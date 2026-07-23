@@ -31,6 +31,7 @@ class RequirementStatus(models.TextChoices):
 class RequirementFieldType(models.TextChoices):
     TEXT = "text", "文本"
     MEMBER = "member", "成员"
+    SELECT = "select", "选择器"
     FORM = "form", "表单"
     RICH_TEXT = "rich_text", "富文本框"
     ATTACHMENT = "attachment", "附件"

@@ -1,5 +1,5 @@
-import { TemplateManagementFeaturePage } from "@/components/template-management";
+import { RequirementTemplateList } from "@/components/template-management/requirements";
 
 export default function TemplateRequirementsPage() {
-  return <TemplateManagementFeaturePage tabKey="requirements" />;
+  return <RequirementTemplateList />;
 }

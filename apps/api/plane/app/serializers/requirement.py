@@ -19,6 +19,8 @@ from plane.utils.content_validator import validate_html_content
 from plane.utils.requirement import (
     clone_requirement_children,
     get_requirement_eligible_user_ids,
+    get_requirement_select_mode,
+    get_requirement_select_options,
     replace_requirement_approvers,
     serialize_requirement_field_tree,
     sync_requirement_fields,
@@ -443,11 +445,83 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
             raise serializers.ValidationError("Field name cannot be empty.")
         return value
 
+    def validate(self, attrs):
+        if attrs["field_type"] != RequirementFieldType.SELECT:
+            return attrs
+
+        config = attrs.get("config") or {}
+        selection_mode = config.get("selection_mode", "single")
+        if selection_mode not in ("single", "multiple"):
+            raise serializers.ValidationError(
+                {"config": {"selection_mode": "Use single or multiple."}}
+            )
+        raw_options = config.get("options")
+        if not isinstance(raw_options, list) or not raw_options:
+            raise serializers.ValidationError(
+                {"config": {"options": "A selector requires at least one option."}}
+            )
+
+        option_ids = set()
+        option_labels = set()
+        options = []
+        for index, option in enumerate(raw_options):
+            if not isinstance(option, dict):
+                raise serializers.ValidationError(
+                    {"config": {"options": f"Option {index + 1} must be an object."}}
+                )
+            try:
+                option_id = str(
+                    serializers.UUIDField().run_validation(option.get("id"))
+                )
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError(
+                    {
+                        "config": {
+                            "options": f"Option {index + 1} must include a valid id."
+                        }
+                    }
+                ) from exc
+            try:
+                label = serializers.CharField(
+                    max_length=255,
+                    trim_whitespace=True,
+                    allow_blank=False,
+                ).run_validation(option.get("label"))
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError(
+                    {
+                        "config": {
+                            "options": f"Option {index + 1} must include a label."
+                        }
+                    }
+                ) from exc
+
+            normalized_label = label.casefold()
+            if option_id in option_ids:
+                raise serializers.ValidationError(
+                    {"config": {"options": "Option ids must be unique."}}
+                )
+            if normalized_label in option_labels:
+                raise serializers.ValidationError(
+                    {"config": {"options": "Option labels must be unique."}}
+                )
+            option_ids.add(option_id)
+            option_labels.add(normalized_label)
+            options.append({"id": option_id, "label": label})
+
+        attrs["config"] = {
+            **config,
+            "selection_mode": selection_mode,
+            "options": options,
+        }
+        return attrs
+
 
 class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
     children = RequirementFieldWriteSerializer(many=True, required=False, default=list)
 
     def validate(self, attrs):
+        attrs = super().validate(attrs)
         field_type = attrs["field_type"]
         children = attrs.get("children") or []
         if field_type != RequirementFieldType.FORM and children:
@@ -551,6 +625,42 @@ def validate_requirement_leaf_value(
     elif field_type == RequirementFieldType.BOOLEAN:
         if value is not None and not isinstance(value, bool):
             raise serializers.ValidationError("Boolean values must be true or false.")
+    elif field_type == RequirementFieldType.SELECT:
+        option_ids = {
+            str(option.get("id"))
+            for option in get_requirement_select_options(field)
+            if isinstance(option, dict) and option.get("id")
+        }
+        if get_requirement_select_mode(field) == "multiple":
+            if value in (None, ""):
+                value = []
+            if not isinstance(value, list):
+                raise serializers.ValidationError(
+                    "Multiple selector values must be an array."
+                )
+            if any(not isinstance(item, str) for item in value):
+                raise serializers.ValidationError(
+                    "Selector values must be option ids."
+                )
+            if len(value) != len(set(value)):
+                raise serializers.ValidationError(
+                    "Selector values cannot contain duplicates."
+                )
+            if set(value).difference(option_ids):
+                raise serializers.ValidationError(
+                    "One or more selected options are not available."
+                )
+        else:
+            if value in ("", None):
+                value = None
+            elif not isinstance(value, str):
+                raise serializers.ValidationError(
+                    "Single selector values must be an option id."
+                )
+            elif value not in option_ids:
+                raise serializers.ValidationError(
+                    "The selected option is not available."
+                )
     elif field_type == RequirementFieldType.ATTACHMENT:
         value = _canonical_asset_values(requirement, value)
     elif field_type == RequirementFieldType.IMAGE:
@@ -802,6 +912,64 @@ class RequirementDetailUpdateSerializer(serializers.Serializer):
         )
 
 
+class RequirementDetailBatchCreateSerializer(RequirementDetailCreateSerializer):
+    client_id = serializers.UUIDField()
+
+
+class RequirementDetailBatchUpdateSerializer(RequirementDetailUpdateSerializer):
+    id = serializers.UUIDField()
+
+
+class RequirementDetailBatchDeleteSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    version = serializers.IntegerField(min_value=1)
+
+
+class RequirementDetailBatchSaveSerializer(serializers.Serializer):
+    expected_updated_at = serializers.DateTimeField()
+    creates = RequirementDetailBatchCreateSerializer(
+        many=True, required=False, default=list
+    )
+    updates = RequirementDetailBatchUpdateSerializer(
+        many=True, required=False, default=list
+    )
+    deletes = RequirementDetailBatchDeleteSerializer(
+        many=True, required=False, default=list
+    )
+
+    def validate(self, attrs):
+        creates = attrs["creates"]
+        updates = attrs["updates"]
+        deletes = attrs["deletes"]
+        if not creates and not updates and not deletes:
+            raise serializers.ValidationError(
+                "At least one detail operation is required."
+            )
+
+        client_ids = [item["client_id"] for item in creates]
+        if len(client_ids) != len(set(client_ids)):
+            raise serializers.ValidationError(
+                {"creates": "Client ids cannot contain duplicates."}
+            )
+
+        update_ids = [item["id"] for item in updates]
+        if len(update_ids) != len(set(update_ids)):
+            raise serializers.ValidationError(
+                {"updates": "Detail ids cannot contain duplicates."}
+            )
+
+        delete_ids = [item["id"] for item in deletes]
+        if len(delete_ids) != len(set(delete_ids)):
+            raise serializers.ValidationError(
+                {"deletes": "Detail ids cannot contain duplicates."}
+            )
+        if set(update_ids).intersection(delete_ids):
+            raise serializers.ValidationError(
+                "A detail cannot be updated and deleted in the same request."
+            )
+        return attrs
+
+
 class RequirementDetailFilterSerializer(serializers.Serializer):
     field_id = serializers.UUIDField()
     operator = serializers.ChoiceField(
@@ -829,9 +997,32 @@ class RequirementDetailFilterSerializer(serializers.Serializer):
             operator == "contains"
             and field.field_type
             not in (RequirementFieldType.TEXT, RequirementFieldType.RICH_TEXT)
+            and not (
+                field.field_type == RequirementFieldType.SELECT
+                and get_requirement_select_mode(field) == "multiple"
+            )
         ):
             raise serializers.ValidationError(
-                {"operator": "Contains is only supported for text fields."}
+                {
+                    "operator": (
+                        "Contains is only supported for text fields and "
+                        "multiple selectors."
+                    )
+                }
             )
+        if field.field_type == RequirementFieldType.SELECT and operator in (
+            "contains",
+            "equals",
+        ):
+            option_ids = {
+                str(option.get("id"))
+                for option in get_requirement_select_options(field)
+                if isinstance(option, dict) and option.get("id")
+            }
+            value = attrs.get("value")
+            if not isinstance(value, str) or value not in option_ids:
+                raise serializers.ValidationError(
+                    {"value": "The filter option is not available."}
+                )
         attrs["field"] = field
         return attrs

@@ -41,7 +41,9 @@ export const TemplateManagementTopNavigation = observer(function TemplateManagem
                 <TabNavigationList className="h-full">
                   {TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.map((item) => {
                     const href = getTemplateManagementTabPath(workspaceSlug, item.key);
-                    const isActive = pathname === href || pathname === `${href}/`;
+                    const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+                    const normalizedHref = href.endsWith("/") ? href : `${href}/`;
+                    const isActive = normalizedPathname.startsWith(normalizedHref);
 
                     return (
                       <Link key={item.key} to={href} className="flex h-full items-center">

@@ -25,6 +25,31 @@ class RequirementDataLossError(Exception):
         super().__init__("Saving this field structure will remove existing detail values.")
 
 
+class RequirementDetailBatchConflict(Exception):
+    def __init__(self, conflicts):
+        self.conflicts = conflicts
+        super().__init__("One or more requirement details changed before the batch was saved.")
+
+
+def get_requirement_select_mode(field):
+    config = (
+        field.config
+        if isinstance(field, RequirementField)
+        else (field.get("config") or {})
+    )
+    return "multiple" if config.get("selection_mode") == "multiple" else "single"
+
+
+def get_requirement_select_options(field):
+    config = (
+        field.config
+        if isinstance(field, RequirementField)
+        else (field.get("config") or {})
+    )
+    options = config.get("options") or []
+    return options if isinstance(options, list) else []
+
+
 def get_requirement_eligible_user_ids(
     *,
     workspace_id,
@@ -254,6 +279,51 @@ def _clean_detail_data_for_fields(data, removed_fields):
     return cleaned, changed
 
 
+def _clear_detail_value_for_field(data, field, empty_value):
+    cleaned = deepcopy(data)
+    field_id = str(field.id)
+    changed = False
+
+    if field.parent_field_id is None:
+        if not _is_empty_detail_value(cleaned.get(field_id)):
+            cleaned[field_id] = deepcopy(empty_value)
+            changed = True
+        return cleaned, changed
+
+    rows = cleaned.get(str(field.parent_field_id))
+    if not isinstance(rows, list):
+        return cleaned, changed
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("values"), dict):
+            continue
+        if not _is_empty_detail_value(row["values"].get(field_id)):
+            row["values"][field_id] = deepcopy(empty_value)
+            changed = True
+    return cleaned, changed
+
+
+def _select_config_removes_values(field, payload):
+    if (
+        field.field_type != RequirementFieldType.SELECT
+        or payload["field_type"] != RequirementFieldType.SELECT
+    ):
+        return False
+    old_ids = {
+        str(option.get("id"))
+        for option in get_requirement_select_options(field)
+        if isinstance(option, dict) and option.get("id")
+    }
+    new_ids = {
+        str(option.get("id"))
+        for option in get_requirement_select_options(payload)
+        if isinstance(option, dict) and option.get("id")
+    }
+    return (
+        get_requirement_select_mode(field) != get_requirement_select_mode(payload)
+        or not old_ids.issubset(new_ids)
+    )
+
+
 def sync_requirement_fields(
     *,
     requirement,
@@ -270,6 +340,7 @@ def sync_requirement_fields(
     submitted_ids = set()
     created_field_ids = {}
     data_loss_fields = []
+    reset_select_fields = {}
 
     def save_field(payload, parent=None, index=0):
         field_id = payload.get("id")
@@ -282,6 +353,11 @@ def sync_requirement_fields(
                 raise ValueError("Existing fields cannot be moved between field levels.")
             if field.field_type != payload["field_type"]:
                 data_loss_fields.append(deepcopy(field))
+            elif _select_config_removes_values(field, payload):
+                reset_select_fields[field.id] = (
+                    deepcopy(field),
+                    [] if get_requirement_select_mode(payload) == "multiple" else None,
+                )
             submitted_ids.add(field.id)
         else:
             field = RequirementField(requirement=requirement, parent_field=parent)
@@ -318,13 +394,20 @@ def sync_requirement_fields(
     cleanup_fields = list(cleanup_fields_by_id.values())
 
     changed_details = []
-    if cleanup_fields:
+    if cleanup_fields or reset_select_fields:
         for detail in RequirementDetail.objects.select_for_update().filter(
             requirement=requirement
         ):
             cleaned_data, changed = _clean_detail_data_for_fields(
                 detail.data, cleanup_fields
             )
+            for field, empty_value in reset_select_fields.values():
+                cleaned_data, select_changed = _clear_detail_value_for_field(
+                    cleaned_data,
+                    field,
+                    empty_value,
+                )
+                changed = changed or select_changed
             if changed:
                 detail.data = cleaned_data
                 detail.version += 1
@@ -394,6 +477,124 @@ def insert_requirement_detail(
     return detail
 
 
+def save_requirement_detail_batch(
+    *,
+    requirement,
+    creates,
+    updates,
+    deletes,
+    actor=None,
+):
+    existing = list(
+        RequirementDetail.objects.select_for_update()
+        .filter(requirement=requirement)
+        .order_by("sort_order", "created_at", "id")
+    )
+    details_by_id = {detail.id: detail for detail in existing}
+    conflicts = []
+
+    for item in [*updates, *deletes]:
+        detail = details_by_id.get(item["id"])
+        if detail is None:
+            conflicts.append(
+                {
+                    "id": str(item["id"]),
+                    "reason": "not_found",
+                }
+            )
+        elif detail.version != item["version"]:
+            conflicts.append(
+                {
+                    "id": str(item["id"]),
+                    "reason": "version_conflict",
+                    "current_version": detail.version,
+                }
+            )
+
+    delete_ids = {item["id"] for item in deletes}
+    for item in creates:
+        anchor_id = item.get("before_id") or item.get("after_id")
+        if anchor_id is None:
+            continue
+        if anchor_id in delete_ids:
+            conflicts.append(
+                {
+                    "id": str(anchor_id),
+                    "reason": "anchor_deleted",
+                }
+            )
+        elif anchor_id not in details_by_id:
+            conflicts.append(
+                {
+                    "id": str(anchor_id),
+                    "reason": "anchor_not_found",
+                }
+            )
+
+    if conflicts:
+        raise RequirementDetailBatchConflict(conflicts)
+
+    now = timezone.now()
+    updated_details = []
+    for item in updates:
+        detail = details_by_id[item["id"]]
+        detail.data = deepcopy(item["data"])
+        detail.version += 1
+        detail.updated_at = now
+        detail.updated_by = actor
+        updated_details.append(detail)
+    if updated_details:
+        RequirementDetail.objects.bulk_update(
+            updated_details,
+            ["data", "version", "updated_at", "updated_by"],
+        )
+
+    ordered_details = [
+        detail for detail in existing if detail.id not in delete_ids
+    ]
+    created_details = []
+    after_anchor_offsets = {}
+    for item in creates:
+        before_id = item.get("before_id")
+        after_id = item.get("after_id")
+        ordered_ids = [detail.id for detail in ordered_details]
+        if before_id:
+            insert_at = ordered_ids.index(before_id)
+        elif after_id:
+            anchor_offset = after_anchor_offsets.get(after_id, 0)
+            insert_at = ordered_ids.index(after_id) + 1 + anchor_offset
+            after_anchor_offsets[after_id] = anchor_offset + 1
+        else:
+            insert_at = len(ordered_details)
+
+        detail = RequirementDetail(
+            requirement=requirement,
+            data=deepcopy(item["data"]),
+            sort_order=(insert_at + 1) * SORT_ORDER_STEP,
+            created_by=actor,
+        )
+        detail.save()
+        ordered_details.insert(insert_at, detail)
+        created_details.append((item["client_id"], detail))
+
+    if delete_ids:
+        RequirementDetail.objects.filter(
+            requirement=requirement,
+            id__in=delete_ids,
+        ).delete()
+
+    if creates or deletes:
+        for index, detail in enumerate(ordered_details):
+            detail.sort_order = (index + 1) * SORT_ORDER_STEP
+            detail.updated_at = now
+        RequirementDetail.objects.bulk_update(
+            ordered_details,
+            ["sort_order", "updated_at"],
+        )
+
+    return created_details, updated_details, list(delete_ids)
+
+
 def _is_empty_detail_value(value):
     if value is None:
         return True
@@ -404,12 +605,18 @@ def _is_empty_detail_value(value):
     return False
 
 
-def _value_matches_filter(value, operator, expected):
+def _value_matches_filter(value, operator, expected, field=None):
     if operator == "is_empty":
         return _is_empty_detail_value(value)
     if operator == "is_not_empty":
         return not _is_empty_detail_value(value)
     if operator == "contains":
+        if (
+            field is not None
+            and field.field_type == RequirementFieldType.SELECT
+            and get_requirement_select_mode(field) == "multiple"
+        ):
+            return isinstance(value, list) and expected in value
         return str(expected or "").casefold() in strip_tags(str(value or "")).casefold()
     if operator == "equals":
         if isinstance(value, str) and isinstance(expected, str):
@@ -462,6 +669,18 @@ def filter_requirement_detail_ids(*, requirement, search="", filters=None):
     def searchable_value(field, value):
         if field.field_type == RequirementFieldType.MEMBER:
             return members.get(str(value), str(value or ""))
+        if field.field_type == RequirementFieldType.SELECT:
+            option_labels = {
+                str(option.get("id")): str(option.get("label") or "")
+                for option in get_requirement_select_options(field)
+                if isinstance(option, dict) and option.get("id")
+            }
+            selected_ids = value if isinstance(value, list) else [value]
+            return " ".join(
+                option_labels.get(str(option_id), "")
+                for option_id in selected_ids
+                if option_id
+            )
         if field.field_type in (
             RequirementFieldType.ATTACHMENT,
             RequirementFieldType.IMAGE,
@@ -503,12 +722,12 @@ def filter_requirement_detail_ids(*, requirement, search="", filters=None):
             expected = item.get("value")
             if field.parent_field_id and operator == "is_empty":
                 item_matches = not values or all(
-                    _value_matches_filter(value, operator, expected)
+                    _value_matches_filter(value, operator, expected, field)
                     for value in values
                 )
             else:
                 item_matches = any(
-                    _value_matches_filter(value, operator, expected)
+                    _value_matches_filter(value, operator, expected, field)
                     for value in values
                 )
             if not item_matches:

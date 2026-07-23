@@ -146,10 +146,20 @@ export const coreRoutes: RouteConfigEntry[] = [
         // Template Management
         layout("./(all)/[workspaceSlug]/(projects)/templates/layout.tsx", [
           route(":workspaceSlug/templates", "./(all)/[workspaceSlug]/(projects)/templates/page.tsx"),
-          route(
-            ":workspaceSlug/templates/requirements",
-            "./(all)/[workspaceSlug]/(projects)/templates/requirements/page.tsx"
-          ),
+          layout("./(all)/[workspaceSlug]/(projects)/templates/requirements/layout.tsx", [
+            route(
+              ":workspaceSlug/templates/requirements",
+              "./(all)/[workspaceSlug]/(projects)/templates/requirements/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/templates/requirements/:templateId",
+              "./(all)/[workspaceSlug]/(projects)/templates/requirements/[templateId]/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/templates/requirements/:templateId/edit",
+              "./(all)/[workspaceSlug]/(projects)/templates/requirements/[templateId]/edit/page.tsx"
+            ),
+          ]),
           route(
             ":workspaceSlug/templates/work-items",
             "./(all)/[workspaceSlug]/(projects)/templates/work-items/page.tsx"

@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -363,3 +364,758 @@ class TestRequirementApp:
             format="json",
         )
         assert create_response.status_code == status.HTTP_201_CREATED
+
+    def test_template_configuration_and_detail_crud_contract(self, api_client):
+        self.authenticate(api_client, self.owner)
+        template_response = api_client.post(
+            self.list_url,
+            {
+                "is_template": True,
+                "title": "Dynamic requirement template",
+                "owner_id": str(self.owner.id),
+            },
+            format="json",
+        )
+        assert template_response.status_code == status.HTTP_201_CREATED
+        template_id = template_response.data["id"]
+        configuration_url = reverse(
+            "requirement-configuration",
+            kwargs={"slug": self.workspace.slug, "pk": template_id},
+        )
+
+        configuration_response = api_client.get(configuration_url)
+        assert configuration_response.status_code == status.HTTP_200_OK
+        summary_client_id = f"summary-{uuid4()}"
+        form_client_id = f"form-{uuid4()}"
+        accepted_client_id = f"accepted-{uuid4()}"
+        save_configuration_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": configuration_response.data["requirement"][
+                    "updated_at"
+                ],
+                "requirement": {
+                    "description_html": "<p>Collect structured requirements.</p>",
+                    "status": RequirementStatus.PUBLISHED,
+                },
+                "fields": [
+                    {
+                        "client_id": summary_client_id,
+                        "name": "Summary",
+                        "field_type": RequirementFieldType.TEXT,
+                        "is_required": True,
+                        "is_active": True,
+                        "config": {"placeholder": "Describe the requirement"},
+                        "default_value": None,
+                        "children": [],
+                    },
+                    {
+                        "client_id": form_client_id,
+                        "name": "Acceptance criteria",
+                        "field_type": RequirementFieldType.FORM,
+                        "is_required": False,
+                        "is_active": True,
+                        "config": {},
+                        "default_value": None,
+                        "children": [
+                            {
+                                "client_id": accepted_client_id,
+                                "name": "Accepted",
+                                "field_type": RequirementFieldType.BOOLEAN,
+                                "is_required": True,
+                                "is_active": True,
+                                "config": {},
+                                "default_value": False,
+                            }
+                        ],
+                    },
+                ],
+            },
+            format="json",
+        )
+        assert save_configuration_response.status_code == status.HTTP_200_OK
+        assert save_configuration_response.data["requirement"]["status"] == (
+            RequirementStatus.PUBLISHED
+        )
+        assert len(save_configuration_response.data["fields"]) == 2
+        summary_id = save_configuration_response.data["created_field_ids"][
+            summary_client_id
+        ]
+        form_id = save_configuration_response.data["created_field_ids"][
+            form_client_id
+        ]
+        accepted_id = save_configuration_response.data["created_field_ids"][
+            accepted_client_id
+        ]
+        saved_form = save_configuration_response.data["fields"][1]
+        form_configuration_payload = {
+            key: saved_form[key]
+            for key in (
+                "id",
+                "name",
+                "field_type",
+                "is_required",
+                "is_active",
+                "config",
+                "default_value",
+            )
+        }
+        form_configuration_payload["children"] = [
+            {
+                key: child[key]
+                for key in (
+                    "id",
+                    "name",
+                    "field_type",
+                    "is_required",
+                    "is_active",
+                    "config",
+                    "default_value",
+                )
+            }
+            for child in saved_form["children"]
+        ]
+
+        details_url = reverse(
+            "requirement-details",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": template_id,
+            },
+        )
+        first_detail_response = api_client.post(
+            details_url,
+            {
+                "data": {
+                    summary_id: "Searchable checkout requirement",
+                    form_id: [
+                        {
+                            "id": str(uuid4()),
+                            "values": {accepted_id: True},
+                        }
+                    ],
+                }
+            },
+            format="json",
+        )
+        assert first_detail_response.status_code == status.HTTP_201_CREATED
+        second_detail_response = api_client.post(
+            details_url,
+            {
+                "after_id": first_detail_response.data["id"],
+                "data": {
+                    summary_id: "Unrelated content",
+                    form_id: [],
+                },
+            },
+            format="json",
+        )
+        assert second_detail_response.status_code == status.HTTP_201_CREATED
+        assert second_detail_response.data["sort_order"] > (
+            first_detail_response.data["sort_order"]
+        )
+
+        search_response = api_client.get(details_url, {"search": "checkout"})
+        assert search_response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in search_response.data["results"]] == [
+            first_detail_response.data["id"]
+        ]
+        filter_response = api_client.get(
+            details_url,
+            {
+                "filters": json.dumps(
+                    [
+                        {
+                            "field_id": accepted_id,
+                            "operator": "equals",
+                            "value": True,
+                        }
+                    ]
+                )
+            },
+        )
+        assert filter_response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in filter_response.data["results"]] == [
+            first_detail_response.data["id"]
+        ]
+
+        detail_url = reverse(
+            "requirement-detail-item",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": template_id,
+                "pk": first_detail_response.data["id"],
+            },
+        )
+        conflict_response = api_client.patch(
+            detail_url,
+            {
+                "version": first_detail_response.data["version"] + 1,
+                "data": first_detail_response.data["data"],
+            },
+            format="json",
+        )
+        assert conflict_response.status_code == status.HTTP_409_CONFLICT
+        update_response = api_client.patch(
+            detail_url,
+            {
+                "version": first_detail_response.data["version"],
+                "data": {
+                    **first_detail_response.data["data"],
+                    summary_id: "Updated checkout requirement",
+                },
+            },
+            format="json",
+        )
+        assert update_response.status_code == status.HTTP_200_OK
+        assert update_response.data["version"] == (
+            first_detail_response.data["version"] + 1
+        )
+
+        data_loss_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": save_configuration_response.data[
+                    "requirement"
+                ]["updated_at"],
+                "requirement": {},
+                "fields": [form_configuration_payload],
+            },
+            format="json",
+        )
+        assert data_loss_response.status_code == status.HTTP_409_CONFLICT
+        assert data_loss_response.data["code"] == "REQUIREMENT_SCHEMA_DATA_LOSS"
+        confirmed_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": save_configuration_response.data[
+                    "requirement"
+                ]["updated_at"],
+                "requirement": {},
+                "fields": [form_configuration_payload],
+                "confirm_data_loss": True,
+            },
+            format="json",
+        )
+        assert confirmed_response.status_code == status.HTTP_200_OK
+
+        bulk_delete_url = reverse(
+            "requirement-detail-bulk-delete",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": template_id,
+            },
+        )
+        bulk_delete_response = api_client.post(
+            bulk_delete_url,
+            {
+                "ids": [
+                    first_detail_response.data["id"],
+                    second_detail_response.data["id"],
+                ]
+            },
+            format="json",
+        )
+        assert bulk_delete_response.status_code == status.HTTP_204_NO_CONTENT
+        assert not RequirementDetail.objects.filter(requirement_id=template_id).exists()
+
+    def test_requirement_detail_bulk_save_applies_mixed_operations_atomically(
+        self, api_client
+    ):
+        self.authenticate(api_client, self.owner)
+        template = Requirement.objects.create(
+            workspace=self.workspace,
+            is_template=True,
+            title=f"Bulk save template {uuid4()}",
+            owner=self.owner,
+        )
+        field = RequirementField.objects.create(
+            requirement=template,
+            name="Summary",
+            field_type=RequirementFieldType.TEXT,
+            is_required=True,
+            is_active=True,
+            config={},
+            default_value=None,
+            sort_order=1000,
+        )
+        field_id = str(field.id)
+        first_detail = RequirementDetail.objects.create(
+            requirement=template,
+            data={field_id: "First"},
+            sort_order=1000,
+        )
+        second_detail = RequirementDetail.objects.create(
+            requirement=template,
+            data={field_id: "Second"},
+            sort_order=2000,
+        )
+        client_id = uuid4()
+        second_client_id = uuid4()
+        bulk_save_url = reverse(
+            "requirement-detail-bulk-save",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": template.id,
+            },
+        )
+
+        response = api_client.post(
+            bulk_save_url,
+            {
+                "expected_updated_at": template.updated_at.isoformat(),
+                "creates": [
+                    {
+                        "client_id": str(client_id),
+                        "data": {field_id: "Created"},
+                        "after_id": str(first_detail.id),
+                    },
+                    {
+                        "client_id": str(second_client_id),
+                        "data": {field_id: "Created second"},
+                        "after_id": str(first_detail.id),
+                    },
+                ],
+                "updates": [
+                    {
+                        "id": str(first_detail.id),
+                        "version": first_detail.version,
+                        "data": {field_id: "Updated"},
+                    }
+                ],
+                "deletes": [
+                    {
+                        "id": str(second_detail.id),
+                        "version": second_detail.version,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [
+            item["client_id"] for item in response.data["created"]
+        ] == [str(client_id), str(second_client_id)]
+        assert str(response.data["updated"][0]["id"]) == str(first_detail.id)
+        assert response.data["deleted_ids"] == [str(second_detail.id)]
+        saved_details = list(
+            RequirementDetail.objects.filter(requirement=template).order_by(
+                "sort_order"
+            )
+        )
+        assert [detail.data[field_id] for detail in saved_details] == [
+            "Updated",
+            "Created",
+            "Created second",
+        ]
+        assert saved_details[0].version == first_detail.version + 1
+
+    def test_requirement_detail_bulk_save_rolls_back_on_conflict_or_validation_error(
+        self, api_client
+    ):
+        self.authenticate(api_client, self.owner)
+        template = Requirement.objects.create(
+            workspace=self.workspace,
+            is_template=True,
+            title=f"Atomic bulk save template {uuid4()}",
+            owner=self.owner,
+        )
+        field = RequirementField.objects.create(
+            requirement=template,
+            name="Summary",
+            field_type=RequirementFieldType.TEXT,
+            is_required=True,
+            is_active=True,
+            config={},
+            default_value=None,
+        )
+        field_id = str(field.id)
+        detail = RequirementDetail.objects.create(
+            requirement=template,
+            data={field_id: "Original"},
+            sort_order=1000,
+        )
+        bulk_save_url = reverse(
+            "requirement-detail-bulk-save",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": template.id,
+            },
+        )
+        base_payload = {
+            "expected_updated_at": template.updated_at.isoformat(),
+            "creates": [
+                {
+                    "client_id": str(uuid4()),
+                    "data": {field_id: "Created"},
+                    "after_id": str(detail.id),
+                }
+            ],
+            "deletes": [],
+        }
+
+        conflict_response = api_client.post(
+            bulk_save_url,
+            {
+                **base_payload,
+                "updates": [
+                    {
+                        "id": str(detail.id),
+                        "version": detail.version + 1,
+                        "data": {field_id: "Should not save"},
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert conflict_response.status_code == status.HTTP_409_CONFLICT
+        assert (
+            conflict_response.data["code"]
+            == "REQUIREMENT_DETAIL_BATCH_CONFLICT"
+        )
+        detail.refresh_from_db()
+        assert detail.data[field_id] == "Original"
+        assert RequirementDetail.objects.filter(requirement=template).count() == 1
+
+        invalid_response = api_client.post(
+            bulk_save_url,
+            {
+                **base_payload,
+                "creates": [
+                    {
+                        **base_payload["creates"][0],
+                        "client_id": str(uuid4()),
+                        "data": {},
+                    }
+                ],
+                "updates": [
+                    {
+                        "id": str(detail.id),
+                        "version": detail.version,
+                        "data": {field_id: "Should still not save"},
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert invalid_response.status_code == status.HTTP_400_BAD_REQUEST
+        detail.refresh_from_db()
+        assert detail.data[field_id] == "Original"
+        assert RequirementDetail.objects.filter(requirement=template).count() == 1
+
+    def test_selector_field_configuration_values_search_filter_and_data_loss(
+        self, api_client
+    ):
+        self.authenticate(api_client, self.owner)
+        template_response = api_client.post(
+            self.list_url,
+            {
+                "is_template": True,
+                "title": "Selector requirement template",
+                "owner_id": str(self.owner.id),
+            },
+            format="json",
+        )
+        assert template_response.status_code == status.HTTP_201_CREATED
+        template_id = template_response.data["id"]
+        configuration_url = reverse(
+            "requirement-configuration",
+            kwargs={"slug": self.workspace.slug, "pk": template_id},
+        )
+        configuration_response = api_client.get(configuration_url)
+        root_option_ids = [str(uuid4()), str(uuid4())]
+        child_option_ids = [str(uuid4()), str(uuid4())]
+        selector_client_id = f"selector-{uuid4()}"
+        form_client_id = f"form-{uuid4()}"
+        child_client_id = f"child-selector-{uuid4()}"
+
+        invalid_configuration_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": configuration_response.data["requirement"][
+                    "updated_at"
+                ],
+                "requirement": {},
+                "fields": [
+                    {
+                        "client_id": selector_client_id,
+                        "name": "Priority",
+                        "field_type": RequirementFieldType.SELECT,
+                        "is_required": False,
+                        "is_active": True,
+                        "config": {
+                            "selection_mode": "single",
+                            "options": [
+                                {"id": root_option_ids[0], "label": "Ready"},
+                                {"id": root_option_ids[1], "label": "ready"},
+                            ],
+                        },
+                        "default_value": None,
+                        "children": [],
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert invalid_configuration_response.status_code == status.HTTP_400_BAD_REQUEST
+
+        save_configuration_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": configuration_response.data["requirement"][
+                    "updated_at"
+                ],
+                "requirement": {},
+                "fields": [
+                    {
+                        "client_id": selector_client_id,
+                        "name": "Priority",
+                        "field_type": RequirementFieldType.SELECT,
+                        "is_required": False,
+                        "is_active": True,
+                        "config": {
+                            "selection_mode": "single",
+                            "options": [
+                                {"id": root_option_ids[0], "label": "Ready"},
+                                {"id": root_option_ids[1], "label": "Blocked"},
+                            ],
+                        },
+                        "default_value": None,
+                        "children": [],
+                    },
+                    {
+                        "client_id": form_client_id,
+                        "name": "Platforms",
+                        "field_type": RequirementFieldType.FORM,
+                        "is_required": False,
+                        "is_active": True,
+                        "config": {},
+                        "default_value": None,
+                        "children": [
+                            {
+                                "client_id": child_client_id,
+                                "name": "Targets",
+                                "field_type": RequirementFieldType.SELECT,
+                                "is_required": False,
+                                "is_active": True,
+                                "config": {
+                                    "selection_mode": "multiple",
+                                    "options": [
+                                        {
+                                            "id": child_option_ids[0],
+                                            "label": "Browser",
+                                        },
+                                        {
+                                            "id": child_option_ids[1],
+                                            "label": "Mobile",
+                                        },
+                                    ],
+                                },
+                                "default_value": [],
+                            }
+                        ],
+                    },
+                ],
+            },
+            format="json",
+        )
+        assert save_configuration_response.status_code == status.HTTP_200_OK
+        selector_id = save_configuration_response.data["created_field_ids"][
+            selector_client_id
+        ]
+        form_id = save_configuration_response.data["created_field_ids"][
+            form_client_id
+        ]
+        child_id = save_configuration_response.data["created_field_ids"][
+            child_client_id
+        ]
+        details_url = reverse(
+            "requirement-details",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": template_id,
+            },
+        )
+        row_id = str(uuid4())
+        detail_response = api_client.post(
+            details_url,
+            {
+                "data": {
+                    selector_id: root_option_ids[0],
+                    form_id: [
+                        {
+                            "id": row_id,
+                            "values": {
+                                child_id: child_option_ids,
+                            },
+                        }
+                    ],
+                }
+            },
+            format="json",
+        )
+        assert detail_response.status_code == status.HTTP_201_CREATED
+
+        invalid_detail_response = api_client.post(
+            details_url,
+            {
+                "data": {
+                    selector_id: str(uuid4()),
+                    form_id: [],
+                }
+            },
+            format="json",
+        )
+        assert invalid_detail_response.status_code == status.HTTP_400_BAD_REQUEST
+
+        for search_value in ("Ready", "Browser"):
+            search_response = api_client.get(
+                details_url,
+                {"search": search_value},
+            )
+            assert search_response.status_code == status.HTTP_200_OK
+            assert [item["id"] for item in search_response.data["results"]] == [
+                detail_response.data["id"]
+            ]
+
+        filter_payloads = [
+            {
+                "field_id": selector_id,
+                "operator": "equals",
+                "value": root_option_ids[0],
+            },
+            {
+                "field_id": child_id,
+                "operator": "contains",
+                "value": child_option_ids[1],
+            },
+        ]
+        for filter_payload in filter_payloads:
+            filter_response = api_client.get(
+                details_url,
+                {"filters": json.dumps([filter_payload])},
+            )
+            assert filter_response.status_code == status.HTTP_200_OK
+            assert [item["id"] for item in filter_response.data["results"]] == [
+                detail_response.data["id"]
+            ]
+
+        def writable_fields(fields):
+            result = []
+            for field in fields:
+                payload = {
+                    key: field[key]
+                    for key in (
+                        "id",
+                        "name",
+                        "field_type",
+                        "is_required",
+                        "is_active",
+                        "config",
+                        "default_value",
+                    )
+                }
+                payload["children"] = [
+                    {
+                        key: child[key]
+                        for key in (
+                            "id",
+                            "name",
+                            "field_type",
+                            "is_required",
+                            "is_active",
+                            "config",
+                            "default_value",
+                        )
+                    }
+                    for child in field["children"]
+                ]
+                result.append(payload)
+            return result
+
+        renamed_fields = writable_fields(save_configuration_response.data["fields"])
+        renamed_fields[0]["config"]["options"][0]["label"] = "Prepared"
+        rename_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": save_configuration_response.data[
+                    "requirement"
+                ]["updated_at"],
+                "requirement": {},
+                "fields": renamed_fields,
+            },
+            format="json",
+        )
+        assert rename_response.status_code == status.HTTP_200_OK
+        detail_after_rename = api_client.get(details_url).data["results"][0]
+        assert detail_after_rename["data"][selector_id] == root_option_ids[0]
+
+        removed_option_fields = writable_fields(rename_response.data["fields"])
+        removed_option_fields[0]["config"]["options"] = removed_option_fields[0][
+            "config"
+        ]["options"][:1]
+        data_loss_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": rename_response.data["requirement"][
+                    "updated_at"
+                ],
+                "requirement": {},
+                "fields": removed_option_fields,
+            },
+            format="json",
+        )
+        assert data_loss_response.status_code == status.HTTP_409_CONFLICT
+        assert data_loss_response.data["code"] == "REQUIREMENT_SCHEMA_DATA_LOSS"
+        assert data_loss_response.data["affected_detail_count"] == 1
+
+        confirmed_remove_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": rename_response.data["requirement"][
+                    "updated_at"
+                ],
+                "requirement": {},
+                "fields": removed_option_fields,
+                "confirm_data_loss": True,
+            },
+            format="json",
+        )
+        assert confirmed_remove_response.status_code == status.HTTP_200_OK
+        detail_after_remove = api_client.get(details_url).data["results"][0]
+        assert detail_after_remove["data"][selector_id] is None
+        assert detail_after_remove["data"][form_id][0]["values"][child_id] == (
+            child_option_ids
+        )
+
+        changed_mode_fields = writable_fields(confirmed_remove_response.data["fields"])
+        changed_mode_fields[1]["children"][0]["config"]["selection_mode"] = "single"
+        changed_mode_fields[1]["children"][0]["default_value"] = None
+        mode_data_loss_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": confirmed_remove_response.data[
+                    "requirement"
+                ]["updated_at"],
+                "requirement": {},
+                "fields": changed_mode_fields,
+            },
+            format="json",
+        )
+        assert mode_data_loss_response.status_code == status.HTTP_409_CONFLICT
+        confirmed_mode_response = api_client.put(
+            configuration_url,
+            {
+                "expected_updated_at": confirmed_remove_response.data[
+                    "requirement"
+                ]["updated_at"],
+                "requirement": {},
+                "fields": changed_mode_fields,
+                "confirm_data_loss": True,
+            },
+            format="json",
+        )
+        assert confirmed_mode_response.status_code == status.HTTP_200_OK
+        detail_after_mode_change = api_client.get(details_url).data["results"][0]
+        assert detail_after_mode_change["data"][form_id][0]["values"][child_id] is None

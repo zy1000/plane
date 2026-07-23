@@ -36,6 +36,7 @@ export * from "./issues/issue-identifier";
 export * from "./layout";
 export * from "./module";
 export * from "./release";
+export * from "./requirement";
 export * from "./page";
 export * from "./payment";
 export * from "./pragmatic";

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from plane.app.serializers.requirement import (
     RequirementConfigurationConflict,
     RequirementConfigurationWriteSerializer,
+    RequirementDetailBatchSaveSerializer,
     RequirementDetailCreateSerializer,
     RequirementDetailFilterSerializer,
     RequirementDetailSerializer,
@@ -24,8 +25,10 @@ from plane.db.models import (
 )
 from plane.utils.requirement import (
     RequirementDataLossError,
+    RequirementDetailBatchConflict,
     filter_requirement_detail_ids,
     insert_requirement_detail,
+    save_requirement_detail_batch,
     serialize_requirement_field_tree,
 )
 
@@ -416,3 +419,71 @@ class RequirementDetailViewSet(BaseViewSet):
             )
         queryset.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def bulk_save(self, request, slug, requirement_id):
+        with transaction.atomic():
+            requirement = (
+                Requirement.objects.select_for_update()
+                .filter(
+                    id=requirement_id,
+                    workspace__slug=self.workspace_slug,
+                    is_template=True,
+                )
+                .first()
+            )
+            if requirement is None:
+                return Response(
+                    {"error": "Requirement template not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            serializer = RequirementDetailBatchSaveSerializer(
+                data=request.data,
+                context={"requirement": requirement},
+            )
+            serializer.is_valid(raise_exception=True)
+            if (
+                requirement.updated_at
+                != serializer.validated_data["expected_updated_at"]
+            ):
+                return Response(
+                    {
+                        "error": "The requirement template changed before the batch was saved.",
+                        "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
+                        "current_updated_at": requirement.updated_at,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            try:
+                created, updated, deleted_ids = save_requirement_detail_batch(
+                    requirement=requirement,
+                    creates=serializer.validated_data["creates"],
+                    updates=serializer.validated_data["updates"],
+                    deletes=serializer.validated_data["deletes"],
+                    actor=request.user,
+                )
+            except RequirementDetailBatchConflict as exc:
+                return Response(
+                    {
+                        "error": "One or more requirement details changed before the batch was saved.",
+                        "code": "REQUIREMENT_DETAIL_BATCH_CONFLICT",
+                        "conflicts": exc.conflicts,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        return Response(
+            {
+                "created": [
+                    {
+                        "client_id": str(client_id),
+                        "detail": RequirementDetailSerializer(detail).data,
+                    }
+                    for client_id, detail in created
+                ],
+                "updated": RequirementDetailSerializer(updated, many=True).data,
+                "deleted_ids": [str(detail_id) for detail_id in deleted_ids],
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -41,6 +41,11 @@ urlpatterns = [
         name="requirement-detail-bulk-delete",
     ),
     path(
+        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/bulk-save/",
+        RequirementDetailViewSet.as_view({"post": "bulk_save"}),
+        name="requirement-detail-bulk-save",
+    ),
+    path(
         "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/<uuid:pk>/",
         RequirementDetailViewSet.as_view(
             {"patch": "partial_update", "delete": "destroy"}

@@ -176,6 +176,7 @@ from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
 from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer
 from .requirement import (
     RequirementConfigurationWriteSerializer,
+    RequirementDetailBatchSaveSerializer,
     RequirementDetailCreateSerializer,
     RequirementDetailFilterSerializer,
     RequirementDetailSerializer,
