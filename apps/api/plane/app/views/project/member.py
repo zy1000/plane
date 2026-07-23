@@ -454,13 +454,43 @@ class ProjectMemberViewSet(BaseViewSet):
 
 class ProjectMemberUserEndpoint(BaseAPIView):
     def get(self, request, slug, project_id):
-        project_member = ProjectMember.objects.get(
-            project_id=project_id,
-            workspace__slug=slug,
-            member=request.user,
-            is_active=True,
+        project_member = (
+            ProjectMember.objects.select_related(
+                "project",
+                "project__project_lead",
+                "project__created_by",
+                "member",
+                "workspace",
+            )
+            .prefetch_related(ACTIVE_MEMBER_ROLES_PREFETCH)
+            .get(
+                project_id=project_id,
+                workspace__slug=slug,
+                member=request.user,
+                is_active=True,
+            )
         )
-        serializer = ProjectMemberSerializer(project_member)
+        role_sources_by_member_id = build_project_member_role_sources([project_member])
+        role_ids = {
+            source["role"]["id"]
+            for source in role_sources_by_member_id.get(project_member.id, [])
+        }
+        permission_keys = list(
+            _get_user_project_permission_keys(
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                project=project_member.project,
+                role_ids=role_ids,
+            )
+        )
+        serializer = ProjectMemberSerializer(
+            project_member,
+            context={
+                "role_sources_by_member_id": role_sources_by_member_id,
+                "permission_keys": permission_keys,
+            },
+        )
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 

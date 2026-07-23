@@ -42,7 +42,11 @@ from plane.app.serializers import (
     CycleUserPropertiesSerializer,
     CycleWriteSerializer,
 )
-from plane.app.serializers.qa import TestPlanDetailSerializer
+from plane.app.serializers.qa import (
+    TestPlanDetailSerializer,
+    TestPlanListSerializer,
+    build_plan_stats_map,
+)
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     Cycle,
@@ -135,18 +139,6 @@ class CycleViewSet(BaseViewSet):
             phase=CycleOverduePhase.TEST,
             deleted_at__isnull=True,
         )
-
-        project = Project.objects.get(id=self.kwargs.get("project_id"))
-
-        # Fetch project for the specific record or pass project_id dynamically
-        project_timezone = project.timezone
-
-        # Convert the current time (timezone.now()) to the project's timezone
-        local_tz = pytz.timezone(project_timezone)
-        current_time_in_project_tz = timezone.now().astimezone(local_tz)
-
-        # Convert project local time back to UTC for comparison (start_date is stored in UTC)
-        current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
 
         return self.filter_queryset(
             super()
@@ -244,146 +236,151 @@ class CycleViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
-    def list(self, request, slug, project_id):
-        cycle_status = request.query_params.getlist('status')
-        queryset = self.get_queryset().filter(archived_at__isnull=True)
-        scan_cycles_for_overdue(queryset)
-        if cycle_status:
-            queryset = queryset.filter(status__in=cycle_status)
-        cycle_view = request.GET.get("cycle_view", "all")
+    _CYCLE_LIST_VALUE_FIELDS = (
+        "id",
+        "workspace_id",
+        "project_id",
+        "name",
+        "description",
+        "suggested_test_scope",
+        "start_date",
+        "end_date",
+        "test_handoff_date",
+        "owned_by_id",
+        "view_props",
+        "sort_order",
+        "external_source",
+        "external_id",
+        "progress_snapshot",
+        "logo_props",
+        "release_id",
+        "is_favorite",
+        "total_issues",
+        "completed_issues",
+        "cancelled_issues",
+        "assignee_ids",
+        "status",
+        "has_active_overdue",
+        "has_overdue_history",
+        "has_active_dev_overdue",
+        "has_active_test_overdue",
+        "has_dev_overdue_history",
+        "has_test_overdue_history",
+        "active_overdue_phase",
+        "plan_ids",
+        "version",
+        "created_by",
+    )
 
-        # Update the order by
-        queryset = queryset.order_by("-is_favorite", "-created_at")
-
-        project = Project.objects.get(id=self.kwargs.get("project_id"))
-
-        # Fetch project for the specific record or pass project_id dynamically
-        project_timezone = project.timezone
-
-        # Convert the current time (timezone.now()) to the project's timezone
-        local_tz = pytz.timezone(project_timezone)
-        current_time_in_project_tz = timezone.now().astimezone(local_tz)
-
-        # Convert project local time back to UTC for comparison (start_date is stored in UTC)
-        current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
-
-        # Current Cycle
-        if cycle_view == "current":
-            queryset = queryset.filter(start_date__lte=current_time_in_utc, end_date__gte=current_time_in_utc)
-
-            data = queryset.values(
-                # necessary fields
-                "id",
-                "workspace_id",
-                "project_id",
-                # model fields
-                "name",
-                "description",
-                "suggested_test_scope",
-                "start_date",
-                "end_date",
-                "test_handoff_date",
-                "owned_by_id",
-                "view_props",
-                "sort_order",
-                "external_source",
-                "external_id",
-                "progress_snapshot",
-                "logo_props",
-                "release_id",
-                "is_favorite",
-                "total_issues",
-                "completed_issues",
-                "cancelled_issues",
-                "assignee_ids",
-                "status",
-                "has_active_overdue",
-                "has_overdue_history",
-                "has_active_dev_overdue",
-                "has_active_test_overdue",
-                "has_dev_overdue_history",
-                "has_test_overdue_history",
-                "active_overdue_phase",
-                "plan_ids",
-                "version",
-                "created_by",
-            )
-            datetime_fields = ["start_date", "end_date", "test_handoff_date"]
-            data = user_timezone_converter(data, datetime_fields, project_timezone)
-
-            # enrich with plans
-            all_plan_ids = set()
-            for item in data:
-                for pid in item.get("plan_ids", []) or []:
-                    all_plan_ids.add(str(pid))
-            plans_map = {}
-            if all_plan_ids:
-                plans_qs = TestPlan.objects.filter(id__in=list(all_plan_ids), deleted_at__isnull=True)
-                plans_serialized = TestPlanDetailSerializer(plans_qs, many=True).data
-                plans_map = {str(p.get("id")): p for p in plans_serialized}
-            for item in data:
-                item["plans"] = [plans_map[str(pid)] for pid in item.get("plan_ids", []) if str(pid) in plans_map]
-
-            if data:
-                return Response(data, status=status.HTTP_200_OK)
-
-        data = queryset.values(
-            # necessary fields
-            "id",
-            "workspace_id",
-            "project_id",
-            # model fields
-            "name",
-            "description",
-            "suggested_test_scope",
-            "start_date",
-            "end_date",
-            "test_handoff_date",
-            "owned_by_id",
-            "view_props",
-            "sort_order",
-            "external_source",
-            "external_id",
-            "progress_snapshot",
-            "logo_props",
-            "release_id",
-            # meta fields
-            "is_favorite",
-            "total_issues",
-            "cancelled_issues",
-            "completed_issues",
-            "assignee_ids",
-            "plan_ids",
-            "status",
-            "has_active_overdue",
-            "has_overdue_history",
-            "has_active_dev_overdue",
-            "has_active_test_overdue",
-            "has_dev_overdue_history",
-            "has_test_overdue_history",
-            "active_overdue_phase",
-            "version",
-            "created_by",
-        )
-        datetime_fields = ["start_date", "end_date", "test_handoff_date"]
-        data = user_timezone_converter(data, datetime_fields, project_timezone)
-
-        # enrich with plans
+    def _enrich_cycles_with_plans(self, data):
+        """批量挂载测试计划，避免 TestPlanDetailSerializer 的 N+1 与逐条 save。"""
         all_plan_ids = set()
         for item in data:
             for pid in item.get("plan_ids", []) or []:
-                if not pid:
-                    continue
-                all_plan_ids.add(str(pid))
+                if pid:
+                    all_plan_ids.add(pid)
+
         plans_map = {}
         if all_plan_ids:
-            plans_qs = TestPlan.objects.filter(id__in=list(all_plan_ids), deleted_at__isnull=True)
-            plans_serialized = TestPlanDetailSerializer(plans_qs, many=True).data
-            plans_map = {str(p.get("id")): p for p in plans_serialized}
-        for item in data:
-            item["plans"] = [plans_map[str(pid)] for pid in item.get("plan_ids", []) if str(pid) in plans_map]
+            plans = list(
+                TestPlan.objects.filter(id__in=list(all_plan_ids), deleted_at__isnull=True)
+                .select_related("module", "project", "cycle")
+                .prefetch_related("modules", "releases")
+            )
+            plan_stats = build_plan_stats_map([plan.id for plan in plans])
 
+            # 保持原 DetailSerializer.to_representation 会刷新 result 的业务副作用
+            plans_to_update = []
+            for plan in plans:
+                stats = plan_stats.get(plan.id) or {}
+                total = stats.get("case_count") or 0
+                if not total:
+                    new_result = "-"
+                else:
+                    threshold = plan.threshold if plan.threshold is not None else 100
+                    new_result = (
+                        "通过"
+                        if (stats.get("success_count", 0) / total) * 100 >= threshold
+                        else "不通过"
+                    )
+                if plan.result != new_result:
+                    plan.result = new_result
+                    plans_to_update.append(plan)
+            if plans_to_update:
+                TestPlan.objects.bulk_update(plans_to_update, ["result"])
+
+            plans_serialized = TestPlanListSerializer(
+                plans,
+                many=True,
+                context={"plan_stats": plan_stats},
+            ).data
+            plans_map = {str(plan.get("id")): plan for plan in plans_serialized}
+
+        for item in data:
+            item["plans"] = [
+                plans_map[str(pid)]
+                for pid in item.get("plan_ids", []) or []
+                if str(pid) in plans_map
+            ]
+        return data
+
+    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
+    def list(self, request, slug, project_id):
+        cycle_status = request.query_params.getlist('status')
+        cycle_view = request.GET.get("cycle_view", "all")
+
+        project = Project.objects.only("id", "timezone").get(id=project_id)
+        project_timezone = project.timezone
+        local_tz = pytz.timezone(project_timezone)
+        current_time_in_utc = timezone.now().astimezone(local_tz).astimezone(pytz.utc)
+
+        # 延期扫描使用轻量 queryset，避免触发 list 注解/prefetch 的重查询。
+        # 需包含终止态迭代，以便 evaluate 关闭其上未结束的延期记录。
+        scan_cycles_for_overdue(
+            Cycle.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                archived_at__isnull=True,
+            ).only(
+                "id",
+                "status",
+                "test_handoff_date",
+                "end_date",
+                "owned_by_id",
+                "project_id",
+                "workspace_id",
+            )
+        )
+
+        # list 走 .values()，清理对响应无用的 select/prefetch，避免额外 JOIN/预取
+        queryset = (
+            self.get_queryset()
+            .filter(archived_at__isnull=True)
+            .select_related(None)
+            .prefetch_related(None)
+            .order_by("-is_favorite", "-created_at")
+        )
+        if cycle_status:
+            queryset = queryset.filter(status__in=cycle_status)
+
+        if cycle_view == "current":
+            queryset = queryset.filter(
+                start_date__lte=current_time_in_utc,
+                end_date__gte=current_time_in_utc,
+            )
+            data = list(queryset.values(*self._CYCLE_LIST_VALUE_FIELDS))
+            data = user_timezone_converter(
+                data, ["start_date", "end_date", "test_handoff_date"], project_timezone
+            )
+            data = self._enrich_cycles_with_plans(data)
+            if data:
+                return Response(data, status=status.HTTP_200_OK)
+
+        data = list(queryset.values(*self._CYCLE_LIST_VALUE_FIELDS))
+        data = user_timezone_converter(
+            data, ["start_date", "end_date", "test_handoff_date"], project_timezone
+        )
+        data = self._enrich_cycles_with_plans(data)
         return Response(data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.SPRINTS_CREATE)

@@ -26,7 +26,7 @@ BUG_REQUIRED_FIELD = ["修复版本", "技术原因及解决方案"]
 TRANSITION_RULES = [
     dict(from_state='Backlog', to_state='Open', initiator=None, assignee=dict(role_name=RD_ROLE_SET)),
     dict(from_state='Open', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=BUG_REQUIRED_FIELD),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=['修复版本', '技术原因及解决方案', '缺陷原因']),
     dict(from_state='Open', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
          assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因及解决方案']),
     dict(from_state='Fixed', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),

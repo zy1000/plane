@@ -58,9 +58,9 @@ export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
 
   const filteredQueryString = useMemo(() => {
     if (!projectIdValue) return "";
-    const applied = issuesFilter?.getAppliedFilters?.(projectIdValue, "defects");
+    const applied = issuesFilter?.appliedFilters;
     return stringifyAppliedFilters(applied as Record<string, unknown> | undefined);
-  }, [issuesFilter, projectIdValue]);
+  }, [issuesFilter, projectIdValue, issuesFilter?.appliedFilters]);
 
   const canCreateDefect =
     workspaceSlugValue && projectIdValue

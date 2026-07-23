@@ -35,7 +35,7 @@ TRANSITION_RULES = [
         "to_state": "Fixed",
         "initiator": {"role_name": RD_ROLE_SET},
         "assignee": {"role_name": QA_ROLE_SET},
-        "required_field": BUG_REQUIRED_FIELD,
+        "required_field": ["修复版本", "技术原因及解决方案", "缺陷原因"],
     },
     {
         "from_state": "Open",

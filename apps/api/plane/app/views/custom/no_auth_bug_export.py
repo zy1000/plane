@@ -35,7 +35,9 @@ class PublicBugReportExportQuerySerializer(serializers.Serializer):
 
         end_date = attrs.get("end_date")
         if end_date and end_date < start_date:
-            raise serializers.ValidationError({"end_date": "结束日期不能早于开始日期。"})
+            raise serializers.ValidationError(
+                {"end_date": "结束日期不能早于开始日期。"}
+            )
         return attrs
 
 
@@ -53,6 +55,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
     TRACE_ACTIVITY_FIELDS = ("state", "assignees")
     TECH_REASON_FIELD_NAME = "技术原因及解决方案"
     BUG_LEVEL_FIELD_NAME = "缺陷级别"
+    BUG_REASON_FIELD_NAME = "缺陷原因"
     export_columns = [
         "序号",
         "ID",
@@ -65,6 +68,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
         "产品类型",
         "状态",
         "缺陷级别",
+        "缺陷原因",
     ]
     export_widths = {
         "标题": 40,
@@ -76,6 +80,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
         "产品类型": 16,
         "状态": 15,
         "ID": 20,
+        "缺陷原因": 30,
     }
 
     @staticmethod
@@ -105,8 +110,12 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
     @staticmethod
     def _build_issue_url(request, issue):
-        workspace_slug = issue.workspace.slug if issue.workspace_id and issue.workspace else ""
-        project_identifier = issue.project.identifier if issue.project_id and issue.project else ""
+        workspace_slug = (
+            issue.workspace.slug if issue.workspace_id and issue.workspace else ""
+        )
+        project_identifier = (
+            issue.project.identifier if issue.project_id and issue.project else ""
+        )
         return request.build_absolute_uri(
             f"/{workspace_slug}/browse/{project_identifier}-{issue.sequence_id}/"
         )
@@ -139,6 +148,13 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
     def _get_bug_level(self, issue):
         for item in getattr(issue, "bug_level_values", []):
+            value = self._stringify_extra_field_value(item.value)
+            if value:
+                return value
+        return ""
+
+    def _get_bug_reason(self, issue):
+        for item in getattr(issue, "bug_reason_values", []):
             value = self._stringify_extra_field_value(item.value)
             if value:
                 return value
@@ -330,6 +346,16 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     .order_by("-created_at"),
                     to_attr="bug_level_values",
                 ),
+                Prefetch(
+                    "type_extra_field_values",
+                    queryset=TypeExtraFieldValue.objects.filter(
+                        deleted_at__isnull=True,
+                        extra_field__name=self.BUG_REASON_FIELD_NAME,
+                    )
+                    .select_related("extra_field")
+                    .order_by("-created_at"),
+                    to_attr="bug_reason_values",
+                ),
             )
             .order_by("-created_at")
         )
@@ -368,10 +394,13 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "项目": issue.project.name if issue.project_id else "",
                     "创建时间": self._to_utc8_string(issue.created_at),
                     "当前负责人": ",".join(assignees),
-                    "创建人": self._resolve_user_name(getattr(issue, "created_by", None)),
+                    "创建人": self._resolve_user_name(
+                        getattr(issue, "created_by", None)
+                    ),
                     "产品类型": issue.project.product_type if issue.project_id else "",
                     "状态": issue.state.name if issue.state_id else "",
                     "缺陷级别": self._get_bug_level(issue),
+                    "缺陷原因": self._get_bug_reason(issue),
                 }
             )
         return rows

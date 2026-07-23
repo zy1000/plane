@@ -97,7 +97,14 @@ def _to_datetime(value):
     )
 
 
-def _active_overdue(cycle_id, phase: str) -> Optional[CycleOverdueRecord]:
+def _active_overdue(
+        cycle_id,
+        phase: str,
+        *,
+        cache: Optional[dict] = None,
+) -> Optional[CycleOverdueRecord]:
+    if cache is not None:
+        return cache.get((cycle_id, phase))
     return CycleOverdueRecord.objects.filter(
         cycle_id=cycle_id,
         phase=phase,
@@ -112,9 +119,10 @@ def open_overdue(
         *,
         triggered_by: str = CycleOverdueTrigger.SYSTEM,
         started_at=None,
+        cache: Optional[dict] = None,
 ) -> CycleOverdueRecord:
     """幂等开启延期记录。已有未结束记录则原样返回。"""
-    existing = _active_overdue(cycle.id, phase)
+    existing = _active_overdue(cycle.id, phase, cache=cache)
     if existing is not None:
         return existing
 
@@ -124,10 +132,12 @@ def open_overdue(
         workspace_id=cycle.workspace_id,
         phase=phase,
         triggered_by=triggered_by,
-        snapshot_owner=cycle.owned_by,
+        snapshot_owner_id=cycle.owned_by_id,
         snapshot_status=cycle.status or "",
         started_at=started_at or timezone.now(),
     )
+    if cache is not None:
+        cache[(cycle.id, phase)] = record
     logger.info(
         "cycle overdue opened",
         extra={"cycle_id": str(cycle.id), "phase": phase, "triggered_by": triggered_by},
@@ -161,20 +171,28 @@ def close_active_overdue(
         phase: str,
         *,
         now=None,
+        cache: Optional[dict] = None,
 ) -> Optional[CycleOverdueRecord]:
     """关闭某 cycle / phase 的未结束记录。返回被关闭记录或 None。"""
-    record = _active_overdue(cycle_id, phase)
+    record = _active_overdue(cycle_id, phase, cache=cache)
     if record is None:
         return None
 
     record.ended_at = now or timezone.now()
     record.save(update_fields=["ended_at", "updated_at"])
+    if cache is not None:
+        cache.pop((cycle_id, phase), None)
     logger.info("cycle overdue closed", extra={"cycle_id": str(cycle_id), "phase": phase})
     _emit_overdue_activity("cycle_overdue.activity.closed", record=record)
     return record
 
 
-def evaluate_cycle_overdue(cycle: Cycle, *, now=None) -> None:
+def evaluate_cycle_overdue(
+        cycle: Cycle,
+        *,
+        now=None,
+        cache: Optional[dict] = None,
+) -> None:
     """根据当前 cycle 字段判定是否开/关哪个 phase 的延期记录。
 
     - 研发延期：status in {未开始,进行中,已退回} 且当前时间已超过 test_handoff_date
@@ -185,26 +203,26 @@ def evaluate_cycle_overdue(cycle: Cycle, *, now=None) -> None:
 
     # 终止状态不再产生新记录；同时把仍未关闭的延期记录关掉
     if status in _TERMINAL_STATUSES:
-        close_active_overdue(cycle.id, CycleOverduePhase.DEV, now=now)
-        close_active_overdue(cycle.id, CycleOverduePhase.TEST, now=now)
+        close_active_overdue(cycle.id, CycleOverduePhase.DEV, now=now, cache=cache)
+        close_active_overdue(cycle.id, CycleOverduePhase.TEST, now=now, cache=cache)
         return
 
     # 研发延期判定
     if status in _DEV_PHASE_STATUSES:
         handoff = _to_datetime(cycle.test_handoff_date)
         if handoff is not None and now > handoff:
-            open_overdue(cycle, CycleOverduePhase.DEV)
+            open_overdue(cycle, CycleOverduePhase.DEV, cache=cache)
         # 研发阶段不会产生测试延期，清理可能残留的 test 记录
-        close_active_overdue(cycle.id, CycleOverduePhase.TEST, now=now)
+        close_active_overdue(cycle.id, CycleOverduePhase.TEST, now=now, cache=cache)
         return
 
     # 测试延期判定
     if status in _TEST_PHASE_STATUSES:
         # 进入测试阶段后研发阶段已结束
-        close_active_overdue(cycle.id, CycleOverduePhase.DEV, now=now)
+        close_active_overdue(cycle.id, CycleOverduePhase.DEV, now=now, cache=cache)
         end_date = _to_datetime(cycle.end_date)
         if end_date is not None and now > end_date:
-            open_overdue(cycle, CycleOverduePhase.TEST)
+            open_overdue(cycle, CycleOverduePhase.TEST, cache=cache)
         return
 
     return
@@ -280,11 +298,25 @@ def scan_cycles_for_overdue(cycles: Optional[Iterable[Cycle]] = None) -> int:
             status__in=_TERMINAL_STATUSES,
         )
 
+    cycle_list = list(cycles)
+    if not cycle_list:
+        return 0
+
+    # 一次取出本批所有未结束延期记录，避免 evaluate 时逐条查询
+    active_cache = {
+        (record.cycle_id, record.phase): record
+        for record in CycleOverdueRecord.objects.filter(
+            cycle_id__in=[cycle.id for cycle in cycle_list],
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+    }
+
     now = timezone.now()
     count = 0
-    for cycle in cycles:
+    for cycle in cycle_list:
         try:
-            evaluate_cycle_overdue(cycle, now=now)
+            evaluate_cycle_overdue(cycle, now=now, cache=active_cache)
         except Exception:  # noqa: BLE001
             logger.exception(
                 "evaluate_cycle_overdue failed",
