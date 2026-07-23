@@ -147,6 +147,7 @@ from .timesheet import TimeSheet, TimesheetCategory
 from .product import Product, ProductMember, ProductMemberRole, ProductRole
 from .requirement import (
     Requirement,
+    RequirementApprovalType,
     RequirementApprover,
     RequirementChangeApproval,
     RequirementChangeItem,

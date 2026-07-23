@@ -25,6 +25,7 @@ from plane.db.models import (
     Workspace,
     Project,
     Product,
+    Requirement,
     User,
     Cycle,
     Release,
@@ -312,6 +313,9 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:
             return {"case_id": entity_id}
 
+        if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+            return {"entity_identifier": str(entity_id)}
+
         # Comment Description
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             return {"comment_id": entity_id}
@@ -452,6 +456,16 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         entity_id_fields = self.get_entity_id_field(
             entity_type=entity_type, entity_id=entity_identifier
         )
+        if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+            requirement = Requirement.objects.filter(
+                id=entity_identifier,
+                workspace=workspace,
+            ).first()
+            if requirement is None:
+                return Response(
+                    {"error": "Requirement not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
             product = _get_product(workspace, entity_identifier)
             if product is not None:
@@ -1084,6 +1098,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
             return {"product_id": entity_id}
 
+        if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+            return {"entity_identifier": str(entity_id)}
+
         return {}
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -1143,6 +1160,15 @@ class DuplicateAssetEndpoint(BaseAPIView):
                 return Response(
                     {"error": "You do not have permission to create product assets."},
                     status=status.HTTP_403_FORBIDDEN,
+                )
+        if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+            if not Requirement.objects.filter(
+                id=entity_id,
+                workspace=workspace,
+            ).exists():
+                return Response(
+                    {"error": "Requirement not found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
 
         entity_id_fields = self.get_entity_id_field(

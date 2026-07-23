@@ -22,6 +22,7 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
 - ``USER_AVATAR`` / ``USER_COVER``  → ``UserRoot('用户') -> User``
 - ``WORKSPACE_LOGO``                → ``Workspace`` 节点本身
 - ``PRODUCT_DESCRIPTION``           → ``Workspace -> Product``
+- ``REQUIREMENT_ATTACHMENT``        → ``Workspace -> 需求 -> Requirement``
 - ``PROJECT_COVER`` / ``PROJECT_DESCRIPTION`` / ``CASE_MINDMAP``
                                     → ``Workspace -> Project``（无中间分类层）
 - ``PROJECT_FILESTORE``             → ``Workspace -> Project -> filestore``（固定根目录）
@@ -189,6 +190,28 @@ class _Resolver:
                 entity_type="PRODUCT",
                 entity_id=product.pk,
                 display_name=getattr(product, "name", "") or "",
+            )
+
+        if et == "REQUIREMENT_ATTACHMENT":
+            requirement_id = getattr(asset, "entity_identifier", None)
+            if not requirement_id:
+                return self._temp_node(parent_for_category=ws_node, asset=asset)
+            from plane.db.models import Requirement
+
+            requirement = Requirement.objects.filter(
+                id=requirement_id,
+                workspace=workspace,
+            ).first()
+            if requirement is None:
+                return self._temp_node(parent_for_category=ws_node, asset=asset)
+            category_node = self._category_node(
+                parent=ws_node, entity_type=et
+            )
+            return self._get_or_create_node(
+                parent=category_node,
+                entity_type="REQUIREMENT",
+                entity_id=requirement.pk,
+                display_name=requirement.title,
             )
 
         project = self._get_related(asset, "project")

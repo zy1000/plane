@@ -86,6 +86,7 @@ class FilePath(MPTTModel):
         CYCLE = "CYCLE"
         RELEASE = "RELEASE"
         PLAN_CASE_RECORD = "PLAN_CASE_RECORD"
+        REQUIREMENT = "REQUIREMENT"
         USER_ROOT = "USER_ROOT"
         USER = "USER"
         # 中文分类节点（entity_id IS NULL）：作为 PROJECT 与具体业务实体之间的固定中间层
@@ -96,6 +97,7 @@ class FilePath(MPTTModel):
         RELEASES_CATEGORY = "RELEASES_CATEGORY"
         CASES_CATEGORY = "CASES_CATEGORY"
         PLAN_CASE_RECORDS_CATEGORY = "PLAN_CASE_RECORDS_CATEGORY"
+        REQUIREMENTS_CATEGORY = "REQUIREMENTS_CATEGORY"
         # 临时分类节点：业务实体（issue/page/...）尚未创建时，FileAsset 先挂到 _temp
         # 分类下；该分类节点共享（entity_id IS NULL），其下每个 TEMP 节点对应一个 asset。
         TEMP_CATEGORY = "TEMP_CATEGORY"
@@ -159,6 +161,7 @@ class FileAsset(BaseModel):
         RELEASE_COMMENT_DESCRIPTION = "RELEASE_COMMENT_DESCRIPTION"
         PLAN_CASE_RECORD_FILE = "PLAN_CASE_RECORD_FILE"
         TEST_CASE_COMMENT_DESCRIPTION = "TEST_CASE_COMMENT_DESCRIPTION"
+        REQUIREMENT_ATTACHMENT = "REQUIREMENT_ATTACHMENT"
 
     attributes = models.JSONField(default=dict)
     # 末段文件名（含可能的 (1)/(2) 去重后缀）。完整 MinIO key 由 ``path`` 节点链派生 +
@@ -358,6 +361,9 @@ class FileAsset(BaseModel):
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/projects/{self.project_id}/{self.id}/"
 
         if self.entity_type == self.EntityTypeContext.PRODUCT_DESCRIPTION:
+            return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.id}/"
+
+        if self.entity_type == self.EntityTypeContext.REQUIREMENT_ATTACHMENT:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.id}/"
 
         if (

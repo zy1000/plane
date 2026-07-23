@@ -174,3 +174,11 @@ from .qa import (
 )
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
 from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer
+from .requirement import (
+    RequirementConfigurationWriteSerializer,
+    RequirementDetailCreateSerializer,
+    RequirementDetailFilterSerializer,
+    RequirementDetailSerializer,
+    RequirementDetailUpdateSerializer,
+    RequirementSerializer,
+)
