@@ -59,7 +59,13 @@ def get_active_custom_role_ids(obj):
 def get_project_member_role_sources(obj, context):
     sources_by_member_id = context.get("role_sources_by_member_id")
     if sources_by_member_id is None:
-        sources_by_member_id = build_project_member_role_sources([obj])
+        # role_sources 与 inherited_role_ids 会各调用一次；按成员记忆，避免重复查库
+        memo = context.setdefault("_role_sources_memo", {})
+        if obj.id not in memo:
+            memo[obj.id] = build_project_member_role_sources([obj]).get(obj.id, [])
+        sources = memo[obj.id]
+    else:
+        sources = sources_by_member_id.get(obj.id, [])
 
     return [
         {
@@ -77,7 +83,7 @@ def get_project_member_role_sources(obj, context):
                 else None
             ),
         }
-        for source in sources_by_member_id.get(obj.id, [])
+        for source in sources
     ]
 
 
@@ -245,11 +251,20 @@ class ProjectMemberSerializer(BaseSerializer):
         return get_active_custom_role_ids(obj)
 
     def get_permission_keys(self, obj):
+        precomputed = self.context.get("permission_keys")
+        if precomputed is not None:
+            return list(precomputed)
+
+        project = getattr(obj, "project", None)
+        role_sources = get_project_member_role_sources(obj, self.context)
+        role_ids = {source["role"]["id"] for source in role_sources}
         return list(
             _get_user_project_permission_keys(
                 user=obj.member,
                 workspace_slug=obj.workspace.slug,
                 project_id=str(obj.project_id),
+                project=project,
+                role_ids=role_ids,
             )
         )
 

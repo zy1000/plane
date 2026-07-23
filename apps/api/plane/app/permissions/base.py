@@ -192,14 +192,24 @@ def _get_all_issue_type_permission_keys_for_project(project_id: str) -> set:
 
 
 def _get_user_project_permission_keys(
-    user, workspace_slug: str, project_id: str
+    user,
+    workspace_slug: str,
+    project_id: str,
+    *,
+    project: Optional[Project] = None,
+    role_ids: Optional[Iterable] = None,
 ) -> set:
     """
     计算用户在某项目内的有效 permission_keys 集合。
     合并直接绑定的 ProjectRole 和工作区团队在当前项目中的角色授权。
     此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
+
+    可选传入已加载的 project / role_ids，避免调用方重复查询。
     """
-    project = Project.objects.get(pk=project_id)
+    if project is None:
+        project = Project.objects.select_related("project_lead", "created_by").get(
+            pk=project_id
+        )
     if (
         user == project.project_lead
         or _is_instance_admin(user)
@@ -212,11 +222,14 @@ def _get_user_project_permission_keys(
             PermissionKey.values()
         ) | _get_all_issue_type_permission_keys_for_project(project_id)
 
-    role_ids = get_user_project_role_ids(user, workspace_slug, project_id)
-    if not role_ids:
+    if role_ids is None:
+        resolved_role_ids = get_user_project_role_ids(user, workspace_slug, project_id)
+    else:
+        resolved_role_ids = set(role_ids)
+    if not resolved_role_ids:
         return set()
 
-    roles = ProjectRole.objects.filter(pk__in=role_ids, deleted_at__isnull=True)
+    roles = ProjectRole.objects.filter(pk__in=resolved_role_ids, deleted_at__isnull=True)
     keys: set = set()
     for role in roles:
         perms = role.permissions if isinstance(role.permissions, dict) else {}
