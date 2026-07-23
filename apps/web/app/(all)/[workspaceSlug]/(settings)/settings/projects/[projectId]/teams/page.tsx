@@ -36,13 +36,12 @@ function TeamsSettingsPage({ params }: Route.ComponentProps) {
   const { roles, isLoading: isRolesLoading, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
 
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.teams.permissionKeys ?? [], workspaceSlug, projectId);
-  const canCreate = allowProjectPermissionKeys(["project.group_grant.create"], workspaceSlug, projectId);
-  const canDelete = allowProjectPermissionKeys(["project.group_grant.delete"], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys(["project.group_grant.edit"], workspaceSlug, projectId);
 
   useSWR(canView ? `PROJECT_GROUPS_${workspaceSlug}_${projectId}` : null, canView ? fetchGroups : null);
   useSWR(
-    canView && canCreate ? `PROJECT_GROUP_ROLES_${workspaceSlug}_${projectId}` : null,
-    canView && canCreate ? fetchRoles : null
+    canView && canEdit ? `PROJECT_GROUP_ROLES_${workspaceSlug}_${projectId}` : null,
+    canView && canEdit ? fetchRoles : null
   );
 
   useEffect(() => {
@@ -101,8 +100,7 @@ function TeamsSettingsPage({ params }: Route.ComponentProps) {
           activeGroupId={selectedGroupId}
           roles={roles}
           isRolesLoading={isRolesLoading}
-          canCreateRole={canCreate}
-          canDeleteRole={canDelete}
+          canEditRole={canEdit}
           onOpen={(group) => setSelectedGroupId(group.id)}
           onRetry={() => void fetchGroups()}
           onAddRoles={addRoles}

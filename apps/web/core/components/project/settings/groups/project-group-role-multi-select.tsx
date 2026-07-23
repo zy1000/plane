@@ -23,8 +23,7 @@ type Props = {
   group: IProjectGroup;
   roles: IProjectRole[];
   isRolesLoading: boolean;
-  canCreate: boolean;
-  canDelete: boolean;
+  canEdit: boolean;
   className?: string;
   onAddRoles: (groupId: string, roleIds: string[]) => Promise<TProjectGroupRoleMutationResult>;
   onRemoveRole: (groupId: string, grantId: string) => Promise<void>;
@@ -47,8 +46,7 @@ export function ProjectGroupRoleMultiSelect({
   group,
   roles,
   isRolesLoading,
-  canCreate,
-  canDelete,
+  canEdit,
   className,
   onAddRoles,
   onRemoveRole,
@@ -69,20 +67,18 @@ export function ProjectGroupRoleMultiSelect({
   const options: TProjectGroupRoleOption[] = useMemo(
     () =>
       availableRoles.map((role) => {
-        const isSelected = selectedRoleIdSet.has(role.id);
-        const disabled = isSelected ? !canDelete : !canCreate;
         return {
           value: role.id,
           data: role,
-          disabled,
-          className: () => (disabled ? "cursor-not-allowed text-placeholder" : ""),
+          disabled: !canEdit,
+          className: () => (!canEdit ? "cursor-not-allowed text-placeholder" : ""),
         };
       }),
-    [availableRoles, canCreate, canDelete, selectedRoleIdSet]
+    [availableRoles, canEdit]
   );
 
   const buttonLabel = useMemo(() => {
-    if (isRolesLoading && canCreate) return <span className="text-placeholder">加载中...</span>;
+    if (isRolesLoading && canEdit) return <span className="text-placeholder">加载中...</span>;
     if (group.grants.length === 0) return <span className="text-placeholder">未分配项目角色</span>;
     if (group.grants.length === 1) return <span className="truncate">{group.grants[0].role_detail.name}</span>;
     return (
@@ -90,16 +86,16 @@ export function ProjectGroupRoleMultiSelect({
         {group.grants[0].role_detail.name} +{group.grants.length - 1}
       </span>
     );
-  }, [canCreate, group.grants, isRolesLoading]);
+  }, [canEdit, group.grants, isRolesLoading]);
 
   const handleChange = async (nextRoleIds: string[]) => {
     const addedRoleId = nextRoleIds.find((roleId) => !selectedRoleIdSet.has(roleId));
     const removedRoleId = selectedRoleIds.find((roleId) => !nextRoleIds.includes(roleId));
-    if ((!addedRoleId || !canCreate) && (!removedRoleId || !canDelete)) return;
+    if (!canEdit || (!addedRoleId && !removedRoleId)) return;
 
     setIsSubmitting(true);
     try {
-      if (addedRoleId && canCreate) {
+      if (addedRoleId) {
         const result = await onAddRoles(group.id, [addedRoleId]);
         if (result.failures.length > 0) {
           setToast({
@@ -120,7 +116,7 @@ export function ProjectGroupRoleMultiSelect({
         return;
       }
 
-      if (removedRoleId && canDelete) {
+      if (removedRoleId) {
         const grant = group.grants.find((item) => item.role === removedRoleId);
         if (!grant) return;
         await onRemoveRole(group.id, grant.id);
@@ -142,9 +138,9 @@ export function ProjectGroupRoleMultiSelect({
     }
   };
 
-  if (!canCreate && !canDelete) return <RoleSummary group={group} />;
+  if (!canEdit) return <RoleSummary group={group} />;
 
-  const isDropdownDisabled = isSubmitting || (isRolesLoading && canCreate);
+  const isDropdownDisabled = isSubmitting || (isRolesLoading && canEdit);
 
   return (
     <div
