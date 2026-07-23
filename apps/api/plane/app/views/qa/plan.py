@@ -1341,16 +1341,15 @@ class CaseAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.QA_CASE_DELETE)
     def delete(self, request, slug, project_id):
-        cases = self.filter_queryset(self.queryset).all()
-        for case in cases:
-            test_case_activity.delay(
-                type="case.activity.deleted",
-                requested_data=None,
-                current_instance=json.dumps({"name": case.name}),
-                case_id=str(case.id),
-                actor_id=str(request.user.id),
-                epoch=int(timezone.now().timestamp()),
+        cases = self.filter_queryset(
+            self.queryset.filter(
+                repository__workspace__slug=slug,
+                repository__project_id=project_id,
             )
+        )
+        # Deletion activities cannot outlive a physically deleted case because
+        # their foreign key cascades. Queuing them here also races with the
+        # cascade and can surface as an IntegrityError during bulk deletion.
         cases.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
