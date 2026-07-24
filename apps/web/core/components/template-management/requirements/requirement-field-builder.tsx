@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlignLeft,
+  ArrowDownToLine,
+  ArrowUpToLine,
   ChevronDown,
   Copy,
   FileImage,
@@ -19,6 +21,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -31,6 +34,21 @@ import {
   getRequirementSelectOptions,
   hasValidRequirementSelectOptions,
 } from "./requirement-select";
+
+const MenuRowLabel = ({
+  icon: Icon,
+  label,
+  tone = "default",
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone?: "default" | "danger";
+}) => (
+  <span className={cn("flex items-center gap-2", tone === "danger" && "text-danger-primary")}>
+    <Icon className="size-3.5 shrink-0" />
+    <span className="truncate">{label}</span>
+  </span>
+);
 
 type TFieldSelection = {
   rootKey: string;
@@ -375,18 +393,29 @@ function RequirementFieldRow(props: TFieldRowProps) {
             portalElement={getMenuPortalElement()}
           >
             <CustomMenu.MenuItem onClick={() => onInsert("above")}>
-              {t("workspace_templates.requirements.fields.insert_above")}
+              <MenuRowLabel
+                icon={ArrowUpToLine}
+                label={t("workspace_templates.requirements.fields.insert_above")}
+              />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={() => onInsert("below")}>
-              {t("workspace_templates.requirements.fields.insert_below")}
+              <MenuRowLabel
+                icon={ArrowDownToLine}
+                label={t("workspace_templates.requirements.fields.insert_below")}
+              />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={onDuplicate}>
-              <Copy className="size-3.5" />
-              {t("workspace_templates.requirements.editor.builder.duplicate_field")}
+              <MenuRowLabel
+                icon={Copy}
+                label={t("workspace_templates.requirements.editor.builder.duplicate_field")}
+              />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={onRemove}>
-              <Trash2 className="size-3.5" />
-              {t("workspace_templates.requirements.editor.builder.delete_field")}
+              <MenuRowLabel
+                icon={Trash2}
+                label={t("workspace_templates.requirements.editor.builder.delete_field")}
+                tone="danger"
+              />
             </CustomMenu.MenuItem>
           </CustomMenu>
         </div>
@@ -953,8 +982,10 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                     key={type}
                     onClick={() => insertChildField(rootKey, field.children.length, type)}
                   >
-                    <Icon className="size-3.5" />
-                    {t(`workspace_templates.requirements.field_types.${type}`)}
+                    <MenuRowLabel
+                      icon={Icon}
+                      label={t(`workspace_templates.requirements.field_types.${type}`)}
+                    />
                   </CustomMenu.MenuItem>
                 );
               })}
@@ -981,8 +1012,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         const Icon = FIELD_ICONS[type];
         return (
           <CustomMenu.MenuItem key={type} onClick={() => insertRootField(fields.length, type)}>
-            <Icon className="size-3.5" />
-            {t(`workspace_templates.requirements.field_types.${type}`)}
+            <MenuRowLabel icon={Icon} label={t(`workspace_templates.requirements.field_types.${type}`)} />
           </CustomMenu.MenuItem>
         );
       })}

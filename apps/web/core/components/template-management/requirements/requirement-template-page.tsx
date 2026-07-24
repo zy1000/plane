@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronDown, FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, FileText, Settings } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
+import { Breadcrumbs, Header, Loader, Tooltip } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -23,10 +22,7 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
     workspaceSlug,
     templates,
     isLoading: isTemplatesLoading,
-    isMutating: isTemplateMutating,
-    deleteTemplate,
     upsertTemplate,
-    setIsCreateModalOpen,
   } = useRequirementTemplatesContext();
   const detailsStore = useRequirementTemplateDetails({
     workspaceSlug,
@@ -35,28 +31,9 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
   });
   const template = detailsStore.configuration?.requirement ?? templates.find((item) => item.id === templateId);
 
-  const handleDelete = async () => {
-    if (!template || !window.confirm(t("workspace_templates.requirements.delete_confirm"))) return;
-    try {
-      await deleteTemplate(template.id);
-      navigate(`/${workspaceSlug}/templates/requirements`, { replace: true });
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: t("workspace_templates.requirements.toast.deleted"),
-      });
-    } catch (error) {
-      const payload = error as { error?: string };
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: payload?.error ?? t("workspace_templates.requirements.toast.failed"),
-      });
-    }
-  };
-
   const isLoading = isTemplatesLoading || detailsStore.isConfigurationLoading;
   const pageTitle = template?.title ?? t("workspace_templates.requirements.title");
+  const canConfigureTemplate = Boolean(templateId) && !isLoading && !isDataEditing;
 
   return (
     <>
@@ -83,25 +60,40 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
                           <Loader.Item height="24px" />
                         </Loader>
                       ) : (
-                        <label className="relative min-w-0">
-                          <select
-                            value={templateId ?? ""}
-                            disabled={isDataEditing}
-                            onChange={(event) => {
-                              if (!event.target.value) return;
-                              navigate(`/${workspaceSlug}/templates/requirements/${event.target.value}`);
-                            }}
-                            className="h-7 max-w-72 appearance-none truncate rounded-md border border-transparent bg-transparent pr-7 pl-1 text-13 font-medium text-primary outline-none hover:border-subtle hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            aria-label={t("workspace_templates.requirements.switch_template")}
-                          >
-                            {templates.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.title}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-secondary" />
-                        </label>
+                        <>
+                          <label className="relative min-w-0">
+                            <select
+                              value={templateId ?? ""}
+                              disabled={isDataEditing}
+                              onChange={(event) => {
+                                if (!event.target.value) return;
+                                navigate(`/${workspaceSlug}/templates/requirements/${event.target.value}`);
+                              }}
+                              className="h-7 max-w-72 appearance-none truncate rounded-md border border-transparent bg-transparent pr-7 pl-1 text-13 font-medium text-primary outline-none hover:border-subtle hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={t("workspace_templates.requirements.switch_template")}
+                            >
+                              {templates.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.title}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-secondary" />
+                          </label>
+                          <Tooltip tooltipContent={t("workspace_templates.requirements.edit")} position="bottom">
+                            <button
+                              type="button"
+                              disabled={!canConfigureTemplate}
+                              onClick={() =>
+                                navigate(`/${workspaceSlug}/templates/requirements/${templateId}/edit`)
+                              }
+                              className="ml-1 flex size-6 flex-shrink-0 items-center justify-center rounded text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={t("workspace_templates.requirements.edit")}
+                            >
+                              <Settings className="size-3.5" />
+                            </button>
+                          </Tooltip>
+                        </>
                       )}
                     </div>
                   }
@@ -109,29 +101,6 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
                 />
               </Breadcrumbs>
             </Header.LeftItem>
-            <Header.RightItem className="gap-2">
-              <Button variant="secondary" onClick={() => setIsCreateModalOpen(true)} disabled={isDataEditing}>
-                <Plus className="size-3.5" />
-                {t("workspace_templates.requirements.create")}
-              </Button>
-              <Button
-                variant={isDataEditing ? "secondary" : "primary"}
-                disabled={!templateId || isLoading || isDataEditing}
-                onClick={() => navigate(`/${workspaceSlug}/templates/requirements/${templateId}/edit`)}
-              >
-                <Pencil className="size-3.5" />
-                {t("workspace_templates.requirements.edit")}
-              </Button>
-              <CustomMenu ellipsis placement="bottom-end">
-                <CustomMenu.MenuItem
-                  onClick={() => void handleDelete()}
-                  disabled={!template || isTemplateMutating || isDataEditing}
-                >
-                  <Trash2 className="size-3.5" />
-                  {t("delete")}
-                </CustomMenu.MenuItem>
-              </CustomMenu>
-            </Header.RightItem>
           </Header>
         }
       />

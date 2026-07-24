@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import {
@@ -8,21 +8,22 @@ import {
   Columns3,
   Copy,
   File,
-  Filter,
   Image as ImageIcon,
   MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
-  Search,
   Save,
   Trash2,
   Undo2,
 } from "lucide-react";
 import { Pagination } from "antd";
 import { v4 as uuidv4 } from "uuid";
+import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { IconButton } from "@plane/propel/icon-button";
+import { CloseIcon, FilterAppliedIcon, FilterIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirementAssetRef,
@@ -433,6 +434,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const { t } = useTranslation();
   const { uploadEditorAsset } = useEditorAsset();
   const [searchInput, setSearchInput] = useState(search);
+  const [isSearchOpen, setIsSearchOpen] = useState(() => search.trim().length > 0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isColumnsOpen, setIsColumnsOpen] = useState(false);
@@ -449,6 +451,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     }
   });
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const activeFields = useMemo(() => fields.filter((field) => field.is_active), [fields]);
   const editor = useRequirementDetailGridEditor({
     details,
@@ -459,9 +462,48 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     onSave: onBulkSave,
     onEditingChange,
   });
+  const hasActiveFilters = filters.length > 0;
+
+  const scheduleSearchChange = useCallback(
+    (value: string) => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => onSearchChange(value), 300);
+    },
+    [onSearchChange]
+  );
+
+  const clearSearch = useCallback(() => {
+    setSearchInput("");
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    onSearchChange("");
+    setIsSearchOpen(false);
+  }, [onSearchChange]);
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      const trimmedQuery = searchInput.trim();
+      setSearchInput(trimmedQuery);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      onSearchChange(trimmedQuery);
+      return;
+    }
+    if (event.key === "Escape") {
+      if (searchInput.trim() !== "") {
+        clearSearch();
+      } else {
+        setIsSearchOpen(false);
+        searchInputRef.current?.blur();
+      }
+    }
+  };
+
+  useOutsideClickDetector(searchInputRef, () => {
+    if (isSearchOpen && searchInput.trim() === "") setIsSearchOpen(false);
+  });
 
   useEffect(() => {
-    setSearchInput(search);
+    if (document.activeElement !== searchInputRef.current) setSearchInput(search);
+    if (search.trim().length > 0) setIsSearchOpen(true);
   }, [search]);
 
   useEffect(() => {
@@ -918,21 +960,20 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
-        {!editor.isEditing && (
+        {!editor.isEditing && selectedIds.length > 0 && (
           <div className="flex items-center gap-2">
-            <Button variant="primary" onClick={() => editor.stageCreate()} disabled={isMutating}>
-              <Plus className="size-4" />
-              {t("workspace_templates.requirements.data.add")}
+            <Button variant="secondary" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
+              <Trash2 className="size-3.5" />
+              {t("workspace_templates.requirements.data.delete_selected", { count: selectedIds.length })}
             </Button>
-            {selectedIds.length > 0 && (
-              <Button variant="secondary" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
-                <Trash2 className="size-3.5" />
-                {t("workspace_templates.requirements.data.delete_selected", { count: selectedIds.length })}
-              </Button>
-            )}
           </div>
         )}
-        <div className={cn("flex flex-wrap items-center gap-2", editor.isEditing && "w-full justify-between")}>
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2",
+            editor.isEditing ? "w-full justify-between" : "ml-auto"
+          )}
+        >
           {editor.isEditing ? (
             <>
               <div className="flex min-w-0 items-center gap-2">
@@ -967,27 +1008,65 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             </>
           ) : (
             <>
-              <label className="relative block w-48 sm:w-60">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setSearchInput(value);
-                    if (searchTimer.current) clearTimeout(searchTimer.current);
-                    searchTimer.current = setTimeout(() => onSearchChange(value), 300);
-                  }}
-                  placeholder={t("workspace_templates.requirements.data.search")}
-                  className="focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-8 text-12 text-primary transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-placeholder focus:ring-2 motion-reduce:transition-none"
-                />
-              </label>
+              <div className="flex items-center">
+                {!isSearchOpen && (
+                  <IconButton
+                    variant="ghost"
+                    size="lg"
+                    className="-mr-1"
+                    onClick={() => {
+                      setIsSearchOpen(true);
+                      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+                    }}
+                    icon={SearchIcon}
+                    aria-label={t("workspace_templates.requirements.data.search")}
+                  />
+                )}
+                <div
+                  className={cn(
+                    "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+                    {
+                      "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
+                    }
+                  )}
+                >
+                  <SearchIcon className="h-3.5 w-3.5" />
+                  <input
+                    ref={searchInputRef}
+                    className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+                    placeholder={t("workspace_templates.requirements.data.search")}
+                    value={searchInput}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSearchInput(value);
+                      scheduleSearchChange(value);
+                    }}
+                    onKeyDown={handleSearchKeyDown}
+                  />
+                  {isSearchOpen && (
+                    <button type="button" className="grid place-items-center" onClick={clearSearch}>
+                      <CloseIcon className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="relative">
-                <Button variant="secondary" onClick={() => setIsFilterOpen((value) => !value)}>
-                  <Filter className="size-3.5" />
-                  {t("workspace_templates.requirements.data.filter")}
-                  {filters.length > 0 && <span className="text-accent-primary">{filters.length}</span>}
-                </Button>
+                <IconButton
+                  size="lg"
+                  variant="secondary"
+                  icon={hasActiveFilters ? FilterAppliedIcon : FilterIcon}
+                  onClick={() => setIsFilterOpen((value) => !value)}
+                  aria-label={t("workspace_templates.requirements.data.filter")}
+                  className={cn({
+                    "border border-accent-subtle-1 bg-accent-subtle text-accent-primary hover:border-accent-subtle-1 hover:bg-accent-subtle hover:text-accent-primary focus:border-accent-subtle-1 focus:bg-accent-subtle focus:text-accent-primary active:border-accent-subtle-1 active:bg-accent-subtle active:text-accent-primary":
+                      hasActiveFilters,
+                    "bg-accent-subtle-hover hover:bg-accent-subtle-hover focus:bg-accent-subtle-hover active:bg-accent-subtle-hover":
+                      hasActiveFilters && isFilterOpen,
+                  })}
+                  iconClassName={cn({
+                    "text-accent-primary [&_path]:fill-current": hasActiveFilters,
+                  })}
+                />
                 {isFilterOpen && (
                   <div className="absolute top-10 right-0 z-30 w-80 space-y-3 rounded-lg border border-subtle bg-surface-1 p-3 shadow-lg">
                     <select
@@ -1117,8 +1196,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                 )}
               </div>
               <div className="relative">
-                <Button variant="secondary" onClick={() => setIsColumnsOpen((value) => !value)}>
-                  <Columns3 className="size-3.5" />
+                <Button variant="secondary" size="lg" onClick={() => setIsColumnsOpen((value) => !value)}>
+                  {t("common.display")}
                 </Button>
                 {isColumnsOpen && (
                   <div className="absolute top-10 right-0 z-30 max-h-80 w-64 overflow-y-auto rounded-lg border border-subtle bg-surface-1 p-2 shadow-lg">
