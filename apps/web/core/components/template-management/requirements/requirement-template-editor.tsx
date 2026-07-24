@@ -6,9 +6,8 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementField, TRequirementFieldDraft } from "@plane/types";
-import { Header, Loader, ToggleSwitch } from "@plane/ui";
+import { Header, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -17,18 +16,8 @@ import { useRequirementTemplatesContext } from "./context";
 import { RequirementFieldBuilder } from "./requirement-field-builder";
 import { hasValidRequirementSelectOptions } from "./requirement-select";
 
-type TEditorTab = "basic" | "fields" | "approval";
-type TRequirementMetadataDraft = Pick<
-  TRequirement,
-  | "title"
-  | "description_html"
-  | "status"
-  | "owner_id"
-  | "approval_type"
-  | "required_count"
-  | "approver_ids"
-  | "is_active"
->;
+type TEditorTab = "basic" | "fields";
+type TRequirementMetadataDraft = Pick<TRequirement, "title" | "description_html">;
 
 const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   id: field.id,
@@ -125,7 +114,7 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
     templateId,
     onTemplateUpdate: upsertTemplate,
   });
-  const [activeTab, setActiveTab] = useState<TEditorTab>("basic");
+  const [activeTab, setActiveTab] = useState<TEditorTab>("fields");
   const [metadata, setMetadata] = useState<TRequirementMetadataDraft | null>(null);
   const [fields, setFields] = useState<TRequirementFieldDraft[]>([]);
   const [baseline, setBaseline] = useState("");
@@ -137,12 +126,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
     const nextMetadata: TRequirementMetadataDraft = {
       title: configuration.requirement.title,
       description_html: configuration.requirement.description_html,
-      status: configuration.requirement.status,
-      owner_id: configuration.requirement.owner_id,
-      approval_type: configuration.requirement.approval_type,
-      required_count: configuration.requirement.required_count,
-      approver_ids: configuration.requirement.approver_ids,
-      is_active: configuration.requirement.is_active,
     };
     const nextFields = configuration.fields.map(toDraftField);
     setMetadata(nextMetadata);
@@ -171,28 +154,13 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
 
   const saveConfiguration = async (confirmDataLoss = false) => {
     if (!metadata || !detailsStore.configuration) return;
-    if (!metadata.title.trim() || !metadata.owner_id) {
+    if (!metadata.title.trim()) {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
-        message: t("workspace_templates.requirements.validation.name_owner_required"),
+        message: t("workspace_templates.requirements.validation.name_required"),
       });
       setActiveTab("basic");
-      setIsPreviewOpen(false);
-      return;
-    }
-    if (
-      metadata.approval_type === "n_of_m" &&
-      (!metadata.required_count ||
-        metadata.required_count < 1 ||
-        metadata.required_count > metadata.approver_ids.length)
-    ) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_templates.requirements.validation.required_count"),
-      });
-      setActiveTab("approval");
       setIsPreviewOpen(false);
       return;
     }
@@ -224,7 +192,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
         requirement: {
           ...metadata,
           title: metadata.title.trim(),
-          required_count: metadata.approval_type === "n_of_m" ? metadata.required_count : null,
         },
         fields,
         confirm_data_loss: confirmDataLoss,
@@ -232,12 +199,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
       const nextMetadata: TRequirementMetadataDraft = {
         title: response.requirement.title,
         description_html: response.requirement.description_html,
-        status: response.requirement.status,
-        owner_id: response.requirement.owner_id,
-        approval_type: response.requirement.approval_type,
-        required_count: response.requirement.required_count,
-        approver_ids: response.requirement.approver_ids,
-        is_active: response.requirement.is_active,
       };
       const nextFields = response.fields.map(toDraftField);
       setMetadata(nextMetadata);
@@ -287,7 +248,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
   const tabItems: Array<{ key: TEditorTab; label: string }> = [
     { key: "basic", label: t("workspace_templates.requirements.editor.tabs.basic") },
     { key: "fields", label: t("workspace_templates.requirements.editor.tabs.fields") },
-    { key: "approval", label: t("workspace_templates.requirements.editor.tabs.approval") },
   ];
 
   if (detailsStore.isConfigurationLoading || !metadata) {
@@ -465,154 +425,11 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
                       placeholder={t("workspace_templates.requirements.fields.description_placeholder")}
                     />
                   </label>
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div>
-                      <span className="mb-1.5 block text-12 font-medium text-secondary">
-                        {t("workspace_templates.requirements.fields.owner")}
-                        <span className="ml-0.5 text-danger-primary">*</span>
-                      </span>
-                      <MemberDropdown
-                        multiple={false}
-                        value={metadata.owner_id}
-                        onChange={(ownerId) => ownerId && setMetadata({ ...metadata, owner_id: ownerId })}
-                        buttonVariant="border-with-text"
-                        buttonClassName="h-9 w-full border !border-subtle bg-surface-1"
-                        buttonContainerClassName="w-full"
-                        placeholder={t("workspace_templates.requirements.fields.owner")}
-                        showUserDetails
-                      />
-                    </div>
-                    <label className="block">
-                      <span className="mb-1.5 block text-12 font-medium text-secondary">
-                        {t("workspace_templates.requirements.fields.status")}
-                      </span>
-                      <select
-                        value={metadata.status}
-                        onChange={(event) =>
-                          setMetadata({
-                            ...metadata,
-                            status: event.target.value as TRequirementMetadataDraft["status"],
-                          })
-                        }
-                        className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none"
-                      >
-                        {(["draft", "in_review", "published", "changing"] as const).map((status) => (
-                          <option key={status} value={status}>
-                            {t(`workspace_templates.requirements.statuses.${status}`)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between rounded-md border border-subtle px-3 py-3">
-                    <div>
-                      <p className="text-12 font-medium text-primary">
-                        {t("workspace_templates.requirements.fields.active")}
-                      </p>
-                      <p className="mt-0.5 text-11 text-secondary">
-                        {t("workspace_templates.requirements.fields.active_description")}
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      value={metadata.is_active}
-                      onChange={(value) => setMetadata({ ...metadata, is_active: value })}
-                      size="md"
-                    />
-                  </div>
                 </div>
               </section>
             </div>
-          ) : activeTab === "fields" ? (
-            <RequirementFieldBuilder fields={fields} onChange={setFields} />
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto bg-layer-1/40">
-              <section className="mx-auto max-w-3xl px-5 py-7 md:px-8">
-                <div className="mb-6">
-                  <h1 className="text-16 font-semibold text-primary">
-                    {t("workspace_templates.requirements.editor.tabs.approval")}
-                  </h1>
-                  <p className="mt-1 text-12 text-secondary">
-                    {t("workspace_templates.requirements.editor.approval_description")}
-                  </p>
-                </div>
-                <div className="space-y-5">
-                  <label className="block">
-                    <span className="mb-1.5 block text-12 font-medium text-secondary">
-                      {t("workspace_templates.requirements.approval.type")}
-                    </span>
-                    <select
-                      value={metadata.approval_type}
-                      onChange={(event) =>
-                        setMetadata({
-                          ...metadata,
-                          approval_type: event.target.value as TRequirementMetadataDraft["approval_type"],
-                          required_count: event.target.value === "n_of_m" ? 1 : null,
-                        })
-                      }
-                      className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none"
-                    >
-                      {(["any", "all", "n_of_m"] as const).map((type) => (
-                        <option key={type} value={type}>
-                          {t(`workspace_templates.requirements.approval.${type}`)}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-11 text-secondary">
-                      {t(`workspace_templates.requirements.approval.${metadata.approval_type}_description`)}
-                    </p>
-                  </label>
-                  <div>
-                    <span className="mb-1.5 block text-12 font-medium text-secondary">
-                      {t("workspace_templates.requirements.approval.approvers")}
-                    </span>
-                    <MemberDropdown
-                      multiple
-                      value={metadata.approver_ids}
-                      onChange={(approverIds) =>
-                        setMetadata({
-                          ...metadata,
-                          approver_ids: approverIds,
-                          required_count:
-                            metadata.approval_type === "n_of_m"
-                              ? Math.min(metadata.required_count ?? 1, Math.max(approverIds.length, 1))
-                              : null,
-                        })
-                      }
-                      buttonVariant="border-with-text"
-                      buttonClassName="min-h-9 w-full border !border-subtle bg-surface-1"
-                      buttonContainerClassName="w-full"
-                      placeholder={t("workspace_templates.requirements.approval.select_approvers")}
-                      showUserDetails
-                    />
-                  </div>
-                  {metadata.approval_type === "n_of_m" && (
-                    <label className="block">
-                      <span className="mb-1.5 block text-12 font-medium text-secondary">
-                        {t("workspace_templates.requirements.approval.required_count")}
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={Math.max(metadata.approver_ids.length, 1)}
-                        value={metadata.required_count ?? 1}
-                        onChange={(event) =>
-                          setMetadata({
-                            ...metadata,
-                            required_count: Math.max(1, Number(event.target.value) || 1),
-                          })
-                        }
-                        className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none"
-                      />
-                      <p className="mt-1 text-11 text-secondary">
-                        {t("workspace_templates.requirements.approval.required_count_description", {
-                          count: metadata.approver_ids.length,
-                        })}
-                      </p>
-                    </label>
-                  )}
-                </div>
-              </section>
-            </div>
+            <RequirementFieldBuilder fields={fields} onChange={setFields} />
           )}
         </div>
       </ContentWrapper>

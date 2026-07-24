@@ -5,31 +5,26 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { useUser } from "@/hooks/store/user";
 import { useRequirementTemplatesContext } from "./context";
 
 export function RequirementTemplateCreateModal() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data: currentUser } = useUser();
   const { workspaceSlug, isCreateModalOpen, setIsCreateModalOpen, createTemplate, isMutating } =
     useRequirementTemplatesContext();
   const [title, setTitle] = useState("");
-  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isCreateModalOpen) return;
     setTitle("");
-    setOwnerId(currentUser?.id ?? null);
     setError(null);
-  }, [currentUser?.id, isCreateModalOpen]);
+  }, [isCreateModalOpen]);
 
   const handleCreate = async () => {
     const normalizedTitle = title.trim();
-    if (!normalizedTitle || !ownerId) {
-      setError(t("workspace_templates.requirements.validation.name_owner_required"));
+    if (!normalizedTitle) {
+      setError(t("workspace_templates.requirements.validation.name_required"));
       return;
     }
     setError(null);
@@ -37,9 +32,6 @@ export function RequirementTemplateCreateModal() {
       const template = await createTemplate({
         is_template: true,
         title: normalizedTitle,
-        owner_id: ownerId,
-        status: "draft",
-        is_active: true,
       });
       setIsCreateModalOpen(false);
       navigate(`/${workspaceSlug}/templates/requirements/${template.id}/edit`);
@@ -93,21 +85,6 @@ export function RequirementTemplateCreateModal() {
             placeholder={t("workspace_templates.requirements.fields.name_placeholder")}
           />
         </label>
-        <div>
-          <span className="mb-1.5 block text-12 font-medium text-secondary">
-            {t("workspace_templates.requirements.fields.owner")}
-          </span>
-          <MemberDropdown
-            multiple={false}
-            value={ownerId}
-            onChange={setOwnerId}
-            buttonVariant="border-with-text"
-            buttonClassName="h-9 w-full border !border-subtle bg-surface-1"
-            buttonContainerClassName="w-full"
-            placeholder={t("workspace_templates.requirements.fields.owner")}
-            showUserDetails
-          />
-        </div>
         {error && <p className="text-11 text-danger-primary">{error}</p>}
       </div>
       <div className="flex justify-end gap-2 border-t border-subtle px-5 py-3">

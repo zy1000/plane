@@ -3,12 +3,10 @@ import { observer } from "mobx-react";
 import { Link, useNavigate } from "react-router";
 import {
   AlertCircle,
-  Check,
   ChevronLeft,
   ChevronRight,
   FilePlus2,
   FileText,
-  Filter,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -20,27 +18,18 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirement, TRequirementStatus } from "@plane/types";
-import { AlertModalCore, Avatar, Breadcrumbs, Checkbox, CustomMenu, Header, Loader } from "@plane/ui";
-import { calculateTimeAgo, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import type { TRequirement } from "@plane/types";
+import { AlertModalCore, Breadcrumbs, Checkbox, CustomMenu, Header, Loader } from "@plane/ui";
+import { calculateTimeAgo, stripAndTruncateHTML } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useRequirementTemplatesContext } from "./context";
 
-type TTemplateFilter = "all" | TRequirementStatus | "active" | "inactive";
-
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
-const SKELETON_COLUMNS = ["select", "name", "description", "owner", "status", "approval", "updated", "actions"];
+const SKELETON_COLUMNS = ["select", "name", "description", "updated", "actions"];
 const SKELETON_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5", "row-6", "row-7", "row-8"];
-
-const STATUS_DOT_CLASS: Record<TRequirementStatus, string> = {
-  draft: "bg-layer-3",
-  in_review: "bg-warning-primary",
-  published: "bg-success-primary",
-  changing: "bg-accent-primary",
-};
 
 export const RequirementTemplateList = observer(function RequirementTemplateList() {
   const { t } = useTranslation();
@@ -56,7 +45,6 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
     setIsCreateModalOpen,
   } = useRequirementTemplatesContext();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<TTemplateFilter>("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(PAGE_SIZE_OPTIONS[0]);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
@@ -66,21 +54,13 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
   const filteredTemplates = useMemo(
     () =>
       templates.filter((template) => {
-        const matchesFilter =
-          filter === "all" ||
-          (filter === "active" && template.is_active) ||
-          (filter === "inactive" && !template.is_active) ||
-          template.status === filter;
-        if (!matchesFilter) return false;
         if (!normalizedSearch) return true;
         const description = template.description_html
           ? stripAndTruncateHTML(template.description_html, 1000).toLocaleLowerCase()
           : "";
-        return [template.title, description, template.owner_detail?.display_name ?? ""].some((value) =>
-          value.toLocaleLowerCase().includes(normalizedSearch)
-        );
+        return [template.title, description].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
       }),
-    [filter, normalizedSearch, templates]
+    [normalizedSearch, templates]
   );
   const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / perPage));
   const paginatedTemplates = filteredTemplates.slice((page - 1) * perPage, page * perPage);
@@ -91,7 +71,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
 
   useEffect(() => {
     setPage(1);
-  }, [filter, normalizedSearch, perPage]);
+  }, [normalizedSearch, perPage]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
@@ -104,7 +84,6 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
 
   const resetView = () => {
     setSearchQuery("");
-    setFilter("all");
     setPage(1);
   };
 
@@ -143,18 +122,8 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
     }
   };
 
-  const filterOptions: { value: TTemplateFilter; label: string }[] = [
-    { value: "all", label: t("workspace_templates.requirements.list.filters.all") },
-    { value: "draft", label: t("workspace_templates.requirements.statuses.draft") },
-    { value: "in_review", label: t("workspace_templates.requirements.statuses.in_review") },
-    { value: "published", label: t("workspace_templates.requirements.statuses.published") },
-    { value: "changing", label: t("workspace_templates.requirements.statuses.changing") },
-    { value: "active", label: t("workspace_templates.requirements.active") },
-    { value: "inactive", label: t("workspace_templates.requirements.inactive") },
-  ];
-
   const renderEmptyState = () => {
-    const hasFilters = Boolean(normalizedSearch || filter !== "all");
+    const hasFilters = Boolean(normalizedSearch);
     return (
       <div className="flex h-full min-h-80 items-center justify-center p-6">
         <div className="max-w-sm text-center">
@@ -235,36 +204,6 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                   className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-8 text-12 text-primary outline-none placeholder:text-placeholder"
                 />
               </label>
-              <CustomMenu
-                placement="bottom-end"
-                optionsClassName="w-48 p-1.5"
-                customButton={
-                  <Tooltip tooltipContent={t("workspace_templates.requirements.list.filter")}>
-                    <button
-                      type="button"
-                      className={`grid size-8 place-items-center rounded-md border text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary ${
-                        filter === "all"
-                          ? "border-subtle bg-surface-1"
-                          : "border-accent-subtle bg-accent-primary/10 text-accent-primary"
-                      }`}
-                      aria-label={t("workspace_templates.requirements.list.filter")}
-                    >
-                      <Filter className="size-3.5" />
-                    </button>
-                  </Tooltip>
-                }
-              >
-                {filterOptions.map((option) => (
-                  <CustomMenu.MenuItem key={option.value} onClick={() => setFilter(option.value)}>
-                    <div className="flex w-full items-center justify-between gap-3 px-1 py-0.5">
-                      <span className="truncate text-12 text-secondary">{option.label}</span>
-                      <span className="grid size-4 shrink-0 place-items-center">
-                        {filter === option.value && <Check className="size-3.5 text-accent-primary" />}
-                      </span>
-                    </div>
-                  </CustomMenu.MenuItem>
-                ))}
-              </CustomMenu>
               <Tooltip tooltipContent={t("workspace_templates.requirements.list.refresh")}>
                 <button
                   type="button"
@@ -309,8 +248,8 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
       />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
         {isLoading ? (
-          <div className="min-w-[1060px] flex-1 overflow-hidden">
-            <div className="grid grid-cols-[44px_minmax(180px,1.15fr)_minmax(220px,1.65fr)_150px_150px_150px_130px_56px] items-center gap-3 border-b border-subtle bg-layer-1 px-3 py-2.5">
+          <div className="min-w-[720px] flex-1 overflow-hidden">
+            <div className="grid grid-cols-[44px_minmax(180px,1fr)_minmax(260px,2fr)_130px_56px] items-center gap-3 border-b border-subtle bg-layer-1 px-3 py-2.5">
               {SKELETON_COLUMNS.map((column) => (
                 <Loader.Item key={column} height="14px" />
               ))}
@@ -318,10 +257,13 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
             {SKELETON_ROWS.map((row) => (
               <div
                 key={row}
-                className="grid grid-cols-[44px_minmax(180px,1.15fr)_minmax(220px,1.65fr)_150px_150px_150px_130px_56px] items-center gap-3 border-b border-subtle px-3 py-3"
+                className="grid grid-cols-[44px_minmax(180px,1fr)_minmax(260px,2fr)_130px_56px] items-center gap-3 border-b border-subtle px-3 py-3"
               >
                 {SKELETON_COLUMNS.map((column, index) => (
-                  <Loader.Item key={column} height={index === 0 || index === 7 ? "16px" : "20px"} />
+                  <Loader.Item
+                    key={column}
+                    height={index === 0 || index === SKELETON_COLUMNS.length - 1 ? "16px" : "20px"}
+                  />
                 ))}
               </div>
             ))}
@@ -346,7 +288,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
         ) : (
           <>
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1060px] table-fixed border-collapse text-left">
+              <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
                 <thead className="sticky top-0 z-[1] bg-layer-1">
                   <tr className="border-b border-subtle text-11 font-medium text-secondary">
                     <th className="w-11 px-3 py-2.5">
@@ -357,12 +299,9 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                         aria-label={t("workspace_templates.requirements.list.select_page")}
                       />
                     </th>
-                    <th className="w-[18%] px-3 py-2.5">{t("workspace_templates.requirements.fields.name")}</th>
-                    <th className="w-[26%] px-3 py-2.5">{t("workspace_templates.requirements.fields.description")}</th>
-                    <th className="w-[13%] px-3 py-2.5">{t("workspace_templates.requirements.fields.owner")}</th>
-                    <th className="w-[13%] px-3 py-2.5">{t("workspace_templates.requirements.fields.status")}</th>
-                    <th className="w-[13%] px-3 py-2.5">{t("workspace_templates.requirements.approval.type")}</th>
-                    <th className="w-[11%] px-3 py-2.5">{t("workspace_templates.requirements.list.updated_at")}</th>
+                    <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirements.fields.name")}</th>
+                    <th className="px-3 py-2.5">{t("workspace_templates.requirements.fields.description")}</th>
+                    <th className="w-32 px-3 py-2.5">{t("workspace_templates.requirements.list.updated_at")}</th>
                     <th className="w-14 px-3 py-2.5">{t("workspace_templates.requirements.fields.actions")}</th>
                   </tr>
                 </thead>
@@ -372,12 +311,6 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                     const description = template.description_html
                       ? stripAndTruncateHTML(template.description_html, 180)
                       : t("workspace_templates.requirements.list.no_description");
-                    const approvalLabel =
-                      template.approval_type === "n_of_m"
-                        ? t("workspace_templates.requirements.list.n_of_m", {
-                            count: template.required_count ?? 1,
-                          })
-                        : t(`workspace_templates.requirements.approval.${template.approval_type}`);
                     return (
                       <tr
                         key={template.id}
@@ -410,38 +343,6 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                         </td>
                         <td className="px-3 py-2.5 align-middle">
                           <span className="block truncate text-12 text-secondary">{description}</span>
-                        </td>
-                        <td className="px-3 py-2.5 align-middle">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Avatar
-                              size="sm"
-                              name={template.owner_detail?.display_name}
-                              src={getFileURL(template.owner_detail?.avatar_url ?? "")}
-                              showTooltip={false}
-                            />
-                            <span className="truncate text-12 text-primary">
-                              {template.owner_detail?.display_name ?? "—"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 align-middle">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <span className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT_CLASS[template.status]}`} />
-                            <span className="truncate text-12 text-primary">
-                              {t(`workspace_templates.requirements.statuses.${template.status}`)}
-                            </span>
-                            <span className="shrink-0 text-11 text-tertiary">
-                              ·{" "}
-                              {t(
-                                template.is_active
-                                  ? "workspace_templates.requirements.active"
-                                  : "workspace_templates.requirements.inactive"
-                              )}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 align-middle">
-                          <span className="block truncate text-12 text-secondary">{approvalLabel}</span>
                         </td>
                         <td className="px-3 py-2.5 text-11 text-secondary">{calculateTimeAgo(template.updated_at)}</td>
                         <td

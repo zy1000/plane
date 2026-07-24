@@ -154,7 +154,7 @@ export type TRequirementDetailFilter = {
 export type TCreateRequirementTemplatePayload = {
   is_template: true;
   title: string;
-  owner_id: string;
+  owner_id?: string;
   status?: TRequirementStatus;
   is_active?: boolean;
 };

@@ -103,21 +103,6 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
                           <ChevronDown className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-secondary" />
                         </label>
                       )}
-                      {template && (
-                        <span
-                          className={
-                            template.is_active
-                              ? "shrink-0 rounded bg-success-subtle px-1.5 py-0.5 text-10 text-success-primary"
-                              : "shrink-0 rounded bg-layer-2 px-1.5 py-0.5 text-10 text-secondary"
-                          }
-                        >
-                          {t(
-                            template.is_active
-                              ? "workspace_templates.requirements.active"
-                              : "workspace_templates.requirements.inactive"
-                          )}
-                        </span>
-                      )}
                     </div>
                   }
                   isLast
