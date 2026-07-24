@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import {
+  ArrowDownToLine,
+  ArrowUpToLine,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -13,7 +15,6 @@ import {
   Paperclip,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
   Save,
   Trash2,
@@ -37,7 +38,7 @@ import type {
 import { EFileAssetType } from "@plane/types";
 import { Avatar, CustomMenu, CustomSelect, Loader, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
-import { getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
@@ -81,8 +82,27 @@ const getFormRows = (data: TRequirementDetailData, fieldId: string): TRequiremen
   return Array.isArray(value) ? (value as TRequirementFormRow[]) : [];
 };
 
-const getGroupHeight = (data: TRequirementDetailData, formFields: TRequirementField[]) =>
-  Math.max(1, ...formFields.map((field) => getFormRows(data, field.id).length));
+const getMaxFormRows = (data: TRequirementDetailData, formFields: TRequirementField[]) =>
+  formFields.reduce((max, field) => Math.max(max, getFormRows(data, field.id).length), 0);
+
+// Number of table columns a repeatable form occupies: one per visible child, plus a trailing action gutter when editing.
+const getFormColumnCount = (form: TRequirementField, withGutter: boolean) =>
+  form.children.length ? form.children.length + (withGutter ? 1 : 0) : 1;
+
+const MenuRowLabel = ({
+  icon: Icon,
+  label,
+  tone = "default",
+}: {
+  icon: typeof Trash2;
+  label: string;
+  tone?: "default" | "danger";
+}) => (
+  <span className={cn("flex items-center gap-2", tone === "danger" && "text-danger-primary")}>
+    <Icon className="size-3.5 shrink-0" />
+    <span className="truncate">{label}</span>
+  </span>
+);
 
 const getDetailRowKey = (
   detailKey: string,
@@ -99,7 +119,7 @@ const getDetailRowKey = (
 
 const RequirementMemberValue = observer(function RequirementMemberValue({ value }: { value: unknown }) {
   const { getUserDetails } = useMember();
-  if (typeof value !== "string") return <span className="text-placeholder">—</span>;
+  if (typeof value !== "string") return null;
   const member = getUserDetails(value);
   return (
     <span className="inline-flex max-w-full items-center gap-1.5">
@@ -124,8 +144,7 @@ const LeafValue = ({
   workspaceSlug: string;
 }) => {
   const { t } = useTranslation();
-  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length))
-    return <span className="text-placeholder">—</span>;
+  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
   if (field.field_type === "boolean") {
     return (
       <span
@@ -149,7 +168,7 @@ const LeafValue = ({
         label: getRequirementSelectLabel(field, String(optionId)),
       }))
       .filter((option): option is { id: string; label: string } => Boolean(option.label));
-    if (!selectedOptions.length) return <span className="text-placeholder">—</span>;
+    if (!selectedOptions.length) return null;
     return (
       <span className="flex max-w-64 flex-wrap gap-1">
         {selectedOptions.map((option) => (
@@ -166,7 +185,7 @@ const LeafValue = ({
   if (field.field_type === "member") return <RequirementMemberValue value={value} />;
   if (field.field_type === "attachment" || field.field_type === "image") {
     const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
-    if (!assets.length) return <span className="text-placeholder">—</span>;
+    if (!assets.length) return null;
     return (
       <span className="flex max-w-48 flex-wrap gap-1">
         {assets.map((asset) => (
@@ -439,6 +458,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
       })
     );
   const hasFormFields = formFields.length > 0;
+  // The per-sub-record action gutter only carries controls while editing, so it collapses in read-only view.
+  const showActionGutter = editor.isEditing;
   const filterableFields = useMemo(
     () =>
       activeFields.flatMap((field) =>
@@ -562,205 +583,214 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     setFilterValue("");
   };
 
+  const renderDetailActionMenu = (
+    target: { beforeId?: string; afterId?: string; beforeKey?: string; afterKey?: string; copyData: TRequirementDetailData },
+    deleteTarget: string
+  ) => (
+    <div className="flex justify-center">
+      <CustomMenu ellipsis placement="bottom-end" buttonClassName="text-tertiary hover:text-primary">
+        <CustomMenu.MenuItem
+          onClick={() =>
+            editor.stageCreate(target.beforeKey ? { beforeKey: target.beforeKey } : { beforeId: target.beforeId })
+          }
+        >
+          <MenuRowLabel icon={ArrowUpToLine} label={t("workspace_templates.requirements.data.insert_above")} />
+        </CustomMenu.MenuItem>
+        <CustomMenu.MenuItem
+          onClick={() =>
+            editor.stageCreate(target.afterKey ? { afterKey: target.afterKey } : { afterId: target.afterId })
+          }
+        >
+          <MenuRowLabel icon={ArrowDownToLine} label={t("workspace_templates.requirements.data.insert_below")} />
+        </CustomMenu.MenuItem>
+        <CustomMenu.MenuItem
+          onClick={() =>
+            editor.stageCreate(
+              target.afterKey
+                ? { data: target.copyData, afterKey: target.afterKey, isCopy: true }
+                : { data: target.copyData, afterId: target.afterId, isCopy: true }
+            )
+          }
+        >
+          <MenuRowLabel icon={Copy} label={t("workspace_templates.requirements.data.copy")} />
+        </CustomMenu.MenuItem>
+        <CustomMenu.MenuItem onClick={() => handleDelete([deleteTarget])}>
+          <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
+        </CustomMenu.MenuItem>
+      </CustomMenu>
+    </div>
+  );
+
   const renderDetailRows = (
     detail: TRequirementDetail | null,
     detailDraft: TRequirementDetailDraftRow | null,
     key: string
   ) => {
     const data = detailDraft?.data ?? detail?.data ?? {};
-    const groupHeight = getGroupHeight(data, formFields);
     const isEditing = Boolean(detailDraft);
     const isDeleted = Boolean(detailDraft?.isDeleted);
     const isConflicted = Boolean(detailDraft?.detailId && editor.conflictIds.includes(detailDraft.detailId));
-    const subRows = Array.from({ length: groupHeight }, (_, position) => ({
-      position,
-      renderKey: getDetailRowKey(key, data, formFields, position),
-    }));
-    return subRows.map(({ position: subRowIndex, renderKey }) => (
-      <tr
-        key={renderKey}
-        className={
-          isDeleted
-            ? "border-b border-danger-subtle bg-danger-subtle/30"
-            : isConflicted
-              ? "border-b border-danger-subtle bg-danger-subtle/20"
-              : isEditing
-                ? "border-b border-subtle bg-surface-1"
-                : "border-b border-subtle hover:bg-layer-transparent-hover"
-        }
-      >
-        {subRowIndex === 0 && (
-          <td rowSpan={groupHeight} className="w-10 border-r border-subtle px-3 py-3 align-middle">
-            {detailDraft?.mode === "create" ? (
-              <span className="inline-flex rounded bg-accent-subtle px-1.5 py-0.5 text-[10px] font-medium text-accent-primary">
-                {t(
-                  detailDraft.isCopy
-                    ? "workspace_templates.requirements.data.copy_badge"
-                    : "workspace_templates.requirements.data.new"
-                )}
-              </span>
-            ) : detail ? (
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(detail.id)}
-                disabled={isDeleted}
-                onChange={(event) =>
-                  setSelectedIds((current) =>
-                    event.target.checked ? [...current, detail.id] : current.filter((id) => id !== detail.id)
-                  )
-                }
-                aria-label={t("workspace_templates.requirements.data.select_row")}
-              />
-            ) : null}
-          </td>
-        )}
-        {subRowIndex === 0 &&
-          normalFields.map((field) => (
-            <td key={field.id} rowSpan={groupHeight} className="min-w-40 border-r border-subtle px-3 py-3 align-middle">
-              {isEditing && !isDeleted ? (
-                <LeafEditor
-                  field={field}
-                  value={data[field.id]}
-                  onChange={(value) => setRootValue(key, field.id, value)}
-                  onUpload={uploadAsset}
-                  onRemoveAsset={editor.discardPendingAsset}
-                />
-              ) : (
-                <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
-              )}
-            </td>
-          ))}
-        {formFields.flatMap((form) => {
-          const rows = getFormRows(data, form.id);
-          const row = rows[subRowIndex];
-          const children = form.children.length ? form.children : [null];
-          return children.map((child, childIndex) => (
-            <td
-              key={`${form.id}-${child?.id ?? "empty"}`}
-              className="min-w-40 border-r border-subtle px-2.5 py-2 align-middle"
-            >
-              {!child ? (
-                <span className="text-11 text-placeholder">
-                  {t("workspace_templates.requirements.fields.no_children")}
-                </span>
-              ) : row ? (
-                <div className="flex items-center gap-1.5">
-                  <div className="min-w-0 flex-1">
-                    {isEditing && !isDeleted ? (
-                      <LeafEditor
-                        field={child}
-                        value={row.values[child.id]}
-                        onChange={(value) => setChildValue(key, form.id, row.id, child.id, value)}
-                        onUpload={uploadAsset}
-                        onRemoveAsset={editor.discardPendingAsset}
-                      />
-                    ) : (
-                      <LeafValue field={child} value={row.values[child.id]} workspaceSlug={workspaceSlug} />
-                    )}
-                  </div>
-                  {isEditing && !isDeleted && childIndex === children.length - 1 && (
-                    <CustomMenu
-                      customButton={
-                        <button
-                          type="button"
-                          className="grid size-7 place-items-center rounded text-secondary hover:bg-layer-2"
-                          aria-label={t("workspace_templates.requirements.data.child_actions")}
-                        >
-                          <MoreHorizontal className="size-3.5" />
-                        </button>
-                      }
-                      placement="bottom-end"
-                    >
-                      <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, subRowIndex)}>
-                        {t("workspace_templates.requirements.data.insert_above")}
-                      </CustomMenu.MenuItem>
-                      <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, subRowIndex + 1)}>
-                        {t("workspace_templates.requirements.data.insert_below")}
-                      </CustomMenu.MenuItem>
-                      <CustomMenu.MenuItem onClick={() => deleteFormRow(key, form.id, row.id)}>
-                        <Trash2 className="size-3.5" />
-                        {t("delete")}
-                      </CustomMenu.MenuItem>
-                    </CustomMenu>
+    const canAddChild = isEditing && !isDeleted && formFields.some((form) => form.children.length > 0);
+    const rawRowCount = getMaxFormRows(data, formFields);
+    // In edit mode the "add child" affordance lives on its own trailing row, so an empty group needs no filler row.
+    const dataRowCount = canAddChild ? rawRowCount : Math.max(1, rawRowCount);
+    const totalRows = dataRowCount + (canAddChild ? 1 : 0);
+    const rowStateClass = isDeleted
+      ? "bg-danger-subtle/40"
+      : isConflicted
+        ? "bg-danger-subtle/25"
+        : isEditing
+          ? "bg-surface-1"
+          : "hover:bg-layer-transparent-hover";
+
+    return Array.from({ length: totalRows }, (_, rowIndex) => {
+      const isAdderRow = canAddChild && rowIndex === dataRowCount;
+      const isFirstRow = rowIndex === 0;
+      const renderKey = isAdderRow ? `${key}-adder` : getDetailRowKey(key, data, formFields, rowIndex);
+      return (
+        <tr key={renderKey} className={cn("group border-b border-subtle transition-colors", rowStateClass)}>
+          {isFirstRow && (
+            <td rowSpan={totalRows} className="w-12 border-r border-subtle px-1.5 py-2 text-center align-middle">
+              {detailDraft?.mode === "create" ? (
+                <span className="inline-flex items-center rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
+                  {t(
+                    detailDraft.isCopy
+                      ? "workspace_templates.requirements.data.copy_badge"
+                      : "workspace_templates.requirements.data.new"
                   )}
-                </div>
-              ) : isEditing && !isDeleted && subRowIndex === 0 && childIndex === children.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={() => insertFormRow(key, form)}
-                  className="inline-flex items-center gap-1 text-11 font-medium text-accent-primary"
+                </span>
+              ) : detail ? (
+                <input
+                  type="checkbox"
+                  className="size-3.5 cursor-pointer"
+                  checked={selectedIds.includes(detail.id)}
+                  disabled={isDeleted}
+                  onChange={(event) =>
+                    setSelectedIds((current) =>
+                      event.target.checked ? [...current, detail.id] : current.filter((id) => id !== detail.id)
+                    )
+                  }
+                  aria-label={t("workspace_templates.requirements.data.select_row")}
+                />
+              ) : null}
+            </td>
+          )}
+          {isFirstRow &&
+            normalFields.map((field) => (
+              <td key={field.id} rowSpan={totalRows} className="min-w-40 border-r border-subtle px-3 py-2 align-middle">
+                {isEditing && !isDeleted ? (
+                  <LeafEditor
+                    field={field}
+                    value={data[field.id]}
+                    onChange={(value) => setRootValue(key, field.id, value)}
+                    onUpload={uploadAsset}
+                    onRemoveAsset={editor.discardPendingAsset}
+                  />
+                ) : (
+                  <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
+                )}
+              </td>
+            ))}
+          {formFields.flatMap((form) => {
+            if (form.children.length === 0) {
+              return [
+                <td
+                  key={`${form.id}-empty`}
+                  className="min-w-40 border-r border-subtle px-3 py-2 align-middle text-11 text-placeholder"
                 >
-                  <Plus className="size-3" />
-                  {t("workspace_templates.requirements.data.add_child")}
-                </button>
-              ) : (
-                <span className="text-placeholder">—</span>
-              )}
-              {isEditing &&
-                !isDeleted &&
-                row &&
-                subRowIndex === rows.length - 1 &&
-                childIndex === children.length - 1 && (
+                  {isFirstRow ? t("workspace_templates.requirements.fields.no_children") : null}
+                </td>,
+              ];
+            }
+            if (isAdderRow) {
+              return [
+                <td
+                  key={`${form.id}-adder`}
+                  colSpan={form.children.length + 1}
+                  className="border-r border-subtle px-2 py-1.5 align-middle"
+                >
                   <button
                     type="button"
                     onClick={() => insertFormRow(key, form)}
-                    className="mt-1 inline-flex items-center gap-1 text-10 text-accent-primary"
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-11 font-medium text-accent-primary transition-colors hover:bg-accent-subtle"
                   >
-                    <Plus className="size-3" />
+                    <Plus className="size-3.5" />
                     {t("workspace_templates.requirements.data.add_child")}
                   </button>
-                )}
+                </td>,
+              ];
+            }
+            const row = getFormRows(data, form.id)[rowIndex];
+            const childCells = form.children.map((child) => (
+              <td key={`${form.id}-${child.id}`} className="min-w-40 border-r border-subtle px-3 py-2 align-middle">
+                {row ? (
+                  isEditing && !isDeleted ? (
+                    <LeafEditor
+                      field={child}
+                      value={row.values[child.id]}
+                      onChange={(value) => setChildValue(key, form.id, row.id, child.id, value)}
+                      onUpload={uploadAsset}
+                      onRemoveAsset={editor.discardPendingAsset}
+                    />
+                  ) : (
+                    <LeafValue field={child} value={row.values[child.id]} workspaceSlug={workspaceSlug} />
+                  )
+                ) : null}
+              </td>
+            ));
+            if (!showActionGutter) return childCells;
+            const gutterCell = (
+              <td key={`${form.id}-gutter`} className="w-9 border-r border-subtle px-0.5 py-2 text-center align-middle">
+                {!isDeleted && row ? (
+                  <div className="flex justify-center">
+                    <CustomMenu
+                      ariaLabel={t("workspace_templates.requirements.data.child_actions")}
+                      customButton={
+                        <span className="grid size-6 place-items-center rounded text-tertiary opacity-0 transition-colors group-hover:opacity-100 focus-within:opacity-100 hover:bg-layer-transparent-hover hover:text-primary">
+                          <MoreHorizontal className="size-3.5" />
+                        </span>
+                      }
+                      placement="bottom-end"
+                    >
+                      <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, rowIndex)}>
+                        <MenuRowLabel
+                          icon={ArrowUpToLine}
+                          label={t("workspace_templates.requirements.data.insert_above")}
+                        />
+                      </CustomMenu.MenuItem>
+                      <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, rowIndex + 1)}>
+                        <MenuRowLabel
+                          icon={ArrowDownToLine}
+                          label={t("workspace_templates.requirements.data.insert_below")}
+                        />
+                      </CustomMenu.MenuItem>
+                      <CustomMenu.MenuItem onClick={() => deleteFormRow(key, form.id, row.id)}>
+                        <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
+                      </CustomMenu.MenuItem>
+                    </CustomMenu>
+                  </div>
+                ) : null}
+              </td>
+            );
+            return [...childCells, gutterCell];
+          })}
+          {isFirstRow && (
+            <td rowSpan={totalRows} className="w-16 px-2 py-2 text-center align-middle">
+              {isEditing && isDeleted ? (
+                <Button variant="secondary" size="sm" onClick={() => editor.undoDelete(key)}>
+                  <Undo2 className="size-3.5" />
+                  {t("workspace_templates.requirements.data.undo")}
+                </Button>
+              ) : isEditing ? (
+                renderDetailActionMenu({ beforeKey: key, afterKey: key, copyData: data }, key)
+              ) : detail ? (
+                renderDetailActionMenu({ beforeId: detail.id, afterId: detail.id, copyData: detail.data }, detail.id)
+              ) : null}
             </td>
-          ));
-        })}
-        {subRowIndex === 0 && (
-          <td rowSpan={groupHeight} className="w-24 px-2 py-2 align-middle">
-            {isEditing && isDeleted ? (
-              <Button variant="secondary" size="sm" onClick={() => editor.undoDelete(key)}>
-                <Undo2 className="size-3.5" />
-                {t("workspace_templates.requirements.data.undo")}
-              </Button>
-            ) : isEditing ? (
-              <CustomMenu ellipsis placement="bottom-end">
-                <CustomMenu.MenuItem onClick={() => editor.stageCreate({ beforeKey: key })}>
-                  {t("workspace_templates.requirements.data.insert_above")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => editor.stageCreate({ afterKey: key })}>
-                  {t("workspace_templates.requirements.data.insert_below")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => editor.stageCreate({ data, afterKey: key, isCopy: true })}>
-                  <Copy className="size-3.5" />
-                  {t("workspace_templates.requirements.data.copy")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => handleDelete([key])}>
-                  <Trash2 className="size-3.5" />
-                  {t("delete")}
-                </CustomMenu.MenuItem>
-              </CustomMenu>
-            ) : detail ? (
-              <CustomMenu ellipsis placement="bottom-end">
-                <CustomMenu.MenuItem onClick={() => editor.stageCreate({ beforeId: detail.id })}>
-                  {t("workspace_templates.requirements.data.insert_above")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => editor.stageCreate({ afterId: detail.id })}>
-                  {t("workspace_templates.requirements.data.insert_below")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem
-                  onClick={() => editor.stageCreate({ data: detail.data, afterId: detail.id, isCopy: true })}
-                >
-                  <Copy className="size-3.5" />
-                  {t("workspace_templates.requirements.data.copy")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => handleDelete([detail.id])}>
-                  <Trash2 className="size-3.5" />
-                  {t("delete")}
-                </CustomMenu.MenuItem>
-              </CustomMenu>
-            ) : null}
-          </td>
-        )}
-      </tr>
-    ));
+          )}
+        </tr>
+      );
+    });
   };
 
   const detailsById = new Map(details.map((detail) => [detail.id, detail]));
@@ -1024,9 +1054,6 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   </div>
                 )}
               </div>
-              <Button variant="secondary" onClick={() => void onRefresh()} disabled={isLoading}>
-                <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
               <Button variant="primary" onClick={editor.startEditing} disabled={isLoading || details.length === 0}>
                 <Pencil className="size-3.5" />
                 {t("workspace_templates.requirements.data.edit_data")}
@@ -1124,9 +1151,10 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           <table className="w-max min-w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 bg-layer-1 text-11 font-medium text-secondary">
               <tr className="border-b border-subtle">
-                <th rowSpan={hasFormFields ? 2 : 1} className="w-10 border-r border-subtle px-3 py-2 text-center">
+                <th rowSpan={hasFormFields ? 2 : 1} className="w-12 border-r border-subtle px-1.5 py-2.5 text-center">
                   <input
                     type="checkbox"
+                    className="size-3.5 cursor-pointer"
                     checked={
                       selectableDetailIds.length > 0 &&
                       selectableDetailIds.every((detailId) => selectedIds.includes(detailId))
@@ -1139,43 +1167,61 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   <th
                     key={field.id}
                     rowSpan={hasFormFields ? 2 : 1}
-                    className="min-w-40 border-r border-subtle px-3 py-2 align-middle"
+                    className="min-w-40 border-r border-subtle px-3 py-2.5 align-middle"
                   >
-                    {field.name}
-                    {field.is_required && <span className="ml-1 text-danger-primary">*</span>}
+                    <span className="inline-flex items-center gap-0.5">
+                      {field.name}
+                      {field.is_required && <span className="text-danger-primary">*</span>}
+                    </span>
                   </th>
                 ))}
                 {formFields.map((field) => (
                   <th
                     key={field.id}
-                    colSpan={Math.max(1, field.children.length)}
-                    className="border-r border-subtle px-3 py-2 text-center text-primary"
+                    colSpan={getFormColumnCount(field, showActionGutter)}
+                    className="border-r border-subtle px-3 py-2.5 text-center text-primary"
                   >
-                    {field.name}
-                    <span className="ml-1.5 rounded bg-accent-subtle px-1.5 py-0.5 text-[10px] text-accent-primary">
-                      {t("workspace_templates.requirements.fields.repeatable")}
+                    <span className="inline-flex items-center gap-1.5">
+                      {field.name}
+                      <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
+                        {t("workspace_templates.requirements.fields.repeatable")}
+                      </span>
                     </span>
                   </th>
                 ))}
-                <th rowSpan={hasFormFields ? 2 : 1} className="w-24 px-3 py-2 text-center">
+                <th rowSpan={hasFormFields ? 2 : 1} className="w-16 px-2 py-2.5 text-center">
                   {t("workspace_templates.requirements.fields.actions")}
                 </th>
               </tr>
               {hasFormFields && (
                 <tr className="border-b border-subtle">
                   {formFields.flatMap((field) =>
-                    field.children.length ? (
-                      field.children.map((child) => (
-                        <th key={child.id} className="min-w-40 border-r border-subtle px-3 py-2">
-                          {child.name}
-                          {child.is_required && <span className="ml-1 text-danger-primary">*</span>}
-                        </th>
-                      ))
-                    ) : (
-                      <th key={`${field.id}-empty`} className="min-w-40 border-r border-subtle px-3 py-2">
-                        {t("workspace_templates.requirements.fields.no_children")}
-                      </th>
-                    )
+                    field.children.length
+                      ? [
+                          ...field.children.map((child) => (
+                            <th key={child.id} className="min-w-40 border-r border-subtle px-3 py-2 font-normal">
+                              <span className="inline-flex items-center gap-0.5">
+                                {child.name}
+                                {child.is_required && <span className="text-danger-primary">*</span>}
+                              </span>
+                            </th>
+                          )),
+                          showActionGutter ? (
+                            <th
+                              key={`${field.id}-gutter`}
+                              aria-hidden
+                              className="w-9 border-r border-subtle px-0.5 py-2"
+                            />
+                          ) : null,
+                        ]
+                      : [
+                          <th
+                            key={`${field.id}-empty`}
+                            className="min-w-40 border-r border-subtle px-3 py-2 font-normal text-placeholder"
+                          >
+                            {t("workspace_templates.requirements.fields.no_children")}
+                          </th>,
+                        ]
                   )}
                 </tr>
               )}
