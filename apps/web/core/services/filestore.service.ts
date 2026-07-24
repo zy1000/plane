@@ -26,10 +26,40 @@ export type TOnlyOfficeConfigResponse = {
   config: Record<string, any>;
 };
 
+export type TOnlyOfficeSaveRequestStatus = "pending" | "saved" | "no_changes" | "failed";
+
+export type TOnlyOfficeSaveRequest = {
+  id: string;
+  sequence: number;
+  status: TOnlyOfficeSaveRequestStatus;
+  requested_at: string;
+  completed_at: string;
+  error: string;
+};
+
+export type TOnlyOfficeSessionStatus = {
+  doc_key: string;
+  is_active: boolean;
+  state: string;
+  last_callback_status: number;
+  last_callback_at: string;
+  last_saved_at: string;
+  last_saved_version_id: string;
+  last_error: string;
+  save_request: TOnlyOfficeSaveRequest | null;
+};
+
 export type TOnlyOfficeStatusResponse = {
   onlyoffice: Record<string, any>;
+  session: TOnlyOfficeSessionStatus;
   versions_count: number;
   updated_at: string;
+};
+
+export type TOnlyOfficeForceSaveResponse = {
+  doc_key: string;
+  save_request_id: string;
+  status: "accepted" | "no_changes";
 };
 
 export type TOnlyOfficeVersionsResponse = {
@@ -66,7 +96,9 @@ export class FilestoreService extends APIService {
     projectId: string,
     params?: { page?: number; page_size?: number; name__icontains?: string }
   ): Promise<TFilestoreAssetListResponse> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/`, { params: params ?? {} })
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/`, {
+      params: params ?? {},
+    })
       .then((response) => response?.data ?? { count: 0, data: [] })
       .catch((error) => {
         throw error?.response?.data;
@@ -145,18 +177,52 @@ export class FilestoreService extends APIService {
     const params: Record<string, string> = {};
     if (mode) params.mode = mode;
     if (versionId) params.version_id = versionId;
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/config/`, {
-      params: Object.keys(params).length > 0 ? params : undefined,
-    })
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/config/`,
+      {
+        params: Object.keys(params).length > 0 ? params : undefined,
+      }
+    )
       .then((response) => response?.data ?? { document_server_url: "", config: {} })
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async getOnlyOfficeStatus(workspaceSlug: string, projectId: string, assetId: string): Promise<TOnlyOfficeStatusResponse> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/status/`)
-      .then((response) => response?.data ?? { onlyoffice: {}, versions_count: 0, updated_at: "" })
+  async getOnlyOfficeStatus(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    params?: { docKey?: string; saveRequestId?: string }
+  ): Promise<TOnlyOfficeStatusResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/status/`,
+      {
+        params: {
+          ...(params?.docKey ? { doc_key: params.docKey } : {}),
+          ...(params?.saveRequestId ? { save_request_id: params.saveRequestId } : {}),
+        },
+      }
+    )
+      .then(
+        (response) =>
+          response?.data ?? {
+            onlyoffice: {},
+            session: {
+              doc_key: "",
+              is_active: false,
+              state: "",
+              last_callback_status: 0,
+              last_callback_at: "",
+              last_saved_at: "",
+              last_saved_version_id: "",
+              last_error: "",
+              save_request: null,
+            },
+            versions_count: 0,
+            updated_at: "",
+          }
+      )
       .catch((error) => {
         throw error?.response?.data;
       });
@@ -167,7 +233,9 @@ export class FilestoreService extends APIService {
     projectId: string,
     assetId: string
   ): Promise<TOnlyOfficeVersionsResponse> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/versions/`)
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/versions/`
+    )
       .then((response) => response?.data ?? { versions: [] })
       .catch((error) => {
         throw error?.response?.data;
@@ -219,11 +287,19 @@ export class FilestoreService extends APIService {
       });
   }
 
-  async forceSaveOnlyOffice(workspaceSlug: string, projectId: string, assetId: string, docKey: string): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/forcesave/`, {
-      doc_key: docKey,
-    })
-      .then((response) => response?.data)
+  async forceSaveOnlyOffice(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    docKey: string
+  ): Promise<TOnlyOfficeForceSaveResponse> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/forcesave/`,
+      {
+        doc_key: docKey,
+      }
+    )
+      .then((response) => response?.data as TOnlyOfficeForceSaveResponse)
       .catch((error) => {
         throw error?.response?.data;
       });

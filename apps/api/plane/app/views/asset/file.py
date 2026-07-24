@@ -7,6 +7,7 @@ import uuid
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponseRedirect, StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -29,6 +30,23 @@ from plane.settings.storage import S3Storage
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.utils.host import base_host
+from plane.utils.onlyoffice_sessions import (
+    close_active_session,
+    complete_pending_save_requests,
+    complete_save_request,
+    create_edit_session,
+    get_doc_session,
+    get_onlyoffice_state,
+    has_active_session,
+    is_session_active,
+    put_doc_session,
+    register_save_request,
+    resolve_callback_sequence,
+    session_status,
+    set_active_session,
+    set_onlyoffice_state,
+    touch_editor,
+)
 from plane.utils.asset_path import (
     build_filestore_version_key,
     filestore_version_prefix,
@@ -50,7 +68,6 @@ ONLYOFFICE_ENTITY_TYPES = (
     FILESTORE_ENTITY_TYPE,
     FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
 )
-ONLYOFFICE_DOC_SESSION_LIMIT = 20
 
 
 def _get_onlyoffice_asset(pk, slug, project_id):
@@ -74,7 +91,7 @@ def _onlyoffice_jwt_secret() -> str:
 
 
 def _onlyoffice_jwt_enabled() -> bool:
-    return False
+    return bool(getattr(settings, "ONLYOFFICE_JWT_ENABLED", False))
 
 
 def _onlyoffice_jwt_header() -> str:
@@ -191,6 +208,11 @@ def _compute_doc_key(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _new_edit_session_key(asset: FileAsset) -> str:
+    raw = f"{_compute_doc_key(asset)}:session:{uuid.uuid4()}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def _storage_version_id(version_id: str | None) -> str | None:
     value = str(version_id or "").strip()
     if not value or value.lower() == NULL_VERSION_ID:
@@ -199,7 +221,11 @@ def _storage_version_id(version_id: str | None) -> str | None:
 
 
 def _api_base_for_onlyoffice(request) -> str:
-    override = os.environ.get("ONLYOFFICE_API_BASE_URL")
+    override = getattr(settings, "ONLYOFFICE_API_BASE_URL", "") or os.environ.get(
+        "ONLYOFFICE_API_BASE_URL"
+    ) or os.environ.get(
+        "ONLYOFFICE_APP_BASE_URL"
+    )
     if override:
         return override.rstrip("/")
     build_absolute_uri = getattr(request, "build_absolute_uri", None)
@@ -233,27 +259,13 @@ def _onlyoffice_versions_from_attributes(attributes: dict) -> list:
 
 
 def _set_onlyoffice_state(attributes: dict, patch: dict) -> dict:
-    if not isinstance(attributes, dict):
-        attributes = {}
-    onlyoffice_state = attributes.get("onlyoffice")
-    if not isinstance(onlyoffice_state, dict):
-        onlyoffice_state = {}
+    onlyoffice_state = get_onlyoffice_state(attributes)
     onlyoffice_state.update(patch)
-    attributes["onlyoffice"] = onlyoffice_state
-    return attributes
+    return set_onlyoffice_state(attributes, onlyoffice_state)
 
 
 def _onlyoffice_doc_session(attributes: dict, doc_key: str) -> dict:
-    if not isinstance(attributes, dict):
-        return {}
-    onlyoffice_state = attributes.get("onlyoffice")
-    if not isinstance(onlyoffice_state, dict):
-        return {}
-    sessions = onlyoffice_state.get("doc_sessions")
-    if not isinstance(sessions, dict):
-        return {}
-    session = sessions.get(str(doc_key or ""))
-    return session if isinstance(session, dict) else {}
+    return get_doc_session(get_onlyoffice_state(attributes), doc_key)
 
 
 def _set_onlyoffice_doc_session(
@@ -263,39 +275,34 @@ def _set_onlyoffice_doc_session(
     user,
     mode: str,
     source_version_id: str | None = None,
+    base_version_id: str | None = None,
 ) -> dict:
-    if not isinstance(attributes, dict):
-        attributes = {}
-    onlyoffice_state = attributes.get("onlyoffice")
-    if not isinstance(onlyoffice_state, dict):
-        onlyoffice_state = {}
-    sessions = onlyoffice_state.get("doc_sessions")
-    if not isinstance(sessions, dict):
-        sessions = {}
-
     now = timezone.now().isoformat()
-    sessions[str(doc_key)] = {
-        "editor_user_id": str(getattr(user, "id", "") or ""),
-        "editor_user_name": getattr(user, "display_name", None)
+    onlyoffice_state = get_onlyoffice_state(attributes)
+    session = get_doc_session(onlyoffice_state, doc_key)
+    if not session:
+        session = create_edit_session(
+            doc_key=doc_key,
+            base_version_id=str(base_version_id or source_version_id or ""),
+            now=now,
+        )
+    session.update(
+        {
+            "mode": mode,
+            "source_version_id": str(source_version_id or ""),
+        }
+    )
+    session = touch_editor(
+        session,
+        user_id=str(getattr(user, "id", "") or ""),
+        user_name=getattr(user, "display_name", None)
         or getattr(user, "email", "")
         or "",
-        "mode": mode,
-        "source_version_id": str(source_version_id or ""),
-        "opened_at": now,
-    }
-    ordered_sessions = sorted(
-        sessions.items(),
-        key=lambda item: str(
-            item[1].get("opened_at") if isinstance(item[1], dict) else ""
-        ),
-    )
-    onlyoffice_state["doc_sessions"] = dict(
-        ordered_sessions[-ONLYOFFICE_DOC_SESSION_LIMIT:]
+        now=now,
     )
     onlyoffice_state.update(
         {
             "last_opened_at": now,
-            "last_doc_key": str(doc_key),
             "last_source_version_id": str(source_version_id or ""),
             "last_editor_user_id": str(getattr(user, "id", "") or ""),
             "last_editor_user_name": getattr(user, "display_name", None)
@@ -303,8 +310,11 @@ def _set_onlyoffice_doc_session(
             or "",
         }
     )
-    attributes["onlyoffice"] = onlyoffice_state
-    return attributes
+    if mode == "edit" and not source_version_id:
+        set_active_session(onlyoffice_state, doc_key, session, now)
+    else:
+        put_doc_session(onlyoffice_state, doc_key, session)
+    return set_onlyoffice_state(attributes, onlyoffice_state)
 
 
 def _coerce_uuid_string(value) -> str | None:
@@ -394,6 +404,46 @@ def _onlyoffice_created_by_id(
                 return parsed
 
     return None
+
+
+def _resolve_onlyoffice_callback_session(
+    state: dict,
+    *,
+    asset: FileAsset,
+    doc_key: str,
+    now: str,
+) -> tuple[dict, bool]:
+    session = get_doc_session(state, doc_key)
+    active_doc_key = str(state.get("active_session_key") or "")
+
+    legacy_doc_key = str(state.get("last_doc_key") or "")
+    # Compatibility for a session opened before the stable-key state was deployed.
+    if (
+        not session
+        and not active_doc_key
+        and (not legacy_doc_key or legacy_doc_key == doc_key)
+    ):
+        session = create_edit_session(
+            doc_key=doc_key,
+            base_version_id=str(asset.version_id or ""),
+            now=now,
+        )
+        set_active_session(state, doc_key, session, now)
+        active_doc_key = doc_key
+    elif (
+        session
+        and not active_doc_key
+        and str(session.get("state") or "open") != "closed"
+    ):
+        session["state"] = "open"
+        set_active_session(state, doc_key, session, now)
+        active_doc_key = doc_key
+
+    return session, active_doc_key == doc_key
+
+
+def _has_active_onlyoffice_session(asset: FileAsset) -> bool:
+    return has_active_session(asset.attributes)
 
 
 def _download_onlyoffice_file(file_url: str) -> dict:
@@ -557,52 +607,64 @@ class FilestoreAssetAPIView(BaseAPIView):
 class FilestoreAssetDetailAPIView(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
     def patch(self, request, slug, project_id, pk):
-        asset = FileAsset.objects.get(
-            id=pk,
-            workspace__slug=slug,
-            project_id=project_id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_deleted=False,
-        )
-
-        if not asset.is_uploaded:
-            asset.is_uploaded = True
-            asset.created_by = request.user
-
-        if not asset.storage_metadata:
-            get_asset_object_metadata.delay(str(asset.id))
-
-        asset.attributes = request.data.get("attributes", asset.attributes)
-        asset.save(update_fields=["is_uploaded", "attributes"])
-        if asset.storage_key:
-            storage = S3Storage(request=request)
-            if not ensure_uploads_bucket_versioning(storage):
-                return Response(
-                    {"error": "Failed to enable uploads bucket versioning"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-            record_latest_object_version(
-                asset=asset,
-                storage=storage,
-                created_by_id=request.user.id,
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_deleted=False,
             )
+            if _has_active_onlyoffice_session(asset):
+                return Response(
+                    {"error": "文件正在在线编辑，暂不能修改文件"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if not asset.is_uploaded:
+                asset.is_uploaded = True
+                asset.created_by = request.user
+
+            if not asset.storage_metadata:
+                get_asset_object_metadata.delay(str(asset.id))
+
+            asset.attributes = request.data.get("attributes", asset.attributes)
+            asset.save(update_fields=["is_uploaded", "attributes"])
+            if asset.storage_key:
+                storage = S3Storage(request=request)
+                if not ensure_uploads_bucket_versioning(storage):
+                    return Response(
+                        {"error": "Failed to enable uploads bucket versioning"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+                record_latest_object_version(
+                    asset=asset,
+                    storage=storage,
+                    created_by_id=request.user.id,
+                )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
     def delete(self, request, slug, project_id, pk):
-        asset = FileAsset.objects.get(
-            id=pk,
-            workspace__slug=slug,
-            project_id=project_id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_deleted=False,
-        )
-        storage = S3Storage(request=request)
-        if not mark_asset_physically_deleted(asset, storage):
-            return Response(
-                {"error": "Failed to delete object versions"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_deleted=False,
             )
+            if _has_active_onlyoffice_session(asset):
+                return Response(
+                    {"error": "文件正在在线编辑，暂不能删除"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            storage = S3Storage(request=request)
+            if not mark_asset_physically_deleted(asset, storage):
+                return Response(
+                    {"error": "Failed to delete object versions"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -720,6 +782,11 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def post(self, request, slug, project_id, pk):
         asset = _get_filestore_asset(pk, slug, project_id)
+        if _has_active_onlyoffice_session(asset):
+            return Response(
+                {"error": "文件正在在线编辑，暂不能上传新版本"},
+                status=status.HTTP_409_CONFLICT,
+            )
         file_type = (
             request.data.get("type")
             or (asset.attributes or {}).get("type")
@@ -746,27 +813,39 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def patch(self, request, slug, project_id, pk):
-        asset = _get_filestore_asset(pk, slug, project_id)
-        attrs = dict(asset.attributes or {})
-        if request.data.get("type"):
-            attrs["type"] = request.data.get("type")
-        if request.data.get("size") is not None:
-            attrs["size"] = int(request.data.get("size") or 0)
-        asset.attributes = attrs
-        asset.save(update_fields=["attributes"])
-
-        storage = S3Storage(request=request)
-        if not ensure_uploads_bucket_versioning(storage):
-            return Response(
-                {"error": "Failed to enable uploads bucket versioning"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_deleted=False,
             )
-        version = record_latest_object_version(
-            asset=asset,
-            storage=storage,
-            created_by_id=request.user.id,
-            alias=request.data.get("alias") or None,
-        )
+            if _has_active_onlyoffice_session(asset):
+                return Response(
+                    {"error": "文件正在在线编辑，暂不能上传新版本"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            attrs = dict(asset.attributes or {})
+            if request.data.get("type"):
+                attrs["type"] = request.data.get("type")
+            if request.data.get("size") is not None:
+                attrs["size"] = int(request.data.get("size") or 0)
+            asset.attributes = attrs
+            asset.save(update_fields=["attributes"])
+
+            storage = S3Storage(request=request)
+            if not ensure_uploads_bucket_versioning(storage):
+                return Response(
+                    {"error": "Failed to enable uploads bucket versioning"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            version = record_latest_object_version(
+                asset=asset,
+                storage=storage,
+                created_by_id=request.user.id,
+                alias=request.data.get("alias") or None,
+            )
         return Response(
             {"version": _serialize_file_version(version)}, status=status.HTTP_200_OK
         )
@@ -775,27 +854,40 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
 class FilestoreAssetVersionRestoreAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def post(self, request, slug, project_id, pk, version_id):
-        asset = _get_filestore_asset(pk, slug, project_id)
-        target_version = asset.versions.filter(
-            version_id=version_id, deleted_at__isnull=True
-        ).first()
-        if target_version is None:
-            return Response(
-                {"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_deleted=False,
             )
+            if _has_active_onlyoffice_session(asset):
+                return Response(
+                    {"error": "文件正在在线编辑，暂不能恢复版本"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            target_version = asset.versions.filter(
+                version_id=version_id, deleted_at__isnull=True
+            ).first()
+            if target_version is None:
+                return Response(
+                    {"error": "Version not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
-        storage = S3Storage(request=request)
-        deleted_version_ids = restore_asset_to_version(
-            asset=asset,
-            target_version=target_version,
-            storage=storage,
-        )
-        current_version = (
-            asset.versions.filter(is_current=True, deleted_at__isnull=True)
-            .select_related("created_by")
-            .first()
-            or target_version
-        )
+            storage = S3Storage(request=request)
+            deleted_version_ids = restore_asset_to_version(
+                asset=asset,
+                target_version=target_version,
+                storage=storage,
+            )
+            current_version = (
+                asset.versions.filter(is_current=True, deleted_at__isnull=True)
+                .select_related("created_by")
+                .first()
+                or target_version
+            )
         return Response(
             {
                 "current_version": _serialize_file_version(current_version),
@@ -851,8 +943,84 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        doc_key = _compute_doc_key(asset, source_version=source_version)
+        document_type = _onlyoffice_document_type(ext)
+        requested_mode = (request.query_params.get("mode") or "").strip().lower()
+        user_permission_keys = _get_user_project_permission_keys(
+            request.user, slug, project_id
+        )
+        is_issue_attachment = (
+            asset.entity_type == FileAsset.EntityTypeContext.ISSUE_ATTACHMENT
+        )
+        # 工作项附件、PDF、或显式请求预览：本质只读，与编辑权限无关。
+        view_only = (
+            requested_mode == "view"
+            or source_version is not None
+            or is_issue_attachment
+            or document_type == "pdf"
+        )
+        # 其余均为编辑请求：必须具备「编辑项目资产」权限，否则直接拒绝并提示，
+        # 不再降级为只读，确保无权限用户无法打开在线编辑器。
+        # 复用 allow_fine_permission 的标准文案，便于前端统一按权限错误识别处理。
+        if (
+            not view_only
+            and PermissionKey.PROJECT_ASSET_EDIT not in user_permission_keys
+        ):
+            return Response(
+                {"error": "您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        mode = "view" if view_only else "edit"
+
+        # 下载按钮受细粒度下载权限控制：无权限的用户在预览/编辑界面看不到下载入口。
+        # 工作项附件与项目资产使用各自的下载权限 key。
+        if is_issue_attachment:
+            download_permission_key = PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD
+        else:
+            download_permission_key = PermissionKey.PROJECT_ASSET_DOWNLOAD
+        can_download = download_permission_key in user_permission_keys
+
         source_version_id = source_version.version_id if source_version else None
+        if mode == "edit":
+            with transaction.atomic():
+                asset = FileAsset.objects.select_for_update().get(
+                    id=pk,
+                    workspace__slug=slug,
+                    project_id=project_id,
+                    entity_type__in=ONLYOFFICE_ENTITY_TYPES,
+                    is_uploaded=True,
+                    is_deleted=False,
+                )
+                onlyoffice_state = get_onlyoffice_state(asset.attributes)
+                active_doc_key = str(
+                    onlyoffice_state.get("active_session_key") or ""
+                )
+                active_session = get_doc_session(onlyoffice_state, active_doc_key)
+                # 过期会话（文档服务器漏发终态回调）视为不可复用，重开新会话。
+                if not active_doc_key or not is_session_active(active_session):
+                    active_doc_key = _new_edit_session_key(asset)
+                doc_key = active_doc_key
+                asset.attributes = _set_onlyoffice_doc_session(
+                    asset.attributes,
+                    doc_key,
+                    user=request.user,
+                    mode=mode,
+                    source_version_id=None,
+                    base_version_id=str(asset.version_id or ""),
+                )
+                asset.save(update_fields=["attributes"])
+        else:
+            onlyoffice_state = get_onlyoffice_state(asset.attributes)
+            active_doc_key = str(onlyoffice_state.get("active_session_key") or "")
+            active_session = get_doc_session(onlyoffice_state, active_doc_key)
+            if (
+                source_version is None
+                and active_doc_key
+                and is_session_active(active_session)
+            ):
+                doc_key = active_doc_key
+            else:
+                doc_key = _compute_doc_key(asset, source_version=source_version)
+
         download_sig = _onlyoffice_hmac_signature(
             "download", str(asset.id), doc_key, source_version_id
         )
@@ -880,38 +1048,24 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
             f"?{urlencode(signed_callback_params)}"
         )
 
-        document_type = _onlyoffice_document_type(ext)
-        requested_mode = (request.query_params.get("mode") or "").strip().lower()
-        user_permission_keys = _get_user_project_permission_keys(
-            request.user, slug, project_id
-        )
-        is_issue_attachment = (
-            asset.entity_type == FileAsset.EntityTypeContext.ISSUE_ATTACHMENT
-        )
-        # 工作项附件、PDF、或显式请求预览：本质只读，与编辑权限无关。
-        view_only = (
-            requested_mode == "view" or is_issue_attachment or document_type == "pdf"
-        )
-        # 其余均为编辑请求：必须具备「编辑项目资产」权限，否则直接拒绝并提示，
-        # 不再降级为只读，确保无权限用户无法打开在线编辑器。
-        # 复用 allow_fine_permission 的标准文案，便于前端统一按权限错误识别处理。
-        if (
-            not view_only
-            and PermissionKey.PROJECT_ASSET_EDIT not in user_permission_keys
-        ):
-            return Response(
-                {"error": "您没有所需的项目权限。"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        mode = "view" if view_only else "edit"
-
-        # 下载按钮受细粒度下载权限控制：无权限的用户在预览/编辑界面看不到下载入口。
-        # 工作项附件与项目资产使用各自的下载权限 key。
-        if is_issue_attachment:
-            download_permission_key = PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD
-        else:
-            download_permission_key = PermissionKey.PROJECT_ASSET_DOWNLOAD
-        can_download = download_permission_key in user_permission_keys
+        editor_config = {
+            "mode": mode,
+            "lang": "zh-CN",
+            "user": {
+                "id": str(request.user.id),
+                "name": request.user.display_name or request.user.email,
+            },
+            "coEditing": {
+                "mode": "fast",
+                "change": False,
+            },
+            "customization": {
+                "autosave": mode == "edit",
+                "forcesave": mode == "edit",
+            },
+        }
+        if mode == "edit":
+            editor_config["callbackUrl"] = callback_url
 
         config = {
             "type": "desktop",
@@ -927,32 +1081,11 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
                     "edit": mode == "edit",
                 },
             },
-            "editorConfig": {
-                "mode": mode,
-                "lang": "zh-CN",
-                "callbackUrl": callback_url,
-                "user": {
-                    "id": str(request.user.id),
-                    "name": request.user.display_name or request.user.email,
-                },
-                "customization": {
-                    "autosave": mode == "edit",
-                    "forcesave": mode == "edit",
-                },
-            },
+            "editorConfig": editor_config,
         }
 
         if _onlyoffice_jwt_enabled():
             config["token"] = _jwt_encode_browser_config(config)
-
-        asset.attributes = _set_onlyoffice_doc_session(
-            asset.attributes,
-            doc_key,
-            user=request.user,
-            mode=mode,
-            source_version_id=source_version_id,
-        )
-        asset.save(update_fields=["attributes"])
 
         return Response(
             {
@@ -1099,6 +1232,11 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
             )
 
         decoded = _jwt_try_decode_from_header(request)
+        if _onlyoffice_jwt_enabled() and not isinstance(decoded, dict):
+            return Response(
+                {"error": 1, "message": "missing or invalid callback token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         decoded_payload = None
         if isinstance(decoded, dict):
             decoded_payload = (
@@ -1107,10 +1245,14 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                 else decoded
             )
 
-        asset = _get_onlyoffice_asset(pk, slug, project_id)
-
         payload = request.data if isinstance(request.data, dict) else {}
-        status_code = int(payload.get("status") or 0)
+        try:
+            status_code = int(payload.get("status") or 0)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": 1, "message": "invalid callback status"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if payload.get("key") and str(payload.get("key")) != doc_key:
             return Response(
                 {"error": 1, "message": "callback key mismatch"},
@@ -1134,88 +1276,328 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        asset.attributes = _set_onlyoffice_state(
-            asset.attributes,
-            {
-                "last_callback_at": timezone.now().isoformat(),
-                "last_callback_status": status_code,
-            },
-        )
+        now = timezone.now().isoformat()
+        request_id = str(payload.get("userdata") or "").strip()
 
-        if status_code in [2, 6]:
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type__in=ONLYOFFICE_ENTITY_TYPES,
+                is_uploaded=True,
+                is_deleted=False,
+            )
+            state = get_onlyoffice_state(asset.attributes)
+            state.update(
+                {
+                    "last_callback_at": now,
+                    "last_callback_status": status_code,
+                }
+            )
+
             if asset.entity_type != FILESTORE_ENTITY_TYPE:
-                patch = {"last_error": None}
-                if status_code == 6:
-                    patch["last_force_saved_at"] = timezone.now().isoformat()
-                else:
-                    patch["last_saved_at"] = timezone.now().isoformat()
-                asset.attributes = _set_onlyoffice_state(asset.attributes, patch)
+                state["last_error"] = None
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
                 asset.save(update_fields=["attributes"])
                 return Response({"error": 0}, status=status.HTTP_200_OK)
 
-            onlyoffice_state = (
-                (asset.attributes or {}).get("onlyoffice")
-                if isinstance(asset.attributes, dict)
-                else {}
+            session, is_active_session = _resolve_onlyoffice_callback_session(
+                state,
+                asset=asset,
+                doc_key=doc_key,
+                now=now,
             )
-            active_doc_key = (
-                str(onlyoffice_state.get("last_doc_key") or "")
-                if isinstance(onlyoffice_state, dict)
-                else ""
+
+            if str(session.get("state") or "") == "closed":
+                # Duplicate terminal callbacks and delayed force-save callbacks are
+                # safe only because the terminal snapshot has already been applied.
+                return Response({"error": 0}, status=status.HTTP_200_OK)
+
+            if not is_active_session:
+                state.update(
+                    {
+                        "last_error": "callback does not belong to active session",
+                        "last_save_skipped": "inactive_doc_key",
+                        "last_stale_doc_key": doc_key,
+                    }
+                )
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
+                asset.save(update_fields=["attributes"])
+                return Response({"error": 1}, status=status.HTTP_200_OK)
+
+            session.update(
+                {
+                    "last_callback_at": now,
+                    "last_callback_status": status_code,
+                    "last_activity_at": now,
+                }
             )
-            checkpoint_version_id = (
-                str(onlyoffice_state.get("last_checkpoint_version_id") or "").strip()
-                if isinstance(onlyoffice_state, dict)
-                else ""
-            )
-            if active_doc_key and active_doc_key != doc_key:
-                asset.attributes = _set_onlyoffice_state(
-                    asset.attributes,
+
+            if status_code == 1:
+                users = payload.get("users")
+                if isinstance(users, list):
+                    existing_editors = (
+                        session.get("editors")
+                        if isinstance(session.get("editors"), dict)
+                        else {}
+                    )
+                    session["editors"] = {
+                        str(user_id): existing_editors.get(str(user_id), {})
+                        for user_id in users
+                        if user_id
+                    }
+                    session["active_user_ids"] = [
+                        str(user_id) for user_id in users if user_id
+                    ]
+                put_doc_session(state, doc_key, session)
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
+                asset.save(update_fields=["attributes"])
+                return Response({"error": 0}, status=status.HTTP_200_OK)
+
+            if status_code in [3, 7]:
+                error_message = (
+                    "OnlyOffice final save failed"
+                    if status_code == 3
+                    else "OnlyOffice force save failed"
+                )
+                session["last_error"] = error_message
+                session["last_error_status"] = status_code
+                session = complete_save_request(
+                    session,
+                    request_id=request_id,
+                    status="failed",
+                    completed_at=now,
+                    error=error_message,
+                )
+                if status_code == 3 or not request_id:
+                    session = complete_pending_save_requests(
+                        session,
+                        status="failed",
+                        completed_at=now,
+                        error=error_message,
+                    )
+                state["last_error"] = error_message
+                put_doc_session(state, doc_key, session)
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
+                asset.save(update_fields=["attributes"])
+                return Response({"error": 0}, status=status.HTTP_200_OK)
+
+            if status_code == 4:
+                checkpoint_version_id = str(
+                    session.get("checkpoint_version_id")
+                    or state.get("last_checkpoint_version_id")
+                    or ""
+                )
+                if (
+                    checkpoint_version_id
+                    and checkpoint_version_id == str(asset.version_id or "")
+                    and not asset.versions.filter(
+                        version_id=checkpoint_version_id,
+                        deleted_at__isnull=True,
+                    ).exists()
+                ):
+                    storage = S3Storage()
+                    created_by_id = _onlyoffice_created_by_id(
+                        payload,
+                        asset=asset,
+                        doc_key=doc_key,
+                        trusted_editor_user_id=trusted_editor_user_id,
+                    )
+                    version = record_latest_object_version(
+                        asset=asset,
+                        storage=storage,
+                        created_by_id=created_by_id,
+                    )
+                    session["last_saved_version_id"] = version.version_id
+                    state["last_saved_version_id"] = version.version_id
+                    state["last_saved_at"] = now
+                    session["last_saved_at"] = now
+                session = complete_pending_save_requests(
+                    session,
+                    status=(
+                        "saved" if checkpoint_version_id else "no_changes"
+                    ),
+                    completed_at=now,
+                )
+                put_doc_session(state, doc_key, session)
+                closed_at = timezone.now().isoformat()
+                close_active_session(
+                    state,
+                    doc_key,
+                    terminal_status=status_code,
+                    now=closed_at,
+                )
+                state.update(
                     {
                         "last_error": None,
-                        "last_save_skipped": "stale_doc_key",
-                        "last_stale_doc_key": doc_key,
-                    },
+                        "last_save_skipped": (
+                            "checkpoint_promoted"
+                            if checkpoint_version_id
+                            else "no_changes"
+                        ),
+                        "last_checkpoint_version_id": None,
+                        "last_checkpoint_saved_at": None,
+                    }
                 )
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
                 asset.save(update_fields=["attributes"])
                 return Response({"error": 0}, status=status.HTTP_200_OK)
 
-            file_url = payload.get("url")
-            if not file_url:
-                asset.attributes = _set_onlyoffice_state(
-                    asset.attributes, {"last_error": "missing url in callback"}
-                )
+            if status_code not in [2, 6]:
+                put_doc_session(state, doc_key, session)
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
                 asset.save(update_fields=["attributes"])
-                return Response({"error": 1}, status=status.HTTP_200_OK)
+                return Response({"error": 0}, status=status.HTTP_200_OK)
 
-            storage = S3Storage()
-            if not ensure_uploads_bucket_versioning(storage):
-                asset.attributes = _set_onlyoffice_state(
-                    asset.attributes,
-                    {"last_error": "uploads bucket versioning is not enabled"},
+            session, callback_sequence, already_completed = (
+                resolve_callback_sequence(
+                    session,
+                    request_id=request_id,
+                    received_at=now,
                 )
-                asset.save(update_fields=["attributes"])
-                return Response({"error": 1}, status=status.HTTP_200_OK)
+            )
+            put_doc_session(state, doc_key, session)
+            asset.attributes = set_onlyoffice_state(asset.attributes, state)
+            asset.save(update_fields=["attributes"])
+            if already_completed:
+                return Response({"error": 0}, status=status.HTTP_200_OK)
 
-            last_exception = None
-            for attempt in range(1, 4):
-                downloaded = None
-                try:
-                    downloaded = _download_onlyoffice_file(file_url)
+        file_url = payload.get("url")
+        if not file_url:
+            error_message = "missing url in callback"
+            with transaction.atomic():
+                asset = FileAsset.objects.select_for_update().get(id=pk)
+                state = get_onlyoffice_state(asset.attributes)
+                session = get_doc_session(state, doc_key)
+                session["last_error"] = error_message
+                session = complete_save_request(
+                    session,
+                    request_id=request_id,
+                    status="failed",
+                    completed_at=timezone.now().isoformat(),
+                    error=error_message,
+                )
+                if not request_id:
+                    session = complete_pending_save_requests(
+                        session,
+                        status="failed",
+                        completed_at=timezone.now().isoformat(),
+                        error=error_message,
+                    )
+                state["last_error"] = error_message
+                put_doc_session(state, doc_key, session)
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
+                asset.save(update_fields=["attributes"])
+            return Response({"error": 1}, status=status.HTTP_200_OK)
+
+        storage = S3Storage()
+        if not ensure_uploads_bucket_versioning(storage):
+            error_message = "uploads bucket versioning is not enabled"
+            with transaction.atomic():
+                asset = FileAsset.objects.select_for_update().get(id=pk)
+                state = get_onlyoffice_state(asset.attributes)
+                session = get_doc_session(state, doc_key)
+                session["last_error"] = error_message
+                session = complete_save_request(
+                    session,
+                    request_id=request_id,
+                    status="failed",
+                    completed_at=timezone.now().isoformat(),
+                    error=error_message,
+                )
+                if not request_id:
+                    session = complete_pending_save_requests(
+                        session,
+                        status="failed",
+                        completed_at=timezone.now().isoformat(),
+                        error=error_message,
+                    )
+                state["last_error"] = error_message
+                put_doc_session(state, doc_key, session)
+                asset.attributes = set_onlyoffice_state(asset.attributes, state)
+                asset.save(update_fields=["attributes"])
+            return Response({"error": 1}, status=status.HTTP_200_OK)
+
+        last_exception = None
+        for attempt in range(1, 4):
+            downloaded = None
+            try:
+                downloaded = _download_onlyoffice_file(file_url)
+                with transaction.atomic():
+                    asset = FileAsset.objects.select_for_update().get(
+                        id=pk,
+                        workspace__slug=slug,
+                        project_id=project_id,
+                        entity_type=FILESTORE_ENTITY_TYPE,
+                        is_uploaded=True,
+                        is_deleted=False,
+                    )
+                    state = get_onlyoffice_state(asset.attributes)
+                    session = get_doc_session(state, doc_key)
+                    if str(session.get("state") or "") == "closed":
+                        return Response({"error": 0}, status=status.HTTP_200_OK)
+                    if str(state.get("active_session_key") or "") != doc_key:
+                        return Response({"error": 1}, status=status.HTTP_200_OK)
+
+                    last_applied_sequence = int(
+                        session.get("last_applied_sequence") or 0
+                    )
+                    if callback_sequence <= last_applied_sequence:
+                        session = complete_save_request(
+                            session,
+                            request_id=request_id,
+                            status="saved",
+                            completed_at=timezone.now().isoformat(),
+                        )
+                        put_doc_session(state, doc_key, session)
+                        asset.attributes = set_onlyoffice_state(
+                            asset.attributes, state
+                        )
+                        asset.save(update_fields=["attributes"])
+                        return Response({"error": 0}, status=status.HTTP_200_OK)
+
+                    checkpoint_version_id = str(
+                        session.get("checkpoint_version_id")
+                        or state.get("last_checkpoint_version_id")
+                        or ""
+                    )
                     current_sha256 = _asset_content_sha256(asset)
                     next_sha256 = downloaded["sha256"]
-                    if current_sha256 and current_sha256 == next_sha256:
-                        created_by_id = None
-                        version = None
-                        if (
-                            status_code == 2
-                            and checkpoint_version_id
-                            and checkpoint_version_id == str(asset.version_id or "")
-                            and not asset.versions.filter(
-                                version_id=checkpoint_version_id,
-                                deleted_at__isnull=True,
-                            ).exists()
-                        ):
+                    version = None
+                    created_by_id = None
+                    checkpoint_version_id_next = checkpoint_version_id
+
+                    if not current_sha256 or current_sha256 != next_sha256:
+                        content_type = (
+                            downloaded.get("content_type")
+                            or (asset.attributes or {}).get("type")
+                            or "application/octet-stream"
+                        )
+                        ok = storage.upload_file(
+                            file_obj=downloaded["file_obj"],
+                            object_name=asset.storage_key,
+                            content_type=content_type,
+                        )
+                        if not ok:
+                            raise RuntimeError("upload to storage failed")
+                        storage_metadata = storage.get_object_metadata(
+                            object_name=asset.storage_key
+                        )
+                        if not storage_metadata:
+                            raise RuntimeError(
+                                "missing storage metadata after upload"
+                            )
+
+                        if status_code == 6:
+                            checkpoint = record_latest_object_checkpoint(
+                                asset=asset,
+                                storage=storage,
+                            )
+                            checkpoint_version_id_next = str(
+                                checkpoint.get("version_id") or ""
+                            )
+                        else:
                             created_by_id = _onlyoffice_created_by_id(
                                 payload,
                                 asset=asset,
@@ -1227,73 +1609,20 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                                 storage=storage,
                                 created_by_id=created_by_id,
                             )
-
-                        saved_at = timezone.now().isoformat()
-                        patch = {
-                            "last_saved_at": saved_at,
-                            "last_error": None,
-                            "last_save_skipped": "unchanged",
-                        }
-                        if status_code == 6:
-                            patch["last_force_saved_at"] = saved_at
-                        else:
-                            patch.update(
-                                {
-                                    "last_checkpoint_version_id": None,
-                                    "last_checkpoint_saved_at": None,
-                                }
+                        _set_asset_content_sha256(asset, next_sha256)
+                        if isinstance(asset.attributes, dict):
+                            asset.attributes["size"] = int(
+                                asset.size or downloaded.get("size") or 0
                             )
-                            if version is not None:
-                                patch.update(
-                                    {
-                                        "last_save_skipped": None,
-                                        "last_saved_version_id": version.version_id,
-                                        "last_saved_by_id": str(created_by_id or ""),
-                                    }
-                                )
-                        asset.attributes = _set_onlyoffice_state(
-                            asset.attributes, patch
-                        )
-                        asset.save(update_fields=["attributes"])
-                        return Response({"error": 0}, status=status.HTTP_200_OK)
-
-                    content_type = (
-                        downloaded.get("content_type")
-                        or (asset.attributes or {}).get("type")
-                        or "application/octet-stream"
-                    )
-                    ok = storage.upload_file(
-                        file_obj=downloaded["file_obj"],
-                        object_name=asset.storage_key,
-                        content_type=content_type,
-                    )
-                    if not ok:
-                        raise RuntimeError("upload to storage failed")
-
-                    storage_metadata = storage.get_object_metadata(
-                        object_name=asset.storage_key
-                    )
-                    if not storage_metadata:
-                        raise RuntimeError("missing storage metadata after upload")
-
-                    if status_code == 6:
-                        checkpoint = record_latest_object_checkpoint(
-                            asset=asset,
-                            storage=storage,
-                        )
-                        checkpoint_version_id_next = str(
-                            checkpoint.get("version_id") or ""
-                        )
-                        if (
-                            checkpoint_version_id
-                            and checkpoint_version_id != checkpoint_version_id_next
-                        ):
-                            _delete_untracked_storage_version(
-                                storage,
-                                asset,
-                                checkpoint_version_id,
-                            )
-                    else:
+                    elif (
+                        status_code == 2
+                        and checkpoint_version_id
+                        and checkpoint_version_id == str(asset.version_id or "")
+                        and not asset.versions.filter(
+                            version_id=checkpoint_version_id,
+                            deleted_at__isnull=True,
+                        ).exists()
+                    ):
                         created_by_id = _onlyoffice_created_by_id(
                             payload,
                             asset=asset,
@@ -1305,66 +1634,134 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                             storage=storage,
                             created_by_id=created_by_id,
                         )
-                        if (
-                            checkpoint_version_id
-                            and checkpoint_version_id != version.version_id
-                        ):
-                            _delete_untracked_storage_version(
-                                storage,
-                                asset,
-                                checkpoint_version_id,
-                            )
 
-                    _set_asset_content_sha256(asset, next_sha256)
-                    if isinstance(asset.attributes, dict):
-                        asset.attributes["size"] = int(
-                            asset.size or downloaded.get("size") or 0
+                    if (
+                        checkpoint_version_id
+                        and status_code == 6
+                        and checkpoint_version_id != checkpoint_version_id_next
+                    ):
+                        _delete_untracked_storage_version(
+                            storage,
+                            asset,
+                            checkpoint_version_id,
+                        )
+                    elif (
+                        checkpoint_version_id
+                        and status_code == 2
+                        and version is not None
+                        and checkpoint_version_id != version.version_id
+                    ):
+                        _delete_untracked_storage_version(
+                            storage,
+                            asset,
+                            checkpoint_version_id,
                         )
 
                     saved_at = timezone.now().isoformat()
-                    patch = {
-                        "last_saved_at": saved_at,
-                        "last_error": None,
-                        "last_save_skipped": "checkpoint" if status_code == 6 else None,
-                    }
+                    session["last_applied_sequence"] = callback_sequence
+                    session["last_saved_at"] = saved_at
+                    session["last_error"] = ""
+                    session = complete_save_request(
+                        session,
+                        request_id=request_id,
+                        status="saved",
+                        completed_at=saved_at,
+                    )
+                    state.update(
+                        {
+                            "last_saved_at": saved_at,
+                            "last_error": None,
+                            "last_save_skipped": (
+                                "checkpoint"
+                                if status_code == 6
+                                else (
+                                    "unchanged" if version is None else None
+                                )
+                            ),
+                        }
+                    )
+
                     if status_code == 6:
-                        patch.update(
+                        session["checkpoint_version_id"] = (
+                            checkpoint_version_id_next
+                        )
+                        state.update(
                             {
                                 "last_force_saved_at": saved_at,
                                 "last_checkpoint_saved_at": saved_at,
-                                "last_checkpoint_version_id": checkpoint_version_id_next,
+                                "last_checkpoint_version_id": (
+                                    checkpoint_version_id_next
+                                ),
                             }
                         )
+                        put_doc_session(state, doc_key, session)
                     else:
-                        patch.update(
+                        if version is not None:
+                            session["last_saved_version_id"] = version.version_id
+                            state["last_saved_version_id"] = version.version_id
+                            state["last_saved_by_id"] = str(
+                                created_by_id or ""
+                            )
+                        session["checkpoint_version_id"] = ""
+                        session = complete_pending_save_requests(
+                            session,
+                            status="saved",
+                            completed_at=saved_at,
+                        )
+                        put_doc_session(state, doc_key, session)
+                        close_active_session(
+                            state,
+                            doc_key,
+                            terminal_status=status_code,
+                            now=saved_at,
+                        )
+                        state.update(
                             {
-                                "last_saved_version_id": version.version_id,
-                                "last_saved_by_id": str(created_by_id or ""),
                                 "last_checkpoint_version_id": None,
                                 "last_checkpoint_saved_at": None,
                             }
                         )
-                    asset.attributes = _set_onlyoffice_state(asset.attributes, patch)
+
+                    asset.attributes = set_onlyoffice_state(
+                        asset.attributes, state
+                    )
                     asset.save(update_fields=["attributes"])
                     return Response({"error": 0}, status=status.HTTP_200_OK)
-                except Exception as e:
-                    last_exception = e
-                    time.sleep(min(2**attempt, 8))
-                finally:
-                    try:
-                        if downloaded is not None and downloaded.get("file_obj"):
-                            downloaded["file_obj"].close()
-                    except Exception:
-                        pass
+            except Exception as exc:
+                last_exception = exc
+                time.sleep(min(2**attempt, 8))
+            finally:
+                try:
+                    if downloaded is not None and downloaded.get("file_obj"):
+                        downloaded["file_obj"].close()
+                except Exception:
+                    pass
 
-            asset.attributes = _set_onlyoffice_state(
-                asset.attributes, {"last_error": f"保存失败: {last_exception}"}
+        error_message = f"保存失败: {last_exception}"
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(id=pk)
+            state = get_onlyoffice_state(asset.attributes)
+            session = get_doc_session(state, doc_key)
+            session["last_error"] = error_message
+            session = complete_save_request(
+                session,
+                request_id=request_id,
+                status="failed",
+                completed_at=timezone.now().isoformat(),
+                error=error_message,
             )
+            if not request_id:
+                session = complete_pending_save_requests(
+                    session,
+                    status="failed",
+                    completed_at=timezone.now().isoformat(),
+                    error=error_message,
+                )
+            state["last_error"] = error_message
+            put_doc_session(state, doc_key, session)
+            asset.attributes = set_onlyoffice_state(asset.attributes, state)
             asset.save(update_fields=["attributes"])
-            return Response({"error": 1}, status=status.HTTP_200_OK)
-
-        asset.save(update_fields=["attributes"])
-        return Response({"error": 0}, status=status.HTTP_200_OK)
+        return Response({"error": 1}, status=status.HTTP_200_OK)
 
 
 class FilestoreAssetOnlyOfficeStatusAPIView(BaseAPIView):
@@ -1378,14 +1775,24 @@ class FilestoreAssetOnlyOfficeStatusAPIView(BaseAPIView):
             is_uploaded=True,
             is_deleted=False,
         )
-        onlyoffice = (
-            (asset.attributes or {}).get("onlyoffice")
-            if isinstance(asset.attributes, dict)
-            else {}
+        onlyoffice = get_onlyoffice_state(asset.attributes)
+        requested_doc_key = str(request.query_params.get("doc_key") or "").strip()
+        requested_save_request_id = str(
+            request.query_params.get("save_request_id") or ""
+        ).strip()
+        status_doc_key = (
+            requested_doc_key
+            or str(onlyoffice.get("active_session_key") or "")
+            or str(onlyoffice.get("last_doc_key") or "")
         )
         return Response(
             {
-                "onlyoffice": onlyoffice if isinstance(onlyoffice, dict) else {},
+                "onlyoffice": onlyoffice,
+                "session": session_status(
+                    onlyoffice,
+                    doc_key=status_doc_key,
+                    request_id=requested_save_request_id,
+                ),
                 "versions_count": asset.versions.filter(
                     deleted_at__isnull=True
                 ).count(),
@@ -1436,6 +1843,11 @@ class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
             is_uploaded=True,
             is_deleted=False,
         )
+        if _has_active_onlyoffice_session(asset):
+            return Response(
+                {"error": "文件正在在线编辑，暂不能恢复版本"},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         versions = _onlyoffice_versions_from_attributes(asset.attributes)
         allowed_prefix = filestore_version_prefix(
@@ -1511,64 +1923,171 @@ class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
 class FilestoreAssetOnlyOfficeForceSaveAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def post(self, request, slug, project_id, pk):
-        asset = FileAsset.objects.get(
-            id=pk,
-            workspace__slug=slug,
-            project_id=project_id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_uploaded=True,
-            is_deleted=False,
-        )
+        doc_key = str(request.data.get("doc_key") or "").strip()
+        if not doc_key:
+            return Response(
+                {"error": "doc_key is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        doc_key = request.data.get("doc_key") or _compute_doc_key(asset)
+        request_id = str(uuid.uuid4())
+        requested_at = timezone.now().isoformat()
+        with transaction.atomic():
+            asset = FileAsset.objects.select_for_update().get(
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_uploaded=True,
+                is_deleted=False,
+            )
+            state = get_onlyoffice_state(asset.attributes)
+            if str(state.get("active_session_key") or "") != doc_key:
+                return Response(
+                    {"error": "document session is no longer active"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            session = get_doc_session(state, doc_key)
+            if str(session.get("state") or "") != "open":
+                return Response(
+                    {"error": "document session is not open"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            session, _ = register_save_request(
+                session,
+                request_id=request_id,
+                requested_at=requested_at,
+            )
+            put_doc_session(state, doc_key, session)
+            state.update(
+                {
+                    "last_forcesave_requested_at": requested_at,
+                    "last_forcesave_doc_key": doc_key,
+                    "last_error": None,
+                }
+            )
+            asset.attributes = set_onlyoffice_state(asset.attributes, state)
+            asset.save(update_fields=["attributes"])
 
-        body = {"c": "forcesave", "key": doc_key}
+        def complete_request(
+            request_status: str,
+            *,
+            error_message: str = "",
+        ) -> None:
+            completed_at = timezone.now().isoformat()
+            with transaction.atomic():
+                locked_asset = FileAsset.objects.select_for_update().get(id=pk)
+                locked_state = get_onlyoffice_state(locked_asset.attributes)
+                locked_session = get_doc_session(locked_state, doc_key)
+                locked_session = complete_save_request(
+                    locked_session,
+                    request_id=request_id,
+                    status=request_status,
+                    completed_at=completed_at,
+                    error=error_message,
+                )
+                if error_message:
+                    locked_session["last_error"] = error_message
+                    locked_state["last_error"] = error_message
+                put_doc_session(locked_state, doc_key, locked_session)
+                locked_asset.attributes = set_onlyoffice_state(
+                    locked_asset.attributes, locked_state
+                )
+                locked_asset.save(update_fields=["attributes"])
 
+        command_body = {
+            "c": "forcesave",
+            "key": doc_key,
+            "userdata": request_id,
+        }
+        body = dict(command_body)
         headers = {"Content-Type": "application/json"}
         if _onlyoffice_jwt_enabled():
-            token = _jwt_encode_request_payload(body)
+            token = _jwt_encode_request_payload(command_body)
+            body["token"] = token
             headers[_onlyoffice_jwt_header()] = f"Bearer {token}"
 
-        command_url = (
-            settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/")
-            + "/coauthoring/CommandService.ashx"
-        )
+        document_server_url = settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/")
+        command_urls = [
+            f"{document_server_url}/command",
+            f"{document_server_url}/coauthoring/CommandService.ashx",
+        ]
+        command_url = command_urls[0]
         try:
-            resp = requests.post(
-                command_url, json=body, headers=headers, timeout=(5, 30)
-            )
-            data = None
+            resp = None
+            for index, candidate_url in enumerate(command_urls):
+                command_url = candidate_url
+                resp = requests.post(
+                    candidate_url,
+                    json=body,
+                    headers=headers,
+                    timeout=(5, 30),
+                )
+                if resp.status_code != status.HTTP_404_NOT_FOUND or index == 1:
+                    break
+
+            if resp is None:
+                raise RuntimeError("empty response from document server")
             try:
                 data = resp.json()
             except Exception:
                 data = {"raw": resp.text}
 
-            asset.attributes = _set_onlyoffice_state(
-                asset.attributes,
-                {
-                    "last_forcesave_requested_at": timezone.now().isoformat(),
-                    "last_forcesave_doc_key": doc_key,
-                },
-            )
-            asset.save(update_fields=["attributes"])
+            if not resp.ok:
+                error_message = (
+                    f"OnlyOffice command HTTP {resp.status_code}"
+                )
+                complete_request("failed", error_message=error_message)
+                return Response(
+                    {
+                        "error": error_message,
+                        "save_request_id": request_id,
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            try:
+                command_error = int(data.get("error") or 0)
+            except (AttributeError, TypeError, ValueError):
+                command_error = -1
+
+            if command_error == 4:
+                complete_request("no_changes")
+                return Response(
+                    {
+                        "doc_key": doc_key,
+                        "save_request_id": request_id,
+                        "status": "no_changes",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            if command_error != 0:
+                error_message = f"OnlyOffice command error {command_error}"
+                complete_request("failed", error_message=error_message)
+                return Response(
+                    {
+                        "error": error_message,
+                        "save_request_id": request_id,
+                        "response": data,
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
             return Response(
                 {
-                    "document_server_url": settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip(
-                        "/"
-                    ),
-                    "command_url": command_url,
-                    "response_status": resp.status_code,
-                    "response": data,
+                    "doc_key": doc_key,
+                    "save_request_id": request_id,
+                    "status": "accepted",
                 },
                 status=status.HTTP_200_OK,
             )
-        except Exception as e:
-            asset.attributes = _set_onlyoffice_state(
-                asset.attributes, {"last_error": f"forcesave失败: {e}"}
-            )
-            asset.save(update_fields=["attributes"])
+        except Exception as exc:
+            error_message = f"forcesave失败: {exc}"
+            complete_request("failed", error_message=error_message)
             return Response(
-                {"error": "forcesave failed"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {
+                    "error": "forcesave failed",
+                    "save_request_id": request_id,
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
             )

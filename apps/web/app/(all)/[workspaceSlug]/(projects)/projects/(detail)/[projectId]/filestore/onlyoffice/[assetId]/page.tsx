@@ -3,14 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { Alert, Button } from "antd";
+import { Alert, Button, Tag } from "antd";
 import { PROJECT_ASSET_EDIT_PERMISSION_KEY, PROJECT_ASSET_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { useOnlyOfficeSave } from "@/hooks/use-onlyoffice-save";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService } from "@/services/filestore.service";
 
 function FilestoreOnlyOfficePage() {
-  const { workspaceSlug, projectId, assetId } = useParams<{ workspaceSlug: string; projectId: string; assetId: string }>();
+  const { workspaceSlug, projectId, assetId } = useParams<{
+    workspaceSlug: string;
+    projectId: string;
+    assetId: string;
+  }>();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const service = useMemo(() => new FilestoreService(), []);
   const canViewFilestore = allowProjectPermissionKeys(
@@ -28,15 +33,24 @@ function FilestoreOnlyOfficePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [docKey, setDocKey] = useState<string>("");
-  const [dirty, setDirty] = useState(false);
 
   const editorRef = useRef<any>(null);
   const containerHostRef = useRef<HTMLDivElement>(null);
   const editorRunIdRef = useRef(0);
-  const docKeyRef = useRef<string>("");
-  const dirtyRef = useRef<boolean>(false);
-  const forceSaveInFlightRef = useRef<boolean>(false);
-  const lastForceSaveAtRef = useRef<number>(0);
+  const {
+    saveStatus,
+    saveError,
+    onDocumentStateChange,
+    flush: flushOnlyOfficeSave,
+    reset: resetOnlyOfficeSave,
+    configure: configureOnlyOfficeSave,
+  } = useOnlyOfficeSave({
+    workspaceSlug: String(workspaceSlug ?? ""),
+    projectId: String(projectId ?? ""),
+    assetId: String(assetId ?? ""),
+    docKey,
+    enabled: Boolean(docKey),
+  });
 
   const containerId = useMemo(() => {
     const id = String(assetId ?? "").trim();
@@ -65,13 +79,20 @@ function FilestoreOnlyOfficePage() {
     return container;
   }, [containerId]);
 
-  useEffect(() => {
-    docKeyRef.current = docKey;
-  }, [docKey]);
+  const requestCloseEditor = useCallback(async () => {
+    const saved = await flushOnlyOfficeSave(true);
+    if (!saved) return;
 
-  useEffect(() => {
-    dirtyRef.current = dirty;
-  }, [dirty]);
+    configureOnlyOfficeSave({ enabled: false, assetId: "", docKey: "" });
+    destroyEditor();
+    window.close();
+    window.setTimeout(() => {
+      if (window.closed || !workspaceSlug || !projectId) return;
+      window.location.assign(
+        `/${encodeURIComponent(String(workspaceSlug))}/projects/${encodeURIComponent(String(projectId))}/filestore`
+      );
+    }, 100);
+  }, [configureOnlyOfficeSave, destroyEditor, flushOnlyOfficeSave, projectId, workspaceSlug]);
 
   const loadOnlyOfficeScript = useCallback(async (documentServerUrl: string) => {
     const url = String(documentServerUrl || "").replace(/\/+$/, "");
@@ -100,29 +121,6 @@ function FilestoreOnlyOfficePage() {
     return p;
   }, []);
 
-  const triggerForceSave = useCallback(
-    async (source: "editor_request_save" | "editor_state_saved" | "interval") => {
-      if (!workspaceSlug || !projectId || !assetId) return;
-      if (source === "interval" && !dirtyRef.current) return;
-      if (forceSaveInFlightRef.current) return;
-
-      const now = Date.now();
-      if (now - lastForceSaveAtRef.current < 1500) return;
-      lastForceSaveAtRef.current = now;
-
-      const key = docKeyRef.current;
-      if (!key) return;
-
-      forceSaveInFlightRef.current = true;
-      try {
-        await service.forceSaveOnlyOffice(String(workspaceSlug), String(projectId), String(assetId), key);
-      } finally {
-        forceSaveInFlightRef.current = false;
-      }
-    },
-    [assetId, projectId, service, workspaceSlug]
-  );
-
   const initEditor = useCallback(
     async (serverUrl: string, config: Record<string, any>, runId: number) => {
       await loadOnlyOfficeScript(serverUrl);
@@ -143,15 +141,9 @@ function FilestoreOnlyOfficePage() {
             setError("");
           },
           onDocumentStateChange: (event: any) => {
-            const nextDirty = Boolean(event?.data);
-            const wasDirty = dirtyRef.current;
-            setDirty(nextDirty);
-            dirtyRef.current = nextDirty;
-            if (wasDirty && !nextDirty) void triggerForceSave("editor_state_saved");
+            onDocumentStateChange(Boolean(event?.data));
           },
-          onRequestSave: () => {
-            void triggerForceSave("editor_request_save");
-          },
+          onRequestClose: () => void requestCloseEditor(),
           onError: (event: any) => {
             const code = event?.data?.errorCode;
             const desc = event?.data?.errorDescription;
@@ -162,7 +154,7 @@ function FilestoreOnlyOfficePage() {
 
       editorRef.current = new w.DocsAPI.DocEditor(containerId, enrichedConfig);
     },
-    [containerId, createEditorContainer, destroyEditor, loadOnlyOfficeScript, triggerForceSave]
+    [containerId, createEditorContainer, destroyEditor, loadOnlyOfficeScript, onDocumentStateChange, requestCloseEditor]
   );
 
   const refresh = useCallback(async () => {
@@ -176,8 +168,13 @@ function FilestoreOnlyOfficePage() {
       const serverUrl = String(res?.document_server_url ?? "");
       const config = (res?.config ?? {}) as Record<string, any>;
       const key = String(config?.document?.key ?? "");
+      resetOnlyOfficeSave();
+      configureOnlyOfficeSave({
+        assetId: String(assetId),
+        docKey: key,
+        enabled: true,
+      });
       setDocKey(key);
-      docKeyRef.current = key;
       await initEditor(serverUrl, config, runId);
     } catch (e: any) {
       if (editorRunIdRef.current !== runId) return;
@@ -185,27 +182,16 @@ function FilestoreOnlyOfficePage() {
     } finally {
       if (editorRunIdRef.current === runId) setLoading(false);
     }
-  }, [assetId, initEditor, projectId, service, workspaceSlug]);
+  }, [assetId, configureOnlyOfficeSave, initEditor, projectId, resetOnlyOfficeSave, service, workspaceSlug]);
 
   useEffect(() => {
     void refresh();
     return () => {
       editorRunIdRef.current += 1;
+      configureOnlyOfficeSave({ enabled: false, assetId: "", docKey: "" });
       destroyEditor();
-      docKeyRef.current = "";
-      dirtyRef.current = false;
-      forceSaveInFlightRef.current = false;
-      lastForceSaveAtRef.current = 0;
     };
-  }, [destroyEditor, refresh]);
-
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      if (!dirtyRef.current) return;
-      void triggerForceSave("interval");
-    }, 60000);
-    return () => window.clearInterval(t);
-  }, [triggerForceSave]);
+  }, [configureOnlyOfficeSave, destroyEditor, refresh]);
 
   if (workspaceUserInfo && workspaceSlug && projectId && (!canViewFilestore || !canEditFilestore)) {
     return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
@@ -213,23 +199,40 @@ function FilestoreOnlyOfficePage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-surface-1">
-      {error && (
-        <div className="absolute left-0 right-0 top-0 z-20 p-3">
+      {(error || saveError) && (
+        <div className="absolute top-0 right-0 left-0 z-20 p-3">
           <Alert
             type="error"
             showIcon
-            message="编辑器加载/运行异常"
+            message={error ? "编辑器加载/运行异常" : "文档保存失败"}
             description={
               <div className="flex items-center justify-between gap-3">
-                <span className="break-all">{error}</span>
-                <Button size="small" onClick={() => void refresh()} disabled={loading}>
-                  重试
-                </Button>
+                <span className="break-all">{error || saveError}</span>
+                {error && (
+                  <Button size="small" onClick={() => void refresh()} disabled={loading}>
+                    重试
+                  </Button>
+                )}
               </div>
             }
           />
         </div>
       )}
+      <div className="pointer-events-none absolute right-4 bottom-4 z-20">
+        <Tag
+          color={
+            saveStatus === "已保存"
+              ? "green"
+              : saveStatus === "保存中"
+                ? "processing"
+                : saveStatus === "保存失败"
+                  ? "red"
+                  : "default"
+          }
+        >
+          {saveStatus}
+        </Tag>
+      </div>
       <div className="absolute inset-0">
         {loading && <div className="absolute inset-0 z-10 bg-white/60" />}
         <div ref={containerHostRef} className="h-full w-full" />
@@ -239,4 +242,3 @@ function FilestoreOnlyOfficePage() {
 }
 
 export default observer(FilestoreOnlyOfficePage);
-

@@ -506,4 +506,18 @@ MONGO_DB_DATABASE = os.environ.get("MONGO_DB_DATABASE", False)
 ONLYOFFICE_DOCUMENT_SERVER_URL = os.environ.get(
     "ONLYOFFICE_DOCUMENT_SERVER_URL", "http://10.32.190.212:89"
 )
-ONLYOFFICE_JWT_ENABLED = os.environ.get("ONLYOFFICE_JWT_ENABLED", "0") == "1"
+ONLYOFFICE_API_BASE_URL = os.environ.get("ONLYOFFICE_API_BASE_URL") or os.environ.get(
+    "ONLYOFFICE_APP_BASE_URL", ""
+)
+ONLYOFFICE_JWT_ENABLED = os.environ.get("ONLYOFFICE_JWT_ENABLED", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+# 会话过期兜底（秒）：文档服务器漏发终态回调时用于自愈，避免文件被永久锁定。
+try:
+    ONLYOFFICE_SESSION_TTL_SECONDS = int(
+        os.environ.get("ONLYOFFICE_SESSION_TTL_SECONDS", "28800")
+    )
+except (TypeError, ValueError):
+    ONLYOFFICE_SESSION_TTL_SECONDS = 28800

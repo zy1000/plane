@@ -52,6 +52,7 @@ from plane.utils.folder_ops import (
     rename_asset_file,
     rename_user_folder,
 )
+from plane.utils.onlyoffice_sessions import has_active_session
 from plane.utils.paginator import CustomPaginator
 
 
@@ -205,6 +206,43 @@ class FilestoreExplorerViewSet(BaseViewSet):
             return False
         return is_folder_in_filestore_scope(
             asset.path, workspace_id=workspace_id, project_id=project_id
+        )
+
+    @staticmethod
+    def _active_onlyoffice_asset_ids(assets) -> list[str]:
+        return [
+            str(asset.id)
+            for asset in assets
+            if has_active_session(asset.attributes)
+        ]
+
+    def _active_onlyoffice_assets_in_folder(
+        self,
+        *,
+        folder: FilePath,
+        project: Project,
+    ) -> list[str]:
+        folder_ids = folder.get_descendants(include_self=True).values_list(
+            "id", flat=True
+        )
+        assets = FileAsset.objects.filter(
+            workspace_id=project.workspace_id,
+            project_id=project.id,
+            entity_type=FILESTORE_ENTITY_TYPE,
+            is_deleted=False,
+            is_uploaded=True,
+            path_id__in=folder_ids,
+        ).only("id", "attributes")
+        return self._active_onlyoffice_asset_ids(assets)
+
+    @staticmethod
+    def _editing_conflict(asset_ids: list[str]) -> Response:
+        return Response(
+            {
+                "error": "文件正在在线编辑，暂不能执行此操作",
+                "asset_ids": asset_ids,
+            },
+            status=status.HTTP_409_CONFLICT,
         )
 
     @staticmethod
@@ -454,6 +492,12 @@ class FilestoreExplorerViewSet(BaseViewSet):
             )
 
         project = self._project_for_scope(slug=slug, project_id=project_id)
+        active_asset_ids = self._active_onlyoffice_assets_in_folder(
+            folder=folder,
+            project=project,
+        )
+        if active_asset_ids:
+            return self._editing_conflict(active_asset_ids)
         storage = S3Storage(request=request)
         try:
             folder = rename_user_folder(
@@ -488,6 +532,12 @@ class FilestoreExplorerViewSet(BaseViewSet):
             )
 
         project = self._project_for_scope(slug=slug, project_id=project_id)
+        active_asset_ids = self._active_onlyoffice_assets_in_folder(
+            folder=folder,
+            project=project,
+        )
+        if active_asset_ids:
+            return self._editing_conflict(active_asset_ids)
         storage = S3Storage(request=request)
         try:
             delete_user_folder(
@@ -583,6 +633,8 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 {"error": "Asset is out of filestore scope"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if has_active_session(asset.attributes):
+            return self._editing_conflict([str(asset.id)])
 
         asset.is_uploaded = True
         if not asset.storage_metadata:
@@ -638,6 +690,8 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 {"error": "Asset is out of filestore scope"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if has_active_session(asset.attributes):
+            return self._editing_conflict([str(asset.id)])
 
         storage = S3Storage(request=request)
         try:
@@ -685,6 +739,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 project_id=str(project.id),
             )
         ]
+        active_asset_ids = self._active_onlyoffice_asset_ids(assets)
+        if active_asset_ids:
+            return self._editing_conflict(active_asset_ids)
 
         deleted_ids = []
         delete_mode = serializer.validated_data.get("delete_mode", "physical")
@@ -732,6 +789,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 project_id=str(project.id),
             )
         ]
+        active_asset_ids = self._active_onlyoffice_asset_ids(assets)
+        if active_asset_ids:
+            return self._editing_conflict(active_asset_ids)
 
         storage = S3Storage(request=request)
         result = copy_assets(
@@ -774,9 +834,32 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 project_id=str(project.id),
             )
         ]
+        active_asset_ids = self._active_onlyoffice_asset_ids(assets)
+        if active_asset_ids:
+            return self._editing_conflict(active_asset_ids)
 
         storage = S3Storage(request=request)
         on_conflict = serializer.validated_data.get("on_conflict", "rename")
+        if on_conflict == "overwrite":
+            source_names = {
+                asset.filename
+                or (asset.attributes or {}).get("name")
+                or "file"
+                for asset in assets
+            }
+            overwritten_assets = FileAsset.objects.filter(
+                workspace_id=project.workspace_id,
+                project_id=project.id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                path=target_folder,
+                filename__in=source_names,
+                is_deleted=False,
+            ).exclude(id__in=[asset.id for asset in assets])
+            active_overwritten_ids = self._active_onlyoffice_asset_ids(
+                overwritten_assets
+            )
+            if active_overwritten_ids:
+                return self._editing_conflict(active_overwritten_ids)
         result = move_assets(
             assets=assets,
             target_folder=target_folder,

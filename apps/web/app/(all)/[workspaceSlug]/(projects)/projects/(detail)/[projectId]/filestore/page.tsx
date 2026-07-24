@@ -22,11 +22,26 @@ import { ExportOutlined } from "@ant-design/icons";
 import { AssetExplorer } from "@/components/asset-explorer";
 import { formatBytes, formatMinIODate } from "@/components/asset-explorer/utils/format";
 import { XmindPreviewModal, type TXmindPreviewAsset } from "@/components/filestore/xmind-preview-modal";
+import { useOnlyOfficeSave } from "@/hooks/use-onlyoffice-save";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService, type TFilestoreAsset, type TFilestoreAssetVersion } from "@/services/filestore.service";
 import { isImageSupported } from "@/utils/onlyoffice";
 
-const ONLYOFFICE_SUPPORTED_EXTS = ["doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "pdf"];
+const ONLYOFFICE_SUPPORTED_EXTS = [
+  "doc",
+  "docx",
+  "odt",
+  "rtf",
+  "txt",
+  "xls",
+  "xlsx",
+  "ods",
+  "csv",
+  "ppt",
+  "pptx",
+  "odp",
+  "pdf",
+];
 const XMIND_SUPPORTED_EXTS = ["xmind"];
 
 type TFilestoreAssetLike = Pick<TFilestoreAsset, "id" | "attributes"> & {
@@ -39,12 +54,20 @@ const getAssetFilename = (asset: TFilestoreAssetLike): string =>
   String(asset.attributes?.name ?? asset.name ?? asset.filename ?? "");
 
 const isOnlyOfficeSupported = (filename?: string): boolean => {
-  const ext = String(filename ?? "").split(".").pop()?.toLowerCase() ?? "";
+  const ext =
+    String(filename ?? "")
+      .split(".")
+      .pop()
+      ?.toLowerCase() ?? "";
   return ONLYOFFICE_SUPPORTED_EXTS.includes(ext);
 };
 
 const isXmindSupported = (filename?: string): boolean => {
-  const ext = String(filename ?? "").split(".").pop()?.toLowerCase() ?? "";
+  const ext =
+    String(filename ?? "")
+      .split(".")
+      .pop()
+      ?.toLowerCase() ?? "";
   return XMIND_SUPPORTED_EXTS.includes(ext);
 };
 
@@ -67,10 +90,7 @@ function FilestorePage() {
   const [editorAsset, setEditorAsset] = useState<TFilestoreAssetLike | null>(null);
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorError, setEditorError] = useState("");
-  const [editorConfig, setEditorConfig] = useState<Record<string, any> | null>(null);
-  const [editorServerUrl, setEditorServerUrl] = useState("");
   const [docKey, setDocKey] = useState("");
-  const [saveStatus, setSaveStatus] = useState<"已保存" | "未保存" | "保存中" | "保存失败">("已保存");
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versions, setVersions] = useState<TFilestoreAssetVersion[]>([]);
@@ -81,15 +101,31 @@ function FilestorePage() {
   const [imagePreview, setImagePreview] = useState<{ src: string; name: string } | null>(null);
 
   const editorRef = useRef<any>(null);
-  const forceSavingRef = useRef(false);
-  const latestDocKeyRef = useRef("");
-  const latestDirtyRef = useRef(false);
-  const lastForceSaveAtRef = useRef(0);
+  const editorModeRef = useRef<TOnlyOfficeMode>("edit");
+  const editorAssetIdRef = useRef("");
+  const saveErrorRef = useRef("");
   const lastCallbackAtRef = useRef("");
   const lastSavedVersionIdRef = useRef("");
   const versionRefreshPollTimerRef = useRef<number | null>(null);
   const editorContainerHostRef = useRef<HTMLDivElement>(null);
   const editorRunIdRef = useRef(0);
+  const closeRequestInFlightRef = useRef(false);
+  const {
+    saveStatus,
+    saveError,
+    hasUnconfirmedChanges,
+    onDocumentStateChange,
+    flush: flushOnlyOfficeSave,
+    reset: resetOnlyOfficeSave,
+    configure: configureOnlyOfficeSave,
+  } = useOnlyOfficeSave({
+    workspaceSlug: String(workspaceSlug ?? ""),
+    projectId: String(projectId ?? ""),
+    assetId: String(editorAsset?.id ?? ""),
+    docKey,
+    enabled: editorOpen && editorMode === "edit",
+  });
+  saveErrorRef.current = saveError;
 
   const destroyEditor = useCallback(() => {
     try {
@@ -155,8 +191,7 @@ function FilestorePage() {
             clearVersionRefreshPoll();
             return;
           }
-        } catch {
-        }
+        } catch {}
 
         pollSavedVersionAfterClose(assetId, baselineVersionId, baselineCallbackAt, attempt + 1);
       }, 2000);
@@ -171,30 +206,54 @@ function FilestorePage() {
     [clearVersionRefreshPoll]
   );
 
-  const closeEditor = useCallback(() => {
-    const shouldRefreshAfterClose = editorMode === "edit" && Boolean(editorAsset?.id);
-    const closingAssetId = String(editorAsset?.id ?? "");
+  const finalizeCloseEditor = useCallback(() => {
+    const shouldRefreshAfterClose = editorModeRef.current === "edit" && Boolean(editorAssetIdRef.current);
+    const closingAssetId = editorAssetIdRef.current;
     const baselineVersionId = lastSavedVersionIdRef.current;
     const baselineCallbackAt = lastCallbackAtRef.current;
     editorRunIdRef.current += 1;
+    configureOnlyOfficeSave({ enabled: false, assetId: "", docKey: "" });
     destroyEditor();
-    latestDocKeyRef.current = "";
-    latestDirtyRef.current = false;
-    forceSavingRef.current = false;
+    editorModeRef.current = "edit";
+    editorAssetIdRef.current = "";
+    closeRequestInFlightRef.current = false;
     setEditorOpen(false);
     setEditorLoading(false);
     setEditorMode("edit");
     setEditorAsset(null);
-    setEditorConfig(null);
-    setEditorServerUrl("");
     setDocKey("");
     setViewingVersionId("");
     setEditorError("");
-    setSaveStatus("已保存");
+    resetOnlyOfficeSave();
     if (shouldRefreshAfterClose) {
       pollSavedVersionAfterClose(closingAssetId, baselineVersionId, baselineCallbackAt);
     }
-  }, [destroyEditor, editorAsset?.id, editorMode, pollSavedVersionAfterClose]);
+  }, [configureOnlyOfficeSave, destroyEditor, pollSavedVersionAfterClose, resetOnlyOfficeSave]);
+
+  const requestCloseEditor = useCallback(async () => {
+    if (closeRequestInFlightRef.current) return;
+    if (editorModeRef.current !== "edit") {
+      finalizeCloseEditor();
+      return;
+    }
+
+    closeRequestInFlightRef.current = true;
+    const saved = await flushOnlyOfficeSave(true);
+    closeRequestInFlightRef.current = false;
+    if (saved) {
+      finalizeCloseEditor();
+      return;
+    }
+
+    Modal.confirm({
+      title: "保存尚未完成",
+      content: saveErrorRef.current || "最新修改未确认保存，强制关闭可能导致内容丢失。",
+      okText: "仍然关闭",
+      okButtonProps: { danger: true },
+      cancelText: "继续编辑",
+      onOk: finalizeCloseEditor,
+    });
+  }, [finalizeCloseEditor, flushOnlyOfficeSave]);
 
   const loadOnlyOfficeScript = useCallback(async (serverUrl: string) => {
     const cleanUrl = String(serverUrl || "").replace(/\/+$/, "");
@@ -222,30 +281,6 @@ function FilestorePage() {
     return p;
   }, []);
 
-  const triggerForceSave = useCallback(
-    async (source: "manual" | "request" | "saved" | "interval") => {
-      if (!workspaceSlug || !projectId || !editorAsset?.id) return;
-      if (source === "interval" && !latestDirtyRef.current) return;
-      if (forceSavingRef.current) return;
-      if (Date.now() - lastForceSaveAtRef.current < 1500) return;
-
-      const currentDocKey = latestDocKeyRef.current;
-      if (!currentDocKey) return;
-      lastForceSaveAtRef.current = Date.now();
-      forceSavingRef.current = true;
-      setSaveStatus("保存中");
-      try {
-        await service.forceSaveOnlyOffice(String(workspaceSlug), String(projectId), String(editorAsset.id), currentDocKey);
-      } catch (error: any) {
-        setSaveStatus("保存失败");
-        message.error(error?.detail || error?.message || "触发保存失败");
-      } finally {
-        forceSavingRef.current = false;
-      }
-    },
-    [editorAsset?.id, projectId, service, workspaceSlug]
-  );
-
   const waitForEditorHost = useCallback(async (timeoutMs = 3000) => {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
@@ -256,7 +291,13 @@ function FilestorePage() {
   }, []);
 
   const initEditor = useCallback(
-    async (serverUrl: string, config: Record<string, any>, containerId: string, mode: TOnlyOfficeMode, runId: number) => {
+    async (
+      serverUrl: string,
+      config: Record<string, any>,
+      containerId: string,
+      mode: TOnlyOfficeMode,
+      runId: number
+    ) => {
       await loadOnlyOfficeScript(serverUrl);
       if (editorRunIdRef.current !== runId) return;
 
@@ -279,13 +320,12 @@ function FilestorePage() {
           onDocumentStateChange: isViewMode
             ? undefined
             : (event: any) => {
-                const dirty = Boolean(event?.data);
-                const wasDirty = latestDirtyRef.current;
-                latestDirtyRef.current = dirty;
-                if (dirty) setSaveStatus("未保存");
-                if (wasDirty && !dirty) void triggerForceSave("saved");
+                onDocumentStateChange(Boolean(event?.data));
               },
-          onRequestSave: isViewMode ? undefined : () => void triggerForceSave("request"),
+          onRequestClose: () => {
+            if (isViewMode) finalizeCloseEditor();
+            else void requestCloseEditor();
+          },
           onError: (event: any) => {
             const code = event?.data?.errorCode;
             const desc = event?.data?.errorDescription;
@@ -294,7 +334,15 @@ function FilestorePage() {
         },
       });
     },
-    [createEditorContainer, destroyEditor, loadOnlyOfficeScript, triggerForceSave, waitForEditorHost]
+    [
+      createEditorContainer,
+      destroyEditor,
+      finalizeCloseEditor,
+      loadOnlyOfficeScript,
+      onDocumentStateChange,
+      requestCloseEditor,
+      waitForEditorHost,
+    ]
   );
 
   const openEditor = useCallback(
@@ -320,7 +368,9 @@ function FilestorePage() {
           setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
           return;
         }
-        message.error(error?.error || error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
+        message.error(
+          error?.error || error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败")
+        );
         return;
       }
       if (editorRunIdRef.current !== runId || !res) return;
@@ -330,7 +380,11 @@ function FilestorePage() {
       const currentDocKey = String(config?.document?.key ?? "");
       if (mode === "edit") {
         try {
-          const statusRes = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), String(asset.id));
+          const statusRes = await service.getOnlyOfficeStatus(
+            String(workspaceSlug),
+            String(projectId),
+            String(asset.id)
+          );
           lastCallbackAtRef.current = String(statusRes?.onlyoffice?.last_callback_at ?? "");
           lastSavedVersionIdRef.current = String(statusRes?.onlyoffice?.last_saved_version_id ?? "");
         } catch {
@@ -340,28 +394,32 @@ function FilestorePage() {
       }
       setEditorAsset(asset);
       setEditorMode(mode);
+      editorModeRef.current = mode;
+      editorAssetIdRef.current = String(asset.id);
       setEditorOpen(true);
       setEditorLoading(true);
       setEditorError("");
-      setEditorConfig(config);
-      setEditorServerUrl(serverUrl);
       setDocKey(currentDocKey);
       setViewingVersionId(sourceVersionId);
-      setSaveStatus("已保存");
-      latestDocKeyRef.current = currentDocKey;
-      latestDirtyRef.current = false;
-      forceSavingRef.current = false;
+      resetOnlyOfficeSave();
+      configureOnlyOfficeSave({
+        assetId: String(asset.id),
+        docKey: currentDocKey,
+        enabled: mode === "edit",
+      });
       const containerId = `filestore-onlyoffice-editor-${asset.id}`;
       try {
         await initEditor(serverUrl, config, containerId, mode, runId);
       } catch (error: any) {
         if (editorRunIdRef.current !== runId) return;
-        setEditorError(error?.error || error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
+        setEditorError(
+          error?.error || error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败")
+        );
       } finally {
         if (editorRunIdRef.current === runId) setEditorLoading(false);
       }
     },
-    [initEditor, projectId, service, t, workspaceSlug]
+    [configureOnlyOfficeSave, initEditor, projectId, resetOnlyOfficeSave, service, t, workspaceSlug]
   );
 
   const handlePreview = useCallback(
@@ -412,7 +470,11 @@ function FilestorePage() {
     if (!workspaceSlug || !projectId || !editorAsset?.id) return;
     setVersionsLoading(true);
     try {
-      const res = await service.listFilestoreAssetVersions(String(workspaceSlug), String(projectId), String(editorAsset.id));
+      const res = await service.listFilestoreAssetVersions(
+        String(workspaceSlug),
+        String(projectId),
+        String(editorAsset.id)
+      );
       setVersions(Array.isArray(res?.versions) ? res.versions : []);
     } finally {
       setVersionsLoading(false);
@@ -422,22 +484,27 @@ function FilestorePage() {
   const viewEditorVersion = useCallback(
     async (versionId: string) => {
       if (!editorAsset?.id) return;
-      const nextMode: TOnlyOfficeMode = editorMode === "view" ? "view" : "edit";
       setVersionsOpen(false);
-      await openEditor(editorAsset, nextMode, versionId);
+      await openEditor(editorAsset, "view", versionId);
     },
-    [editorAsset, editorMode, openEditor]
+    [editorAsset, openEditor]
   );
 
   const handleViewEditorVersion = useCallback(
     async (record: TFilestoreAssetVersion) => {
       const versionId = String(record?.version_id ?? "").trim();
       if (!versionId) return;
-      if (latestDirtyRef.current) {
+      if (editorMode === "edit" && hasUnconfirmedChanges) {
+        const saved = await flushOnlyOfficeSave(true);
+        if (saved) {
+          await viewEditorVersion(versionId);
+          return;
+        }
         Modal.confirm({
           title: "切换版本",
-          content: "切换版本会放弃当前未保存的修改。",
-          okText: "继续查看",
+          content: saveError || "最新修改未确认保存，继续查看历史版本可能丢失这些修改。",
+          okText: "仍然查看",
+          okButtonProps: { danger: true },
           cancelText: "取消",
           onOk: () => viewEditorVersion(versionId),
         });
@@ -445,7 +512,7 @@ function FilestorePage() {
       }
       await viewEditorVersion(versionId);
     },
-    [viewEditorVersion]
+    [editorMode, flushOnlyOfficeSave, hasUnconfirmedChanges, saveError, viewEditorVersion]
   );
 
   useEffect(() => {
@@ -454,43 +521,12 @@ function FilestorePage() {
   }, [onlyofficeAssetId, openEditor, projectId, workspaceSlug]);
 
   useEffect(() => {
-    latestDocKeyRef.current = docKey;
-  }, [docKey]);
-
-  useEffect(() => {
-    if (!editorOpen || editorMode !== "edit" || !workspaceSlug || !projectId || !editorAsset?.id) return;
-    const statusTimer = window.setInterval(async () => {
-      try {
-        const res = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), String(editorAsset.id));
-        const lastCallbackStatus = Number(res?.onlyoffice?.last_callback_status ?? 0);
-        // OnlyOffice 回调状态码：2 = 所有人关闭后的最终保存；6 = 编辑中的强制保存(forcesave)。
-        // 编辑过程中走的是 forcesave(6)，此时内容已落库，需同样视为「已保存」，
-        // 否则文档未关闭前标签会一直卡在「未保存」。
-        const isSavedCallback = lastCallbackStatus === 2 || lastCallbackStatus === 6;
-        if (res?.onlyoffice?.last_error) setSaveStatus("保存失败");
-        else if (!latestDirtyRef.current && isSavedCallback && res?.onlyoffice?.last_saved_at) {
-          setSaveStatus("已保存");
-          const savedVersionId = String(res?.onlyoffice?.last_saved_version_id ?? "");
-          if (savedVersionId && savedVersionId !== lastSavedVersionIdRef.current) {
-            lastCallbackAtRef.current = String(res?.onlyoffice?.last_callback_at ?? "");
-            lastSavedVersionIdRef.current = savedVersionId;
-            refreshAssetVersions();
-            if (versionsOpen) void fetchVersions();
-          }
-        }
-      } catch {
-      }
-    }, 5000);
-
-    const saveTimer = window.setInterval(() => {
-      void triggerForceSave("interval");
-    }, 60000);
-
     return () => {
-      window.clearInterval(statusTimer);
-      window.clearInterval(saveTimer);
+      editorRunIdRef.current += 1;
+      configureOnlyOfficeSave({ enabled: false, assetId: "", docKey: "" });
+      destroyEditor();
     };
-  }, [editorAsset?.id, editorMode, editorOpen, fetchVersions, projectId, refreshAssetVersions, service, triggerForceSave, versionsOpen, workspaceSlug]);
+  }, [configureOnlyOfficeSave, destroyEditor]);
 
   const openEditorInNewTab = useCallback(() => {
     if (!workspaceSlug || !projectId || !editorAsset?.id) return;
@@ -507,7 +543,7 @@ function FilestorePage() {
   const renderEditorPanel = (
     <div className="relative" style={{ height: "calc(100vh - 56px)" }}>
       {editorError && (
-        <div className="absolute left-0 right-0 top-0 z-20 p-3">
+        <div className="absolute top-0 right-0 left-0 z-20 p-3">
           <Alert
             type="error"
             showIcon
@@ -525,7 +561,26 @@ function FilestorePage() {
     return (
       <>
         <PageHead title="在线编辑" />
-        <div className="fixed inset-0 z-50 bg-surface-1">{renderEditorPanel}</div>
+        <div className="fixed inset-0 z-50 bg-surface-1">
+          {renderEditorPanel}
+          {editorMode === "edit" && (
+            <div className="pointer-events-none absolute right-4 bottom-4 z-20">
+              <Tag
+                color={
+                  saveStatus === "已保存"
+                    ? "green"
+                    : saveStatus === "保存中"
+                      ? "processing"
+                      : saveStatus === "保存失败"
+                        ? "red"
+                        : "default"
+                }
+              >
+                {saveStatus}
+              </Tag>
+            </div>
+          )}
+        </div>
       </>
     );
   }
@@ -547,14 +602,17 @@ function FilestorePage() {
 
       <Modal
         open={editorOpen}
-        onCancel={closeEditor}
+        onCancel={() => void requestCloseEditor()}
         footer={null}
         width="100vw"
         style={{ top: 0, paddingBottom: 0 }}
         bodyStyle={{ padding: 0 }}
         destroyOnClose
         title={
-          <div className="flex items-center justify-between gap-2 pr-12" style={{ marginTop: -16, marginBottom: -16, height: 56 }}>
+          <div
+            className="flex items-center justify-between gap-2 pr-12"
+            style={{ marginTop: -16, marginBottom: -16, height: 56 }}
+          >
             <div className="flex items-center gap-2">
               <Typography.Text strong>
                 {editorMode === "view"
@@ -562,7 +620,17 @@ function FilestorePage() {
                   : String(editorAsset?.attributes?.name ?? "在线编辑")}
               </Typography.Text>
               {editorMode === "edit" && (
-                <Tag color={saveStatus === "已保存" ? "green" : saveStatus === "保存中" ? "processing" : saveStatus === "保存失败" ? "red" : "default"}>
+                <Tag
+                  color={
+                    saveStatus === "已保存"
+                      ? "green"
+                      : saveStatus === "保存中"
+                        ? "processing"
+                        : saveStatus === "保存失败"
+                          ? "red"
+                          : "default"
+                  }
+                >
                   {saveStatus}
                 </Tag>
               )}
@@ -571,12 +639,25 @@ function FilestorePage() {
             </div>
             {editorAsset?.id && (
               <Space>
-                <Button type="text" onClick={async () => { setVersionsOpen(true); await fetchVersions(); }}>
+                <Button
+                  type="text"
+                  onClick={async () => {
+                    setVersionsOpen(true);
+                    await fetchVersions();
+                  }}
+                >
                   历史版本
                 </Button>
                 {editorMode === "edit" && (
                   <Tooltip title="新标签页打开">
-                    <Button type="text" icon={<ExportOutlined />} onClick={() => { openEditorInNewTab(); closeEditor(); }} />
+                    <Button
+                      type="text"
+                      icon={<ExportOutlined />}
+                      onClick={() => {
+                        openEditorInNewTab();
+                        void requestCloseEditor();
+                      }}
+                    />
                   </Tooltip>
                 )}
               </Space>
@@ -643,7 +724,13 @@ function FilestorePage() {
           size="small"
           scroll={{ y: 440 }}
           columns={[
-            { title: "时间", dataIndex: "created_at", key: "created_at", width: 180, render: (v: string) => formatMinIODate(v) },
+            {
+              title: "时间",
+              dataIndex: "created_at",
+              key: "created_at",
+              width: 180,
+              render: (v: string) => formatMinIODate(v),
+            },
             {
               title: "名称",
               key: "name",
@@ -663,7 +750,13 @@ function FilestorePage() {
               },
             },
             { title: "大小", dataIndex: "size", key: "size", width: 100, render: (v: number) => formatBytes(v) },
-            { title: "来源", dataIndex: "created_by_name", key: "created_by_name", width: 140, render: (v: string | null) => String(v ?? "-") },
+            {
+              title: "来源",
+              dataIndex: "created_by_name",
+              key: "created_by_name",
+              width: 140,
+              render: (v: string | null) => String(v ?? "-"),
+            },
             {
               title: "操作",
               key: "actions",
@@ -672,7 +765,11 @@ function FilestorePage() {
                 const versionId = String(record?.version_id ?? "");
                 const isViewing = viewingVersionId ? viewingVersionId === versionId : Boolean(record?.is_current);
                 return (
-                  <Button size="small" disabled={isViewing || !versionId} onClick={() => void handleViewEditorVersion(record)}>
+                  <Button
+                    size="small"
+                    disabled={isViewing || !versionId}
+                    onClick={() => void handleViewEditorVersion(record)}
+                  >
                     {isViewing ? "当前" : "查看"}
                   </Button>
                 );
