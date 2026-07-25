@@ -29,19 +29,19 @@ const EMPTY_PAGE: TRequirementDetailsResponse = {
   count: 0,
 };
 
-export const useRequirementTemplateDetails = ({
+export const useRequirementDetails = ({
   workspaceSlug,
-  templateId,
-  onTemplateUpdate,
+  requirementId,
+  onRequirementUpdate,
 }: {
   workspaceSlug: string | undefined;
-  templateId: string | undefined;
-  onTemplateUpdate?: (template: TRequirement) => void;
+  requirementId: string | undefined;
+  onRequirementUpdate?: (requirement: TRequirement) => void;
 }) => {
   const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
   const [detailsPage, setDetailsPage] = useState<TRequirementDetailsResponse>(EMPTY_PAGE);
-  const [isConfigurationLoading, setIsConfigurationLoading] = useState(Boolean(workspaceSlug && templateId));
-  const [isDetailsLoading, setIsDetailsLoading] = useState(Boolean(workspaceSlug && templateId));
+  const [isConfigurationLoading, setIsConfigurationLoading] = useState(Boolean(workspaceSlug && requirementId));
+  const [isDetailsLoading, setIsDetailsLoading] = useState(Boolean(workspaceSlug && requirementId));
   const [isMutating, setIsMutating] = useState(false);
   const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -51,13 +51,13 @@ export const useRequirementTemplateDetails = ({
   const [perPage, setPerPage] = useState(20);
 
   const fetchConfiguration = useCallback(async () => {
-    if (!workspaceSlug || !templateId) return null;
+    if (!workspaceSlug || !requirementId) return null;
     setIsConfigurationLoading(true);
     setConfigurationError(null);
     try {
-      const response = await requirementService.getConfiguration(workspaceSlug, templateId);
+      const response = await requirementService.getConfiguration(workspaceSlug, requirementId);
       setConfiguration(response);
-      onTemplateUpdate?.(response.requirement);
+      onRequirementUpdate?.(response.requirement);
       return response;
     } catch (requestError) {
       setConfigurationError(getErrorMessage(requestError));
@@ -65,14 +65,14 @@ export const useRequirementTemplateDetails = ({
     } finally {
       setIsConfigurationLoading(false);
     }
-  }, [onTemplateUpdate, templateId, workspaceSlug]);
+  }, [onRequirementUpdate, requirementId, workspaceSlug]);
 
   const fetchDetails = useCallback(async () => {
-    if (!workspaceSlug || !templateId) return EMPTY_PAGE;
+    if (!workspaceSlug || !requirementId) return EMPTY_PAGE;
     setIsDetailsLoading(true);
     setDetailsError(null);
     try {
-      const response = await requirementService.listDetails(workspaceSlug, templateId, {
+      const response = await requirementService.listDetails(workspaceSlug, requirementId, {
         cursor,
         perPage,
         search,
@@ -86,7 +86,7 @@ export const useRequirementTemplateDetails = ({
     } finally {
       setIsDetailsLoading(false);
     }
-  }, [cursor, filters, perPage, search, templateId, workspaceSlug]);
+  }, [cursor, filters, perPage, search, requirementId, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);
@@ -101,41 +101,41 @@ export const useRequirementTemplateDetails = ({
 
   const updateConfiguration = useCallback(
     async (payload: TRequirementConfigurationPayload) => {
-      if (!workspaceSlug || !templateId) throw new Error("Requirement template is required.");
+      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.updateConfiguration(workspaceSlug, templateId, payload);
+        const response = await requirementService.updateConfiguration(workspaceSlug, requirementId, payload);
         setConfiguration(response);
-        onTemplateUpdate?.(response.requirement);
+        onRequirementUpdate?.(response.requirement);
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [onTemplateUpdate, templateId, workspaceSlug]
+    [onRequirementUpdate, requirementId, workspaceSlug]
   );
 
   const createDetail = useCallback(
     async (data: TRequirementDetailData, position: { before_id?: string; after_id?: string } = {}) => {
-      if (!workspaceSlug || !templateId) throw new Error("Requirement template is required.");
+      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.createDetail(workspaceSlug, templateId, { data, ...position });
+        const response = await requirementService.createDetail(workspaceSlug, requirementId, { data, ...position });
         await fetchDetails();
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchDetails, templateId, workspaceSlug]
+    [fetchDetails, requirementId, workspaceSlug]
   );
 
   const updateDetail = useCallback(
     async (detailId: string, data: TRequirementDetailData, version: number) => {
-      if (!workspaceSlug || !templateId) throw new Error("Requirement template is required.");
+      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.updateDetail(workspaceSlug, templateId, detailId, {
+        const response = await requirementService.updateDetail(workspaceSlug, requirementId, detailId, {
           data,
           version,
         });
@@ -148,41 +148,41 @@ export const useRequirementTemplateDetails = ({
         setIsMutating(false);
       }
     },
-    [templateId, workspaceSlug]
+    [requirementId, workspaceSlug]
   );
 
   const deleteDetails = useCallback(
     async (detailIds: string[]) => {
-      if (!workspaceSlug || !templateId) throw new Error("Requirement template is required.");
+      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
       if (!detailIds.length) return;
       setIsMutating(true);
       try {
         if (detailIds.length === 1) {
-          await requirementService.deleteDetail(workspaceSlug, templateId, detailIds[0]);
+          await requirementService.deleteDetail(workspaceSlug, requirementId, detailIds[0]);
         } else {
-          await requirementService.bulkDeleteDetails(workspaceSlug, templateId, detailIds);
+          await requirementService.bulkDeleteDetails(workspaceSlug, requirementId, detailIds);
         }
         await fetchDetails();
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchDetails, templateId, workspaceSlug]
+    [fetchDetails, requirementId, workspaceSlug]
   );
 
   const saveDetailBatch = useCallback(
     async (payload: TRequirementDetailBatchSavePayload) => {
-      if (!workspaceSlug || !templateId) throw new Error("Requirement template is required.");
+      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.bulkSaveDetails(workspaceSlug, templateId, payload);
+        const response = await requirementService.bulkSaveDetails(workspaceSlug, requirementId, payload);
         await fetchDetails();
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchDetails, templateId, workspaceSlug]
+    [fetchDetails, requirementId, workspaceSlug]
   );
 
   const updateSearch = useCallback((value: string) => {
@@ -223,3 +223,18 @@ export const useRequirementTemplateDetails = ({
     saveDetailBatch,
   };
 };
+
+export const useRequirementTemplateDetails = ({
+  workspaceSlug,
+  templateId,
+  onTemplateUpdate,
+}: {
+  workspaceSlug: string | undefined;
+  templateId: string | undefined;
+  onTemplateUpdate?: (template: TRequirement) => void;
+}) =>
+  useRequirementDetails({
+    workspaceSlug,
+    requirementId: templateId,
+    onRequirementUpdate: onTemplateUpdate,
+  });

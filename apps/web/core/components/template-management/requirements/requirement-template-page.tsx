@@ -18,12 +18,7 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
   const navigate = useNavigate();
   const { templateId } = useParams();
   const [isDataEditing, setIsDataEditing] = useState(false);
-  const {
-    workspaceSlug,
-    templates,
-    isLoading: isTemplatesLoading,
-    upsertTemplate,
-  } = useRequirementTemplatesContext();
+  const { workspaceSlug, templates, isLoading: isTemplatesLoading, upsertTemplate } = useRequirementTemplatesContext();
   const detailsStore = useRequirementTemplateDetails({
     workspaceSlug,
     templateId,
@@ -84,9 +79,7 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
                             <button
                               type="button"
                               disabled={!canConfigureTemplate}
-                              onClick={() =>
-                                navigate(`/${workspaceSlug}/templates/requirements/${templateId}/edit`)
-                              }
+                              onClick={() => navigate(`/${workspaceSlug}/templates/requirements/${templateId}/edit`)}
                               className="ml-1 flex size-6 flex-shrink-0 items-center justify-center rounded text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary disabled:cursor-not-allowed disabled:opacity-60"
                               aria-label={t("workspace_templates.requirements.edit")}
                             >
@@ -122,7 +115,7 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
         ) : (
           <RequirementDetailGrid
             workspaceSlug={workspaceSlug}
-            templateId={templateId ?? ""}
+            requirementId={templateId ?? ""}
             expectedUpdatedAt={detailsStore.configuration?.requirement.updated_at}
             fields={detailsStore.configuration?.fields ?? []}
             details={detailsStore.detailsPage.results}

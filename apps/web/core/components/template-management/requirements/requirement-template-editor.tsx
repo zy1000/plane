@@ -39,33 +39,37 @@ const serializeDraft = (metadata: TRequirementMetadataDraft, fields: TRequiremen
 function RequirementFieldsPreview({ fields }: { fields: TRequirementFieldDraft[] }) {
   const { t } = useTranslation();
   const visibleFields = fields.filter((field) => field.is_active);
-  const normalFields = visibleFields.filter((field) => field.field_type !== "form");
   const formFields = visibleFields.filter((field) => field.field_type === "form");
   const hasForms = formFields.length > 0;
+  const columnCount = visibleFields.reduce((count, field) => {
+    if (field.field_type !== "form") return count + 1;
+    return count + Math.max(field.children.filter((child) => child.is_active).length, 1);
+  }, 0);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-subtle bg-surface-1">
       <table className="min-w-full border-collapse text-left">
         <thead className="bg-layer-1 text-11 text-secondary">
           <tr className="border-b border-subtle">
-            {normalFields.map((field) => (
-              <th
-                key={fieldKey(field)}
-                rowSpan={hasForms ? 2 : 1}
-                className="min-w-40 border-r border-subtle px-3 py-2"
-              >
-                {field.name || t("workspace_templates.requirements.fields.untitled")}
-              </th>
-            ))}
-            {formFields.map((field) => (
-              <th
-                key={fieldKey(field)}
-                colSpan={Math.max(field.children.filter((child) => child.is_active).length, 1)}
-                className="min-w-40 border-r border-subtle px-3 py-2 text-center text-primary"
-              >
-                {field.name || t("workspace_templates.requirements.fields.untitled")}
-              </th>
-            ))}
+            {visibleFields.map((field) =>
+              field.field_type === "form" ? (
+                <th
+                  key={fieldKey(field)}
+                  colSpan={Math.max(field.children.filter((child) => child.is_active).length, 1)}
+                  className="min-w-40 border-r border-subtle px-3 py-2 text-center text-primary"
+                >
+                  {field.name || t("workspace_templates.requirements.fields.untitled")}
+                </th>
+              ) : (
+                <th
+                  key={fieldKey(field)}
+                  rowSpan={hasForms ? 2 : 1}
+                  className="min-w-40 border-r border-subtle px-3 py-2"
+                >
+                  {field.name || t("workspace_templates.requirements.fields.untitled")}
+                </th>
+              )
+            )}
           </tr>
           {hasForms && (
             <tr className="border-b border-subtle">
@@ -88,13 +92,7 @@ function RequirementFieldsPreview({ fields }: { fields: TRequirementFieldDraft[]
         </thead>
         <tbody>
           <tr>
-            <td
-              colSpan={Math.max(
-                1,
-                normalFields.length + formFields.reduce((count, field) => count + Math.max(field.children.length, 1), 0)
-              )}
-              className="h-24 px-4 text-center text-11 text-placeholder"
-            >
+            <td colSpan={Math.max(1, columnCount)} className="h-24 px-4 text-center text-11 text-placeholder">
               {t("workspace_templates.requirements.preview.empty")}
             </td>
           </tr>

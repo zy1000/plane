@@ -67,9 +67,14 @@ type TFieldDropTarget =
 type TRequirementFieldBuilderProps = {
   fields: TRequirementFieldDraft[];
   onChange: (fields: TRequirementFieldDraft[]) => void;
+  sidebarHeader?: React.ReactNode;
+  compactLayout?: boolean;
+  title?: string;
+  description?: string;
 };
 
 type TFieldLibraryProps = {
+  compact?: boolean;
   onAdd: (type: TRequirementFieldType) => void;
   onDragStart: (type: TRequirementFieldType) => void;
   onDragEnd: () => void;
@@ -79,6 +84,7 @@ type TFieldRowProps = {
   field: TRequirementFieldDraft;
   isSelected: boolean;
   isChild?: boolean;
+  compact?: boolean;
   hasSelectedChild?: boolean;
   isDropTarget?: boolean;
   isInvalidDropTarget?: boolean;
@@ -189,11 +195,54 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
 };
 
 function FieldLibrary(props: TFieldLibraryProps) {
-  const { onAdd, onDragStart, onDragEnd } = props;
+  const { compact = false, onAdd, onDragStart, onDragEnd } = props;
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const draggedFieldTypeRef = useRef<TRequirementFieldType | null>(null);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+
+  if (compact) {
+    return (
+      <div className="flex h-full min-h-0 flex-col px-4 py-4">
+        <h2 className="mb-3 text-12 font-semibold text-primary">{t("workspace_templates.requirements.fields.add")}</h2>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+          {ROOT_FIELD_TYPES.map((type) => {
+            const Icon = FIELD_ICONS[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                draggable
+                onDragStart={(event) => {
+                  draggedFieldTypeRef.current = type;
+                  onDragStart(type);
+                  event.dataTransfer.effectAllowed = "copy";
+                  event.dataTransfer.setData(FIELD_LIBRARY_DRAG_TYPE, type);
+                }}
+                onDragEnd={() => {
+                  onDragEnd();
+                  window.setTimeout(() => {
+                    draggedFieldTypeRef.current = null;
+                  }, 0);
+                }}
+                onClick={() => {
+                  if (draggedFieldTypeRef.current === type) return;
+                  onAdd(type);
+                }}
+                className="group flex h-9 w-full cursor-grab items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-left transition-colors duration-150 hover:border-strong hover:bg-layer-transparent-hover active:cursor-grabbing"
+              >
+                <Icon className="size-4 shrink-0 text-secondary" />
+                <span className="truncate text-12 text-primary">
+                  {t(`workspace_templates.requirements.field_types.${type}`)}
+                </span>
+                <Plus className="ml-auto size-3.5 shrink-0 text-placeholder opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -306,6 +355,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
     field,
     isSelected,
     isChild = false,
+    compact = false,
     hasSelectedChild = false,
     isDropTarget = false,
     isInvalidDropTarget = false,
@@ -318,6 +368,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
   const { t } = useTranslation();
   const Icon = FIELD_ICONS[field.field_type];
   const isForm = field.field_type === "form" && !isChild;
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const fieldTypeDescription =
     field.field_type === "select"
       ? t("workspace_templates.requirements.editor.builder.selector_summary", {
@@ -330,10 +381,15 @@ function RequirementFieldRow(props: TFieldRowProps) {
         })
       : t(`workspace_templates.requirements.field_types.${field.field_type}`);
 
+  useEffect(() => {
+    if (hasSelectedChild || isDropTarget || isInvalidDropTarget) setIsCollapsed(false);
+  }, [hasSelectedChild, isDropTarget, isInvalidDropTarget]);
+
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg border bg-surface-1 transition-colors duration-150",
+        "overflow-hidden border bg-surface-1 transition-colors duration-150",
+        compact ? "rounded-md" : "rounded-lg",
         isInvalidDropTarget
           ? "border-danger-strong bg-danger-subtle/20"
           : isDropTarget
@@ -345,8 +401,31 @@ function RequirementFieldRow(props: TFieldRowProps) {
                 : "border-subtle hover:border-strong"
       )}
     >
-      <div className={cn("flex min-h-14 items-center gap-2 px-3", { "min-h-12 rounded-md": isChild })}>
+      <div
+        className={cn(
+          "group/field-row flex items-center gap-2",
+          compact ? "min-h-11 px-2.5" : "min-h-14 px-3",
+          isChild && (compact ? "min-h-10 rounded-md" : "min-h-12 rounded-md")
+        )}
+      >
         <GripVertical className="size-4 shrink-0 cursor-grab text-placeholder active:cursor-grabbing" />
+        {isForm && (
+          <button
+            type="button"
+            onClick={() => setIsCollapsed((value) => !value)}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-2 hover:text-primary"
+            aria-expanded={!isCollapsed}
+            aria-label={t(
+              isCollapsed
+                ? "workspace_templates.requirements.editor.builder.expand_form"
+                : "workspace_templates.requirements.editor.builder.collapse_form"
+            )}
+          >
+            <ChevronDown
+              className={cn("size-4 transition-transform duration-150", isCollapsed && "-rotate-90")}
+            />
+          </button>
+        )}
         <button
           type="button"
           onClick={onSelect}
@@ -354,26 +433,37 @@ function RequirementFieldRow(props: TFieldRowProps) {
         >
           <span
             className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-md border border-subtle bg-layer-1 text-secondary",
+              "grid shrink-0 place-items-center rounded-md border border-subtle bg-layer-1 text-secondary",
+              compact ? "size-6 border-0 bg-transparent" : "size-8",
               { "border-accent-subtle bg-surface-1 text-accent-primary": isSelected }
             )}
           >
-            <Icon className="size-4" />
+            <Icon className={compact ? "size-3.5" : "size-4"} />
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-13 font-medium text-primary">
+            <span className={cn("block truncate font-medium text-primary", compact ? "text-12" : "text-13")}>
               {field.name || t("workspace_templates.requirements.fields.untitled")}
+              {compact && field.is_required && (
+                <span className="ml-1 font-normal text-secondary">
+                  ({t("workspace_templates.requirements.fields.required")})
+                </span>
+              )}
             </span>
-            <span className="mt-0.5 block truncate text-11 text-secondary">{fieldTypeDescription}</span>
+            {!compact && <span className="mt-0.5 block truncate text-11 text-secondary">{fieldTypeDescription}</span>}
           </span>
         </button>
-        <FieldStateBadges field={field} isSelected={isSelected} />
+        {!compact && <FieldStateBadges field={field} isSelected={isSelected} />}
+        {compact && isForm && (
+          <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
+            {t("workspace_templates.requirements.field_types.form")}
+          </span>
+        )}
         <div className="flex shrink-0 items-center gap-0.5">
           <Tooltip tooltipContent={t("workspace_templates.requirements.editor.builder.duplicate_field")}>
             <button
               type="button"
               onClick={onDuplicate}
-              className="grid size-7 place-items-center rounded-md text-tertiary opacity-0 transition-all group-hover:opacity-100 hover:bg-layer-2 hover:text-primary focus:opacity-100"
+              className="grid size-7 place-items-center rounded-md text-tertiary opacity-0 transition-all group-hover/field-row:opacity-100 hover:bg-layer-2 hover:text-primary focus:opacity-100"
               aria-label={t("workspace_templates.requirements.editor.builder.duplicate_field")}
             >
               <Copy className="size-3.5" />
@@ -393,22 +483,13 @@ function RequirementFieldRow(props: TFieldRowProps) {
             portalElement={getMenuPortalElement()}
           >
             <CustomMenu.MenuItem onClick={() => onInsert("above")}>
-              <MenuRowLabel
-                icon={ArrowUpToLine}
-                label={t("workspace_templates.requirements.fields.insert_above")}
-              />
+              <MenuRowLabel icon={ArrowUpToLine} label={t("workspace_templates.requirements.fields.insert_above")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={() => onInsert("below")}>
-              <MenuRowLabel
-                icon={ArrowDownToLine}
-                label={t("workspace_templates.requirements.fields.insert_below")}
-              />
+              <MenuRowLabel icon={ArrowDownToLine} label={t("workspace_templates.requirements.fields.insert_below")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={onDuplicate}>
-              <MenuRowLabel
-                icon={Copy}
-                label={t("workspace_templates.requirements.editor.builder.duplicate_field")}
-              />
+              <MenuRowLabel icon={Copy} label={t("workspace_templates.requirements.editor.builder.duplicate_field")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={onRemove}>
               <MenuRowLabel
@@ -420,7 +501,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
           </CustomMenu>
         </div>
       </div>
-      {isForm && children}
+      {isForm && !isCollapsed && children}
     </div>
   );
 }
@@ -737,7 +818,7 @@ function FieldInspector(props: TFieldInspectorProps) {
 }
 
 export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
-  const { fields, onChange } = props;
+  const { fields, onChange, sidebarHeader, compactLayout = false, title, description } = props;
   const { t } = useTranslation();
   const [selection, setSelection] = useState<TFieldSelection | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -890,7 +971,6 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const isInvalidChildDropTarget = dropTarget?.kind === "invalid-child" && dropTarget.rootKey === rootKey;
     return (
       <div
-        className="group"
         onDragOver={(event) => {
           if (field.field_type === "form") handleChildFieldDragOver(event, rootKey);
         }}
@@ -901,6 +981,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         <RequirementFieldRow
           field={field}
           isSelected={isSelected}
+          compact={compactLayout}
           hasSelectedChild={hasSelectedChild}
           isDropTarget={isChildDropTarget}
           isInvalidDropTarget={isInvalidChildDropTarget}
@@ -912,7 +993,9 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           onDuplicate={() => duplicateSelection({ rootKey })}
           onRemove={() => removeSelection({ rootKey })}
         >
-          <div className="border-t border-subtle bg-layer-1/50 px-3 py-3 sm:pl-9">
+          <div
+            className={cn("border-t border-subtle bg-layer-1/50 px-3", compactLayout ? "py-2 sm:pl-7" : "py-3 sm:pl-9")}
+          >
             {isInvalidChildDropTarget && (
               <div className="mb-2 rounded-md border border-danger-subtle bg-danger-subtle px-3 py-2 text-11 text-danger-primary">
                 {t("workspace_templates.requirements.editor.builder.nested_form_not_supported")}
@@ -930,22 +1013,21 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 render={(child, childIndex) => {
                   const childKey = fieldKey(child);
                   return (
-                    <div className="group">
-                      <RequirementFieldRow
-                        field={child}
-                        isChild
-                        isSelected={selection?.rootKey === rootKey && selection.childKey === childKey}
-                        onSelect={() => {
-                          setSelection({ rootKey, childKey });
-                          setIsInspectorOpen(true);
-                        }}
-                        onInsert={(position) =>
-                          insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")
-                        }
-                        onDuplicate={() => duplicateSelection({ rootKey, childKey })}
-                        onRemove={() => removeSelection({ rootKey, childKey })}
-                      />
-                    </div>
+                    <RequirementFieldRow
+                      field={child}
+                      isChild
+                      compact={compactLayout}
+                      isSelected={selection?.rootKey === rootKey && selection.childKey === childKey}
+                      onSelect={() => {
+                        setSelection({ rootKey, childKey });
+                        setIsInspectorOpen(true);
+                      }}
+                      onInsert={(position) =>
+                        insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")
+                      }
+                      onDuplicate={() => duplicateSelection({ rootKey, childKey })}
+                      onRemove={() => removeSelection({ rootKey, childKey })}
+                    />
                   );
                 }}
               />
@@ -982,10 +1064,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                     key={type}
                     onClick={() => insertChildField(rootKey, field.children.length, type)}
                   >
-                    <MenuRowLabel
-                      icon={Icon}
-                      label={t(`workspace_templates.requirements.field_types.${type}`)}
-                    />
+                    <MenuRowLabel icon={Icon} label={t(`workspace_templates.requirements.field_types.${type}`)} />
                   </CustomMenu.MenuItem>
                 );
               })}
@@ -1021,29 +1100,43 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden bg-surface-1">
-      <aside className="hidden w-60 shrink-0 border-r border-subtle bg-surface-1 xl:block">
-        <FieldLibrary
-          onAdd={(type) => insertRootField(fields.length, type)}
-          onDragStart={(type) => {
-            setDraggedLibraryFieldType(type);
-            setDropTarget(null);
-          }}
-          onDragEnd={resetLibraryDrag}
-        />
+      <aside
+        className={cn(
+          "hidden shrink-0 border-r border-subtle bg-surface-1 xl:flex xl:flex-col",
+          compactLayout ? "w-52" : "w-60"
+        )}
+      >
+        {sidebarHeader}
+        <div className="min-h-0 flex-1">
+          <FieldLibrary
+            compact={compactLayout}
+            onAdd={(type) => insertRootField(fields.length, type)}
+            onDragStart={(type) => {
+              setDraggedLibraryFieldType(type);
+              setDropTarget(null);
+            }}
+            onDragEnd={resetLibraryDrag}
+          />
+        </div>
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col bg-layer-1/40">
-        <div className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-subtle bg-surface-1 px-4 py-3 2xl:px-6">
+      <main className={cn("flex min-w-0 flex-1 flex-col", compactLayout ? "bg-surface-1" : "bg-layer-1/40")}>
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-between gap-3 border-b border-subtle bg-surface-1",
+            compactLayout ? "min-h-20 px-6 py-4" : "min-h-16 px-4 py-3 2xl:px-6"
+          )}
+        >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-14 font-semibold text-primary">
-                {t("workspace_templates.requirements.editor.builder.field_structure")}
+              <h1 className={cn("font-semibold text-primary", compactLayout ? "text-20" : "text-14")}>
+                {title ?? t("workspace_templates.requirements.editor.builder.field_structure")}
               </h1>
               <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
                 {fields.length}
               </span>
             </div>
             <p className="mt-0.5 truncate text-11 text-secondary">
-              {t("workspace_templates.requirements.editor.builder.field_structure_description")}
+              {description ?? t("workspace_templates.requirements.editor.builder.field_structure_description")}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -1060,7 +1153,10 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           </div>
         </div>
         <div
-          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 2xl:px-7 2xl:py-6"
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            compactLayout ? "px-6 py-4 2xl:px-7" : "px-4 py-4 2xl:px-7 2xl:py-6"
+          )}
           onDragOver={(event) => {
             if (!event.dataTransfer.types.includes(FIELD_LIBRARY_DRAG_TYPE)) return;
             event.preventDefault();
@@ -1075,7 +1171,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
             resetLibraryDrag();
           }}
         >
-          <div className="mx-auto w-full max-w-4xl">
+          <div className={cn("mx-auto w-full", compactLayout ? "max-w-3xl" : "max-w-4xl")}>
             {fields.length === 0 ? (
               <div
                 className={cn(
@@ -1121,7 +1217,12 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           </div>
         </div>
       </main>
-      <aside className="hidden w-80 shrink-0 border-l border-subtle bg-surface-1 lg:block 2xl:w-[340px]">
+      <aside
+        className={cn(
+          "hidden shrink-0 border-l border-subtle bg-surface-1 lg:block",
+          compactLayout ? "w-80 2xl:w-[420px]" : "w-80 2xl:w-[340px]"
+        )}
+      >
         <FieldInspector
           field={selectedField}
           isChild={Boolean(selection?.childKey)}

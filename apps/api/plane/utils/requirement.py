@@ -4,7 +4,9 @@ from uuid import UUID
 from django.utils import timezone
 from django.utils.html import strip_tags
 
+from plane.app.permissions import ROLE
 from plane.db.models import (
+    Product,
     ProductMember,
     ProjectMember,
     RequirementApprover,
@@ -12,6 +14,7 @@ from plane.db.models import (
     RequirementField,
     RequirementFieldType,
     User,
+    Workspace,
     WorkspaceMember,
 )
 
@@ -72,13 +75,34 @@ def get_requirement_eligible_user_ids(
     )
 
     if product_id:
+        product = Product.objects.filter(id=product_id).only("owner_id").first()
         product_member_ids = set(
             ProductMember.objects.filter(
                 product_id=product_id,
                 member_id__in=workspace_member_ids,
             ).values_list("member_id", flat=True)
         )
-        return workspace_member_ids.intersection(product_member_ids)
+        privileged_ids = set(
+            WorkspaceMember.objects.filter(
+                workspace_id=workspace_id,
+                member_id__in=workspace_member_ids,
+                role=ROLE.ADMIN.value,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).values_list("member_id", flat=True)
+        )
+        workspace_owner_id = (
+            Workspace.objects.filter(id=workspace_id)
+            .values_list("owner_id", flat=True)
+            .first()
+        )
+        if workspace_owner_id in candidate_ids:
+            privileged_ids.add(workspace_owner_id)
+        if product is not None and product.owner_id in candidate_ids:
+            privileged_ids.add(product.owner_id)
+        return workspace_member_ids.intersection(product_member_ids).union(
+            privileged_ids
+        )
 
     if project_id:
         project_member_ids = set(
@@ -94,8 +118,8 @@ def get_requirement_eligible_user_ids(
     return workspace_member_ids
 
 
-def clone_requirement_children(*, source, target, actor=None):
-    """Clone a template's field tree and detail rows into an independent copy."""
+def clone_requirement_children(*, source, target, include_details=True, actor=None):
+    """Clone a template's field tree and optionally its detail rows."""
     source_fields = list(source.fields.all())
     field_map = {}
 
@@ -151,11 +175,9 @@ def clone_requirement_children(*, source, target, actor=None):
             try:
                 source_field_id = UUID(str(source_key))
             except (TypeError, ValueError):
-                remapped[source_key] = value
                 continue
             target_field = field_map.get(source_field_id)
             if target_field is None:
-                remapped[source_key] = value
                 continue
             target_key = str(target_field.id)
             if target_field.field_type != RequirementFieldType.FORM:
@@ -171,15 +193,16 @@ def clone_requirement_children(*, source, target, actor=None):
                     try:
                         source_child_id = UUID(str(child_key))
                     except (TypeError, ValueError):
-                        child_values[child_key] = child_value
                         continue
                     target_child = field_map.get(source_child_id)
-                    child_values[
-                        str(target_child.id) if target_child else child_key
-                    ] = child_value
+                    if target_child is not None:
+                        child_values[str(target_child.id)] = child_value
                 rows.append({**row, "values": child_values})
             remapped[target_key] = rows
         return remapped
+
+    if not include_details:
+        return
 
     details = [
         RequirementDetail(

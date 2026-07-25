@@ -1,4 +1,14 @@
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type KeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import {
@@ -53,7 +63,8 @@ const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"
 
 type TProps = {
   workspaceSlug: string;
-  templateId: string;
+  requirementId: string;
+  readOnly?: boolean;
   expectedUpdatedAt?: string;
   fields: TRequirementField[];
   details: TRequirementDetail[];
@@ -76,6 +87,8 @@ type TProps = {
   onRefresh: () => Promise<unknown>;
   onBulkSave: (payload: TRequirementDetailBatchSavePayload) => Promise<TRequirementDetailBatchSaveResponse>;
   onEditingChange?: (isEditing: boolean) => void;
+  /** When set, search/filter/display/edit (and bulk-edit actions) render into this host instead of the grid toolbar. */
+  toolbarPortalEl?: HTMLElement | null;
 };
 
 const getFormRows = (data: TRequirementDetailData, fieldId: string): TRequirementFormRow[] => {
@@ -408,7 +421,8 @@ const LeafEditor = ({
 export const RequirementDetailGrid = observer(function RequirementDetailGrid(props: TProps) {
   const {
     workspaceSlug,
-    templateId,
+    requirementId,
+    readOnly = false,
     expectedUpdatedAt,
     fields,
     details,
@@ -430,6 +444,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     onRefresh,
     onBulkSave,
     onEditingChange,
+    toolbarPortalEl,
   } = props;
   const { t } = useTranslation();
   const { uploadEditorAsset } = useEditorAsset();
@@ -441,7 +456,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const [filterFieldId, setFilterFieldId] = useState("");
   const [filterOperator, setFilterOperator] = useState<TRequirementDetailFilter["operator"]>("contains");
   const [filterValue, setFilterValue] = useState("");
-  const storageKey = `requirement-template:columns:${workspaceSlug}:${templateId}`;
+  const storageKey = `requirement:columns:${workspaceSlug}:${requirementId}`;
   const [hiddenFieldIds, setHiddenFieldIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -515,18 +530,21 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     setSelectedIds((current) => current.filter((id) => visibleDetailIds.has(id)));
   }, [details]);
 
+  // Preserve configured root-field order; only filter visibility / inactive children.
   const visibleRootFields = useMemo(
-    () => activeFields.filter((field) => !hiddenFieldIds.includes(field.id)),
+    () =>
+      activeFields
+        .filter((field) => !hiddenFieldIds.includes(field.id))
+        .map((field) =>
+          field.field_type === "form"
+            ? Object.assign({}, field, {
+                children: field.children.filter((child) => child.is_active && !hiddenFieldIds.includes(child.id)),
+              })
+            : field
+        ),
     [activeFields, hiddenFieldIds]
   );
-  const normalFields = visibleRootFields.filter((field) => field.field_type !== "form");
-  const formFields = visibleRootFields
-    .filter((field) => field.field_type === "form")
-    .map((field) =>
-      Object.assign({}, field, {
-        children: field.children.filter((child) => child.is_active && !hiddenFieldIds.includes(child.id)),
-      })
-    );
+  const formFields = visibleRootFields.filter((field) => field.field_type === "form");
   const hasFormFields = formFields.length > 0;
   // The per-sub-record action gutter only carries controls while editing, so it collapses in read-only view.
   const showActionGutter = editor.isEditing;
@@ -548,7 +566,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
       const response = await uploadEditorAsset({
         blockId: uuidv4(),
         data: {
-          entity_identifier: templateId,
+          entity_identifier: requirementId,
           entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT,
         },
         file,
@@ -562,7 +580,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         size: file.size,
       };
     },
-    [editor, templateId, uploadEditorAsset, workspaceSlug]
+    [editor, requirementId, uploadEditorAsset, workspaceSlug]
   );
 
   const saveChanges = async () => {
@@ -758,12 +776,12 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                           : "workspace_templates.requirements.data.new"
                       )}
                     </span>
-                  ) : detail ? (
+                  ) : detail && !readOnly ? (
                     <input
                       type="checkbox"
                       className="size-3.5 cursor-pointer"
                       checked={selectedIds.includes(detail.id)}
-                      disabled={isDeleted}
+                      disabled={isDeleted || readOnly}
                       onChange={(event) =>
                         setSelectedIds((current) =>
                           event.target.checked ? [...current, detail.id] : current.filter((id) => id !== detail.id)
@@ -774,32 +792,36 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   ) : null}
                 </td>
               )}
-              {isFirstRow &&
-                normalFields.map((field) => (
-                  <td
-                    key={field.id}
-                    rowSpan={totalRows}
-                    className={cn(
-                      "min-w-40 border-r border-subtle px-3 py-2 align-middle",
-                      groupCellClass,
-                      isRootFieldChanged(field.id) && "relative"
-                    )}
-                  >
-                    {isEditing && !isDeleted ? (
-                      <LeafEditor
-                        field={field}
-                        value={data[field.id]}
-                        onChange={(value) => setRootValue(key, field.id, value)}
-                        onUpload={uploadAsset}
-                        onRemoveAsset={editor.discardPendingAsset}
-                      />
-                    ) : (
-                      <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
-                    )}
-                    {isRootFieldChanged(field.id) && <ChangedFieldCorner />}
-                  </td>
-                ))}
-              {formFields.flatMap((form) => {
+              {visibleRootFields.flatMap((field) => {
+                if (field.field_type !== "form") {
+                  if (!isFirstRow) return [];
+                  return [
+                    <td
+                      key={field.id}
+                      rowSpan={totalRows}
+                      className={cn(
+                        "min-w-40 border-r border-subtle px-3 py-2 align-middle",
+                        groupCellClass,
+                        isRootFieldChanged(field.id) && "relative"
+                      )}
+                    >
+                      {isEditing && !isDeleted ? (
+                        <LeafEditor
+                          field={field}
+                          value={data[field.id]}
+                          onChange={(value) => setRootValue(key, field.id, value)}
+                          onUpload={uploadAsset}
+                          onRemoveAsset={editor.discardPendingAsset}
+                        />
+                      ) : (
+                        <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
+                      )}
+                      {isRootFieldChanged(field.id) && <ChangedFieldCorner />}
+                    </td>,
+                  ];
+                }
+
+                const form = field;
                 if (form.children.length === 0) {
                   return [
                     <td
@@ -956,303 +978,322 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     : totalCount;
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
   const pageItemCount = editor.isEditing ? editor.draftRows.length : details.length;
+  const showSelectionActions = !readOnly && !editor.isEditing && selectedIds.length > 0;
+  const useExternalToolbar = Boolean(toolbarPortalEl);
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
-        {!editor.isEditing && selectedIds.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
-              <Trash2 className="size-3.5" />
-              {t("workspace_templates.requirements.data.delete_selected", { count: selectedIds.length })}
-            </Button>
-          </div>
+  const toolbarActions: ReactNode = editor.isEditing ? (
+    <>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-accent-subtle text-accent-primary">
+          <Pencil className="size-3.5" />
+        </span>
+        <span className="truncate text-12 font-medium text-primary">
+          {t("workspace_templates.requirements.data.bulk_edit_mode")}
+        </span>
+        <span className="bg-border-subtle h-4 w-px shrink-0" />
+        <span
+          className="shrink-0 rounded-full bg-layer-2 px-2 py-0.5 text-10 font-medium text-secondary"
+          aria-live="polite"
+        >
+          {t("workspace_templates.requirements.data.changed_count", { count: editor.changedCount })}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button variant="secondary" onClick={() => void editor.cancelEditing()} disabled={isMutating}>
+          {t("cancel")}
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => void saveChanges()}
+          loading={isMutating}
+          disabled={!editor.isDirty || Boolean(editor.saveError && editor.conflictIds.length)}
+        >
+          <Save className="size-3.5" />
+          {t("workspace_templates.requirements.data.save_changes")}
+        </Button>
+      </div>
+    </>
+  ) : (
+    <>
+      <div className="flex items-center">
+        {!isSearchOpen && (
+          <IconButton
+            variant="ghost"
+            size="lg"
+            className="-mr-1"
+            onClick={() => {
+              setIsSearchOpen(true);
+              window.setTimeout(() => searchInputRef.current?.focus(), 0);
+            }}
+            icon={SearchIcon}
+            aria-label={t("workspace_templates.requirements.data.search")}
+          />
         )}
         <div
           className={cn(
-            "flex flex-wrap items-center gap-2",
-            editor.isEditing ? "w-full justify-between" : "ml-auto"
+            "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+            {
+              "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
+            }
           )}
         >
-          {editor.isEditing ? (
-            <>
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="grid size-7 shrink-0 place-items-center rounded-md bg-accent-subtle text-accent-primary">
-                  <Pencil className="size-3.5" />
-                </span>
-                <span className="truncate text-12 font-medium text-primary">
-                  {t("workspace_templates.requirements.data.bulk_edit_mode")}
-                </span>
-                <span className="bg-border-subtle h-4 w-px shrink-0" />
-                <span
-                  className="shrink-0 rounded-full bg-layer-2 px-2 py-0.5 text-10 font-medium text-secondary"
-                  aria-live="polite"
-                >
-                  {t("workspace_templates.requirements.data.changed_count", { count: editor.changedCount })}
-                </span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button variant="secondary" onClick={() => void editor.cancelEditing()} disabled={isMutating}>
-                  {t("cancel")}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void saveChanges()}
-                  loading={isMutating}
-                  disabled={!editor.isDirty || Boolean(editor.saveError && editor.conflictIds.length)}
-                >
-                  <Save className="size-3.5" />
-                  {t("workspace_templates.requirements.data.save_changes")}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center">
-                {!isSearchOpen && (
-                  <IconButton
-                    variant="ghost"
-                    size="lg"
-                    className="-mr-1"
-                    onClick={() => {
-                      setIsSearchOpen(true);
-                      window.setTimeout(() => searchInputRef.current?.focus(), 0);
-                    }}
-                    icon={SearchIcon}
-                    aria-label={t("workspace_templates.requirements.data.search")}
-                  />
-                )}
-                <div
-                  className={cn(
-                    "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
-                    {
-                      "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
-                    }
-                  )}
-                >
-                  <SearchIcon className="h-3.5 w-3.5" />
-                  <input
-                    ref={searchInputRef}
-                    className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-                    placeholder={t("workspace_templates.requirements.data.search")}
-                    value={searchInput}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setSearchInput(value);
-                      scheduleSearchChange(value);
-                    }}
-                    onKeyDown={handleSearchKeyDown}
-                  />
-                  {isSearchOpen && (
-                    <button type="button" className="grid place-items-center" onClick={clearSearch}>
-                      <CloseIcon className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="relative">
-                <IconButton
-                  size="lg"
-                  variant="secondary"
-                  icon={hasActiveFilters ? FilterAppliedIcon : FilterIcon}
-                  onClick={() => setIsFilterOpen((value) => !value)}
-                  aria-label={t("workspace_templates.requirements.data.filter")}
-                  className={cn({
-                    "border border-accent-subtle-1 bg-accent-subtle text-accent-primary hover:border-accent-subtle-1 hover:bg-accent-subtle hover:text-accent-primary focus:border-accent-subtle-1 focus:bg-accent-subtle focus:text-accent-primary active:border-accent-subtle-1 active:bg-accent-subtle active:text-accent-primary":
-                      hasActiveFilters,
-                    "bg-accent-subtle-hover hover:bg-accent-subtle-hover focus:bg-accent-subtle-hover active:bg-accent-subtle-hover":
-                      hasActiveFilters && isFilterOpen,
-                  })}
-                  iconClassName={cn({
-                    "text-accent-primary [&_path]:fill-current": hasActiveFilters,
-                  })}
-                />
-                {isFilterOpen && (
-                  <div className="absolute top-10 right-0 z-30 w-80 space-y-3 rounded-lg border border-subtle bg-surface-1 p-3 shadow-lg">
-                    <select
-                      value={filterFieldId}
-                      onChange={(event) => {
-                        setFilterFieldId(event.target.value);
-                        const field = filterableFields.find((item) => item.id === event.target.value);
-                        setFilterOperator(
-                          field?.field_type === "text" || field?.field_type === "rich_text"
-                            ? "contains"
-                            : field?.field_type === "select" && getRequirementSelectMode(field) === "multiple"
-                              ? "contains"
-                              : field?.field_type === "attachment" || field?.field_type === "image"
-                                ? "is_not_empty"
-                                : "equals"
-                        );
-                        setFilterValue(
-                          field?.field_type === "boolean"
-                            ? "true"
-                            : field?.field_type === "select"
-                              ? (getRequirementSelectOptions(field)[0]?.id ?? "")
-                              : ""
-                        );
-                      }}
-                      className="h-8 w-full rounded-md border border-subtle bg-surface-1 px-2 text-12"
-                    >
-                      <option value="">{t("workspace_templates.requirements.data.select_field")}</option>
-                      {filterableFields.map((field) => (
-                        <option key={field.id} value={field.id}>
-                          {field.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={filterOperator}
-                        onChange={(event) =>
-                          setFilterOperator(event.target.value as TRequirementDetailFilter["operator"])
-                        }
-                        className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
-                      >
-                        {(selectedFilterField?.field_type === "text" ||
-                          selectedFilterField?.field_type === "rich_text" ||
-                          (selectedFilterField?.field_type === "select" &&
-                            getRequirementSelectMode(selectedFilterField) === "multiple")) && (
-                          <option value="contains">{t("workspace_templates.requirements.filters.contains")}</option>
-                        )}
-                        {!["attachment", "image"].includes(selectedFilterField?.field_type ?? "") &&
-                          !(
-                            selectedFilterField?.field_type === "select" &&
-                            getRequirementSelectMode(selectedFilterField) === "multiple"
-                          ) && <option value="equals">{t("workspace_templates.requirements.filters.equals")}</option>}
-                        <option value="is_empty">{t("workspace_templates.requirements.filters.is_empty")}</option>
-                        <option value="is_not_empty">
-                          {t("workspace_templates.requirements.filters.is_not_empty")}
-                        </option>
-                      </select>
-                      {filterRequiresValue && selectedFilterField?.field_type === "select" ? (
-                        <select
-                          value={filterValue}
-                          onChange={(event) => setFilterValue(event.target.value)}
-                          className="h-8 min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-12"
-                        >
-                          {selectedFilterOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : filterRequiresValue && selectedFilterField?.field_type === "member" ? (
-                        <MemberDropdown
-                          multiple={false}
-                          value={filterValue || null}
-                          onChange={(memberId) => setFilterValue(memberId ?? "")}
-                          buttonVariant="border-with-text"
-                          buttonClassName="h-8 min-w-0 border !border-subtle bg-surface-1"
-                          buttonContainerClassName="min-w-0"
-                          placeholder={t("workspace_templates.requirements.data.select_member")}
-                          showUserDetails
-                        />
-                      ) : filterRequiresValue && selectedFilterField?.field_type === "boolean" ? (
-                        <select
-                          value={filterValue}
-                          onChange={(event) => setFilterValue(event.target.value)}
-                          className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
-                        >
-                          <option value="true">{t("workspace_templates.requirements.data.yes")}</option>
-                          <option value="false">{t("workspace_templates.requirements.data.no")}</option>
-                        </select>
-                      ) : filterRequiresValue ? (
-                        <input
-                          value={filterValue}
-                          onChange={(event) => setFilterValue(event.target.value)}
-                          className="focus:border-accent-primary h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12 outline-none"
-                          placeholder={t("workspace_templates.requirements.data.filter_value")}
-                        />
-                      ) : null}
-                    </div>
-                    {filters.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {filters.map((filter) => (
-                          <button
-                            key={filter.field_id}
-                            type="button"
-                            onClick={() => onFiltersChange(filters.filter((item) => item.field_id !== filter.field_id))}
-                            className="rounded-md bg-layer-2 px-2 py-1 text-10 text-secondary"
-                          >
-                            {filterableFields.find((field) => field.id === filter.field_id)?.name ?? "—"} ×
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex justify-end gap-2">
-                      <Button variant="secondary" size="sm" onClick={() => onFiltersChange([])}>
-                        {t("reset")}
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={addFilter}
-                        disabled={!filterFieldId || (filterRequiresValue && !filterValue)}
-                      >
-                        {t("apply")}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <Button variant="secondary" size="lg" onClick={() => setIsColumnsOpen((value) => !value)}>
-                  {t("common.display")}
-                </Button>
-                {isColumnsOpen && (
-                  <div className="absolute top-10 right-0 z-30 max-h-80 w-64 overflow-y-auto rounded-lg border border-subtle bg-surface-1 p-2 shadow-lg">
-                    {activeFields.map((field) => (
-                      <div key={field.id}>
-                        <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-12 hover:bg-layer-transparent-hover">
-                          <input
-                            type="checkbox"
-                            checked={!hiddenFieldIds.includes(field.id)}
-                            onChange={() =>
-                              setHiddenFieldIds((current) =>
-                                current.includes(field.id)
-                                  ? current.filter((id) => id !== field.id)
-                                  : [...current, field.id]
-                              )
-                            }
-                          />
-                          <span className="truncate">{field.name}</span>
-                        </label>
-                        {field.field_type === "form" &&
-                          !hiddenFieldIds.includes(field.id) &&
-                          field.children
-                            .filter((child) => child.is_active)
-                            .map((child) => (
-                              <label
-                                key={child.id}
-                                className="ml-5 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-11 text-secondary hover:bg-layer-transparent-hover"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={!hiddenFieldIds.includes(child.id)}
-                                  onChange={() =>
-                                    setHiddenFieldIds((current) =>
-                                      current.includes(child.id)
-                                        ? current.filter((id) => id !== child.id)
-                                        : [...current, child.id]
-                                    )
-                                  }
-                                />
-                                <span className="truncate">{child.name}</span>
-                              </label>
-                            ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <Button variant="primary" onClick={editor.startEditing} disabled={isLoading || details.length === 0}>
-                <Pencil className="size-3.5" />
-                {t("workspace_templates.requirements.data.edit_data")}
-              </Button>
-            </>
+          <SearchIcon className="h-3.5 w-3.5" />
+          <input
+            ref={searchInputRef}
+            className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+            placeholder={t("workspace_templates.requirements.data.search")}
+            value={searchInput}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSearchInput(value);
+              scheduleSearchChange(value);
+            }}
+            onKeyDown={handleSearchKeyDown}
+          />
+          {isSearchOpen && (
+            <button type="button" className="grid place-items-center" onClick={clearSearch}>
+              <CloseIcon className="h-3 w-3" />
+            </button>
           )}
         </div>
       </div>
+      <div className="relative">
+        <IconButton
+          size="lg"
+          variant="secondary"
+          icon={hasActiveFilters ? FilterAppliedIcon : FilterIcon}
+          onClick={() => setIsFilterOpen((value) => !value)}
+          aria-label={t("workspace_templates.requirements.data.filter")}
+          className={cn({
+            "border-accent-subtle-1 hover:border-accent-subtle-1 focus:border-accent-subtle-1 active:border-accent-subtle-1 border bg-accent-subtle text-accent-primary hover:bg-accent-subtle hover:text-accent-primary focus:bg-accent-subtle focus:text-accent-primary active:bg-accent-subtle active:text-accent-primary":
+              hasActiveFilters,
+            "bg-accent-subtle-hover hover:bg-accent-subtle-hover focus:bg-accent-subtle-hover active:bg-accent-subtle-hover":
+              hasActiveFilters && isFilterOpen,
+          })}
+          iconClassName={cn({
+            "text-accent-primary [&_path]:fill-current": hasActiveFilters,
+          })}
+        />
+        {isFilterOpen && (
+          <div className="absolute top-10 right-0 z-30 w-80 space-y-3 rounded-lg border border-subtle bg-surface-1 p-3 shadow-lg">
+            <select
+              value={filterFieldId}
+              onChange={(event) => {
+                setFilterFieldId(event.target.value);
+                const field = filterableFields.find((item) => item.id === event.target.value);
+                setFilterOperator(
+                  field?.field_type === "text" || field?.field_type === "rich_text"
+                    ? "contains"
+                    : field?.field_type === "select" && getRequirementSelectMode(field) === "multiple"
+                      ? "contains"
+                      : field?.field_type === "attachment" || field?.field_type === "image"
+                        ? "is_not_empty"
+                        : "equals"
+                );
+                setFilterValue(
+                  field?.field_type === "boolean"
+                    ? "true"
+                    : field?.field_type === "select"
+                      ? (getRequirementSelectOptions(field)[0]?.id ?? "")
+                      : ""
+                );
+              }}
+              className="h-8 w-full rounded-md border border-subtle bg-surface-1 px-2 text-12"
+            >
+              <option value="">{t("workspace_templates.requirements.data.select_field")}</option>
+              {filterableFields.map((field) => (
+                <option key={field.id} value={field.id}>
+                  {field.name}
+                </option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={filterOperator}
+                onChange={(event) => setFilterOperator(event.target.value as TRequirementDetailFilter["operator"])}
+                className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
+              >
+                {(selectedFilterField?.field_type === "text" ||
+                  selectedFilterField?.field_type === "rich_text" ||
+                  (selectedFilterField?.field_type === "select" &&
+                    getRequirementSelectMode(selectedFilterField) === "multiple")) && (
+                  <option value="contains">{t("workspace_templates.requirements.filters.contains")}</option>
+                )}
+                {!["attachment", "image"].includes(selectedFilterField?.field_type ?? "") &&
+                  !(
+                    selectedFilterField?.field_type === "select" &&
+                    getRequirementSelectMode(selectedFilterField) === "multiple"
+                  ) && <option value="equals">{t("workspace_templates.requirements.filters.equals")}</option>}
+                <option value="is_empty">{t("workspace_templates.requirements.filters.is_empty")}</option>
+                <option value="is_not_empty">{t("workspace_templates.requirements.filters.is_not_empty")}</option>
+              </select>
+              {filterRequiresValue && selectedFilterField?.field_type === "select" ? (
+                <select
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.target.value)}
+                  className="h-8 min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-12"
+                >
+                  {selectedFilterOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : filterRequiresValue && selectedFilterField?.field_type === "member" ? (
+                <MemberDropdown
+                  multiple={false}
+                  value={filterValue || null}
+                  onChange={(memberId) => setFilterValue(memberId ?? "")}
+                  buttonVariant="border-with-text"
+                  buttonClassName="h-8 min-w-0 border !border-subtle bg-surface-1"
+                  buttonContainerClassName="min-w-0"
+                  placeholder={t("workspace_templates.requirements.data.select_member")}
+                  showUserDetails
+                />
+              ) : filterRequiresValue && selectedFilterField?.field_type === "boolean" ? (
+                <select
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.target.value)}
+                  className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
+                >
+                  <option value="true">{t("workspace_templates.requirements.data.yes")}</option>
+                  <option value="false">{t("workspace_templates.requirements.data.no")}</option>
+                </select>
+              ) : filterRequiresValue ? (
+                <input
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.target.value)}
+                  className="focus:border-accent-primary h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12 outline-none"
+                  placeholder={t("workspace_templates.requirements.data.filter_value")}
+                />
+              ) : null}
+            </div>
+            {filters.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {filters.map((filter) => (
+                  <button
+                    key={filter.field_id}
+                    type="button"
+                    onClick={() => onFiltersChange(filters.filter((item) => item.field_id !== filter.field_id))}
+                    className="rounded-md bg-layer-2 px-2 py-1 text-10 text-secondary"
+                  >
+                    {filterableFields.find((field) => field.id === filter.field_id)?.name ?? "—"} ×
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => onFiltersChange([])}>
+                {t("reset")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={addFilter}
+                disabled={!filterFieldId || (filterRequiresValue && !filterValue)}
+              >
+                {t("apply")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="relative">
+        <Button variant="secondary" size="lg" onClick={() => setIsColumnsOpen((value) => !value)}>
+          {t("common.display")}
+        </Button>
+        {isColumnsOpen && (
+          <div className="absolute top-10 right-0 z-30 max-h-80 w-64 overflow-y-auto rounded-lg border border-subtle bg-surface-1 p-2 shadow-lg">
+            {activeFields.map((field) => (
+              <div key={field.id}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-12 hover:bg-layer-transparent-hover">
+                  <input
+                    type="checkbox"
+                    checked={!hiddenFieldIds.includes(field.id)}
+                    onChange={() =>
+                      setHiddenFieldIds((current) =>
+                        current.includes(field.id)
+                          ? current.filter((id) => id !== field.id)
+                          : [...current, field.id]
+                      )
+                    }
+                  />
+                  <span className="truncate">{field.name}</span>
+                </label>
+                {field.field_type === "form" &&
+                  !hiddenFieldIds.includes(field.id) &&
+                  field.children
+                    .filter((child) => child.is_active)
+                    .map((child) => (
+                      <label
+                        key={child.id}
+                        className="ml-5 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-11 text-secondary hover:bg-layer-transparent-hover"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!hiddenFieldIds.includes(child.id)}
+                          onChange={() =>
+                            setHiddenFieldIds((current) =>
+                              current.includes(child.id)
+                                ? current.filter((id) => id !== child.id)
+                                : [...current, child.id]
+                            )
+                          }
+                        />
+                        <span className="truncate">{child.name}</span>
+                      </label>
+                    ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {!readOnly && (
+        <Button variant="primary" onClick={editor.startEditing} disabled={isLoading || details.length === 0}>
+          <Pencil className="size-3.5" />
+          {t("workspace_templates.requirements.data.edit_data")}
+        </Button>
+      )}
+    </>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+      {useExternalToolbar &&
+        toolbarPortalEl &&
+        createPortal(
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-2",
+              editor.isEditing ? "min-w-0 justify-end" : undefined
+            )}
+          >
+            {toolbarActions}
+          </div>,
+          toolbarPortalEl
+        )}
+      {(!useExternalToolbar || showSelectionActions) && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
+          {showSelectionActions && (
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
+                <Trash2 className="size-3.5" />
+                {t("workspace_templates.requirements.data.delete_selected", { count: selectedIds.length })}
+              </Button>
+            </div>
+          )}
+          {!useExternalToolbar && (
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-2",
+                editor.isEditing ? "w-full justify-between" : "ml-auto"
+              )}
+            >
+              {toolbarActions}
+            </div>
+          )}
+        </div>
+      )}
 
       {editor.saveError && (
         <div
@@ -1295,66 +1336,78 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
       )}
 
       <div className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 flex-1 overflow-auto bg-surface-1">
-          {isLoading ? (
-            <div className="min-w-[960px] p-4">
-              <Loader>
-                <Loader.Item height="72px" />
-                {SKELETON_ROW_KEYS.map((key) => (
-                  <Loader.Item key={key} height="52px" />
-                ))}
-              </Loader>
+        {isLoading ? (
+          <div className="min-w-[960px] p-4">
+            <Loader>
+              <Loader.Item height="72px" />
+              {SKELETON_ROW_KEYS.map((key) => (
+                <Loader.Item key={key} height="52px" />
+              ))}
+            </Loader>
+          </div>
+        ) : error ? (
+          <div className="flex min-h-72 items-center justify-center p-6 text-center">
+            <div>
+              <p className="text-13 font-medium text-primary">{t("workspace_templates.requirements.error.title")}</p>
+              <p className="mt-1 text-12 text-secondary">{error}</p>
+              <Button className="mt-3" variant="secondary" onClick={() => void onRefresh()}>
+                {t("retry")}
+              </Button>
             </div>
-          ) : error ? (
-            <div className="flex min-h-72 items-center justify-center p-6 text-center">
-              <div>
-                <p className="text-13 font-medium text-primary">{t("workspace_templates.requirements.error.title")}</p>
-                <p className="mt-1 text-12 text-secondary">{error}</p>
-                <Button className="mt-3" variant="secondary" onClick={() => void onRefresh()}>
-                  {t("retry")}
-                </Button>
-              </div>
+          </div>
+        ) : activeFields.length === 0 ? (
+          <div className="flex min-h-72 items-center justify-center p-6 text-center">
+            <div>
+              <Columns3 className="mx-auto size-8 text-placeholder" />
+              <p className="mt-2 text-13 font-medium text-primary">
+                {t("workspace_templates.requirements.data.no_fields")}
+              </p>
+              <p className="mt-1 text-12 text-secondary">
+                {t("workspace_templates.requirements.data.no_fields_description")}
+              </p>
             </div>
-          ) : activeFields.length === 0 ? (
-            <div className="flex min-h-72 items-center justify-center p-6 text-center">
-              <div>
-                <Columns3 className="mx-auto size-8 text-placeholder" />
-                <p className="mt-2 text-13 font-medium text-primary">
-                  {t("workspace_templates.requirements.data.no_fields")}
-                </p>
-                <p className="mt-1 text-12 text-secondary">
-                  {t("workspace_templates.requirements.data.no_fields_description")}
-                </p>
-              </div>
-            </div>
-          ) : details.length === 0 && !editor.isEditing ? (
-            <div className="flex min-h-72 items-center justify-center p-6 text-center">
-              <div>
-                <Plus className="mx-auto size-8 text-placeholder" />
-                <p className="mt-2 text-13 font-medium text-primary">
-                  {t("workspace_templates.requirements.data.empty")}
-                </p>
+          </div>
+        ) : details.length === 0 && !editor.isEditing ? (
+          <div className="flex min-h-72 items-center justify-center p-6 text-center">
+            <div>
+              <Plus className="mx-auto size-8 text-placeholder" />
+              <p className="mt-2 text-13 font-medium text-primary">
+                {t("workspace_templates.requirements.data.empty")}
+              </p>
+              {!readOnly && (
                 <Button className="mt-3" variant="primary" onClick={() => editor.stageCreate()}>
                   {t("workspace_templates.requirements.data.add")}
                 </Button>
-              </div>
+              )}
             </div>
-          ) : (
-            <table className="w-max min-w-full border-collapse text-left">
-              <thead className="sticky top-0 z-10 bg-layer-1 text-13 font-medium text-secondary">
-                <tr className="border-b border-subtle">
-                  <th rowSpan={hasFormFields ? 2 : 1} className="w-12 border-r border-subtle px-1.5 py-2.5 text-center">
-                    <input
-                      type="checkbox"
-                      className="size-3.5 cursor-pointer"
-                      checked={
-                        selectableDetailIds.length > 0 &&
-                        selectableDetailIds.every((detailId) => selectedIds.includes(detailId))
-                      }
-                      onChange={(event) => setSelectedIds(event.target.checked ? selectableDetailIds : [])}
-                      aria-label={t("workspace_templates.requirements.data.select_all")}
-                    />
-                  </th>
-                  {normalFields.map((field) => (
+          </div>
+        ) : (
+          <table className="w-max min-w-full border-collapse text-left">
+            <thead className="sticky top-0 z-10 bg-layer-1 text-13 font-medium text-secondary">
+              <tr className="border-b border-subtle">
+                <th rowSpan={hasFormFields ? 2 : 1} className="w-12 border-r border-subtle px-1.5 py-2.5 text-center">
+                  <input
+                    type="checkbox"
+                    className="size-3.5 cursor-pointer"
+                    disabled={readOnly}
+                    checked={
+                      selectableDetailIds.length > 0 &&
+                      selectableDetailIds.every((detailId) => selectedIds.includes(detailId))
+                    }
+                    onChange={(event) => setSelectedIds(event.target.checked ? selectableDetailIds : [])}
+                    aria-label={t("workspace_templates.requirements.data.select_all")}
+                  />
+                </th>
+                {visibleRootFields.map((field) =>
+                  field.field_type === "form" ? (
+                    <th
+                      key={field.id}
+                      colSpan={getFormColumnCount(field, showActionGutter)}
+                      className="border-r border-subtle bg-accent-subtle/30 px-3 py-2.5 text-center text-primary"
+                    >
+                      {field.name}
+                    </th>
+                  ) : (
                     <th
                       key={field.id}
                       rowSpan={hasFormFields ? 2 : 1}
@@ -1365,59 +1418,47 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                         {field.is_required && <span className="text-danger-primary">*</span>}
                       </span>
                     </th>
-                  ))}
-                  {formFields.map((field) => (
-                    <th
-                      key={field.id}
-                      colSpan={getFormColumnCount(field, showActionGutter)}
-                      className="border-r border-subtle bg-accent-subtle/30 px-3 py-2.5 text-center text-primary"
-                    >
-                      {field.name}
-                    </th>
-                  ))}
-                  <th rowSpan={hasFormFields ? 2 : 1} className="w-16 px-2 py-2.5 text-center text-primary">
-                    {t("workspace_templates.requirements.fields.actions")}
-                  </th>
-                </tr>
-                {hasFormFields && (
-                  <tr className="border-b border-subtle">
-                    {formFields.flatMap((field) =>
-                      field.children.length
-                        ? [
-                            ...field.children.map((child) => (
-                              <th
-                                key={child.id}
-                                className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-secondary"
-                              >
-                                <span className="inline-flex items-center gap-0.5">
-                                  {child.name}
-                                  {child.is_required && <span className="text-danger-primary">*</span>}
-                                </span>
-                              </th>
-                            )),
-                            showActionGutter ? (
-                              <th
-                                key={`${field.id}-gutter`}
-                                aria-hidden
-                                className="w-9 border-r border-subtle bg-accent-subtle/15 px-0.5 py-2"
-                              />
-                            ) : null,
-                          ]
-                        : [
-                            <th
-                              key={`${field.id}-empty`}
-                              className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-placeholder"
-                            >
-                              {t("workspace_templates.requirements.fields.no_children")}
-                            </th>,
-                          ]
-                    )}
-                  </tr>
+                  )
                 )}
-              </thead>
-              {rowGroups}
-            </table>
-          )}
+                <th rowSpan={hasFormFields ? 2 : 1} className="w-16 px-2 py-2.5 text-center text-primary">
+                  {t("workspace_templates.requirements.fields.actions")}
+                </th>
+              </tr>
+              {hasFormFields && (
+                <tr className="border-b border-subtle">
+                  {formFields.map((field) =>
+                    field.children.length ? (
+                      <Fragment key={field.id}>
+                        {field.children.map((child) => (
+                          <th
+                            key={child.id}
+                            className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-secondary"
+                          >
+                            <span className="inline-flex items-center gap-0.5">
+                              {child.name}
+                              {child.is_required && <span className="text-danger-primary">*</span>}
+                            </span>
+                          </th>
+                        ))}
+                        {showActionGutter && (
+                          <th aria-hidden className="w-9 border-r border-subtle bg-accent-subtle/15 px-0.5 py-2" />
+                        )}
+                      </Fragment>
+                    ) : (
+                      <th
+                        key={`${field.id}-empty`}
+                        className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-placeholder"
+                      >
+                        {t("workspace_templates.requirements.fields.no_children")}
+                      </th>
+                    )
+                  )}
+                </tr>
+              )}
+            </thead>
+            {rowGroups}
+          </table>
+        )}
       </div>
 
       <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">

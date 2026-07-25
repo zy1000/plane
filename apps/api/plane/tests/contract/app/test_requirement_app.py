@@ -13,6 +13,7 @@ from plane.db.models import (
     Requirement,
     RequirementApprover,
     RequirementApprovalType,
+    RequirementChangeRequest,
     RequirementDetail,
     RequirementField,
     RequirementFieldType,
@@ -113,6 +114,8 @@ class TestRequirementApp:
         assert product_response.status_code == status.HTTP_201_CREATED
         assert product_response.data["scope"] == "product"
         assert str(product_response.data["product_id"]) == str(product.id)
+        assert product_response.data["field_count"] == 0
+        assert product_response.data["detail_count"] == 0
 
         project_response = api_client.post(
             self.list_url,
@@ -242,6 +245,7 @@ class TestRequirementApp:
             str(approver.id),
             str(second_approver.id),
         ]
+        assert not RequirementChangeRequest.objects.exists()
 
         invalid_count_response = api_client.post(
             self.list_url,
@@ -297,7 +301,16 @@ class TestRequirementApp:
         )
         source_detail = RequirementDetail.objects.create(
             requirement=template,
-            data={"summary": "Template detail"},
+            data={
+                str(root_field.id): [
+                    {
+                        "id": str(uuid4()),
+                        "values": {
+                            str(child_field.id): "Template detail",
+                        },
+                    }
+                ]
+            },
             version=3,
         )
         self.authenticate(api_client, self.owner)
@@ -307,11 +320,14 @@ class TestRequirementApp:
             {
                 "product_id": str(product.id),
                 "template_id": str(template.id),
+                "title": "Invalid details-only import",
+                "owner_id": str(self.owner.id),
+                "import_details": True,
             },
             format="json",
         )
         assert failed_response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "required_count" in failed_response.data
+        assert "import_details" in failed_response.data
         assert not Requirement.objects.filter(product=product).exists()
 
         success_response = api_client.post(
@@ -320,18 +336,28 @@ class TestRequirementApp:
                 "product_id": str(product.id),
                 "template_id": str(template.id),
                 "title": "Imported copy",
-                "approval_type": RequirementApprovalType.ANY,
+                "description_html": "<p>Product-specific description</p>",
+                "approval_type": RequirementApprovalType.ALL,
+                "approver_ids": [str(self.owner.id)],
+                "import_fields": True,
+                "import_details": True,
             },
             format="json",
         )
         assert success_response.status_code == status.HTTP_201_CREATED
         assert success_response.data["title"] == "Imported copy"
-        assert success_response.data["description_html"] == template.description_html
+        assert (
+            success_response.data["description_html"]
+            == "<p>Product-specific description</p>"
+        )
         assert success_response.data["status"] == RequirementStatus.DRAFT
+        assert success_response.data["approval_type"] == RequirementApprovalType.ALL
         assert success_response.data["required_count"] is None
         assert [str(item) for item in success_response.data["approver_ids"]] == [
-            str(eligible_approver.id)
+            str(self.owner.id)
         ]
+        assert success_response.data["field_count"] == 2
+        assert success_response.data["detail_count"] == 1
 
         copied_requirement = Requirement.objects.get(id=success_response.data["id"])
         copied_fields = list(copied_requirement.fields.all())
@@ -345,8 +371,28 @@ class TestRequirementApp:
 
         copied_detail = copied_requirement.details.get()
         assert copied_detail.id != source_detail.id
-        assert copied_detail.data == source_detail.data
+        copied_rows = copied_detail.data[str(copied_root.id)]
+        assert copied_rows[0]["values"] == {
+            str(copied_child.id): "Template detail"
+        }
         assert copied_detail.version == source_detail.version
+
+        fields_only_response = api_client.post(
+            self.list_url,
+            {
+                "product_id": str(product.id),
+                "template_id": str(template.id),
+                "title": "Fields only copy",
+                "owner_id": str(self.owner.id),
+                "import_fields": True,
+                "import_details": False,
+            },
+            format="json",
+        )
+        assert fields_only_response.status_code == status.HTTP_201_CREATED
+        assert fields_only_response.data["field_count"] == 2
+        assert fields_only_response.data["detail_count"] == 0
+        assert fields_only_response.data["approver_ids"] == []
 
     def test_only_authentication_is_enforced(self, api_client):
         unauthenticated_response = api_client.get(self.list_url)
@@ -364,6 +410,126 @@ class TestRequirementApp:
             format="json",
         )
         assert create_response.status_code == status.HTTP_201_CREATED
+
+    def test_product_requirement_permission_matrix_and_promoted_endpoints(
+        self, api_client
+    ):
+        product_member = self.add_workspace_member(role=5)
+        reviewer = self.add_workspace_member(role=5)
+        workspace_viewer = self.add_workspace_member(role=5)
+        workspace_admin = self.add_workspace_member(role=20)
+        outsider = UserFactory(username=f"requirement-outsider-{uuid4()}")
+        product = self.create_product(self.owner, product_member)
+        product.reviewers.add(reviewer)
+
+        self.authenticate(api_client, self.owner)
+        create_response = api_client.post(
+            self.list_url,
+            {
+                "product_id": str(product.id),
+                "title": "Permission matrix requirement",
+                "owner_id": str(self.owner.id),
+            },
+            format="json",
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        requirement_id = create_response.data["id"]
+        configuration_url = reverse(
+            "requirement-configuration",
+            kwargs={"slug": self.workspace.slug, "pk": requirement_id},
+        )
+        details_url = reverse(
+            "requirement-details",
+            kwargs={
+                "slug": self.workspace.slug,
+                "requirement_id": requirement_id,
+            },
+        )
+
+        for read_only_user in (reviewer, workspace_viewer):
+            self.authenticate(api_client, read_only_user)
+            list_response = api_client.get(
+                self.list_url, {"product_id": str(product.id)}
+            )
+            assert list_response.status_code == status.HTTP_200_OK
+            assert [item["id"] for item in list_response.data] == [requirement_id]
+            assert list_response.data[0]["can_edit"] is False
+            assert api_client.get(configuration_url).status_code == status.HTTP_200_OK
+            assert api_client.get(details_url).status_code == status.HTTP_200_OK
+            assert (
+                api_client.post(
+                    self.list_url,
+                    {
+                        "product_id": str(product.id),
+                        "title": "Read-only create",
+                        "owner_id": str(self.owner.id),
+                    },
+                    format="json",
+                ).status_code
+                == status.HTTP_403_FORBIDDEN
+            )
+            assert (
+                api_client.post(details_url, {"data": {}}, format="json").status_code
+                == status.HTTP_403_FORBIDDEN
+            )
+
+        self.authenticate(api_client, product_member)
+        member_list = api_client.get(
+            self.list_url, {"product_id": str(product.id)}
+        )
+        assert member_list.status_code == status.HTTP_200_OK
+        assert member_list.data[0]["can_edit"] is True
+        member_create = api_client.post(
+            self.list_url,
+            {
+                "product_id": str(product.id),
+                "title": "Created by product member",
+                "owner_id": str(product_member.id),
+            },
+            format="json",
+        )
+        assert member_create.status_code == status.HTTP_201_CREATED
+        configuration = api_client.get(configuration_url).data
+        assert (
+            api_client.put(
+                configuration_url,
+                {
+                    "expected_updated_at": configuration["requirement"]["updated_at"],
+                    "requirement": {},
+                    "fields": [],
+                },
+                format="json",
+            ).status_code
+            == status.HTTP_200_OK
+        )
+        assert (
+            api_client.post(details_url, {"data": {}}, format="json").status_code
+            == status.HTTP_201_CREATED
+        )
+
+        self.authenticate(api_client, workspace_admin)
+        admin_create = api_client.post(
+            self.list_url,
+            {
+                "product_id": str(product.id),
+                "title": "Created by workspace admin",
+                "owner_id": str(self.owner.id),
+            },
+            format="json",
+        )
+        assert admin_create.status_code == status.HTTP_201_CREATED
+
+        self.authenticate(api_client, outsider)
+        assert (
+            api_client.get(
+                self.list_url, {"product_id": str(product.id)}
+            ).status_code
+            == status.HTTP_404_NOT_FOUND
+        )
+        assert (
+            api_client.get(configuration_url).status_code
+            == status.HTTP_404_NOT_FOUND
+        )
 
     def test_template_configuration_and_detail_crud_contract(self, api_client):
         self.authenticate(api_client, self.owner)

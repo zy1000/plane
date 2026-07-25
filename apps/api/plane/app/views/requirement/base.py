@@ -1,11 +1,13 @@
 import json
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch, Q
 from rest_framework import status
 from rest_framework import serializers as drf_serializers
 from rest_framework.response import Response
 
+from plane.app.permissions.base import is_workspace_member
 from plane.app.serializers.requirement import (
     RequirementConfigurationConflict,
     RequirementConfigurationWriteSerializer,
@@ -18,10 +20,16 @@ from plane.app.serializers.requirement import (
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import (
+    Product,
     Requirement,
     RequirementApprover,
     RequirementDetail,
     Workspace,
+)
+from plane.utils.product import (
+    can_edit_product_requirements,
+    can_manage_workspace_products,
+    can_view_product,
 )
 from plane.utils.requirement import (
     RequirementDataLossError,
@@ -65,7 +73,25 @@ class RequirementViewSet(BaseViewSet):
                 "updated_by",
             )
             .prefetch_related(Prefetch("approvers", queryset=approvers))
+            .annotate(
+                field_count=Count("fields", distinct=True),
+                detail_count=Count("details", distinct=True),
+            )
         )
+        workspace = Workspace.objects.filter(slug=self.workspace_slug).first()
+        if workspace is not None and not can_manage_workspace_products(
+            self.request.user, workspace
+        ):
+            product_visibility = (
+                Q(product__owner=self.request.user)
+                | Q(product__reviewers=self.request.user)
+                | Q(product__member_product__member=self.request.user)
+            )
+            if is_workspace_member(self.request.user, self.workspace_slug):
+                product_visibility |= Q(product__network=2)
+            queryset = queryset.filter(
+                Q(product__isnull=True) | product_visibility
+            ).distinct()
         return self.filter_queryset(queryset)
 
     def get_serializer_context(self):
@@ -78,7 +104,38 @@ class RequirementViewSet(BaseViewSet):
     def _get_requirement(self, pk):
         return self.get_queryset().filter(pk=pk).first()
 
+    def _get_request_product(self, product_id):
+        if not product_id:
+            return None
+        try:
+            product = (
+                Product.objects.filter(
+                    id=product_id,
+                    workspace__slug=self.workspace_slug,
+                )
+                .select_related("workspace")
+                .prefetch_related("reviewers")
+                .first()
+            )
+        except (ValidationError, ValueError):
+            return None
+        if product is None or not can_view_product(self.request.user, product):
+            return None
+        return product
+
+    @staticmethod
+    def _can_write(user, requirement):
+        if requirement.product_id:
+            return can_edit_product_requirements(user, requirement.product)
+        return True
+
     def list(self, request, slug):
+        product_id = request.query_params.get("product_id")
+        if product_id and self._get_request_product(product_id) is None:
+            return Response(
+                {"error": "Product not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -102,6 +159,24 @@ class RequirementViewSet(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        product_id = request.data.get("product_id")
+        if product_id:
+            product = self._get_request_product(product_id)
+            if product is None:
+                return Response(
+                    {"error": "Product not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if not can_edit_product_requirements(request.user, product):
+                return Response(
+                    {
+                        "error": (
+                            "You do not have permission to maintain product requirements."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         requirement = serializer.save(workspace=workspace)
@@ -116,6 +191,11 @@ class RequirementViewSet(BaseViewSet):
             return Response(
                 {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         serializer = self.get_serializer(
@@ -143,21 +223,40 @@ class RequirementViewSet(BaseViewSet):
                 {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         requirement.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class RequirementConfigurationAPIView(BaseAPIView):
-    def _get_template(self, slug, pk, *, for_update=False):
+    def _get_requirement(self, slug, pk, *, for_update=False):
         queryset = Requirement.objects.filter(
             workspace__slug=slug,
             id=pk,
-            is_template=True,
-        ).select_related("workspace", "owner")
+        ).filter(Q(is_template=True) | Q(product__isnull=False)).select_related(
+            "workspace", "product", "owner"
+        )
         if for_update:
             queryset = queryset.select_for_update()
-        return queryset.first()
+        requirement = queryset.first()
+        if (
+            requirement is not None
+            and requirement.product_id
+            and not can_view_product(self.request.user, requirement.product)
+        ):
+            return None
+        return requirement
+
+    @staticmethod
+    def _can_write(user, requirement):
+        return not requirement.product_id or can_edit_product_requirements(
+            user, requirement.product
+        )
 
     def _response_payload(self, requirement, created_field_ids=None):
         requirement = (
@@ -186,20 +285,25 @@ class RequirementConfigurationAPIView(BaseAPIView):
         }
 
     def get(self, request, slug, pk):
-        requirement = self._get_template(slug, pk)
+        requirement = self._get_requirement(slug, pk)
         if requirement is None:
             return Response(
-                {"error": "Requirement template not found."},
+                {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(self._response_payload(requirement), status=status.HTTP_200_OK)
 
     def put(self, request, slug, pk):
-        requirement = self._get_template(slug, pk)
+        requirement = self._get_requirement(slug, pk)
         if requirement is None:
             return Response(
-                {"error": "Requirement template not found."},
+                {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
             )
         serializer = RequirementConfigurationWriteSerializer(
             data=request.data,
@@ -244,29 +348,49 @@ class RequirementDetailViewSet(BaseViewSet):
     model = RequirementDetail
     serializer_class = RequirementDetailSerializer
 
-    def _get_template(self):
-        return Requirement.objects.filter(
+    def _get_requirement(self, *, for_update=False):
+        queryset = Requirement.objects.filter(
             id=self.kwargs.get("requirement_id"),
             workspace__slug=self.workspace_slug,
-            is_template=True,
-        ).first()
+        ).filter(Q(is_template=True) | Q(product__isnull=False)).select_related(
+            "workspace", "product"
+        )
+        if for_update:
+            queryset = queryset.select_for_update(of=("self",))
+        requirement = queryset.first()
+        if (
+            requirement is not None
+            and requirement.product_id
+            and not can_view_product(self.request.user, requirement.product)
+        ):
+            return None
+        return requirement
+
+    @staticmethod
+    def _can_write(user, requirement):
+        return not requirement.product_id or can_edit_product_requirements(
+            user, requirement.product
+        )
 
     def get_queryset(self):
         return (
             RequirementDetail.objects.filter(
                 requirement_id=self.kwargs.get("requirement_id"),
                 requirement__workspace__slug=self.workspace_slug,
-                requirement__is_template=True,
+            )
+            .filter(
+                Q(requirement__is_template=True)
+                | Q(requirement__product__isnull=False)
             )
             .select_related("requirement")
             .order_by("sort_order", "created_at", "id")
         )
 
     def list(self, request, slug, requirement_id):
-        requirement = self._get_template()
+        requirement = self._get_requirement()
         if requirement is None:
             return Response(
-                {"error": "Requirement template not found."},
+                {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -318,11 +442,16 @@ class RequirementDetailViewSet(BaseViewSet):
         )
 
     def create(self, request, slug, requirement_id):
-        requirement = self._get_template()
+        requirement = self._get_requirement()
         if requirement is None:
             return Response(
-                {"error": "Requirement template not found."},
+                {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
             )
         serializer = RequirementDetailCreateSerializer(
             data=request.data,
@@ -349,11 +478,16 @@ class RequirementDetailViewSet(BaseViewSet):
         )
 
     def partial_update(self, request, slug, requirement_id, pk):
-        requirement = self._get_template()
+        requirement = self._get_requirement()
         if requirement is None:
             return Response(
-                {"error": "Requirement template not found."},
+                {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
             )
         serializer = RequirementDetailUpdateSerializer(
             data=request.data,
@@ -388,6 +522,17 @@ class RequirementDetailViewSet(BaseViewSet):
         )
 
     def destroy(self, request, slug, requirement_id, pk):
+        requirement = self._get_requirement()
+        if requirement is None:
+            return Response(
+                {"error": "Requirement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         detail = self.get_queryset().filter(id=pk).first()
         if detail is None:
             return Response(
@@ -398,11 +543,16 @@ class RequirementDetailViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_destroy(self, request, slug, requirement_id):
-        requirement = self._get_template()
+        requirement = self._get_requirement()
         if requirement is None:
             return Response(
-                {"error": "Requirement template not found."},
+                {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_write(request.user, requirement):
+            return Response(
+                {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
             )
         ids_serializer = drf_serializers.ListField(
             child=drf_serializers.UUIDField(), allow_empty=False
@@ -422,19 +572,16 @@ class RequirementDetailViewSet(BaseViewSet):
 
     def bulk_save(self, request, slug, requirement_id):
         with transaction.atomic():
-            requirement = (
-                Requirement.objects.select_for_update()
-                .filter(
-                    id=requirement_id,
-                    workspace__slug=self.workspace_slug,
-                    is_template=True,
-                )
-                .first()
-            )
+            requirement = self._get_requirement(for_update=True)
             if requirement is None:
                 return Response(
-                    {"error": "Requirement template not found."},
+                    {"error": "Requirement not found."},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+            if not self._can_write(request.user, requirement):
+                return Response(
+                    {"error": "You do not have permission to maintain this requirement."},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             serializer = RequirementDetailBatchSaveSerializer(
@@ -448,7 +595,7 @@ class RequirementDetailViewSet(BaseViewSet):
             ):
                 return Response(
                     {
-                        "error": "The requirement template changed before the batch was saved.",
+                        "error": "The requirement changed before the batch was saved.",
                         "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
                         "current_updated_at": requirement.updated_at,
                     },

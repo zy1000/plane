@@ -44,3 +44,10 @@ def can_view_product(user, product) -> bool:
     if product.reviewers.filter(id=user.id).exists():
         return True
     return ProductMember.objects.filter(product=product, member=user).exists()
+
+
+def can_edit_product_requirements(user, product) -> bool:
+    """Product members maintain requirements; product/workspace owners retain access."""
+    if can_manage_product(user, product):
+        return True
+    return ProductMember.objects.filter(product=product, member=user).exists()

@@ -58,6 +58,9 @@ export type TRequirement = {
   required_count: number | null;
   approver_ids: string[];
   approver_details: IUserLite[];
+  field_count: number;
+  detail_count: number;
+  can_edit: boolean;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -158,6 +161,26 @@ export type TCreateRequirementTemplatePayload = {
   status?: TRequirementStatus;
   is_active?: boolean;
 };
+
+export type TCreateProductRequirementPayload = {
+  product_id: string;
+  title: string;
+  description_html?: string | null;
+  owner_id: string;
+  template_id?: string | null;
+  import_fields: boolean;
+  import_details: boolean;
+  approver_ids: string[];
+  approval_type: TRequirementApprovalType;
+  required_count: number | null;
+};
+
+export type TUpdateProductRequirementPayload = Partial<
+  Pick<
+    TRequirement,
+    "title" | "description_html" | "owner_id" | "status" | "approver_ids" | "approval_type" | "required_count"
+  >
+>;
 
 export type TRequirementConfigurationPayload = {
   expected_updated_at: string;

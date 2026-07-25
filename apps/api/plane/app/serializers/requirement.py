@@ -12,10 +12,10 @@ from plane.db.models import (
     RequirementDetail,
     RequirementField,
     RequirementFieldType,
-    RequirementStatus,
     User,
 )
 from plane.utils.content_validator import validate_html_content
+from plane.utils.product import can_edit_product_requirements
 from plane.utils.requirement import (
     clone_requirement_children,
     get_requirement_eligible_user_ids,
@@ -68,6 +68,15 @@ class RequirementSerializer(BaseSerializer):
     )
     approver_details = serializers.SerializerMethodField()
     scope = serializers.CharField(read_only=True)
+    import_fields = serializers.BooleanField(
+        required=False, default=False, write_only=True
+    )
+    import_details = serializers.BooleanField(
+        required=False, default=False, write_only=True
+    )
+    field_count = serializers.SerializerMethodField()
+    detail_count = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
@@ -88,6 +97,11 @@ class RequirementSerializer(BaseSerializer):
             "required_count",
             "approver_ids",
             "approver_details",
+            "import_fields",
+            "import_details",
+            "field_count",
+            "detail_count",
+            "can_edit",
             "is_active",
             "sort_order",
             "created_at",
@@ -101,6 +115,9 @@ class RequirementSerializer(BaseSerializer):
             "scope",
             "owner_detail",
             "approver_details",
+            "field_count",
+            "detail_count",
+            "can_edit",
             "created_at",
             "updated_at",
             "created_by",
@@ -110,6 +127,22 @@ class RequirementSerializer(BaseSerializer):
     def get_approver_details(self, obj):
         approvers = [link.approver for link in obj.approvers.all()]
         return UserLiteSerializer(approvers, many=True).data
+
+    def get_field_count(self, obj):
+        annotated_count = getattr(obj, "field_count", None)
+        return annotated_count if annotated_count is not None else obj.fields.count()
+
+    def get_detail_count(self, obj):
+        annotated_count = getattr(obj, "detail_count", None)
+        return annotated_count if annotated_count is not None else obj.details.count()
+
+    def get_can_edit(self, obj):
+        request = self.context.get("request")
+        if request is None or request.user.is_anonymous:
+            return False
+        if obj.product_id:
+            return can_edit_product_requirements(request.user, obj.product)
+        return True
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -156,35 +189,6 @@ class RequirementSerializer(BaseSerializer):
             attrs.pop(attribute, None)
         if errors:
             raise serializers.ValidationError(errors)
-
-    def _apply_template_defaults(self, attrs, source_template):
-        initial_data = self.initial_data
-        default_fields = (
-            "title",
-            "description_html",
-            "approval_type",
-            "is_active",
-        )
-        for field_name in default_fields:
-            if field_name not in initial_data:
-                attrs[field_name] = getattr(source_template, field_name)
-
-        if "required_count" not in initial_data:
-            if (
-                "approval_type" in initial_data
-                and attrs.get("approval_type") != RequirementApprovalType.N_OF_M
-            ):
-                attrs["required_count"] = None
-            else:
-                attrs["required_count"] = source_template.required_count
-
-        if "status" not in initial_data:
-            attrs["status"] = RequirementStatus.DRAFT
-
-        if "description_html" not in initial_data:
-            attrs["description_html"] = self.validate_description_html(
-                attrs.get("description_html")
-            )
 
     def _validate_scope(self, attrs, workspace):
         if self.instance:
@@ -262,20 +266,6 @@ class RequirementSerializer(BaseSerializer):
             attrs["approver_ids"] = approver_ids
             return approver_ids
 
-        if not self.instance and source_template is not None:
-            source_ids = list(
-                source_template.approvers.values_list("approver_id", flat=True)
-            )
-            eligible_ids = get_requirement_eligible_user_ids(
-                workspace_id=workspace.id,
-                product_id=getattr(product, "id", None),
-                project_id=getattr(project, "id", None),
-                user_ids=source_ids,
-            )
-            approver_ids = [item for item in source_ids if item in eligible_ids]
-            attrs["approver_ids"] = approver_ids
-            return approver_ids
-
         if self.instance:
             return list(
                 self.instance.approvers.values_list("approver_id", flat=True)
@@ -328,12 +318,34 @@ class RequirementSerializer(BaseSerializer):
         workspace = self.context.get("workspace")
         if workspace is None:
             raise serializers.ValidationError({"workspace": "Workspace is required."})
+        if self.instance and (
+            "import_fields" in self.initial_data
+            or "import_details" in self.initial_data
+        ):
+            raise serializers.ValidationError(
+                {"import_fields": "Import options can only be used when creating a requirement."}
+            )
 
         is_template, product, project, source_template = self._validate_scope(
             attrs, workspace
         )
-        if not self.instance and source_template is not None:
-            self._apply_template_defaults(attrs, source_template)
+        import_fields = attrs.get("import_fields", False)
+        import_details = attrs.get("import_details", False)
+        import_errors = {}
+        if import_fields and source_template is None:
+            import_errors["import_fields"] = (
+                "A template is required when importing fields."
+            )
+        if import_details and source_template is None:
+            import_errors["import_details"] = (
+                "A template is required when importing details."
+            )
+        elif import_details and not import_fields:
+            import_errors["import_details"] = (
+                "Fields must be imported when importing details."
+            )
+        if import_errors:
+            raise serializers.ValidationError(import_errors)
 
         title = attrs.get("title", getattr(self.instance, "title", None))
         if not title:
@@ -384,6 +396,8 @@ class RequirementSerializer(BaseSerializer):
     @transaction.atomic
     def create(self, validated_data):
         approver_ids = validated_data.pop("approver_ids", [])
+        import_fields = validated_data.pop("import_fields", False)
+        import_details = validated_data.pop("import_details", False)
         source_template = validated_data.get("template")
         request = self.context.get("request")
         actor = getattr(request, "user", None)
@@ -392,11 +406,12 @@ class RequirementSerializer(BaseSerializer):
         requirement.full_clean(exclude=["created_by", "updated_by"])
         requirement.save()
 
-        if source_template is not None:
+        if source_template is not None and import_fields:
             try:
                 clone_requirement_children(
                     source=source_template,
                     target=requirement,
+                    include_details=import_details,
                     actor=actor,
                 )
             except ValueError as exc:
@@ -413,6 +428,8 @@ class RequirementSerializer(BaseSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         approver_ids = validated_data.pop("approver_ids", serializers.empty)
+        validated_data.pop("import_fields", None)
+        validated_data.pop("import_details", None)
         for attribute, value in validated_data.items():
             setattr(instance, attribute, value)
 
@@ -841,12 +858,11 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
             .filter(
                 id=self.context["requirement"].id,
                 workspace=self.context["workspace"],
-                is_template=True,
             )
             .first()
         )
         if requirement is None:
-            raise serializers.ValidationError("Requirement template not found.")
+            raise serializers.ValidationError("Requirement not found.")
         if requirement.updated_at != self.validated_data["expected_updated_at"]:
             raise RequirementConfigurationConflict
 
