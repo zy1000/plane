@@ -135,7 +135,7 @@ const FIELD_LIBRARY_GROUPS: Array<{
   },
 ];
 
-const FIELD_ICONS = {
+export const FIELD_ICONS = {
   text: Type,
   member: UserRound,
   select: ListChecks,

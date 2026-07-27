@@ -1,13 +1,4 @@
-import {
-  Fragment,
-  type KeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
@@ -17,8 +8,6 @@ import {
   Check,
   Columns3,
   Copy,
-  File,
-  Image as ImageIcon,
   MoreHorizontal,
   Paperclip,
   Pencil,
@@ -40,20 +29,29 @@ import type {
   TRequirementDetail,
   TRequirementDetailBatchSavePayload,
   TRequirementDetailBatchSaveResponse,
-  TRequirementDetailData,
   TRequirementDetailFilter,
   TRequirementDetailValue,
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
 import { EFileAssetType } from "@plane/types";
-import { Avatar, CustomMenu, CustomSelect, Loader, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
+import { CustomMenu, CustomSelect, Loader, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
-import { cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
-import { useMember } from "@/hooks/store/use-member";
-import { getRequirementSelectLabel, getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
+import {
+  ChangedFieldCorner,
+  getCurrentPageOffset,
+  getDetailRowKey,
+  getFormColumnCount,
+  getFormRows,
+  getMaxFormRows,
+  isEmptyDetailValue,
+  LeafValue,
+  RequirementGridHeader,
+} from "./requirement-grid-shared";
+import { getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 import {
   createEmptyRequirementDetailData,
   type TRequirementDetailDraftRow,
@@ -91,40 +89,6 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
 };
 
-const getFormRows = (data: TRequirementDetailData, fieldId: string): TRequirementFormRow[] => {
-  const value = data[fieldId];
-  return Array.isArray(value) ? (value as TRequirementFormRow[]) : [];
-};
-
-const getMaxFormRows = (data: TRequirementDetailData, formFields: TRequirementField[]) =>
-  formFields.reduce((max, field) => Math.max(max, getFormRows(data, field.id).length), 0);
-
-const getCursorPageOffset = (cursor?: string) => {
-  if (!cursor) return null;
-  const offset = Number(cursor.split(":")[1]);
-  return Number.isFinite(offset) ? offset : null;
-};
-
-const getCurrentPageOffset = (
-  prevCursor: string | undefined,
-  nextCursor: string | undefined,
-  prevPageResults?: boolean,
-  nextPageResults?: boolean
-) => {
-  const prevOffset = prevPageResults ? getCursorPageOffset(prevCursor) : null;
-  if (prevOffset !== null) return prevOffset + 1;
-  const nextOffset = getCursorPageOffset(nextCursor);
-  if (nextOffset !== null && (nextPageResults || nextOffset > 0)) return Math.max(0, nextOffset - 1);
-  return 0;
-};
-
-const isEmptyDetailValue = (value: TRequirementDetailValue | undefined) =>
-  value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
-
-// Number of table columns a repeatable form occupies: one per visible child, plus a trailing action gutter when editing.
-const getFormColumnCount = (form: TRequirementField, withGutter: boolean) =>
-  form.children.length ? form.children.length + (withGutter ? 1 : 0) : 1;
-
 const MenuRowLabel = ({
   icon: Icon,
   label,
@@ -139,119 +103,6 @@ const MenuRowLabel = ({
     <span className="truncate">{label}</span>
   </span>
 );
-
-const ChangedFieldCorner = () => (
-  <span
-    aria-hidden
-    className="pointer-events-none absolute top-0 right-0 block h-0 w-0 border-t-[8px] border-l-[8px] border-t-accent-strong border-l-transparent"
-  />
-);
-
-const getDetailRowKey = (
-  detailKey: string,
-  data: TRequirementDetailData,
-  formFields: TRequirementField[],
-  rowPosition: number
-) =>
-  `${detailKey}-${
-    formFields
-      .map((form) => getFormRows(data, form.id)[rowPosition]?.id)
-      .filter(Boolean)
-      .join("-") || "root"
-  }`;
-
-const RequirementMemberValue = observer(function RequirementMemberValue({ value }: { value: unknown }) {
-  const { getUserDetails } = useMember();
-  if (typeof value !== "string") return null;
-  const member = getUserDetails(value);
-  return (
-    <span className="inline-flex max-w-full items-center gap-1.5">
-      <Avatar
-        size="sm"
-        name={member?.display_name ?? value}
-        src={getFileURL(member?.avatar_url ?? "")}
-        showTooltip={false}
-      />
-      <span className="max-w-28 truncate text-14 text-primary">{member?.display_name ?? value}</span>
-    </span>
-  );
-});
-
-const LeafValue = ({
-  field,
-  value,
-  workspaceSlug,
-}: {
-  field: TRequirementField;
-  value: TRequirementDetailValue | undefined;
-  workspaceSlug: string;
-}) => {
-  const { t } = useTranslation();
-  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
-  if (field.field_type === "boolean") {
-    return (
-      <span
-        className={
-          value
-            ? "inline-flex rounded-md bg-success-subtle px-2 py-0.5 text-13 text-success-primary"
-            : "inline-flex rounded-md bg-layer-2 px-2 py-0.5 text-13 text-secondary"
-        }
-      >
-        {t(value ? "workspace_templates.requirements.data.yes" : "workspace_templates.requirements.data.no")}
-      </span>
-    );
-  }
-  if (field.field_type === "select") {
-    const selectedIds = Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [value];
-    const selectedOptions = selectedIds
-      .map((optionId) => ({
-        id: String(optionId),
-        label: getRequirementSelectLabel(field, String(optionId)),
-      }))
-      .filter((option): option is { id: string; label: string } => Boolean(option.label));
-    if (!selectedOptions.length) return null;
-    return (
-      <span className="flex max-w-64 flex-wrap gap-1">
-        {selectedOptions.map((option) => (
-          <span
-            key={option.id}
-            className="inline-flex max-w-44 items-center truncate rounded-md border border-subtle bg-layer-2 px-2 py-0.5 text-13 text-primary"
-          >
-            {option.label}
-          </span>
-        ))}
-      </span>
-    );
-  }
-  if (field.field_type === "member") return <RequirementMemberValue value={value} />;
-  if (field.field_type === "attachment" || field.field_type === "image") {
-    const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
-    if (!assets.length) return null;
-    return (
-      <span className="flex max-w-48 flex-wrap gap-1">
-        {assets.map((asset) => (
-          <a
-            key={asset.asset_id}
-            href={`/api/assets/v2/workspaces/${workspaceSlug}/${asset.asset_id}/`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-13 text-primary hover:text-accent-primary"
-          >
-            {field.field_type === "image" ? <ImageIcon className="size-3" /> : <File className="size-3" />}
-            <span className="truncate">{asset.name}</span>
-          </a>
-        ))}
-      </span>
-    );
-  }
-  return (
-    <span className="block max-w-64 text-14 leading-5 whitespace-pre-wrap text-primary">
-      {field.field_type === "rich_text" ? stripAndTruncateHTML(String(value), 180) : String(value)}
-    </span>
-  );
-};
 
 const LeafEditor = ({
   field,
@@ -545,7 +396,6 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     [activeFields, hiddenFieldIds]
   );
   const formFields = visibleRootFields.filter((field) => field.field_type === "form");
-  const hasFormFields = formFields.length > 0;
   // The per-sub-record action gutter only carries controls while editing, so it collapses in read-only view.
   const showActionGutter = editor.isEditing;
   const filterableFields = useMemo(
@@ -1383,9 +1233,12 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           </div>
         ) : (
           <table className="w-max min-w-full border-collapse text-left">
-            <thead className="sticky top-0 z-10 bg-layer-1 text-13 font-medium text-secondary">
-              <tr className="border-b border-subtle">
-                <th rowSpan={hasFormFields ? 2 : 1} className="w-12 border-r border-subtle px-1.5 py-2.5 text-center">
+            <RequirementGridHeader
+              rootFields={visibleRootFields}
+              showActionGutter={showActionGutter}
+              leadingHeader={{
+                className: "w-12 border-r border-subtle px-1.5 py-2.5 text-center",
+                content: (
                   <input
                     type="checkbox"
                     className="size-3.5 cursor-pointer"
@@ -1397,65 +1250,13 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                     onChange={(event) => setSelectedIds(event.target.checked ? selectableDetailIds : [])}
                     aria-label={t("workspace_templates.requirements.data.select_all")}
                   />
-                </th>
-                {visibleRootFields.map((field) =>
-                  field.field_type === "form" ? (
-                    <th
-                      key={field.id}
-                      colSpan={getFormColumnCount(field, showActionGutter)}
-                      className="border-r border-subtle bg-accent-subtle/30 px-3 py-2.5 text-center text-primary"
-                    >
-                      {field.name}
-                    </th>
-                  ) : (
-                    <th
-                      key={field.id}
-                      rowSpan={hasFormFields ? 2 : 1}
-                      className="min-w-40 border-r border-subtle px-3 py-2.5 align-middle text-primary"
-                    >
-                      <span className="inline-flex items-center gap-0.5">
-                        {field.name}
-                        {field.is_required && <span className="text-danger-primary">*</span>}
-                      </span>
-                    </th>
-                  )
-                )}
-                <th rowSpan={hasFormFields ? 2 : 1} className="w-16 px-2 py-2.5 text-center text-primary">
-                  {t("workspace_templates.requirements.fields.actions")}
-                </th>
-              </tr>
-              {hasFormFields && (
-                <tr className="border-b border-subtle">
-                  {formFields.map((field) =>
-                    field.children.length ? (
-                      <Fragment key={field.id}>
-                        {field.children.map((child) => (
-                          <th
-                            key={child.id}
-                            className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-secondary"
-                          >
-                            <span className="inline-flex items-center gap-0.5">
-                              {child.name}
-                              {child.is_required && <span className="text-danger-primary">*</span>}
-                            </span>
-                          </th>
-                        ))}
-                        {showActionGutter && (
-                          <th aria-hidden className="w-9 border-r border-subtle bg-accent-subtle/15 px-0.5 py-2" />
-                        )}
-                      </Fragment>
-                    ) : (
-                      <th
-                        key={`${field.id}-empty`}
-                        className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-placeholder"
-                      >
-                        {t("workspace_templates.requirements.fields.no_children")}
-                      </th>
-                    )
-                  )}
-                </tr>
-              )}
-            </thead>
+                ),
+              }}
+              trailingHeader={{
+                className: "w-16 px-2 py-2.5 text-center text-primary",
+                content: t("workspace_templates.requirements.fields.actions"),
+              }}
+            />
             {rowGroups}
           </table>
         )}

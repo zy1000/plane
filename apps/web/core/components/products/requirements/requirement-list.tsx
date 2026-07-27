@@ -16,7 +16,7 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles, type TRequirement } from "@plane/types";
 import { AlertModalCore, Avatar, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
-import { calculateTimeAgo, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { calculateTimeAgo, cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -24,6 +24,7 @@ import { PageHead } from "@/components/core/page-title";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useProductsContext } from "../context";
+import { PILL_BASE, REQUIREMENT_STATUS_PILL } from "./change/styles";
 import { useProductRequirementsContext } from "./context";
 import { ProductRequirementFilters } from "./requirement-filters";
 import { ProductRequirementModal } from "./requirement-modal";
@@ -60,12 +61,14 @@ export const ProductRequirementList = observer(function ProductRequirementList()
     search,
     statusFilters,
     ownerFilters,
+    pendingMyApprovalOnly,
     page,
     perPage,
     totalPages,
     setSearch,
     setStatusFilters,
     setOwnerFilters,
+    setPendingMyApprovalOnly,
     setPage,
     setPerPage,
     fetchRequirements,
@@ -138,8 +141,10 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                   statusFilters={statusFilters}
                   ownerFilters={ownerFilters}
                   ownerOptions={ownerOptions}
+                  pendingMyApprovalOnly={pendingMyApprovalOnly}
                   onStatusFiltersChange={setStatusFilters}
                   onOwnerFiltersChange={setOwnerFilters}
+                  onPendingMyApprovalOnlyChange={setPendingMyApprovalOnly}
                 />
                 {canMaintain && (
                   <Button variant="primary" onClick={openCreateModal}>
@@ -245,8 +250,19 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                           </p>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="rounded-full bg-layer-2 px-2 py-1 text-10 font-medium text-secondary">
-                            {t(`workspace_products.requirements.status.${requirement.status}`)}
+                          <span className="flex flex-wrap items-center gap-1">
+                            <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[requirement.status])}>
+                              {requirement.status === "draft" && requirement.current_version !== null
+                                ? t("workspace_products.requirements.status.draft_with_version", {
+                                    version: requirement.current_version,
+                                  })
+                                : t(`workspace_products.requirements.status.${requirement.status}`)}
+                            </span>
+                            {requirement.can_approve && (
+                              <span className={cn(PILL_BASE, "bg-warning-primary text-on-color")}>
+                                {t("workspace_products.requirements.status.pending_my_approval")}
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td className="px-3 py-3">

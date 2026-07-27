@@ -3,6 +3,13 @@ import type {
   TCreateProductRequirementPayload,
   TCreateRequirementTemplatePayload,
   TRequirement,
+  TRequirementApprovalAction,
+  TRequirementChangeItemsResponse,
+  TRequirementChangeRequest,
+  TRequirementChangeRequestDetail,
+  TRequirementChangeRequestsResponse,
+  TRequirementChangeStatus,
+  TRequirementChangeType,
   TRequirementConfiguration,
   TRequirementConfigurationPayload,
   TRequirementDetail,
@@ -11,6 +18,11 @@ import type {
   TRequirementDetailData,
   TRequirementDetailFilter,
   TRequirementDetailsResponse,
+  TRequirementDiscardDraftResponse,
+  TRequirementVersionDetail,
+  TRequirementVersionDetailsResponse,
+  TRequirementVersionsResponse,
+  TRequirementWorkingCopyResponse,
   TUpdateProductRequirementPayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
@@ -192,6 +204,188 @@ export class RequirementService extends APIService {
     payload: TRequirementDetailBatchSavePayload
   ): Promise<TRequirementDetailBatchSaveResponse> {
     return this.post(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/details/bulk-save/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 工作副本 --------------------------------------------------------- */
+
+  /** 对应「编辑」按钮：已发布内容克隆出工作副本，状态置为草稿 */
+  async startEditing(workspaceSlug: string, requirementId: string): Promise<TRequirementWorkingCopyResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/working-copy/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 对应「撤回草稿」：从未发布则删除需求，否则恢复到上一个已发布版本 */
+  async discardDraft(workspaceSlug: string, requirementId: string): Promise<TRequirementDiscardDraftResponse> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/working-copy/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 变更单 ----------------------------------------------------------- */
+
+  async listChangeRequests(
+    workspaceSlug: string,
+    requirementId: string,
+    params: { cursor?: string; perPage?: number; status?: TRequirementChangeStatus } = {}
+  ): Promise<TRequirementChangeRequestsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.status ? { status: params.status } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getChangeRequest(
+    workspaceSlug: string,
+    requirementId: string,
+    changeRequestId: string
+  ): Promise<TRequirementChangeRequestDetail> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/${changeRequestId}/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 明细数据组的变更项：千行量级下必须分页 */
+  async listChangeItems(
+    workspaceSlug: string,
+    requirementId: string,
+    changeRequestId: string,
+    params: { cursor?: string; perPage?: number; changeType?: TRequirementChangeType } = {}
+  ): Promise<TRequirementChangeItemsResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/${changeRequestId}/items/`,
+      {
+        params: {
+          ...(params.cursor ? { cursor: params.cursor } : {}),
+          ...(params.perPage ? { per_page: params.perPage } : {}),
+          ...(params.changeType ? { change_type: params.changeType } : {}),
+        },
+      }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async submitChangeRequest(
+    workspaceSlug: string,
+    requirementId: string,
+    payload: { reason: string }
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/submit/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async actOnChangeRequest(
+    workspaceSlug: string,
+    requirementId: string,
+    changeRequestId: string,
+    payload: { action: TRequirementApprovalAction; comment?: string }
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/${changeRequestId}/act/`,
+      payload
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async cancelChangeRequest(
+    workspaceSlug: string,
+    requirementId: string,
+    changeRequestId: string
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/${changeRequestId}/cancel/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 版本 ------------------------------------------------------------- */
+
+  async listVersions(
+    workspaceSlug: string,
+    requirementId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TRequirementVersionsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getVersion(
+    workspaceSlug: string,
+    requirementId: string,
+    version: number
+  ): Promise<TRequirementVersionDetail> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 版本快照的 details 数组在服务端切片，避免整份返回 */
+  async listVersionDetails(
+    workspaceSlug: string,
+    requirementId: string,
+    version: number,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TRequirementVersionDetailsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/details/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 回滚只是把历史快照灌入工作副本，仍需提交审批才会生效 */
+  async rollbackToVersion(
+    workspaceSlug: string,
+    requirementId: string,
+    version: number
+  ): Promise<TRequirementWorkingCopyResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/rollback/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

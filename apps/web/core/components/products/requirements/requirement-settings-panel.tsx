@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { ChevronDown, Settings2, SlidersHorizontal } from "lucide-react";
+import { Settings2, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementApprovalType, TRequirementStatus, IUserLite } from "@plane/types";
 import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { PILL_BASE, REQUIREMENT_STATUS_PILL } from "./change/styles";
 import { RequirementApprovalSettings } from "./requirement-approval-settings";
 
 export type TRequirementConfigurationSection = "settings" | "fields";
@@ -17,8 +18,6 @@ export type TRequirementSettingsDraft = {
   approval_type: TRequirementApprovalType;
   required_count: number | null;
 };
-
-const statuses: TRequirementStatus[] = ["draft", "in_review", "published", "changing"];
 
 type TRequirementConfigurationNavigationProps = {
   activeSection: TRequirementConfigurationSection;
@@ -186,25 +185,19 @@ export function RequirementSettingsPanel({ draft, memberOptions, onChange }: TRe
                 />
               </label>
 
-              <label className="block">
+              <div className="block">
                 <span className="mb-2 block text-12 font-medium text-primary">
                   {t("workspace_products.requirements.fields.status")}
                 </span>
-                <span className="relative block">
-                  <select
-                    value={draft.status}
-                    onChange={(event) => updateDraft({ status: event.target.value as TRequirementStatus })}
-                    className="focus:border-accent-primary h-10 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-9 pl-3 text-12 text-primary outline-none"
-                  >
-                    {statuses.map((status) => (
-                      <option key={status} value={status}>
-                        {t(`workspace_products.requirements.status.${status}`)}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-placeholder" />
-                </span>
-              </label>
+                <div className="flex h-10 w-full items-center gap-2 rounded-md border border-subtle bg-layer-2 px-3">
+                  <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[draft.status])}>
+                    {t(`workspace_products.requirements.status.${draft.status}`)}
+                  </span>
+                  <span className="truncate text-11 text-tertiary">
+                    {t("workspace_products.requirements.fields.status_hint")}
+                  </span>
+                </div>
+              </div>
             </div>
           </section>
 

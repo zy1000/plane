@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams, useSearchParams } from "react-router";
-import { Database, FileText, Save, Settings2 } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import { Database, FileText, GitBranch, History, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementField, TRequirementFieldDraft, IUserLite } from "@plane/types";
-import { Breadcrumbs, Header, Loader } from "@plane/ui";
+import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
@@ -16,15 +16,27 @@ import { RequirementDetailGrid } from "@/components/template-management/requirem
 import { RequirementFieldBuilder } from "@/components/template-management/requirements/requirement-field-builder";
 import { hasValidRequirementSelectOptions } from "@/components/template-management/requirements/requirement-select";
 import { useProductMembers } from "@/hooks/store/use-product-members";
+import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { useRequirementDetails } from "@/hooks/store/use-requirement-template-details";
 import { useUser } from "@/hooks/store/user";
+import { RequirementChangesTab } from "./change/requirement-changes-tab";
+import { RequirementStateBanner } from "./change/requirement-state-banner";
+import { RequirementStatusActions } from "./change/requirement-status-actions";
+import { SubmitChangeModal } from "./change/submit-change-modal";
+import { useRequirementStateActions } from "./change/use-requirement-state-actions";
+import { VersionHistory } from "./change/version-history";
 import { useProductRequirementsContext } from "./context";
+import { ReadOnlyFieldStructure, ReadOnlyRequirementSettings } from "./requirement-read-only-configuration";
 import {
   RequirementConfigurationNavigation,
   RequirementSettingsPanel,
   type TRequirementConfigurationSection,
   type TRequirementSettingsDraft,
 } from "./requirement-settings-panel";
+
+const TABS = ["data", "configuration", "changes", "versions"] as const;
+
+type TRequirementDetailTab = (typeof TABS)[number];
 
 const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   id: field.id,
@@ -52,58 +64,10 @@ const toSettingsDraft = (requirement: TRequirement): TRequirementSettingsDraft =
 
 const serializeSettings = (settings: TRequirementSettingsDraft) => JSON.stringify(settings);
 
-function ReadOnlyFieldStructure({ fields }: { fields: TRequirementField[] }) {
-  const { t } = useTranslation();
-  return (
-    <div className="mx-auto max-w-4xl space-y-3 px-5 py-6 md:px-8">
-      <div className="mb-5">
-        <h2 className="text-15 font-semibold text-primary">
-          {t("workspace_products.requirements.configuration.title")}
-        </h2>
-        <p className="mt-1 text-12 text-secondary">{t("workspace_products.requirements.configuration.read_only")}</p>
-      </div>
-      {fields.length ? (
-        fields.map((field) => (
-          <div key={field.id} className="rounded-lg border border-subtle bg-surface-1 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-12 font-medium text-primary">{field.name}</p>
-                <p className="mt-0.5 text-10 text-tertiary">
-                  {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
-                </p>
-              </div>
-              <span className="rounded bg-layer-2 px-2 py-1 text-10 text-secondary">
-                {field.is_active
-                  ? t("workspace_templates.requirements.active")
-                  : t("workspace_templates.requirements.inactive")}
-              </span>
-            </div>
-            {field.children.length > 0 && (
-              <div className="mt-3 grid gap-2 border-t border-subtle pt-3 sm:grid-cols-2">
-                {field.children.map((child) => (
-                  <div key={child.id} className="rounded-md bg-layer-1 px-3 py-2">
-                    <p className="text-11 font-medium text-primary">{child.name}</p>
-                    <p className="mt-0.5 text-10 text-tertiary">
-                      {t(`workspace_templates.requirements.field_types.${child.field_type}`)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))
-      ) : (
-        <div className="rounded-lg border border-dashed border-subtle px-6 py-12 text-center text-12 text-tertiary">
-          {t("workspace_templates.requirements.fields.empty")}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export const ProductRequirementDetailPage = observer(function ProductRequirementDetailPage() {
   const { t } = useTranslation();
   const { requirementId } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workspaceSlug, productId, requirements, upsertRequirement } = useProductRequirementsContext();
   const { members } = useProductMembers(workspaceSlug, productId);
@@ -121,9 +85,29 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     onRequirementUpdate: upsertRequirement,
   });
   const requirement = detailsStore.configuration?.requirement ?? requirements.find((item) => item.id === requirementId);
-  const requestedTab = searchParams.get("tab");
-  const activeTab = requestedTab === "configuration" ? "configuration" : "data";
+  const requestedTab = searchParams.get("tab") as TRequirementDetailTab | null;
+  const activeTab: TRequirementDetailTab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "data";
+  const openedChangeRequestId = searchParams.get("cr");
   const canEdit = Boolean(requirement?.can_edit);
+  /**
+   * 只有草稿态可写，与后端 READ_ONLY_REASONS 一致：已发布内容要先点「编辑」生成工作
+   * 副本，审批期草稿已被冻结成变更单快照。否则用户能进编辑态但保存拿到 409。
+   */
+  const isEditable = canEdit && requirement?.status === "draft";
+  const configurationReadOnlyHint = t(
+    !canEdit
+      ? "workspace_products.requirements.configuration.read_only"
+      : requirement?.status === "in_review"
+        ? "workspace_products.requirements.configuration.read_only_in_review"
+        : "workspace_products.requirements.configuration.read_only_published"
+  );
+  const changesStore = useRequirementChangeRequests({
+    workspaceSlug,
+    requirementId,
+    onRequirementUpdate: upsertRequirement,
+  });
+  const pendingChangeRequest = changesStore.changeRequestsPage.results.find((item) => item.status === "pending");
+  const pendingCount = changesStore.changeRequestsPage.results.filter((item) => item.status === "pending").length;
   const memberOptions = useMemo(() => {
     const byId = new Map<string, IUserLite>();
     members.forEach((membership) => byId.set(membership.member, membership.member_detail));
@@ -152,12 +136,35 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     setSettingsBaseline(serializeSettings(nextSettings));
   }, [detailsStore.configuration]);
 
-  const setTab = (tab: "data" | "configuration") => {
+  const setTab = (tab: TRequirementDetailTab) => {
     if (isDataEditing || (activeTab === "configuration" && isDirty)) return;
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
+    next.delete("cr");
     setSearchParams(next, { replace: true });
   };
+
+  const openChangeRequest = (changeRequestId: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", "changes");
+    if (changeRequestId) next.set("cr", changeRequestId);
+    else next.delete("cr");
+    setSearchParams(next, { replace: true });
+  };
+
+  const refreshLayer = () => {
+    void detailsStore.fetchConfiguration().catch(() => undefined);
+    void detailsStore.fetchDetails().catch(() => undefined);
+  };
+
+  const stateActions = useRequirementStateActions({
+    requirement,
+    changesStore,
+    pendingChangeRequestId: pendingChangeRequest?.id ?? null,
+    onLayerChanged: refreshLayer,
+    onDeleted: () => navigate(`/${workspaceSlug}/products/${productId}/requirements`),
+    onSubmitted: () => setTab("changes"),
+  });
 
   const saveConfiguration = async (confirmDataLoss = false) => {
     if (!detailsStore.configuration || !requirement || !settingsDraft) return;
@@ -301,7 +308,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               </Breadcrumbs>
             </Header.LeftItem>
             <Header.RightItem className="gap-2">
-              {activeTab === "configuration" && canEdit && (
+              {activeTab === "configuration" && isEditable && (
                 <Button
                   variant="primary"
                   disabled={!isDirty}
@@ -311,6 +318,18 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   <Save className="size-3.5" />
                   {t("workspace_products.requirements.configuration.save")}
                 </Button>
+              )}
+              {requirement && (
+                <RequirementStatusActions
+                  requirement={requirement}
+                  isSubmitter={Boolean(pendingChangeRequest?.can_cancel)}
+                  isMutating={changesStore.isMutating}
+                  onEdit={() => void stateActions.startEditing()}
+                  onSubmitReview={stateActions.openSubmitModal}
+                  onDiscardDraft={stateActions.openDiscardModal}
+                  onWithdrawReview={stateActions.openWithdrawModal}
+                  onGoApprove={() => openChangeRequest(pendingChangeRequest?.id ?? null)}
+                />
               )}
             </Header.RightItem>
           </Header>
@@ -326,6 +345,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 icon: Settings2,
                 label: t("workspace_products.requirements.tabs.configuration"),
               },
+              { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
+              { key: "versions" as const, icon: GitBranch, label: t("workspace_products.requirements.tabs.versions") },
             ].map((tab) => {
               const Icon = tab.icon;
               return (
@@ -343,12 +364,24 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 >
                   <Icon className="size-3.5" />
                   {tab.label}
+                  {tab.key === "changes" && pendingCount > 0 && (
+                    <span className="ml-1 grid size-4 place-items-center rounded-full bg-warning-primary text-10 text-on-color">
+                      {pendingCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
           {activeTab === "data" && <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 items-center" />}
         </nav>
+
+        {requirement && (activeTab === "data" || activeTab === "configuration") && (
+          <RequirementStateBanner
+            requirement={requirement}
+            onViewChangeRequest={() => openChangeRequest(requirement.pending_change_request_id)}
+          />
+        )}
 
         {detailsStore.configurationError && !detailsStore.configuration ? (
           <div className="grid flex-1 place-items-center p-6 text-center">
@@ -364,11 +397,42 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               </Button>
             </div>
           </div>
+        ) : activeTab === "changes" ? (
+          <RequirementChangesTab
+            workspaceSlug={workspaceSlug}
+            requirementId={requirementId ?? ""}
+            fields={detailsStore.configuration?.fields ?? []}
+            store={changesStore}
+            openedChangeRequestId={openedChangeRequestId}
+            onOpenChangeRequest={openChangeRequest}
+            onSettled={() => {
+              refreshLayer();
+              void changesStore.fetchChangeRequests().catch(() => undefined);
+            }}
+          />
+        ) : activeTab === "versions" ? (
+          requirement ? (
+            <VersionHistory
+              workspaceSlug={workspaceSlug}
+              requirement={requirement}
+              currentFields={detailsStore.configuration?.fields ?? []}
+              onRequirementUpdate={(next) => {
+                upsertRequirement(next);
+                refreshLayer();
+              }}
+            />
+          ) : (
+            <div className="p-6">
+              <Loader>
+                <Loader.Item height="420px" />
+              </Loader>
+            </div>
+          )
         ) : activeTab === "data" ? (
           <RequirementDetailGrid
             workspaceSlug={workspaceSlug}
             requirementId={requirementId ?? ""}
-            readOnly={!canEdit}
+            readOnly={!isEditable}
             expectedUpdatedAt={detailsStore.configuration?.requirement.updated_at}
             fields={detailsStore.configuration?.fields ?? []}
             details={detailsStore.detailsPage.results}
@@ -399,7 +463,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               <Loader.Item height="420px" />
             </Loader>
           </div>
-        ) : canEdit ? (
+        ) : isEditable ? (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="shrink-0 border-b border-subtle xl:hidden">
               <RequirementConfigurationNavigation
@@ -450,9 +514,66 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             )}
           </div>
         ) : (
-          <ReadOnlyFieldStructure fields={detailsStore.configuration?.fields ?? []} />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="shrink-0 border-b border-subtle xl:hidden">
+              <RequirementConfigurationNavigation
+                activeSection={configurationSection}
+                onSectionChange={setConfigurationSection}
+                orientation="horizontal"
+              />
+            </div>
+            <div className="flex min-h-0 flex-1">
+              <aside className="hidden w-52 shrink-0 border-r border-subtle bg-surface-1 xl:block">
+                <RequirementConfigurationNavigation
+                  activeSection={configurationSection}
+                  onSectionChange={setConfigurationSection}
+                />
+              </aside>
+              {configurationSection === "settings" && requirement ? (
+                <ReadOnlyRequirementSettings requirement={requirement} hint={configurationReadOnlyHint} />
+              ) : (
+                <ReadOnlyFieldStructure
+                  fields={detailsStore.configuration?.fields ?? []}
+                  hint={configurationReadOnlyHint}
+                />
+              )}
+            </div>
+          </div>
         )}
       </ContentWrapper>
+
+      <SubmitChangeModal
+        isOpen={stateActions.isSubmitModalOpen}
+        isSubmitting={changesStore.isMutating}
+        onClose={stateActions.closeSubmitModal}
+        onSubmit={(reason) => void stateActions.submitReview(reason)}
+      />
+      <AlertModalCore
+        isOpen={stateActions.isDiscardModalOpen}
+        isSubmitting={changesStore.isMutating}
+        handleClose={stateActions.closeDiscardModal}
+        handleSubmit={() => void stateActions.discardDraft()}
+        title={t(
+          stateActions.hasPublishedVersion
+            ? "workspace_products.requirements.state.discard_draft_title"
+            : "workspace_products.requirements.state.delete_requirement_title"
+        )}
+        content={
+          stateActions.hasPublishedVersion
+            ? t("workspace_products.requirements.state.discard_draft_description", {
+                version: requirement?.current_version ?? "",
+              })
+            : t("workspace_products.requirements.state.delete_requirement_description")
+        }
+      />
+      <AlertModalCore
+        isOpen={stateActions.isWithdrawModalOpen}
+        isSubmitting={changesStore.isMutating}
+        handleClose={stateActions.closeWithdrawModal}
+        handleSubmit={() => void stateActions.withdrawReview()}
+        title={t("workspace_products.requirements.state.withdraw_review_title")}
+        content={t("workspace_products.requirements.state.withdraw_review_description")}
+      />
     </>
   );
 });

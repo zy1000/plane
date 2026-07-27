@@ -27,6 +27,7 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
   const [search, setSearch] = useState("");
   const [statusFilters, setStatusFilters] = useState<TRequirementStatus[]>([]);
   const [ownerFilters, setOwnerFilters] = useState<string[]>([]);
+  const [pendingMyApprovalOnly, setPendingMyApprovalOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
 
@@ -122,9 +123,10 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
         !normalizedSearch || `${requirement.title} ${plainDescription}`.toLocaleLowerCase().includes(normalizedSearch);
       const matchesStatus = statusFilters.length === 0 || statusFilters.includes(requirement.status);
       const matchesOwner = ownerFilters.length === 0 || ownerFilters.includes(requirement.owner_id);
-      return matchesSearch && matchesStatus && matchesOwner;
+      const matchesApproval = !pendingMyApprovalOnly || requirement.can_approve;
+      return matchesSearch && matchesStatus && matchesOwner && matchesApproval;
     });
-  }, [ownerFilters, requirements, search, statusFilters]);
+  }, [ownerFilters, pendingMyApprovalOnly, requirements, search, statusFilters]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequirements.length / perPage));
   const safePage = Math.min(page, totalPages);
@@ -140,12 +142,14 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
     search,
     statusFilters,
     ownerFilters,
+    pendingMyApprovalOnly,
     page: safePage,
     perPage,
     totalPages,
     setSearch,
     setStatusFilters,
     setOwnerFilters,
+    setPendingMyApprovalOnly,
     setPage,
     setPerPage,
     fetchRequirements,

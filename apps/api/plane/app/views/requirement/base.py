@@ -19,10 +19,17 @@ from plane.app.serializers.requirement import (
     RequirementSerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
+from plane.app.views.requirement.mixins import (
+    RequirementDraftDispatchMixin,
+    resolve_detail_layer,
+)
 from plane.db.models import (
     Product,
     Requirement,
     RequirementApprover,
+    RequirementChangeApproval,
+    RequirementChangeRequest,
+    RequirementChangeStatus,
     RequirementDetail,
     Workspace,
 )
@@ -35,10 +42,25 @@ from plane.utils.requirement import (
     RequirementDataLossError,
     RequirementDetailBatchConflict,
     filter_requirement_detail_ids,
-    insert_requirement_detail,
-    save_requirement_detail_batch,
     serialize_requirement_field_tree,
 )
+from plane.utils.requirement_draft import get_draft_field_tree
+
+
+def pending_change_requests():
+    """待审批的变更单（含审批记录），供需求序列化器判断「待我审批」。"""
+    return (
+        RequirementChangeRequest.objects.filter(status=RequirementChangeStatus.PENDING)
+        .order_by("-created_at")
+        .prefetch_related(
+            Prefetch(
+                "approvals",
+                queryset=RequirementChangeApproval.objects.order_by(
+                    "created_at", "id"
+                ),
+            )
+        )
+    )
 
 
 class RequirementViewSet(BaseViewSet):
@@ -72,7 +94,14 @@ class RequirementViewSet(BaseViewSet):
                 "created_by",
                 "updated_by",
             )
-            .prefetch_related(Prefetch("approvers", queryset=approvers))
+            .prefetch_related(
+                Prefetch("approvers", queryset=approvers),
+                Prefetch(
+                    "change_requests",
+                    queryset=pending_change_requests(),
+                    to_attr="pending_change_requests",
+                ),
+            )
             .annotate(
                 field_count=Count("fields", distinct=True),
                 detail_count=Count("details", distinct=True),
@@ -233,7 +262,7 @@ class RequirementViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RequirementConfigurationAPIView(BaseAPIView):
+class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView):
     def _get_requirement(self, slug, pk, *, for_update=False):
         queryset = Requirement.objects.filter(
             workspace__slug=slug,
@@ -268,10 +297,16 @@ class RequirementConfigurationAPIView(BaseAPIView):
                     queryset=RequirementApprover.objects.select_related(
                         "approver"
                     ).order_by("sort_order", "created_at", "id"),
-                )
+                ),
+                Prefetch(
+                    "change_requests",
+                    queryset=pending_change_requests(),
+                    to_attr="pending_change_requests",
+                ),
             )
             .get()
         )
+        draft = self.draft_for_read(requirement)
         return {
             "requirement": RequirementSerializer(
                 requirement,
@@ -280,7 +315,11 @@ class RequirementConfigurationAPIView(BaseAPIView):
                     "workspace": requirement.workspace,
                 },
             ).data,
-            "fields": serialize_requirement_field_tree(requirement),
+            "fields": (
+                get_draft_field_tree(draft)
+                if draft is not None
+                else serialize_requirement_field_tree(requirement)
+            ),
             "created_field_ids": created_field_ids or {},
         }
 
@@ -305,12 +344,16 @@ class RequirementConfigurationAPIView(BaseAPIView):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        read_only = self.read_only_response(requirement)
+        if read_only is not None:
+            return read_only
         serializer = RequirementConfigurationWriteSerializer(
             data=request.data,
             context={
                 "request": request,
                 "workspace": requirement.workspace,
                 "requirement": requirement,
+                "draft": self.draft_for_write(requirement, request.user),
             },
         )
         serializer.is_valid(raise_exception=True)
@@ -344,9 +387,28 @@ class RequirementConfigurationAPIView(BaseAPIView):
         )
 
 
-class RequirementDetailViewSet(BaseViewSet):
+class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseViewSet):
     model = RequirementDetail
     serializer_class = RequirementDetailSerializer
+
+    def _read_layer(self, requirement):
+        return resolve_detail_layer(
+            requirement=requirement,
+            draft=self.draft_for_read(requirement),
+        )
+
+    def _write_layer(self, requirement):
+        """返回 (layer, error_response)。"""
+        read_only = self.read_only_response(requirement)
+        if read_only is not None:
+            return None, read_only
+        return (
+            resolve_detail_layer(
+                requirement=requirement,
+                draft=self.draft_for_write(requirement, self.request.user),
+            ),
+            None,
+        )
 
     def _get_requirement(self, *, for_update=False):
         queryset = Requirement.objects.filter(
@@ -407,10 +469,11 @@ class RequirementDetailViewSet(BaseViewSet):
                 {"filters": "Filters must be a JSON array."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        layer = self._read_layer(requirement)
         filter_serializer = RequirementDetailFilterSerializer(
             data=filter_payload,
             many=True,
-            context={"requirement": requirement},
+            context={"requirement": requirement, "fields": layer.fields},
         )
         filter_serializer.is_valid(raise_exception=True)
         normalized_filters = [
@@ -422,11 +485,12 @@ class RequirementDetailViewSet(BaseViewSet):
             for item in filter_serializer.validated_data
         ]
 
-        queryset = self.get_queryset()
+        queryset = layer.queryset
         search = request.query_params.get("search", "")
         if search.strip() or normalized_filters:
             matching_ids = filter_requirement_detail_ids(
-                requirement=requirement,
+                fields=layer.fields,
+                details=queryset,
                 search=search,
                 filters=normalized_filters,
             )
@@ -434,8 +498,10 @@ class RequirementDetailViewSet(BaseViewSet):
         return self.paginate(
             request=request,
             queryset=queryset,
-            on_results=lambda results: RequirementDetailSerializer(
-                results, many=True
+            on_results=lambda results: layer.serializer_class(
+                results,
+                many=True,
+                context=layer.serializer_context,
             ).data,
             default_per_page=20,
             max_per_page=100,
@@ -453,15 +519,17 @@ class RequirementDetailViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        layer, read_only = self._write_layer(requirement)
+        if read_only is not None:
+            return read_only
         serializer = RequirementDetailCreateSerializer(
             data=request.data,
-            context={"requirement": requirement},
+            context={"requirement": requirement, "fields": layer.fields},
         )
         serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
-                detail = insert_requirement_detail(
-                    requirement=requirement,
+                detail = layer.insert(
                     data=serializer.validated_data["data"],
                     actor=request.user,
                     before_id=serializer.validated_data.get("before_id"),
@@ -473,7 +541,7 @@ class RequirementDetailViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(
-            RequirementDetailSerializer(detail).data,
+            layer.serializer_class(detail, context=layer.serializer_context).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -489,13 +557,16 @@ class RequirementDetailViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        layer, read_only = self._write_layer(requirement)
+        if read_only is not None:
+            return read_only
         serializer = RequirementDetailUpdateSerializer(
             data=request.data,
-            context={"requirement": requirement},
+            context={"requirement": requirement, "fields": layer.fields},
         )
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
-            detail = self.get_queryset().select_for_update().filter(id=pk).first()
+            detail = layer.queryset.select_for_update().filter(id=pk).first()
             if detail is None:
                 return Response(
                     {"error": "Requirement detail not found."},
@@ -517,7 +588,7 @@ class RequirementDetailViewSet(BaseViewSet):
                 update_fields=["data", "version", "updated_at", "updated_by"]
             )
         return Response(
-            RequirementDetailSerializer(detail).data,
+            layer.serializer_class(detail, context=layer.serializer_context).data,
             status=status.HTTP_200_OK,
         )
 
@@ -533,13 +604,16 @@ class RequirementDetailViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        detail = self.get_queryset().filter(id=pk).first()
+        layer, read_only = self._write_layer(requirement)
+        if read_only is not None:
+            return read_only
+        detail = layer.queryset.filter(id=pk).first()
         if detail is None:
             return Response(
                 {"error": "Requirement detail not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        detail.delete()
+        detail.delete(soft=not layer.hard_delete)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_destroy(self, request, slug, requirement_id):
@@ -554,6 +628,9 @@ class RequirementDetailViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        layer, read_only = self._write_layer(requirement)
+        if read_only is not None:
+            return read_only
         ids_serializer = drf_serializers.ListField(
             child=drf_serializers.UUIDField(), allow_empty=False
         )
@@ -561,13 +638,13 @@ class RequirementDetailViewSet(BaseViewSet):
             detail_ids = ids_serializer.run_validation(request.data.get("ids"))
         except drf_serializers.ValidationError as exc:
             return Response({"ids": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
-        queryset = self.get_queryset().filter(id__in=detail_ids)
+        queryset = layer.queryset.filter(id__in=detail_ids)
         if queryset.count() != len(set(detail_ids)):
             return Response(
                 {"ids": "One or more details were not found."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        queryset.delete()
+        queryset.delete(soft=not layer.hard_delete)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_save(self, request, slug, requirement_id):
@@ -584,9 +661,12 @@ class RequirementDetailViewSet(BaseViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            layer, read_only = self._write_layer(requirement)
+            if read_only is not None:
+                return read_only
             serializer = RequirementDetailBatchSaveSerializer(
                 data=request.data,
-                context={"requirement": requirement},
+                context={"requirement": requirement, "fields": layer.fields},
             )
             serializer.is_valid(raise_exception=True)
             if (
@@ -603,8 +683,7 @@ class RequirementDetailViewSet(BaseViewSet):
                 )
 
             try:
-                created, updated, deleted_ids = save_requirement_detail_batch(
-                    requirement=requirement,
+                created, updated, deleted_ids = layer.save_batch(
                     creates=serializer.validated_data["creates"],
                     updates=serializer.validated_data["updates"],
                     deletes=serializer.validated_data["deletes"],
@@ -625,11 +704,15 @@ class RequirementDetailViewSet(BaseViewSet):
                 "created": [
                     {
                         "client_id": str(client_id),
-                        "detail": RequirementDetailSerializer(detail).data,
+                        "detail": layer.serializer_class(
+                            detail, context=layer.serializer_context
+                        ).data,
                     }
                     for client_id, detail in created
                 ],
-                "updated": RequirementDetailSerializer(updated, many=True).data,
+                "updated": layer.serializer_class(
+                    updated, many=True, context=layer.serializer_context
+                ).data,
                 "deleted_ids": [str(detail_id) for detail_id in deleted_ids],
             },
             status=status.HTTP_200_OK,

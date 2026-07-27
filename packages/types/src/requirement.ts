@@ -1,7 +1,7 @@
 import type { TPaginatedResponse } from "./pagination";
 import type { IUserLite } from "./users";
 
-export type TRequirementStatus = "draft" | "in_review" | "published" | "changing";
+export type TRequirementStatus = "draft" | "in_review" | "published";
 export type TRequirementApprovalType = "any" | "all" | "n_of_m";
 export type TRequirementFieldType =
   | "text"
@@ -61,6 +61,10 @@ export type TRequirement = {
   field_count: number;
   detail_count: number;
   can_edit: boolean;
+  /** null = 从未发布，前端靠它区分「撤回草稿」的两种语义 */
+  current_version: number | null;
+  pending_change_request_id: string | null;
+  can_approve: boolean;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -202,3 +206,129 @@ export type TRequirementConfigurationPayload = {
 };
 
 export type TRequirementDetailsResponse = TPaginatedResponse<TRequirementDetail[]>;
+
+/* --- 变更审批与版本 ------------------------------------------------------ */
+
+export type TRequirementChangeStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type TRequirementChangeRequestKind = "initial_publish" | "change";
+export type TRequirementChangeType = "create" | "update" | "delete";
+/** 变更项分为三组：基本信息 / 字段定义 / 明细数据 */
+export type TRequirementChangeTargetKind = "requirement" | "schema" | "detail_data";
+export type TRequirementApprovalAction = "approved" | "rejected";
+
+export type TRequirementChangeApproval = {
+  id: string;
+  approver_id: string;
+  approver_detail: IUserLite;
+  action: TRequirementApprovalAction | null;
+  comment: string | null;
+  acted_at: string | null;
+};
+
+/** 基本信息组的变更项快照形状 */
+export type TRequirementMetaChangeSnapshot = {
+  field: string;
+  value: unknown;
+};
+
+/** 字段定义组的变更项快照形状 */
+export type TRequirementSchemaChangeSnapshot = {
+  id: string;
+  parent_field_id: string | null;
+  parent_name: string | null;
+  name: string;
+  field_type: TRequirementFieldType;
+  is_required: boolean;
+  is_active: boolean;
+  sort_order: number;
+  config: TRequirementField["config"];
+  default_value: TRequirementDetailValue;
+};
+
+/** 明细数据组的变更项快照形状 */
+export type TRequirementDetailChangeSnapshot = {
+  id: string;
+  data: TRequirementDetailData;
+  sort_order: number;
+};
+
+export type TRequirementChangeItem = {
+  id: string;
+  target_kind: TRequirementChangeTargetKind;
+  change_type: TRequirementChangeType;
+  target_id: string | null;
+  before_snapshot: unknown;
+  proposed_snapshot: unknown;
+  base_version: number | null;
+  proposed_sort_order: number | null;
+};
+
+export type TRequirementChangeRequest = {
+  id: string;
+  requirement_id: string;
+  sequence_id: number;
+  request_kind: TRequirementChangeRequestKind;
+  status: TRequirementChangeStatus;
+  reason: string;
+  base_version: number | null;
+  approval_type: TRequirementApprovalType;
+  required_count: number | null;
+  created_count: number;
+  updated_count: number;
+  deleted_count: number;
+  item_count: number;
+  /** 本次变更涉及的根字段 ID，供「仅显示变化列」使用 */
+  changed_field_ids: string[];
+  approvals: TRequirementChangeApproval[];
+  total_count: number;
+  approved_count: number;
+  rejected_count: number;
+  can_approve: boolean;
+  can_cancel: boolean;
+  created_by: string | null;
+  created_by_detail: IUserLite | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+/** 变更单详情只内联基本信息与字段定义两组，明细组走 items 分页端点 */
+export type TRequirementChangeRequestDetail = TRequirementChangeRequest & {
+  requirement_title: string;
+  requirement_items: TRequirementChangeItem[];
+  schema_items: TRequirementChangeItem[];
+  detail_item_count: number;
+};
+
+export type TRequirementVersion = {
+  id: string;
+  requirement_id: string;
+  version: number;
+  change_type: TRequirementChangeType;
+  approved_by: string[];
+  change_request_id: string | null;
+  change_request_sequence_id: number | null;
+  change_request_reason: string | null;
+  created_by: string | null;
+  created_by_detail: IUserLite | null;
+  created_at: string;
+};
+
+export type TRequirementVersionDetail = TRequirementVersion & {
+  requirement_snapshot: Record<string, unknown>;
+  fields_snapshot: TRequirementField[];
+  detail_count: number;
+};
+
+export type TRequirementWorkingCopyResponse = {
+  requirement: TRequirement;
+};
+
+export type TRequirementDiscardDraftResponse = {
+  outcome: "deleted" | "reverted";
+  requirement?: TRequirement;
+};
+
+export type TRequirementChangeRequestsResponse = TPaginatedResponse<TRequirementChangeRequest[]>;
+export type TRequirementChangeItemsResponse = TPaginatedResponse<TRequirementChangeItem[]>;
+export type TRequirementVersionsResponse = TPaginatedResponse<TRequirementVersion[]>;
+export type TRequirementVersionDetailsResponse = TPaginatedResponse<TRequirementDetailChangeSnapshot[]>;

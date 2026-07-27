@@ -6,29 +6,41 @@ import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { FilterHeader, FilterOption, FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 
-const REQUIREMENT_STATUSES: TRequirementStatus[] = ["draft", "in_review", "published", "changing"];
+const REQUIREMENT_STATUSES: TRequirementStatus[] = ["draft", "in_review", "published"];
 
 type TProductRequirementFiltersProps = {
   statusFilters: TRequirementStatus[];
   ownerFilters: string[];
   ownerOptions: IUserLite[];
+  pendingMyApprovalOnly: boolean;
   onStatusFiltersChange: (value: TRequirementStatus[]) => void;
   onOwnerFiltersChange: (value: string[]) => void;
+  onPendingMyApprovalOnlyChange: (value: boolean) => void;
 };
 
 const toggleValue = <T,>(values: T[], value: T) =>
   values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 
 export function ProductRequirementFilters(props: TProductRequirementFiltersProps) {
-  const { statusFilters, ownerFilters, ownerOptions, onStatusFiltersChange, onOwnerFiltersChange } = props;
+  const {
+    statusFilters,
+    ownerFilters,
+    ownerOptions,
+    pendingMyApprovalOnly,
+    onStatusFiltersChange,
+    onOwnerFiltersChange,
+    onPendingMyApprovalOnlyChange,
+  } = props;
   const { t } = useTranslation();
   const [filtersSearchQuery, setFiltersSearchQuery] = useState("");
   const [statusPreviewEnabled, setStatusPreviewEnabled] = useState(true);
   const [ownerPreviewEnabled, setOwnerPreviewEnabled] = useState(true);
 
-  const hasActiveFilters = statusFilters.length > 0 || ownerFilters.length > 0;
+  const hasActiveFilters = statusFilters.length > 0 || ownerFilters.length > 0 || pendingMyApprovalOnly;
   const normalizedQuery = filtersSearchQuery.trim().toLocaleLowerCase();
   const TriggerIcon = hasActiveFilters ? FilterAppliedIcon : FilterIcon;
+  const approvalOptionLabel = t("workspace_products.requirements.status.pending_my_approval");
+  const showApprovalOption = !normalizedQuery || approvalOptionLabel.toLocaleLowerCase().includes(normalizedQuery);
 
   const filteredStatuses = useMemo(
     () =>
@@ -100,15 +112,24 @@ export function ProductRequirementFilters(props: TProductRequirementFiltersProps
             />
             {statusPreviewEnabled && (
               <div>
-                {filteredStatuses.length > 0 ? (
-                  filteredStatuses.map((status) => (
-                    <FilterOption
-                      key={status}
-                      isChecked={statusFilters.includes(status)}
-                      onClick={() => onStatusFiltersChange(toggleValue(statusFilters, status))}
-                      title={t(`workspace_products.requirements.status.${status}`)}
-                    />
-                  ))
+                {filteredStatuses.length > 0 || showApprovalOption ? (
+                  <>
+                    {filteredStatuses.map((status) => (
+                      <FilterOption
+                        key={status}
+                        isChecked={statusFilters.includes(status)}
+                        onClick={() => onStatusFiltersChange(toggleValue(statusFilters, status))}
+                        title={t(`workspace_products.requirements.status.${status}`)}
+                      />
+                    ))}
+                    {showApprovalOption && (
+                      <FilterOption
+                        isChecked={pendingMyApprovalOnly}
+                        onClick={() => onPendingMyApprovalOnlyChange(!pendingMyApprovalOnly)}
+                        title={approvalOptionLabel}
+                      />
+                    )}
+                  </>
                 ) : (
                   <p className="fs-10 italic text-placeholder">{t("common.search.no_matching_results")}</p>
                 )}

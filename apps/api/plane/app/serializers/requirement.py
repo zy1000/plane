@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from django.db import transaction
 from django.utils.html import strip_tags
 from rest_framework import serializers
@@ -9,7 +11,9 @@ from plane.db.models import (
     Project,
     Requirement,
     RequirementApprovalType,
+    RequirementChangeStatus,
     RequirementDetail,
+    RequirementDraftDetail,
     RequirementField,
     RequirementFieldType,
     User,
@@ -18,13 +22,15 @@ from plane.utils.content_validator import validate_html_content
 from plane.utils.product import can_edit_product_requirements
 from plane.utils.requirement import (
     clone_requirement_children,
+    field_attr,
     get_requirement_eligible_user_ids,
+    get_requirement_field_specs,
     get_requirement_select_mode,
     get_requirement_select_options,
     replace_requirement_approvers,
-    serialize_requirement_field_tree,
     sync_requirement_fields,
 )
+from plane.utils.requirement_draft import get_draft_field_specs, save_draft_fields
 
 from .base import BaseSerializer
 
@@ -77,6 +83,8 @@ class RequirementSerializer(BaseSerializer):
     field_count = serializers.SerializerMethodField()
     detail_count = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
+    pending_change_request_id = serializers.SerializerMethodField()
+    can_approve = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
@@ -102,6 +110,9 @@ class RequirementSerializer(BaseSerializer):
             "field_count",
             "detail_count",
             "can_edit",
+            "current_version",
+            "pending_change_request_id",
+            "can_approve",
             "is_active",
             "sort_order",
             "created_at",
@@ -118,6 +129,9 @@ class RequirementSerializer(BaseSerializer):
             "field_count",
             "detail_count",
             "can_edit",
+            "current_version",
+            "pending_change_request_id",
+            "can_approve",
             "created_at",
             "updated_at",
             "created_by",
@@ -143,6 +157,33 @@ class RequirementSerializer(BaseSerializer):
         if obj.product_id:
             return can_edit_product_requirements(request.user, obj.product)
         return True
+
+    def _pending_change_request(self, obj):
+        """走 to_attr="pending_change_requests" 的预取，列表页不产生 N+1。"""
+        prefetched = getattr(obj, "pending_change_requests", None)
+        if prefetched is not None:
+            return prefetched[0] if prefetched else None
+        return (
+            obj.change_requests.filter(status=RequirementChangeStatus.PENDING)
+            .order_by("-created_at")
+            .first()
+        )
+
+    def get_pending_change_request_id(self, obj):
+        change_request = self._pending_change_request(obj)
+        return str(change_request.id) if change_request else None
+
+    def get_can_approve(self, obj):
+        request = self.context.get("request")
+        if request is None or request.user.is_anonymous:
+            return False
+        change_request = self._pending_change_request(obj)
+        if change_request is None:
+            return False
+        return any(
+            approval.approver_id == request.user.id and not approval.action
+            for approval in change_request.approvals.all()
+        )
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -607,10 +648,8 @@ def _canonical_asset_values(requirement, value, *, image_only=False):
 def validate_requirement_leaf_value(
     *, requirement, field, value, enforce_required=True
 ):
-    field_type = field.field_type if isinstance(field, RequirementField) else field["field_type"]
-    is_required = (
-        field.is_required if isinstance(field, RequirementField) else field.get("is_required", False)
-    )
+    field_type = field_attr(field, "field_type")
+    is_required = bool(field_attr(field, "is_required", False))
 
     if field_type in (RequirementFieldType.TEXT, RequirementFieldType.RICH_TEXT):
         if value is not None and not isinstance(value, str):
@@ -693,16 +732,19 @@ def validate_requirement_leaf_value(
     return value
 
 
-def validate_requirement_detail_data(*, requirement, data):
+def validate_requirement_detail_data(*, requirement, data, fields=None):
+    """校验并规范化一行明细数据。
+
+    fields 为 None 时从正式表读取字段定义；草稿路径传入草稿快照解析出的 spec
+    列表，从而与正式表共用同一套校验语义。
+    """
     if not isinstance(data, dict):
         raise serializers.ValidationError("Detail data must be an object.")
 
-    fields = list(
-        RequirementField.objects.filter(requirement=requirement).select_related(
-            "parent_field"
-        )
-    )
-    fields_by_id = {str(field.id): field for field in fields}
+    if fields is None:
+        fields = get_requirement_field_specs(requirement)
+    else:
+        fields = list(fields)
     roots = [field for field in fields if field.parent_field_id is None]
     children_by_parent = {}
     for field in fields:
@@ -799,11 +841,17 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
             raise serializers.ValidationError("Root field names must be unique.")
 
         requirement = self.context["requirement"]
-        existing_ids = set(
-            RequirementField.objects.filter(requirement=requirement).values_list(
-                "id", flat=True
+        draft = self.context.get("draft")
+        if draft is not None:
+            existing_ids = {
+                UUID(spec.id) for spec in get_draft_field_specs(draft)
+            }
+        else:
+            existing_ids = set(
+                RequirementField.objects.filter(requirement=requirement).values_list(
+                    "id", flat=True
+                )
             )
-        )
         submitted_ids = []
         for root in value:
             if root.get("id"):
@@ -838,6 +886,9 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
 
     def validate_requirement(self, value):
         requirement = self.context["requirement"]
+        # 非模板需求的状态只能由审批流转推动，配置保存里带上的 status 一律忽略
+        if not requirement.is_template:
+            value = {key: item for key, item in value.items() if key != "status"}
         serializer = RequirementSerializer(
             requirement,
             data=value,
@@ -869,12 +920,22 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
         self._requirement_serializer.instance = requirement
         requirement = self._requirement_serializer.save()
         request = self.context.get("request")
-        created_field_ids = sync_requirement_fields(
-            requirement=requirement,
-            field_payloads=self.validated_data["fields"],
-            actor=getattr(request, "user", None),
-            confirm_data_loss=self.validated_data["confirm_data_loss"],
-        )
+        draft = self.context.get("draft")
+        actor = getattr(request, "user", None)
+        if draft is not None:
+            created_field_ids = save_draft_fields(
+                draft=draft,
+                field_payloads=self.validated_data["fields"],
+                actor=actor,
+                confirm_data_loss=self.validated_data["confirm_data_loss"],
+            )
+        else:
+            created_field_ids = sync_requirement_fields(
+                requirement=requirement,
+                field_payloads=self.validated_data["fields"],
+                actor=actor,
+                confirm_data_loss=self.validated_data["confirm_data_loss"],
+            )
         requirement.refresh_from_db()
         return requirement, created_field_ids
 
@@ -900,6 +961,34 @@ class RequirementDetailSerializer(BaseSerializer):
         read_only_fields = fields
 
 
+class RequirementDraftDetailSerializer(BaseSerializer):
+    """草稿明细行，输出形状与正式明细行完全一致。
+
+    前端的明细网格因此不需要为草稿态做任何分支 —— 它看到的始终是同一份契约。
+    """
+
+    requirement_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RequirementDraftDetail
+        fields = [
+            "id",
+            "requirement_id",
+            "data",
+            "sort_order",
+            "version",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = fields
+
+    def get_requirement_id(self, obj):
+        requirement_id = self.context.get("requirement_id")
+        return str(requirement_id) if requirement_id else str(obj.draft.requirement_id)
+
+
 class RequirementDetailCreateSerializer(serializers.Serializer):
     data = serializers.DictField()
     before_id = serializers.UUIDField(required=False, allow_null=True)
@@ -913,6 +1002,7 @@ class RequirementDetailCreateSerializer(serializers.Serializer):
         attrs["data"] = validate_requirement_detail_data(
             requirement=self.context["requirement"],
             data=attrs["data"],
+            fields=self.context.get("fields"),
         )
         return attrs
 
@@ -925,6 +1015,7 @@ class RequirementDetailUpdateSerializer(serializers.Serializer):
         return validate_requirement_detail_data(
             requirement=self.context["requirement"],
             data=value,
+            fields=self.context.get("fields"),
         )
 
 
@@ -993,15 +1084,30 @@ class RequirementDetailFilterSerializer(serializers.Serializer):
     )
     value = serializers.JSONField(required=False, allow_null=True)
 
-    def validate(self, attrs):
-        field = (
+    def _resolve_field(self, field_id):
+        """字段来源可能是正式表，也可能是草稿快照解析出的 spec 列表。"""
+        fields = self.context.get("fields")
+        if fields is not None:
+            return next(
+                (
+                    field
+                    for field in fields
+                    if str(field_attr(field, "id")) == str(field_id)
+                    and field_attr(field, "field_type") != RequirementFieldType.FORM
+                ),
+                None,
+            )
+        return (
             RequirementField.objects.filter(
-                id=attrs["field_id"],
+                id=field_id,
                 requirement=self.context["requirement"],
             )
             .exclude(field_type=RequirementFieldType.FORM)
             .first()
         )
+
+    def validate(self, attrs):
+        field = self._resolve_field(attrs["field_id"])
         if field is None:
             raise serializers.ValidationError(
                 {"field_id": "The filter field was not found."}

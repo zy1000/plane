@@ -12,12 +12,12 @@ import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useRequirementTemplates } from "@/hooks/store/use-requirement-templates";
 import { useUser } from "@/hooks/store/user";
 import { useProductsContext } from "../context";
+import { PILL_BASE, REQUIREMENT_STATUS_PILL } from "./change/styles";
 import { useProductRequirementsContext } from "./context";
 import { RequirementApprovalSettings } from "./requirement-approval-settings";
 
 const EMPTY_DESCRIPTION = "<p></p>";
 
-const statuses: TRequirementStatus[] = ["draft", "in_review", "published", "changing"];
 const createSteps = ["basic", "template", "approval"] as const;
 
 type TCreateStep = (typeof createSteps)[number];
@@ -456,22 +456,19 @@ export function ProductRequirementModal() {
                   />
                 </div>
               </div>
-              <label className="block">
+              <div className="block">
                 <span className="mb-2 block text-12 font-medium text-primary">
                   {t("workspace_products.requirements.fields.status")}
                 </span>
-                <select
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value as TRequirementStatus)}
-                  className="focus:border-accent-primary h-10 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none"
-                >
-                  {statuses.map((value) => (
-                    <option key={value} value={value}>
-                      {t(`workspace_products.requirements.status.${value}`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <div className="flex h-10 w-full items-center gap-2 rounded-md border border-subtle bg-layer-2 px-3">
+                  <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[status])}>
+                    {t(`workspace_products.requirements.status.${status}`)}
+                  </span>
+                  <span className="truncate text-11 text-tertiary">
+                    {t("workspace_products.requirements.fields.status_hint")}
+                  </span>
+                </div>
+              </div>
             </section>
 
             <aside className="space-y-6 bg-surface-1 p-6 md:p-8">

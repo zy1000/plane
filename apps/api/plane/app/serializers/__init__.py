@@ -181,5 +181,16 @@ from .requirement import (
     RequirementDetailFilterSerializer,
     RequirementDetailSerializer,
     RequirementDetailUpdateSerializer,
+    RequirementDraftDetailSerializer,
     RequirementSerializer,
+)
+from .requirement_change import (
+    RequirementChangeActionSerializer,
+    RequirementChangeApprovalSerializer,
+    RequirementChangeItemSerializer,
+    RequirementChangeRequestDetailSerializer,
+    RequirementChangeRequestSerializer,
+    RequirementChangeSubmitSerializer,
+    RequirementVersionDetailSerializer,
+    RequirementVersionSerializer,
 )

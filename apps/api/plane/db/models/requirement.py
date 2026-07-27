@@ -22,10 +22,16 @@ class RequirementScope(models.TextChoices):
 
 
 class RequirementStatus(models.TextChoices):
+    """需求状态描述「编辑状态」，不描述「内容可用性」。
+
+    一旦发布过 v1，正式表就一直持有最后一次批准通过的内容 —— 即使因为正在
+    编辑而回到 draft。判断「是否有已发布内容」要看 current_version，不能用
+    status != draft。
+    """
+
     DRAFT = "draft", "草稿"
     IN_REVIEW = "in_review", "评审中"
     PUBLISHED = "published", "已发布"
-    CHANGING = "changing", "变更中"
 
 
 class RequirementFieldType(models.TextChoices):
@@ -58,6 +64,7 @@ class RequirementChangeStatus(models.TextChoices):
 
 
 class RequirementChangeTargetKind(models.TextChoices):
+    REQUIREMENT = "requirement", "基本信息"
     DETAIL_DATA = "detail_data", "明细数据"
     SCHEMA = "schema", "字段定义"
 
@@ -66,6 +73,13 @@ class RequirementChangeType(models.TextChoices):
     CREATE = "create", "新增"
     UPDATE = "update", "更新"
     DELETE = "delete", "删除"
+
+
+class RequirementChangeRequestKind(models.TextChoices):
+    """仅用于展示与统计，不参与状态流转判断。"""
+
+    INITIAL_PUBLISH = "initial_publish", "首次发布"
+    CHANGE = "change", "变更"
 
 
 # 说明：结构性规则（作用域组合、N_OF_M 的通过人数）由 DB CheckConstraint 兜底，
@@ -138,6 +152,11 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         verbose_name="最少通过人数（仅 N_OF_M 模式生效）",
+    )
+    current_version = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="当前已发布版本号（null 表示从未发布）",
     )
     is_active = models.BooleanField(default=True, verbose_name="是否启用")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
@@ -306,6 +325,98 @@ class RequirementDetail(BaseModel):
         return f"{self.requirement_id} / {self.id}"
 
 
+class RequirementDraft(BaseModel):
+    """需求的工作副本：承载未发布的编辑内容，正式表在审批通过前不受影响。
+
+    meta 与字段定义放在 snapshot（字段通常几十个以内，天然整体读写），明细行
+    拆到 RequirementDraftDetail —— 千行量级下 JSON blob 会让每次单元格保存都
+    重写整份文档，且无法用数据库分页/筛选，行级乐观锁也会退化。
+    """
+
+    workspace = models.ForeignKey(
+        "db.WorkSpace",
+        on_delete=models.CASCADE,
+        related_name="requirement_drafts",
+        verbose_name="所属工作区",
+    )
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="requirement_drafts",
+        null=True,
+        blank=True,
+        verbose_name="所属产品",
+    )
+    project = models.ForeignKey(
+        "db.Project",
+        on_delete=models.CASCADE,
+        related_name="requirement_drafts",
+        null=True,
+        blank=True,
+        verbose_name="所属项目",
+    )
+    requirement = models.OneToOneField(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="draft",
+        verbose_name="所属需求",
+    )
+    base_version = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="基准版本号（null 表示首次发布草稿）",
+    )
+    snapshot = models.JSONField(
+        default=dict, blank=True, verbose_name="草稿快照（meta + 字段定义）"
+    )
+
+    class Meta:
+        db_table = "requirement_drafts"
+        ordering = ("-updated_at",)
+
+    def __str__(self):
+        return f"draft of {self.requirement_id}"
+
+    def save(self, *args, **kwargs):
+        if not self.workspace_id and self.requirement_id:
+            source = self.requirement
+            self.workspace_id = source.workspace_id
+            self.product_id = source.product_id
+            self.project_id = source.project_id
+        return super().save(*args, **kwargs)
+
+
+class RequirementDraftDetail(BaseModel):
+    """草稿明细行。结构与 RequirementDetail 一致，外键换成草稿。
+
+    物化时直接复用这里的 UUID 作为正式表主键，因此明细 data 里以字段 ID 为 key
+    的结构不需要任何 remap。
+    """
+
+    draft = models.ForeignKey(
+        RequirementDraft,
+        on_delete=models.CASCADE,
+        related_name="details",
+        verbose_name="所属草稿",
+    )
+    data = models.JSONField(default=dict, blank=True, verbose_name="明细数据")
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+    version = models.PositiveIntegerField(default=1, verbose_name="当前版本")
+
+    class Meta:
+        db_table = "requirement_draft_details"
+        ordering = ("sort_order", "created_at", "id")
+        indexes = [
+            models.Index(
+                fields=["draft", "sort_order"],
+                name="req_draft_detail_draft_sort",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.draft_id} / {self.id}"
+
+
 class RequirementApprover(BaseModel):
     """需求的审批人名单（谁可以审批），与审批规则（approval_type/required_count）配套。
 
@@ -376,6 +487,28 @@ class RequirementChangeRequest(BaseModel):
         choices=RequirementChangeTargetKind.choices,
         verbose_name="变更目标类型",
     )
+    request_kind = models.CharField(
+        max_length=20,
+        choices=RequirementChangeRequestKind.choices,
+        default=RequirementChangeRequestKind.CHANGE,
+        verbose_name="变更单类型（仅用于展示与统计）",
+    )
+    sequence_id = models.PositiveIntegerField(
+        default=1, verbose_name="需求内自增序号（用于展示 CR-001）"
+    )
+    base_version = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="基准版本号（null 表示首次发布）",
+    )
+    created_count = models.PositiveIntegerField(default=0, verbose_name="新增项数")
+    updated_count = models.PositiveIntegerField(default=0, verbose_name="修改项数")
+    deleted_count = models.PositiveIntegerField(default=0, verbose_name="删除项数")
+    changed_field_ids = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="本次变更涉及的字段 ID（供「仅显示变化列」使用）",
+    )
     approval_type = models.CharField(
         max_length=10,
         choices=RequirementApprovalType.choices,
@@ -400,7 +533,18 @@ class RequirementChangeRequest(BaseModel):
     class Meta:
         db_table = "requirement_change_requests"
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=["requirement", "-created_at"],
+                name="req_change_requirement_created",
+            )
+        ]
         constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "sequence_id"],
+                condition=Q(deleted_at__isnull=True),
+                name="req_change_unique_requirement_sequence_active",
+            ),
             models.CheckConstraint(
                 check=Q(product__isnull=False, project__isnull=True)
                 | Q(product__isnull=True, project__isnull=False),
@@ -453,6 +597,12 @@ class RequirementChangeItem(BaseModel):
         related_name="items",
         verbose_name="所属变更请求",
     )
+    target_kind = models.CharField(
+        max_length=20,
+        choices=RequirementChangeTargetKind.choices,
+        default=RequirementChangeTargetKind.DETAIL_DATA,
+        verbose_name="变更目标类型",
+    )
     change_type = models.CharField(
         max_length=10,
         choices=RequirementChangeType.choices,
@@ -474,10 +624,16 @@ class RequirementChangeItem(BaseModel):
 
     class Meta:
         db_table = "requirement_change_items"
-        ordering = ("created_at", "id")
+        ordering = ("proposed_sort_order", "created_at", "id")
+        indexes = [
+            models.Index(
+                fields=["change_request", "target_kind", "proposed_sort_order"],
+                name="req_change_item_request_kind",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.change_type} / {self.target_id or 'new'}"
+        return f"{self.target_kind} / {self.change_type} / {self.target_id or 'new'}"
 
 
 class RequirementChangeApproval(BaseModel):
