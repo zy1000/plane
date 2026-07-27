@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useNavigate } from "react-router";
 import {
   ChevronLeft,
   ChevronRight,
@@ -45,7 +45,6 @@ const approvalSummary = (requirement: TRequirement, t: (key: string, values?: Re
 export const ProductRequirementList = observer(function ProductRequirementList() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { data: currentUser } = useUser();
   const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
   const { products } = useProductsContext();
@@ -84,20 +83,11 @@ export const ProductRequirementList = observer(function ProductRequirementList()
     isWorkspaceAdmin ||
     product?.owner === currentUser?.id ||
     members.some((membership) => membership.member === currentUser?.id);
-  const peekId = searchParams.get("peekRequirement");
-  const peekedRequirement = requirements.find((item) => item.id === peekId) ?? null;
 
   const ownerOptions = useMemo(() => {
     const byId = new Map(requirements.map((item) => [item.owner_id, item.owner_detail]));
     return Array.from(byId.values());
   }, [requirements]);
-
-  const setPeekRequirement = (requirementId?: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (requirementId) next.set("peekRequirement", requirementId);
-    else next.delete("peekRequirement");
-    setSearchParams(next, { replace: true });
-  };
 
   const openRequirement = (requirement: TRequirement, tab: "data" | "configuration" = "data") =>
     navigate(`/${workspaceSlug}/products/${productId}/requirements/${requirement.id}?tab=${tab}`);
@@ -106,7 +96,6 @@ export const ProductRequirementList = observer(function ProductRequirementList()
     if (!requirementToDelete) return;
     try {
       await deleteRequirement(requirementToDelete.id);
-      if (peekId === requirementToDelete.id) setPeekRequirement();
       setRequirementToDelete(null);
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -238,28 +227,17 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                         // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- An interactive table row cannot be replaced by a button without invalid table markup.
                         role="button"
                         tabIndex={0}
-                        onClick={() => setPeekRequirement(requirement.id)}
+                        onClick={() => openRequirement(requirement)}
                         onKeyDown={(event) => {
                           if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
                           event.preventDefault();
-                          setPeekRequirement(requirement.id);
+                          openRequirement(requirement);
                         }}
-                        aria-label={t("workspace_products.requirements.preview.open", {
-                          name: requirement.title,
-                        })}
+                        aria-label={t("workspace_products.requirements.actions.open_data")}
                         className="cursor-pointer border-b border-subtle/70 text-12 hover:bg-layer-transparent-hover"
                       >
                         <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openRequirement(requirement);
-                            }}
-                            className="block max-w-sm truncate text-left font-medium text-primary hover:text-accent-primary"
-                          >
-                            {requirement.title}
-                          </button>
+                          <p className="max-w-sm truncate font-medium text-primary">{requirement.title}</p>
                           <p className="mt-0.5 max-w-sm truncate text-11 text-tertiary">
                             {requirement.description_html
                               ? stripAndTruncateHTML(requirement.description_html, 100)
@@ -369,81 +347,6 @@ export const ProductRequirementList = observer(function ProductRequirementList()
             </>
           )}
         </main>
-
-        {peekedRequirement && (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-10 bg-backdrop md:hidden"
-              onClick={() => setPeekRequirement()}
-              aria-label={t("close")}
-            />
-            <aside className="fixed inset-y-0 right-0 z-20 flex w-[min(92vw,390px)] flex-col border-l border-subtle bg-surface-1 shadow-raised-200 md:relative md:inset-auto md:z-auto md:w-96 md:shadow-none">
-              <div className="flex items-center justify-between border-b border-subtle px-4 py-3">
-                <p className="text-11 font-semibold tracking-wide text-tertiary uppercase">
-                  {t("workspace_products.requirements.preview.title")}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setPeekRequirement()}
-                  className="grid size-7 place-items-center rounded text-secondary hover:bg-layer-transparent-hover"
-                  aria-label={t("close")}
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                <span className="rounded-full bg-layer-2 px-2 py-1 text-10 font-medium text-secondary">
-                  {t(`workspace_products.requirements.status.${peekedRequirement.status}`)}
-                </span>
-                <h2 className="text-17 mt-3 leading-6 font-semibold text-primary">{peekedRequirement.title}</h2>
-                <p className="mt-2 text-12 leading-5 text-secondary">
-                  {peekedRequirement.description_html
-                    ? stripAndTruncateHTML(peekedRequirement.description_html, 500)
-                    : t("workspace_products.requirements.fields.no_description")}
-                </p>
-                <dl className="mt-6 space-y-4 border-t border-subtle pt-5 text-12">
-                  <div>
-                    <dt className="text-11 text-tertiary">{t("workspace_products.requirements.fields.owner")}</dt>
-                    <dd className="mt-1 font-medium text-primary">{peekedRequirement.owner_detail.display_name}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-11 text-tertiary">{t("workspace_products.requirements.fields.approval")}</dt>
-                    <dd className="mt-1 font-medium text-primary">{approvalSummary(peekedRequirement, t)}</dd>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-md border border-subtle bg-layer-1 p-3">
-                      <dt className="text-10 text-tertiary">
-                        {t("workspace_products.requirements.fields.field_count")}
-                      </dt>
-                      <dd className="mt-1 text-18 font-semibold text-primary tabular-nums">
-                        {peekedRequirement.field_count}
-                      </dd>
-                    </div>
-                    <div className="rounded-md border border-subtle bg-layer-1 p-3">
-                      <dt className="text-10 text-tertiary">
-                        {t("workspace_products.requirements.fields.detail_count")}
-                      </dt>
-                      <dd className="mt-1 text-18 font-semibold text-primary tabular-nums">
-                        {peekedRequirement.detail_count}
-                      </dd>
-                    </div>
-                  </div>
-                </dl>
-              </div>
-              <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-subtle p-4">
-                <Button variant="secondary" onClick={() => openRequirement(peekedRequirement, "configuration")}>
-                  <Settings2 className="size-3.5" />
-                  {t("workspace_products.requirements.actions.configure")}
-                </Button>
-                <Button variant="primary" onClick={() => openRequirement(peekedRequirement, "data")}>
-                  <Database className="size-3.5" />
-                  {t("workspace_products.requirements.actions.open_data")}
-                </Button>
-              </div>
-            </aside>
-          </>
-        )}
       </ContentWrapper>
 
       <ProductRequirementModal />
