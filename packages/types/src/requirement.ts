@@ -320,6 +320,16 @@ export type TRequirementVersionDetail = TRequirementVersion & {
   detail_count: number;
 };
 
+export type TRequirementVersionComparisonResponse = TPaginatedResponse<TRequirementChangeItem[]> & {
+  from_version: number;
+  to_version: number;
+  requirement_items: TRequirementChangeItem[];
+  schema_items: TRequirementChangeItem[];
+  detail_item_count: number;
+  changed_field_ids: string[];
+  to_fields_snapshot: TRequirementField[];
+};
+
 export type TRequirementWorkingCopyResponse = {
   requirement: TRequirement;
 };

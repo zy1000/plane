@@ -927,6 +927,240 @@ class TestRequirementChangeApp:
         assert detail.data == {str(field.id): "v1"}
         assert requirement.current_version == 3
 
+    def test_version_rollback_is_blocked_while_a_change_is_under_review(
+        self, api_client
+    ):
+        approver = self.add_member()
+        requirement = self.create_requirement(approver)
+        field = self.add_field(requirement)
+        detail = RequirementDetail.objects.create(
+            requirement=requirement,
+            data={str(field.id): "published"},
+        )
+        self.publish(api_client, requirement, approver)
+
+        assert (
+            api_client.post(self.working_copy_url(requirement)).status_code
+            == status.HTTP_200_OK
+        )
+        draft = RequirementDraft.objects.get(requirement=requirement)
+        draft_detail = RequirementDraftDetail.objects.get(draft=draft, id=detail.id)
+        draft_detail.data = {str(field.id): "pending"}
+        draft_detail.save(update_fields=["data", "updated_at"])
+        submit_response = self.submit(api_client, requirement, reason="待审核变更")
+        assert submit_response.status_code == status.HTTP_201_CREATED
+
+        rollback_response = api_client.post(
+            self.url(
+                "requirement-version-rollback",
+                requirement_id=requirement.id,
+                version=1,
+            )
+        )
+
+        assert rollback_response.status_code == status.HTTP_409_CONFLICT
+        assert rollback_response.data == {
+            "error": (
+                "Withdraw or complete the current review before rolling back "
+                "this requirement."
+            ),
+            "code": "REQUIREMENT_IN_REVIEW",
+        }
+        requirement.refresh_from_db()
+        draft_detail.refresh_from_db()
+        assert requirement.status == RequirementStatus.IN_REVIEW
+        assert requirement.current_version == 1
+        assert draft_detail.data == {str(field.id): "pending"}
+        assert RequirementVersion.objects.filter(requirement=requirement).count() == 1
+
+    def test_version_compare_current_returns_all_diff_groups_and_paginated_details(
+        self, api_client
+    ):
+        approver = self.add_member()
+        requirement = self.create_requirement(approver)
+        field = self.add_field(requirement, sort_order=1000)
+        first_detail = RequirementDetail.objects.create(
+            requirement=requirement,
+            data={str(field.id): "First"},
+            sort_order=1000,
+        )
+        second_detail = RequirementDetail.objects.create(
+            requirement=requirement,
+            data={str(field.id): "Second"},
+            sort_order=2000,
+        )
+        self.publish(api_client, requirement, approver)
+
+        api_client.force_authenticate(user=self.owner)
+        assert (
+            api_client.post(self.working_copy_url(requirement)).status_code
+            == status.HTTP_200_OK
+        )
+        assert (
+            api_client.patch(
+                self.url("requirement-detail", pk=requirement.id),
+                {"title": "Compared title"},
+                format="json",
+            ).status_code
+            == status.HTTP_200_OK
+        )
+
+        configuration = api_client.get(self.configuration_url(requirement)).data
+        client_id = f"compare-field-{uuid4()}"
+        configuration_response = api_client.put(
+            self.configuration_url(requirement),
+            {
+                "expected_updated_at": configuration["requirement"]["updated_at"],
+                "requirement": {},
+                "fields": [
+                    {
+                        **configuration["fields"][0],
+                        "name": "Renamed summary",
+                    },
+                    {
+                        "client_id": client_id,
+                        "name": "Added field",
+                        "field_type": RequirementFieldType.TEXT,
+                        "is_required": False,
+                        "is_active": True,
+                        "config": {},
+                        "default_value": None,
+                        "children": [],
+                    },
+                ],
+            },
+            format="json",
+        )
+        assert configuration_response.status_code == status.HTTP_200_OK
+        added_field_id = configuration_response.data["created_field_ids"][client_id]
+
+        assert (
+            api_client.patch(
+                self.url(
+                    "requirement-detail-item",
+                    requirement_id=requirement.id,
+                    pk=first_detail.id,
+                ),
+                {
+                    "data": {
+                        str(field.id): "First updated",
+                        added_field_id: "Added value",
+                    },
+                    "version": 1,
+                },
+                format="json",
+            ).status_code
+            == status.HTTP_200_OK
+        )
+        assert (
+            api_client.delete(
+                self.url(
+                    "requirement-detail-item",
+                    requirement_id=requirement.id,
+                    pk=second_detail.id,
+                )
+            ).status_code
+            == status.HTTP_204_NO_CONTENT
+        )
+        created_detail_response = api_client.post(
+            self.details_url(requirement),
+            {
+                "data": {
+                    str(field.id): "Third",
+                    added_field_id: "Created value",
+                }
+            },
+            format="json",
+        )
+        assert created_detail_response.status_code == status.HTTP_201_CREATED
+
+        change_request_id = self.submit(
+            api_client, requirement, reason="Compare every group"
+        ).data["id"]
+        assert (
+            self.approve(
+                api_client,
+                requirement,
+                change_request_id,
+                approver,
+            ).status_code
+            == status.HTTP_200_OK
+        )
+        api_client.force_authenticate(user=self.owner)
+
+        compare_url = self.url(
+            "requirement-version-compare-current",
+            requirement_id=requirement.id,
+            version=1,
+        )
+        response = api_client.get(compare_url, {"per_page": 1})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["from_version"] == 1
+        assert response.data["to_version"] == 2
+        assert response.data["detail_item_count"] == 3
+        assert response.data["total_count"] == 3
+        assert response.data["count"] == 1
+        assert response.data["next_page_results"] is True
+        assert response.data["results"][0]["base_version"] == 1
+        assert response.data["results"][0]["id"].startswith("detail_data:")
+
+        meta_items = response.data["requirement_items"]
+        assert [item["before_snapshot"]["field"] for item in meta_items] == [
+            "title"
+        ]
+        assert meta_items[0]["proposed_snapshot"]["value"] == "Compared title"
+
+        schema_items = response.data["schema_items"]
+        assert {item["change_type"] for item in schema_items} == {
+            RequirementChangeType.CREATE,
+            RequirementChangeType.UPDATE,
+        }
+        assert {item["target_id"] for item in schema_items} == {
+            str(field.id),
+            added_field_id,
+        }
+        assert [item["name"] for item in response.data["to_fields_snapshot"]] == [
+            "Renamed summary",
+            "Added field",
+        ]
+        assert set(response.data["changed_field_ids"]) == {
+            str(field.id),
+            added_field_id,
+        }
+
+        created_only = api_client.get(
+            compare_url,
+            {"change_type": RequirementChangeType.CREATE},
+        )
+        assert created_only.status_code == status.HTTP_200_OK
+        assert created_only.data["detail_item_count"] == 3
+        assert created_only.data["total_count"] == 1
+        assert [item["change_type"] for item in created_only.data["results"]] == [
+            RequirementChangeType.CREATE
+        ]
+
+        invalid_filter = api_client.get(compare_url, {"change_type": "move"})
+        assert invalid_filter.status_code == status.HTTP_400_BAD_REQUEST
+
+        outsider = UserFactory(username=f"version-outsider-{uuid4()}")
+        api_client.force_authenticate(user=outsider)
+        assert api_client.get(compare_url).status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unpublished_requirement_cannot_compare_versions(self, api_client):
+        approver = self.add_member()
+        requirement = self.create_requirement(approver)
+        api_client.force_authenticate(user=self.owner)
+
+        response = api_client.get(
+            self.url(
+                "requirement-version-compare-current",
+                requirement_id=requirement.id,
+                version=1,
+            )
+        )
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["code"] == "REQUIREMENT_NOT_PUBLISHED"
+
     def test_templates_stay_out_of_the_approval_flow(self, api_client):
         template = Requirement.objects.create(
             workspace=self.workspace,

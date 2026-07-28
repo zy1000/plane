@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { isEqual } from "lodash-es";
-import { Info } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
   IUserLite,
@@ -9,7 +8,6 @@ import type {
   TRequirementMetaChangeSnapshot,
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
-import { ToggleSwitch } from "@plane/ui";
 import { cn, sanitizeHTML } from "@plane/utils";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
@@ -90,13 +88,13 @@ export function MetaDiffTable({ items, members }: TMetaDiffTableProps) {
 
   return (
     <section aria-labelledby="change-overview-title" className="min-w-0">
-      <h2 id="change-overview-title" className="text-16 font-semibold text-primary">
+      <h2 id="change-overview-title" className="sr-only">
         {t("workspace_products.requirements.change.overview.title")}
       </h2>
 
       {rows.length > 0 ? (
         <>
-          <div className="mt-3 hidden overflow-hidden rounded-md border border-subtle md:block">
+          <div className="hidden overflow-hidden rounded-md border border-subtle md:block">
             <table className="w-full table-fixed border-collapse text-left">
               <thead className="bg-layer-1 text-12 font-medium text-secondary">
                 <tr className="border-b border-subtle">
@@ -127,7 +125,7 @@ export function MetaDiffTable({ items, members }: TMetaDiffTableProps) {
             </table>
           </div>
 
-          <div className="mt-3 divide-y divide-subtle overflow-hidden rounded-md border border-subtle md:hidden">
+          <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle md:hidden">
             {rows.map((row) => (
               <div key={row.id} className="px-3 py-3">
                 <p className="text-13 font-medium text-primary">{row.label}</p>
@@ -150,7 +148,7 @@ export function MetaDiffTable({ items, members }: TMetaDiffTableProps) {
           </div>
         </>
       ) : (
-        <p className="mt-3 rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
+        <p className="rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
           {t("workspace_products.requirements.change.overview.empty")}
         </p>
       )}
@@ -198,7 +196,6 @@ const getConfigSummary = (
 /** 字段定义：按字段聚合属性差异，避免重复卡片抢占注意力。 */
 export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
   const { t } = useTranslation();
-  const [changedOnly, setChangedOnly] = useState(true);
 
   const formatValue = (
     key: TSchemaCompareKey,
@@ -231,43 +228,28 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
 
   return (
     <section aria-labelledby="change-schema-title" className="min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 id="change-schema-title" className="text-16 font-semibold text-primary">
-            {t("workspace_products.requirements.change.schema_review.title")}
-          </h2>
-          <p className="text-12 text-tertiary">
-            {t("workspace_products.requirements.change.schema_review.description", { count: items.length })}
-          </p>
-        </div>
-        <div className="flex min-h-8 items-center gap-2 text-12 text-secondary">
-          <span>{t("workspace_products.requirements.change.schema_review.changed_only")}</span>
-          <ToggleSwitch
-            value={changedOnly}
-            onChange={setChangedOnly}
-            label={t("workspace_products.requirements.change.schema_review.changed_only")}
-            size="sm"
-            className="focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:ring-offset-1"
-          />
-        </div>
-      </div>
+      <h2 id="change-schema-title" className="sr-only">
+        {t("workspace_products.requirements.change.schema_review.title")}
+      </h2>
 
       {items.length > 0 ? (
-        <div className="mt-3 overflow-x-auto rounded-md border border-subtle">
-          <table className="w-full min-w-[760px] border-collapse text-left">
+        <div className="overflow-x-auto rounded-md border border-subtle">
+          <table className="w-full min-w-[680px] table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[10%]" />
+              <col className="w-[40%]" />
+              <col className="w-1/2" />
+            </colgroup>
             <thead className="bg-layer-1 text-12 font-medium text-secondary">
               <tr className="border-b border-subtle">
-                <th className="w-24 px-4 py-2.5">
+                <th className="px-4 py-2.5">
                   {t("workspace_products.requirements.change.schema_review.columns.change")}
                 </th>
-                <th className="w-64 px-4 py-2.5">
+                <th className="px-4 py-2.5">
                   {t("workspace_products.requirements.change.schema_review.columns.field")}
                 </th>
                 <th className="px-4 py-2.5">
                   {t("workspace_products.requirements.change.schema_review.columns.properties")}
-                </th>
-                <th className="w-48 px-4 py-2.5">
-                  {t("workspace_products.requirements.change.schema_review.columns.scope")}
                 </th>
               </tr>
             </thead>
@@ -290,7 +272,7 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
                 };
                 const visibleKeys = SCHEMA_COMPARE_KEYS.filter((key) => {
                   if (!isUpdate) return key !== "name" && key !== "field_type";
-                  return !changedOnly || !isEqual(valueFor(before, key), valueFor(after, key));
+                  return !isEqual(valueFor(before, key), valueFor(after, key));
                 });
 
                 return (
@@ -313,7 +295,13 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
                           {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
                         </span>
                       </div>
-                      {field.parent_name && <p className="mt-1 text-12 text-tertiary">{field.parent_name}</p>}
+                      <p className="mt-1 text-12 text-tertiary">
+                        {field.parent_name
+                          ? t("workspace_products.requirements.change.schema_review.child_field", {
+                              name: field.parent_name,
+                            })
+                          : t("workspace_products.requirements.change.schema_review.root_field")}
+                      </p>
                     </th>
                     <td className="px-4 py-4">
                       {visibleKeys.length > 0 ? (
@@ -353,13 +341,6 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-13 text-secondary">
-                      {field.parent_name
-                        ? t("workspace_products.requirements.change.schema_review.child_field", {
-                            name: field.parent_name,
-                          })
-                        : t("workspace_products.requirements.change.schema_review.root_field")}
-                    </td>
                   </tr>
                 );
               })}
@@ -367,15 +348,10 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
           </table>
         </div>
       ) : (
-        <p className="mt-3 rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
+        <p className="rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
           {t("workspace_products.requirements.change.schema_review.empty")}
         </p>
       )}
-
-      <div className="mt-4 flex items-start gap-2 rounded-md border border-accent-subtle bg-accent-subtle px-3 py-2.5 text-12 leading-5 text-accent-primary">
-        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <p>{t("workspace_products.requirements.change.schema_review.notice")}</p>
-      </div>
     </section>
   );
 }

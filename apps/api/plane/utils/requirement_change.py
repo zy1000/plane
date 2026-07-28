@@ -328,6 +328,55 @@ def diff_snapshots(before, after):
     return items, stats
 
 
+def build_version_comparison(*, before, after, from_version, to_version):
+    """把两份版本快照整理成前端可直接消费的三组差异。
+
+    版本快照没有 RequirementChangeItem 数据库行，因此这里补出稳定的字符串 id 和
+    base_version。明细组仍保留完整列表，交给 view 在服务端按筛选条件分页。
+    """
+    items, stats = diff_snapshots(before, after)
+    grouped_items = {
+        RequirementChangeTargetKind.REQUIREMENT: [],
+        RequirementChangeTargetKind.SCHEMA: [],
+        RequirementChangeTargetKind.DETAIL_DATA: [],
+    }
+
+    for item in items:
+        snapshot = item.get("proposed_snapshot") or item.get("before_snapshot") or {}
+        target_key = item.get("target_id") or snapshot.get("field") or "unknown"
+        normalized = {
+            "id": f"{item['target_kind']}:{target_key}",
+            **item,
+            "base_version": from_version,
+        }
+        grouped_items[item["target_kind"]].append(normalized)
+
+    def item_sort_key(item):
+        sort_order = item.get("proposed_sort_order")
+        return (
+            sort_order is None,
+            sort_order if sort_order is not None else 0,
+            str(item.get("target_id") or item["id"]),
+        )
+
+    for grouped in grouped_items.values():
+        grouped.sort(key=item_sort_key)
+
+    detail_items = grouped_items[RequirementChangeTargetKind.DETAIL_DATA]
+    return {
+        "from_version": from_version,
+        "to_version": to_version,
+        "requirement_items": grouped_items[
+            RequirementChangeTargetKind.REQUIREMENT
+        ],
+        "schema_items": grouped_items[RequirementChangeTargetKind.SCHEMA],
+        "detail_items": detail_items,
+        "detail_item_count": len(detail_items),
+        "changed_field_ids": stats["changed_field_ids"],
+        "to_fields_snapshot": deepcopy(after.get("fields") or []),
+    }
+
+
 def _next_sequence_id(requirement):
     latest = RequirementChangeRequest.all_objects.filter(
         requirement=requirement
@@ -629,7 +678,7 @@ def rollback_to_version(*, requirement, version, actor=None):
     """
     if requirement.status == RequirementStatus.IN_REVIEW:
         raise RequirementChangeError(
-            "The requirement is under review and cannot be rolled back right now.",
+            "Withdraw or complete the current review before rolling back this requirement.",
             code="REQUIREMENT_IN_REVIEW",
         )
     draft = start_editing(requirement=requirement, actor=actor)

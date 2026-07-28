@@ -1,7 +1,7 @@
 """需求变更审批与版本管理的 API 入口。
 
 四组端点：工作副本（编辑 / 撤回草稿）、变更单（列表 / 详情 / 提交 / 审批 / 撤回）、
-变更项（明细数据组的分页）、版本（列表 / 详情 / 快照明细分页 / 回滚）。
+变更项（明细数据组的分页）、版本（列表 / 详情 / 快照明细分页 / 与当前比较 / 回滚）。
 
 千行明细的取舍集中在两处：变更单详情只内联基本信息与字段定义两组变更项，明细组
 走 items 端点分页；版本快照的 details 数组在服务端切片，不整份返回。
@@ -22,6 +22,8 @@ from plane.app.serializers import (
     RequirementChangeRequestSerializer,
     RequirementChangeSubmitSerializer,
     RequirementSerializer,
+    RequirementVersionComparisonItemSerializer,
+    RequirementVersionComparisonSerializer,
     RequirementVersionDetailSerializer,
     RequirementVersionSerializer,
 )
@@ -43,6 +45,7 @@ from plane.utils.paginator import Cursor
 from plane.utils.requirement_change import (
     RequirementChangeError,
     act_on_change_request,
+    build_version_comparison,
     cancel_change_request,
     rollback_to_version,
     submit_change_request,
@@ -469,6 +472,52 @@ class RequirementVersionViewSet(RequirementScopedMixin, BaseViewSet):
             return self.version_not_found()
         rows = (requirement_version.snapshot or {}).get("details") or []
         return paginate_sequence(self, request, rows)
+
+    def compare_current(self, request, slug, requirement_id, version):
+        requirement = self.resolve_requirement()
+        if requirement is None:
+            return self.not_found()
+        if requirement.current_version is None:
+            return Response(
+                {
+                    "error": "The requirement has not been published.",
+                    "code": "REQUIREMENT_NOT_PUBLISHED",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        from_version = self._get_version(version)
+        to_version = self._get_version(requirement.current_version)
+        if from_version is None or to_version is None:
+            return self.version_not_found()
+
+        change_type = request.query_params.get("change_type")
+        if change_type and change_type not in RequirementChangeType.values:
+            return Response(
+                {"change_type": "This change type is not supported."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        comparison = build_version_comparison(
+            before=from_version.snapshot or {},
+            after=to_version.snapshot or {},
+            from_version=from_version.version,
+            to_version=to_version.version,
+        )
+        detail_items = comparison.pop("detail_items")
+        if change_type:
+            detail_items = [
+                item for item in detail_items if item["change_type"] == change_type
+            ]
+
+        response = paginate_sequence(self, request, detail_items)
+        response.data["results"] = RequirementVersionComparisonItemSerializer(
+            response.data["results"], many=True
+        ).data
+        response.data.update(
+            RequirementVersionComparisonSerializer(comparison).data
+        )
+        return response
 
     def rollback(self, request, slug, requirement_id, version):
         try:

@@ -107,6 +107,11 @@ urlpatterns = [
         name="requirement-version-details",
     ),
     path(
+        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/compare-current/",
+        RequirementVersionViewSet.as_view({"get": "compare_current"}),
+        name="requirement-version-compare-current",
+    ),
+    path(
         "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/rollback/",
         RequirementVersionViewSet.as_view({"post": "rollback"}),
         name="requirement-version-rollback",

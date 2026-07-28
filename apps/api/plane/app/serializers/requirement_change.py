@@ -8,6 +8,7 @@ from plane.db.models import (
     RequirementChangeRequest,
     RequirementChangeStatus,
     RequirementChangeTargetKind,
+    RequirementChangeType,
     RequirementVersion,
 )
 
@@ -255,3 +256,30 @@ class RequirementVersionDetailSerializer(RequirementVersionSerializer):
 
     def get_detail_count(self, obj):
         return len((obj.snapshot or {}).get("details") or [])
+
+
+class RequirementVersionComparisonItemSerializer(serializers.Serializer):
+    """版本比较产生的瞬时变更项，与已落库的变更项保持同一前端契约。"""
+
+    id = serializers.CharField()
+    target_kind = serializers.ChoiceField(
+        choices=RequirementChangeTargetKind.choices
+    )
+    change_type = serializers.ChoiceField(choices=RequirementChangeType.choices)
+    target_id = serializers.UUIDField(allow_null=True)
+    before_snapshot = serializers.JSONField(allow_null=True)
+    proposed_snapshot = serializers.JSONField(allow_null=True)
+    base_version = serializers.IntegerField(allow_null=True)
+    proposed_sort_order = serializers.FloatField(allow_null=True)
+
+
+class RequirementVersionComparisonSerializer(serializers.Serializer):
+    """版本比较的非分页部分；明细结果由通用分页响应的 results 承载。"""
+
+    from_version = serializers.IntegerField()
+    to_version = serializers.IntegerField()
+    requirement_items = RequirementVersionComparisonItemSerializer(many=True)
+    schema_items = RequirementVersionComparisonItemSerializer(many=True)
+    detail_item_count = serializers.IntegerField()
+    changed_field_ids = serializers.ListField(child=serializers.CharField())
+    to_fields_snapshot = serializers.JSONField()

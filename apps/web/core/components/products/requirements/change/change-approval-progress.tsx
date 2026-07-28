@@ -1,9 +1,9 @@
-/** 收进变更摘要栏的审批详情：默认只露出进度，按需弹出完整轨迹。 */
+/** 收进变更头部的审批详情：默认只露出状态与进度，按需弹出完整轨迹。 */
 import { Fragment } from "react";
 import { Popover, Transition } from "@headlessui/react";
-import { CheckCircle2, ChevronDown, Clock3, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleMinus, Clock3, XCircle } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirementChangeApproval } from "@plane/types";
+import type { TRequirementChangeApproval, TRequirementChangeStatus } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 
@@ -13,38 +13,47 @@ const STATE_ICON = {
   pending: { Icon: Clock3, className: "text-warning-primary" },
 } as const;
 
+const REQUEST_STATE_ICON: Record<TRequirementChangeStatus, { Icon: typeof CheckCircle2; className: string }> = {
+  approved: STATE_ICON.approved,
+  rejected: STATE_ICON.rejected,
+  pending: STATE_ICON.pending,
+  cancelled: { Icon: CircleMinus, className: "text-tertiary" },
+};
+
 export function ChangeApprovalProgress({
   approvals,
+  status,
   summary,
 }: {
   approvals: TRequirementChangeApproval[];
+  status: TRequirementChangeStatus;
   summary?: string;
 }) {
   const { t } = useTranslation();
   const approvedCount = approvals.filter((approval) => approval.action === "approved").length;
+  const rejectedCount = approvals.filter((approval) => approval.action === "rejected").length;
+  const progressCount = status === "rejected" ? rejectedCount : approvedCount;
+  const { Icon: StatusIcon, className: statusClassName } = REQUEST_STATE_ICON[status];
 
   return (
     <Popover className="relative shrink-0">
       {({ open }) => (
         <>
-          <Popover.Button className="flex h-8 max-w-full items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-13 text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong">
-            <span className="hidden -space-x-1.5 sm:flex">
-              {approvals.slice(0, 3).map((approval) => (
-                <Avatar
-                  key={approval.id}
-                  size="sm"
-                  name={approval.approver_detail?.display_name ?? ""}
-                  src={getFileURL(approval.approver_detail?.avatar_url ?? "")}
-                />
-              ))}
+          <Popover.Button className="flex h-8 max-w-full items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 text-13 text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong">
+            <StatusIcon aria-hidden className={cn("size-3.5 shrink-0", statusClassName)} />
+            <span className={cn("font-medium", statusClassName)}>
+              {t(`workspace_products.requirements.change.statuses.${status}`)}
             </span>
-            <span className="font-medium">{t("workspace_products.requirements.change.groups.approval")}</span>
-            <span className="text-primary tabular-nums">
-              {t("workspace_products.requirements.change.approved_progress", {
-                approved: approvedCount,
-                total: approvals.length,
-              })}
-            </span>
+            {status !== "cancelled" && (
+              <>
+                <span aria-hidden className="text-tertiary">
+                  ·
+                </span>
+                <span className="text-primary tabular-nums">
+                  {progressCount}/{approvals.length}
+                </span>
+              </>
+            )}
             <ChevronDown
               aria-hidden
               className={cn("size-3.5 text-tertiary transition-transform", open && "rotate-180")}

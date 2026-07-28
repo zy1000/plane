@@ -19,6 +19,7 @@ import type {
   TRequirementDetailFilter,
   TRequirementDetailsResponse,
   TRequirementDiscardDraftResponse,
+  TRequirementVersionComparisonResponse,
   TRequirementVersionDetail,
   TRequirementVersionDetailsResponse,
   TRequirementVersionsResponse,
@@ -348,11 +349,7 @@ export class RequirementService extends APIService {
       });
   }
 
-  async getVersion(
-    workspaceSlug: string,
-    requirementId: string,
-    version: number
-  ): Promise<TRequirementVersionDetail> {
+  async getVersion(workspaceSlug: string, requirementId: string, version: number): Promise<TRequirementVersionDetail> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -373,6 +370,32 @@ export class RequirementService extends APIService {
         ...(params.perPage ? { per_page: params.perPage } : {}),
       },
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async compareVersionWithCurrent(
+    workspaceSlug: string,
+    requirementId: string,
+    version: number,
+    params: {
+      cursor?: string;
+      perPage?: number;
+      changeType?: TRequirementChangeType;
+    } = {}
+  ): Promise<TRequirementVersionComparisonResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/compare-current/`,
+      {
+        params: {
+          ...(params.cursor ? { cursor: params.cursor } : {}),
+          ...(params.perPage ? { per_page: params.perPage } : {}),
+          ...(params.changeType ? { change_type: params.changeType } : {}),
+        },
+      }
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

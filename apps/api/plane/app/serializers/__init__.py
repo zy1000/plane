@@ -191,6 +191,8 @@ from .requirement_change import (
     RequirementChangeRequestDetailSerializer,
     RequirementChangeRequestSerializer,
     RequirementChangeSubmitSerializer,
+    RequirementVersionComparisonItemSerializer,
+    RequirementVersionComparisonSerializer,
     RequirementVersionDetailSerializer,
     RequirementVersionSerializer,
 )

@@ -430,7 +430,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             <VersionHistory
               workspaceSlug={workspaceSlug}
               requirement={requirement}
-              currentFields={detailsStore.configuration?.fields ?? []}
+              members={memberOptions}
               onRequirementUpdate={(next) => {
                 upsertRequirement(next);
                 refreshLayer();

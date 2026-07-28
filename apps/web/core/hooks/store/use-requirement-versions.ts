@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   TRequirement,
+  TRequirementChangeType,
+  TRequirementVersionComparisonResponse,
   TRequirementVersionDetail,
   TRequirementVersionDetailsResponse,
   TRequirementVersionsResponse,
@@ -40,10 +42,14 @@ const EMPTY_DETAILS: TRequirementVersionDetailsResponse = {
 export const useRequirementVersions = ({
   workspaceSlug,
   requirementId,
+  currentVersion,
+  changeType,
   onRequirementUpdate,
 }: {
   workspaceSlug: string | undefined;
   requirementId: string | undefined;
+  currentVersion: number | null;
+  changeType?: TRequirementChangeType;
   onRequirementUpdate?: (requirement: TRequirement) => void;
 }) => {
   const [versionsPage, setVersionsPage] = useState<TRequirementVersionsResponse>(EMPTY_VERSIONS);
@@ -60,10 +66,39 @@ export const useRequirementVersions = ({
   const [perPage, setPerPage] = useState(20);
   const [detailsCursor, setDetailsCursor] = useState<string | undefined>();
   const [detailsPerPage, setDetailsPerPage] = useState(20);
-  // 「与当前对比」的另一侧。当前发布内容就是 current_version 那份快照，所以对比两侧
-  // 走的是同一个分页端点，不需要额外把上千行明细拉到前端。
+  // 「与当前对比」始终以已发布 current_version 的快照为目标，不读取可能存在的草稿层。
   const [compareVersion, setCompareVersion] = useState<number | null>(null);
-  const [comparePage, setComparePage] = useState<TRequirementVersionDetailsResponse>(EMPTY_DETAILS);
+  const [comparisonPage, setComparisonPage] = useState<TRequirementVersionComparisonResponse | null>(null);
+  const [isComparisonLoading, setIsComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [comparisonCursor, setComparisonCursor] = useState<string | undefined>();
+  const [comparisonPerPage, setComparisonPerPage] = useState(20);
+
+  const selectVersion = useCallback(
+    (version: number | null) => {
+      setDetailsCursor(undefined);
+      setComparisonCursor(undefined);
+      setVersionDetail(null);
+      setDetailsPage(EMPTY_DETAILS);
+      setComparisonPage(null);
+      setError(null);
+      setDetailsError(null);
+      setComparisonError(null);
+      setIsVersionLoading(version !== null);
+      setIsDetailsLoading(version !== null && compareVersion === null);
+      setIsComparisonLoading(version !== null && compareVersion !== null);
+      setSelectedVersion(version);
+    },
+    [compareVersion]
+  );
+
+  const selectCompareVersion = useCallback((version: number | null) => {
+    setComparisonCursor(undefined);
+    setComparisonPage(null);
+    setComparisonError(null);
+    setIsComparisonLoading(version !== null);
+    setCompareVersion(version);
+  }, []);
 
   const fetchVersions = useCallback(async () => {
     if (!workspaceSlug || !requirementId) return EMPTY_VERSIONS;
@@ -87,11 +122,9 @@ export const useRequirementVersions = ({
 
   // 默认选中最新版本（列表按 version 倒序）
   useEffect(() => {
-    setSelectedVersion((current) => {
-      if (current !== null && versionsPage.results.some((item) => item.version === current)) return current;
-      return versionsPage.results[0]?.version ?? null;
-    });
-  }, [versionsPage]);
+    if (selectedVersion !== null && versionsPage.results.some((item) => item.version === selectedVersion)) return;
+    selectVersion(versionsPage.results[0]?.version ?? null);
+  }, [selectVersion, selectedVersion, versionsPage]);
 
   const fetchVersionDetail = useCallback(async () => {
     if (!workspaceSlug || !requirementId || selectedVersion === null) {
@@ -133,35 +166,52 @@ export const useRequirementVersions = ({
     }
   }, [detailsCursor, detailsPerPage, requirementId, selectedVersion, workspaceSlug]);
 
-  const fetchComparisonDetails = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || compareVersion === null) {
-      setComparePage(EMPTY_DETAILS);
-      return EMPTY_DETAILS;
-    }
-    const response = await requirementService.listVersionDetails(workspaceSlug, requirementId, compareVersion, {
-      cursor: detailsCursor,
-      perPage: detailsPerPage,
-    });
-    setComparePage(response);
-    return response;
-  }, [compareVersion, detailsCursor, detailsPerPage, requirementId, workspaceSlug]);
-
   useEffect(() => {
     void fetchVersionDetail().catch(() => undefined);
   }, [fetchVersionDetail]);
 
   useEffect(() => {
+    if (compareVersion !== null) return;
     void fetchVersionDetails().catch(() => undefined);
-  }, [fetchVersionDetails]);
+  }, [compareVersion, fetchVersionDetails]);
+
+  const fetchComparison = useCallback(async () => {
+    if (!workspaceSlug || !requirementId || selectedVersion === null || compareVersion === null) {
+      setComparisonPage(null);
+      return null;
+    }
+    setIsComparisonLoading(true);
+    setComparisonError(null);
+    try {
+      const response = await requirementService.compareVersionWithCurrent(
+        workspaceSlug,
+        requirementId,
+        selectedVersion,
+        {
+          cursor: comparisonCursor,
+          perPage: comparisonPerPage,
+          changeType,
+        }
+      );
+      setComparisonPage(response);
+      return response;
+    } catch (requestError) {
+      setComparisonError(getErrorMessage(requestError, "Unable to compare requirement versions."));
+      throw requestError;
+    } finally {
+      setIsComparisonLoading(false);
+    }
+  }, [changeType, compareVersion, comparisonCursor, comparisonPerPage, requirementId, selectedVersion, workspaceSlug]);
 
   useEffect(() => {
-    void fetchComparisonDetails().catch(() => undefined);
-  }, [fetchComparisonDetails]);
+    if (compareVersion === null) return;
+    void fetchComparison().catch(() => undefined);
+  }, [compareVersion, fetchComparison]);
 
-  const selectVersion = useCallback((version: number | null) => {
-    setDetailsCursor(undefined);
-    setSelectedVersion(version);
-  }, []);
+  useEffect(() => {
+    if (compareVersion === null || compareVersion === currentVersion) return;
+    selectCompareVersion(currentVersion);
+  }, [compareVersion, currentVersion, selectCompareVersion]);
 
   /** 回滚只是把历史快照灌入工作副本，需求会回到草稿态，仍需再走一次审批 */
   const rollbackToVersion = useCallback(
@@ -187,6 +237,10 @@ export const useRequirementVersions = ({
     setDetailsCursor(undefined);
     setDetailsPerPage(value);
   }, []);
+  const updateComparisonPerPage = useCallback((value: number) => {
+    setComparisonCursor(undefined);
+    setComparisonPerPage(value);
+  }, []);
 
   return {
     versionsPage,
@@ -194,26 +248,33 @@ export const useRequirementVersions = ({
     versionDetail,
     detailsPage,
     compareVersion,
-    comparePage,
-    setCompareVersion,
+    comparisonPage,
+    setCompareVersion: selectCompareVersion,
     isLoading,
     isVersionLoading,
     isDetailsLoading,
+    isComparisonLoading,
     isMutating,
     error,
     detailsError,
+    comparisonError,
     cursor,
     perPage,
     detailsCursor,
     detailsPerPage,
+    comparisonCursor,
+    comparisonPerPage,
     setCursor,
     setPerPage: updatePerPage,
     setDetailsCursor,
     setDetailsPerPage: updateDetailsPerPage,
+    setComparisonCursor,
+    setComparisonPerPage: updateComparisonPerPage,
     selectVersion,
     fetchVersions,
     fetchVersionDetail,
     fetchVersionDetails,
+    fetchComparison,
     rollbackToVersion,
   };
 };
