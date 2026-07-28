@@ -10,7 +10,7 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementApprovalAction, TRequirementField, IUserLite } from "@plane/types";
 import { AlertModalCore, Avatar, Loader } from "@plane/ui";
-import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
+import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { useRequirementChangeRequestDetail } from "@/hooks/store/use-requirement-changes";
 import { ChangeApprovalBar } from "./change-approval-bar";
 import { ChangeApprovalProgress } from "./change-approval-progress";
@@ -183,7 +183,7 @@ export function ChangeRequestDetail(props: TProps) {
                 <span aria-hidden>·</span>
                 <span>
                   {t("workspace_products.requirements.change.meta_submitted", {
-                    time: renderFormattedDate(changeRequest.created_at, "MM-dd HH:mm"),
+                    time: `${renderFormattedDate(changeRequest.created_at, "MM-dd")} ${renderFormattedTime(changeRequest.created_at)}`,
                   })}
                 </span>
                 {changeRequest.base_version !== null && (
@@ -271,15 +271,10 @@ export function ChangeRequestDetail(props: TProps) {
           id="change-review-panel"
           role="tabpanel"
           aria-labelledby={`change-review-tab-${activeSection}`}
-          className="px-4 py-4 md:px-6"
+          className={cn(activeSection !== "detail" && "px-4 py-4 md:px-6")}
         >
           {activeSection === "overview" ? (
-            <MetaDiffTable
-              items={changeRequest.requirement_items}
-              members={members}
-              reason={changeRequest.reason}
-              createdBy={changeRequest.created_by_detail}
-            />
+            <MetaDiffTable items={changeRequest.requirement_items} members={members} />
           ) : activeSection === "schema" ? (
             <SchemaDiffList items={changeRequest.schema_items} />
           ) : (

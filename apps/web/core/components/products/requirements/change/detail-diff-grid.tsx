@@ -380,7 +380,7 @@ export function DetailDiffGrid(props: TProps) {
   return (
     <section
       aria-labelledby="change-detail-title"
-      className="flex min-w-0 flex-col overflow-hidden rounded-md border border-subtle bg-surface-1"
+      className="flex min-w-0 flex-col overflow-hidden bg-surface-1"
     >
       <h2 id="change-detail-title" className="sr-only">
         {t("workspace_products.requirements.change.detail_review.title")}

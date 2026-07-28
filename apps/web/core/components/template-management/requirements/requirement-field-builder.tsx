@@ -408,7 +408,12 @@ function RequirementFieldRow(props: TFieldRowProps) {
           isChild && (compact ? "min-h-10 rounded-md" : "min-h-12 rounded-md")
         )}
       >
-        <GripVertical className="size-4 shrink-0 cursor-grab text-placeholder active:cursor-grabbing" />
+        <span
+          data-sortable-drag-handle
+          className="grid size-6 shrink-0 cursor-grab place-items-center text-placeholder active:cursor-grabbing"
+        >
+          <GripVertical className="size-4 pointer-events-none" />
+        </span>
         {isForm && (
           <button
             type="button"

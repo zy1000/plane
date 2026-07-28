@@ -5,7 +5,7 @@ import { CheckCircle2, ChevronDown, Clock3, XCircle } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementChangeApproval } from "@plane/types";
 import { Avatar } from "@plane/ui";
-import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
+import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 
 const STATE_ICON = {
   approved: { Icon: CheckCircle2, className: "text-success-primary" },
@@ -92,7 +92,7 @@ export function ChangeApprovalProgress({
                           </div>
                           <p className="mt-0.5 text-12 text-tertiary">
                             {approval.acted_at
-                              ? renderFormattedDate(approval.acted_at, "MM-dd HH:mm")
+                              ? `${renderFormattedDate(approval.acted_at, "MM-dd")} ${renderFormattedTime(approval.acted_at)}`
                               : t("workspace_products.requirements.change.approval_waiting")}
                           </p>
                           {approval.comment && (

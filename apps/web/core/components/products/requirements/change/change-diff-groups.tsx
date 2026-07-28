@@ -9,11 +9,19 @@ import type {
   TRequirementMetaChangeSnapshot,
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
-import { Avatar, ToggleSwitch } from "@plane/ui";
-import { cn, getFileURL, sanitizeHTML } from "@plane/utils";
+import { ToggleSwitch } from "@plane/ui";
+import { cn, sanitizeHTML } from "@plane/utils";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
-const SCHEMA_COMPARE_KEYS = ["name", "field_type", "is_required", "is_active", "config", "default_value"] as const;
+const SCHEMA_COMPARE_KEYS = [
+  "name",
+  "field_type",
+  "is_required",
+  "is_active",
+  "position",
+  "config",
+  "default_value",
+] as const;
 
 type TSchemaCompareKey = (typeof SCHEMA_COMPARE_KEYS)[number];
 
@@ -61,12 +69,10 @@ function useMetaValueFormatter(members: IUserLite[]) {
 type TMetaDiffTableProps = {
   items: TRequirementChangeItem[];
   members: IUserLite[];
-  reason: string;
-  createdBy: IUserLite | null;
 };
 
 /** 概览：以清晰的并列视图展示需求基本信息的前后差异。 */
-export function MetaDiffTable({ items, members, reason, createdBy }: TMetaDiffTableProps) {
+export function MetaDiffTable({ items, members }: TMetaDiffTableProps) {
   const { t } = useTranslation();
   const formatValue = useMetaValueFormatter(members);
 
@@ -84,12 +90,9 @@ export function MetaDiffTable({ items, members, reason, createdBy }: TMetaDiffTa
 
   return (
     <section aria-labelledby="change-overview-title" className="min-w-0">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 id="change-overview-title" className="text-16 font-semibold text-primary">
-          {t("workspace_products.requirements.change.overview.title")}
-        </h2>
-        <p className="text-12 text-tertiary">{t("workspace_products.requirements.change.overview.description")}</p>
-      </div>
+      <h2 id="change-overview-title" className="text-16 font-semibold text-primary">
+        {t("workspace_products.requirements.change.overview.title")}
+      </h2>
 
       {rows.length > 0 ? (
         <>
@@ -151,18 +154,6 @@ export function MetaDiffTable({ items, members, reason, createdBy }: TMetaDiffTa
           {t("workspace_products.requirements.change.overview.empty")}
         </p>
       )}
-
-      <div className="mt-5 border-t border-subtle pt-4">
-        <h3 className="text-14 font-semibold text-primary">
-          {t("workspace_products.requirements.change.overview.reason")}
-        </h3>
-        <div className="mt-2 flex items-start gap-2.5">
-          <Avatar size="sm" name={createdBy?.display_name ?? ""} src={getFileURL(createdBy?.avatar_url ?? "")} />
-          <p className="max-w-[75ch] text-13 leading-5 text-secondary">
-            {reason || t("workspace_products.requirements.change.untitled")}
-          </p>
-        </div>
-      </div>
     </section>
   );
 }
@@ -217,6 +208,9 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
     if (isEmptyValue(value)) return t("workspace_products.requirements.change.empty_value");
     if (key === "field_type" && typeof value === "string") {
       return t(`workspace_templates.requirements.field_types.${value}`);
+    }
+    if (key === "position" && typeof value === "number") {
+      return t("workspace_products.requirements.change.field_position", { position: value });
     }
     if (key === "config" && typeof value === "object") {
       const parts = getConfigSummary(value as TRequirementField["config"], t);
@@ -284,9 +278,19 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
                 const field = after ?? before;
                 if (!field) return null;
                 const isUpdate = item.change_type === "update" && Boolean(before && after);
+                const valueFor = (
+                  snapshot: TRequirementSchemaChangeSnapshot | null,
+                  key: TSchemaCompareKey
+                ): unknown => {
+                  if (key !== "position" || snapshot?.position !== undefined) return snapshot?.[key];
+                  const sortOrder = snapshot?.sort_order;
+                  if (typeof sortOrder !== "number") return undefined;
+                  const legacyPosition = sortOrder / 1000;
+                  return Number.isInteger(legacyPosition) ? legacyPosition : undefined;
+                };
                 const visibleKeys = SCHEMA_COMPARE_KEYS.filter((key) => {
                   if (!isUpdate) return key !== "name" && key !== "field_type";
-                  return !changedOnly || !isEqual(before?.[key], after?.[key]);
+                  return !changedOnly || !isEqual(valueFor(before, key), valueFor(after, key));
                 });
 
                 return (
@@ -315,8 +319,8 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
                       {visibleKeys.length > 0 ? (
                         <dl className="space-y-1.5 text-13">
                           {visibleKeys.map((key) => {
-                            const beforeValue = before?.[key];
-                            const afterValue = after?.[key];
+                            const beforeValue = valueFor(before, key);
+                            const afterValue = valueFor(after, key);
                             return (
                               <div key={key} className="flex min-w-0 items-baseline gap-2">
                                 <dt className="w-20 shrink-0 text-tertiary">

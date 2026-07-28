@@ -241,6 +241,7 @@ export type TRequirementSchemaChangeSnapshot = {
   is_required: boolean;
   is_active: boolean;
   sort_order: number;
+  position?: number;
   config: TRequirementField["config"];
   default_value: TRequirementDetailValue;
 };

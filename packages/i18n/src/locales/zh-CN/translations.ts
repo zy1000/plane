@@ -2139,9 +2139,11 @@ export default {
           config: "配置",
           default_value: "默认值",
           sort_order: "排序",
+          position: "字段位置",
           parent: "所属表单",
           options: "选项",
         },
+        field_position: "第 {position} 位",
         meta_fields: {
           title: "名称",
           description_html: "描述",

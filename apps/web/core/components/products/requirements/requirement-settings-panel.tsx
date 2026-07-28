@@ -130,9 +130,6 @@ export function RequirementSettingsPanel({
         <h1 className="text-20 font-semibold text-primary">
           {t("workspace_products.requirements.configuration.settings")}
         </h1>
-        <p className="mt-1 max-w-[65ch] text-12 leading-5 text-secondary">
-          {t("workspace_products.requirements.configuration.settings_description")}
-        </p>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 md:px-8 md:pb-10">
@@ -141,7 +138,6 @@ export function RequirementSettingsPanel({
             <RequirementSettingsCard
               icon={FileText}
               title={t("workspace_products.requirements.configuration.basic")}
-              description={t("workspace_products.requirements.configuration.basic_description")}
             >
               <div className="grid gap-x-6 gap-y-5 lg:grid-cols-2">
                 <label className="block">
@@ -202,7 +198,6 @@ export function RequirementSettingsPanel({
             className="mt-4"
             icon={ShieldCheck}
             title={t("workspace_products.requirements.configuration.approval")}
-            description={t("workspace_products.requirements.configuration.approval_description")}
           >
             <RequirementApprovalSettings
               layout="cards"

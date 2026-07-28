@@ -1980,9 +1980,11 @@ export default {
           config: "Config",
           default_value: "Default value",
           sort_order: "Order",
+          position: "Position",
           parent: "Parent form",
           options: "Options",
         },
+        field_position: "Position {position}",
         meta_fields: {
           title: "Name",
           description_html: "Description",

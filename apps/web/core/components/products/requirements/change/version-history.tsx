@@ -16,7 +16,7 @@ import type {
   TRequirementField,
 } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { useRequirementVersions } from "@/hooks/store/use-requirement-versions";
 import { DetailDiffGrid } from "./detail-diff-grid";
 import { PILL_BASE } from "./styles";
@@ -203,7 +203,7 @@ export function VersionHistory({ workspaceSlug, requirement, currentFields, onRe
                     </span>
                     <p className="mt-0.5 text-11 text-secondary">
                       {t("workspace_products.requirements.version.meta", {
-                        time: renderFormattedDate(version.created_at, "MM-dd HH:mm"),
+                        time: `${renderFormattedDate(version.created_at, "MM-dd")} ${renderFormattedTime(version.created_at)}`,
                         name: version.created_by_detail?.display_name ?? "",
                       })}
                     </p>

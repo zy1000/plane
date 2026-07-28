@@ -123,7 +123,7 @@ function ReadOnlySection({
   layered = false,
 }: {
   title: string;
-  description: string;
+  description?: string;
   hint: string;
   children: ReactNode;
   layered?: boolean;
@@ -134,7 +134,7 @@ function ReadOnlySection({
         className={cn("shrink-0 px-5 md:px-8", layered ? "pt-5 pb-4 md:pt-6" : "border-b border-subtle py-4 md:py-5")}
       >
         <h1 className="text-20 font-semibold text-primary">{title}</h1>
-        <p className="mt-1 max-w-[65ch] text-12 leading-5 text-secondary">{description}</p>
+        {description && <p className="mt-1 max-w-[65ch] text-12 leading-5 text-secondary">{description}</p>}
         <ReadOnlyNotice hint={hint} />
       </header>
       <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 md:px-8", layered ? "pb-8 md:pb-10" : "py-6 md:py-7")}>
@@ -150,9 +150,6 @@ export function ReadOnlyFieldStructure({ fields, hint }: { fields: TRequirementF
   return (
     <ReadOnlySection
       title={t("workspace_products.requirements.configuration.custom_fields")}
-      description={t("workspace_products.requirements.configuration.custom_fields_read_only_description", {
-        count: fields.length,
-      })}
       hint={hint}
     >
       {fields.length ? (
@@ -222,7 +219,6 @@ export function ReadOnlyRequirementSettings({ requirement, hint }: { requirement
   return (
     <ReadOnlySection
       title={t("workspace_products.requirements.configuration.settings")}
-      description={t("workspace_products.requirements.configuration.settings_description")}
       hint={hint}
       layered
     >
@@ -230,7 +226,6 @@ export function ReadOnlyRequirementSettings({ requirement, hint }: { requirement
         <RequirementSettingsCard
           icon={FileText}
           title={t("workspace_products.requirements.configuration.basic")}
-          description={t("workspace_products.requirements.configuration.basic_description")}
           bodyClassName="px-0 pt-3 pb-0 sm:px-0 sm:pb-0"
         >
           <dl className="divide-y divide-subtle">
@@ -255,7 +250,6 @@ export function ReadOnlyRequirementSettings({ requirement, hint }: { requirement
         className="mt-4"
         icon={ShieldCheck}
         title={t("workspace_products.requirements.configuration.approval")}
-        description={t("workspace_products.requirements.configuration.approval_description")}
         bodyClassName="px-0 pt-3 pb-0 sm:px-0 sm:pb-0"
       >
         <dl className="divide-y divide-subtle">

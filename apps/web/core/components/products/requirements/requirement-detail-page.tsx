@@ -21,7 +21,6 @@ import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-chan
 import { useRequirementDetails } from "@/hooks/store/use-requirement-template-details";
 import { useUser } from "@/hooks/store/user";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
-import { RequirementStateNotice } from "./change/requirement-state-banner";
 import { RequirementStatusActions, RequirementStatusMeta } from "./change/requirement-status-actions";
 import { SubmitChangeModal } from "./change/submit-change-modal";
 import { useRequirementStateActions } from "./change/use-requirement-state-actions";
@@ -319,15 +318,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   isLast
                 />
               </Breadcrumbs>
-              {requirement && (
-                <>
-                  <RequirementStatusMeta requirement={requirement} className="hidden sm:flex" />
-                  <RequirementStateNotice
-                    requirement={requirement}
-                    onViewChangeRequest={() => openChangeRequest(requirement.pending_change_request_id)}
-                  />
-                </>
-              )}
+              {requirement && <RequirementStatusMeta requirement={requirement} className="hidden sm:flex" />}
             </Header.LeftItem>
             <Header.RightItem className="shrink-0 gap-2">
               {activeTab === "configuration" && isEditable && (

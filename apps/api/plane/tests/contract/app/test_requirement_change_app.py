@@ -784,6 +784,74 @@ class TestRequirementChangeApp:
             ["重命名的字段", "新增字段"]
         )
 
+    def test_field_reordering_is_a_submittable_schema_change(self, api_client):
+        approver = self.add_member()
+        requirement = self.create_requirement(approver)
+        first_field = self.add_field(requirement, name="First", sort_order=1000)
+        second_field = self.add_field(requirement, name="Second", sort_order=2000)
+        self.publish(api_client, requirement, approver)
+
+        api_client.post(self.working_copy_url(requirement))
+        configuration = api_client.get(self.configuration_url(requirement)).data
+        save_response = api_client.put(
+            self.configuration_url(requirement),
+            {
+                "expected_updated_at": configuration["requirement"]["updated_at"],
+                "requirement": {},
+                "fields": list(reversed(configuration["fields"])),
+            },
+            format="json",
+        )
+        assert save_response.status_code == status.HTTP_200_OK
+        assert [item["name"] for item in save_response.data["fields"]] == [
+            "Second",
+            "First",
+        ]
+
+        submit_response = self.submit(api_client, requirement, reason="调整字段顺序")
+        assert submit_response.status_code == status.HTTP_201_CREATED
+        assert submit_response.data["updated_count"] == 2
+
+        detail_response = api_client.get(
+            self.url(
+                "requirement-change-request-detail",
+                requirement_id=requirement.id,
+                pk=submit_response.data["id"],
+            )
+        )
+        schema_items = detail_response.data["schema_items"]
+        assert {item["target_id"] for item in schema_items} == {
+            str(first_field.id),
+            str(second_field.id),
+        }
+        assert {
+            (
+                item["before_snapshot"]["sort_order"],
+                item["proposed_snapshot"]["sort_order"],
+            )
+            for item in schema_items
+        } == {(1000, 2000), (2000, 1000)}
+        assert {
+            (
+                item["before_snapshot"]["position"],
+                item["proposed_snapshot"]["position"],
+            )
+            for item in schema_items
+        } == {(1, 2), (2, 1)}
+
+        assert (
+            self.approve(
+                api_client,
+                requirement,
+                submit_response.data["id"],
+                approver,
+            ).status_code
+            == status.HTTP_200_OK
+        )
+        assert list(
+            requirement.fields.order_by("sort_order").values_list("name", flat=True)
+        ) == ["Second", "First"]
+
     def test_version_snapshot_details_are_paginated_and_rollback_needs_approval(
         self, api_client
     ):

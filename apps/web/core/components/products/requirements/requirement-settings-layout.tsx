@@ -8,7 +8,7 @@ import { PILL_BASE, REQUIREMENT_STATUS_PILL } from "./change/styles";
 type TRequirementSettingsCardProps = {
   icon: LucideIcon;
   title: string;
-  description: string;
+  description?: string;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -30,7 +30,7 @@ export function RequirementSettingsCard({
         </span>
         <div className="min-w-0 pt-0.5">
           <h2 className="text-15 font-semibold text-primary">{title}</h2>
-          <p className="mt-1 max-w-[65ch] text-12 leading-5 text-secondary">{description}</p>
+          {description && <p className="mt-1 max-w-[65ch] text-12 leading-5 text-secondary">{description}</p>}
         </div>
       </header>
       <div className={cn("px-4 pt-5 pb-4 sm:px-5 sm:pb-5", bodyClassName)}>{children}</div>
@@ -82,9 +82,6 @@ export function RequirementStatusSummary({
           <h2 className="text-15 font-semibold text-primary">
             {t("workspace_products.requirements.configuration.current_status")}
           </h2>
-          <p className="mt-1 text-12 leading-5 text-secondary">
-            {t("workspace_products.requirements.configuration.status_overview_description")}
-          </p>
         </div>
         <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[status])}>
           {t(`workspace_products.requirements.status.${status}`)}

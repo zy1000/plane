@@ -71,6 +71,7 @@ FIELD_COMPARE_KEYS = (
     "field_type",
     "is_required",
     "is_active",
+    "position",
     "config",
     "default_value",
 )
@@ -143,7 +144,10 @@ def build_change_snapshots(*, requirement, draft):
 def _flatten_fields(tree):
     """摊平字段树，并给子字段带上父字段名，供 diff 展示定位。"""
     flat = {}
+    sibling_positions = {}
     for spec in field_specs_from_tree(tree):
+        position = sibling_positions.get(spec.parent_field_id, 0) + 1
+        sibling_positions[spec.parent_field_id] = position
         flat[spec.id] = {
             "id": spec.id,
             "parent_field_id": spec.parent_field_id,
@@ -152,6 +156,7 @@ def _flatten_fields(tree):
             "is_required": spec.is_required,
             "is_active": spec.is_active,
             "sort_order": spec.sort_order,
+            "position": position,
             "config": spec.config,
             "default_value": spec.default_value,
         }

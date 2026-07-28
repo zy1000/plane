@@ -9,7 +9,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirementChangeApproval, TRequirementChangeRequest } from "@plane/types";
 import { Avatar, Loader } from "@plane/ui";
-import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
+import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { CHANGE_STATUS_PILL, PILL_BASE } from "./styles";
 
 const PER_PAGE_OPTIONS = [10, 20, 50];
@@ -190,7 +190,7 @@ export function ChangeRequestList(props: TProps) {
                   </span>
                 </td>
                 <td className="px-3 py-3 text-11 text-tertiary">
-                  {renderFormattedDate(changeRequest.created_at, "MM-dd HH:mm")}
+                  {`${renderFormattedDate(changeRequest.created_at, "MM-dd")} ${renderFormattedTime(changeRequest.created_at)}`}
                 </td>
               </tr>
             ))}

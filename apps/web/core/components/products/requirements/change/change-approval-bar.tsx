@@ -38,9 +38,9 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
   return (
     <div className="sticky bottom-0 z-[2] flex shrink-0 flex-wrap items-center gap-3 border-t border-subtle bg-surface-1 px-4 py-3 md:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex -space-x-2">
+        <span className="flex items-center gap-1.5">
           {changeRequest.approvals.map((approval) => (
-            <span key={approval.id} className="relative">
+            <span key={approval.id} className="relative shrink-0">
               <Avatar
                 size="base"
                 name={approval.approver_detail?.display_name ?? ""}
