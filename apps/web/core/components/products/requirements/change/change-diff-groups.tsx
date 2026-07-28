@@ -1,176 +1,377 @@
-/**
- * 「基本信息」与「字段定义」两组的卡片式 diff。
- *
- * 这两组不是表格数据且数据量天然很小（meta 六个键、字段通常几十个以内），所以直接
- * 内联在变更单详情响应里，卡片式展示。明细数据组走 detail-diff-grid.tsx。
- */
-import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { isEqual } from "lodash-es";
+import { Info } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
+  IUserLite,
   TRequirementChangeItem,
+  TRequirementField,
   TRequirementMetaChangeSnapshot,
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
-import { cn } from "@plane/utils";
-import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
+import { Avatar, ToggleSwitch } from "@plane/ui";
+import { cn, getFileURL, sanitizeHTML } from "@plane/utils";
+import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
-const SCHEMA_COMPARE_KEYS = ["name", "field_type", "is_required", "is_active", "default_value"] as const;
+const SCHEMA_COMPARE_KEYS = ["name", "field_type", "is_required", "is_active", "config", "default_value"] as const;
 
-export function DiffGroupCard({
-  title,
-  count,
-  isOpen,
-  onToggle,
-  children,
-}: {
-  title: string;
-  count: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+type TSchemaCompareKey = (typeof SCHEMA_COMPARE_KEYS)[number];
+
+const isEmptyValue = (value: unknown) => value === null || value === undefined || value === "";
+
+function useMetaValueFormatter(members: IUserLite[]) {
   const { t } = useTranslation();
-  const Chevron = isOpen ? ChevronDown : ChevronRight;
+  const membersById = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
 
-  return (
-    <section className="rounded-lg border border-subtle">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left"
-      >
-        <Chevron className="size-4 shrink-0 text-secondary" />
-        <span className="text-14 font-semibold text-primary">{title}</span>
-        {count > 0 ? (
-          <span className="grid size-4 place-items-center rounded-full bg-layer-2 text-10 text-secondary">
-            {count}
-          </span>
-        ) : (
-          <span className="text-12 text-tertiary">{t("workspace_products.requirements.change.no_changes")}</span>
-        )}
-      </button>
-      {isOpen && <div className="border-t border-subtle px-4 py-3">{children}</div>}
-    </section>
-  );
-}
+  return (fieldKey: string, value: unknown): string => {
+    if (isEmptyValue(value)) return t("workspace_products.requirements.change.empty_value");
 
-/** 复用同一套 diff 值格式化：布尔转是/否、数组用逗号连接、空值用破折号 */
-const useValueFormatter = () => {
-  const { t } = useTranslation();
-  return (value: unknown): string => {
-    if (value === null || value === undefined || value === "") {
-      return t("workspace_products.requirements.change.empty_value");
+    if (fieldKey === "description_html" && typeof value === "string") {
+      return sanitizeHTML(value) || t("workspace_products.requirements.change.empty_value");
     }
+
+    if (fieldKey === "owner_id" && typeof value === "string") {
+      return membersById.get(value)?.display_name ?? value;
+    }
+
+    if (fieldKey === "approver_ids" && Array.isArray(value)) {
+      if (!value.length) return t("workspace_products.requirements.change.empty_value");
+      return value.map((id) => membersById.get(String(id))?.display_name ?? String(id)).join(", ");
+    }
+
+    if (fieldKey === "approval_type" && typeof value === "string") {
+      return t(`workspace_templates.requirements.approval.${value}`);
+    }
+
     if (typeof value === "boolean") {
       return t(value ? "workspace_products.requirements.change.yes" : "workspace_products.requirements.change.no");
     }
+
     if (Array.isArray(value)) {
       return value.length
         ? value.map((item) => (typeof item === "object" ? JSON.stringify(item) : String(item))).join(", ")
         : t("workspace_products.requirements.change.empty_value");
     }
+
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
   };
+}
+
+type TMetaDiffTableProps = {
+  items: TRequirementChangeItem[];
+  members: IUserLite[];
+  reason: string;
+  createdBy: IUserLite | null;
 };
 
-/** 基本信息组：三列表「字段 / 变更前 / 变更后」 */
-export function MetaDiffTable({ items }: { items: TRequirementChangeItem[] }) {
+/** 概览：以清晰的并列视图展示需求基本信息的前后差异。 */
+export function MetaDiffTable({ items, members, reason, createdBy }: TMetaDiffTableProps) {
   const { t } = useTranslation();
-  const formatValue = useValueFormatter();
+  const formatValue = useMetaValueFormatter(members);
+
+  const rows = items.map((item) => {
+    const before = item.before_snapshot as TRequirementMetaChangeSnapshot | null;
+    const after = item.proposed_snapshot as TRequirementMetaChangeSnapshot | null;
+    const fieldKey = after?.field ?? before?.field ?? "";
+    return {
+      id: item.id,
+      label: t(`workspace_products.requirements.change.meta_fields.${fieldKey}`),
+      before: formatValue(fieldKey, before?.value),
+      after: formatValue(fieldKey, after?.value),
+    };
+  });
 
   return (
-    <table className="w-full border-collapse text-left text-13">
-      <thead className="bg-layer-1 text-12 font-medium text-secondary">
-        <tr className="border-b border-subtle">
-          <th className="w-1/3 px-3 py-2">{t("workspace_products.requirements.change.meta_columns.field")}</th>
-          <th className="w-1/3 px-3 py-2">{t("workspace_products.requirements.change.meta_columns.before")}</th>
-          <th className="w-1/3 px-3 py-2">{t("workspace_products.requirements.change.meta_columns.after")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => {
-          const before = item.before_snapshot as TRequirementMetaChangeSnapshot | null;
-          const after = item.proposed_snapshot as TRequirementMetaChangeSnapshot | null;
-          const fieldKey = after?.field ?? before?.field ?? "";
-          return (
-            <tr key={item.id} className="border-b border-subtle last:border-b-0">
-              <td className="px-3 py-2 text-primary">
-                {t(`workspace_products.requirements.change.meta_fields.${fieldKey}`)}
-              </td>
-              <td className="bg-danger-subtle/40 px-3 py-2 text-primary">{formatValue(before?.value)}</td>
-              <td className="bg-success-subtle/40 px-3 py-2 text-primary">{formatValue(after?.value)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <section aria-labelledby="change-overview-title" className="min-w-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="change-overview-title" className="text-16 font-semibold text-primary">
+          {t("workspace_products.requirements.change.overview.title")}
+        </h2>
+        <p className="text-12 text-tertiary">{t("workspace_products.requirements.change.overview.description")}</p>
+      </div>
+
+      {rows.length > 0 ? (
+        <>
+          <div className="mt-3 hidden overflow-hidden rounded-md border border-subtle md:block">
+            <table className="w-full table-fixed border-collapse text-left">
+              <thead className="bg-layer-1 text-12 font-medium text-secondary">
+                <tr className="border-b border-subtle">
+                  <th className="w-1/4 px-4 py-2.5">
+                    {t("workspace_products.requirements.change.meta_columns.field")}
+                  </th>
+                  <th className="w-[37.5%] px-4 py-2.5">
+                    {t("workspace_products.requirements.change.meta_columns.before")}
+                  </th>
+                  <th className="w-[37.5%] px-4 py-2.5">
+                    {t("workspace_products.requirements.change.meta_columns.after")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-b border-subtle last:border-b-0">
+                    <th className="px-4 py-3 text-13 font-medium text-primary">{row.label}</th>
+                    <td className="bg-danger-subtle/40 px-4 py-3 text-13 leading-5 text-danger-primary">
+                      {row.before}
+                    </td>
+                    <td className="bg-success-subtle/40 px-4 py-3 text-13 leading-5 text-success-primary">
+                      {row.after}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 divide-y divide-subtle overflow-hidden rounded-md border border-subtle md:hidden">
+            {rows.map((row) => (
+              <div key={row.id} className="px-3 py-3">
+                <p className="text-13 font-medium text-primary">{row.label}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="rounded bg-danger-subtle/40 p-2">
+                    <p className="text-12 text-danger-secondary">
+                      {t("workspace_products.requirements.change.meta_columns.before")}
+                    </p>
+                    <p className="mt-1 text-13 leading-5 text-danger-primary">{row.before}</p>
+                  </div>
+                  <div className="rounded bg-success-subtle/40 p-2">
+                    <p className="text-12 text-success-secondary">
+                      {t("workspace_products.requirements.change.meta_columns.after")}
+                    </p>
+                    <p className="mt-1 text-13 leading-5 text-success-primary">{row.after}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="mt-3 rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
+          {t("workspace_products.requirements.change.overview.empty")}
+        </p>
+      )}
+
+      <div className="mt-5 border-t border-subtle pt-4">
+        <h3 className="text-14 font-semibold text-primary">
+          {t("workspace_products.requirements.change.overview.reason")}
+        </h3>
+        <div className="mt-2 flex items-start gap-2.5">
+          <Avatar size="sm" name={createdBy?.display_name ?? ""} src={getFileURL(createdBy?.avatar_url ?? "")} />
+          <p className="max-w-[75ch] text-13 leading-5 text-secondary">
+            {reason || t("workspace_products.requirements.change.untitled")}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
-/** 字段定义组：每项一行，修改项的属性值用「旧值红删除线 → 新值绿」 */
+const getConfigSummary = (
+  config: TRequirementField["config"],
+  t: (key: string, values?: Record<string, unknown>) => string
+) => {
+  const parts: string[] = [];
+  if (config.selection_mode) {
+    parts.push(
+      t(
+        config.selection_mode === "multiple"
+          ? "workspace_templates.requirements.editor.builder.multiple_select"
+          : "workspace_templates.requirements.editor.builder.single_select"
+      )
+    );
+  }
+  if (config.options?.length) {
+    parts.push(
+      `${t("workspace_products.requirements.change.field_props.options")}: ${config.options
+        .map((option) => option.label)
+        .join(", ")}`
+    );
+  }
+  if (typeof config.placeholder === "string" && config.placeholder.trim()) {
+    parts.push(`${t("workspace_templates.requirements.fields.placeholder")}: ${config.placeholder.trim()}`);
+  }
+  if (typeof config.description === "string" && config.description.trim()) {
+    parts.push(`${t("workspace_templates.requirements.fields.description")}: ${config.description.trim()}`);
+  }
+  const extraConfig = Object.fromEntries(
+    Object.entries(config).filter(
+      ([key, value]) =>
+        !["selection_mode", "options", "placeholder", "description"].includes(key) && !isEmptyValue(value)
+    )
+  );
+  if (Object.keys(extraConfig).length > 0) parts.push(JSON.stringify(extraConfig));
+  return parts;
+};
+
+/** 字段定义：按字段聚合属性差异，避免重复卡片抢占注意力。 */
 export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
   const { t } = useTranslation();
-  const formatValue = useValueFormatter();
+  const [changedOnly, setChangedOnly] = useState(true);
+
+  const formatValue = (
+    key: TSchemaCompareKey,
+    value: unknown,
+    snapshot: TRequirementSchemaChangeSnapshot | null
+  ): string => {
+    if (isEmptyValue(value)) return t("workspace_products.requirements.change.empty_value");
+    if (key === "field_type" && typeof value === "string") {
+      return t(`workspace_templates.requirements.field_types.${value}`);
+    }
+    if (key === "config" && typeof value === "object") {
+      const parts = getConfigSummary(value as TRequirementField["config"], t);
+      return parts.length ? parts.join(" · ") : t("workspace_products.requirements.change.empty_value");
+    }
+    if (key === "default_value" && snapshot?.field_type === "select") {
+      const optionById = new Map((snapshot.config.options ?? []).map((option) => [option.id, option.label]));
+      if (Array.isArray(value)) return value.map((item) => optionById.get(String(item)) ?? String(item)).join(", ");
+      return optionById.get(String(value)) ?? String(value);
+    }
+    if (typeof value === "boolean") {
+      return t(value ? "workspace_products.requirements.change.yes" : "workspace_products.requirements.change.no");
+    }
+    if (Array.isArray(value)) return value.map(String).join(", ");
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
 
   return (
-    <ul className="divide-y divide-subtle">
-      {items.map((item) => {
-        const before = item.before_snapshot as TRequirementSchemaChangeSnapshot | null;
-        const after = item.proposed_snapshot as TRequirementSchemaChangeSnapshot | null;
-        const field = after ?? before;
-        if (!field) return null;
-        const isUpdate = item.change_type === "update" && before && after;
+    <section aria-labelledby="change-schema-title" className="min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="change-schema-title" className="text-16 font-semibold text-primary">
+            {t("workspace_products.requirements.change.schema_review.title")}
+          </h2>
+          <p className="text-12 text-tertiary">
+            {t("workspace_products.requirements.change.schema_review.description", { count: items.length })}
+          </p>
+        </div>
+        <div className="flex min-h-8 items-center gap-2 text-12 text-secondary">
+          <span>{t("workspace_products.requirements.change.schema_review.changed_only")}</span>
+          <ToggleSwitch
+            value={changedOnly}
+            onChange={setChangedOnly}
+            label={t("workspace_products.requirements.change.schema_review.changed_only")}
+            size="sm"
+            className="focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:ring-offset-1"
+          />
+        </div>
+      </div>
 
-        return (
-          <li key={item.id} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
-            <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type], "mt-0.5 shrink-0")}>
-              {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-13 font-medium text-primary">
-                {t("workspace_products.requirements.change.field_label", {
-                  name: field.name,
-                  type: t(`workspace_templates.requirements.field_types.${field.field_type}`),
-                })}
-                {field.parent_name && (
-                  <span className="ml-1.5 text-11 text-tertiary">
-                    {t("workspace_products.requirements.change.field_props.parent")}: {field.parent_name}
-                  </span>
-                )}
-              </p>
-              <dl className="mt-1 space-y-0.5 pl-3 text-12">
-                {SCHEMA_COMPARE_KEYS.map((key) => {
-                  const beforeValue = before?.[key];
-                  const afterValue = after?.[key];
-                  if (isUpdate && formatValue(beforeValue) === formatValue(afterValue)) return null;
-                  if (!isUpdate && (afterValue ?? beforeValue) === undefined) return null;
-                  return (
-                    <div key={key} className="flex items-baseline gap-1.5">
-                      <dt className="shrink-0 text-tertiary">
-                        {t(`workspace_products.requirements.change.field_props.${key}`)}:
-                      </dt>
-                      <dd className="min-w-0 text-secondary">
-                        {isUpdate ? (
-                          <>
-                            <span className={DIFF_OLD_VALUE}>{formatValue(beforeValue)}</span>
-                            <span className="mx-1.5 text-tertiary">→</span>
-                            <span className={DIFF_NEW_VALUE}>{formatValue(afterValue)}</span>
-                          </>
-                        ) : (
-                          formatValue(item.change_type === "delete" ? beforeValue : afterValue)
-                        )}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+      {items.length > 0 ? (
+        <div className="mt-3 overflow-x-auto rounded-md border border-subtle">
+          <table className="w-full min-w-[760px] border-collapse text-left">
+            <thead className="bg-layer-1 text-12 font-medium text-secondary">
+              <tr className="border-b border-subtle">
+                <th className="w-24 px-4 py-2.5">
+                  {t("workspace_products.requirements.change.schema_review.columns.change")}
+                </th>
+                <th className="w-64 px-4 py-2.5">
+                  {t("workspace_products.requirements.change.schema_review.columns.field")}
+                </th>
+                <th className="px-4 py-2.5">
+                  {t("workspace_products.requirements.change.schema_review.columns.properties")}
+                </th>
+                <th className="w-48 px-4 py-2.5">
+                  {t("workspace_products.requirements.change.schema_review.columns.scope")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const before = item.before_snapshot as TRequirementSchemaChangeSnapshot | null;
+                const after = item.proposed_snapshot as TRequirementSchemaChangeSnapshot | null;
+                const field = after ?? before;
+                if (!field) return null;
+                const isUpdate = item.change_type === "update" && Boolean(before && after);
+                const visibleKeys = SCHEMA_COMPARE_KEYS.filter((key) => {
+                  if (!isUpdate) return key !== "name" && key !== "field_type";
+                  return !changedOnly || !isEqual(before?.[key], after?.[key]);
+                });
+
+                return (
+                  <tr
+                    key={item.id}
+                    className={cn(
+                      "border-b border-subtle align-top last:border-b-0",
+                      CHANGE_TYPE_ROW[item.change_type]
+                    )}
+                  >
+                    <td className="px-4 py-4">
+                      <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type])}>
+                        {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
+                      </span>
+                    </td>
+                    <th className="px-4 py-4 font-normal">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-13 font-semibold text-primary">{field.name}</span>
+                        <span className="rounded bg-layer-2 px-1.5 py-0.5 text-11 text-secondary">
+                          {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
+                        </span>
+                      </div>
+                      {field.parent_name && <p className="mt-1 text-12 text-tertiary">{field.parent_name}</p>}
+                    </th>
+                    <td className="px-4 py-4">
+                      {visibleKeys.length > 0 ? (
+                        <dl className="space-y-1.5 text-13">
+                          {visibleKeys.map((key) => {
+                            const beforeValue = before?.[key];
+                            const afterValue = after?.[key];
+                            return (
+                              <div key={key} className="flex min-w-0 items-baseline gap-2">
+                                <dt className="w-20 shrink-0 text-tertiary">
+                                  {t(`workspace_products.requirements.change.field_props.${key}`)}
+                                </dt>
+                                <dd className="min-w-0 text-secondary">
+                                  {isUpdate ? (
+                                    <>
+                                      <span className={DIFF_OLD_VALUE}>{formatValue(key, beforeValue, before)}</span>
+                                      <span className="mx-2 text-tertiary">→</span>
+                                      <span className={DIFF_NEW_VALUE}>{formatValue(key, afterValue, after)}</span>
+                                    </>
+                                  ) : (
+                                    <span className={item.change_type === "create" ? DIFF_NEW_VALUE : DIFF_OLD_VALUE}>
+                                      {formatValue(
+                                        key,
+                                        item.change_type === "delete" ? beforeValue : afterValue,
+                                        field
+                                      )}
+                                    </span>
+                                  )}
+                                </dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                      ) : (
+                        <span className="text-12 text-tertiary">
+                          {t("workspace_products.requirements.change.no_changes")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-13 text-secondary">
+                      {field.parent_name
+                        ? t("workspace_products.requirements.change.schema_review.child_field", {
+                            name: field.parent_name,
+                          })
+                        : t("workspace_products.requirements.change.schema_review.root_field")}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="mt-3 rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
+          {t("workspace_products.requirements.change.schema_review.empty")}
+        </p>
+      )}
+
+      <div className="mt-4 flex items-start gap-2 rounded-md border border-accent-subtle bg-accent-subtle px-3 py-2.5 text-12 leading-5 text-accent-primary">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <p>{t("workspace_products.requirements.change.schema_review.notice")}</p>
+      </div>
+    </section>
   );
 }

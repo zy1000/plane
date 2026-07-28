@@ -422,6 +422,120 @@ class TestRequirementChangeApp:
         requirement.refresh_from_db()
         assert requirement.status == RequirementStatus.PUBLISHED
 
+    def test_approval_setting_change_takes_effect_from_the_next_request(
+        self, api_client
+    ):
+        original_approver = self.add_member()
+        added_approver = self.add_member()
+        requirement = self.create_requirement(original_approver)
+        self.add_field(requirement)
+        self.publish(api_client, requirement, original_approver)
+
+        api_client.force_authenticate(user=self.owner)
+        assert (
+            api_client.post(self.working_copy_url(requirement)).status_code
+            == status.HTTP_200_OK
+        )
+        configuration = api_client.get(self.configuration_url(requirement)).data
+        save_response = api_client.put(
+            self.configuration_url(requirement),
+            {
+                "expected_updated_at": configuration["requirement"]["updated_at"],
+                "requirement": {
+                    "approval_type": RequirementApprovalType.ALL,
+                    "approver_ids": [
+                        str(original_approver.id),
+                        str(added_approver.id),
+                    ],
+                },
+                "fields": configuration["fields"],
+            },
+            format="json",
+        )
+        assert save_response.status_code == status.HTTP_200_OK
+
+        # 修改审批设置的这一单仍由变更前已生效的配置审批。
+        submit_response = self.submit(api_client, requirement, reason="调整审批设置")
+        assert submit_response.status_code == status.HTTP_201_CREATED
+        assert submit_response.data["approval_type"] == RequirementApprovalType.ANY
+        assert submit_response.data["required_count"] is None
+        assert [
+            str(item["approver_id"]) for item in submit_response.data["approvals"]
+        ] == [str(original_approver.id)]
+        change_request_id = submit_response.data["id"]
+
+        proposed_approver_response = self.approve(
+            api_client,
+            requirement,
+            change_request_id,
+            added_approver,
+        )
+        assert proposed_approver_response.status_code == status.HTTP_409_CONFLICT
+        assert (
+            proposed_approver_response.data["code"] == "REQUIREMENT_NOT_APPROVER"
+        )
+        assert (
+            self.approve(
+                api_client,
+                requirement,
+                change_request_id,
+                original_approver,
+            ).data["status"]
+            == RequirementChangeStatus.APPROVED
+        )
+
+        requirement.refresh_from_db()
+        assert requirement.approval_type == RequirementApprovalType.ALL
+        assert list(
+            requirement.approvers.order_by("sort_order").values_list(
+                "approver_id", flat=True
+            )
+        ) == [original_approver.id, added_approver.id]
+
+        # 上一单通过后，新配置才成为下一份变更单的审批快照。
+        api_client.force_authenticate(user=self.owner)
+        assert (
+            api_client.post(self.working_copy_url(requirement)).status_code
+            == status.HTTP_200_OK
+        )
+        assert (
+            api_client.patch(
+                self.url("requirement-detail", pk=requirement.id),
+                {"title": "下一次变更"},
+                format="json",
+            ).status_code
+            == status.HTTP_200_OK
+        )
+        next_submit_response = self.submit(
+            api_client, requirement, reason="验证新审批设置"
+        )
+        assert next_submit_response.status_code == status.HTTP_201_CREATED
+        assert next_submit_response.data["approval_type"] == RequirementApprovalType.ALL
+        assert {
+            str(item["approver_id"])
+            for item in next_submit_response.data["approvals"]
+        } == {str(original_approver.id), str(added_approver.id)}
+
+        next_change_request_id = next_submit_response.data["id"]
+        assert (
+            self.approve(
+                api_client,
+                requirement,
+                next_change_request_id,
+                original_approver,
+            ).data["status"]
+            == RequirementChangeStatus.PENDING
+        )
+        assert (
+            self.approve(
+                api_client,
+                requirement,
+                next_change_request_id,
+                added_approver,
+            ).data["status"]
+            == RequirementChangeStatus.APPROVED
+        )
+
     def test_n_of_m_rule_and_single_rejection_blocks_the_change(self, api_client):
         first = self.add_member()
         second = self.add_member()

@@ -44,7 +44,6 @@ import {
   ChangedFieldCorner,
   getCurrentPageOffset,
   getDetailRowKey,
-  getFormColumnCount,
   getFormRows,
   getMaxFormRows,
   isEmptyDetailValue,
@@ -863,6 +862,19 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         </Button>
       </div>
     </>
+  ) : showSelectionActions ? (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <span className="px-1 text-12 font-medium text-primary tabular-nums" aria-live="polite">
+        {t("workspace_templates.requirements.data.selected_count", { count: selectedIds.length })}
+      </span>
+      <Button variant="ghost" size="lg" onClick={() => setSelectedIds([])}>
+        {t("workspace_templates.requirements.data.clear_selection")}
+      </Button>
+      <Button variant="error-outline" size="lg" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
+        <Trash2 className="size-3.5" />
+        {t("delete")}
+      </Button>
+    </div>
   ) : (
     <>
       <div className="flex items-center">
@@ -1062,9 +1074,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                     checked={!hiddenFieldIds.includes(field.id)}
                     onChange={() =>
                       setHiddenFieldIds((current) =>
-                        current.includes(field.id)
-                          ? current.filter((id) => id !== field.id)
-                          : [...current, field.id]
+                        current.includes(field.id) ? current.filter((id) => id !== field.id) : [...current, field.id]
                       )
                     }
                   />
@@ -1111,37 +1121,14 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
       {useExternalToolbar &&
         toolbarPortalEl &&
-        createPortal(
+        createPortal(<div className="flex min-w-0 items-center gap-2">{toolbarActions}</div>, toolbarPortalEl)}
+      {!useExternalToolbar && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
           <div
-            className={cn(
-              "flex flex-wrap items-center gap-2",
-              editor.isEditing ? "min-w-0 justify-end" : undefined
-            )}
+            className={cn("flex flex-wrap items-center gap-2", editor.isEditing ? "w-full justify-between" : "ml-auto")}
           >
             {toolbarActions}
-          </div>,
-          toolbarPortalEl
-        )}
-      {(!useExternalToolbar || showSelectionActions) && (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
-          {showSelectionActions && (
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
-                <Trash2 className="size-3.5" />
-                {t("workspace_templates.requirements.data.delete_selected", { count: selectedIds.length })}
-              </Button>
-            </div>
-          )}
-          {!useExternalToolbar && (
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-2",
-                editor.isEditing ? "w-full justify-between" : "ml-auto"
-              )}
-            >
-              {toolbarActions}
-            </div>
-          )}
+          </div>
         </div>
       )}
 

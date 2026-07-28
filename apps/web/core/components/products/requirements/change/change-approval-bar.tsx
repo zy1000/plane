@@ -36,7 +36,7 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
   const rule = approvalRuleLabel(t, changeRequest.approval_type, changeRequest.required_count);
 
   return (
-    <div className="sticky bottom-0 z-[2] flex flex-wrap items-center gap-3 border-t border-subtle bg-surface-1 px-4 py-3">
+    <div className="sticky bottom-0 z-[2] flex shrink-0 flex-wrap items-center gap-3 border-t border-subtle bg-surface-1 px-4 py-3 md:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex -space-x-2">
           {changeRequest.approvals.map((approval) => (
@@ -49,14 +49,14 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
               <span
                 aria-hidden
                 className={cn(
-                  "absolute right-0 bottom-0 size-2 rounded-full ring-2 ring-surface-1",
+                  "ring-surface-1 absolute right-0 bottom-0 size-2 rounded-full ring-2",
                   dotClass(approval)
                 )}
               />
             </span>
           ))}
         </span>
-        <span className="text-12 text-secondary">
+        <span className="text-13 text-secondary">
           {t("workspace_products.requirements.change.bar.effective_after", {
             approved: changeRequest.approved_count,
             total: changeRequest.total_count,
@@ -66,14 +66,21 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
       </div>
 
       {changeRequest.can_approve ? (
-        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+        <div className="flex min-w-0 basis-full items-center justify-end gap-2 lg:ml-auto lg:flex-1 lg:basis-auto">
+          <label htmlFor="change-approval-comment" className="sr-only">
+            {t("workspace_products.requirements.change.bar.comment_label")}
+          </label>
           <input
+            id="change-approval-comment"
             value={comment}
             onChange={(event) => setComment(event.target.value)}
             maxLength={2000}
             placeholder={t("workspace_products.requirements.change.bar.comment_placeholder")}
-            className="focus:border-accent-primary h-9 min-w-0 max-w-md flex-1 rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none placeholder:text-placeholder"
+            className="focus:border-accent-primary focus:ring-accent-primary/10 h-9 max-w-md min-w-0 flex-1 rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder focus:ring-2"
           />
+          <Button variant="error-outline" disabled={isMutating} onClick={() => onReject(comment)}>
+            {t("workspace_products.requirements.change.bar.reject")}
+          </Button>
           <Button
             variant="primary"
             className="bg-success-primary text-on-color hover:bg-success-primary hover:opacity-90"
@@ -81,9 +88,6 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
             onClick={() => onApprove(comment)}
           >
             {t("workspace_products.requirements.change.bar.approve")}
-          </Button>
-          <Button variant="error-outline" disabled={isMutating} onClick={() => onReject(comment)}>
-            {t("workspace_products.requirements.change.bar.reject")}
           </Button>
         </div>
       ) : changeRequest.can_cancel ? (

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { Database, FileText, GitBranch, History, Save, Settings2 } from "lucide-react";
+import { ChevronLeft, Database, GitBranch, History, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement, TRequirementField, TRequirementFieldDraft, IUserLite } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -20,8 +21,8 @@ import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-chan
 import { useRequirementDetails } from "@/hooks/store/use-requirement-template-details";
 import { useUser } from "@/hooks/store/user";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
-import { RequirementStateBanner } from "./change/requirement-state-banner";
-import { RequirementStatusActions } from "./change/requirement-status-actions";
+import { RequirementStateNotice } from "./change/requirement-state-banner";
+import { RequirementStatusActions, RequirementStatusMeta } from "./change/requirement-status-actions";
 import { SubmitChangeModal } from "./change/submit-change-modal";
 import { useRequirementStateActions } from "./change/use-requirement-state-actions";
 import { VersionHistory } from "./change/version-history";
@@ -280,16 +281,24 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     <>
       <PageHead title={requirement?.title ?? t("workspace_products.navigation.requirements")} />
       <AppHeader
+        rowClassName="h-[52px]"
         header={
-          <Header>
-            <Header.LeftItem className="min-w-0">
-              <Breadcrumbs>
+          <Header className="min-w-0">
+            <Header.LeftItem className="max-w-none min-w-0 flex-nowrap">
+              <button
+                type="button"
+                onClick={() => navigate(`/${workspaceSlug}/products/${productId}/requirements`)}
+                className="grid h-11 w-7 shrink-0 place-items-center rounded-md text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong"
+                aria-label={t("common.back")}
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <Breadcrumbs className="min-w-0 flex-grow-0">
                 <Breadcrumbs.Item
                   component={
                     <BreadcrumbLink
                       href={`/${workspaceSlug}/products/${productId}/requirements`}
                       label={t("workspace_products.navigation.requirements")}
-                      icon={<FileText className="size-4 text-secondary" />}
                     />
                   }
                 />
@@ -300,14 +309,27 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                         <Loader.Item height="22px" />
                       </Loader>
                     ) : (
-                      <BreadcrumbLink label={requirement.title} isLast />
+                      <Tooltip tooltipContent={requirement.title} position="bottom">
+                        <h1 className="text-15 max-w-44 truncate font-semibold text-primary sm:max-w-60 xl:max-w-80">
+                          {requirement.title}
+                        </h1>
+                      </Tooltip>
                     )
                   }
                   isLast
                 />
               </Breadcrumbs>
+              {requirement && (
+                <>
+                  <RequirementStatusMeta requirement={requirement} className="hidden sm:flex" />
+                  <RequirementStateNotice
+                    requirement={requirement}
+                    onViewChangeRequest={() => openChangeRequest(requirement.pending_change_request_id)}
+                  />
+                </>
+              )}
             </Header.LeftItem>
-            <Header.RightItem className="gap-2">
+            <Header.RightItem className="shrink-0 gap-2">
               {activeTab === "configuration" && isEditable && (
                 <Button
                   variant="primary"
@@ -336,52 +358,53 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         }
       />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        <nav className="flex h-11 shrink-0 items-center gap-2 border-b border-subtle px-4 md:px-6">
-          <div className="flex h-full items-end gap-1">
-            {[
-              { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
-              {
-                key: "configuration" as const,
-                icon: Settings2,
-                label: t("workspace_products.requirements.tabs.configuration"),
-              },
-              { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
-              { key: "versions" as const, icon: GitBranch, label: t("workspace_products.requirements.tabs.versions") },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  disabled={isDataEditing || (activeTab === "configuration" && isDirty)}
-                  onClick={() => setTab(tab.key)}
-                  className={cn(
-                    "relative flex h-11 items-center gap-1.5 px-3 text-12 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                    activeTab === tab.key
-                      ? "font-medium text-accent-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:bg-accent-primary"
-                      : "text-secondary hover:text-primary"
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                  {tab.label}
-                  {tab.key === "changes" && pendingCount > 0 && (
-                    <span className="ml-1 grid size-4 place-items-center rounded-full bg-warning-primary text-10 text-on-color">
-                      {pendingCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+        <nav className="flex h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-subtle px-4 md:px-6">
+          <div className="min-w-0 flex-1 self-stretch overflow-x-auto">
+            <div className="flex h-full min-w-max items-end gap-1">
+              {[
+                { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
+                {
+                  key: "configuration" as const,
+                  icon: Settings2,
+                  label: t("workspace_products.requirements.tabs.configuration"),
+                },
+                { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
+                {
+                  key: "versions" as const,
+                  icon: GitBranch,
+                  label: t("workspace_products.requirements.tabs.versions"),
+                },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    disabled={isDataEditing || (activeTab === "configuration" && isDirty)}
+                    onClick={() => setTab(tab.key)}
+                    className={cn(
+                      "relative flex h-11 items-center gap-1.5 px-3 text-12 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                      activeTab === tab.key
+                        ? "font-medium text-accent-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:bg-accent-primary"
+                        : "text-secondary hover:text-primary"
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                    {tab.label}
+                    {tab.key === "changes" && pendingCount > 0 && (
+                      <span className="ml-1 grid size-4 place-items-center rounded-full bg-warning-primary text-10 text-on-color">
+                        {pendingCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          {activeTab === "data" && <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 items-center" />}
+          {activeTab === "data" && (
+            <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 shrink-0 items-center pl-2" />
+          )}
         </nav>
-
-        {requirement && (activeTab === "data" || activeTab === "configuration") && (
-          <RequirementStateBanner
-            requirement={requirement}
-            onViewChangeRequest={() => openChangeRequest(requirement.pending_change_request_id)}
-          />
-        )}
 
         {detailsStore.configurationError && !detailsStore.configuration ? (
           <div className="grid flex-1 place-items-center p-6 text-center">
@@ -402,6 +425,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             workspaceSlug={workspaceSlug}
             requirementId={requirementId ?? ""}
             fields={detailsStore.configuration?.fields ?? []}
+            members={memberOptions}
             store={changesStore}
             openedChangeRequestId={openedChangeRequestId}
             onOpenChangeRequest={openChangeRequest}
@@ -484,6 +508,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 {settingsDraft ? (
                   <RequirementSettingsPanel
                     draft={settingsDraft}
+                    currentVersion={requirement?.current_version ?? null}
                     memberOptions={memberOptions}
                     onChange={setSettingsDraft}
                   />

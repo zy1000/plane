@@ -1,5 +1,5 @@
 /** 「变更记录」Tab：列表与对比页共用一个 Tab，靠 URL 上的变更单 ID 切换。 */
-import type { TRequirementField } from "@plane/types";
+import type { TRequirementField, IUserLite } from "@plane/types";
 import type { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { ChangeRequestDetail } from "./change-request-detail";
 import { ChangeRequestList } from "./change-request-list";
@@ -8,6 +8,7 @@ type TProps = {
   workspaceSlug: string;
   requirementId: string;
   fields: TRequirementField[];
+  members: IUserLite[];
   store: ReturnType<typeof useRequirementChangeRequests>;
   openedChangeRequestId: string | null;
   onOpenChangeRequest: (changeRequestId: string | null) => void;
@@ -15,7 +16,16 @@ type TProps = {
 };
 
 export function RequirementChangesTab(props: TProps) {
-  const { workspaceSlug, requirementId, fields, store, openedChangeRequestId, onOpenChangeRequest, onSettled } = props;
+  const {
+    workspaceSlug,
+    requirementId,
+    fields,
+    members,
+    store,
+    openedChangeRequestId,
+    onOpenChangeRequest,
+    onSettled,
+  } = props;
 
   if (openedChangeRequestId) {
     return (
@@ -24,6 +34,7 @@ export function RequirementChangesTab(props: TProps) {
         requirementId={requirementId}
         changeRequestId={openedChangeRequestId}
         fields={fields}
+        members={members}
         onBack={() => onOpenChangeRequest(null)}
         onSettled={onSettled}
       />

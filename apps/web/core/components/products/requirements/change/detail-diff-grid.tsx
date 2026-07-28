@@ -91,9 +91,13 @@ const alignSubRows = (
   return aligned;
 };
 
-const EmptyValue = () => {
+const EmptyValue = ({ className }: { className?: string }) => {
   const { t } = useTranslation();
-  return <span className="text-13 text-placeholder">{t("workspace_products.requirements.change.empty_value")}</span>;
+  return (
+    <span className={cn("text-13 text-placeholder", className)}>
+      {t("workspace_products.requirements.change.empty_value")}
+    </span>
+  );
 };
 
 /** 单元格：新增行只出绿值、删除行只出红删除线值、修改单元格旧值在上新值在下 */
@@ -103,33 +107,59 @@ function DiffCell({
   before,
   after,
   workspaceSlug,
+  valueClassName,
 }: {
   field: TRequirementField;
   changeType: TRequirementChangeType;
   before: TRequirementDetailValue | undefined;
   after: TRequirementDetailValue | undefined;
   workspaceSlug: string;
+  valueClassName?: string;
 }) {
   if (changeType === "create") {
-    return <LeafValue field={field} value={after} workspaceSlug={workspaceSlug} className={DIFF_NEW_VALUE} />;
+    return (
+      <LeafValue
+        field={field}
+        value={after}
+        workspaceSlug={workspaceSlug}
+        className={cn(DIFF_NEW_VALUE, valueClassName)}
+      />
+    );
   }
   if (changeType === "delete") {
-    return <LeafValue field={field} value={before} workspaceSlug={workspaceSlug} className={DIFF_OLD_VALUE} />;
+    return (
+      <LeafValue
+        field={field}
+        value={before}
+        workspaceSlug={workspaceSlug}
+        className={cn(DIFF_OLD_VALUE, valueClassName)}
+      />
+    );
   }
   if (isEqual(before, after)) {
-    return <LeafValue field={field} value={before} workspaceSlug={workspaceSlug} />;
+    return <LeafValue field={field} value={before} workspaceSlug={workspaceSlug} className={valueClassName} />;
   }
   return (
     <span className="flex flex-col gap-0.5">
       {before === undefined || before === null || before === "" ? (
-        <EmptyValue />
+        <EmptyValue className={valueClassName} />
       ) : (
-        <LeafValue field={field} value={before} workspaceSlug={workspaceSlug} className={DIFF_OLD_VALUE} />
+        <LeafValue
+          field={field}
+          value={before}
+          workspaceSlug={workspaceSlug}
+          className={cn(DIFF_OLD_VALUE, valueClassName)}
+        />
       )}
       {after === undefined || after === null || after === "" ? (
-        <EmptyValue />
+        <EmptyValue className={valueClassName} />
       ) : (
-        <LeafValue field={field} value={after} workspaceSlug={workspaceSlug} className={DIFF_NEW_VALUE} />
+        <LeafValue
+          field={field}
+          value={after}
+          workspaceSlug={workspaceSlug}
+          className={cn(DIFF_NEW_VALUE, valueClassName)}
+        />
       )}
     </span>
   );
@@ -151,6 +181,8 @@ type TProps = {
   prevPageResults?: boolean;
   changeType: TRequirementChangeType | undefined;
   changedColumnsOnly: boolean;
+  /** 仅变更详情页使用舒适密度；版本历史保持默认密度。 */
+  density?: "default" | "comfortable";
   onChangeTypeChange: (value: TRequirementChangeType | undefined) => void;
   onChangedColumnsOnlyChange: (value: boolean) => void;
   onPerPageChange: (value: number) => void;
@@ -173,12 +205,16 @@ export function DetailDiffGrid(props: TProps) {
     prevPageResults,
     changeType,
     changedColumnsOnly,
+    density = "default",
     onChangeTypeChange,
     onChangedColumnsOnlyChange,
     onPerPageChange,
     onCursorChange,
   } = props;
   const { t } = useTranslation();
+  const isComfortable = density === "comfortable";
+  const cellPaddingClass = isComfortable ? "py-3" : "py-2";
+  const valueClassName = isComfortable ? "text-14" : undefined;
 
   const rootFields = useMemo(() => {
     const active = fields.filter((field) => field.is_active);
@@ -198,10 +234,7 @@ export function DetailDiffGrid(props: TProps) {
     const alignedByForm = new Map(
       formFields.map((form) => [form.id, alignSubRows(beforeData, afterData, form.id)] as const)
     );
-    const totalRows = Math.max(
-      1,
-      ...Array.from(alignedByForm.values(), (aligned) => aligned.length)
-    );
+    const totalRows = Math.max(1, ...Array.from(alignedByForm.values(), (aligned) => aligned.length));
     const rowToneClass = CHANGE_TYPE_ROW[item.change_type];
     const groupCellClass = "border-b border-b-subtle";
 
@@ -214,7 +247,11 @@ export function DetailDiffGrid(props: TProps) {
               {isFirstRow && (
                 <td
                   rowSpan={totalRows}
-                  className={cn("w-20 border-r border-subtle px-2 py-2 text-center align-middle", groupCellClass)}
+                  className={cn(
+                    "w-20 border-r border-subtle px-2 text-center align-middle",
+                    cellPaddingClass,
+                    groupCellClass
+                  )}
                 >
                   <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type])}>
                     {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
@@ -231,9 +268,10 @@ export function DetailDiffGrid(props: TProps) {
                       key={field.id}
                       rowSpan={totalRows}
                       className={cn(
-                        "min-w-40 border-r border-subtle px-3 py-2 align-middle",
+                        "min-w-40 border-r border-subtle px-3 align-middle",
+                        cellPaddingClass,
                         groupCellClass,
-                        hasChanged && "relative"
+                        hasChanged && "relative bg-danger-subtle/40"
                       )}
                     >
                       <DiffCell
@@ -242,6 +280,7 @@ export function DetailDiffGrid(props: TProps) {
                         before={beforeData[field.id]}
                         after={afterData[field.id]}
                         workspaceSlug={workspaceSlug}
+                        valueClassName={valueClassName}
                       />
                       {hasChanged && <ChangedFieldCorner />}
                     </td>,
@@ -254,7 +293,9 @@ export function DetailDiffGrid(props: TProps) {
                     <td
                       key={`${form.id}-empty`}
                       className={cn(
-                        "min-w-40 border-r border-subtle px-3 py-2 align-middle text-13 text-placeholder",
+                        "min-w-40 border-r border-subtle px-3 align-middle text-placeholder",
+                        cellPaddingClass,
+                        isComfortable ? "text-14" : "text-13",
                         groupCellClass
                       )}
                     >
@@ -282,10 +323,11 @@ export function DetailDiffGrid(props: TProps) {
                     <td
                       key={`${form.id}-${child.id}`}
                       className={cn(
-                        "min-w-40 border-r border-subtle px-3 py-2 align-middle",
+                        "min-w-40 border-r border-subtle px-3 align-middle",
+                        cellPaddingClass,
                         groupCellClass,
                         subToneClass,
-                        hasChanged && "relative"
+                        hasChanged && "relative bg-danger-subtle/40"
                       )}
                     >
                       {subRow ? (
@@ -295,6 +337,7 @@ export function DetailDiffGrid(props: TProps) {
                           before={beforeValue}
                           after={afterValue}
                           workspaceSlug={workspaceSlug}
+                          valueClassName={valueClassName}
                         />
                       ) : null}
                       {hasChanged && <ChangedFieldCorner />}
@@ -306,7 +349,9 @@ export function DetailDiffGrid(props: TProps) {
                   <td
                     key={`${form.id}-gutter`}
                     className={cn(
-                      "w-9 border-r border-subtle px-0.5 py-2 text-center align-middle text-13 font-medium",
+                      "w-9 border-r border-subtle px-0.5 text-center align-middle font-medium",
+                      cellPaddingClass,
+                      isComfortable ? "text-14" : "text-13",
                       groupCellClass,
                       subToneClass,
                       SUB_ROW_MARKER_TONE[subState]
@@ -323,10 +368,31 @@ export function DetailDiffGrid(props: TProps) {
     );
   };
 
+  const rangeLabel =
+    totalCount > 0
+      ? t("workspace_products.requirements.change.grid.range", {
+          start: pageStart,
+          end: Math.min(pageStart + items.length - 1, totalCount),
+          total: totalCount,
+        })
+      : "";
+
   return (
-    <div className="flex min-w-0 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-        <div className="flex items-center gap-3">
+    <section
+      aria-labelledby="change-detail-title"
+      className="flex min-w-0 flex-col overflow-hidden rounded-md border border-subtle bg-surface-1"
+    >
+      <h2 id="change-detail-title" className="sr-only">
+        {t("workspace_products.requirements.change.detail_review.title")}
+      </h2>
+
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 border-b border-subtle bg-layer-1/40 px-3 py-2",
+          isComfortable && "min-h-[50px] px-4"
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center rounded-md border border-subtle p-0.5">
             {SEGMENTS.map((segment) => (
               <button
@@ -334,25 +400,32 @@ export function DetailDiffGrid(props: TProps) {
                 type="button"
                 onClick={() => onChangeTypeChange(segment)}
                 className={cn(
-                  "h-6 rounded px-2.5 text-11 transition-colors",
+                  "rounded px-2.5 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong",
+                  isComfortable ? "h-8 text-13" : "h-7 text-12",
                   changeType === segment
-                    ? "bg-accent-primary font-medium text-on-color"
-                    : "text-secondary hover:text-primary"
+                    ? "bg-accent-subtle font-medium text-accent-primary"
+                    : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
                 )}
               >
                 {t(`workspace_products.requirements.change.filters.${segment ?? "all"}`)}
               </button>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-11 text-secondary">
-            {t("workspace_products.requirements.change.filters.changed_only")}
-            <ToggleSwitch value={changedColumnsOnly} onChange={onChangedColumnsOnlyChange} size="sm" />
-          </label>
+          <div className={cn("flex min-h-8 items-center gap-2 text-secondary", isComfortable ? "text-13" : "text-12")}>
+            <span>{t("workspace_products.requirements.change.filters.changed_only")}</span>
+            <ToggleSwitch
+              value={changedColumnsOnly}
+              onChange={onChangedColumnsOnlyChange}
+              label={t("workspace_products.requirements.change.filters.changed_only")}
+              size="sm"
+              className="focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:ring-offset-1"
+            />
+          </div>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="px-4 pb-4">
+        <div className="px-4 py-4">
           <Loader className="space-y-2">
             {Array.from({ length: 5 }, (_, index) => (
               <Loader.Item key={index} height="44px" />
@@ -360,19 +433,24 @@ export function DetailDiffGrid(props: TProps) {
           </Loader>
         </div>
       ) : error ? (
-        <p className="px-4 pb-6 text-12 text-danger-primary">{error}</p>
+        <p className="px-4 py-6 text-13 text-danger-primary">{error}</p>
       ) : !items.length ? (
         <p className="px-4 py-10 text-center text-13 text-tertiary">
           {t("workspace_products.requirements.change.grid.empty")}
         </p>
       ) : (
-        <div className="overflow-auto border-t border-subtle">
-          <table className="w-max min-w-full border-collapse text-left">
+        <div className="overflow-auto">
+          <table
+            className={cn("w-max min-w-full border-collapse text-left", isComfortable && "text-14 [&_thead_th]:py-3")}
+          >
             <RequirementGridHeader
               rootFields={rootFields}
               showActionGutter
               leadingHeader={{
-                className: "w-20 border-r border-subtle px-2 py-2.5 text-center text-primary",
+                className: cn(
+                  "w-20 border-r border-subtle px-2 text-center text-primary",
+                  isComfortable ? "py-3" : "py-2.5"
+                ),
                 content: t("workspace_products.requirements.change.grid.change"),
               }}
             />
@@ -381,21 +459,18 @@ export function DetailDiffGrid(props: TProps) {
         </div>
       )}
 
-      <div className="flex items-center justify-between border-t border-subtle px-4 py-3 text-11 text-secondary">
-        <span>
-          {totalCount > 0
-            ? t("workspace_products.requirements.change.grid.range", {
-                start: pageStart,
-                end: Math.min(pageStart + items.length - 1, totalCount),
-                total: totalCount,
-              })
-            : ""}
-        </span>
+      <div
+        className={cn(
+          "flex items-center justify-between border-t border-subtle px-4 py-3 text-secondary",
+          isComfortable ? "text-13" : "text-12"
+        )}
+      >
+        <span className="tabular-nums">{rangeLabel}</span>
         <div className="flex items-center gap-2">
           <select
             value={perPage}
             onChange={(event) => onPerPageChange(Number(event.target.value))}
-            className="h-7 rounded border border-subtle bg-surface-1 px-1.5 outline-none"
+            className="focus:border-accent-primary h-7 rounded border border-subtle bg-surface-1 px-1.5 outline-none focus:ring-1 focus:ring-accent-strong"
             aria-label={t("workspace_templates.requirements.list.per_page")}
           >
             {PER_PAGE_OPTIONS.map((value) => (
@@ -408,7 +483,7 @@ export function DetailDiffGrid(props: TProps) {
             type="button"
             disabled={!prevPageResults}
             onClick={() => onCursorChange(prevCursor)}
-            className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
+            className="grid size-7 place-items-center rounded border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
             aria-label={t("workspace_templates.requirements.list.previous_page")}
           >
             <ChevronLeft className="size-3.5" />
@@ -418,13 +493,13 @@ export function DetailDiffGrid(props: TProps) {
             type="button"
             disabled={!nextPageResults}
             onClick={() => onCursorChange(nextCursor)}
-            className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
+            className="grid size-7 place-items-center rounded border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
             aria-label={t("workspace_templates.requirements.list.next_page")}
           >
             <ChevronRight className="size-3.5" />
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

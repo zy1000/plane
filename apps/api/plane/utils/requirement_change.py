@@ -349,6 +349,52 @@ def get_pending_change_request(requirement):
     )
 
 
+def _get_effective_approval_config(*, requirement, draft):
+    """返回本次变更单必须遵循的已生效审批配置。
+
+    首次发布还没有已生效版本，只能使用当前配置。后续变更的审批设置本身也是提案的
+    一部分，因此必须从开始编辑时冻结的基线读取；否则提交人可以先把审批人改成自己，
+    再用尚未生效的配置审批同一份变更。
+    """
+    if requirement.current_version is None:
+        approval_meta = requirement_meta_snapshot(requirement)
+    else:
+        approval_meta = get_draft_baseline_meta(draft) if draft is not None else {}
+        required_keys = {"approval_type", "required_count", "approver_ids"}
+        if not required_keys.issubset(approval_meta):
+            raise RequirementChangeError(
+                "The approved approval configuration could not be resolved.",
+                code="REQUIREMENT_APPROVAL_BASELINE_MISSING",
+            )
+
+    approver_ids = list(dict.fromkeys(approval_meta.get("approver_ids") or []))
+    if not approver_ids:
+        raise RequirementChangeError(
+            "Configure at least one approver before submitting for approval.",
+            code="REQUIREMENT_APPROVER_REQUIRED",
+        )
+
+    approval_type = approval_meta.get("approval_type")
+    required_count = approval_meta.get("required_count")
+    valid_rule = approval_type in RequirementApprovalType.values and (
+        (
+            approval_type == RequirementApprovalType.N_OF_M
+            and isinstance(required_count, int)
+            and 1 <= required_count <= len(approver_ids)
+        )
+        or (
+            approval_type != RequirementApprovalType.N_OF_M
+            and required_count is None
+        )
+    )
+    if not valid_rule:
+        raise RequirementChangeError(
+            "The approved approval configuration is invalid.",
+            code="REQUIREMENT_APPROVAL_BASELINE_INVALID",
+        )
+    return approval_type, required_count, approver_ids
+
+
 def submit_change_request(*, requirement, reason="", actor=None):
     """从 draft 提交审批。首次发布与后续变更走完全相同的这条链路。"""
     if requirement.is_template:
@@ -361,20 +407,15 @@ def submit_change_request(*, requirement, reason="", actor=None):
             "Only a draft requirement can be submitted for approval.",
             code="REQUIREMENT_NOT_DRAFT",
         )
-    approver_ids = list(
-        requirement.approvers.order_by("sort_order", "created_at", "id").values_list(
-            "approver_id", flat=True
-        )
-    )
-    if not approver_ids:
-        raise RequirementChangeError(
-            "Configure at least one approver before submitting for approval.",
-            code="REQUIREMENT_APPROVER_REQUIRED",
-        )
 
+    draft = get_draft(requirement)
+    approval_type, required_count, approver_ids = _get_effective_approval_config(
+        requirement=requirement,
+        draft=draft,
+    )
     before, after = build_change_snapshots(
         requirement=requirement,
-        draft=get_draft(requirement),
+        draft=draft,
     )
     items, stats = diff_snapshots(before, after)
     if not items:
@@ -396,8 +437,8 @@ def submit_change_request(*, requirement, reason="", actor=None):
         ),
         sequence_id=_next_sequence_id(requirement),
         base_version=requirement.current_version,
-        approval_type=requirement.approval_type,
-        required_count=requirement.required_count,
+        approval_type=approval_type,
+        required_count=required_count,
         status=RequirementChangeStatus.PENDING,
         reason=reason or "",
         created_by=actor,

@@ -1,10 +1,15 @@
-import { Check, ChevronDown, Info } from "lucide-react";
+import { Check, ChevronDown, Info, ListChecks, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementApprovalType, IUserLite } from "@plane/types";
 import { Avatar, MultiSelectDropdown } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 
 const approvalTypes: TRequirementApprovalType[] = ["any", "all", "n_of_m"];
+const approvalTypeIcons: Record<TRequirementApprovalType, LucideIcon> = {
+  any: UserCheck,
+  all: Users,
+  n_of_m: ListChecks,
+};
 
 type TRequirementApprovalSettingsProps = {
   memberOptions: IUserLite[];
@@ -16,6 +21,7 @@ type TRequirementApprovalSettingsProps = {
   onRequiredCountChange: (count: number) => void;
   className?: string;
   radioGroupName?: string;
+  layout?: "stacked" | "cards";
 };
 
 function UserOption({ user }: { user: IUserLite }) {
@@ -37,13 +43,15 @@ export function RequirementApprovalSettings({
   onRequiredCountChange,
   className,
   radioGroupName = "product-requirement-approval-type",
+  layout = "stacked",
 }: TRequirementApprovalSettingsProps) {
   const { t } = useTranslation();
+  const isCardLayout = layout === "cards";
 
   return (
     <div className={cn("space-y-5", className)}>
-      <div>
-        <span className="mb-2 block text-12 font-medium text-secondary">
+      <div className={cn(isCardLayout && "max-w-lg")}>
+        <span className={cn("mb-2 block text-12 font-medium", isCardLayout ? "text-primary" : "text-secondary")}>
           {t("workspace_products.requirements.fields.approvers")}
         </span>
         <MultiSelectDropdown
@@ -102,48 +110,79 @@ export function RequirementApprovalSettings({
           }}
         />
       </div>
-      <fieldset disabled={!approverIds.length} className="disabled:opacity-60">
-        <legend className="mb-3 block text-12 font-medium text-secondary">
+      <fieldset disabled={!approverIds.length} className={cn(!approverIds.length && "opacity-60")}>
+        <legend className={cn("mb-3 block text-12 font-medium", isCardLayout ? "text-primary" : "text-secondary")}>
           {t("workspace_products.requirements.fields.approval_rule")}
         </legend>
-        <div className="space-y-3">
-          {approvalTypes.map((value) => (
-            <label key={value} className="flex cursor-pointer items-start gap-2.5 text-12 text-primary">
-              <input
-                type="radio"
-                name={radioGroupName}
-                value={value}
-                checked={approvalType === value}
-                onChange={() => onApprovalTypeChange(value)}
-                className="accent-accent-primary mt-0.5 size-4"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block">{t(`workspace_products.requirements.approval.${value}`)}</span>
-                {value === "n_of_m" && approvalType === "n_of_m" && approverIds.length > 0 && (
-                  <span className="mt-2 flex items-center gap-2 text-11 text-secondary">
-                    <select
-                      value={requiredCount ?? 1}
-                      onChange={(event) => onRequiredCountChange(Number(event.target.value))}
-                      className="focus:border-accent-primary h-8 w-16 rounded-md border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
-                    >
-                      {Array.from({ length: approverIds.length }, (_, index) => index + 1).map((count) => (
-                        <option key={count} value={count}>
-                          {count}
-                        </option>
-                      ))}
-                    </select>
-                    {t("workspace_products.requirements.approval.n_summary", {
-                      required: requiredCount ?? 1,
-                      total: approverIds.length,
-                    })}
-                  </span>
+        <div className={cn(isCardLayout ? "grid gap-3 lg:grid-cols-3" : "space-y-3")}>
+          {approvalTypes.map((value) => {
+            const Icon = approvalTypeIcons[value];
+            const isSelected = approvalType === value;
+            return (
+              <label
+                key={value}
+                className={cn(
+                  "flex items-start gap-2.5 text-12 text-primary",
+                  approverIds.length ? "cursor-pointer" : "cursor-not-allowed",
+                  isCardLayout &&
+                    "min-h-20 rounded-lg border border-subtle bg-surface-1 px-3 py-3 transition-colors focus-within:ring-2 focus-within:ring-accent-subtle hover:border-strong hover:bg-layer-1",
+                  isCardLayout && isSelected && "border-accent-strong bg-accent-subtle"
                 )}
-              </span>
-            </label>
-          ))}
+              >
+                <input
+                  type="radio"
+                  name={radioGroupName}
+                  value={value}
+                  checked={isSelected}
+                  onChange={() => onApprovalTypeChange(value)}
+                  className="accent-accent-primary mt-0.5 size-4 shrink-0"
+                />
+                {isCardLayout && (
+                  <Icon
+                    className={cn("mt-0.5 size-4 shrink-0", isSelected ? "text-accent-primary" : "text-secondary")}
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block", isCardLayout && "text-13 font-medium")}>
+                    {t(`workspace_products.requirements.approval.${value}`)}
+                  </span>
+                  {isCardLayout && (
+                    <span className="mt-1 block text-11 leading-4 text-secondary">
+                      {t(`workspace_products.requirements.approval.${value}_description`)}
+                    </span>
+                  )}
+                  {value === "n_of_m" && isSelected && approverIds.length > 0 && (
+                    <span className="mt-2 flex flex-wrap items-center gap-2 text-11 text-secondary">
+                      <select
+                        value={requiredCount ?? 1}
+                        onChange={(event) => onRequiredCountChange(Number(event.target.value))}
+                        className="focus:border-accent-primary h-8 w-16 rounded-md border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
+                      >
+                        {Array.from({ length: approverIds.length }, (_, index) => index + 1).map((count) => (
+                          <option key={count} value={count}>
+                            {count}
+                          </option>
+                        ))}
+                      </select>
+                      {t("workspace_products.requirements.approval.n_summary", {
+                        required: requiredCount ?? 1,
+                        total: approverIds.length,
+                      })}
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </fieldset>
-      <p className="flex items-start gap-2 text-11 leading-5 text-secondary">
+      <p
+        className={cn(
+          "flex items-start gap-2 text-11 leading-5 text-secondary",
+          isCardLayout && "rounded-lg border border-accent-subtle bg-accent-subtle px-3 py-2.5 text-12"
+        )}
+      >
         <Info className="mt-0.5 size-3.5 shrink-0 text-accent-primary" />
         {t("workspace_products.requirements.approval.configuration_only")}
       </p>

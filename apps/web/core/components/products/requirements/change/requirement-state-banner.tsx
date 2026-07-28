@@ -1,14 +1,11 @@
-/**
- * 数据 / 配置 Tab 顶部的状态提示条，避免用户误以为草稿改动已生效。
- *
- * draft 且从未发布、以及 published 状态都不渲染 —— 前者没有已发布内容可对比，
- * 后者本身就是生效内容。
- */
+/** 页头内联状态说明，避免再为草稿 / 审批状态单独占用一整行。 */
 import { Info } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement } from "@plane/types";
+import { cn } from "@plane/utils";
 
-export function RequirementStateBanner({
+export function RequirementStateNotice({
   requirement,
   onViewChangeRequest,
 }: {
@@ -16,29 +13,40 @@ export function RequirementStateBanner({
   onViewChangeRequest: () => void;
 }) {
   const { t } = useTranslation();
+  const isInReview = requirement.status === "in_review";
+  const isPublishedDraft = requirement.status === "draft" && requirement.current_version !== null;
 
-  if (requirement.status === "in_review") {
-    return (
-      <div className="flex items-center gap-2 border-b border-accent-subtle bg-accent-subtle px-4 py-2.5 text-12 text-accent-primary md:px-6">
-        <Info className="size-3.5 shrink-0" />
-        <span>{t("workspace_products.requirements.state.in_review_banner")}</span>
-        {requirement.pending_change_request_id && (
-          <button type="button" onClick={onViewChangeRequest} className="font-medium underline underline-offset-2">
-            {t("workspace_products.requirements.state.view_change_request")}
-          </button>
-        )}
-      </div>
-    );
-  }
+  if (!isInReview && !isPublishedDraft) return null;
 
-  if (requirement.status !== "draft" || requirement.current_version === null) return null;
-
+  const message = t(
+    isInReview
+      ? "workspace_products.requirements.state.in_review_banner"
+      : "workspace_products.requirements.state.draft_notice"
+  );
   return (
-    <div className="flex items-center gap-2 border-b border-warning-subtle bg-warning-subtle px-4 py-2.5 text-12 text-warning-primary md:px-6">
-      <Info className="size-3.5 shrink-0" />
-      <span>
-        {t("workspace_products.requirements.state.draft_banner", { version: requirement.current_version })}
-      </span>
-    </div>
+    <>
+      <span className="sr-only">{message}</span>
+      <Tooltip tooltipContent={message} position="bottom">
+        <span
+          aria-hidden
+          className={cn(
+            "hidden min-w-0 items-center gap-1.5 text-12 lg:flex",
+            isInReview ? "text-accent-primary" : "text-warning-primary"
+          )}
+        >
+          <Info className="size-3.5 shrink-0" aria-hidden />
+          <span className="hidden max-w-72 truncate 2xl:inline">{message}</span>
+        </span>
+      </Tooltip>
+      {isInReview && requirement.pending_change_request_id && (
+        <button
+          type="button"
+          onClick={onViewChangeRequest}
+          className="hidden shrink-0 text-12 font-medium text-accent-primary hover:underline lg:inline"
+        >
+          {t("workspace_products.requirements.state.view_change_request")}
+        </button>
+      )}
+    </>
   );
 }

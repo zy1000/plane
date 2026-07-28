@@ -16,7 +16,7 @@ import type {
   TRequirementFormRow,
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
-import { cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { cn, getEditorAssetDownloadSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 import { getRequirementSelectLabel } from "./requirement-select";
 
@@ -155,9 +155,12 @@ export const LeafValue = ({
         {assets.map((asset) => (
           <a
             key={asset.asset_id}
-            href={`/api/assets/v2/workspaces/${workspaceSlug}/${asset.asset_id}/`}
+            href={getEditorAssetDownloadSrc({
+              assetId: asset.asset_id,
+              workspaceSlug,
+            })}
             target="_blank"
-            rel="noreferrer"
+            rel="noreferrer noopener"
             className={cn(
               "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-13 text-primary hover:text-accent-primary",
               className
