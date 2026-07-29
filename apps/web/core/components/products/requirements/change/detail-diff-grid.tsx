@@ -20,7 +20,7 @@ import type {
   TRequirementDetailValue,
   TRequirementField,
 } from "@plane/types";
-import { Loader, ToggleSwitch } from "@plane/ui";
+import { CustomSelect, Loader, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
 import {
   ChangedFieldCorner,
@@ -467,23 +467,24 @@ export function DetailDiffGrid(props: TProps) {
       >
         <span className="tabular-nums">{rangeLabel}</span>
         <div className="flex items-center gap-2">
-          <select
+          <CustomSelect
             value={perPage}
-            onChange={(event) => onPerPageChange(Number(event.target.value))}
-            className="focus:border-accent-primary h-7 rounded border border-subtle bg-surface-1 px-1.5 outline-none focus:ring-1 focus:ring-accent-strong"
-            aria-label={t("workspace_templates.requirements.list.per_page")}
+            onChange={(value: number) => onPerPageChange(Number(value))}
+            label={t("workspace_products.requirements.change.grid.per_page_value", { count: perPage })}
+            buttonClassName="h-7 border-subtle px-1.5"
+            maxHeight="sm"
           >
             {PER_PAGE_OPTIONS.map((value) => (
-              <option key={value} value={value}>
+              <CustomSelect.Option key={value} value={value}>
                 {t("workspace_products.requirements.change.grid.per_page_value", { count: value })}
-              </option>
+              </CustomSelect.Option>
             ))}
-          </select>
+          </CustomSelect>
           <button
             type="button"
             disabled={!prevPageResults}
             onClick={() => onCursorChange(prevCursor)}
-            className="grid size-7 place-items-center rounded border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
+            className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
             aria-label={t("workspace_templates.requirements.list.previous_page")}
           >
             <ChevronLeft className="size-3.5" />
@@ -493,7 +494,7 @@ export function DetailDiffGrid(props: TProps) {
             type="button"
             disabled={!nextPageResults}
             onClick={() => onCursorChange(nextCursor)}
-            className="grid size-7 place-items-center rounded border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
+            className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
             aria-label={t("workspace_templates.requirements.list.next_page")}
           >
             <ChevronRight className="size-3.5" />

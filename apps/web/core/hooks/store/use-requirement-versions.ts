@@ -66,7 +66,8 @@ export const useRequirementVersions = ({
   const [perPage, setPerPage] = useState(20);
   const [detailsCursor, setDetailsCursor] = useState<string | undefined>();
   const [detailsPerPage, setDetailsPerPage] = useState(20);
-  // 「与当前对比」始终以已发布 current_version 的快照为目标，不读取可能存在的草稿层。
+  // 对比目标（to）：默认已发布 current_version 的快照，可切换为任意历史版本；
+  // 永远不读取可能存在的草稿层。
   const [compareVersion, setCompareVersion] = useState<number | null>(null);
   const [comparisonPage, setComparisonPage] = useState<TRequirementVersionComparisonResponse | null>(null);
   const [isComparisonLoading, setIsComparisonLoading] = useState(false);
@@ -186,11 +187,12 @@ export const useRequirementVersions = ({
     setIsComparisonLoading(true);
     setComparisonError(null);
     try {
-      const response = await requirementService.compareVersionWithCurrent(
+      const response = await requirementService.compareVersions(
         workspaceSlug,
         requirementId,
         selectedVersion,
         {
+          toVersion: compareVersion ?? undefined,
           cursor: comparisonCursor,
           perPage: comparisonPerPage,
           changeType,
@@ -210,11 +212,6 @@ export const useRequirementVersions = ({
     if (compareVersion === null) return;
     void fetchComparison().catch(() => undefined);
   }, [compareVersion, fetchComparison]);
-
-  useEffect(() => {
-    if (compareVersion === null || compareVersion === currentVersion) return;
-    selectCompareVersion(currentVersion);
-  }, [compareVersion, currentVersion, selectCompareVersion]);
 
   /** 回滚只是把历史快照灌入工作副本，需求会回到草稿态，仍需再走一次审批 */
   const rollbackToVersion = useCallback(

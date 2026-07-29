@@ -3,23 +3,26 @@
  *
  * 回滚不直接改正式表 —— 它把历史快照灌入工作副本，需求回到草稿态，仍要再走一次审批。
  */
-import { useState, type KeyboardEvent } from "react";
-import { ArrowLeftRight, ChevronLeft, ChevronRight, GitBranch, Info, RotateCcw } from "lucide-react";
+import { useRef, useState, type KeyboardEvent } from "react";
+import { ArrowLeftRight, ChevronLeft, ChevronRight, GitBranch, RotateCcw } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IUserLite, TRequirement } from "@plane/types";
-import { AlertModalCore, Loader } from "@plane/ui";
+import { AlertModalCore, CustomSelect, Loader } from "@plane/ui";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { useRequirementVersions } from "@/hooks/store/use-requirement-versions";
 import { MetaDiffTable, SchemaDiffList } from "./change-diff-groups";
 import { DetailDiffGrid } from "./detail-diff-grid";
 import { PILL_BASE } from "./styles";
 import { useChangeItemFilters } from "./use-change-item-filters";
+import { useScrollSpy } from "./use-scroll-spy";
 import { VersionSnapshotOverview } from "./version-snapshot-overview";
 
 const COMPARISON_SECTIONS = ["basic", "schema", "detail"] as const;
+/** 快照模式的区块导航：只列真实存在的区块，active 由 useScrollSpy 跟踪 */
+const SNAPSHOT_SECTION_IDS = ["version-basic", "version-fields", "version-details"] as const;
 type TComparisonSection = (typeof COMPARISON_SECTIONS)[number];
 type TComparisonSelection = {
   comparisonKey: string;
@@ -45,6 +48,12 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   });
   const [pendingRollback, setPendingRollback] = useState<number | null>(null);
   const [comparisonSelection, setComparisonSelection] = useState<TComparisonSelection | null>(null);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+  const activeSnapshotSection = useScrollSpy(
+    SNAPSHOT_SECTION_IDS,
+    contentScrollRef,
+    Boolean(store.versionDetail) && store.compareVersion === null
+  );
 
   const versions = store.versionsPage.results;
   const selectedVersion = store.selectedVersion;
@@ -191,13 +200,14 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                     onClick={() => {
                       setComparisonSelection(null);
                       store.selectVersion(version.version);
-                      if (version.version === requirement.current_version) store.setCompareVersion(null);
+                      // 点中当前版本或对比目标时退出对比：前者保持「从历史版本发起对比」的
+                      // 入口约束，后者避免 from == to 的无效请求
+                      if (version.version === requirement.current_version || version.version === store.compareVersion)
+                        store.setCompareVersion(null);
                     }}
                     className={cn(
-                      "min-w-0 flex-1 rounded-md border px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong",
-                      isSelected
-                        ? "border-accent-subtle bg-accent-subtle/70"
-                        : "border-transparent hover:border-subtle hover:bg-layer-transparent-hover"
+                      "min-w-0 flex-1 rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong",
+                      isSelected ? "bg-accent-subtle/70" : "hover:bg-layer-transparent-hover"
                     )}
                     aria-pressed={isSelected}
                   >
@@ -211,7 +221,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                     </span>
                     <p className="mt-1 text-11 text-secondary">
                       {t("workspace_products.requirements.version.meta", {
-                        time: `${renderFormattedDate(version.created_at, "YYYY-MM-DD")} ${renderFormattedTime(version.created_at)}`,
+                        time: `${renderFormattedDate(version.created_at, "yyyy-MM-dd")} ${renderFormattedTime(version.created_at)}`,
                         name: version.created_by_detail?.display_name ?? "",
                       })}
                     </p>
@@ -265,7 +275,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                   {isComparing
                     ? t("workspace_products.requirements.version.comparing", {
                         from: `v${selectedVersion ?? ""}`,
-                        to: `v${comparison?.to_version ?? requirement.current_version ?? ""}`,
+                        to: `v${comparison?.to_version ?? store.compareVersion ?? requirement.current_version ?? ""}`,
                       })
                     : t("workspace_products.requirements.version.read_only")}
                 </span>
@@ -273,7 +283,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
               {selectedVersionItem && (
                 <p className="mt-1 text-11 text-secondary">
                   {t("workspace_products.requirements.version.meta", {
-                    time: `${renderFormattedDate(selectedVersionItem.created_at, "YYYY-MM-DD")} ${renderFormattedTime(selectedVersionItem.created_at)}`,
+                    time: `${renderFormattedDate(selectedVersionItem.created_at, "yyyy-MM-dd")} ${renderFormattedTime(selectedVersionItem.created_at)}`,
                     name: selectedVersionItem.created_by_detail?.display_name ?? "",
                   })}
                   <span className="px-1.5 text-placeholder">·</span>
@@ -286,28 +296,73 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant={isComparing ? "primary" : "secondary"}
-                size="sm"
-                disabled={isCurrentVersion || requirement.current_version === null}
-                onClick={() => {
-                  setComparisonSelection(null);
-                  store.setCompareVersion(isComparing ? null : requirement.current_version);
-                }}
+              <Tooltip
+                tooltipContent={t("workspace_products.requirements.version.compare_current_hint")}
+                disabled={!isCurrentVersion}
               >
-                <ArrowLeftRight className="size-3.5" />
-                {t("workspace_products.requirements.version.compare_current")}
-              </Button>
+                <span>
+                  <Button
+                    variant={isComparing ? "primary" : "secondary"}
+                    size="sm"
+                    disabled={isCurrentVersion || requirement.current_version === null}
+                    onClick={() => {
+                      setComparisonSelection(null);
+                      store.setCompareVersion(isComparing ? null : requirement.current_version);
+                    }}
+                  >
+                    <ArrowLeftRight className="size-3.5" />
+                    {t(
+                      isComparing
+                        ? "workspace_products.requirements.version.compare_exit"
+                        : "workspace_products.requirements.version.compare"
+                    )}
+                  </Button>
+                </span>
+              </Tooltip>
+              {isComparing && (
+                <CustomSelect
+                  value={store.compareVersion}
+                  onChange={(value: number | null) => value !== null && store.setCompareVersion(value)}
+                  label={
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-secondary">{t("workspace_products.requirements.version.compare_target")}</span>
+                      <span className="font-medium text-primary">v{store.compareVersion ?? ""}</span>
+                    </span>
+                  }
+                  buttonClassName="h-8 border-subtle px-2 text-12"
+                  maxHeight="md"
+                >
+                  {versions
+                    .filter((version) => version.version !== selectedVersion)
+                    .map((version) => (
+                      <CustomSelect.Option key={version.id} value={version.version}>
+                        <span className="flex items-center gap-1.5">
+                          v{version.version}
+                          {version.version === requirement.current_version && (
+                            <span className={cn(PILL_BASE, "bg-accent-subtle text-accent-primary")}>
+                              {t("workspace_products.requirements.version.current")}
+                            </span>
+                          )}
+                        </span>
+                      </CustomSelect.Option>
+                    ))}
+                </CustomSelect>
+              )}
               {requirement.can_edit && (
                 <Tooltip
-                  tooltipContent={t("workspace_products.requirements.version.rollback_in_review")}
-                  disabled={!isRollbackBlocked}
+                  tooltipContent={t(
+                    isRollbackBlocked
+                      ? "workspace_products.requirements.version.rollback_in_review"
+                      : isCurrentVersion
+                        ? "workspace_products.requirements.version.rollback_current_hint"
+                        : "workspace_products.requirements.version.rollback_hint"
+                  )}
                 >
                   <span>
                     <Button
                       variant="secondary"
                       size="sm"
-                      disabled={store.isMutating || isRollbackBlocked}
+                      disabled={store.isMutating || isRollbackBlocked || isCurrentVersion}
                       onClick={() => selectedVersion !== null && setPendingRollback(selectedVersion)}
                     >
                       <RotateCcw className="size-3.5" />
@@ -318,15 +373,6 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
               )}
             </div>
           </header>
-
-          <div className="flex items-center gap-2 border-b border-subtle bg-layer-2 px-4 py-2.5 text-12 text-secondary">
-            <Info className="size-3.5 shrink-0" />
-            {t(
-              isRollbackBlocked
-                ? "workspace_products.requirements.version.rollback_in_review"
-                : "workspace_products.requirements.version.rollback_hint"
-            )}
-          </div>
 
           {isComparing ? (
             <div className="min-w-0 overflow-x-auto border-b border-subtle px-3">
@@ -372,27 +418,26 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
           ) : (
             <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-subtle px-3">
               {[
-                { href: "#version-overview", label: t("workspace_products.requirements.version.sections.overview") },
-                { href: "#version-basic", label: t("workspace_products.requirements.version.sections.basic") },
+                { id: "version-basic", label: t("workspace_products.requirements.version.sections.basic") },
                 {
-                  href: "#version-fields",
+                  id: "version-fields",
                   label: t("workspace_products.requirements.version.sections.fields_with_count", {
                     count: snapshotFieldCount,
                   }),
                 },
                 {
-                  href: "#version-details",
+                  id: "version-details",
                   label: t("workspace_products.requirements.version.sections.details_with_count", {
                     count: store.versionDetail?.detail_count ?? 0,
                   }),
                 },
-              ].map((item, index) => (
+              ].map((item) => (
                 <a
-                  key={item.href}
-                  href={item.href}
+                  key={item.id}
+                  href={`#${item.id}`}
                   className={cn(
                     "relative flex h-10 shrink-0 items-center px-3 text-11 transition-colors hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent-strong",
-                    index === 0
+                    activeSnapshotSection === item.id
                       ? "font-medium text-accent-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:bg-accent-primary"
                       : "text-secondary"
                   )}
@@ -404,6 +449,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
           )}
 
           <div
+            ref={contentScrollRef}
             id={isComparing ? "version-compare-panel" : undefined}
             role={isComparing ? "tabpanel" : undefined}
             aria-labelledby={isComparing ? `version-compare-tab-${activeComparisonSection}` : undefined}
@@ -516,7 +562,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
       <AlertModalCore
         isOpen={pendingRollback !== null}
         isSubmitting={store.isMutating}
-        variant="primary"
+        variant="danger"
         handleClose={() => setPendingRollback(null)}
         handleSubmit={() => pendingRollback !== null && void rollback(pendingRollback)}
         title={t("workspace_products.requirements.version.rollback_title", { version: pendingRollback ?? "" })}

@@ -7,7 +7,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementDetailChangeSnapshot, TRequirementField } from "@plane/types";
-import { Loader } from "@plane/ui";
+import { CustomSelect, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import {
   getFormRows,
@@ -148,23 +148,24 @@ export function VersionSnapshotPreview(props: TProps) {
             : ""}
         </span>
         <div className="flex items-center gap-2">
-          <select
+          <CustomSelect
             value={perPage}
-            onChange={(event) => onPerPageChange(Number(event.target.value))}
-            className="h-7 rounded border border-subtle bg-surface-1 px-1.5 outline-none"
-            aria-label={t("workspace_templates.requirements.list.per_page")}
+            onChange={(value: number) => onPerPageChange(Number(value))}
+            label={t("workspace_products.requirements.change.grid.per_page_value", { count: perPage })}
+            buttonClassName="h-7 border-subtle px-1.5"
+            maxHeight="sm"
           >
             {PER_PAGE_OPTIONS.map((value) => (
-              <option key={value} value={value}>
+              <CustomSelect.Option key={value} value={value}>
                 {t("workspace_products.requirements.change.grid.per_page_value", { count: value })}
-              </option>
+              </CustomSelect.Option>
             ))}
-          </select>
+          </CustomSelect>
           <button
             type="button"
             disabled={!prevPageResults}
             onClick={() => onCursorChange(prevCursor)}
-            className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
+            className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover disabled:opacity-40"
             aria-label={t("workspace_templates.requirements.list.previous_page")}
           >
             <ChevronLeft className="size-3.5" />
@@ -174,7 +175,7 @@ export function VersionSnapshotPreview(props: TProps) {
             type="button"
             disabled={!nextPageResults}
             onClick={() => onCursorChange(nextCursor)}
-            className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
+            className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover disabled:opacity-40"
             aria-label={t("workspace_templates.requirements.list.next_page")}
           >
             <ChevronRight className="size-3.5" />

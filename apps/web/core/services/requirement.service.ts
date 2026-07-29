@@ -376,20 +376,23 @@ export class RequirementService extends APIService {
       });
   }
 
-  async compareVersionWithCurrent(
+  /** 任意两版对比：toVersion 缺省时由服务端回退为当前已发布版本 */
+  async compareVersions(
     workspaceSlug: string,
     requirementId: string,
     version: number,
     params: {
+      toVersion?: number;
       cursor?: string;
       perPage?: number;
       changeType?: TRequirementChangeType;
     } = {}
   ): Promise<TRequirementVersionComparisonResponse> {
     return this.get(
-      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/compare-current/`,
+      `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/compare/`,
       {
         params: {
+          ...(params.toVersion ? { to_version: params.toVersion } : {}),
           ...(params.cursor ? { cursor: params.cursor } : {}),
           ...(params.perPage ? { per_page: params.perPage } : {}),
           ...(params.changeType ? { change_type: params.changeType } : {}),

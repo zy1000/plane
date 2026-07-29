@@ -155,7 +155,7 @@ export function VersionSnapshotOverview(props: TProps) {
       : t(`workspace_products.requirements.approval.${snapshot.approval_type}`);
 
   return (
-    <div id="version-overview" className="space-y-3 p-3 lg:p-4">
+    <div className="space-y-3 p-3 lg:p-4">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <section className="min-w-0 rounded-lg border border-subtle bg-surface-1">
           <SectionHeader
@@ -232,7 +232,7 @@ export function VersionSnapshotOverview(props: TProps) {
                   <Icon className="size-3.5" />
                   {label}
                 </span>
-                <strong className="text-17 mt-1 block font-semibold text-primary tabular-nums">{value}</strong>
+                <strong className="text-14 mt-1 block font-semibold text-primary tabular-nums">{value}</strong>
               </div>
             ))}
           </div>

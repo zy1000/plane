@@ -1161,6 +1161,94 @@ class TestRequirementChangeApp:
         assert response.status_code == status.HTTP_409_CONFLICT
         assert response.data["code"] == "REQUIREMENT_NOT_PUBLISHED"
 
+    def test_version_compare_supports_arbitrary_to_version(self, api_client):
+        approver = self.add_member()
+        requirement = self.create_requirement(approver)
+        field = self.add_field(requirement)
+        RequirementDetail.objects.create(
+            requirement=requirement,
+            data={str(field.id): "First"},
+        )
+        self.publish(api_client, requirement, approver)
+
+        def bump_version(title):
+            api_client.force_authenticate(user=self.owner)
+            assert (
+                api_client.post(self.working_copy_url(requirement)).status_code
+                == status.HTTP_200_OK
+            )
+            assert (
+                api_client.patch(
+                    self.url("requirement-detail", pk=requirement.id),
+                    {"title": title},
+                    format="json",
+                ).status_code
+                == status.HTTP_200_OK
+            )
+            change_request_id = self.submit(api_client, requirement).data["id"]
+            assert (
+                self.approve(
+                    api_client, requirement, change_request_id, approver
+                ).status_code
+                == status.HTTP_200_OK
+            )
+            api_client.force_authenticate(user=self.owner)
+
+        bump_version("Second title")
+        bump_version("Third title")
+        requirement.refresh_from_db()
+        assert requirement.current_version == 3
+
+        compare_url = self.url(
+            "requirement-version-compare",
+            requirement_id=requirement.id,
+            version=1,
+        )
+
+        # 缺省 to_version 时与当前已发布版本对比
+        default_response = api_client.get(compare_url)
+        assert default_response.status_code == status.HTTP_200_OK
+        assert default_response.data["from_version"] == 1
+        assert default_response.data["to_version"] == 3
+
+        # 显式指定任意目标版本
+        explicit_response = api_client.get(compare_url, {"to_version": 2})
+        assert explicit_response.status_code == status.HTTP_200_OK
+        assert explicit_response.data["from_version"] == 1
+        assert explicit_response.data["to_version"] == 2
+        title_items = explicit_response.data["requirement_items"]
+        assert [item["before_snapshot"]["field"] for item in title_items] == [
+            "title"
+        ]
+        assert title_items[0]["proposed_snapshot"]["value"] == "Second title"
+
+        # 允许反向对比（v2 → v1）
+        reverse_response = api_client.get(
+            self.url(
+                "requirement-version-compare",
+                requirement_id=requirement.id,
+                version=2,
+            ),
+            {"to_version": 1},
+        )
+        assert reverse_response.status_code == status.HTTP_200_OK
+        assert reverse_response.data["from_version"] == 2
+        assert reverse_response.data["to_version"] == 1
+
+        # 同版本对比、非法与缺失的目标版本
+        assert (
+            api_client.get(compare_url, {"to_version": 1}).status_code
+            == status.HTTP_400_BAD_REQUEST
+        )
+        assert (
+            api_client.get(compare_url, {"to_version": "abc"}).status_code
+            == status.HTTP_400_BAD_REQUEST
+        )
+        assert (
+            api_client.get(compare_url, {"to_version": 99}).status_code
+            == status.HTTP_404_NOT_FOUND
+        )
+
     def test_templates_stay_out_of_the_approval_flow(self, api_client):
         template = Requirement.objects.create(
             workspace=self.workspace,

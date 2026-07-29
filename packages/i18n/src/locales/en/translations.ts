@@ -2058,7 +2058,10 @@ export default {
         initial_publish: "First publish",
         meta: "{time} · {name}",
         snapshot_title: "v{version} snapshot",
-        compare_current: "Compare with current",
+        compare: "Compare",
+        compare_exit: "Exit comparison",
+        compare_target: "Compare to",
+        compare_current_hint: "The current version is the latest snapshot. Select a past version to compare.",
         comparing: "{from} → {to} comparison",
         comparison_views: "Version comparison views",
         comparison_sections: {
@@ -2069,11 +2072,12 @@ export default {
         comparison_error: "Unable to compare these versions",
         rollback: "Roll back to this version",
         rollback_hint:
-          "Rolling back creates a draft from this version. It only takes effect after a change request is approved.",
+          "Rolling back overwrites the current working copy with this version and creates a draft. It only takes effect after a change request is approved.",
         rollback_in_review: "Withdraw or complete the current review before rolling back this requirement.",
+        rollback_current_hint: "The current version does not need a rollback.",
         rollback_title: "Roll back to v{version}?",
         rollback_description:
-          "A draft will be created from v{version}. It only takes effect after a change request is approved.",
+          "The current working copy will be overwritten with v{version} and saved as a draft. It only takes effect after a change request is approved.",
         rollback_confirm: "Confirm rollback",
         rollback_loading: "Rolling back",
         read_only: "Read-only",
@@ -2084,7 +2088,6 @@ export default {
         row_count: "{count} records",
         child_of: "In “{name}”",
         sections: {
-          overview: "Overview",
           basic: "Basic information",
           fields: "Field definitions",
           fields_with_count: "Field definitions {count}",
