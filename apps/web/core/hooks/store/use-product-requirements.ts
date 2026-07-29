@@ -28,6 +28,7 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
   const [statusFilters, setStatusFilters] = useState<TRequirementStatus[]>([]);
   const [ownerFilters, setOwnerFilters] = useState<string[]>([]);
   const [pendingMyApprovalOnly, setPendingMyApprovalOnly] = useState(false);
+  const [unconfiguredApprovalOnly, setUnconfiguredApprovalOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
 
@@ -66,7 +67,10 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
     void fetchRequirements().catch(() => undefined);
   }, [fetchRequirements]);
 
-  useEffect(() => setPage(1), [ownerFilters, perPage, search, statusFilters]);
+  useEffect(
+    () => setPage(1),
+    [ownerFilters, pendingMyApprovalOnly, perPage, search, statusFilters, unconfiguredApprovalOnly]
+  );
 
   const createRequirement = useCallback(
     async (payload: TCreateProductRequirementPayload) => {
@@ -123,10 +127,11 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
         !normalizedSearch || `${requirement.title} ${plainDescription}`.toLocaleLowerCase().includes(normalizedSearch);
       const matchesStatus = statusFilters.length === 0 || statusFilters.includes(requirement.status);
       const matchesOwner = ownerFilters.length === 0 || ownerFilters.includes(requirement.owner_id);
-      const matchesApproval = !pendingMyApprovalOnly || requirement.can_approve;
-      return matchesSearch && matchesStatus && matchesOwner && matchesApproval;
+      const matchesPendingApproval = !pendingMyApprovalOnly || requirement.can_approve;
+      const matchesApprovalConfiguration = !unconfiguredApprovalOnly || requirement.approver_ids.length === 0;
+      return matchesSearch && matchesStatus && matchesOwner && matchesPendingApproval && matchesApprovalConfiguration;
     });
-  }, [ownerFilters, pendingMyApprovalOnly, requirements, search, statusFilters]);
+  }, [ownerFilters, pendingMyApprovalOnly, requirements, search, statusFilters, unconfiguredApprovalOnly]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequirements.length / perPage));
   const safePage = Math.min(page, totalPages);
@@ -143,6 +148,7 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
     statusFilters,
     ownerFilters,
     pendingMyApprovalOnly,
+    unconfiguredApprovalOnly,
     page: safePage,
     perPage,
     totalPages,
@@ -150,6 +156,7 @@ export const useProductRequirements = (workspaceSlug: string | undefined, produc
     setStatusFilters,
     setOwnerFilters,
     setPendingMyApprovalOnly,
+    setUnconfiguredApprovalOnly,
     setPage,
     setPerPage,
     fetchRequirements,

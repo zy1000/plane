@@ -1,22 +1,13 @@
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate } from "react-router";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Database,
-  FileText,
-  Plus,
-  Settings2,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles, type TRequirement } from "@plane/types";
-import { AlertModalCore, Avatar, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
-import { calculateTimeAgo, cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { AlertModalCore, Avatar, Breadcrumbs, Header, Loader } from "@plane/ui";
+import { cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -32,6 +23,28 @@ import { ProductRequirementSearch } from "./requirement-search";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
+const formatRelativeTime = (time: string | number | Date | null, locale: string) => {
+  if (!time) return "";
+  const date = time instanceof Date ? time : new Date(time);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const secondsFromNow = (date.getTime() - Date.now()) / 1000;
+  const ranges: { unit: Intl.RelativeTimeFormatUnit; seconds: number }[] = [
+    { unit: "year", seconds: 31_536_000 },
+    { unit: "month", seconds: 2_592_000 },
+    { unit: "week", seconds: 604_800 },
+    { unit: "day", seconds: 86_400 },
+    { unit: "hour", seconds: 3_600 },
+    { unit: "minute", seconds: 60 },
+    { unit: "second", seconds: 1 },
+  ];
+  const range = ranges.find((item) => Math.abs(secondsFromNow) >= item.seconds) ?? ranges[ranges.length - 1];
+  return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
+    Math.round(secondsFromNow / range.seconds),
+    range.unit
+  );
+};
+
 const approvalSummary = (requirement: TRequirement, t: (key: string, values?: Record<string, unknown>) => string) => {
   if (!requirement.approver_ids.length) return t("workspace_products.requirements.approval.unconfigured");
   if (requirement.approval_type === "n_of_m") {
@@ -44,7 +57,7 @@ const approvalSummary = (requirement: TRequirement, t: (key: string, values?: Re
 };
 
 export const ProductRequirementList = observer(function ProductRequirementList() {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const navigate = useNavigate();
   const { data: currentUser } = useUser();
   const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
@@ -62,6 +75,7 @@ export const ProductRequirementList = observer(function ProductRequirementList()
     statusFilters,
     ownerFilters,
     pendingMyApprovalOnly,
+    unconfiguredApprovalOnly,
     page,
     perPage,
     totalPages,
@@ -69,12 +83,12 @@ export const ProductRequirementList = observer(function ProductRequirementList()
     setStatusFilters,
     setOwnerFilters,
     setPendingMyApprovalOnly,
+    setUnconfiguredApprovalOnly,
     setPage,
     setPerPage,
     fetchRequirements,
     deleteRequirement,
     openCreateModal,
-    openEditModal,
   } = useProductRequirementsContext();
   const { members } = useProductMembers(workspaceSlug, productId);
   const [requirementToDelete, setRequirementToDelete] = useState<TRequirement | null>(null);
@@ -126,7 +140,8 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                   component={
                     <BreadcrumbLink
                       label={t("workspace_products.navigation.requirements")}
-                      icon={<FileText className="size-4 text-secondary" />}
+                      href={`/${workspaceSlug}/products/${productId}/requirements`}
+                      icon={<FileText className="size-4 text-tertiary" />}
                       isLast
                     />
                   }
@@ -136,19 +151,22 @@ export const ProductRequirementList = observer(function ProductRequirementList()
             </Header.LeftItem>
             <Header.RightItem>
               <div className="flex items-center gap-2">
-                <ProductRequirementSearch value={search} onSearch={setSearch} />
-                <ProductRequirementFilters
-                  statusFilters={statusFilters}
-                  ownerFilters={ownerFilters}
-                  ownerOptions={ownerOptions}
-                  pendingMyApprovalOnly={pendingMyApprovalOnly}
-                  onStatusFiltersChange={setStatusFilters}
-                  onOwnerFiltersChange={setOwnerFilters}
-                  onPendingMyApprovalOnlyChange={setPendingMyApprovalOnly}
-                />
+                <div className="hidden items-center gap-2 sm:flex">
+                  <ProductRequirementSearch value={search} onSearch={setSearch} />
+                  <ProductRequirementFilters
+                    statusFilters={statusFilters}
+                    ownerFilters={ownerFilters}
+                    ownerOptions={ownerOptions}
+                    pendingMyApprovalOnly={pendingMyApprovalOnly}
+                    unconfiguredApprovalOnly={unconfiguredApprovalOnly}
+                    onStatusFiltersChange={setStatusFilters}
+                    onOwnerFiltersChange={setOwnerFilters}
+                    onPendingMyApprovalOnlyChange={setPendingMyApprovalOnly}
+                    onUnconfiguredApprovalOnlyChange={setUnconfiguredApprovalOnly}
+                  />
+                </div>
                 {canMaintain && (
-                  <Button variant="primary" onClick={openCreateModal}>
-                    <Plus className="size-3.5" />
+                  <Button variant="primary" size="lg" onClick={openCreateModal}>
                     {t("workspace_products.requirements.create")}
                   </Button>
                 )}
@@ -208,50 +226,83 @@ export const ProductRequirementList = observer(function ProductRequirementList()
           ) : (
             <>
               <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[1080px] border-collapse text-left">
-                  <thead className="sticky top-0 z-[1] bg-layer-1 text-11 font-medium text-secondary">
+                <table className="w-full min-w-[400px] border-collapse text-left sm:min-w-[520px] md:min-w-[640px]">
+                  <thead className="sticky top-0 z-[2] bg-layer-1 text-13 font-medium text-secondary">
                     <tr className="border-b border-subtle">
-                      <th className="min-w-64 px-4 py-2.5">{t("workspace_products.requirements.fields.title")}</th>
-                      <th className="w-28 px-3 py-2.5">{t("workspace_products.requirements.fields.status")}</th>
-                      <th className="w-44 px-3 py-2.5">{t("workspace_products.requirements.fields.owner")}</th>
-                      <th className="w-44 px-3 py-2.5">{t("workspace_products.requirements.fields.approval")}</th>
-                      <th className="w-24 px-3 py-2.5 text-right">
+                      <th className="min-w-64 px-4 py-3">{t("workspace_products.requirements.fields.title")}</th>
+                      <th className="hidden w-28 px-3 py-3 sm:table-cell">
+                        {t("workspace_products.requirements.fields.status")}
+                      </th>
+                      <th className="hidden w-40 px-3 py-3 md:table-cell">
+                        {t("workspace_products.requirements.fields.owner")}
+                      </th>
+                      <th className="hidden w-44 px-3 py-3 lg:table-cell">
+                        {t("workspace_products.requirements.fields.approval")}
+                      </th>
+                      <th className="hidden w-24 px-3 py-3 xl:table-cell">
                         {t("workspace_products.requirements.fields.field_count")}
                       </th>
-                      <th className="w-24 px-3 py-2.5 text-right">
+                      <th className="hidden w-24 px-3 py-3 xl:table-cell">
                         {t("workspace_products.requirements.fields.detail_count")}
                       </th>
-                      <th className="w-28 px-3 py-2.5">{t("workspace_products.requirements.fields.updated_at")}</th>
-                      <th className="w-12 px-3 py-2.5" />
+                      <th className="hidden w-28 px-3 py-3 lg:table-cell">
+                        {t("workspace_products.requirements.fields.updated_at")}
+                      </th>
+                      <th className="sticky right-0 w-24 bg-layer-1 px-3 py-3" />
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedRequirements.map((requirement) => (
                       <tr
                         key={requirement.id}
-                        // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- An interactive table row cannot be replaced by a button without invalid table markup.
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => openRequirement(requirement)}
-                        onKeyDown={(event) => {
-                          if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
-                          event.preventDefault();
-                          openRequirement(requirement);
-                        }}
-                        aria-label={t("workspace_products.requirements.actions.open_data")}
-                        className="cursor-pointer border-b border-subtle/70 text-12 hover:bg-layer-transparent-hover"
+                        className="group border-b border-subtle/70 text-13 hover:bg-surface-2"
                       >
-                        <td className="px-4 py-3">
-                          <p className="max-w-sm truncate font-medium text-primary">{requirement.title}</p>
-                          <p className="mt-0.5 max-w-sm truncate text-11 text-tertiary">
+                        <td className="px-4 py-3.5">
+                          <button
+                            type="button"
+                            onClick={() => openRequirement(requirement)}
+                            className="focus-visible:outline-accent-primary block max-w-sm truncate text-left text-sm font-medium text-accent-primary hover:underline focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2"
+                          >
+                            {requirement.title}
+                          </button>
+                          <p className="mt-1 max-w-sm truncate text-12 text-secondary">
                             {requirement.description_html
                               ? stripAndTruncateHTML(requirement.description_html, 100)
                               : t("workspace_products.requirements.fields.no_description")}
                           </p>
+                          <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-12 text-tertiary lg:hidden">
+                            <span
+                              className={cn(
+                                PILL_BASE,
+                                REQUIREMENT_STATUS_PILL[requirement.status],
+                                "text-11 sm:hidden"
+                              )}
+                            >
+                              {t(`workspace_products.requirements.status.${requirement.status}`)}
+                            </span>
+                            <span className="sm:hidden">·</span>
+                            <span className="truncate md:hidden">{requirement.owner_detail.display_name}</span>
+                            <span className="md:hidden">·</span>
+                            {requirement.approver_ids.length === 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => openRequirement(requirement, "configuration")}
+                                className="focus-visible:outline-accent-primary rounded-full bg-warning-subtle px-1.5 py-0.5 font-medium text-warning-primary hover:ring-1 hover:ring-warning-subtle hover:ring-inset focus-visible:outline focus-visible:outline-2"
+                              >
+                                {t("workspace_products.requirements.approval.unconfigured")}
+                              </button>
+                            ) : (
+                              <span className="truncate">{approvalSummary(requirement, t)}</span>
+                            )}
+                            <span>·</span>
+                            <span className="shrink-0">
+                              {formatRelativeTime(requirement.updated_at, currentLocale)}
+                            </span>
+                          </div>
                         </td>
-                        <td className="px-3 py-3">
-                          <span className="flex flex-wrap items-center gap-1">
-                            <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[requirement.status])}>
+                        <td className="hidden py-3.5 pr-3 pl-1 sm:table-cell">
+                          <span className="flex flex-wrap items-center justify-start gap-1 text-left">
+                            <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[requirement.status], "text-11")}>
                               {requirement.status === "draft" && requirement.current_version !== null
                                 ? t("workspace_products.requirements.status.draft_with_version", {
                                     version: requirement.current_version,
@@ -259,13 +310,13 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                                 : t(`workspace_products.requirements.status.${requirement.status}`)}
                             </span>
                             {requirement.can_approve && (
-                              <span className={cn(PILL_BASE, "bg-warning-primary text-on-color")}>
+                              <span className={cn(PILL_BASE, "bg-warning-subtle text-11 text-warning-primary")}>
                                 {t("workspace_products.requirements.status.pending_my_approval")}
                               </span>
                             )}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="hidden px-3 py-3.5 md:table-cell">
                           <span className="flex min-w-0 items-center gap-2">
                             <Avatar
                               name={requirement.owner_detail.display_name}
@@ -275,57 +326,49 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                             <span className="truncate">{requirement.owner_detail.display_name}</span>
                           </span>
                         </td>
-                        <td className="truncate px-3 py-3 text-secondary">{approvalSummary(requirement, t)}</td>
-                        <td className="px-3 py-3 text-right text-secondary tabular-nums">{requirement.field_count}</td>
-                        <td className="px-3 py-3 text-right text-secondary tabular-nums">{requirement.detail_count}</td>
-                        <td className="px-3 py-3 text-11 text-tertiary">{calculateTimeAgo(requirement.updated_at)}</td>
-                        <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
-                          <CustomMenu
-                            ellipsis
-                            closeOnSelect
-                            placement="bottom-end"
-                            buttonClassName="text-tertiary hover:text-primary"
-                          >
-                            <CustomMenu.MenuItem
-                              className="flex items-center gap-2"
-                              onClick={() => openRequirement(requirement, "data")}
-                            >
-                              <Database className="size-3.5 shrink-0" />
-                              {t("workspace_products.requirements.actions.open_data")}
-                            </CustomMenu.MenuItem>
-                            <CustomMenu.MenuItem
-                              className="flex items-center gap-2"
+                        <td className="hidden px-3 py-3.5 text-secondary lg:table-cell">
+                          {requirement.approver_ids.length === 0 ? (
+                            <button
+                              type="button"
                               onClick={() => openRequirement(requirement, "configuration")}
+                              className={cn(
+                                PILL_BASE,
+                                "focus-visible:outline-accent-primary bg-warning-subtle text-11 text-warning-primary hover:ring-1 hover:ring-warning-subtle hover:ring-inset focus-visible:outline focus-visible:outline-2"
+                              )}
                             >
-                              <Settings2 className="size-3.5 shrink-0" />
-                              {t("workspace_products.requirements.actions.configure")}
-                            </CustomMenu.MenuItem>
-                            {requirement.can_edit && (
-                              <>
-                                <CustomMenu.MenuItem
-                                  className="flex items-center gap-2"
-                                  onClick={() => openEditModal(requirement)}
-                                >
-                                  <FileText className="size-3.5 shrink-0" />
-                                  {t("workspace_products.requirements.actions.edit")}
-                                </CustomMenu.MenuItem>
-                                <CustomMenu.MenuItem
-                                  className="flex items-center gap-2"
-                                  onClick={() => setRequirementToDelete(requirement)}
-                                >
-                                  <X className="size-3.5 shrink-0" />
-                                  {t("workspace_products.requirements.actions.delete")}
-                                </CustomMenu.MenuItem>
-                              </>
-                            )}
-                          </CustomMenu>
+                              {t("workspace_products.requirements.approval.unconfigured")}
+                            </button>
+                          ) : (
+                            <span className="block truncate">{approvalSummary(requirement, t)}</span>
+                          )}
+                        </td>
+                        <td className="hidden px-3 py-3.5 text-secondary tabular-nums xl:table-cell">
+                          {requirement.field_count}
+                        </td>
+                        <td className="hidden px-3 py-3.5 text-secondary tabular-nums xl:table-cell">
+                          {requirement.detail_count}
+                        </td>
+                        <td className="hidden px-3 py-3.5 text-12 text-tertiary lg:table-cell">
+                          {formatRelativeTime(requirement.updated_at, currentLocale)}
+                        </td>
+                        <td className="sticky right-0 bg-surface-1 px-3 py-3.5 group-hover:bg-surface-2">
+                          {requirement.can_edit && (
+                            <button
+                              type="button"
+                              onClick={() => setRequirementToDelete(requirement)}
+                              className="focus-visible:outline-accent-primary grid size-8 place-items-center rounded-md text-tertiary transition-colors hover:text-danger-primary focus-visible:outline focus-visible:outline-2"
+                              aria-label={t("workspace_products.requirements.actions.delete")}
+                            >
+                              <Trash2 className="size-3.5" aria-hidden="true" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <footer className="flex shrink-0 items-center justify-between border-t border-subtle px-4 py-2.5 text-11 text-secondary">
+              <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-subtle px-4 py-2.5 text-12 text-secondary">
                 <span>
                   {t("workspace_products.requirements.pagination.total", { count: filteredRequirements.length })}
                 </span>
@@ -333,11 +376,12 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                   <select
                     value={perPage}
                     onChange={(event) => setPerPage(Number(event.target.value))}
-                    className="h-7 rounded border border-subtle bg-surface-1 px-1.5 outline-none"
+                    className="focus-visible:border-accent-subtle-1 h-8 rounded-md border border-subtle bg-surface-1 px-2 outline-none hover:bg-layer-transparent-hover focus-visible:ring-1 focus-visible:ring-accent-subtle"
+                    aria-label={t("workspace_products.requirements.pagination.per_page")}
                   >
                     {PAGE_SIZE_OPTIONS.map((value) => (
                       <option key={value} value={value}>
-                        {value}
+                        {t("workspace_products.requirements.pagination.per_page_value", { count: value })}
                       </option>
                     ))}
                   </select>
@@ -345,16 +389,20 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                     type="button"
                     disabled={page <= 1}
                     onClick={() => setPage(page - 1)}
-                    className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
+                    className="focus-visible:outline-accent-primary grid size-8 place-items-center rounded-md border border-subtle hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={t("workspace_products.requirements.pagination.previous_page")}
                   >
                     <ChevronLeft className="size-3.5" />
                   </button>
-                  <span>{t("workspace_products.requirements.pagination.page", { page, total: totalPages })}</span>
+                  <span className="min-w-16 text-center tabular-nums">
+                    {t("workspace_products.requirements.pagination.page", { page, total: totalPages })}
+                  </span>
                   <button
                     type="button"
                     disabled={page >= totalPages}
                     onClick={() => setPage(page + 1)}
-                    className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
+                    className="focus-visible:outline-accent-primary grid size-8 place-items-center rounded-md border border-subtle hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={t("workspace_products.requirements.pagination.next_page")}
                   >
                     <ChevronRight className="size-3.5" />
                   </button>

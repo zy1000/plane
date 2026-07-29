@@ -15,35 +15,27 @@ export function ProductRequirementSearch(props: TProductRequirementSearchProps) 
   const { value, onSearch, className } = props;
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isSearchOpen, setIsSearchOpen] = useState(() => value.trim().length > 0);
-  const [inputValue, setInputValue] = useState(value);
-
-  useEffect(() => {
-    if (document.activeElement !== inputRef.current) setInputValue(value);
-    if (value.trim().length > 0) setIsSearchOpen(true);
-  }, [value]);
-
-  useOutsideClickDetector(inputRef, () => {
-    if (isSearchOpen && inputValue.trim() === "") setIsSearchOpen(false);
-  });
+  const [isSearchOpen, setIsSearchOpen] = useState(value.trim() !== "");
 
   const clearSearch = () => {
-    setInputValue("");
     onSearch("");
-    setIsSearchOpen(false);
+    inputRef.current?.focus();
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      if (inputValue.trim() !== "") {
-        setInputValue("");
-        onSearch("");
-      } else {
-        setIsSearchOpen(false);
-        inputRef.current?.blur();
-      }
-    }
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    if (value.trim() !== "") clearSearch();
+    else setIsSearchOpen(false);
   };
+
+  useOutsideClickDetector(inputRef, () => {
+    if (isSearchOpen && value.trim() === "") setIsSearchOpen(false);
+  });
+
+  useEffect(() => {
+    if (value.trim() !== "") setIsSearchOpen(true);
+  }, [value]);
 
   return (
     <div className={cn("flex items-center", className)}>
@@ -54,7 +46,7 @@ export function ProductRequirementSearch(props: TProductRequirementSearchProps) 
           className="-mr-1"
           onClick={() => {
             setIsSearchOpen(true);
-            window.setTimeout(() => inputRef.current?.focus(), 0);
+            requestAnimationFrame(() => inputRef.current?.focus());
           }}
           icon={SearchIcon}
           aria-label={t("workspace_products.requirements.search")}
@@ -64,30 +56,31 @@ export function ProductRequirementSearch(props: TProductRequirementSearchProps) 
         className={cn(
           "ml-auto flex w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
           {
-            "w-30 border-subtle px-2.5 py-1.5 opacity-100 md:w-64": isSearchOpen,
+            "w-40 border-subtle px-2.5 py-1.5 opacity-100 md:w-64": isSearchOpen,
           }
         )}
       >
-        <SearchIcon className="h-3.5 w-3.5" />
+        <SearchIcon className="size-3.5 shrink-0" />
         <input
           ref={inputRef}
-          className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+          className="min-w-0 flex-1 border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+          aria-label={t("workspace_products.requirements.search")}
           placeholder={t("workspace_products.requirements.search")}
-          value={inputValue}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            setInputValue(nextValue);
-            onSearch(nextValue);
-          }}
+          value={value}
+          onChange={(event) => onSearch(event.target.value)}
           onKeyDown={handleInputKeyDown}
         />
         {isSearchOpen && (
           <button
             type="button"
-            className="grid place-items-center"
-            onClick={clearSearch}
+            className="focus-visible:outline-accent-primary grid size-5 shrink-0 place-items-center rounded-sm text-tertiary hover:bg-layer-transparent-hover hover:text-primary focus-visible:outline focus-visible:outline-2"
+            onClick={() => {
+              clearSearch();
+              setIsSearchOpen(false);
+            }}
+            aria-label={t("workspace_products.requirements.actions.clear_search")}
           >
-            <CloseIcon className="h-3 w-3" />
+            <CloseIcon className="size-3" />
           </button>
         )}
       </div>

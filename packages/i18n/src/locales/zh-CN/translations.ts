@@ -1899,9 +1899,16 @@ export default {
         owner: "按负责人筛选",
         all_statuses: "全部状态",
         all_owners: "全部负责人",
+        quick: {
+          all: "全部",
+          unconfigured: "待配置审批",
+        },
       },
       actions: {
+        open: "打开",
+        open_named: "打开「{name}」",
         open_data: "打开数据",
+        clear_search: "清空需求搜索",
         configure: "配置",
         preview: "预览",
         edit: "编辑",
@@ -1987,6 +1994,10 @@ export default {
       pagination: {
         total: "共 {count} 条需求",
         page: "第 {page}/{total} 页",
+        per_page: "每页需求数量",
+        per_page_value: "每页 {count} 条",
+        previous_page: "上一页",
+        next_page: "下一页",
       },
       preview: {
         title: "需求预览",

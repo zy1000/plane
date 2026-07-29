@@ -1736,9 +1736,16 @@ export default {
         owner: "Filter by owner",
         all_statuses: "All statuses",
         all_owners: "All owners",
+        quick: {
+          all: "All",
+          unconfigured: "Approval not configured",
+        },
       },
       actions: {
+        open: "Open",
+        open_named: "Open {name}",
         open_data: "Open data",
+        clear_search: "Clear requirement search",
         configure: "Configure",
         preview: "Preview",
         edit: "Edit",
@@ -1825,6 +1832,10 @@ export default {
       pagination: {
         total: "{count} requirements",
         page: "Page {page} of {total}",
+        per_page: "Requirements per page",
+        per_page_value: "{count} / page",
+        previous_page: "Previous page",
+        next_page: "Next page",
       },
       preview: {
         title: "Requirement preview",

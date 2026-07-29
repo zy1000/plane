@@ -11,7 +11,7 @@ import type {
 } from "@plane/types";
 
 export const REQUIREMENT_STATUS_PILL: Record<TRequirementStatus, string> = {
-  draft: "bg-layer-2 text-secondary",
+  draft: "bg-accent-subtle text-accent-primary",
   in_review: "bg-warning-subtle text-warning-primary",
   published: "bg-success-subtle text-success-primary",
 };

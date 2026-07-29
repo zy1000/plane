@@ -13,9 +13,11 @@ type TProductRequirementFiltersProps = {
   ownerFilters: string[];
   ownerOptions: IUserLite[];
   pendingMyApprovalOnly: boolean;
+  unconfiguredApprovalOnly: boolean;
   onStatusFiltersChange: (value: TRequirementStatus[]) => void;
   onOwnerFiltersChange: (value: string[]) => void;
   onPendingMyApprovalOnlyChange: (value: boolean) => void;
+  onUnconfiguredApprovalOnlyChange: (value: boolean) => void;
 };
 
 const toggleValue = <T,>(values: T[], value: T) =>
@@ -27,20 +29,28 @@ export function ProductRequirementFilters(props: TProductRequirementFiltersProps
     ownerFilters,
     ownerOptions,
     pendingMyApprovalOnly,
+    unconfiguredApprovalOnly,
     onStatusFiltersChange,
     onOwnerFiltersChange,
     onPendingMyApprovalOnlyChange,
+    onUnconfiguredApprovalOnlyChange,
   } = props;
   const { t } = useTranslation();
   const [filtersSearchQuery, setFiltersSearchQuery] = useState("");
   const [statusPreviewEnabled, setStatusPreviewEnabled] = useState(true);
   const [ownerPreviewEnabled, setOwnerPreviewEnabled] = useState(true);
+  const [approvalPreviewEnabled, setApprovalPreviewEnabled] = useState(true);
 
-  const hasActiveFilters = statusFilters.length > 0 || ownerFilters.length > 0 || pendingMyApprovalOnly;
+  const hasActiveFilters =
+    statusFilters.length > 0 || ownerFilters.length > 0 || pendingMyApprovalOnly || unconfiguredApprovalOnly;
   const normalizedQuery = filtersSearchQuery.trim().toLocaleLowerCase();
   const TriggerIcon = hasActiveFilters ? FilterAppliedIcon : FilterIcon;
-  const approvalOptionLabel = t("workspace_products.requirements.status.pending_my_approval");
-  const showApprovalOption = !normalizedQuery || approvalOptionLabel.toLocaleLowerCase().includes(normalizedQuery);
+  const pendingApprovalOptionLabel = t("workspace_products.requirements.status.pending_my_approval");
+  const unconfiguredApprovalOptionLabel = t("workspace_products.requirements.filters.quick.unconfigured");
+  const showPendingApprovalOption =
+    !normalizedQuery || pendingApprovalOptionLabel.toLocaleLowerCase().includes(normalizedQuery);
+  const showUnconfiguredApprovalOption =
+    !normalizedQuery || unconfiguredApprovalOptionLabel.toLocaleLowerCase().includes(normalizedQuery);
 
   const filteredStatuses = useMemo(
     () =>
@@ -65,22 +75,23 @@ export function ProductRequirementFilters(props: TProductRequirementFiltersProps
     <FiltersDropdown
       placement="bottom-end"
       isFiltersApplied={hasActiveFilters}
-      menuButton={
-        <div
-          aria-label={t("common.filters")}
-          className={cn(
-            "grid size-7 place-items-center rounded-md border border-subtle-1 bg-layer-2 text-secondary transition-all duration-200",
-            {
-              "border-accent-subtle-1 bg-accent-subtle text-accent-primary": hasActiveFilters,
-            }
-          )}
-        >
+      title={t("common.filters")}
+      icon={
+        <TriggerIcon
+          className={cn("size-3.5 text-secondary", {
+            "text-accent-primary [&_path]:fill-current": hasActiveFilters,
+          })}
+        />
+      }
+      miniIcon={
+        <span className="grid place-items-center">
           <TriggerIcon
-            className={cn("size-3.5", {
+            className={cn("size-3.5 text-secondary", {
               "text-accent-primary [&_path]:fill-current": hasActiveFilters,
             })}
           />
-        </div>
+          <span className="sr-only">{t("common.filters")}</span>
+        </span>
       }
     >
       <div className="flex max-h-[350px] flex-col overflow-hidden">
@@ -112,7 +123,7 @@ export function ProductRequirementFilters(props: TProductRequirementFiltersProps
             />
             {statusPreviewEnabled && (
               <div>
-                {filteredStatuses.length > 0 || showApprovalOption ? (
+                {filteredStatuses.length > 0 ? (
                   <>
                     {filteredStatuses.map((status) => (
                       <FilterOption
@@ -122,16 +133,9 @@ export function ProductRequirementFilters(props: TProductRequirementFiltersProps
                         title={t(`workspace_products.requirements.status.${status}`)}
                       />
                     ))}
-                    {showApprovalOption && (
-                      <FilterOption
-                        isChecked={pendingMyApprovalOnly}
-                        onClick={() => onPendingMyApprovalOnlyChange(!pendingMyApprovalOnly)}
-                        title={approvalOptionLabel}
-                      />
-                    )}
                   </>
                 ) : (
-                  <p className="fs-10 italic text-placeholder">{t("common.search.no_matching_results")}</p>
+                  <p className="fs-10 text-placeholder italic">{t("common.search.no_matching_results")}</p>
                 )}
               </div>
             )}
@@ -152,14 +156,51 @@ export function ProductRequirementFilters(props: TProductRequirementFiltersProps
                       key={owner.id}
                       isChecked={ownerFilters.includes(owner.id)}
                       onClick={() => onOwnerFiltersChange(toggleValue(ownerFilters, owner.id))}
-                      icon={
-                        <Avatar name={owner.display_name} src={getFileURL(owner.avatar_url ?? "")} size="sm" />
-                      }
+                      icon={<Avatar name={owner.display_name} src={getFileURL(owner.avatar_url ?? "")} size="sm" />}
                       title={owner.display_name}
                     />
                   ))
                 ) : (
-                  <p className="fs-10 italic text-placeholder">{t("common.search.no_matching_results")}</p>
+                  <p className="fs-10 text-placeholder italic">{t("common.search.no_matching_results")}</p>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="py-2">
+            <FilterHeader
+              title={t("workspace_products.requirements.fields.approval")}
+              isPreviewEnabled={approvalPreviewEnabled}
+              handleIsPreviewEnabled={() => setApprovalPreviewEnabled((value) => !value)}
+            />
+            {approvalPreviewEnabled && (
+              <div>
+                {showPendingApprovalOption || showUnconfiguredApprovalOption ? (
+                  <>
+                    {showPendingApprovalOption && (
+                      <FilterOption
+                        isChecked={pendingMyApprovalOnly}
+                        onClick={() => {
+                          const nextValue = !pendingMyApprovalOnly;
+                          onPendingMyApprovalOnlyChange(nextValue);
+                          if (nextValue) onUnconfiguredApprovalOnlyChange(false);
+                        }}
+                        title={pendingApprovalOptionLabel}
+                      />
+                    )}
+                    {showUnconfiguredApprovalOption && (
+                      <FilterOption
+                        isChecked={unconfiguredApprovalOnly}
+                        onClick={() => {
+                          const nextValue = !unconfiguredApprovalOnly;
+                          onUnconfiguredApprovalOnlyChange(nextValue);
+                          if (nextValue) onPendingMyApprovalOnlyChange(false);
+                        }}
+                        title={unconfiguredApprovalOptionLabel}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <p className="fs-10 text-placeholder italic">{t("common.search.no_matching_results")}</p>
                 )}
               </div>
             )}
