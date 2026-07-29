@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useNavigate } from "react-router";
 import {
@@ -7,20 +7,19 @@ import {
   ChevronRight,
   FilePlus2,
   FileText,
-  MoreHorizontal,
   Plus,
-  RefreshCw,
-  RotateCcw,
-  Search,
   Trash2,
 } from "lucide-react";
+import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { IconButton } from "@plane/propel/icon-button";
+import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement } from "@plane/types";
-import { AlertModalCore, Breadcrumbs, Checkbox, CustomMenu, Header, Loader } from "@plane/ui";
-import { calculateTimeAgo, stripAndTruncateHTML } from "@plane/utils";
+import { AlertModalCore, Breadcrumbs, Checkbox, Header, Loader } from "@plane/ui";
+import { calculateTimeAgo, cn, stripAndTruncateHTML } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -45,6 +44,8 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
     setIsCreateModalOpen,
   } = useRequirementTemplatesContext();
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(PAGE_SIZE_OPTIONS[0]);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
@@ -82,8 +83,27 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
     setSelectedTemplateIds((current) => current.filter((id) => availableIds.has(id)));
   }, [templates]);
 
-  const resetView = () => {
+  const clearSearch = () => {
     setSearchQuery("");
+    setIsSearchOpen(false);
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Escape") return;
+    if (searchQuery) {
+      setSearchQuery("");
+      return;
+    }
+    setIsSearchOpen(false);
+    searchInputRef.current?.blur();
+  };
+
+  useOutsideClickDetector(searchInputRef, () => {
+    if (isSearchOpen && searchQuery.trim() === "") setIsSearchOpen(false);
+  });
+
+  const resetView = () => {
+    clearSearch();
     setPage(1);
   };
 
@@ -194,50 +214,44 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
               )}
             </Header.LeftItem>
             <Header.RightItem className="gap-1.5">
-              <label className="relative block w-40 lg:w-56">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder={t("workspace_templates.requirements.list.search_placeholder")}
-                  className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-8 text-12 text-primary outline-none placeholder:text-placeholder"
-                />
-              </label>
-              <Tooltip tooltipContent={t("workspace_templates.requirements.list.refresh")}>
-                <button
-                  type="button"
-                  onClick={() => void fetchTemplates().catch(() => undefined)}
-                  disabled={isLoading}
-                  className="grid size-8 place-items-center rounded-md border border-subtle bg-surface-1 text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  aria-label={t("workspace_templates.requirements.list.refresh")}
+              <div className="flex items-center">
+                {!isSearchOpen && (
+                  <IconButton
+                    variant="ghost"
+                    size="lg"
+                    className="-mr-1"
+                    onClick={() => {
+                      setIsSearchOpen(true);
+                      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+                    }}
+                    icon={SearchIcon}
+                    aria-label={t("workspace_templates.requirements.list.search_placeholder")}
+                  />
+                )}
+                <div
+                  className={cn(
+                    "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+                    {
+                      "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
+                    }
+                  )}
                 >
-                  <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
-                </button>
-              </Tooltip>
-              <CustomMenu
-                placement="bottom-end"
-                customButton={
-                  <Tooltip tooltipContent={t("workspace_templates.requirements.list.more")}>
-                    <button
-                      type="button"
-                      className="grid size-8 place-items-center rounded-md border border-subtle bg-surface-1 text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
-                      aria-label={t("workspace_templates.requirements.list.more")}
-                    >
-                      <MoreHorizontal className="size-4" />
+                  <SearchIcon className="h-3.5 w-3.5" />
+                  <input
+                    ref={searchInputRef}
+                    className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+                    placeholder={t("workspace_templates.requirements.list.search_placeholder")}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                  />
+                  {isSearchOpen && (
+                    <button type="button" className="grid place-items-center" onClick={clearSearch}>
+                      <CloseIcon className="h-3 w-3" />
                     </button>
-                  </Tooltip>
-                }
-              >
-                <CustomMenu.MenuItem onClick={resetView}>
-                  <RotateCcw className="size-3.5" />
-                  {t("workspace_templates.requirements.list.reset_view")}
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => void fetchTemplates().catch(() => undefined)}>
-                  <RefreshCw className="size-3.5" />
-                  {t("workspace_templates.requirements.list.refresh")}
-                </CustomMenu.MenuItem>
-              </CustomMenu>
+                  )}
+                </div>
+              </div>
               <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
                 <Plus className="size-3.5" />
                 {t("workspace_templates.requirements.create")}

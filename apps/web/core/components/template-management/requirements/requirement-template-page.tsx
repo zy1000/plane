@@ -18,6 +18,7 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
   const navigate = useNavigate();
   const { templateId } = useParams();
   const [isDataEditing, setIsDataEditing] = useState(false);
+  const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const { workspaceSlug, templates, isLoading: isTemplatesLoading, upsertTemplate } = useRequirementTemplatesContext();
   const detailsStore = useRequirementTemplateDetails({
     workspaceSlug,
@@ -94,6 +95,9 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
                 />
               </Breadcrumbs>
             </Header.LeftItem>
+            <Header.RightItem className="shrink-0">
+              <div ref={setDataToolbarHost} className="flex min-w-0 items-center gap-2" />
+            </Header.RightItem>
           </Header>
         }
       />
@@ -138,6 +142,7 @@ export const RequirementTemplatePage = observer(function RequirementTemplatePage
             onRefresh={detailsStore.fetchDetails}
             onBulkSave={detailsStore.saveDetailBatch}
             onEditingChange={setIsDataEditing}
+            toolbarPortalEl={dataToolbarHost}
           />
         )}
       </ContentWrapper>

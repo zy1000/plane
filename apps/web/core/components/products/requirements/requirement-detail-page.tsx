@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { ChevronLeft, Database, GitBranch, History, Save, Settings2 } from "lucide-react";
+import { ChevronLeft, Database, FileText, GitBranch, History, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement, TRequirementField, TRequirementFieldDraft, IUserLite } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -298,6 +297,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                     <BreadcrumbLink
                       href={`/${workspaceSlug}/products/${productId}/requirements`}
                       label={t("workspace_products.navigation.requirements")}
+                      icon={<FileText className="size-4 text-tertiary" />}
                     />
                   }
                 />
@@ -308,11 +308,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                         <Loader.Item height="22px" />
                       </Loader>
                     ) : (
-                      <Tooltip tooltipContent={requirement.title} position="bottom">
-                        <h1 className="text-15 max-w-44 truncate font-semibold text-primary sm:max-w-60 xl:max-w-80">
-                          {requirement.title}
-                        </h1>
-                      </Tooltip>
+                      <BreadcrumbLink label={requirement.title} isLast />
                     )
                   }
                   isLast

@@ -156,9 +156,9 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-layer-1 p-3 lg:overflow-hidden lg:p-4">
-      <div className="grid min-h-full gap-3 lg:h-full lg:min-h-0 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <aside className="flex max-h-[28rem] min-h-0 flex-col overflow-hidden rounded-lg border border-subtle bg-surface-1 lg:max-h-none">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-surface-1 lg:overflow-hidden">
+      <div className="grid min-h-full lg:h-full lg:min-h-0 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <aside className="flex max-h-[28rem] min-h-0 flex-col overflow-hidden border-b border-subtle bg-surface-1 lg:max-h-none lg:border-r lg:border-b-0">
           <header className="flex items-center justify-between gap-3 border-b border-subtle px-4 py-3">
             <span className="flex min-w-0 items-center gap-2 text-12 font-semibold text-primary">
               <GitBranch className="size-4 text-secondary" />
@@ -254,7 +254,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
           </footer>
         </aside>
 
-        <section className="flex min-h-[38rem] min-w-0 flex-col overflow-hidden rounded-lg border border-subtle bg-surface-1 lg:min-h-0">
+        <section className="flex min-h-[38rem] min-w-0 flex-col overflow-hidden bg-surface-1 lg:min-h-0">
           <header className="flex flex-wrap items-start justify-between gap-3 border-b border-subtle px-4 py-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">

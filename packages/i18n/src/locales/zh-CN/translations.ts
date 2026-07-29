@@ -2040,6 +2040,9 @@ export default {
           reverted: "草稿已撤回，需求恢复到上一个已发布版本。",
           failed: "操作未能完成，请稍后重试。",
         },
+        errors: {
+          REQUIREMENT_APPROVER_REQUIRED: "提交审批前请至少配置一名审批人。",
+        },
       },
       change: {
         title: "变更记录",

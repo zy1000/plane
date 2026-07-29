@@ -76,6 +76,9 @@ export const useRequirementVersions = ({
 
   const selectVersion = useCallback(
     (version: number | null) => {
+      // 同一版本重复点击不能清掉已加载的快照：selectedVersion 不变时
+      // fetchVersionDetail 的 effect 不会重跑，右侧会永久卡在骨架屏。
+      if (version === selectedVersion) return;
       setDetailsCursor(undefined);
       setComparisonCursor(undefined);
       setVersionDetail(null);
@@ -89,7 +92,7 @@ export const useRequirementVersions = ({
       setIsComparisonLoading(version !== null && compareVersion !== null);
       setSelectedVersion(version);
     },
-    [compareVersion]
+    [compareVersion, selectedVersion]
   );
 
   const selectCompareVersion = useCallback((version: number | null) => {

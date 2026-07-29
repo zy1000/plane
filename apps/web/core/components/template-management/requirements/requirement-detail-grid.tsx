@@ -37,13 +37,14 @@ import type {
 import { EFileAssetType } from "@plane/types";
 import { CustomMenu, CustomSelect, Loader, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { cn, getEditorAssetSrc } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import {
   ChangedFieldCorner,
   getCurrentPageOffset,
   getDetailRowKey,
+  getFormColumnCount,
   getFormRows,
   getMaxFormRows,
   isEmptyDetailValue,
@@ -106,12 +107,14 @@ const MenuRowLabel = ({
 const LeafEditor = ({
   field,
   value,
+  workspaceSlug,
   onChange,
   onUpload,
   onRemoveAsset,
 }: {
   field: TRequirementField;
   value: TRequirementDetailValue | undefined;
+  workspaceSlug: string;
   onChange: (value: TRequirementDetailValue) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
   onRemoveAsset?: (assetId: string) => void;
@@ -131,7 +134,7 @@ const LeafEditor = ({
       }));
       return (
         <MultiSelectDropdown
-          containerClassName="min-w-40"
+          containerClassName="w-full min-w-0"
           value={currentValue}
           onChange={(nextValue) => onChange(nextValue)}
           options={dropdownOptions}
@@ -155,7 +158,7 @@ const LeafEditor = ({
               </span>
             );
           }}
-          buttonContainerClassName="h-8 w-full rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+          buttonContainerClassName="h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
           optionsContainerClassName="w-60"
           disableSearch={options.length <= 8}
           disableSorting
@@ -174,7 +177,7 @@ const LeafEditor = ({
             {selectedOption?.label ?? placeholder}
           </span>
         }
-        buttonClassName="h-8 min-w-40 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
         optionsClassName="w-60"
         input
       >
@@ -198,7 +201,8 @@ const LeafEditor = ({
         value={typeof value === "string" ? value : null}
         onChange={(memberId) => onChange(memberId)}
         buttonVariant="border-with-text"
-        buttonClassName="h-8 min-w-32 border !border-transparent bg-layer-1/60 text-14 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 text-14 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        buttonContainerClassName="w-full min-w-0"
         placeholder={field.config.placeholder ?? t("workspace_templates.requirements.data.select_member")}
         showUserDetails
       />
@@ -206,32 +210,65 @@ const LeafEditor = ({
   }
   if (field.field_type === "attachment" || field.field_type === "image") {
     const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
+    const removeAsset = (assetId: string) => {
+      onRemoveAsset?.(assetId);
+      onChange(assets.filter((item) => item.asset_id !== assetId));
+    };
     return (
-      <div className="flex min-w-40 flex-col gap-1.5">
-        {assets.map((asset) => (
-          <span key={asset.asset_id} className="flex items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-13">
-            <Paperclip className="size-3 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">{asset.name}</span>
-            <button
-              type="button"
-              className="text-secondary hover:text-danger-primary"
-              onClick={() => {
-                onRemoveAsset?.(asset.asset_id);
-                onChange(assets.filter((item) => item.asset_id !== asset.asset_id));
-              }}
-              aria-label={t("delete")}
+      <div className="flex w-full min-w-0 flex-col gap-1">
+        {field.field_type === "image" ? (
+          <div className="flex flex-wrap gap-1">
+            {assets.map((asset) => {
+              const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
+              return (
+                <span
+                  key={asset.asset_id}
+                  title={asset.name}
+                  className="relative size-9 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2"
+                >
+                  <img src={src} alt={asset.name} className="size-full object-cover" loading="lazy" />
+                  <button
+                    type="button"
+                    className="absolute top-0.5 right-0.5 grid size-3.5 place-items-center rounded-full bg-surface-1/90 text-10 leading-none text-secondary shadow-sm hover:bg-danger-subtle hover:text-danger-primary"
+                    onClick={() => removeAsset(asset.asset_id)}
+                    aria-label={t("delete")}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          assets.map((asset) => (
+            <span
+              key={asset.asset_id}
+              className="flex min-w-0 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-0.5 text-12"
             >
-              ×
-            </button>
+              <Paperclip className="size-3 shrink-0" />
+              <span className="min-w-0 flex-1 truncate" title={asset.name}>
+                {asset.name}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 text-secondary hover:text-danger-primary"
+                onClick={() => removeAsset(asset.asset_id)}
+                aria-label={t("delete")}
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+        <label className="inline-flex h-7 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-12 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
+          <Paperclip className="size-3 shrink-0" />
+          <span className="truncate">
+            {t(
+              field.field_type === "image"
+                ? "workspace_templates.requirements.data.upload_image"
+                : "workspace_templates.requirements.data.upload_file"
+            )}
           </span>
-        ))}
-        <label className="inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-dashed border-subtle bg-transparent px-2 text-13 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
-          <Paperclip className="size-3" />
-          {t(
-            field.field_type === "image"
-              ? "workspace_templates.requirements.data.upload_image"
-              : "workspace_templates.requirements.data.upload_file"
-          )}
           <input
             type="file"
             className="sr-only"
@@ -252,8 +289,8 @@ const LeafEditor = ({
       <textarea
         value={typeof value === "string" ? value : ""}
         onChange={(event) => onChange(event.target.value)}
-        rows={2}
-        className="focus:border-accent-primary focus:ring-accent-primary/10 min-h-16 w-full min-w-44 resize-y rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-14 leading-5 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
+        rows={1}
+        className="focus:border-accent-primary focus:ring-accent-primary/10 max-h-24 min-h-8 w-full min-w-0 resize-y rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-14 leading-5 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
         placeholder={field.config.placeholder}
       />
     );
@@ -262,7 +299,7 @@ const LeafEditor = ({
     <input
       value={typeof value === "string" ? value : ""}
       onChange={(event) => onChange(event.target.value)}
-      className="focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-32 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
+      className="focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
       placeholder={field.config.placeholder}
     />
   );
@@ -397,6 +434,18 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const formFields = visibleRootFields.filter((field) => field.field_type === "form");
   // The per-sub-record action gutter only carries controls while editing, so it collapses in read-only view.
   const showActionGutter = editor.isEditing;
+  // Column count for the trailing "add record" affordance row; mirrors the header's column math.
+  const totalColumnCount = useMemo(
+    () =>
+      1 + // leading checkbox column
+      visibleRootFields.reduce(
+        (sum, field) =>
+          sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter) : 1),
+        0
+      ) +
+      1, // trailing actions column
+    [showActionGutter, visibleRootFields]
+  );
   const filterableFields = useMemo(
     () =>
       activeFields.flatMap((field) =>
@@ -658,6 +707,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                         <LeafEditor
                           field={field}
                           value={data[field.id]}
+                          workspaceSlug={workspaceSlug}
                           onChange={(value) => setRootValue(key, field.id, value)}
                           onUpload={uploadAsset}
                           onRemoveAsset={editor.discardPendingAsset}
@@ -730,6 +780,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                           <LeafEditor
                             field={child}
                             value={currentValue}
+                            workspaceSlug={workspaceSlug}
                             onChange={(value) => setChildValue(key, form.id, row.id, child.id, value)}
                             onUpload={uploadAsset}
                             onRemoveAsset={editor.discardPendingAsset}
@@ -1109,10 +1160,14 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         )}
       </div>
       {!readOnly && (
-        <Button variant="primary" onClick={editor.startEditing} disabled={isLoading || details.length === 0}>
-          <Pencil className="size-3.5" />
-          {t("workspace_templates.requirements.data.edit_data")}
-        </Button>
+        <IconButton
+          variant="secondary"
+          size="lg"
+          icon={Pencil}
+          onClick={editor.startEditing}
+          disabled={isLoading || details.length === 0}
+          aria-label={t("workspace_templates.requirements.data.edit_data")}
+        />
       )}
     </>
   );
@@ -1245,6 +1300,23 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
               }}
             />
             {rowGroups}
+            {!readOnly &&
+              (editor.isEditing ? editor.draftRows.length > 0 : details.length > 0) && (
+                <tbody>
+                  <tr>
+                    <td colSpan={totalColumnCount} className="border-b border-subtle px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => editor.stageCreate()}
+                        className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-13 font-medium text-accent-primary transition-colors duration-150 hover:border-accent-subtle hover:bg-accent-subtle motion-reduce:transition-none"
+                      >
+                        <Plus className="size-3.5" />
+                        {t("workspace_templates.requirements.data.add")}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              )}
           </table>
         )}
       </div>

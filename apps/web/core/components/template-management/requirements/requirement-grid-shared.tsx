@@ -4,9 +4,10 @@
  * 编辑态网格（requirement-detail-grid.tsx）、变更 diff 网格和版本只读快照共用同一套
  * 二级表头结构、值渲染和行内子表单排布逻辑，所以这些纯 helper 与展示组件抽在这里。
  */
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { observer } from "mobx-react";
-import { File, Image as ImageIcon } from "lucide-react";
+import { Download, File } from "lucide-react";
+import { Modal, Typography } from "antd";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirementAssetRef,
@@ -16,7 +17,7 @@ import type {
   TRequirementFormRow,
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
-import { cn, getEditorAssetDownloadSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 import { getRequirementSelectLabel } from "./requirement-select";
 
@@ -91,6 +92,99 @@ const RequirementMemberValue = observer(function RequirementMemberValue({ value 
   );
 });
 
+const RequirementImageValue = ({
+  assets,
+  workspaceSlug,
+  className,
+}: {
+  assets: TRequirementAssetRef[];
+  workspaceSlug: string;
+  className?: string;
+}) => {
+  const { t } = useTranslation();
+  const [preview, setPreview] = useState<{ src: string; downloadSrc: string; name: string } | null>(null);
+
+  return (
+    <>
+      <span className="flex max-w-64 flex-wrap gap-1.5">
+        {assets.map((asset) => {
+          const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
+          const downloadSrc = getEditorAssetDownloadSrc({ assetId: asset.asset_id, workspaceSlug });
+          return (
+            <button
+              key={asset.asset_id}
+              type="button"
+              title={asset.name}
+              onClick={() => {
+                if (!src || !downloadSrc) return;
+                setPreview({ src, downloadSrc, name: asset.name });
+              }}
+              className={cn(
+                "block size-12 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2 transition-opacity hover:opacity-90",
+                className
+              )}
+            >
+              <img src={src} alt={asset.name} className="size-full object-cover" loading="lazy" />
+            </button>
+          );
+        })}
+      </span>
+      <Modal
+        open={Boolean(preview)}
+        onCancel={() => setPreview(null)}
+        afterOpenChange={(visible) => {
+          if (!visible) setPreview(null);
+        }}
+        footer={null}
+        modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
+        width="100vw"
+        style={{ top: 0, paddingBottom: 0 }}
+        styles={{ body: { padding: 0 } }}
+        destroyOnClose
+        title={
+          <div className="flex items-center justify-between gap-3 pr-8" style={{ marginTop: -16, marginBottom: -16 }}>
+            <Typography.Text strong className="min-w-0 truncate">
+              {preview?.name ?? t("workspace_templates.requirements.field_types.image")}
+            </Typography.Text>
+            {preview?.downloadSrc && (
+              <a
+                href={preview.downloadSrc}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex shrink-0 items-center gap-1 text-13 font-medium text-accent-primary hover:text-accent-primary"
+              >
+                <Download className="size-3.5" />
+                {t("page_navigation_pane.tabs.assets.download_button")}
+              </a>
+            )}
+          </div>
+        }
+      >
+        <div
+          className="flex items-center justify-center overflow-auto bg-surface-2 p-4"
+          style={{ height: "calc(100vh - 56px)" }}
+        >
+          {preview?.src && preview.downloadSrc && (
+            <a
+              href={preview.downloadSrc}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={t("page_navigation_pane.tabs.assets.download_button")}
+              className="inline-flex max-h-full max-w-full"
+            >
+              <img
+                src={preview.src}
+                alt={preview.name}
+                className="max-h-full max-w-full cursor-zoom-in object-contain"
+              />
+            </a>
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+};
+
 export const LeafValue = ({
   field,
   value,
@@ -150,6 +244,9 @@ export const LeafValue = ({
   if (field.field_type === "attachment" || field.field_type === "image") {
     const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
     if (!assets.length) return null;
+    if (field.field_type === "image") {
+      return <RequirementImageValue assets={assets} workspaceSlug={workspaceSlug} className={className} />;
+    }
     return (
       <span className="flex max-w-48 flex-wrap gap-1">
         {assets.map((asset) => (
@@ -166,7 +263,7 @@ export const LeafValue = ({
               className
             )}
           >
-            {field.field_type === "image" ? <ImageIcon className="size-3" /> : <File className="size-3" />}
+            <File className="size-3" />
             <span className="truncate">{asset.name}</span>
           </a>
         ))}

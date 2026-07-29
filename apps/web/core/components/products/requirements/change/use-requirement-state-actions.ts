@@ -12,6 +12,8 @@ import type { useRequirementChangeRequests } from "@/hooks/store/use-requirement
 
 type TChangesStore = ReturnType<typeof useRequirementChangeRequests>;
 
+const LOCALIZED_STATE_ERROR_CODES = new Set(["REQUIREMENT_APPROVER_REQUIRED"]);
+
 export const useRequirementStateActions = ({
   requirement,
   changesStore,
@@ -40,11 +42,15 @@ export const useRequirementStateActions = ({
 
   const notifyFailure = useCallback(
     (error: unknown) => {
-      const payload = error as { error?: string };
+      const payload = error as { code?: string; error?: string };
+      const message =
+        payload?.code && LOCALIZED_STATE_ERROR_CODES.has(payload.code)
+          ? t(`workspace_products.requirements.state.errors.${payload.code}`)
+          : (payload?.error ?? t("workspace_products.requirements.state.toast.failed"));
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
-        message: payload?.error ?? t("workspace_products.requirements.state.toast.failed"),
+        message,
       });
     },
     [t]

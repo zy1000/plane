@@ -3,11 +3,11 @@
  *
  * 四种组合：
  * - published：「编辑」
- * - draft 且从未发布：「提交审批」+「删除需求」
+ * - draft 且从未发布：「提交审批」
  * - draft 且曾发布：「提交审批」+「撤回草稿」（提示会恢复到 v{n}）
  * - in_review：提交人「撤回审批」、审批人「去审批」、其余人只看到状态
  */
-import { Pencil, RotateCcw, Send, Trash2 } from "lucide-react";
+import { Pencil, RotateCcw, Send } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirement } from "@plane/types";
@@ -33,7 +33,7 @@ export function RequirementStatusMeta({ requirement, className }: { requirement:
 
   return (
     <span className={cn("flex shrink-0 items-center gap-2", className)}>
-      <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[status])}>
+      <span className={cn(PILL_BASE, REQUIREMENT_STATUS_PILL[status], "text-12")}>
         {t(`workspace_products.requirements.status.${status}`)}
       </span>
       {currentVersion !== null && (
@@ -73,35 +73,32 @@ export function RequirementStatusActions(props: TProps) {
 
       {status === "draft" && requirement.can_edit && (
         <>
-          <Button variant="secondary" disabled={isMutating} onClick={onDiscardDraft} className="hidden md:inline-flex">
-            {hasPublishedVersion ? <RotateCcw className="size-3.5" /> : <Trash2 className="size-3.5" />}
-            {t(
-              hasPublishedVersion
-                ? "workspace_products.requirements.state.discard_draft"
-                : "workspace_products.requirements.state.delete_requirement"
-            )}
-          </Button>
-          <CustomMenu
-            ellipsis
-            closeOnSelect
-            placement="bottom-end"
-            className="md:hidden"
-            buttonClassName="size-7 border border-subtle bg-surface-1"
-            ariaLabel={t("workspace_products.requirements.state.more_actions")}
-          >
-            <CustomMenu.MenuItem className="flex items-center gap-2" onClick={onDiscardDraft}>
-              {hasPublishedVersion ? (
-                <RotateCcw className="size-3.5 shrink-0" />
-              ) : (
-                <Trash2 className="size-3.5 shrink-0 text-danger-primary" />
-              )}
-              {t(
-                hasPublishedVersion
-                  ? "workspace_products.requirements.state.discard_draft"
-                  : "workspace_products.requirements.state.delete_requirement"
-              )}
-            </CustomMenu.MenuItem>
-          </CustomMenu>
+          {hasPublishedVersion && (
+            <>
+              <Button
+                variant="secondary"
+                disabled={isMutating}
+                onClick={onDiscardDraft}
+                className="hidden md:inline-flex"
+              >
+                <RotateCcw className="size-3.5" />
+                {t("workspace_products.requirements.state.discard_draft")}
+              </Button>
+              <CustomMenu
+                ellipsis
+                closeOnSelect
+                placement="bottom-end"
+                className="md:hidden"
+                buttonClassName="size-7 border border-subtle bg-surface-1"
+                ariaLabel={t("workspace_products.requirements.state.more_actions")}
+              >
+                <CustomMenu.MenuItem className="flex items-center gap-2" onClick={onDiscardDraft}>
+                  <RotateCcw className="size-3.5 shrink-0" />
+                  {t("workspace_products.requirements.state.discard_draft")}
+                </CustomMenu.MenuItem>
+              </CustomMenu>
+            </>
+          )}
           <Button variant="primary" disabled={isMutating} onClick={onSubmitReview}>
             <Send className="size-3.5" />
             {t("workspace_products.requirements.state.submit_review")}

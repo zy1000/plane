@@ -1881,6 +1881,9 @@ export default {
           reverted: "Draft discarded. The requirement is back on its last published version.",
           failed: "That action could not be completed. Please try again.",
         },
+        errors: {
+          REQUIREMENT_APPROVER_REQUIRED: "Configure at least one approver before submitting for approval.",
+        },
       },
       change: {
         title: "Change log",
