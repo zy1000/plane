@@ -17,6 +17,7 @@ from plane.db.models import (
     RequirementDetail,
     RequirementField,
     RequirementFieldType,
+    RequirementLibrary,
     RequirementStatus,
     WorkspaceMember,
 )
@@ -59,6 +60,20 @@ class TestRequirementApp:
         for member in members:
             ProductMember.objects.create(product=product, member=member)
         return product
+
+    def create_standard_requirement(self, template, title=None):
+        """标准库 + 标准需求：模板只定义字段，明细挂在标准需求上。"""
+        library = RequirementLibrary.objects.create(
+            workspace=self.workspace,
+            template=template,
+            name=f"Requirement library {uuid4()}",
+        )
+        return Requirement.objects.create(
+            workspace=self.workspace,
+            library=library,
+            title=title or f"Standard requirement {uuid4()}",
+            owner=self.owner,
+        )
 
     def create_project(self, *members):
         project = ProjectFactory(
@@ -299,35 +314,20 @@ class TestRequirementApp:
             field_type=RequirementFieldType.TEXT,
             default_value="Default summary",
         )
-        source_detail = RequirementDetail.objects.create(
-            requirement=template,
-            data={
-                str(root_field.id): [
-                    {
-                        "id": str(uuid4()),
-                        "values": {
-                            str(child_field.id): "Template detail",
-                        },
-                    }
-                ]
-            },
-            version=3,
-        )
         self.authenticate(api_client, self.owner)
 
         failed_response = api_client.post(
             self.list_url,
             {
                 "product_id": str(product.id),
-                "template_id": str(template.id),
-                "title": "Invalid details-only import",
+                "title": "Invalid import without template",
                 "owner_id": str(self.owner.id),
-                "import_details": True,
+                "import_fields": True,
             },
             format="json",
         )
         assert failed_response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "import_details" in failed_response.data
+        assert "import_fields" in failed_response.data
         assert not Requirement.objects.filter(product=product).exists()
 
         success_response = api_client.post(
@@ -340,7 +340,6 @@ class TestRequirementApp:
                 "approval_type": RequirementApprovalType.ALL,
                 "approver_ids": [str(self.owner.id)],
                 "import_fields": True,
-                "import_details": True,
             },
             format="json",
         )
@@ -357,7 +356,8 @@ class TestRequirementApp:
             str(self.owner.id)
         ]
         assert success_response.data["field_count"] == 2
-        assert success_response.data["detail_count"] == 1
+        # 模板只定义字段，导入不会带来任何明细
+        assert success_response.data["detail_count"] == 0
 
         copied_requirement = Requirement.objects.get(id=success_response.data["id"])
         copied_fields = list(copied_requirement.fields.all())
@@ -368,31 +368,22 @@ class TestRequirementApp:
         assert copied_child.id != child_field.id
         assert copied_child.parent_field_id == copied_root.id
         assert copied_root.config == root_field.config
+        assert not copied_requirement.details.exists()
 
-        copied_detail = copied_requirement.details.get()
-        assert copied_detail.id != source_detail.id
-        copied_rows = copied_detail.data[str(copied_root.id)]
-        assert copied_rows[0]["values"] == {
-            str(copied_child.id): "Template detail"
-        }
-        assert copied_detail.version == source_detail.version
-
-        fields_only_response = api_client.post(
+        without_fields_response = api_client.post(
             self.list_url,
             {
                 "product_id": str(product.id),
                 "template_id": str(template.id),
-                "title": "Fields only copy",
+                "title": "Reference only copy",
                 "owner_id": str(self.owner.id),
-                "import_fields": True,
-                "import_details": False,
             },
             format="json",
         )
-        assert fields_only_response.status_code == status.HTTP_201_CREATED
-        assert fields_only_response.data["field_count"] == 2
-        assert fields_only_response.data["detail_count"] == 0
-        assert fields_only_response.data["approver_ids"] == []
+        assert without_fields_response.status_code == status.HTTP_201_CREATED
+        assert without_fields_response.data["field_count"] == 0
+        assert without_fields_response.data["detail_count"] == 0
+        assert without_fields_response.data["approver_ids"] == []
 
     def test_only_authentication_is_enforced(self, api_client):
         unauthenticated_response = api_client.get(self.list_url)
@@ -642,11 +633,29 @@ class TestRequirementApp:
             for child in saved_form["children"]
         ]
 
+        # 模板只定义字段，明细走标准库里的标准需求（字段实时引用该模板）
+        assert (
+            api_client.post(
+                reverse(
+                    "requirement-details",
+                    kwargs={
+                        "slug": self.workspace.slug,
+                        "requirement_id": template_id,
+                    },
+                ),
+                {"data": {}},
+                format="json",
+            ).status_code
+            == status.HTTP_404_NOT_FOUND
+        )
+        standard_requirement = self.create_standard_requirement(
+            Requirement.objects.get(id=template_id)
+        )
         details_url = reverse(
             "requirement-details",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": template_id,
+                "requirement_id": standard_requirement.id,
             },
         )
         first_detail_response = api_client.post(
@@ -709,7 +718,7 @@ class TestRequirementApp:
             "requirement-detail-item",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": template_id,
+                "requirement_id": standard_requirement.id,
                 "pk": first_detail_response.data["id"],
             },
         )
@@ -769,7 +778,7 @@ class TestRequirementApp:
             "requirement-detail-bulk-delete",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": template_id,
+                "requirement_id": standard_requirement.id,
             },
         )
         bulk_delete_response = api_client.post(
@@ -783,7 +792,9 @@ class TestRequirementApp:
             format="json",
         )
         assert bulk_delete_response.status_code == status.HTTP_204_NO_CONTENT
-        assert not RequirementDetail.objects.filter(requirement_id=template_id).exists()
+        assert not RequirementDetail.objects.filter(
+            requirement=standard_requirement
+        ).exists()
 
     def test_requirement_detail_bulk_save_applies_mixed_operations_atomically(
         self, api_client
@@ -806,13 +817,14 @@ class TestRequirementApp:
             sort_order=1000,
         )
         field_id = str(field.id)
+        requirement = self.create_standard_requirement(template)
         first_detail = RequirementDetail.objects.create(
-            requirement=template,
+            requirement=requirement,
             data={field_id: "First"},
             sort_order=1000,
         )
         second_detail = RequirementDetail.objects.create(
-            requirement=template,
+            requirement=requirement,
             data={field_id: "Second"},
             sort_order=2000,
         )
@@ -822,14 +834,14 @@ class TestRequirementApp:
             "requirement-detail-bulk-save",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": template.id,
+                "requirement_id": requirement.id,
             },
         )
 
         response = api_client.post(
             bulk_save_url,
             {
-                "expected_updated_at": template.updated_at.isoformat(),
+                "expected_updated_at": requirement.updated_at.isoformat(),
                 "creates": [
                     {
                         "client_id": str(client_id),
@@ -866,7 +878,7 @@ class TestRequirementApp:
         assert str(response.data["updated"][0]["id"]) == str(first_detail.id)
         assert response.data["deleted_ids"] == [str(second_detail.id)]
         saved_details = list(
-            RequirementDetail.objects.filter(requirement=template).order_by(
+            RequirementDetail.objects.filter(requirement=requirement).order_by(
                 "sort_order"
             )
         )
@@ -897,8 +909,9 @@ class TestRequirementApp:
             default_value=None,
         )
         field_id = str(field.id)
+        requirement = self.create_standard_requirement(template)
         detail = RequirementDetail.objects.create(
-            requirement=template,
+            requirement=requirement,
             data={field_id: "Original"},
             sort_order=1000,
         )
@@ -906,11 +919,11 @@ class TestRequirementApp:
             "requirement-detail-bulk-save",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": template.id,
+                "requirement_id": requirement.id,
             },
         )
         base_payload = {
-            "expected_updated_at": template.updated_at.isoformat(),
+            "expected_updated_at": requirement.updated_at.isoformat(),
             "creates": [
                 {
                     "client_id": str(uuid4()),
@@ -942,7 +955,7 @@ class TestRequirementApp:
         )
         detail.refresh_from_db()
         assert detail.data[field_id] == "Original"
-        assert RequirementDetail.objects.filter(requirement=template).count() == 1
+        assert RequirementDetail.objects.filter(requirement=requirement).count() == 1
 
         invalid_response = api_client.post(
             bulk_save_url,
@@ -968,7 +981,7 @@ class TestRequirementApp:
         assert invalid_response.status_code == status.HTTP_400_BAD_REQUEST
         detail.refresh_from_db()
         assert detail.data[field_id] == "Original"
-        assert RequirementDetail.objects.filter(requirement=template).count() == 1
+        assert RequirementDetail.objects.filter(requirement=requirement).count() == 1
 
     def test_selector_field_configuration_values_search_filter_and_data_loss(
         self, api_client

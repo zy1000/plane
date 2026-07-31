@@ -44,9 +44,11 @@ export type TRequirementDetailData = Record<string, TRequirementDetailValue>;
 export type TRequirement = {
   id: string;
   workspace_id: string;
-  scope: "workspace" | "product" | "project";
+  /** workspace = 需求模板，library = 标准库里的标准需求 */
+  scope: "workspace" | "library" | "product" | "project";
   product_id: string | null;
   project_id: string | null;
+  library_id: string | null;
   is_template: boolean;
   template_id: string | null;
   title: string;
@@ -173,10 +175,48 @@ export type TCreateProductRequirementPayload = {
   owner_id: string;
   template_id?: string | null;
   import_fields: boolean;
-  import_details: boolean;
   approver_ids: string[];
   approval_type: TRequirementApprovalType;
   required_count: number | null;
+};
+
+/* --- 需求标准库 --------------------------------------------------------- */
+
+export type TRequirementLibrary = {
+  id: string;
+  workspace_id: string;
+  template_id: string;
+  template_detail: {
+    id: string;
+    title: string;
+  };
+  name: string;
+  description: string;
+  /** 模板的字段数——库内标准需求共用这套字段 */
+  field_count: number;
+  requirement_count: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type TCreateRequirementLibraryPayload = {
+  name: string;
+  template_id: string;
+  description?: string;
+};
+
+/** template_id 创建后不可变——换模板会让库内已填数据全部失效 */
+export type TUpdateRequirementLibraryPayload = Partial<Pick<TRequirementLibrary, "name" | "description" | "is_active">>;
+
+export type TCreateStandardRequirementPayload = {
+  library_id: string;
+  title: string;
+  description_html?: string | null;
+  owner_id?: string;
 };
 
 export type TUpdateProductRequirementPayload = Partial<

@@ -9,12 +9,14 @@ from .change import (
     RequirementVersionViewSet,
     RequirementWorkingCopyAPIView,
 )
+from .library import RequirementLibraryViewSet
 
 __all__ = [
     "RequirementChangeItemViewSet",
     "RequirementChangeRequestViewSet",
     "RequirementConfigurationAPIView",
     "RequirementDetailViewSet",
+    "RequirementLibraryViewSet",
     "RequirementVersionViewSet",
     "RequirementViewSet",
     "RequirementWorkingCopyAPIView",

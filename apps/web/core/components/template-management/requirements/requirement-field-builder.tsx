@@ -250,9 +250,6 @@ function FieldLibrary(props: TFieldLibraryProps) {
         <h2 className="text-14 font-semibold text-primary">
           {t("workspace_templates.requirements.editor.builder.field_library")}
         </h2>
-        <p className="mt-1 text-11 leading-4 text-secondary">
-          {t("workspace_templates.requirements.editor.builder.field_library_description")}
-        </p>
         <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
           <input

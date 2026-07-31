@@ -1,7 +1,9 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateProductRequirementPayload,
+  TCreateRequirementLibraryPayload,
   TCreateRequirementTemplatePayload,
+  TCreateStandardRequirementPayload,
   TRequirement,
   TRequirementApprovalAction,
   TRequirementChangeItemsResponse,
@@ -19,12 +21,14 @@ import type {
   TRequirementDetailFilter,
   TRequirementDetailsResponse,
   TRequirementDiscardDraftResponse,
+  TRequirementLibrary,
   TRequirementVersionComparisonResponse,
   TRequirementVersionDetail,
   TRequirementVersionDetailsResponse,
   TRequirementVersionsResponse,
   TRequirementWorkingCopyResponse,
   TUpdateProductRequirementPayload,
+  TUpdateRequirementLibraryPayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
@@ -53,6 +57,74 @@ export class RequirementService extends APIService {
 
   async deleteTemplate(workspaceSlug: string, templateId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/requirements/${templateId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 需求标准库 ------------------------------------------------------- */
+
+  async listLibraries(workspaceSlug: string): Promise<TRequirementLibrary[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getLibrary(workspaceSlug: string, libraryId: string): Promise<TRequirementLibrary> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createLibrary(workspaceSlug: string, payload: TCreateRequirementLibraryPayload): Promise<TRequirementLibrary> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirement-libraries/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateLibrary(
+    workspaceSlug: string,
+    libraryId: string,
+    payload: TUpdateRequirementLibraryPayload
+  ): Promise<TRequirementLibrary> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteLibrary(workspaceSlug: string, libraryId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 库内的标准需求。字段来自库所选模板，明细挂在每条标准需求自己身上。 */
+  async listLibraryRequirements(workspaceSlug: string, libraryId: string): Promise<TRequirement[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirements/`, {
+      params: { library_id: libraryId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createStandardRequirement(
+    workspaceSlug: string,
+    payload: TCreateStandardRequirementPayload
+  ): Promise<TRequirement> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirements/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

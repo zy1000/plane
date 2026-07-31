@@ -19,16 +19,19 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Checkbox, Header, Loader } from "@plane/ui";
-import { calculateTimeAgo, cn, stripAndTruncateHTML } from "@plane/utils";
+import { cn, renderFormattedDateTime, stripAndTruncateHTML } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
 import { useRequirementTemplatesContext } from "./context";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
-const SKELETON_COLUMNS = ["select", "name", "description", "updated", "actions"];
+const SKELETON_COLUMNS = ["select", "name", "description", "fields", "usage", "updated", "actions"];
 const SKELETON_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5", "row-6", "row-7", "row-8"];
+const SKELETON_GRID =
+  "grid-cols-[44px_minmax(180px,1.2fr)_minmax(200px,1.2fr)_80px_128px_144px_56px]";
 
 export const RequirementTemplateList = observer(function RequirementTemplateList() {
   const { t } = useTranslation();
@@ -43,6 +46,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
     deleteTemplates,
     setIsCreateModalOpen,
   } = useRequirementTemplatesContext();
+  const { libraries } = useRequirementLibraries(workspaceSlug);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -63,9 +67,21 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
       }),
     [normalizedSearch, templates]
   );
+  // 被标准库引用的模板不能删——库内标准需求靠它解析字段
+  const libraryCountByTemplate = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const library of libraries) {
+      counts.set(library.template_id, (counts.get(library.template_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [libraries]);
+
   const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / perPage));
   const paginatedTemplates = filteredTemplates.slice((page - 1) * perPage, page * perPage);
-  const paginatedTemplateIds = paginatedTemplates.map((template) => template.id);
+  // 被引用的模板不可删，也就不该被勾选——否则批量删除必然 409
+  const paginatedTemplateIds = paginatedTemplates
+    .filter((template) => !libraryCountByTemplate.has(template.id))
+    .map((template) => template.id);
   const selectedOnPageCount = paginatedTemplateIds.filter((id) => selectedTemplateIds.includes(id)).length;
   const isPageSelected = paginatedTemplateIds.length > 0 && selectedOnPageCount === paginatedTemplateIds.length;
   const isPagePartiallySelected = selectedOnPageCount > 0 && !isPageSelected;
@@ -263,7 +279,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
         {isLoading ? (
           <div className="min-w-[720px] flex-1 overflow-hidden">
-            <div className="grid grid-cols-[44px_minmax(180px,1fr)_minmax(260px,2fr)_130px_56px] items-center gap-3 border-b border-subtle bg-layer-1 px-3 py-2.5">
+            <div className={`grid ${SKELETON_GRID} items-center gap-3 border-b border-subtle bg-layer-1 px-3 py-2.5`}>
               {SKELETON_COLUMNS.map((column) => (
                 <Loader.Item key={column} height="14px" />
               ))}
@@ -271,7 +287,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
             {SKELETON_ROWS.map((row) => (
               <div
                 key={row}
-                className="grid grid-cols-[44px_minmax(180px,1fr)_minmax(260px,2fr)_130px_56px] items-center gap-3 border-b border-subtle px-3 py-3"
+                className={`grid ${SKELETON_GRID} items-center gap-3 border-b border-subtle px-3 py-3`}
               >
                 {SKELETON_COLUMNS.map((column, index) => (
                   <Loader.Item
@@ -302,7 +318,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
         ) : (
           <>
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+              <table className="w-full min-w-[940px] table-fixed border-collapse text-left">
                 <thead className="sticky top-0 z-[1] bg-layer-1">
                   <tr className="border-b border-subtle text-11 font-medium text-secondary">
                     <th className="w-11 px-3 py-2.5">
@@ -313,9 +329,12 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                         aria-label={t("workspace_templates.requirements.list.select_page")}
                       />
                     </th>
+                    {/* 名称与说明各占 28%：说明原来没设宽度，table-fixed 下会吃掉全部余量（1920 时占 53%） */}
                     <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirements.fields.name")}</th>
-                    <th className="px-3 py-2.5">{t("workspace_templates.requirements.fields.description")}</th>
-                    <th className="w-32 px-3 py-2.5">{t("workspace_templates.requirements.list.updated_at")}</th>
+                    <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirements.fields.description")}</th>
+                    <th className="w-20 px-3 py-2.5">{t("workspace_templates.requirements.list.field_count")}</th>
+                    <th className="w-32 px-3 py-2.5">{t("workspace_templates.requirements.list.used_by")}</th>
+                    <th className="w-36 px-3 py-2.5">{t("workspace_templates.requirements.list.updated_at")}</th>
                     <th className="w-14 px-3 py-2.5">{t("workspace_templates.requirements.fields.actions")}</th>
                   </tr>
                 </thead>
@@ -325,6 +344,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                     const description = template.description_html
                       ? stripAndTruncateHTML(template.description_html, 180)
                       : t("workspace_templates.requirements.list.no_description");
+                    const usedByCount = libraryCountByTemplate.get(template.id) ?? 0;
                     return (
                       <tr
                         key={template.id}
@@ -336,6 +356,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                         <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                           <Checkbox
                             checked={isSelected}
+                            disabled={usedByCount > 0}
                             onChange={() =>
                               setSelectedTemplateIds((current) =>
                                 isSelected ? current.filter((id) => id !== template.id) : [...current, template.id]
@@ -358,16 +379,40 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                         <td className="px-3 py-2.5 align-middle">
                           <span className="block truncate text-12 text-secondary">{description}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-11 text-secondary">{calculateTimeAgo(template.updated_at)}</td>
+                        <td className="px-3 py-2.5 text-12 tabular-nums text-secondary">{template.field_count}</td>
+                        <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
+                          {usedByCount > 0 ? (
+                            <Link
+                              to={`/${workspaceSlug}/templates/libraries`}
+                              className="inline-block rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
+                            >
+                              {t("workspace_templates.requirements.list.used_by_count", { count: usedByCount })}
+                            </Link>
+                          ) : (
+                            <span className="text-11 text-tertiary">
+                              {t("workspace_templates.requirements.list.not_used")}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-11 whitespace-nowrap text-secondary">
+                          {renderFormattedDateTime(template.updated_at)}
+                        </td>
                         <td
                           className="px-3 py-2.5 text-center align-middle"
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <Tooltip tooltipContent={t("delete")}>
+                          <Tooltip
+                            tooltipContent={
+                              usedByCount > 0
+                                ? t("workspace_templates.requirements.list.delete_blocked", { count: usedByCount })
+                                : t("delete")
+                            }
+                          >
                             <button
                               type="button"
+                              disabled={usedByCount > 0}
                               onClick={() => setTemplatesToDelete([template])}
-                              className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary"
+                              className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-tertiary"
                               aria-label={t("workspace_templates.requirements.list.delete_template", {
                                 name: template.title,
                               })}

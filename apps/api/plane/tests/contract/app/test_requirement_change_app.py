@@ -1266,14 +1266,14 @@ class TestRequirementChangeApp:
             self.submit(api_client, template).status_code
             == status.HTTP_400_BAD_REQUEST
         )
-        # 模板始终直接写正式表
+        # 模板只定义字段，不再持有明细
         assert (
             api_client.post(
                 self.details_url(template),
                 {"data": {}},
                 format="json",
             ).status_code
-            == status.HTTP_201_CREATED
+            == status.HTTP_404_NOT_FOUND
         )
 
     def test_requirement_payload_exposes_approval_state(self, api_client):

@@ -5,6 +5,7 @@ from plane.app.views.requirement import (
     RequirementChangeRequestViewSet,
     RequirementConfigurationAPIView,
     RequirementDetailViewSet,
+    RequirementLibraryViewSet,
     RequirementVersionViewSet,
     RequirementViewSet,
     RequirementWorkingCopyAPIView,
@@ -12,6 +13,23 @@ from plane.app.views.requirement import (
 
 
 urlpatterns = [
+    path(
+        "workspaces/<str:slug>/requirement-libraries/",
+        RequirementLibraryViewSet.as_view({"get": "list", "post": "create"}),
+        name="requirement-libraries",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:pk>/",
+        RequirementLibraryViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="requirement-library-detail",
+    ),
     path(
         "workspaces/<str:slug>/requirements/",
         RequirementViewSet.as_view({"get": "list", "post": "create"}),

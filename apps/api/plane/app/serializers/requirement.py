@@ -16,6 +16,7 @@ from plane.db.models import (
     RequirementDraftDetail,
     RequirementField,
     RequirementFieldType,
+    RequirementLibrary,
     User,
 )
 from plane.utils.content_validator import validate_html_content
@@ -28,7 +29,9 @@ from plane.utils.requirement import (
     get_requirement_select_mode,
     get_requirement_select_options,
     replace_requirement_approvers,
+    resolve_field_source,
     sync_requirement_fields,
+    uses_change_flow,
 )
 from plane.utils.requirement_draft import get_draft_field_specs, save_draft_fields
 
@@ -46,6 +49,12 @@ class RequirementSerializer(BaseSerializer):
     project_id = serializers.PrimaryKeyRelatedField(
         source="project",
         queryset=Project.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    library_id = serializers.PrimaryKeyRelatedField(
+        source="library",
+        queryset=RequirementLibrary.objects.all(),
         required=False,
         allow_null=True,
     )
@@ -77,9 +86,6 @@ class RequirementSerializer(BaseSerializer):
     import_fields = serializers.BooleanField(
         required=False, default=False, write_only=True
     )
-    import_details = serializers.BooleanField(
-        required=False, default=False, write_only=True
-    )
     field_count = serializers.SerializerMethodField()
     detail_count = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
@@ -94,6 +100,7 @@ class RequirementSerializer(BaseSerializer):
             "scope",
             "product_id",
             "project_id",
+            "library_id",
             "is_template",
             "template_id",
             "title",
@@ -106,7 +113,6 @@ class RequirementSerializer(BaseSerializer):
             "approver_ids",
             "approver_details",
             "import_fields",
-            "import_details",
             "field_count",
             "detail_count",
             "can_edit",
@@ -143,6 +149,12 @@ class RequirementSerializer(BaseSerializer):
         return UserLiteSerializer(approvers, many=True).data
 
     def get_field_count(self, obj):
+        # 标准需求的字段来自标准库所选模板，不能数它自己的 fields（恒为 0）
+        if obj.library_id:
+            annotated_count = getattr(obj, "library_field_count", None)
+            if annotated_count is not None:
+                return annotated_count
+            return resolve_field_source(obj).fields.count()
         annotated_count = getattr(obj, "field_count", None)
         return annotated_count if annotated_count is not None else obj.fields.count()
 
@@ -214,6 +226,7 @@ class RequirementSerializer(BaseSerializer):
             "is_template": ("is_template", self.instance.is_template),
             "product_id": ("product", self.instance.product_id),
             "project_id": ("project", self.instance.project_id),
+            "library_id": ("library", self.instance.library_id),
             "template_id": ("template", self.instance.template_id),
         }
         for request_field, (attribute, current_value) in immutable_fields.items():
@@ -238,12 +251,14 @@ class RequirementSerializer(BaseSerializer):
                 self.instance.is_template,
                 self.instance.product,
                 self.instance.project,
+                self.instance.library,
                 self.instance.template,
             )
 
         is_template = attrs.get("is_template", False)
         product = attrs.get("product")
         project = attrs.get("project")
+        library = attrs.get("library")
         source_template = attrs.get("template")
         errors = {}
 
@@ -252,17 +267,33 @@ class RequirementSerializer(BaseSerializer):
                 errors["product_id"] = "A workspace template cannot belong to a product."
             if project is not None:
                 errors["project_id"] = "A workspace template cannot belong to a project."
+            if library is not None:
+                errors["library_id"] = "A workspace template cannot belong to a library."
             if source_template is not None:
                 errors["template_id"] = "A workspace template cannot import another template."
-        elif (product is None) == (project is None):
+        elif len([scope for scope in (product, project, library) if scope]) != 1:
             errors["scope"] = (
-                "A non-template requirement must belong to exactly one product or project."
+                "A non-template requirement must belong to exactly one product, "
+                "project or library."
             )
+
+        # 标准需求的字段实时引用标准库所选模板，不能再单独指定模板或导入字段
+        if library is not None:
+            if source_template is not None:
+                errors["template_id"] = (
+                    "A standard requirement inherits fields from its library template."
+                )
+            if attrs.get("import_fields"):
+                errors["import_fields"] = (
+                    "A standard requirement inherits fields from its library template."
+                )
 
         if product is not None and product.workspace_id != workspace.id:
             errors["product_id"] = "Product does not belong to this workspace."
         if project is not None and project.workspace_id != workspace.id:
             errors["project_id"] = "Project does not belong to this workspace."
+        if library is not None and library.workspace_id != workspace.id:
+            errors["library_id"] = "Library does not belong to this workspace."
         if source_template is not None:
             if source_template.workspace_id != workspace.id:
                 errors["template_id"] = "Template does not belong to this workspace."
@@ -271,7 +302,7 @@ class RequirementSerializer(BaseSerializer):
 
         if errors:
             raise serializers.ValidationError(errors)
-        return is_template, product, project, source_template
+        return is_template, product, project, library, source_template
 
     def _get_effective_approver_ids(
         self,
@@ -359,34 +390,18 @@ class RequirementSerializer(BaseSerializer):
         workspace = self.context.get("workspace")
         if workspace is None:
             raise serializers.ValidationError({"workspace": "Workspace is required."})
-        if self.instance and (
-            "import_fields" in self.initial_data
-            or "import_details" in self.initial_data
-        ):
+        if self.instance and "import_fields" in self.initial_data:
             raise serializers.ValidationError(
                 {"import_fields": "Import options can only be used when creating a requirement."}
             )
 
-        is_template, product, project, source_template = self._validate_scope(
+        is_template, product, project, library, source_template = self._validate_scope(
             attrs, workspace
         )
-        import_fields = attrs.get("import_fields", False)
-        import_details = attrs.get("import_details", False)
-        import_errors = {}
-        if import_fields and source_template is None:
-            import_errors["import_fields"] = (
-                "A template is required when importing fields."
+        if attrs.get("import_fields", False) and source_template is None:
+            raise serializers.ValidationError(
+                {"import_fields": "A template is required when importing fields."}
             )
-        if import_details and source_template is None:
-            import_errors["import_details"] = (
-                "A template is required when importing details."
-            )
-        elif import_details and not import_fields:
-            import_errors["import_details"] = (
-                "Fields must be imported when importing details."
-            )
-        if import_errors:
-            raise serializers.ValidationError(import_errors)
 
         title = attrs.get("title", getattr(self.instance, "title", None))
         if not title:
@@ -438,7 +453,6 @@ class RequirementSerializer(BaseSerializer):
     def create(self, validated_data):
         approver_ids = validated_data.pop("approver_ids", [])
         import_fields = validated_data.pop("import_fields", False)
-        import_details = validated_data.pop("import_details", False)
         source_template = validated_data.get("template")
         request = self.context.get("request")
         actor = getattr(request, "user", None)
@@ -452,7 +466,6 @@ class RequirementSerializer(BaseSerializer):
                 clone_requirement_children(
                     source=source_template,
                     target=requirement,
-                    include_details=import_details,
                     actor=actor,
                 )
             except ValueError as exc:
@@ -470,7 +483,6 @@ class RequirementSerializer(BaseSerializer):
     def update(self, instance, validated_data):
         approver_ids = validated_data.pop("approver_ids", serializers.empty)
         validated_data.pop("import_fields", None)
-        validated_data.pop("import_details", None)
         for attribute, value in validated_data.items():
             setattr(instance, attribute, value)
 
@@ -886,8 +898,8 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
 
     def validate_requirement(self, value):
         requirement = self.context["requirement"]
-        # 非模板需求的状态只能由审批流转推动，配置保存里带上的 status 一律忽略
-        if not requirement.is_template:
+        # 走审批流程的需求，状态只能由审批流转推动，配置保存里带上的 status 一律忽略
+        if uses_change_flow(requirement):
             value = {key: item for key, item in value.items() if key != "status"}
         serializer = RequirementSerializer(
             requirement,

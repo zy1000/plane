@@ -34,7 +34,7 @@ export function RequirementTemplateCreateModal() {
         title: normalizedTitle,
       });
       setIsCreateModalOpen(false);
-      navigate(`/${workspaceSlug}/templates/requirements/${template.id}/edit`);
+      navigate(`/${workspaceSlug}/templates/requirements/${template.id}`);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),

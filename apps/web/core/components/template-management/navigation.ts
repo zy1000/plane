@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { ListChecks, ListTodo, Workflow } from "lucide-react";
+import { Library, ListChecks, ListTodo, Workflow } from "lucide-react";
 
-export type TTemplateManagementTabKey = "requirements" | "work-items" | "workflow";
+export type TTemplateManagementTabKey = "requirements" | "libraries" | "work-items" | "workflow";
 
 export type TTemplateManagementNavigationItem = {
   key: TTemplateManagementTabKey;
@@ -14,6 +14,11 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     key: "requirements",
     icon: ListChecks,
     i18nKey: "workspace_templates.navigation.requirements",
+  },
+  {
+    key: "libraries",
+    icon: Library,
+    i18nKey: "workspace_templates.navigation.libraries",
   },
   {
     key: "work-items",

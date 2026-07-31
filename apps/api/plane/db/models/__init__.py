@@ -162,6 +162,7 @@ from .requirement import (
     RequirementDraftDetail,
     RequirementField,
     RequirementFieldType,
+    RequirementLibrary,
     RequirementScope,
     RequirementStatus,
     RequirementVersion,

@@ -159,9 +159,19 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/templates/requirements/:templateId",
               "./(all)/[workspaceSlug]/(projects)/templates/requirements/[templateId]/page.tsx"
             ),
+          ]),
+          layout("./(all)/[workspaceSlug]/(projects)/templates/libraries/layout.tsx", [
             route(
-              ":workspaceSlug/templates/requirements/:templateId/edit",
-              "./(all)/[workspaceSlug]/(projects)/templates/requirements/[templateId]/edit/page.tsx"
+              ":workspaceSlug/templates/libraries",
+              "./(all)/[workspaceSlug]/(projects)/templates/libraries/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/templates/libraries/:libraryId",
+              "./(all)/[workspaceSlug]/(projects)/templates/libraries/[libraryId]/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/templates/libraries/:libraryId/requirements/:requirementId",
+              "./(all)/[workspaceSlug]/(projects)/templates/libraries/[libraryId]/requirements/[requirementId]/page.tsx"
             ),
           ]),
           route(
@@ -662,6 +672,12 @@ export const coreRoutes: RouteConfigEntry[] = [
 
   // Timesheets: 旧路径 /timesheets/manage → /timesheets
   route(":workspaceSlug/timesheets/manage", "routes/redirects/core/timesheets-manage.tsx"),
+
+  // 需求模板: 旧路径 /templates/requirements/:templateId/edit → /templates/requirements/:templateId
+  route(
+    ":workspaceSlug/templates/requirements/:templateId/edit",
+    "routes/redirects/core/requirement-template-edit.tsx"
+  ),
 
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens

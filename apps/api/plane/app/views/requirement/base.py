@@ -31,6 +31,7 @@ from plane.db.models import (
     RequirementChangeRequest,
     RequirementChangeStatus,
     RequirementDetail,
+    RequirementLibrary,
     Workspace,
 )
 from plane.utils.product import (
@@ -71,6 +72,7 @@ class RequirementViewSet(BaseViewSet):
         "is_template": ["exact"],
         "product_id": ["exact"],
         "project_id": ["exact"],
+        "library_id": ["exact"],
         "template_id": ["exact"],
         "status": ["exact", "in"],
         "owner_id": ["exact"],
@@ -89,6 +91,8 @@ class RequirementViewSet(BaseViewSet):
                 "workspace",
                 "product",
                 "project",
+                "library",
+                "library__template",
                 "template",
                 "owner",
                 "created_by",
@@ -105,6 +109,10 @@ class RequirementViewSet(BaseViewSet):
             .annotate(
                 field_count=Count("fields", distinct=True),
                 detail_count=Count("details", distinct=True),
+                # 标准需求自身没有字段，字段数要数标准库所选模板的
+                library_field_count=Count(
+                    "library__template__fields", distinct=True
+                ),
             )
         )
         workspace = Workspace.objects.filter(slug=self.workspace_slug).first()
@@ -257,6 +265,18 @@ class RequirementViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # 标准库实时引用模板的字段，模板被引用时删掉会让库内标准需求失去字段定义
+        if (
+            requirement.is_template
+            and RequirementLibrary.objects.filter(template=requirement).exists()
+        ):
+            return Response(
+                {
+                    "error": "This template is still used by one or more libraries.",
+                    "code": "REQUIREMENT_TEMPLATE_IN_USE",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         requirement.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -264,14 +284,17 @@ class RequirementViewSet(BaseViewSet):
 
 class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView):
     def _get_requirement(self, slug, pk, *, for_update=False):
-        queryset = Requirement.objects.filter(
-            workspace__slug=slug,
-            id=pk,
-        ).filter(Q(is_template=True) | Q(product__isnull=False)).select_related(
-            "workspace", "product", "owner"
+        queryset = (
+            Requirement.objects.filter(workspace__slug=slug, id=pk)
+            .filter(
+                Q(is_template=True)
+                | Q(product__isnull=False)
+                | Q(library__isnull=False)
+            )
+            .select_related("workspace", "product", "library__template", "owner")
         )
         if for_update:
-            queryset = queryset.select_for_update()
+            queryset = queryset.select_for_update(of=("self",))
         requirement = queryset.first()
         if (
             requirement is not None
@@ -290,7 +313,7 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
     def _response_payload(self, requirement, created_field_ids=None):
         requirement = (
             Requirement.objects.filter(id=requirement.id)
-            .select_related("workspace", "owner")
+            .select_related("workspace", "owner", "library__template")
             .prefetch_related(
                 Prefetch(
                     "approvers",
@@ -342,6 +365,17 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
         if not self._can_write(request.user, requirement):
             return Response(
                 {"error": "You do not have permission to maintain this requirement."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        # 标准需求的字段归标准库所选模板所有，只能在模板上改
+        if requirement.library_id:
+            return Response(
+                {
+                    "error": (
+                        "Standard requirement fields are defined by the library template."
+                    ),
+                    "code": "REQUIREMENT_FIELDS_READ_ONLY",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         read_only = self.read_only_response(requirement)
@@ -411,11 +445,14 @@ class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseViewSet):
         )
 
     def _get_requirement(self, *, for_update=False):
-        queryset = Requirement.objects.filter(
-            id=self.kwargs.get("requirement_id"),
-            workspace__slug=self.workspace_slug,
-        ).filter(Q(is_template=True) | Q(product__isnull=False)).select_related(
-            "workspace", "product"
+        # 模板只定义字段、不持有明细，所以明细入口只放行产品需求与标准需求
+        queryset = (
+            Requirement.objects.filter(
+                id=self.kwargs.get("requirement_id"),
+                workspace__slug=self.workspace_slug,
+            )
+            .filter(Q(product__isnull=False) | Q(library__isnull=False))
+            .select_related("workspace", "product", "library__template")
         )
         if for_update:
             queryset = queryset.select_for_update(of=("self",))
@@ -441,8 +478,8 @@ class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseViewSet):
                 requirement__workspace__slug=self.workspace_slug,
             )
             .filter(
-                Q(requirement__is_template=True)
-                | Q(requirement__product__isnull=False)
+                Q(requirement__product__isnull=False)
+                | Q(requirement__library__isnull=False)
             )
             .select_related("requirement")
             .order_by("sort_order", "created_at", "id")

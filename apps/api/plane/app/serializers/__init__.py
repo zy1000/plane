@@ -184,6 +184,7 @@ from .requirement import (
     RequirementDraftDetailSerializer,
     RequirementSerializer,
 )
+from .requirement_library import RequirementLibrarySerializer
 from .requirement_change import (
     RequirementChangeActionSerializer,
     RequirementChangeApprovalSerializer,

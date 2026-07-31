@@ -38,6 +38,23 @@ export const renderFormattedDate = (
 };
 
 /**
+ * @returns {string} formatted datetime in the format of yyyy-MM-dd HH:mm:ss (local time), or "" if invalid
+ * @description 列表页需要精确到秒的绝对时间时用它，替代 calculateTimeAgo 的相对时间。
+ *
+ * 故意不走 renderFormattedDate：它内部的 getDate() 只取字符串前 10 位重建 Date，
+ * 时间部分会被丢掉，格式化出来永远是 00:00:00。这里直接解析完整时间戳。
+ *
+ * 另注意 date-fns 的年份 token 是 `yyyy`、日期是 `dd`——写成 `YYYY-MM-DD` 会抛错。
+ * @example renderFormattedDateTime("2026-07-30T08:09:47Z") // 2026-07-30 16:09:47（按本地时区）
+ */
+export const renderFormattedDateTime = (date: string | Date | undefined | null): string => {
+  if (!date) return "";
+  const parsed = typeof date === "string" ? parseISO(date) : date;
+  if (!isValid(parsed)) return "";
+  return format(parsed, "yyyy-MM-dd HH:mm:ss");
+};
+
+/**
  * @returns {string} formatted date in the format of MMM dd
  * @description Returns date in the formatted format
  * @param {string | Date} date

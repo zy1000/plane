@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, Eye, Save, X } from "lucide-react";
+import { ChevronDown, FileText, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementField, TRequirementFieldDraft } from "@plane/types";
-import { Header, Loader } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { Tooltip } from "@plane/propel/tooltip";
+import { Breadcrumbs, Header, Loader } from "@plane/ui";
+import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
 import { useRequirementTemplateDetails } from "@/hooks/store/use-requirement-template-details";
 import { useRequirementTemplatesContext } from "./context";
 import { RequirementFieldBuilder } from "./requirement-field-builder";
+import { countRequirementColumns } from "./requirement-fields-preview";
 import { hasValidRequirementSelectOptions } from "./requirement-select";
+import { RequirementTemplateSettingsModal } from "./template-settings-modal";
 
-type TEditorTab = "basic" | "fields";
 type TRequirementMetadataDraft = Pick<TRequirement, "title" | "description_html">;
 
 const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
@@ -31,92 +34,24 @@ const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   children: field.children.map(toDraftField),
 });
 
-const fieldKey = (field: TRequirementFieldDraft) => field.id ?? field.client_id ?? "";
-
 const serializeDraft = (metadata: TRequirementMetadataDraft, fields: TRequirementFieldDraft[]) =>
   JSON.stringify({ metadata, fields });
-
-function RequirementFieldsPreview({ fields }: { fields: TRequirementFieldDraft[] }) {
-  const { t } = useTranslation();
-  const visibleFields = fields.filter((field) => field.is_active);
-  const formFields = visibleFields.filter((field) => field.field_type === "form");
-  const hasForms = formFields.length > 0;
-  const columnCount = visibleFields.reduce((count, field) => {
-    if (field.field_type !== "form") return count + 1;
-    return count + Math.max(field.children.filter((child) => child.is_active).length, 1);
-  }, 0);
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-subtle bg-surface-1">
-      <table className="min-w-full border-collapse text-left">
-        <thead className="bg-layer-1 text-11 text-secondary">
-          <tr className="border-b border-subtle">
-            {visibleFields.map((field) =>
-              field.field_type === "form" ? (
-                <th
-                  key={fieldKey(field)}
-                  colSpan={Math.max(field.children.filter((child) => child.is_active).length, 1)}
-                  className="min-w-40 border-r border-subtle px-3 py-2 text-center text-primary"
-                >
-                  {field.name || t("workspace_templates.requirements.fields.untitled")}
-                </th>
-              ) : (
-                <th
-                  key={fieldKey(field)}
-                  rowSpan={hasForms ? 2 : 1}
-                  className="min-w-40 border-r border-subtle px-3 py-2"
-                >
-                  {field.name || t("workspace_templates.requirements.fields.untitled")}
-                </th>
-              )
-            )}
-          </tr>
-          {hasForms && (
-            <tr className="border-b border-subtle">
-              {formFields.flatMap((field) => {
-                const children = field.children.filter((child) => child.is_active);
-                return children.length ? (
-                  children.map((child) => (
-                    <th key={fieldKey(child)} className="min-w-40 border-r border-subtle px-3 py-2">
-                      {child.name || t("workspace_templates.requirements.fields.untitled")}
-                    </th>
-                  ))
-                ) : (
-                  <th key={`${fieldKey(field)}-empty`} className="min-w-40 border-r border-subtle px-3 py-2">
-                    {t("workspace_templates.requirements.fields.no_children")}
-                  </th>
-                );
-              })}
-            </tr>
-          )}
-        </thead>
-        <tbody>
-          <tr>
-            <td colSpan={Math.max(1, columnCount)} className="h-24 px-4 text-center text-11 text-placeholder">
-              {t("workspace_templates.requirements.preview.empty")}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 export const RequirementTemplateEditor = observer(function RequirementTemplateEditor() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { templateId } = useParams();
-  const { workspaceSlug, upsertTemplate } = useRequirementTemplatesContext();
+  const { workspaceSlug, templates, upsertTemplate } = useRequirementTemplatesContext();
   const detailsStore = useRequirementTemplateDetails({
     workspaceSlug,
     templateId,
     onTemplateUpdate: upsertTemplate,
   });
-  const [activeTab, setActiveTab] = useState<TEditorTab>("fields");
+  const { libraries } = useRequirementLibraries(workspaceSlug);
   const [metadata, setMetadata] = useState<TRequirementMetadataDraft | null>(null);
   const [fields, setFields] = useState<TRequirementFieldDraft[]>([]);
   const [baseline, setBaseline] = useState("");
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const configuration = detailsStore.configuration;
@@ -136,6 +71,17 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
     [baseline, fields, metadata]
   );
 
+  const linkedLibraries = useMemo(
+    () => libraries.filter((library) => library.template_id === templateId),
+    [libraries, templateId]
+  );
+
+  // 用草稿算而不是用后端的 field_count，未保存的增删也要反映出来
+  const fieldSummary = useMemo(
+    () => ({ topLevel: fields.length, columns: countRequirementColumns(fields) }),
+    [fields]
+  );
+
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!isDirty) return;
@@ -145,9 +91,13 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
-  const handleCancel = () => {
-    if (isDirty && !window.confirm(t("workspace_templates.requirements.editor.discard_confirm"))) return;
-    navigate(`/${workspaceSlug}/templates/requirements/${templateId}`);
+  /** 页面本身就是编辑器，任何离开当前模板的导航都要先确认丢弃草稿 */
+  const confirmDiscard = () =>
+    !isDirty || window.confirm(t("workspace_templates.requirements.editor.discard_confirm"));
+
+  const handleBack = () => {
+    if (!confirmDiscard()) return;
+    navigate(`/${workspaceSlug}/templates/requirements`);
   };
 
   const saveConfiguration = async (confirmDataLoss = false) => {
@@ -158,8 +108,8 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
         title: t("error"),
         message: t("workspace_templates.requirements.validation.name_required"),
       });
-      setActiveTab("basic");
-      setIsPreviewOpen(false);
+      // 名称在「模板设置」弹窗里，直接打开让人改
+      setIsSettingsOpen(true);
       return;
     }
     if (fields.some((field) => !field.name.trim() || field.children.some((child) => !child.name.trim()))) {
@@ -168,8 +118,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
         title: t("error"),
         message: t("workspace_templates.requirements.validation.field_name"),
       });
-      setActiveTab("fields");
-      setIsPreviewOpen(false);
       return;
     }
     const allFields = fields.flatMap((field) => [field, ...field.children]);
@@ -179,8 +127,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
         title: t("error"),
         message: t("workspace_templates.requirements.validation.selector_options"),
       });
-      setActiveTab("fields");
-      setIsPreviewOpen(false);
       return;
     }
 
@@ -243,11 +189,6 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
     }
   };
 
-  const tabItems: Array<{ key: TEditorTab; label: string }> = [
-    { key: "basic", label: t("workspace_templates.requirements.editor.tabs.basic") },
-    { key: "fields", label: t("workspace_templates.requirements.editor.tabs.fields") },
-  ];
-
   if (detailsStore.isConfigurationLoading || !metadata) {
     return (
       <div className="flex h-full flex-col bg-surface-1 p-6">
@@ -283,48 +224,81 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
       <AppHeader
         header={
           <Header>
-            <Header.LeftItem className="min-w-0 gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="grid size-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-                aria-label={t("back")}
-              >
-                <ArrowLeft className="size-4" />
-              </button>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-13 font-medium text-primary">{metadata.title}</span>
-                  {isDirty && (
-                    <span className="shrink-0 rounded bg-warning-subtle px-1.5 py-0.5 text-10 text-warning-primary">
-                      {t("workspace_templates.requirements.editor.unsaved")}
-                    </span>
-                  )}
-                </div>
-              </div>
+            <Header.LeftItem className="min-w-0">
+              <Breadcrumbs>
+                <Breadcrumbs.Item
+                  component={
+                    /* 不能用 href：离开编辑器前要先确认丢弃草稿 */
+                    <button type="button" onClick={handleBack}>
+                      <BreadcrumbLink
+                        label={t("workspace_templates.requirements.title")}
+                        icon={<FileText className="size-4 text-secondary" />}
+                      />
+                    </button>
+                  }
+                />
+                <Breadcrumbs.Item
+                  component={
+                    <div className="flex min-w-0 items-center gap-2">
+                      <label className="relative min-w-0">
+                        <select
+                          value={templateId ?? ""}
+                          onChange={(event) => {
+                            if (!event.target.value || event.target.value === templateId) return;
+                            if (!confirmDiscard()) return;
+                            navigate(`/${workspaceSlug}/templates/requirements/${event.target.value}`);
+                          }}
+                          className="h-7 max-w-72 appearance-none truncate rounded-md border border-transparent bg-transparent pr-7 pl-1 text-13 font-medium text-primary outline-none hover:border-subtle hover:bg-layer-transparent-hover"
+                          aria-label={t("workspace_templates.requirements.switch_template")}
+                        >
+                          {templates.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {/* 当前项用草稿标题，否则在「基础信息」改名未保存时下拉显示的还是旧名 */}
+                              {item.id === templateId ? metadata.title : item.title}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-secondary" />
+                      </label>
+                      {isDirty && (
+                        <span className="shrink-0 rounded bg-warning-subtle px-1.5 py-0.5 text-10 text-warning-primary">
+                          {t("workspace_templates.requirements.editor.unsaved")}
+                        </span>
+                      )}
+                      {linkedLibraries.length > 0 && (
+                        <Tooltip
+                          tooltipContent={t("workspace_templates.requirements.editor.used_by_hint")}
+                          position="bottom"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // 离开当前模板，先确认丢弃草稿
+                              if (!confirmDiscard()) return;
+                              navigate(`/${workspaceSlug}/templates/libraries?template=${templateId}`);
+                            }}
+                            className="text-accent-primary hover:bg-accent-subtle shrink-0 rounded border border-accent-primary/25 bg-accent-primary/[0.06] px-1.5 py-0.5 text-10 transition-colors"
+                          >
+                            {t("workspace_templates.requirements.editor.used_by_count", {
+                              count: linkedLibraries.length,
+                            })}
+                          </button>
+                        </Tooltip>
+                      )}
+                    </div>
+                  }
+                  isLast
+                />
+              </Breadcrumbs>
             </Header.LeftItem>
             <Header.RightItem className="gap-2">
               <Button
                 variant="secondary"
-                onClick={() => setIsPreviewOpen((value) => !value)}
-                aria-label={t(
-                  isPreviewOpen
-                    ? "workspace_templates.requirements.editor.close_preview"
-                    : "workspace_templates.requirements.editor.preview"
-                )}
+                onClick={() => setIsSettingsOpen(true)}
+                aria-label={t("workspace_templates.requirements.editor.settings")}
               >
-                <Eye className="size-3.5" />
-                <span className="hidden md:inline">
-                  {t(
-                    isPreviewOpen
-                      ? "workspace_templates.requirements.editor.close_preview"
-                      : "workspace_templates.requirements.editor.preview"
-                  )}
-                </span>
-              </Button>
-              <Button variant="secondary" onClick={handleCancel} aria-label={t("cancel")}>
-                <X className="size-3.5" />
-                <span className="hidden md:inline">{t("cancel")}</span>
+                <Settings2 className="size-3.5" />
+                <span className="hidden md:inline">{t("workspace_templates.requirements.editor.settings")}</span>
               </Button>
               <Button
                 variant="primary"
@@ -340,97 +314,18 @@ export const RequirementTemplateEditor = observer(function RequirementTemplateEd
         }
       />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        <nav className="flex h-12 shrink-0 items-end gap-1 overflow-x-auto border-b border-subtle bg-surface-1 px-4 md:px-6">
-          {tabItems.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => {
-                setActiveTab(item.key);
-                setIsPreviewOpen(false);
-              }}
-              className={cn(
-                "relative flex h-12 items-center gap-1.5 px-3 text-12 transition-colors duration-150",
-                activeTab === item.key && !isPreviewOpen
-                  ? "font-medium text-accent-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:rounded-full after:bg-accent-primary"
-                  : "text-secondary hover:text-primary"
-              )}
-            >
-              {item.label}
-              {item.key === "fields" && (
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-10",
-                    activeTab === "fields" && !isPreviewOpen
-                      ? "bg-accent-subtle text-accent-primary"
-                      : "bg-layer-2 text-secondary"
-                  )}
-                >
-                  {fields.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
         <div className="flex min-h-0 flex-1 flex-col">
-          {isPreviewOpen ? (
-            <div className="min-h-0 flex-1 overflow-y-auto bg-layer-1/40">
-              <section className="mx-auto max-w-6xl px-5 py-7 md:px-8">
-                <div className="mb-5">
-                  <h1 className="text-16 font-semibold text-primary">
-                    {t("workspace_templates.requirements.preview.title")}
-                  </h1>
-                  <p className="mt-1 text-12 text-secondary">
-                    {t("workspace_templates.requirements.preview.description")}
-                  </p>
-                </div>
-                <RequirementFieldsPreview fields={fields} />
-              </section>
-            </div>
-          ) : activeTab === "basic" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto bg-layer-1/40">
-              <section className="mx-auto max-w-3xl px-5 py-7 md:px-8">
-                <div className="mb-6">
-                  <h1 className="text-16 font-semibold text-primary">
-                    {t("workspace_templates.requirements.editor.tabs.basic")}
-                  </h1>
-                  <p className="mt-1 text-12 text-secondary">
-                    {t("workspace_templates.requirements.editor.basic_description")}
-                  </p>
-                </div>
-                <div className="space-y-5">
-                  <label className="block">
-                    <span className="mb-1.5 block text-12 font-medium text-secondary">
-                      {t("workspace_templates.requirements.fields.name")}
-                      <span className="ml-0.5 text-danger-primary">*</span>
-                    </span>
-                    <input
-                      value={metadata.title}
-                      onChange={(event) => setMetadata({ ...metadata, title: event.target.value })}
-                      maxLength={255}
-                      className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-12 font-medium text-secondary">
-                      {t("workspace_templates.requirements.fields.description")}
-                    </span>
-                    <textarea
-                      value={metadata.description_html ?? ""}
-                      onChange={(event) => setMetadata({ ...metadata, description_html: event.target.value })}
-                      rows={6}
-                      className="focus:border-accent-primary w-full resize-y rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none"
-                      placeholder={t("workspace_templates.requirements.fields.description_placeholder")}
-                    />
-                  </label>
-                </div>
-              </section>
-            </div>
-          ) : (
-            <RequirementFieldBuilder fields={fields} onChange={setFields} />
-          )}
+          <RequirementFieldBuilder fields={fields} onChange={setFields} />
         </div>
       </ContentWrapper>
+      <RequirementTemplateSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        metadata={metadata}
+        onApply={setMetadata}
+        requirement={detailsStore.configuration?.requirement}
+        fieldSummary={fieldSummary}
+      />
     </>
   );
 });

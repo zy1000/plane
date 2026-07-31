@@ -1,7 +1,7 @@
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Optional
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -213,8 +213,40 @@ def get_requirement_eligible_user_ids(
     return workspace_member_ids
 
 
-def clone_requirement_children(*, source, target, include_details=True, actor=None):
-    """Clone a template's field tree and optionally its detail rows."""
+def resolve_field_source(requirement):
+    """返回真正持有字段定义的需求。
+
+    标准需求不拷贝字段，而是实时引用所属标准库选定的模板；其余需求持有自己的
+    RequirementField。所有读字段的路径都必须经过这里，才能让明细校验、搜索筛选、
+    字段树输出对两种来源一视同仁。
+    """
+    if requirement.library_id:
+        return requirement.library.template
+    return requirement
+
+
+def uses_change_flow(requirement):
+    """是否走「工作副本 + 变更审批 + 版本」流程。
+
+    只有产品/项目需求走；工作区模板与标准需求都直接编辑直接生效。
+    """
+    return not requirement.is_template and not requirement.library_id
+
+
+def details_affected_by_fields(requirement):
+    """字段变更会波及的明细行。
+
+    模板字段被标准库实时引用，所以改模板字段要连带清理引用它的全部标准需求明细。
+    """
+    if requirement.is_template:
+        return RequirementDetail.objects.filter(
+            requirement__library__template=requirement
+        )
+    return RequirementDetail.objects.filter(requirement=requirement)
+
+
+def clone_requirement_children(*, source, target, actor=None):
+    """Clone a template's field tree onto the target requirement."""
     source_fields = list(source.fields.all())
     field_map = {}
 
@@ -264,54 +296,6 @@ def clone_requirement_children(*, source, target, include_details=True, actor=No
     if child_fields:
         RequirementField.objects.bulk_create(child_fields)
 
-    def remap_detail_data(source_data):
-        remapped = {}
-        for source_key, value in deepcopy(source_data).items():
-            try:
-                source_field_id = UUID(str(source_key))
-            except (TypeError, ValueError):
-                continue
-            target_field = field_map.get(source_field_id)
-            if target_field is None:
-                continue
-            target_key = str(target_field.id)
-            if target_field.field_type != RequirementFieldType.FORM:
-                remapped[target_key] = value
-                continue
-
-            rows = []
-            for row in value if isinstance(value, list) else []:
-                if not isinstance(row, dict):
-                    continue
-                child_values = {}
-                for child_key, child_value in (row.get("values") or {}).items():
-                    try:
-                        source_child_id = UUID(str(child_key))
-                    except (TypeError, ValueError):
-                        continue
-                    target_child = field_map.get(source_child_id)
-                    if target_child is not None:
-                        child_values[str(target_child.id)] = child_value
-                rows.append({**row, "values": child_values})
-            remapped[target_key] = rows
-        return remapped
-
-    if not include_details:
-        return
-
-    details = [
-        RequirementDetail(
-            requirement=target,
-            data=remap_detail_data(source_detail.data),
-            sort_order=source_detail.sort_order,
-            version=source_detail.version,
-            created_by=actor,
-        )
-        for source_detail in source.details.all()
-    ]
-    if details:
-        RequirementDetail.objects.bulk_create(details)
-
 
 def replace_requirement_approvers(*, requirement, approver_ids, actor=None):
     """Replace the active approver list while preserving the submitted order."""
@@ -333,9 +317,9 @@ def replace_requirement_approvers(*, requirement, approver_ids, actor=None):
 
 def get_requirement_field_specs(requirement):
     return field_specs_from_models(
-        requirement.fields.select_related("parent_field").order_by(
-            "sort_order", "created_at", "id"
-        )
+        resolve_field_source(requirement)
+        .fields.select_related("parent_field")
+        .order_by("sort_order", "created_at", "id")
     )
 
 
@@ -534,8 +518,10 @@ def sync_requirement_fields(
     changed_details = []
     if cleanup_fields or reset_select_fields:
         changed_details = apply_field_change_cleanup(
-            details=RequirementDetail.objects.select_for_update().filter(
-                requirement=requirement
+            # of=("self",) 只锁明细行本身 —— 模板路径要 join 到标准库，不该把模板
+            # 与标准库的行一起锁住。
+            details=details_affected_by_fields(requirement).select_for_update(
+                of=("self",)
             ),
             removed_fields=cleanup_fields,
             reset_select_fields=list(reset_select_fields.values()),

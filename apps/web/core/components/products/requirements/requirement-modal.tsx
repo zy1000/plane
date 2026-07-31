@@ -104,7 +104,6 @@ type TCreateSummaryProps = {
   ownerName?: string;
   templateName?: string;
   fieldCount: number;
-  detailCount: number;
   approvalSummary: string;
   currentStep: TCreateStep;
   onEditBasic: () => void;
@@ -115,7 +114,6 @@ function CreateSummary({
   ownerName,
   templateName,
   fieldCount,
-  detailCount,
   approvalSummary,
   currentStep,
   onEditBasic,
@@ -134,10 +132,6 @@ function CreateSummary({
     {
       label: t("workspace_products.requirements.modal.wizard.summary.fields"),
       value: String(fieldCount),
-    },
-    {
-      label: t("workspace_products.requirements.modal.wizard.summary.details"),
-      value: String(detailCount),
     },
     {
       label: t("workspace_products.requirements.modal.wizard.summary.approval"),
@@ -214,7 +208,6 @@ export function ProductRequirementModal() {
   const [ownerId, setOwnerId] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [importFields, setImportFields] = useState(false);
-  const [importDetails, setImportDetails] = useState(false);
   const [status, setStatus] = useState<TRequirementStatus>("draft");
   const [approverIds, setApproverIds] = useState<string[]>([]);
   const [approvalType, setApprovalType] = useState<TRequirementApprovalType>("any");
@@ -240,7 +233,6 @@ export function ProductRequirementModal() {
     setOwnerId(requirement?.owner_id ?? currentUser?.id ?? product?.owner ?? "");
     setTemplateId("");
     setImportFields(false);
-    setImportDetails(false);
     setStatus(requirement?.status ?? "draft");
     setApproverIds(requirement?.approver_ids ?? []);
     setApprovalType(requirement?.approval_type ?? "any");
@@ -252,14 +244,7 @@ export function ProductRequirementModal() {
 
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
-    const enabled = Boolean(value);
-    setImportFields(enabled);
-    setImportDetails(enabled);
-  };
-
-  const handleImportFieldsChange = (checked: boolean) => {
-    setImportFields(checked);
-    if (!checked) setImportDetails(false);
+    setImportFields(Boolean(value));
   };
 
   const handleApproverIdsChange = (next: string[]) => {
@@ -351,7 +336,6 @@ export function ProductRequirementModal() {
         owner_id: ownerId,
         template_id: templateId || null,
         import_fields: Boolean(templateId && importFields),
-        import_details: Boolean(templateId && importFields && importDetails),
         approver_ids: approverIds,
         approval_type: approverIds.length ? approvalType : "any",
         required_count: approverIds.length && approvalType === "n_of_m" ? requiredCount : null,
@@ -598,7 +582,6 @@ export function ProductRequirementModal() {
                           <p className="-mt-5 text-11 text-secondary">
                             {t("workspace_products.requirements.import.summary", {
                               fields: selectedTemplate.field_count,
-                              details: selectedTemplate.detail_count,
                             })}
                           </p>
                           <div className="space-y-4">
@@ -610,7 +593,7 @@ export function ProductRequirementModal() {
                                 id="product-requirement-import-fields"
                                 checked={importFields}
                                 disabled={!templateId}
-                                onChange={() => handleImportFieldsChange(!importFields)}
+                                onChange={() => setImportFields(!importFields)}
                               />
                               <span>
                                 <span className="block text-12 font-medium text-primary">
@@ -618,25 +601,6 @@ export function ProductRequirementModal() {
                                 </span>
                                 <span className="mt-0.5 block text-11 leading-5 text-tertiary">
                                   {t("workspace_products.requirements.import.fields_description")}
-                                </span>
-                              </span>
-                            </label>
-                            <label
-                              htmlFor="product-requirement-import-details"
-                              className="ml-2 flex cursor-pointer items-start gap-3 border-l border-accent-subtle py-1 pl-6"
-                            >
-                              <Checkbox
-                                id="product-requirement-import-details"
-                                checked={importDetails}
-                                disabled={!templateId || !importFields}
-                                onChange={() => setImportDetails(!importDetails)}
-                              />
-                              <span>
-                                <span className="block text-12 font-medium text-primary">
-                                  {t("workspace_products.requirements.import.details")}
-                                </span>
-                                <span className="mt-0.5 block text-11 leading-5 text-tertiary">
-                                  {t("workspace_products.requirements.import.details_description")}
                                 </span>
                               </span>
                             </label>
@@ -674,7 +638,6 @@ export function ProductRequirementModal() {
                 ownerName={selectedOwner?.display_name}
                 templateName={selectedTemplate?.title}
                 fieldCount={selectedTemplate && importFields ? selectedTemplate.field_count : 0}
-                detailCount={selectedTemplate && importDetails ? selectedTemplate.detail_count : 0}
                 approvalSummary={approvalSummary}
                 currentStep={createStep}
                 onEditBasic={() => setCreateStep("basic")}

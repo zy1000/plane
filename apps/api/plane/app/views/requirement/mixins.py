@@ -29,6 +29,7 @@ from plane.utils.requirement import (
     get_requirement_field_specs,
     insert_requirement_detail,
     save_requirement_detail_batch,
+    uses_change_flow,
 )
 from plane.utils.requirement_draft import (
     get_draft,
@@ -127,7 +128,7 @@ def can_write_requirement(user, requirement):
 class RequirementDraftDispatchMixin:
     @staticmethod
     def draft_for_read(requirement):
-        if requirement.is_template:
+        if not uses_change_flow(requirement):
             return None
         return get_draft(requirement)
 
@@ -137,7 +138,7 @@ class RequirementDraftDispatchMixin:
         发过版本却没有工作副本时补一份 —— 否则这次写入会直接落到正式表上，把已
         批准的内容改掉。
         """
-        if requirement.is_template:
+        if not uses_change_flow(requirement):
             return None
         draft = get_draft(requirement)
         if draft is None and requirement.current_version is not None:
@@ -147,7 +148,7 @@ class RequirementDraftDispatchMixin:
     @staticmethod
     def read_only_response(requirement):
         """不可写时返回 409，可写时返回 None。"""
-        if requirement.is_template:
+        if not uses_change_flow(requirement):
             return None
         reason = READ_ONLY_REASONS.get(requirement.status)
         if reason is None:
