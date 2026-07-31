@@ -157,7 +157,12 @@ export const useIssueStateTransition = (
           if (!roleId) return;
           projectMemberIds.forEach((memberId) => {
             const memberDetails = getProjectMemberDetails(memberId, projectId);
-            if (memberDetails?.custom_role_ids?.includes(roleId)) {
+            // 角色可能是直接授予（custom_role_ids），也可能是通过用户组继承（inherited_role_ids）。
+            // 后端 resolve_role_member_ids 两者都算，这里必须保持一致，否则组继承的成员选不到。
+            const hasRole =
+              memberDetails?.custom_role_ids?.includes(roleId) ||
+              memberDetails?.inherited_role_ids?.includes(roleId);
+            if (hasRole) {
               allowedAssigneeSet.add(memberId);
             }
           });

@@ -19,7 +19,7 @@ from plane.utils.host import base_host
 from plane.utils.workflow.transition import (
     cancel_issue_pending_transitions,
     capture_issue_content_snapshot,
-    check_state_assignee_constraint,
+    check_added_assignee_constraint,
     check_update_state_permission,
     reset_pending_transition_votes_if_content_changed,
 )
@@ -93,7 +93,7 @@ class IssueBatchUpdate(BaseAPIView):
                     })
                     continue
             elif has_assignee_update and query.state_id:
-                allowed, error_msg = check_state_assignee_constraint(
+                allowed, error_msg = check_added_assignee_constraint(
                     issue=query,
                     state=query.state,
                     desired_assignee_ids=properties.get("assignee_ids"),

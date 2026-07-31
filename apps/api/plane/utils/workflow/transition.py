@@ -324,6 +324,38 @@ def check_state_assignee_constraint(issue: Issue, state: State, desired_assignee
     return False, "当前状态负责人不符合工作流规则"
 
 
+def check_added_assignee_constraint(
+    issue: Issue, state: State, desired_assignee_ids=None, current_assignee_ids=None
+):
+    """
+    只校验本次「新增」的负责人是否符合当前状态的工作流约束。
+
+    存量负责人可能是工作流规则变更前遗留的，若按全量校验，加人、减人、
+    离职交接都会被历史数据整体判死，且无法从界面上修复。这里改为增量校验：
+    - 有新增负责人 => 只校验新增的这些人；
+    - 纯减人或负责人未变化 => 放行（没有引入新的不合规负责人）；
+    - 清空负责人 => 交由 check_state_assignee_constraint 走原有的非空校验。
+    """
+    current_ids = set(
+        _normalize_user_ids(
+            current_assignee_ids
+            if current_assignee_ids is not None
+            else get_issue_assignee_ids(issue)
+        )
+    )
+    desired_ids = set(_normalize_user_ids(desired_assignee_ids))
+    added_ids = desired_ids - current_ids
+
+    if not added_ids and desired_ids:
+        return True, None
+
+    return check_state_assignee_constraint(
+        issue=issue,
+        state=state,
+        desired_assignee_ids=sorted(added_ids),
+    )
+
+
 def _normalize_approval_reason(approval_reason=None) -> str:
     return str(approval_reason or "").strip()
 

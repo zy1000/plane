@@ -102,7 +102,7 @@ from plane.utils.extra_field_value import serialize_extra_field_values
 from plane.settings.redis import redis_instance
 from plane.utils.workflow import (
     check_update_state_permission,
-    check_state_assignee_constraint,
+    check_added_assignee_constraint,
     cancel_issue_pending_transitions,
     capture_issue_content_snapshot,
     reset_pending_transition_votes_if_content_changed,
@@ -917,10 +917,11 @@ class IssueViewSet(BaseViewSet):
             except StateModel.DoesNotExist:
                 pass
         elif has_assignee_update and issue.state_id:
-            allowed, error_msg = check_state_assignee_constraint(
+            allowed, error_msg = check_added_assignee_constraint(
                 issue=issue,
                 state=issue.state,
                 desired_assignee_ids=desired_assignee_ids,
+                current_assignee_ids=issue.assignee_ids,
             )
             if not allowed:
                 redis_client.delete(lock_id)
