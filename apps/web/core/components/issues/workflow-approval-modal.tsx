@@ -242,101 +242,101 @@ function DetailPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* 详情头 */}
-      <div className="p-4 border-b border-subtle flex-shrink-0">
-        <div className="flex items-start gap-2 mb-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-tertiary mb-0.5">#{record.issue_sequence_id}</p>
-            <h3 className="text-base font-semibold text-primary break-words">{record.issue_name}</h3>
-          </div>
-          <div className="mt-1 flex-shrink-0">
-            <StatusTag status={record.status} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-sm">
-          <StateChip
-            name={record.from_state_name}
-            color={record.from_state_color}
-            group={record.from_state_group}
-          />
-          <ArrowRight className="h-4 w-4 text-tertiary" />
-          <StateChip
-            name={record.to_state_name}
-            color={record.to_state_color}
-            group={record.to_state_group}
-          />
-        </div>
-
-        <div className="mt-2 text-xs text-secondary">
-          审批进度：{approvedCount}/{total}
-          {record.required_count ? `，需 ${record.required_count} 人通过` : ""}
-        </div>
-
-        {record.target_assignee_ids !== null && (
-          <div className="mt-2 rounded-md border border-subtle bg-layer-1 px-2.5 py-2 text-xs text-secondary">
-            <p className="font-medium text-primary">审批通过后负责人将更新为：</p>
-            <p className="mt-1">
-              {targetAssigneeNames.length > 0 ? targetAssigneeNames.join("、") : "无负责人"}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* 审批人列表 */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="mb-4 rounded-md border border-subtle bg-layer-1 px-2.5 py-2 text-xs text-secondary">
-          <p className="font-medium text-primary">变更原因</p>
-          <p className="mt-1 whitespace-pre-wrap break-words">
-            {record.approval_reason?.trim() || "未填写"}
-          </p>
-        </div>
-
-        <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-2">审批人</p>
-        <div className="space-y-0.5">
-          {record.approval_records.map((rec) => (
-            <ApproverRow key={rec.id} rec={rec} />
-          ))}
-        </div>
-
-        {/* 审批人评论 */}
-        {record.approval_records.some((r) => r.comment) && (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-2">评审意见</p>
-            <div className="space-y-2">
-              {record.approval_records
-                .filter((r) => r.comment)
-                .map((r) => (
-                  <div
-                    key={r.id}
-                    className="rounded-md bg-layer-1 border border-subtle p-2.5 text-sm"
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Avatar
-                        name={r.approver_display_name}
-                        src={r.approver_avatar_url ?? undefined}
-                        size="sm"
-                      />
-                      <span className="text-xs font-medium text-primary">{r.approver_display_name}</span>
-                    </div>
-                    <p className="text-xs text-secondary whitespace-pre-wrap">{r.comment}</p>
-                  </div>
-                ))}
+      {/* 详情内容（头信息 + 变更原因 + 审批人统一滚动，避免中间区域被头/操作区挤扁） */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="p-4 border-b border-subtle">
+          <div className="flex items-start gap-2 mb-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-tertiary mb-0.5">#{record.issue_sequence_id}</p>
+              <h3 className="text-base font-semibold text-primary break-words">{record.issue_name}</h3>
+            </div>
+            <div className="mt-1 flex-shrink-0">
+              <StatusTag status={record.status} />
             </div>
           </div>
-        )}
+
+          <div className="flex items-center gap-2 text-sm">
+            <StateChip
+              name={record.from_state_name}
+              color={record.from_state_color}
+              group={record.from_state_group}
+            />
+            <ArrowRight className="h-4 w-4 text-tertiary" />
+            <StateChip
+              name={record.to_state_name}
+              color={record.to_state_color}
+              group={record.to_state_group}
+            />
+          </div>
+
+          <div className="mt-2 text-xs text-secondary">
+            审批进度：{approvedCount}/{total}
+            {record.required_count ? `，需 ${record.required_count} 人通过` : ""}
+          </div>
+
+          {record.target_assignee_ids !== null && (
+            <div className="mt-2 rounded-md border border-subtle bg-layer-1 px-2.5 py-2 text-xs text-secondary">
+              <p className="font-medium text-primary">审批通过后负责人将更新为：</p>
+              <p className="mt-1">
+                {targetAssigneeNames.length > 0 ? targetAssigneeNames.join("、") : "无负责人"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4">
+          <div className="mb-4 rounded-md border border-subtle bg-layer-1 px-2.5 py-2 text-xs text-secondary">
+            <p className="font-medium text-primary">变更原因</p>
+            <p className="mt-1 whitespace-pre-wrap break-words">
+              {record.approval_reason?.trim() || "未填写"}
+            </p>
+          </div>
+
+          <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-2">审批人</p>
+          <div className="space-y-0.5">
+            {record.approval_records.map((rec) => (
+              <ApproverRow key={rec.id} rec={rec} />
+            ))}
+          </div>
+
+          {record.approval_records.some((r) => r.comment) && (
+            <div className="mt-4">
+              <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-2">评审意见</p>
+              <div className="space-y-2">
+                {record.approval_records
+                  .filter((r) => r.comment)
+                  .map((r) => (
+                    <div
+                      key={r.id}
+                      className="rounded-md bg-layer-1 border border-subtle p-2.5 text-sm"
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Avatar
+                          name={r.approver_display_name}
+                          src={r.approver_avatar_url ?? undefined}
+                          size="sm"
+                        />
+                        <span className="text-xs font-medium text-primary">{r.approver_display_name}</span>
+                      </div>
+                      <p className="text-xs text-secondary whitespace-pre-wrap">{r.comment}</p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 操作区（仅 pending 且我是审批人且未操作时显示） */}
       {canAct && (
-        <div className="p-4 border-t border-subtle flex-shrink-0 bg-surface-1">
-          <p className="text-xs font-medium text-secondary mb-3">提交审批</p>
+        <div className="px-4 py-3 border-t border-subtle flex-shrink-0 bg-surface-1">
+          <p className="text-xs font-medium text-secondary mb-2">提交审批</p>
 
-          <div className="flex gap-2 mb-3">
+          <div className="flex gap-2 mb-2">
             <button
               type="button"
               onClick={() => setAction("approved")}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-md border py-2 text-sm font-medium transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-md border py-1.5 text-sm font-medium transition-all"
               style={
                 action === "approved"
                   ? { borderColor: "#10b981", backgroundColor: "#10b98122", color: "#10b981" }
@@ -349,7 +349,7 @@ function DetailPanel({
             <button
               type="button"
               onClick={() => setAction("rejected")}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-md border py-2 text-sm font-medium transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-md border py-1.5 text-sm font-medium transition-all"
               style={
                 action === "rejected"
                   ? { borderColor: "#ef4444", backgroundColor: "#ef444422", color: "#ef4444" }
@@ -365,15 +365,15 @@ function DetailPanel({
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="添加审批意见（可选）"
-            rows={3}
-            className="w-full resize-none rounded-md border border-subtle bg-surface-2 px-3 py-2 text-sm text-primary placeholder:text-tertiary outline-none focus:border-accent-primary/60 transition-colors mb-3"
+            rows={2}
+            className="w-full resize-none rounded-md border border-subtle bg-surface-2 px-3 py-2 text-sm text-primary placeholder:text-tertiary outline-none focus:border-accent-primary/60 transition-colors mb-2"
           />
 
           <button
             type="button"
             disabled={!action || isSubmitting}
             onClick={handleSubmit}
-            className="w-full flex items-center justify-center gap-2 rounded-md py-2.5 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 rounded-md py-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={
               action === "approved"
                 ? { backgroundColor: "#10b981", color: "#ffffff" }
@@ -528,8 +528,8 @@ export function WorkflowApprovalModal({ isOpen, onClose, workspaceSlug, projectI
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="relative w-full max-w-4xl rounded-xl bg-surface-1 shadow-raised-200 overflow-hidden flex flex-col"
-                style={{ height: "min(80vh, 640px)" }}
+              <Dialog.Panel className="relative w-full max-w-6xl rounded-xl bg-surface-1 shadow-raised-200 overflow-hidden flex flex-col"
+                style={{ height: "min(92vh, 900px)" }}
               >
                 {/* 头部 */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-subtle flex-shrink-0">

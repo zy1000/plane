@@ -45,7 +45,8 @@ export const StateTransitionAssigneeModal = ({
   const noAllowedAssignees = showAssigneeSelection && normalizedAllowedAssigneeIds.length === 0;
   const canConfirm =
     !isSubmitting &&
-    (!showAssigneeSelection || (!noAllowedAssignees && selectedAssigneeIds.length > 0));
+    (!showAssigneeSelection || (!noAllowedAssignees && selectedAssigneeIds.length > 0)) &&
+    (!showApprovalReason || approvalReason.trim().length > 0);
 
   const handleConfirm = async () => {
     if (!canConfirm) return;
@@ -127,11 +128,14 @@ export const StateTransitionAssigneeModal = ({
 
                   {showApprovalReason && (
                     <div className="space-y-2">
-                      <p className="text-xs text-secondary">变更原因</p>
+                      <p className="text-xs text-secondary">
+                        变更原因
+                        <span className="text-danger-primary">*</span>
+                      </p>
                       <textarea
                         value={approvalReason}
                         onChange={(e) => setApprovalReason(e.target.value)}
-                        placeholder="填写变更原因（可选）"
+                        placeholder="请填写变更原因"
                         rows={4}
                         className="w-full resize-none rounded-md border border-subtle bg-surface-2 px-3 py-2 text-sm text-primary placeholder:text-tertiary outline-none transition-colors focus:border-accent-primary/60"
                       />

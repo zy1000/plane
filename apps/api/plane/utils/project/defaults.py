@@ -225,6 +225,55 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         issue_type=defect_issue_type, project=project, name="软件版本", is_required=True
     )
 
+    # 功能模块
+    function_module = {
+        "choices": [
+            "计量",
+            "显示",
+            "时钟",
+            "费率",
+            "升级",
+            "结算",
+            "需量",
+            "负荷曲线",
+            "负荷控制",
+            "电网质量",
+            "预付费",
+            "PUSH",
+            "状态字",
+            "DLMS协议栈",
+            "报警窃电",
+            "P1",
+            "事件记录",
+            "安全",
+            "P2P",
+            "红外",
+            "RS485/232",
+            "电池管理",
+            "功耗",
+            "阀控",
+            "NFC",
+            "MBUS",
+            "Lorawan",
+            "PLC",
+            "RF",
+            "蓝牙",
+            "CIU",
+            "默认值",
+            "接口类",
+            "其它",
+        ],
+        "selection_mode": "single",
+    }
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type,
+        project=project,
+        name="功能模块",
+        is_required=True,
+        options=function_module,
+        field_type="select",
+    )
+
     # 发现方式
     discover = {
         "choices": [
