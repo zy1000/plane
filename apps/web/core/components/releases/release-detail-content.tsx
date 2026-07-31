@@ -29,6 +29,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useUserPermissions } from "@/hooks/store/user";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { useAttachmentBatchDownload } from "@/hooks/use-attachment-batch-download";
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
@@ -172,6 +173,18 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   const [releaseFilesDeletingId, setReleaseFilesDeletingId] = useState<string | null>(null);
   const [releaseFilesDownloadingId, setReleaseFilesDownloadingId] = useState<string | null>(null);
   const { uploadStatuses: releaseFileUploadStatuses, trackUpload } = useFileUploadProgress();
+  const { isBatchDownloading: releaseFilesBatchDownloading, batchDownload: handleBatchDownloadReleaseFiles } =
+    useAttachmentBatchDownload({
+      filename: "release-attachments.zip",
+      fetchZip: (fileIds) =>
+        releaseService.batchDownloadReleaseFiles(
+          workspaceSlug.toString(),
+          projectId.toString(),
+          releaseId.toString(),
+          fileIds
+        ),
+      onError: (message) => setToast({ type: TOAST_TYPE.ERROR, title: "批量下载失败", message }),
+    });
 
   // 与后端 CustomPaginator.max_page_size 一致，单次请求上限；多页时循环拉取直至全部
   const RELEASE_FILES_PAGE_SIZE = 100;
@@ -685,6 +698,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               filesUploading={releaseFilesUploading}
               filesDeletingId={releaseFilesDeletingId}
               filesDownloadingId={releaseFilesDownloadingId}
+              filesBatchDownloading={releaseFilesBatchDownloading}
               filesUploadStatuses={releaseFileUploadStatuses}
               canManageReleaseCycles={canManageReleaseCyclesAction}
               canManageReleasePlans={canManageReleasePlansAction}
@@ -705,6 +719,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               }}
               onDeleteFile={handleDeleteReleaseFile}
               onDownloadFile={handleDownloadReleaseFile}
+              onBatchDownloadFiles={handleBatchDownloadReleaseFiles}
             />
           )}
 

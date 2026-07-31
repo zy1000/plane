@@ -9,11 +9,12 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Download, FileText, Plus, Repeat, Trash2, Unlink, Upload } from "lucide-react";
-import { Popconfirm } from "antd";
+import { Checkbox, Popconfirm } from "antd";
 import { Button } from "@plane/propel/button";
 import { cn } from "@plane/utils";
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { ReadonlyDate } from "@/components/readonly/date";
+import { useFileSelection } from "@/hooks/use-file-selection";
 import type { TFileUploadStatus } from "@/hooks/use-file-upload-progress";
 import { formatFileSize, formatReleaseOverviewDateRange } from "./release-format";
 import { CycleStatusTag, PlanPassRate, PlanStateTag } from "./release-tags";
@@ -64,8 +65,23 @@ const SectionHeader: React.FC<{
   onAction?: () => void;
   actionLoading?: boolean;
   actionDisabled?: boolean;
-}> = ({ icon, title, count, actionIcon, actionLabel, onAction, actionLoading, actionDisabled }) => {
+  actionSize?: "sm" | "base" | "lg" | "xl";
+  /** 渲染在主操作按钮左侧的额外操作 */
+  actions?: React.ReactNode;
+}> = ({
+  icon,
+  title,
+  count,
+  actionIcon,
+  actionLabel,
+  onAction,
+  actionLoading,
+  actionDisabled,
+  actionSize = "lg",
+  actions,
+}) => {
   const isActionDisabled = !!actionDisabled || !!actionLoading;
+  const showPrimaryAction = Boolean(actionLabel && onAction);
 
   return (
     <div className="flex items-center justify-between px-5 py-4">
@@ -76,22 +92,27 @@ const SectionHeader: React.FC<{
           {count}
         </span>
       </div>
-      {actionLabel && onAction && (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            if (isActionDisabled) return;
-            onAction();
-          }}
-          loading={actionLoading}
-          disabled={isActionDisabled}
-          aria-disabled={isActionDisabled}
-          className={cn(isActionDisabled && "cursor-not-allowed opacity-60")}
-        >
-          {actionIcon}
-          <span className="ml-1">{actionLabel}</span>
-        </Button>
+      {(actions || showPrimaryAction) && (
+        <div className="flex items-center gap-2">
+          {actions}
+          {showPrimaryAction && (
+            <Button
+              variant="secondary"
+              size={actionSize}
+              onClick={() => {
+                if (isActionDisabled) return;
+                onAction?.();
+              }}
+              loading={actionLoading}
+              disabled={isActionDisabled}
+              aria-disabled={isActionDisabled}
+              className={cn(isActionDisabled && "cursor-not-allowed opacity-60")}
+            >
+              {actionIcon}
+              <span className="ml-1">{actionLabel}</span>
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -333,6 +354,9 @@ type FilesSectionProps = {
   onTriggerUploadFile: () => void;
   onDeleteFile: (fileId: string) => Promise<void> | void;
   onDownloadFile: (fileId: string, fileName: string) => Promise<void> | void;
+  /** 传入后才会展示勾选列与批量下载入口 */
+  onBatchDownloadFiles?: (fileIds: string[]) => Promise<void> | void;
+  filesBatchDownloading?: boolean;
   uploadStatuses?: TFileUploadStatus[];
   className?: string;
 };
@@ -350,99 +374,139 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
   onTriggerUploadFile,
   onDeleteFile,
   onDownloadFile,
+  onBatchDownloadFiles,
+  filesBatchDownloading = false,
   uploadStatuses = [],
   className,
-}) => (
-  <section className={cn(SECTION_CARD, className)}>
-    <SectionHeader
-      icon={<FileText className="h-4 w-4 text-placeholder" aria-hidden />}
-      title="附件"
-      count={files.length}
-      actionIcon={<Upload className="h-3.5 w-3.5" aria-hidden />}
-      actionLabel="上传附件"
-      onAction={onTriggerUploadFile}
-      actionLoading={filesUploading}
-      actionDisabled={filesUploading || !canUploadReleaseFile}
-    />
-    <div className={SECTION_BODY}>
-      <FileUploadProgressList uploadStatuses={uploadStatuses} className="mb-2 flex flex-col gap-1" />
-      {filesLoading ? (
-        <TableLoading />
-      ) : filesError ? (
-        <p className="text-sm text-danger-primary">{filesError}</p>
-      ) : files.length === 0 && uploadStatuses.length === 0 ? (
-        <TableEmpty hint="暂无附件" />
-      ) : (
-        <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <table className="min-w-full table-fixed">
-            <thead>
-              <tr className={TABLE_HEAD_CLASS}>
-                <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">附件</th>
-                <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">大小</th>
-                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
-                <th className="w-[140px] py-2 pr-2 pl-10 text-left text-sm font-medium text-primary">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((file) => {
-                const isDeleteDisabled = filesDeletingId === file.id || !canDeleteReleaseFile;
+}) => {
+  const selection = useFileSelection(files);
+  const canBatchDownload = Boolean(onBatchDownloadFiles) && canDownloadReleaseFile;
 
-                return (
-                  <tr key={file.id} className="border-b border-subtle last:border-b-0 hover:bg-layer-1">
-                    <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                      <span className="truncate">{file.name}</span>
-                    </td>
-                    <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
-                    <td className="px-2 py-2 text-sm text-primary">
-                      <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
-                    </td>
-                    <td className="py-2 pr-2 pl-10">
-                      <div className="flex items-center justify-start gap-2">
-                        <Button
-                          variant="link-neutral"
-                          className="p-0"
-                          disabled={filesDownloadingId === file.id || !canDownloadReleaseFile}
-                          onClick={() => onDownloadFile(file.id, file.name)}
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
-                        <Popconfirm
-                          title="确认删除该附件？"
-                          okText="删除"
-                          cancelText="取消"
-                          disabled={isDeleteDisabled}
-                          onConfirm={() => {
-                            if (isDeleteDisabled) return;
-                            void onDeleteFile(file.id);
-                          }}
-                        >
+  return (
+    <section className={cn(SECTION_CARD, className)}>
+      <SectionHeader
+        icon={<FileText className="h-4 w-4 text-placeholder" aria-hidden />}
+        title="附件"
+        count={files.length}
+        actionIcon={<Upload className="h-3.5 w-3.5" aria-hidden />}
+        actionLabel="上传"
+        onAction={onTriggerUploadFile}
+        actionLoading={filesUploading}
+        actionDisabled={filesUploading || !canUploadReleaseFile}
+        actions={
+          canBatchDownload ? (
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => onBatchDownloadFiles?.(selection.selectedIds)}
+              loading={filesBatchDownloading}
+              disabled={selection.selectedCount === 0 || filesBatchDownloading}
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              <span className="ml-1">下载</span>
+            </Button>
+          ) : undefined
+        }
+      />
+      <div className={SECTION_BODY}>
+        <FileUploadProgressList uploadStatuses={uploadStatuses} className="mb-2 flex flex-col gap-1" />
+        {filesLoading ? (
+          <TableLoading />
+        ) : filesError ? (
+          <p className="text-sm text-danger-primary">{filesError}</p>
+        ) : files.length === 0 && uploadStatuses.length === 0 ? (
+          <TableEmpty hint="暂无附件" />
+        ) : (
+          <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+            <table className="min-w-full table-fixed">
+              <thead>
+                <tr className={TABLE_HEAD_CLASS}>
+                  {canBatchDownload && (
+                    <th className="w-10 px-2 py-2">
+                      <Checkbox
+                        checked={selection.isAllSelected}
+                        indeterminate={selection.isPartiallySelected}
+                        onChange={selection.toggleAll}
+                        aria-label="全选附件"
+                      />
+                    </th>
+                  )}
+                  <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">附件</th>
+                  <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">大小</th>
+                  <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
+                  <th className="w-[140px] py-2 pr-2 pl-10 text-left text-sm font-medium text-primary">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((file) => {
+                  const isDeleteDisabled = filesDeletingId === file.id || !canDeleteReleaseFile;
+
+                  return (
+                    <tr key={file.id} className="border-b border-subtle last:border-b-0 hover:bg-layer-1">
+                      {canBatchDownload && (
+                        <td className="px-2 py-2">
+                          <Checkbox
+                            checked={selection.isSelected(file.id)}
+                            onChange={() => selection.toggle(file.id)}
+                            aria-label={`选择 ${file.name}`}
+                          />
+                        </td>
+                      )}
+                      <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+                        <span className="truncate">{file.name}</span>
+                      </td>
+                      <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
+                      <td className="px-2 py-2 text-sm text-primary">
+                        <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                      </td>
+                      <td className="py-2 pr-2 pl-10">
+                        <div className="flex items-center justify-start gap-2">
                           <Button
-                            variant={canDeleteReleaseFile ? "link-danger" : "link-neutral"}
-                            className={cn("p-0", isDeleteDisabled && "cursor-not-allowed opacity-50")}
-                            disabled={isDeleteDisabled}
-                            loading={filesDeletingId === file.id}
-                            aria-disabled={isDeleteDisabled}
+                            variant="link-neutral"
+                            className="p-0"
+                            disabled={filesDownloadingId === file.id || !canDownloadReleaseFile}
+                            onClick={() => onDownloadFile(file.id, file.name)}
                           >
-                            <Trash2
-                              className={cn(
-                                "h-3.5 w-3.5",
-                                canDeleteReleaseFile ? "text-danger-primary" : "text-placeholder"
-                              )}
-                            />
+                            <Download className="h-3.5 w-3.5" />
                           </Button>
-                        </Popconfirm>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  </section>
-);
+                          <Popconfirm
+                            title="确认删除该附件？"
+                            okText="删除"
+                            cancelText="取消"
+                            disabled={isDeleteDisabled}
+                            onConfirm={() => {
+                              if (isDeleteDisabled) return;
+                              void onDeleteFile(file.id);
+                            }}
+                          >
+                            <Button
+                              variant={canDeleteReleaseFile ? "link-danger" : "link-neutral"}
+                              className={cn("p-0", isDeleteDisabled && "cursor-not-allowed opacity-50")}
+                              disabled={isDeleteDisabled}
+                              loading={filesDeletingId === file.id}
+                              aria-disabled={isDeleteDisabled}
+                            >
+                              <Trash2
+                                className={cn(
+                                  "h-3.5 w-3.5",
+                                  canDeleteReleaseFile ? "text-danger-primary" : "text-placeholder"
+                                )}
+                              />
+                            </Button>
+                          </Popconfirm>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
 
 type Props = {
   workspaceSlug: string;

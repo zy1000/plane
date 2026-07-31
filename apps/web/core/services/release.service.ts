@@ -468,6 +468,24 @@ export class ReleaseService extends APIService {
       });
   }
 
+  /** 批量下载发布附件：后端打包成 zip 直接返回二进制流 */
+  async batchDownloadReleaseFiles(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    fileIds: string[]
+  ): Promise<Blob> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/release/file/batch-download/`,
+      { params: { release_id: releaseId, asset_ids: fileIds.join(",") } },
+      { responseType: "blob" }
+    )
+      .then((response) => response?.data as Blob)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async downloadReleaseFile(workspaceSlug: string, projectId: string, fileId: string): Promise<string> {
     return this.get(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/release/file/${fileId}/download/`

@@ -9,13 +9,11 @@ import type { ComponentType } from "react";
 import { ChevronRight, ClipboardCheck } from "lucide-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { STATE_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { PieChart } from "@plane/propel/charts/pie-chart";
 import { CycleIcon, DueDatePropertyIcon, WorkflowsPropertyIcon } from "@plane/propel/icons";
 import type { IUserProfileData, TProfileMetricKey } from "@plane/types";
 import { Card, ECardVariant, LinearProgressIndicator, Loader } from "@plane/ui";
-import { capitalizeFirstLetter, cn } from "@plane/utils";
+import { cn } from "@plane/utils";
 // components
 import { ProfileMetricDetailModal } from "./metric-detail-modal";
 
@@ -99,9 +97,6 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
     },
   ];
 
-  const stateDistribution = userProfile.state_distribution;
-  const totalOpenIssues = stateDistribution.reduce((total, group) => total + group.state_count, 0);
-
   const activeMetricTitle = queueMetrics.find((metric) => metric.key === activeMetric)?.title;
 
   return (
@@ -109,74 +104,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       <h3 className="text-16 font-medium">{t("profile.stats.workload_overview.title")}</h3>
       <Card variant={ECardVariant.WITHOUT_SHADOW} className="overflow-hidden p-0">
         <div className="grid grid-cols-1 xl:grid-cols-12">
-          <section className="p-5 xl:col-span-5 xl:border-r xl:border-subtle">
-            <h4 className="text-14 font-medium text-primary">{t("profile.stats.workload_overview.state_title")}</h4>
-            <p className="mt-1 text-11 leading-4 text-placeholder">
-              {t("profile.stats.workload_overview.state_description")}
-            </p>
-            {stateDistribution.length > 0 ? (
-              <div className="mt-4 flex items-center gap-6">
-                <div className="relative h-[150px] w-[150px] shrink-0">
-                  <PieChart
-                    className="size-full"
-                    dataKey="value"
-                    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-                    data={stateDistribution.map((group) => ({
-                      id: group.state_group,
-                      key: group.state_group,
-                      value: group.state_count,
-                      name: capitalizeFirstLetter(group.state_group),
-                      color: STATE_GROUPS[group.state_group]?.color,
-                    }))}
-                    cells={stateDistribution.map((group) => ({
-                      key: group.state_group,
-                      fill: STATE_GROUPS[group.state_group]?.color,
-                    }))}
-                    showTooltip
-                    tooltipLabel="Count"
-                    paddingAngle={4}
-                    cornerRadius={4}
-                    innerRadius="62%"
-                    showLabel={false}
-                    showActiveOuterRing={false}
-                  />
-                  <div className="pointer-events-none absolute inset-0 grid place-items-center">
-                    <div className="flex flex-col items-center">
-                      <span className="text-24 leading-none font-semibold text-primary tabular-nums">
-                        {totalOpenIssues}
-                      </span>
-                      <span className="mt-1 text-11 text-placeholder">
-                        {t("profile.stats.workload_overview.open_items")}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1 space-y-3">
-                  {stateDistribution.map((group) => (
-                    <div key={group.state_group} className="flex items-center justify-between gap-2 text-12">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <span
-                          className="size-2.5 shrink-0 rounded-xs"
-                          style={{
-                            backgroundColor:
-                              STATE_GROUPS[group.state_group]?.color ?? "var(--background-color-accent-primary)",
-                          }}
-                        />
-                        <span className="truncate text-secondary">{STATE_GROUPS[group.state_group].label}</span>
-                      </div>
-                      <span className="shrink-0 font-medium text-primary tabular-nums">{group.state_count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="grid h-[190px] place-items-center text-12 text-placeholder">
-                {t("profile.stats.workload_overview.empty")}
-              </div>
-            )}
-          </section>
-
-          <section className="border-t border-subtle p-5 xl:col-span-4 xl:border-r xl:border-t-0">
+          <section className="p-5 xl:col-span-7 xl:border-r xl:border-subtle">
             <h4 className="text-14 font-medium text-primary">{t("profile.stats.progress.title")}</h4>
             <p className="mt-1 text-11 leading-4 text-placeholder">{t("profile.stats.progress.subtitle")}</p>
             <div className="mt-4 flex items-end gap-2">
@@ -218,7 +146,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
             </div>
           </section>
 
-          <section className="border-t border-subtle p-5 xl:col-span-3 xl:border-t-0">
+          <section className="border-t border-subtle p-5 xl:col-span-5 xl:border-t-0">
             <h4 className="text-14 font-medium text-primary">
               {t("profile.stats.overview_sections.queue.title")}
             </h4>

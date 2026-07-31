@@ -273,6 +273,24 @@ export class CycleService extends APIService {
       });
   }
 
+  /** 批量下载迭代附件：后端打包成 zip 直接返回二进制流 */
+  async batchDownloadCycleFiles(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    fileIds: string[]
+  ): Promise<Blob> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/batch-download/`,
+      { params: { cycle_id: cycleId, asset_ids: fileIds.join(",") } },
+      { responseType: "blob" }
+    )
+      .then((response) => response?.data as Blob)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async deleteCycleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<any> {
     return this.delete(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${fileId}/delete/`

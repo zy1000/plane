@@ -1,6 +1,7 @@
 """Release 附件接口（已重构为 FileAsset 体系）。"""
 
 import json
+from uuid import UUID
 
 from django.conf import settings
 from django.utils import timezone
@@ -15,10 +16,16 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import Release, FileAsset, Workspace, ReleaseStatus
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
+from plane.utils.asset_zip import build_assets_zip_response
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
 RELEASE_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.RELEASE_FILE
+
+
+def _parse_asset_ids(raw: str) -> list[UUID]:
+    """把逗号分隔的 asset_ids 解析成 UUID 列表，非法值直接抛 ValueError。"""
+    return [UUID(item.strip()) for item in (raw or "").split(",") if item.strip()]
 
 
 def _serialize_asset(asset: FileAsset) -> dict:
@@ -170,6 +177,39 @@ class ReleaseFileAPI(BaseViewSet):
         except Exception:
             pass
         return Response(status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="batch-download")
+    @allow_fine_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
+    def batch_download(self, request, slug, project_id):
+        release_id = request.query_params.get("release_id")
+        if not release_id:
+            return Response({"error": "release_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            asset_ids = _parse_asset_ids(request.query_params.get("asset_ids", ""))
+        except ValueError:
+            return Response({"error": "Invalid asset_ids"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not asset_ids:
+            return Response({"error": "asset_ids is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        assets = list(
+            FileAsset.objects.filter(
+                pk__in=asset_ids,
+                release_id=release_id,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=RELEASE_FILE_ENTITY_TYPE,
+                is_deleted=False,
+                is_uploaded=True,
+            ).order_by("-created_at")
+        )
+        if not assets:
+            return Response({"error": "No downloadable files found"}, status=status.HTTP_404_NOT_FOUND)
+
+        return build_assets_zip_response(
+            request=request, assets=assets, zip_filename="release-attachments.zip"
+        )
 
     @allow_fine_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
     def download(self, request, slug, project_id, file_id):

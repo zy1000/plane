@@ -63,6 +63,8 @@ type Props = {
   onTriggerUploadFile: () => void;
   onDeleteFile: (fileId: string) => Promise<void> | void;
   onDownloadFile: (fileId: string, fileName: string) => Promise<void> | void;
+  onBatchDownloadFiles?: (fileIds: string[]) => Promise<void> | void;
+  filesBatchDownloading?: boolean;
 };
 
 export const ReleaseMaterialsTab: React.FC<Props> = ({
@@ -94,6 +96,8 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
   onTriggerUploadFile,
   onDeleteFile,
   onDownloadFile,
+  onBatchDownloadFiles,
+  filesBatchDownloading,
 }) => (
   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
     <ReleaseFilesSection
@@ -104,6 +108,7 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
       filesUploading={filesUploading}
       filesDeletingId={filesDeletingId}
       filesDownloadingId={filesDownloadingId}
+      filesBatchDownloading={filesBatchDownloading}
       uploadStatuses={filesUploadStatuses}
       canUploadReleaseFile={canUploadReleaseFile}
       canDeleteReleaseFile={canDeleteReleaseFile}
@@ -111,6 +116,7 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
       onTriggerUploadFile={onTriggerUploadFile}
       onDeleteFile={onDeleteFile}
       onDownloadFile={onDownloadFile}
+      onBatchDownloadFiles={onBatchDownloadFiles}
     />
     <ReleaseCyclesSection
       workspaceSlug={workspaceSlug}

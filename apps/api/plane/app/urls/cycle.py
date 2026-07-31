@@ -54,6 +54,11 @@ urlpatterns = [
         name="cycle-file-download",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/batch-download/",
+        CycleFileAPI.as_view({"get": "batch_download"}),
+        name="cycle-file-batch-download",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/",
         CycleViewSet.as_view({"get": "list", "post": "create"}),
         name="project-cycle",

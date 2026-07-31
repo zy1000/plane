@@ -152,9 +152,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     filesTotal,
     filesDownloadingId,
     filesDeletingId,
+    filesBatchDownloading,
     filesError,
     uploadFile,
     downloadFile,
+    batchDownloadFiles,
     deleteFile,
   } = useCycleFiles({
     workspaceSlug,
@@ -710,10 +712,12 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                             files={files}
                             filesDownloadingId={filesDownloadingId}
                             filesDeletingId={filesDeletingId}
+                            filesBatchDownloading={filesBatchDownloading}
                             canDeleteCycleFile={canDeleteCycleFileAction}
                             canDownloadCycleFile={canDownloadCycleFile}
                             onDownloadFile={(fileId) => void downloadFile(fileId)}
                             onDeleteFile={(fileId) => void deleteFile(fileId)}
+                            onBatchDownloadFiles={(fileIds) => void batchDownloadFiles(fileIds)}
                           />
                         </div>
                       </div>
@@ -842,10 +846,12 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                       files={files}
                       filesDownloadingId={filesDownloadingId}
                       filesDeletingId={filesDeletingId}
+                      filesBatchDownloading={filesBatchDownloading}
                       canDeleteCycleFile={canDeleteCycleFileAction}
                       canDownloadCycleFile={canDownloadCycleFile}
                       onDownloadFile={(fileId) => void downloadFile(fileId)}
                       onDeleteFile={(fileId) => void deleteFile(fileId)}
+                      onBatchDownloadFiles={(fileIds) => void batchDownloadFiles(fileIds)}
                     />
                   </div>
                 </div>

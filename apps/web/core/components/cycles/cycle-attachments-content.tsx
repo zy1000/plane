@@ -33,9 +33,11 @@ export const CycleAttachmentsContent = observer(function CycleAttachmentsContent
     uploadStatuses,
     filesDownloadingId,
     filesDeletingId,
+    filesBatchDownloading,
     filesError,
     uploadFile,
     downloadFile,
+    batchDownloadFiles,
     deleteFile,
   } = useCycleFiles({
     workspaceSlug,
@@ -75,6 +77,7 @@ export const CycleAttachmentsContent = observer(function CycleAttachmentsContent
           filesUploading={filesUploading}
           filesDeletingId={filesDeletingId}
           filesDownloadingId={filesDownloadingId}
+          filesBatchDownloading={filesBatchDownloading}
           uploadStatuses={uploadStatuses}
           canUploadReleaseFile={canUploadCycleFile}
           canDeleteReleaseFile={canDeleteCycleFile}
@@ -84,6 +87,7 @@ export const CycleAttachmentsContent = observer(function CycleAttachmentsContent
           }}
           onDeleteFile={(fileId) => void deleteFile(fileId)}
           onDownloadFile={(fileId, _fileName) => void downloadFile(fileId)}
+          onBatchDownloadFiles={(fileIds) => void batchDownloadFiles(fileIds)}
         />
       </div>
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileInputChange} />

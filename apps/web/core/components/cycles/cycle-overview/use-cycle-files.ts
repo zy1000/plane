@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAttachmentBatchDownload } from "@/hooks/use-attachment-batch-download";
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import { CycleService } from "@/services/cycle.service";
 
@@ -107,6 +108,17 @@ export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFi
     [cycleService, projectId, workspaceSlug]
   );
 
+  const fetchFilesZip = useCallback(
+    (fileIds: string[]) => cycleService.batchDownloadCycleFiles(workspaceSlug, projectId, cycleId, fileIds),
+    [cycleId, cycleService, projectId, workspaceSlug]
+  );
+
+  const { isBatchDownloading: filesBatchDownloading, batchDownload: batchDownloadFiles } = useAttachmentBatchDownload({
+    filename: "cycle-attachments.zip",
+    fetchZip: fetchFilesZip,
+    onError: setFilesError,
+  });
+
   const deleteFile = useCallback(
     async (fileId: string) => {
       if (!workspaceSlug || !projectId) return;
@@ -131,10 +143,12 @@ export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFi
     filesTotal,
     filesDownloadingId,
     filesDeletingId,
+    filesBatchDownloading,
     filesError,
     fetchFiles,
     uploadFile,
     downloadFile,
+    batchDownloadFiles,
     deleteFile,
   };
 };
