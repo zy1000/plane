@@ -24,6 +24,8 @@ import { BaseIssuesStore } from "../helpers/base-issues.store";
 import type { IIssueRootStore } from "../root.store";
 import type { IProfileIssuesFilter } from "./filter.store";
 
+const DEFECT_TYPE_CATEGORY = "缺陷";
+
 export interface IProfileIssues extends IBaseIssuesStore {
   // observable
   currentView: TProfileViews;
@@ -149,7 +151,21 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
       if (this.currentView === "assigned") params = { ...params, assignees: userId };
       else if (this.currentView === "created") params = { ...params, created_by: userId };
       else if (this.currentView === "subscribed") params = { ...params, subscriber: userId };
-      else if (this.currentView === "overdue") {
+      else if (this.currentView === "defects") {
+        params = {
+          ...params,
+          assignees: userId,
+          type_category: DEFECT_TYPE_CATEGORY,
+          state_group: "backlog,unstarted,started",
+        };
+      } else if (this.currentView === "work_items") {
+        params = {
+          ...params,
+          assignees: userId,
+          exclude_type_category: DEFECT_TYPE_CATEGORY,
+          state_group: "backlog,unstarted,started",
+        };
+      } else if (this.currentView === "overdue") {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split("T")[0];
@@ -211,7 +227,21 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
       if (this.currentView === "assigned") params = { ...params, assignees: userId };
       else if (this.currentView === "created") params = { ...params, created_by: userId };
       else if (this.currentView === "subscribed") params = { ...params, subscriber: userId };
-      else if (this.currentView === "overdue") {
+      else if (this.currentView === "defects") {
+        params = {
+          ...params,
+          assignees: userId,
+          type_category: DEFECT_TYPE_CATEGORY,
+          state_group: "backlog,unstarted,started",
+        };
+      } else if (this.currentView === "work_items") {
+        params = {
+          ...params,
+          assignees: userId,
+          exclude_type_category: DEFECT_TYPE_CATEGORY,
+          state_group: "backlog,unstarted,started",
+        };
+      } else if (this.currentView === "overdue") {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split("T")[0];

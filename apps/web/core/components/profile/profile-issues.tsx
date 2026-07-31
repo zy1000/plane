@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 import useSWR from "swr";
 // plane imports
 import { ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
+import type { TProfileViews } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 // components
 import { ProfileIssuesKanBanLayout } from "@/components/issues/issue-layouts/kanban/roots/profile-issues-root";
@@ -22,7 +23,7 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
 
 type Props = {
-  type: "assigned" | "subscribed" | "created" | "overdue";
+  type: TProfileViews;
 };
 
 export const ProfileIssuesPage = observer(function ProfileIssuesPage(props: Props) {

@@ -24,6 +24,7 @@ from plane.db.models import (
 CLOSED_ISSUE_STATE_GROUPS = ("completed", "cancelled")
 CLOSED_CYCLE_STATUSES = (Cycle.Status.COMPLETED, Cycle.Status.CANCELLED, "completed", "cancelled")
 CLOSED_RELEASE_STATUSES = (ReleaseStatus.COMPLETED, ReleaseStatus.CANCELLED)
+DEFECT_TYPE_CATEGORY_NAME = "缺陷"
 
 
 PROFILE_METRIC_KEYS = frozenset(
@@ -43,6 +44,8 @@ PROFILE_METRIC_KEYS = frozenset(
         "open_assigned_issues",
         "open_created_issues",
         "open_subscribed_issues",
+        "open_defect_issues",
+        "open_assigned_non_defect_issues",
     }
 )
 
@@ -59,6 +62,8 @@ ISSUE_PROFILE_METRICS = frozenset(
         "open_assigned_issues",
         "open_created_issues",
         "open_subscribed_issues",
+        "open_defect_issues",
+        "open_assigned_non_defect_issues",
     }
 )
 
@@ -146,6 +151,16 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
         queryset = _open_issue_queryset(queryset)
         if metric == "open_assigned_issues":
             return queryset.select_related("project", "state").distinct()
+
+        if metric == "open_defect_issues":
+            return queryset.filter(type__category__name=DEFECT_TYPE_CATEGORY_NAME).select_related(
+                "project", "state"
+            ).distinct()
+
+        if metric == "open_assigned_non_defect_issues":
+            return queryset.exclude(type__category__name=DEFECT_TYPE_CATEGORY_NAME).select_related(
+                "project", "state"
+            ).distinct()
 
         if metric == "today_pending_issues":
             queryset = queryset.filter(target_date__isnull=False, target_date__lte=today)

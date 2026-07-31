@@ -14,6 +14,7 @@ class WorkspaceUserMetricQuerySerializer(serializers.Serializer):
     review_id = serializers.UUIDField(required=False)
     page = serializers.IntegerField(default=1, min_value=1)
     page_size = serializers.IntegerField(default=20, min_value=1, max_value=100)
+    ordering = serializers.ChoiceField(choices=("-created_at", "target_date"), default="-created_at", required=False)
 
     def validate(self, attrs):
         metric = self.context["metric"]
@@ -62,6 +63,8 @@ class WorkspaceUserMetricItemSerializer(serializers.Serializer):
             "open_assigned_issues",
             "open_created_issues",
             "open_subscribed_issues",
+            "open_defect_issues",
+            "open_assigned_non_defect_issues",
         }:
             target_state = None
             if metric == "pending_approval_issues" and getattr(instance, "approval_to_state_id", None):

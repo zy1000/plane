@@ -88,6 +88,8 @@ export type TIssueParams =
   | "cursor"
   | "per_page"
   | "issue_type"
+  | "type_category"
+  | "exclude_type_category"
   | "layout"
   | "expand"
   | "scope"

@@ -340,6 +340,17 @@ def filter_type_name(params, issue_filter, method, prefix=""):
     return issue_filter
 
 
+def filter_type_category(params, issue_filter, method, prefix=""):
+    if method == "GET":
+        category_names = [item for item in params.get("type_category").split(",") if item]
+        if category_names:
+            issue_filter[f"{prefix}type__category__name__in"] = category_names
+    else:
+        if params.get("type_category", None) and len(params.get("type_category")):
+            issue_filter[f"{prefix}type__category__name__in"] = params.get("type_category")
+    return issue_filter
+
+
 def filter_project(params, issue_filter, method, prefix=""):
     if method == "GET":
         projects = [item for item in params.get("project").split(",") if item != "null"]
@@ -485,6 +496,8 @@ def issue_filters(query_params, method, prefix=""):
         # 新增：按 Issue.type 外键过滤
         "type_id": filter_type_id,
         "type__name": filter_type_name,
+        # 按 IssueTypeCategory.name 过滤（如：缺陷）
+        "type_category": filter_type_category,
         "project": filter_project,
         "cycle": filter_cycle,
         "module": filter_module,

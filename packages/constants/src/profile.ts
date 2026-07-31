@@ -24,6 +24,18 @@ export const PROFILE_ADMINS_TAB = [
     selected: "/assigned/",
   },
   {
+    key: "work_items",
+    route: "work_items",
+    i18n_label: "profile.tabs.work_items",
+    selected: "/work_items/",
+  },
+  {
+    key: "defects",
+    route: "defects",
+    i18n_label: "profile.tabs.defects",
+    selected: "/defects/",
+  },
+  {
     key: "created",
     route: "created",
     i18n_label: "profile.tabs.created",

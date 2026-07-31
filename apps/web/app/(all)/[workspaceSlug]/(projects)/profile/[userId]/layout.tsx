@@ -51,9 +51,19 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
   const profileBasePath = `/${workspaceSlug}/profile/${userId}`;
   const isSummaryTab = pathname === `${profileBasePath}/` || pathname === profileBasePath;
   const isAuthorizedPath =
-    pathname.includes("assigned") || pathname.includes("created") || pathname.includes("subscribed") || pathname.includes("overdue");
+    pathname.includes("assigned") ||
+    pathname.includes("created") ||
+    pathname.includes("subscribed") ||
+    pathname.includes("overdue") ||
+    pathname.includes("work_items") ||
+    pathname.includes("defects");
   const isIssuesTab =
-    pathname.includes("assigned") || pathname.includes("created") || pathname.includes("subscribed") || pathname.includes("overdue");
+    pathname.includes("assigned") ||
+    pathname.includes("created") ||
+    pathname.includes("subscribed") ||
+    pathname.includes("overdue") ||
+    pathname.includes("work_items") ||
+    pathname.includes("defects");
 
   const tabsList = isAuthorized ? [...PROFILE_VIEWER_TAB, ...PROFILE_ADMINS_TAB] : PROFILE_VIEWER_TAB;
   const currentTab = tabsList.find((tab) => pathname === `/${workspaceSlug}/profile/${userId}${tab.selected}`);

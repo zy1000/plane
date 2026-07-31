@@ -161,8 +161,10 @@ export interface IUserProfileData {
   created_issues: number;
   high_priority_pending_issues: number;
   open_assigned_issues: number;
+  open_assigned_non_defect_issues: number;
   open_created_issues: number;
   open_subscribed_issues: number;
+  open_defect_issues: number;
   overdue_issues: number;
   pending_issues: number;
   pending_approval_issues: number;
@@ -193,7 +195,9 @@ export type TProfileMetricKey =
   | "subscribed_issues"
   | "open_assigned_issues"
   | "open_created_issues"
-  | "open_subscribed_issues";
+  | "open_subscribed_issues"
+  | "open_defect_issues"
+  | "open_assigned_non_defect_issues";
 
 export type TProfileMetricTreeNodeType = "project" | "plan" | "review";
 
@@ -324,7 +328,7 @@ export interface IUserEmailNotificationSettings {
   issue_completed: boolean;
 }
 
-export type TProfileViews = "assigned" | "created" | "subscribed" | "overdue";
+export type TProfileViews = "assigned" | "created" | "subscribed" | "overdue" | "work_items" | "defects";
 
 export type TPublicMember = {
   id: string;

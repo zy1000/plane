@@ -10,11 +10,11 @@ import { useTranslation } from "@plane/i18n";
 import { ContentWrapper } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
-import { ProfilePriorityDistribution } from "@/components/profile/overview/priority-distribution";
+import { ProfileAssignedWorkLists } from "@/components/profile/overview/assigned-work-lists";
+import { ProfileFocusMetrics } from "@/components/profile/overview/focus-metrics";
 import { ProfileProjectContribution } from "@/components/profile/overview/project-contribution";
-import { ProfileSummaryProgress } from "@/components/profile/overview/summary-progress";
 import { ProfileSummarySignals } from "@/components/profile/overview/summary-signals";
-import { ProfileStats } from "@/components/profile/overview/stats";
+import { ProfileWorkloadOverview } from "@/components/profile/overview/workload-overview";
 // constants
 import { USER_PROFILE_DATA, USER_PROFILE_PROJECT_SEGREGATION } from "@/constants/fetch-keys";
 // services
@@ -38,11 +38,9 @@ export default function ProfileOverviewPage({ params }: Route.ComponentProps) {
       <PageHead title={t("profile.page_label")} />
       <ContentWrapper className="space-y-7">
         <ProfileSummarySignals userProfile={userProfile} />
-        <ProfileStats userProfile={userProfile} />
-        <div className="grid grid-cols-1 items-stretch gap-7 xl:grid-cols-2">
-          <ProfileSummaryProgress userProfile={userProfile} />
-          <ProfilePriorityDistribution userProfile={userProfile} />
-        </div>
+        <ProfileFocusMetrics userProfile={userProfile} />
+        <ProfileAssignedWorkLists userProfile={userProfile} />
+        <ProfileWorkloadOverview userProfile={userProfile} />
         <ProfileProjectContribution userProjectsData={userProjectsData} />
       </ContentWrapper>
     </>

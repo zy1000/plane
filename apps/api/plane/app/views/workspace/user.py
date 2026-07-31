@@ -162,6 +162,13 @@ class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
         # Apply legacy filters
         issue_queryset = issue_queryset.filter(**filters)
 
+        # Exclude issue type categories (e.g. 排除“缺陷”分类，仅保留普通工作项)
+        exclude_type_category = request.GET.get("exclude_type_category")
+        if exclude_type_category:
+            category_names = [name for name in exclude_type_category.split(",") if name]
+            if category_names:
+                issue_queryset = issue_queryset.exclude(type__category__name__in=category_names)
+
         # Total count queryset
         total_issue_queryset = copy.deepcopy(issue_queryset)
 
@@ -551,6 +558,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
                 "open_assigned_issues": metric_counts["open_assigned_issues"],
                 "open_created_issues": metric_counts["open_created_issues"],
                 "open_subscribed_issues": metric_counts["open_subscribed_issues"],
+                "open_defect_issues": metric_counts["open_defect_issues"],
+                "open_assigned_non_defect_issues": metric_counts["open_assigned_non_defect_issues"],
                 "overdue_issues": metric_counts["overdue_issues"],
                 "today_pending_issues": metric_counts["today_pending_issues"],
                 "week_pending_issues": metric_counts["week_pending_issues"],
@@ -605,7 +614,12 @@ class WorkspaceUserProfileMetricItemsEndpoint(BaseAPIView):
             project_id=params.get("project_id"),
             plan_id=params.get("plan_id"),
             review_id=params.get("review_id"),
-        ).order_by("-created_at")
+        )
+        # 到期日升序（逾期/今天到期优先，未排期置底），默认按创建时间倒序
+        if params.get("ordering") == "target_date":
+            queryset = queryset.order_by(F("target_date").asc(nulls_last=True), "-created_at")
+        else:
+            queryset = queryset.order_by("-created_at")
 
         total_count = queryset.count()
         start = (params["page"] - 1) * params["page_size"]
