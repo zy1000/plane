@@ -4,20 +4,18 @@
  * See the LICENSE file for details.
  */
 
+import type { UIEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Bug, ChevronRight, ClipboardList } from "lucide-react";
-import useSWR from "swr";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { PriorityIcon } from "@plane/propel/icons";
 import type { IProfileMetricWorkItem, IUserProfileData, TProfileMetricKey } from "@plane/types";
 import { Card, ECardVariant, Loader } from "@plane/ui";
 import { cn, generateWorkItemLink, getDate, renderFormattedDate } from "@plane/utils";
-// constants
-import { USER_PROFILE_DEFECTS_PREVIEW, USER_PROFILE_WORK_ITEMS_PREVIEW } from "@/constants/fetch-keys";
-// services
-import { UserService } from "@/services/user.service";
+// hooks
+import { useProfileAssignedWorkList } from "@/hooks/use-profile-assigned-work-list";
 
 type Props = {
   userProfile: IUserProfileData | undefined;
@@ -25,14 +23,13 @@ type Props = {
 
 type TListVariant = "defects" | "work_items";
 
-const PREVIEW_PAGE_SIZE = 5;
+/** 距离底部小于该值时预加载下一页 */
+const LOAD_MORE_THRESHOLD = 80;
 
 const VARIANT_TO_METRIC: Record<TListVariant, TProfileMetricKey> = {
   defects: "open_defect_issues",
   work_items: "open_assigned_non_defect_issues",
 };
-
-const userService = new UserService();
 
 function DueDateLabel({ targetDate }: { targetDate: string | null }) {
   const { t } = useTranslation();
@@ -100,7 +97,9 @@ function WorkItemRow({ item, workspaceSlug }: { item: IProfileMetricWorkItem; wo
 function WorkListCard({
   emptyText,
   excludeHint,
+  isLoadingMore,
   items,
+  onLoadMore,
   title,
   totalCount,
   userId,
@@ -109,7 +108,9 @@ function WorkListCard({
 }: {
   emptyText: string;
   excludeHint?: string;
+  isLoadingMore: boolean;
   items: IProfileMetricWorkItem[] | undefined;
+  onLoadMore: () => void;
   title: string;
   totalCount: number;
   userId: string;
@@ -119,6 +120,11 @@ function WorkListCard({
   const { t } = useTranslation();
   const isDefects = variant === "defects";
   const HeaderIcon = isDefects ? Bug : ClipboardList;
+
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const { clientHeight, scrollHeight, scrollTop } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < LOAD_MORE_THRESHOLD) onLoadMore();
+  };
 
   return (
     <Card variant={ECardVariant.WITHOUT_SHADOW} className="flex flex-col overflow-hidden p-0">
@@ -155,16 +161,21 @@ function WorkListCard({
           <Loader.Item width="100%" height="100%" />
         </Loader>
       ) : items.length > 0 ? (
-        <>
-          <ul className="flex-1">
+        <div
+          className="vertical-scrollbar scrollbar-sm max-h-[420px] min-h-0 flex-1 overflow-y-auto"
+          onScroll={handleScroll}
+        >
+          <ul>
             {items.map((item) => (
               <WorkItemRow key={item.id} item={item} workspaceSlug={workspaceSlug} />
             ))}
           </ul>
-          <p className="border-t border-subtle px-5 py-2.5 text-center text-11 text-placeholder">
-            {t("profile.stats.assigned_lists.preview_hint", { count: PREVIEW_PAGE_SIZE })}
-          </p>
-        </>
+          {isLoadingMore && (
+            <p className="px-5 py-2.5 text-center text-11 text-placeholder">
+              {t("profile.stats.assigned_lists.loading_more")}
+            </p>
+          )}
+        </div>
       ) : (
         <div className="grid h-[260px] flex-1 place-items-center px-5">
           <p className="text-12 text-placeholder">{emptyText}</p>
@@ -178,26 +189,16 @@ export function ProfileAssignedWorkLists({ userProfile }: Props) {
   const { workspaceSlug, userId } = useParams();
   const { t } = useTranslation();
 
-  const { data: defectPreview } = useSWR(
-    workspaceSlug && userId ? USER_PROFILE_DEFECTS_PREVIEW(String(workspaceSlug), String(userId)) : null,
-    () =>
-      userService.getUserProfileMetricItems(String(workspaceSlug), String(userId), VARIANT_TO_METRIC.defects, {
-        page: 1,
-        page_size: PREVIEW_PAGE_SIZE,
-        ordering: "target_date",
-      }),
-    { revalidateOnFocus: false }
-  );
-  const { data: workItemPreview } = useSWR(
-    workspaceSlug && userId ? USER_PROFILE_WORK_ITEMS_PREVIEW(String(workspaceSlug), String(userId)) : null,
-    () =>
-      userService.getUserProfileMetricItems(String(workspaceSlug), String(userId), VARIANT_TO_METRIC.work_items, {
-        page: 1,
-        page_size: PREVIEW_PAGE_SIZE,
-        ordering: "target_date",
-      }),
-    { revalidateOnFocus: false }
-  );
+  const defectList = useProfileAssignedWorkList({
+    metric: VARIANT_TO_METRIC.defects,
+    userId: userId ? String(userId) : undefined,
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+  });
+  const workItemList = useProfileAssignedWorkList({
+    metric: VARIANT_TO_METRIC.work_items,
+    userId: userId ? String(userId) : undefined,
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+  });
 
   if (!userProfile) {
     return (
@@ -210,22 +211,17 @@ export function ProfileAssignedWorkLists({ userProfile }: Props) {
     );
   }
 
-  const defectItems = defectPreview?.data.filter(
-    (item): item is IProfileMetricWorkItem => item.entity_type === "work_item"
-  );
-  const workItems = workItemPreview?.data.filter(
-    (item): item is IProfileMetricWorkItem => item.entity_type === "work_item"
-  );
-
   return (
     <div className="space-y-2">
       <h3 className="text-16 font-medium">{t("profile.stats.assigned_lists.title")}</h3>
       <div className="grid grid-cols-1 gap-7 xl:grid-cols-2">
         <WorkListCard
           emptyText={t("profile.stats.assigned_lists.empty_defects")}
-          items={defectItems}
+          isLoadingMore={defectList.isLoadingMore}
+          items={defectList.items}
+          onLoadMore={defectList.loadMore}
           title={t("profile.stats.assigned_lists.defects_title")}
-          totalCount={defectPreview?.count ?? userProfile.open_defect_issues}
+          totalCount={defectList.items ? defectList.count : userProfile.open_defect_issues}
           userId={String(userId)}
           variant="defects"
           workspaceSlug={String(workspaceSlug)}
@@ -233,9 +229,11 @@ export function ProfileAssignedWorkLists({ userProfile }: Props) {
         <WorkListCard
           emptyText={t("profile.stats.assigned_lists.empty_work_items")}
           excludeHint={t("profile.stats.assigned_lists.work_items_exclude_hint")}
-          items={workItems}
+          isLoadingMore={workItemList.isLoadingMore}
+          items={workItemList.items}
+          onLoadMore={workItemList.loadMore}
           title={t("profile.stats.assigned_lists.work_items_title")}
-          totalCount={workItemPreview?.count ?? userProfile.open_assigned_non_defect_issues}
+          totalCount={workItemList.items ? workItemList.count : userProfile.open_assigned_non_defect_issues}
           userId={String(userId)}
           variant="work_items"
           workspaceSlug={String(workspaceSlug)}

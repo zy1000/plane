@@ -1908,7 +1908,7 @@ export default {
         work_items_title: "My work items",
         work_items_exclude_hint: "excl. defects",
         view_all: "View all",
-        preview_hint: "Showing top {count} by due date",
+        loading_more: "Loading more…",
         empty_defects: "No defects assigned to you",
         empty_work_items: "No work items assigned to you",
         unscheduled: "Unscheduled",

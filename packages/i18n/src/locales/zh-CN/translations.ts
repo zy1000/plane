@@ -2056,7 +2056,7 @@ export default {
         work_items_title: "我负责的工作项",
         work_items_exclude_hint: "不含缺陷",
         view_all: "查看全部",
-        preview_hint: "仅显示按到期日排序的前 {count} 条",
+        loading_more: "正在加载更多…",
         empty_defects: "当前没有分配给你的缺陷",
         empty_work_items: "当前没有分配给你的工作项",
         unscheduled: "未排期",
