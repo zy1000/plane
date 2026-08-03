@@ -10,7 +10,6 @@ import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProject, IUserLite, IWorkspace } from "@plane/types";
@@ -19,7 +18,8 @@ import { Loader, ToggleSwitch } from "@plane/ui";
 import { PROJECT_DETAILS } from "@/constants/fetch-keys";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser } from "@/hooks/store/user";
+import { useInstanceAdminStatus } from "@/hooks/use-instance-admin-status";
 // local imports
 import { MemberSelect } from "./member-select";
 
@@ -58,16 +58,16 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { data: currentUser } = useUser();
+  const { isInstanceAdmin } = useInstanceAdminStatus();
 
   const { currentProjectDetails, fetchProjectDetails, updateProject } = useProject();
   // derived values
-  const isAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    currentProjectDetails?.id
-  );
+  const projectLeadId =
+    (currentProjectDetails?.project_lead as IUserLite | null)?.id ?? (currentProjectDetails?.project_lead as string);
+  const isProjectLead = !!currentUser?.id && currentUser.id === projectLeadId;
+  // 仅项目负责人本人与实例管理员（超级管理员）可修改
+  const canEdit = isProjectLead || isInstanceAdmin;
   // form info
   const { reset, control } = useForm<IProject>({ defaultValues });
   // fetching user members
@@ -150,7 +150,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
                 onChange={(val: string) => {
                   submitChanges({ project_lead: val });
                 }}
-                isDisabled={!isAdmin}
+                isDisabled={!canEdit}
               />
             )}
           />
@@ -171,7 +171,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
                 onChange={(val: string) => {
                   submitChanges({ default_assignee: val });
                 }}
-                isDisabled={!isAdmin}
+                isDisabled={!canEdit}
               />
             )}
           />
@@ -190,7 +190,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
             <ToggleSwitch
               value={!!currentProjectDetails?.guest_view_all_features}
               onChange={() => toggleGuestViewAllIssues(!currentProjectDetails?.guest_view_all_features)}
-              disabled={!isAdmin}
+              disabled={!canEdit}
               size="sm"
             />
           </div>
