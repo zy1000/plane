@@ -213,35 +213,21 @@ def get_requirement_eligible_user_ids(
     return workspace_member_ids
 
 
-def resolve_field_source(requirement):
-    """返回真正持有字段定义的需求。
-
-    标准需求不拷贝字段，而是实时引用所属标准库选定的模板；其余需求持有自己的
-    RequirementField。所有读字段的路径都必须经过这里，才能让明细校验、搜索筛选、
-    字段树输出对两种来源一视同仁。
-    """
-    if requirement.library_id:
-        return requirement.library.template
-    return requirement
-
-
 def uses_change_flow(requirement):
     """是否走「工作副本 + 变更审批 + 版本」流程。
 
-    只有产品/项目需求走；工作区模板与标准需求都直接编辑直接生效。
+    只有产品/项目需求走；工作区模板直接编辑直接生效。
     """
-    return not requirement.is_template and not requirement.library_id
+    return not requirement.is_template
 
 
 def details_affected_by_fields(requirement):
     """字段变更会波及的明细行。
 
-    模板字段被标准库实时引用，所以改模板字段要连带清理引用它的全部标准需求明细。
+    模板字段被标准库实时引用，所以改模板字段要连带清理引用它的全部库内条目。
     """
     if requirement.is_template:
-        return RequirementDetail.objects.filter(
-            requirement__library__template=requirement
-        )
+        return RequirementDetail.objects.filter(library__template=requirement)
     return RequirementDetail.objects.filter(requirement=requirement)
 
 
@@ -315,16 +301,29 @@ def replace_requirement_approvers(*, requirement, approver_ids, actor=None):
         requirement._prefetched_objects_cache.pop("approvers", None)
 
 
-def get_requirement_field_specs(requirement):
+def _field_specs_of(owner):
     return field_specs_from_models(
-        resolve_field_source(requirement)
-        .fields.select_related("parent_field")
-        .order_by("sort_order", "created_at", "id")
+        owner.fields.select_related("parent_field").order_by(
+            "sort_order", "created_at", "id"
+        )
     )
+
+
+def get_requirement_field_specs(requirement):
+    return _field_specs_of(requirement)
 
 
 def serialize_requirement_field_tree(requirement):
     return field_tree_from_specs(get_requirement_field_specs(requirement))
+
+
+def get_library_field_specs(library):
+    """标准库的字段实时引用所选模板，不拷贝。"""
+    return _field_specs_of(library.template)
+
+
+def serialize_library_field_tree(library):
+    return field_tree_from_specs(get_library_field_specs(library))
 
 
 def _clean_detail_data_for_fields(data, removed_fields):
@@ -620,6 +619,30 @@ def insert_requirement_detail(
     )
 
 
+def insert_library_item(
+    *,
+    library,
+    data,
+    actor=None,
+    before_id=None,
+    after_id=None,
+):
+    return insert_detail_row(
+        model=RequirementDetail,
+        scope={"library": library},
+        new_row=lambda data, sort_order, actor: RequirementDetail(
+            library=library,
+            data=data,
+            sort_order=sort_order,
+            created_by=actor,
+        ),
+        data=data,
+        actor=actor,
+        before_id=before_id,
+        after_id=after_id,
+    )
+
+
 def save_detail_row_batch(
     *,
     model,
@@ -762,6 +785,30 @@ def save_requirement_detail_batch(
         scope={"requirement": requirement},
         new_row=lambda data, sort_order, actor: RequirementDetail(
             requirement=requirement,
+            data=data,
+            sort_order=sort_order,
+            created_by=actor,
+        ),
+        creates=creates,
+        updates=updates,
+        deletes=deletes,
+        actor=actor,
+    )
+
+
+def save_library_item_batch(
+    *,
+    library,
+    creates,
+    updates,
+    deletes,
+    actor=None,
+):
+    return save_detail_row_batch(
+        model=RequirementDetail,
+        scope={"library": library},
+        new_row=lambda data, sort_order, actor: RequirementDetail(
+            library=library,
             data=data,
             sort_order=sort_order,
             created_by=actor,

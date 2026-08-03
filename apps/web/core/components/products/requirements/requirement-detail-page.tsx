@@ -442,7 +442,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         ) : activeTab === "data" ? (
           <RequirementDetailGrid
             workspaceSlug={workspaceSlug}
-            requirementId={requirementId ?? ""}
+            entityId={requirementId ?? ""}
             readOnly={!isEditable}
             expectedUpdatedAt={detailsStore.configuration?.requirement.updated_at}
             fields={detailsStore.configuration?.fields ?? []}

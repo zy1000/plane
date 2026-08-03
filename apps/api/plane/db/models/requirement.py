@@ -17,7 +17,6 @@ class RequirementScope(models.TextChoices):
     """scope 不落库，仅作为 scope @property 的取值与外部筛选常量。"""
 
     WORKSPACE = "workspace", "工作区"
-    LIBRARY = "library", "标准库"
     PRODUCT = "product", "产品"
     PROJECT = "project", "项目"
 
@@ -91,8 +90,9 @@ class RequirementChangeRequestKind(models.TextChoices):
 # 工作区模板即 is_template=True 的需求，只定义字段、不持有明细；在产品/项目中创建
 # 需求时可通过 template 引用某个模板并复制其字段定义。
 #
-# 标准需求（library 非空）是第三种作用域：字段不拷贝，而是实时引用所属标准库选定
-# 的模板（见 plane.utils.requirement.resolve_field_source），明细挂在自己身上。
+# 需求标准库（RequirementLibrary）直接持有条目：条目就是 library 非空的
+# RequirementDetail 行，字段不拷贝而是实时引用库所选的工作区模板。因此一个
+# RequirementDetail 要么属于某个需求，要么属于某个标准库，二者必居其一。
 
 
 class Requirement(BaseModel):
@@ -117,14 +117,6 @@ class Requirement(BaseModel):
         null=True,
         blank=True,
         verbose_name="所属项目",
-    )
-    library = models.ForeignKey(
-        "RequirementLibrary",
-        on_delete=models.CASCADE,
-        related_name="requirements",
-        null=True,
-        blank=True,
-        verbose_name="所属需求标准库",
     )
     is_template = models.BooleanField(
         default=False, db_index=True, verbose_name="是否为工作区模板"
@@ -177,32 +169,18 @@ class Requirement(BaseModel):
         db_table = "requirements"
         ordering = ("sort_order", "created_at", "id")
         constraints = [
-            # 作用域：模板不归属标准库/产品/项目；非模板必须且只能归属其中一个
+            # 作用域：模板不归属产品/项目；非模板必须且只能归属其中一个
             models.CheckConstraint(
                 check=Q(
                     is_template=True,
-                    library__isnull=True,
                     product__isnull=True,
                     project__isnull=True,
                 )
                 | (
                     Q(is_template=False)
                     & (
-                        Q(
-                            library__isnull=False,
-                            product__isnull=True,
-                            project__isnull=True,
-                        )
-                        | Q(
-                            library__isnull=True,
-                            product__isnull=False,
-                            project__isnull=True,
-                        )
-                        | Q(
-                            library__isnull=True,
-                            product__isnull=True,
-                            project__isnull=False,
-                        )
+                        Q(product__isnull=False, project__isnull=True)
+                        | Q(product__isnull=True, project__isnull=False)
                     )
                 ),
                 name="requirement_scope_by_template",
@@ -234,8 +212,6 @@ class Requirement(BaseModel):
     def scope(self):
         if self.is_template:
             return RequirementScope.WORKSPACE
-        if self.library_id:
-            return RequirementScope.LIBRARY
         if self.product_id:
             return RequirementScope.PRODUCT
         return RequirementScope.PROJECT
@@ -248,23 +224,15 @@ class Requirement(BaseModel):
                 raise ValidationError({"template": "需求不能以自身作为模板。"})
             if self.is_template:
                 raise ValidationError({"template": "工作区模板不能再引用其他模板。"})
-            if self.library_id:
-                raise ValidationError(
-                    {"template": "标准需求的字段来自标准库所选模板，不能再引用模板。"}
-                )
             template = self.template
             if not template.is_template:
                 raise ValidationError({"template": "来源必须是工作区模板。"})
             if self.workspace_id != template.workspace_id:
                 raise ValidationError({"template": "只能导入当前工作区内的需求模板。"})
-        if self.library_id and self.workspace_id != self.library.workspace_id:
-            raise ValidationError({"library": "只能归属当前工作区内的需求标准库。"})
 
     def save(self, *args, **kwargs):
         if not self.workspace_id:
-            if self.library_id:
-                self.workspace_id = self.library.workspace_id
-            elif self.product_id:
+            if self.product_id:
                 self.workspace_id = self.product.workspace_id
             elif self.project_id:
                 self.workspace_id = self.project.workspace_id
@@ -272,10 +240,10 @@ class Requirement(BaseModel):
 
 
 class RequirementLibrary(BaseModel):
-    """需求标准库：选定一个工作区模板，库内的标准需求共用该模板的字段定义。
+    """需求标准库：选定一个工作区模板，库内的条目共用该模板的字段定义。
 
-    字段是引用而非拷贝，所以同一个库里的标准需求永远保持同一套字段；模板改字段
-    会立刻反映到库内所有标准需求上（明细里失效的值由 sync_requirement_fields 清理）。
+    字段是引用而非拷贝，所以同一个库里的条目永远保持同一套字段；模板改字段会立刻
+    反映到库内所有条目上（失效的值由 sync_requirement_fields 清理）。
     """
 
     workspace = models.ForeignKey(
@@ -368,9 +336,7 @@ class RequirementField(BaseModel):
                 raise ValidationError({"parent_field": "字段不能以自身作为父字段。"})
             parent_field = self.parent_field
             if parent_field.requirement_id != self.requirement_id:
-                raise ValidationError(
-                    {"parent_field": "父字段必须属于同一个需求。"}
-                )
+                raise ValidationError({"parent_field": "父字段必须属于同一个需求。"})
             if parent_field.parent_field_id:
                 raise ValidationError({"parent_field": "表单字段仅允许一层子字段。"})
             if parent_field.field_type != RequirementFieldType.FORM:
@@ -391,11 +357,28 @@ class RequirementField(BaseModel):
 
 
 class RequirementDetail(BaseModel):
+    """一行明细数据：要么是某个需求的明细行，要么是某个标准库的条目。
+
+    两种归属共用同一张表，因为行结构与读写语义完全一致（data / sort_order /
+    version）；区别只在字段定义从哪来 —— 需求读自己的 RequirementField，标准库
+    读所选模板的。
+    """
+
     requirement = models.ForeignKey(
         Requirement,
         on_delete=models.CASCADE,
         related_name="details",
+        null=True,
+        blank=True,
         verbose_name="所属需求",
+    )
+    library = models.ForeignKey(
+        "RequirementLibrary",
+        on_delete=models.CASCADE,
+        related_name="items",
+        null=True,
+        blank=True,
+        verbose_name="所属需求标准库",
     )
     data = models.JSONField(default=dict, blank=True, verbose_name="明细数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
@@ -408,11 +391,22 @@ class RequirementDetail(BaseModel):
             models.Index(
                 fields=["requirement", "sort_order"],
                 name="req_detail_requirement_sort",
+            ),
+            models.Index(
+                fields=["library", "sort_order"],
+                name="req_detail_library_sort",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(requirement__isnull=False, library__isnull=True)
+                | Q(requirement__isnull=True, library__isnull=False),
+                name="requirement_detail_owner_exactly_one",
             )
         ]
 
     def __str__(self):
-        return f"{self.requirement_id} / {self.id}"
+        return f"{self.requirement_id or self.library_id} / {self.id}"
 
 
 class RequirementDraft(BaseModel):
@@ -616,9 +610,7 @@ class RequirementChangeRequest(BaseModel):
         verbose_name="审批状态",
     )
     reason = models.TextField(blank=True, default="", verbose_name="变更原因")
-    completed_at = models.DateTimeField(
-        null=True, blank=True, verbose_name="完成时间"
-    )
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="完成时间")
 
     class Meta:
         db_table = "requirement_change_requests"
@@ -658,12 +650,10 @@ class RequirementChangeRequest(BaseModel):
 
     def clean(self):
         super().clean()
-        # 跨表规则：工作区模板与标准需求都直接编辑，不通过变更审批流程修改
-        if self.requirement_id and (
-            self.requirement.is_template or self.requirement.library_id
-        ):
+        # 跨表规则：工作区模板直接编辑，不通过变更审批流程修改
+        if self.requirement_id and self.requirement.is_template:
             raise ValidationError(
-                {"requirement": "工作区模板与标准需求不通过变更审批流程修改。"}
+                {"requirement": "工作区模板不通过变更审批流程修改。"}
             )
 
     def save(self, *args, **kwargs):
@@ -701,9 +691,7 @@ class RequirementChangeItem(BaseModel):
         verbose_name="变更类型",
     )
     target_id = models.UUIDField(null=True, blank=True, verbose_name="目标记录 ID")
-    before_snapshot = models.JSONField(
-        null=True, blank=True, verbose_name="变更前快照"
-    )
+    before_snapshot = models.JSONField(null=True, blank=True, verbose_name="变更前快照")
     proposed_snapshot = models.JSONField(
         null=True, blank=True, verbose_name="拟变更快照"
     )

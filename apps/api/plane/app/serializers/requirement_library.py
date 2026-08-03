@@ -15,7 +15,7 @@ class RequirementLibrarySerializer(BaseSerializer):
     name = serializers.CharField(max_length=255, required=False)
     description = serializers.CharField(required=False, allow_blank=True)
     field_count = serializers.SerializerMethodField()
-    requirement_count = serializers.SerializerMethodField()
+    item_count = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementLibrary
@@ -27,7 +27,7 @@ class RequirementLibrarySerializer(BaseSerializer):
             "name",
             "description",
             "field_count",
-            "requirement_count",
+            "item_count",
             "is_active",
             "sort_order",
             "created_at",
@@ -40,7 +40,7 @@ class RequirementLibrarySerializer(BaseSerializer):
             "workspace_id",
             "template_detail",
             "field_count",
-            "requirement_count",
+            "item_count",
             "created_at",
             "updated_at",
             "created_by",
@@ -56,11 +56,11 @@ class RequirementLibrarySerializer(BaseSerializer):
             return annotated_count
         return obj.template.fields.count()
 
-    def get_requirement_count(self, obj):
-        annotated_count = getattr(obj, "requirement_count", None)
+    def get_item_count(self, obj):
+        annotated_count = getattr(obj, "item_count", None)
         if annotated_count is not None:
             return annotated_count
-        return obj.requirements.count()
+        return obj.items.count()
 
     def validate_name(self, value):
         name = value.strip()
@@ -73,7 +73,7 @@ class RequirementLibrarySerializer(BaseSerializer):
         if workspace is None:
             raise serializers.ValidationError({"workspace": "Workspace is required."})
 
-        # 库内标准需求的明细都以模板字段 ID 为 key，换模板会让存量数据全部失效
+        # 库内条目都以模板字段 ID 为 key，换模板会让存量数据全部失效
         if self.instance and "template_id" in self.initial_data:
             submitted = attrs.pop("template", None)
             if getattr(submitted, "id", None) != self.instance.template_id:

@@ -25,7 +25,7 @@ class RequirementLibraryViewSet(BaseViewSet):
             .filter(workspace__slug=self.workspace_slug)
             .select_related("workspace", "template", "created_by", "updated_by")
             .annotate(
-                requirement_count=Count("requirements", distinct=True),
+                item_count=Count("items", distinct=True),
                 field_count=Count("template__fields", distinct=True),
             )
         )
@@ -97,11 +97,11 @@ class RequirementLibraryViewSet(BaseViewSet):
                 {"error": "Requirement library not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        # 删库会级联软删库内所有标准需求，先要求清空以免误操作
-        if library.requirements.exists():
+        # 删库会级联删掉库内所有条目，先要求清空以免误操作
+        if library.items.exists():
             return Response(
                 {
-                    "error": "Remove the standard requirements in this library first.",
+                    "error": "Remove the items in this library first.",
                     "code": "REQUIREMENT_LIBRARY_NOT_EMPTY",
                 },
                 status=status.HTTP_409_CONFLICT,

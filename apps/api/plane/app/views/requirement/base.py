@@ -1,24 +1,16 @@
-import json
-
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 from rest_framework import status
-from rest_framework import serializers as drf_serializers
 from rest_framework.response import Response
 
 from plane.app.permissions.base import is_workspace_member
 from plane.app.serializers.requirement import (
     RequirementConfigurationConflict,
     RequirementConfigurationWriteSerializer,
-    RequirementDetailBatchSaveSerializer,
-    RequirementDetailCreateSerializer,
-    RequirementDetailFilterSerializer,
-    RequirementDetailSerializer,
-    RequirementDetailUpdateSerializer,
     RequirementSerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
+from plane.app.views.requirement.detail_base import BaseRequirementDetailViewSet
 from plane.app.views.requirement.mixins import (
     RequirementDraftDispatchMixin,
     resolve_detail_layer,
@@ -41,8 +33,6 @@ from plane.utils.product import (
 )
 from plane.utils.requirement import (
     RequirementDataLossError,
-    RequirementDetailBatchConflict,
-    filter_requirement_detail_ids,
     serialize_requirement_field_tree,
 )
 from plane.utils.requirement_draft import get_draft_field_tree
@@ -72,7 +62,6 @@ class RequirementViewSet(BaseViewSet):
         "is_template": ["exact"],
         "product_id": ["exact"],
         "project_id": ["exact"],
-        "library_id": ["exact"],
         "template_id": ["exact"],
         "status": ["exact", "in"],
         "owner_id": ["exact"],
@@ -91,8 +80,6 @@ class RequirementViewSet(BaseViewSet):
                 "workspace",
                 "product",
                 "project",
-                "library",
-                "library__template",
                 "template",
                 "owner",
                 "created_by",
@@ -109,10 +96,6 @@ class RequirementViewSet(BaseViewSet):
             .annotate(
                 field_count=Count("fields", distinct=True),
                 detail_count=Count("details", distinct=True),
-                # 标准需求自身没有字段，字段数要数标准库所选模板的
-                library_field_count=Count(
-                    "library__template__fields", distinct=True
-                ),
             )
         )
         workspace = Workspace.objects.filter(slug=self.workspace_slug).first()
@@ -265,7 +248,7 @@ class RequirementViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        # 标准库实时引用模板的字段，模板被引用时删掉会让库内标准需求失去字段定义
+        # 标准库实时引用模板的字段，模板被引用时删掉会让库内条目失去字段定义
         if (
             requirement.is_template
             and RequirementLibrary.objects.filter(template=requirement).exists()
@@ -286,12 +269,8 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
     def _get_requirement(self, slug, pk, *, for_update=False):
         queryset = (
             Requirement.objects.filter(workspace__slug=slug, id=pk)
-            .filter(
-                Q(is_template=True)
-                | Q(product__isnull=False)
-                | Q(library__isnull=False)
-            )
-            .select_related("workspace", "product", "library__template", "owner")
+            .filter(Q(is_template=True) | Q(product__isnull=False))
+            .select_related("workspace", "product", "owner")
         )
         if for_update:
             queryset = queryset.select_for_update(of=("self",))
@@ -313,7 +292,7 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
     def _response_payload(self, requirement, created_field_ids=None):
         requirement = (
             Requirement.objects.filter(id=requirement.id)
-            .select_related("workspace", "owner", "library__template")
+            .select_related("workspace", "owner")
             .prefetch_related(
                 Prefetch(
                     "approvers",
@@ -367,17 +346,6 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        # 标准需求的字段归标准库所选模板所有，只能在模板上改
-        if requirement.library_id:
-            return Response(
-                {
-                    "error": (
-                        "Standard requirement fields are defined by the library template."
-                    ),
-                    "code": "REQUIREMENT_FIELDS_READ_ONLY",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
         read_only = self.read_only_response(requirement)
         if read_only is not None:
             return read_only
@@ -421,336 +389,61 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
         )
 
 
-class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseViewSet):
-    model = RequirementDetail
-    serializer_class = RequirementDetailSerializer
+class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseRequirementDetailViewSet):
+    """产品需求的明细行，按需分派到正式表或工作副本。"""
 
-    def _read_layer(self, requirement):
-        return resolve_detail_layer(
-            requirement=requirement,
-            draft=self.draft_for_read(requirement),
-        )
-
-    def _write_layer(self, requirement):
-        """返回 (layer, error_response)。"""
-        read_only = self.read_only_response(requirement)
-        if read_only is not None:
-            return None, read_only
-        return (
-            resolve_detail_layer(
-                requirement=requirement,
-                draft=self.draft_for_write(requirement, self.request.user),
-            ),
-            None,
-        )
-
-    def _get_requirement(self, *, for_update=False):
-        # 模板只定义字段、不持有明细，所以明细入口只放行产品需求与标准需求
+    def resolve_owner(self, *, for_update=False):
+        # 模板只定义字段、不持有明细，所以明细入口只放行产品需求
         queryset = (
             Requirement.objects.filter(
                 id=self.kwargs.get("requirement_id"),
                 workspace__slug=self.workspace_slug,
+                product__isnull=False,
             )
-            .filter(Q(product__isnull=False) | Q(library__isnull=False))
-            .select_related("workspace", "product", "library__template")
+            .select_related("workspace", "product")
         )
         if for_update:
             queryset = queryset.select_for_update(of=("self",))
         requirement = queryset.first()
-        if (
-            requirement is not None
-            and requirement.product_id
-            and not can_view_product(self.request.user, requirement.product)
+        if requirement is not None and not can_view_product(
+            self.request.user, requirement.product
         ):
             return None
         return requirement
 
-    @staticmethod
-    def _can_write(user, requirement):
-        return not requirement.product_id or can_edit_product_requirements(
-            user, requirement.product
+    def can_write(self, owner):
+        return can_edit_product_requirements(self.request.user, owner.product)
+
+    def resolve_layer(self, owner, *, for_write):
+        if not for_write:
+            return (
+                resolve_detail_layer(
+                    requirement=owner,
+                    draft=self.draft_for_read(owner),
+                ),
+                None,
+            )
+        read_only = self.read_only_response(owner)
+        if read_only is not None:
+            return None, read_only
+        return (
+            resolve_detail_layer(
+                requirement=owner,
+                draft=self.draft_for_write(owner, self.request.user),
+            ),
+            None,
         )
+
+    def expected_updated_at(self, owner):
+        return owner.updated_at
 
     def get_queryset(self):
         return (
             RequirementDetail.objects.filter(
                 requirement_id=self.kwargs.get("requirement_id"),
                 requirement__workspace__slug=self.workspace_slug,
-            )
-            .filter(
-                Q(requirement__product__isnull=False)
-                | Q(requirement__library__isnull=False)
+                requirement__product__isnull=False,
             )
             .select_related("requirement")
             .order_by("sort_order", "created_at", "id")
-        )
-
-    def list(self, request, slug, requirement_id):
-        requirement = self._get_requirement()
-        if requirement is None:
-            return Response(
-                {"error": "Requirement not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        raw_filters = request.query_params.get("filters", "[]")
-        try:
-            filter_payload = json.loads(raw_filters)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return Response(
-                {"filters": "Filters must be a JSON array."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not isinstance(filter_payload, list):
-            return Response(
-                {"filters": "Filters must be a JSON array."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        layer = self._read_layer(requirement)
-        filter_serializer = RequirementDetailFilterSerializer(
-            data=filter_payload,
-            many=True,
-            context={"requirement": requirement, "fields": layer.fields},
-        )
-        filter_serializer.is_valid(raise_exception=True)
-        normalized_filters = [
-            {
-                "field_id": str(item["field_id"]),
-                "operator": item["operator"],
-                **({"value": item.get("value")} if "value" in item else {}),
-            }
-            for item in filter_serializer.validated_data
-        ]
-
-        queryset = layer.queryset
-        search = request.query_params.get("search", "")
-        if search.strip() or normalized_filters:
-            matching_ids = filter_requirement_detail_ids(
-                fields=layer.fields,
-                details=queryset,
-                search=search,
-                filters=normalized_filters,
-            )
-            queryset = queryset.filter(id__in=matching_ids)
-        return self.paginate(
-            request=request,
-            queryset=queryset,
-            on_results=lambda results: layer.serializer_class(
-                results,
-                many=True,
-                context=layer.serializer_context,
-            ).data,
-            default_per_page=20,
-            max_per_page=100,
-        )
-
-    def create(self, request, slug, requirement_id):
-        requirement = self._get_requirement()
-        if requirement is None:
-            return Response(
-                {"error": "Requirement not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        if not self._can_write(request.user, requirement):
-            return Response(
-                {"error": "You do not have permission to maintain this requirement."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        layer, read_only = self._write_layer(requirement)
-        if read_only is not None:
-            return read_only
-        serializer = RequirementDetailCreateSerializer(
-            data=request.data,
-            context={"requirement": requirement, "fields": layer.fields},
-        )
-        serializer.is_valid(raise_exception=True)
-        try:
-            with transaction.atomic():
-                detail = layer.insert(
-                    data=serializer.validated_data["data"],
-                    actor=request.user,
-                    before_id=serializer.validated_data.get("before_id"),
-                    after_id=serializer.validated_data.get("after_id"),
-                )
-        except ValueError as exc:
-            return Response(
-                {"error": str(exc)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(
-            layer.serializer_class(detail, context=layer.serializer_context).data,
-            status=status.HTTP_201_CREATED,
-        )
-
-    def partial_update(self, request, slug, requirement_id, pk):
-        requirement = self._get_requirement()
-        if requirement is None:
-            return Response(
-                {"error": "Requirement not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        if not self._can_write(request.user, requirement):
-            return Response(
-                {"error": "You do not have permission to maintain this requirement."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        layer, read_only = self._write_layer(requirement)
-        if read_only is not None:
-            return read_only
-        serializer = RequirementDetailUpdateSerializer(
-            data=request.data,
-            context={"requirement": requirement, "fields": layer.fields},
-        )
-        serializer.is_valid(raise_exception=True)
-        with transaction.atomic():
-            detail = layer.queryset.select_for_update().filter(id=pk).first()
-            if detail is None:
-                return Response(
-                    {"error": "Requirement detail not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            if detail.version != serializer.validated_data["version"]:
-                return Response(
-                    {
-                        "error": "The detail was updated by another request.",
-                        "code": "REQUIREMENT_DETAIL_VERSION_CONFLICT",
-                        "current_version": detail.version,
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-            detail.data = serializer.validated_data["data"]
-            detail.version += 1
-            detail.updated_by = request.user
-            detail.save(
-                update_fields=["data", "version", "updated_at", "updated_by"]
-            )
-        return Response(
-            layer.serializer_class(detail, context=layer.serializer_context).data,
-            status=status.HTTP_200_OK,
-        )
-
-    def destroy(self, request, slug, requirement_id, pk):
-        requirement = self._get_requirement()
-        if requirement is None:
-            return Response(
-                {"error": "Requirement not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        if not self._can_write(request.user, requirement):
-            return Response(
-                {"error": "You do not have permission to maintain this requirement."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        layer, read_only = self._write_layer(requirement)
-        if read_only is not None:
-            return read_only
-        detail = layer.queryset.filter(id=pk).first()
-        if detail is None:
-            return Response(
-                {"error": "Requirement detail not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        detail.delete(soft=not layer.hard_delete)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def bulk_destroy(self, request, slug, requirement_id):
-        requirement = self._get_requirement()
-        if requirement is None:
-            return Response(
-                {"error": "Requirement not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        if not self._can_write(request.user, requirement):
-            return Response(
-                {"error": "You do not have permission to maintain this requirement."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        layer, read_only = self._write_layer(requirement)
-        if read_only is not None:
-            return read_only
-        ids_serializer = drf_serializers.ListField(
-            child=drf_serializers.UUIDField(), allow_empty=False
-        )
-        try:
-            detail_ids = ids_serializer.run_validation(request.data.get("ids"))
-        except drf_serializers.ValidationError as exc:
-            return Response({"ids": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
-        queryset = layer.queryset.filter(id__in=detail_ids)
-        if queryset.count() != len(set(detail_ids)):
-            return Response(
-                {"ids": "One or more details were not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        queryset.delete(soft=not layer.hard_delete)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def bulk_save(self, request, slug, requirement_id):
-        with transaction.atomic():
-            requirement = self._get_requirement(for_update=True)
-            if requirement is None:
-                return Response(
-                    {"error": "Requirement not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            if not self._can_write(request.user, requirement):
-                return Response(
-                    {"error": "You do not have permission to maintain this requirement."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            layer, read_only = self._write_layer(requirement)
-            if read_only is not None:
-                return read_only
-            serializer = RequirementDetailBatchSaveSerializer(
-                data=request.data,
-                context={"requirement": requirement, "fields": layer.fields},
-            )
-            serializer.is_valid(raise_exception=True)
-            if (
-                requirement.updated_at
-                != serializer.validated_data["expected_updated_at"]
-            ):
-                return Response(
-                    {
-                        "error": "The requirement changed before the batch was saved.",
-                        "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
-                        "current_updated_at": requirement.updated_at,
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-
-            try:
-                created, updated, deleted_ids = layer.save_batch(
-                    creates=serializer.validated_data["creates"],
-                    updates=serializer.validated_data["updates"],
-                    deletes=serializer.validated_data["deletes"],
-                    actor=request.user,
-                )
-            except RequirementDetailBatchConflict as exc:
-                return Response(
-                    {
-                        "error": "One or more requirement details changed before the batch was saved.",
-                        "code": "REQUIREMENT_DETAIL_BATCH_CONFLICT",
-                        "conflicts": exc.conflicts,
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-
-        return Response(
-            {
-                "created": [
-                    {
-                        "client_id": str(client_id),
-                        "detail": layer.serializer_class(
-                            detail, context=layer.serializer_context
-                        ).data,
-                    }
-                    for client_id, detail in created
-                ],
-                "updated": layer.serializer_class(
-                    updated, many=True, context=layer.serializer_context
-                ).data,
-                "deleted_ids": [str(detail_id) for detail_id in deleted_ids],
-            },
-            status=status.HTTP_200_OK,
         )

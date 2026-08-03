@@ -3,7 +3,6 @@ import type {
   TCreateProductRequirementPayload,
   TCreateRequirementLibraryPayload,
   TCreateRequirementTemplatePayload,
-  TCreateStandardRequirementPayload,
   TRequirement,
   TRequirementApprovalAction,
   TRequirementChangeItemsResponse,
@@ -22,6 +21,7 @@ import type {
   TRequirementDetailsResponse,
   TRequirementDiscardDraftResponse,
   TRequirementLibrary,
+  TRequirementLibraryConfiguration,
   TRequirementVersionComparisonResponse,
   TRequirementVersionDetail,
   TRequirementVersionDetailsResponse,
@@ -109,10 +109,37 @@ export class RequirementService extends APIService {
       });
   }
 
-  /** 库内的标准需求。字段来自库所选模板，明细挂在每条标准需求自己身上。 */
-  async listLibraryRequirements(workspaceSlug: string, libraryId: string): Promise<TRequirement[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/requirements/`, {
-      params: { library_id: libraryId },
+  /* --- 标准库条目 ------------------------------------------------------- */
+
+  /** 条目网格的表头：库信息 + 字段树。字段来自库所选模板，只读。 */
+  async getLibraryConfiguration(
+    workspaceSlug: string,
+    libraryId: string
+  ): Promise<TRequirementLibraryConfiguration> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/configuration/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listLibraryItems(
+    workspaceSlug: string,
+    libraryId: string,
+    params: {
+      cursor?: string;
+      perPage?: number;
+      search?: string;
+      filters?: TRequirementDetailFilter[];
+    } = {}
+  ): Promise<TRequirementDetailsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.search ? { search: params.search } : {}),
+        ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
+      },
     })
       .then((response) => response?.data)
       .catch((error) => {
@@ -120,11 +147,65 @@ export class RequirementService extends APIService {
       });
   }
 
-  async createStandardRequirement(
+  async createLibraryItem(
     workspaceSlug: string,
-    payload: TCreateStandardRequirementPayload
-  ): Promise<TRequirement> {
-    return this.post(`/api/workspaces/${workspaceSlug}/requirements/`, payload)
+    libraryId: string,
+    payload: {
+      data: TRequirementDetailData;
+      before_id?: string;
+      after_id?: string;
+    }
+  ): Promise<TRequirementDetail> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateLibraryItem(
+    workspaceSlug: string,
+    libraryId: string,
+    itemId: string,
+    payload: { data: TRequirementDetailData; version: number }
+  ): Promise<TRequirementDetail> {
+    return this.patch(
+      `/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/${itemId}/`,
+      payload
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteLibraryItem(workspaceSlug: string, libraryId: string, itemId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/${itemId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async bulkDeleteLibraryItems(workspaceSlug: string, libraryId: string, itemIds: string[]): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/bulk-delete/`, {
+      ids: itemIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async bulkSaveLibraryItems(
+    workspaceSlug: string,
+    libraryId: string,
+    payload: TRequirementDetailBatchSavePayload
+  ): Promise<TRequirementDetailBatchSaveResponse> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/bulk-save/`,
+      payload
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -80,7 +80,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
   const paginatedLibraries = filteredLibraries.slice((page - 1) * perPage, page * perPage);
   // 非空标准库删不掉（后端会拒），所以也不允许勾选，否则批量删除必然失败
   const selectableLibraryIds = paginatedLibraries
-    .filter((library) => library.requirement_count === 0)
+    .filter((library) => library.item_count === 0)
     .map((library) => library.id);
   const selectedOnPageCount = selectableLibraryIds.filter((id) => selectedLibraryIds.includes(id)).length;
   const isPageSelected = selectableLibraryIds.length > 0 && selectedOnPageCount === selectableLibraryIds.length;
@@ -330,14 +330,14 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                     <th className="w-[15%] px-3 py-2.5">{t("requirement_libraries.fields.template")}</th>
                     <th className="w-[22%] px-3 py-2.5">{t("requirement_libraries.fields.description")}</th>
                     <th className="w-20 px-3 py-2.5">{t("requirement_libraries.fields.field_count")}</th>
-                    <th className="w-24 px-3 py-2.5">{t("requirement_libraries.fields.requirement_count")}</th>
+                    <th className="w-24 px-3 py-2.5">{t("requirement_libraries.fields.item_count")}</th>
                     <th className="w-36 px-3 py-2.5">{t("requirement_libraries.list.updated_at")}</th>
                     <th className="w-14 px-3 py-2.5">{t("requirement_libraries.fields.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedLibraries.map((library) => {
-                    const isEmptyLibrary = library.requirement_count === 0;
+                    const isEmptyLibrary = library.item_count === 0;
                     const isSelected = selectedLibraryIds.includes(library.id);
                     return (
                       <tr
@@ -382,7 +382,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-12 tabular-nums text-secondary">{library.field_count}</td>
-                        <td className="px-3 py-2.5 text-12 tabular-nums text-secondary">{library.requirement_count}</td>
+                        <td className="px-3 py-2.5 text-12 tabular-nums text-secondary">{library.item_count}</td>
                         <td className="px-3 py-2.5 text-11 whitespace-nowrap text-secondary">
                           {renderFormattedDateTime(library.updated_at)}
                         </td>
@@ -395,7 +395,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                               isEmptyLibrary
                                 ? t("delete")
                                 : t("requirement_libraries.list.delete_blocked", {
-                                    count: library.requirement_count,
+                                    count: library.item_count,
                                   })
                             }
                           >

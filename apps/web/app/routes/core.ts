@@ -169,10 +169,6 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/templates/libraries/:libraryId",
               "./(all)/[workspaceSlug]/(projects)/templates/libraries/[libraryId]/page.tsx"
             ),
-            route(
-              ":workspaceSlug/templates/libraries/:libraryId/requirements/:requirementId",
-              "./(all)/[workspaceSlug]/(projects)/templates/libraries/[libraryId]/requirements/[requirementId]/page.tsx"
-            ),
           ]),
           route(
             ":workspaceSlug/templates/work-items",

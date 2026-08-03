@@ -61,7 +61,8 @@ const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"
 
 type TProps = {
   workspaceSlug: string;
-  requirementId: string;
+  /** 这批明细的归属：产品需求传 requirementId，标准库条目传 libraryId */
+  entityId: string;
   readOnly?: boolean;
   expectedUpdatedAt?: string;
   fields: TRequirementField[];
@@ -308,7 +309,7 @@ const LeafEditor = ({
 export const RequirementDetailGrid = observer(function RequirementDetailGrid(props: TProps) {
   const {
     workspaceSlug,
-    requirementId,
+    entityId,
     readOnly = false,
     expectedUpdatedAt,
     fields,
@@ -343,7 +344,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const [filterFieldId, setFilterFieldId] = useState("");
   const [filterOperator, setFilterOperator] = useState<TRequirementDetailFilter["operator"]>("contains");
   const [filterValue, setFilterValue] = useState("");
-  const storageKey = `requirement:columns:${workspaceSlug}:${requirementId}`;
+  const storageKey = `requirement:columns:${workspaceSlug}:${entityId}`;
   const [hiddenFieldIds, setHiddenFieldIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -464,7 +465,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
       const response = await uploadEditorAsset({
         blockId: uuidv4(),
         data: {
-          entity_identifier: requirementId,
+          entity_identifier: entityId,
           entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT,
         },
         file,
@@ -478,7 +479,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         size: file.size,
       };
     },
-    [editor, requirementId, uploadEditorAsset, workspaceSlug]
+    [editor, entityId, uploadEditorAsset, workspaceSlug]
   );
 
   const saveChanges = async () => {
@@ -1160,14 +1161,14 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         )}
       </div>
       {!readOnly && (
-        <IconButton
-          variant="secondary"
+        <Button
+          variant="primary"
           size="lg"
-          icon={Pencil}
           onClick={editor.startEditing}
           disabled={isLoading || details.length === 0}
-          aria-label={t("workspace_templates.requirements.data.edit_data")}
-        />
+        >
+          {t("edit")}
+        </Button>
       )}
     </>
   );

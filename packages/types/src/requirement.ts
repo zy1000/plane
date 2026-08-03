@@ -44,11 +44,10 @@ export type TRequirementDetailData = Record<string, TRequirementDetailValue>;
 export type TRequirement = {
   id: string;
   workspace_id: string;
-  /** workspace = 需求模板，library = 标准库里的标准需求 */
-  scope: "workspace" | "library" | "product" | "project";
+  /** workspace = 需求模板 */
+  scope: "workspace" | "product" | "project";
   product_id: string | null;
   project_id: string | null;
-  library_id: string | null;
   is_template: boolean;
   template_id: string | null;
   title: string;
@@ -106,9 +105,11 @@ export type TRequirementConfiguration = {
   created_field_ids: Record<string, string>;
 };
 
+/** 一行明细：requirement_id 与 library_id 恒有且仅有一个非空 */
 export type TRequirementDetail = {
   id: string;
-  requirement_id: string;
+  requirement_id: string | null;
+  library_id: string | null;
   data: TRequirementDetailData;
   sort_order: number;
   version: number;
@@ -173,8 +174,6 @@ export type TCreateProductRequirementPayload = {
   title: string;
   description_html?: string | null;
   owner_id: string;
-  template_id?: string | null;
-  import_fields: boolean;
   approver_ids: string[];
   approval_type: TRequirementApprovalType;
   required_count: number | null;
@@ -192,9 +191,9 @@ export type TRequirementLibrary = {
   };
   name: string;
   description: string;
-  /** 模板的字段数——库内标准需求共用这套字段 */
+  /** 模板的字段数——库内条目共用这套字段 */
   field_count: number;
-  requirement_count: number;
+  item_count: number;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -212,11 +211,12 @@ export type TCreateRequirementLibraryPayload = {
 /** template_id 创建后不可变——换模板会让库内已填数据全部失效 */
 export type TUpdateRequirementLibraryPayload = Partial<Pick<TRequirementLibrary, "name" | "description" | "is_active">>;
 
-export type TCreateStandardRequirementPayload = {
-  library_id: string;
-  title: string;
-  description_html?: string | null;
-  owner_id?: string;
+/** 条目网格的表头：字段来自库所选模板，只读 */
+export type TRequirementLibraryConfiguration = {
+  library: TRequirementLibrary;
+  fields: TRequirementField[];
+  /** 乐观锁基准，取的是模板的 updated_at——改字段动的是模板 */
+  expected_updated_at: string;
 };
 
 export type TUpdateProductRequirementPayload = Partial<

@@ -16,7 +16,6 @@ from plane.db.models import (
     RequirementDraftDetail,
     RequirementField,
     RequirementFieldType,
-    RequirementLibrary,
     User,
 )
 from plane.utils.content_validator import validate_html_content
@@ -29,7 +28,6 @@ from plane.utils.requirement import (
     get_requirement_select_mode,
     get_requirement_select_options,
     replace_requirement_approvers,
-    resolve_field_source,
     sync_requirement_fields,
     uses_change_flow,
 )
@@ -49,12 +47,6 @@ class RequirementSerializer(BaseSerializer):
     project_id = serializers.PrimaryKeyRelatedField(
         source="project",
         queryset=Project.objects.all(),
-        required=False,
-        allow_null=True,
-    )
-    library_id = serializers.PrimaryKeyRelatedField(
-        source="library",
-        queryset=RequirementLibrary.objects.all(),
         required=False,
         allow_null=True,
     )
@@ -100,7 +92,6 @@ class RequirementSerializer(BaseSerializer):
             "scope",
             "product_id",
             "project_id",
-            "library_id",
             "is_template",
             "template_id",
             "title",
@@ -149,12 +140,6 @@ class RequirementSerializer(BaseSerializer):
         return UserLiteSerializer(approvers, many=True).data
 
     def get_field_count(self, obj):
-        # 标准需求的字段来自标准库所选模板，不能数它自己的 fields（恒为 0）
-        if obj.library_id:
-            annotated_count = getattr(obj, "library_field_count", None)
-            if annotated_count is not None:
-                return annotated_count
-            return resolve_field_source(obj).fields.count()
         annotated_count = getattr(obj, "field_count", None)
         return annotated_count if annotated_count is not None else obj.fields.count()
 
@@ -226,7 +211,6 @@ class RequirementSerializer(BaseSerializer):
             "is_template": ("is_template", self.instance.is_template),
             "product_id": ("product", self.instance.product_id),
             "project_id": ("project", self.instance.project_id),
-            "library_id": ("library", self.instance.library_id),
             "template_id": ("template", self.instance.template_id),
         }
         for request_field, (attribute, current_value) in immutable_fields.items():
@@ -251,14 +235,12 @@ class RequirementSerializer(BaseSerializer):
                 self.instance.is_template,
                 self.instance.product,
                 self.instance.project,
-                self.instance.library,
                 self.instance.template,
             )
 
         is_template = attrs.get("is_template", False)
         product = attrs.get("product")
         project = attrs.get("project")
-        library = attrs.get("library")
         source_template = attrs.get("template")
         errors = {}
 
@@ -267,33 +249,18 @@ class RequirementSerializer(BaseSerializer):
                 errors["product_id"] = "A workspace template cannot belong to a product."
             if project is not None:
                 errors["project_id"] = "A workspace template cannot belong to a project."
-            if library is not None:
-                errors["library_id"] = "A workspace template cannot belong to a library."
             if source_template is not None:
                 errors["template_id"] = "A workspace template cannot import another template."
-        elif len([scope for scope in (product, project, library) if scope]) != 1:
+        elif len([scope for scope in (product, project) if scope]) != 1:
             errors["scope"] = (
-                "A non-template requirement must belong to exactly one product, "
-                "project or library."
+                "A non-template requirement must belong to exactly one product "
+                "or project."
             )
-
-        # 标准需求的字段实时引用标准库所选模板，不能再单独指定模板或导入字段
-        if library is not None:
-            if source_template is not None:
-                errors["template_id"] = (
-                    "A standard requirement inherits fields from its library template."
-                )
-            if attrs.get("import_fields"):
-                errors["import_fields"] = (
-                    "A standard requirement inherits fields from its library template."
-                )
 
         if product is not None and product.workspace_id != workspace.id:
             errors["product_id"] = "Product does not belong to this workspace."
         if project is not None and project.workspace_id != workspace.id:
             errors["project_id"] = "Project does not belong to this workspace."
-        if library is not None and library.workspace_id != workspace.id:
-            errors["library_id"] = "Library does not belong to this workspace."
         if source_template is not None:
             if source_template.workspace_id != workspace.id:
                 errors["template_id"] = "Template does not belong to this workspace."
@@ -302,7 +269,7 @@ class RequirementSerializer(BaseSerializer):
 
         if errors:
             raise serializers.ValidationError(errors)
-        return is_template, product, project, library, source_template
+        return is_template, product, project, source_template
 
     def _get_effective_approver_ids(
         self,
@@ -395,7 +362,7 @@ class RequirementSerializer(BaseSerializer):
                 {"import_fields": "Import options can only be used when creating a requirement."}
             )
 
-        is_template, product, project, library, source_template = self._validate_scope(
+        is_template, product, project, source_template = self._validate_scope(
             attrs, workspace
         )
         if attrs.get("import_fields", False) and source_template is None:
@@ -615,7 +582,7 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
         return attrs
 
 
-def _canonical_asset_values(requirement, value, *, image_only=False):
+def _canonical_asset_values(owner, value, *, image_only=False):
     if value in (None, ""):
         return []
     if not isinstance(value, list):
@@ -629,7 +596,7 @@ def _canonical_asset_values(requirement, value, *, image_only=False):
         str(asset.id): asset
         for asset in FileAsset.objects.filter(
             id__in=asset_ids,
-            workspace_id=requirement.workspace_id,
+            workspace_id=owner.workspace_id,
             entity_type=FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT,
             is_uploaded=True,
             is_deleted=False,
@@ -657,9 +624,7 @@ def _canonical_asset_values(requirement, value, *, image_only=False):
     return result
 
 
-def validate_requirement_leaf_value(
-    *, requirement, field, value, enforce_required=True
-):
+def validate_requirement_leaf_value(*, owner, field, value, enforce_required=True):
     field_type = field_attr(field, "field_type")
     is_required = bool(field_attr(field, "is_required", False))
 
@@ -682,7 +647,7 @@ def validate_requirement_leaf_value(
             except serializers.ValidationError as exc:
                 raise serializers.ValidationError("Member values must be UUIDs.") from exc
             eligible_ids = get_requirement_eligible_user_ids(
-                workspace_id=requirement.workspace_id,
+                workspace_id=owner.workspace_id,
                 user_ids=[member_id],
             )
             if member_id not in eligible_ids:
@@ -730,9 +695,9 @@ def validate_requirement_leaf_value(
                     "The selected option is not available."
                 )
     elif field_type == RequirementFieldType.ATTACHMENT:
-        value = _canonical_asset_values(requirement, value)
+        value = _canonical_asset_values(owner, value)
     elif field_type == RequirementFieldType.IMAGE:
-        value = _canonical_asset_values(requirement, value, image_only=True)
+        value = _canonical_asset_values(owner, value, image_only=True)
     else:
         raise serializers.ValidationError("This value is not valid for a form field.")
 
@@ -744,17 +709,18 @@ def validate_requirement_leaf_value(
     return value
 
 
-def validate_requirement_detail_data(*, requirement, data, fields=None):
+def validate_requirement_detail_data(*, owner, data, fields=None):
     """校验并规范化一行明细数据。
 
-    fields 为 None 时从正式表读取字段定义；草稿路径传入草稿快照解析出的 spec
-    列表，从而与正式表共用同一套校验语义。
+    owner 是这行数据的归属（需求或标准库），只用于取 workspace_id 做资产与成员
+    校验。fields 为 None 时从正式表读取字段定义；草稿路径传入草稿快照解析出的
+    spec 列表，从而与正式表共用同一套校验语义。
     """
     if not isinstance(data, dict):
         raise serializers.ValidationError("Detail data must be an object.")
 
     if fields is None:
-        fields = get_requirement_field_specs(requirement)
+        fields = get_requirement_field_specs(owner)
     else:
         fields = list(fields)
     roots = [field for field in fields if field.parent_field_id is None]
@@ -776,7 +742,7 @@ def validate_requirement_detail_data(*, requirement, data, fields=None):
         raw_value = data.get(field_key, field.default_value)
         if field.field_type != RequirementFieldType.FORM:
             canonical[field_key] = validate_requirement_leaf_value(
-                requirement=requirement,
+                owner=owner,
                 field=field,
                 value=raw_value,
                 enforce_required=field.is_active,
@@ -831,7 +797,7 @@ def validate_requirement_detail_data(*, requirement, data, fields=None):
             for child in child_fields:
                 child_key = str(child.id)
                 canonical_values[child_key] = validate_requirement_leaf_value(
-                    requirement=requirement,
+                    owner=owner,
                     field=child,
                     value=values.get(child_key, child.default_value),
                     enforce_required=field.is_active and child.is_active,
@@ -882,14 +848,14 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
         for root in value:
             if root["field_type"] != RequirementFieldType.FORM:
                 root["default_value"] = validate_requirement_leaf_value(
-                    requirement=requirement,
+                    owner=requirement,
                     field=root,
                     value=root.get("default_value"),
                     enforce_required=False,
                 )
             for child in root.get("children") or []:
                 child["default_value"] = validate_requirement_leaf_value(
-                    requirement=requirement,
+                    owner=requirement,
                     field=child,
                     value=child.get("default_value"),
                     enforce_required=False,
@@ -962,6 +928,7 @@ class RequirementDetailSerializer(BaseSerializer):
         fields = [
             "id",
             "requirement_id",
+            "library_id",
             "data",
             "sort_order",
             "version",
@@ -980,12 +947,14 @@ class RequirementDraftDetailSerializer(BaseSerializer):
     """
 
     requirement_id = serializers.SerializerMethodField()
+    library_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementDraftDetail
         fields = [
             "id",
             "requirement_id",
+            "library_id",
             "data",
             "sort_order",
             "version",
@@ -1000,6 +969,11 @@ class RequirementDraftDetailSerializer(BaseSerializer):
         requirement_id = self.context.get("requirement_id")
         return str(requirement_id) if requirement_id else str(obj.draft.requirement_id)
 
+    def get_library_id(self, obj):
+        # 草稿只属于产品/项目需求，永远不会挂在标准库上；这里恒为 None，只是为了
+        # 让草稿行与正式行的输出形状保持一致。
+        return None
+
 
 class RequirementDetailCreateSerializer(serializers.Serializer):
     data = serializers.DictField()
@@ -1012,7 +986,7 @@ class RequirementDetailCreateSerializer(serializers.Serializer):
                 "Only one insertion anchor can be provided."
             )
         attrs["data"] = validate_requirement_detail_data(
-            requirement=self.context["requirement"],
+            owner=self.context["owner"],
             data=attrs["data"],
             fields=self.context.get("fields"),
         )
@@ -1025,7 +999,7 @@ class RequirementDetailUpdateSerializer(serializers.Serializer):
 
     def validate_data(self, value):
         return validate_requirement_detail_data(
-            requirement=self.context["requirement"],
+            owner=self.context["owner"],
             data=value,
             fields=self.context.get("fields"),
         )
@@ -1097,25 +1071,17 @@ class RequirementDetailFilterSerializer(serializers.Serializer):
     value = serializers.JSONField(required=False, allow_null=True)
 
     def _resolve_field(self, field_id):
-        """字段来源可能是正式表，也可能是草稿快照解析出的 spec 列表。"""
-        fields = self.context.get("fields")
-        if fields is not None:
-            return next(
-                (
-                    field
-                    for field in fields
-                    if str(field_attr(field, "id")) == str(field_id)
-                    and field_attr(field, "field_type") != RequirementFieldType.FORM
-                ),
-                None,
-            )
-        return (
-            RequirementField.objects.filter(
-                id=field_id,
-                requirement=self.context["requirement"],
-            )
-            .exclude(field_type=RequirementFieldType.FORM)
-            .first()
+        """字段可能是正式表的模型对象，也可能是草稿快照解析出的 spec，用
+        field_attr 一视同仁。调用方（明细列表入口）总是从 DetailLayer 取好字段传
+        进来，所以这里只认 context["fields"]。"""
+        return next(
+            (
+                field
+                for field in self.context["fields"]
+                if str(field_attr(field, "id")) == str(field_id)
+                and field_attr(field, "field_type") != RequirementFieldType.FORM
+            ),
+            None,
         )
 
     def validate(self, attrs):

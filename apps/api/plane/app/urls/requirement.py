@@ -5,6 +5,8 @@ from plane.app.views.requirement import (
     RequirementChangeRequestViewSet,
     RequirementConfigurationAPIView,
     RequirementDetailViewSet,
+    RequirementLibraryConfigurationAPIView,
+    RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
     RequirementVersionViewSet,
     RequirementViewSet,
@@ -29,6 +31,33 @@ urlpatterns = [
             }
         ),
         name="requirement-library-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/configuration/",
+        RequirementLibraryConfigurationAPIView.as_view(),
+        name="requirement-library-configuration",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/",
+        RequirementLibraryItemViewSet.as_view({"get": "list", "post": "create"}),
+        name="requirement-library-items",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/bulk-delete/",
+        RequirementLibraryItemViewSet.as_view({"post": "bulk_destroy"}),
+        name="requirement-library-item-bulk-delete",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/bulk-save/",
+        RequirementLibraryItemViewSet.as_view({"post": "bulk_save"}),
+        name="requirement-library-item-bulk-save",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/<uuid:pk>/",
+        RequirementLibraryItemViewSet.as_view(
+            {"patch": "partial_update", "delete": "destroy"}
+        ),
+        name="requirement-library-item",
     ),
     path(
         "workspaces/<str:slug>/requirements/",

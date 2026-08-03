@@ -61,18 +61,12 @@ class TestRequirementApp:
             ProductMember.objects.create(product=product, member=member)
         return product
 
-    def create_standard_requirement(self, template, title=None):
-        """标准库 + 标准需求：模板只定义字段，明细挂在标准需求上。"""
-        library = RequirementLibrary.objects.create(
+    def create_library(self, template, name=None):
+        """标准库：模板只定义字段，条目直接挂在库上。"""
+        return RequirementLibrary.objects.create(
             workspace=self.workspace,
             template=template,
-            name=f"Requirement library {uuid4()}",
-        )
-        return Requirement.objects.create(
-            workspace=self.workspace,
-            library=library,
-            title=title or f"Standard requirement {uuid4()}",
-            owner=self.owner,
+            name=name or f"Requirement library {uuid4()}",
         )
 
     def create_project(self, *members):
@@ -633,7 +627,7 @@ class TestRequirementApp:
             for child in saved_form["children"]
         ]
 
-        # 模板只定义字段，明细走标准库里的标准需求（字段实时引用该模板）
+        # 模板只定义字段，数据走标准库里的条目（字段实时引用该模板）
         assert (
             api_client.post(
                 reverse(
@@ -648,14 +642,12 @@ class TestRequirementApp:
             ).status_code
             == status.HTTP_404_NOT_FOUND
         )
-        standard_requirement = self.create_standard_requirement(
-            Requirement.objects.get(id=template_id)
-        )
+        library = self.create_library(Requirement.objects.get(id=template_id))
         details_url = reverse(
-            "requirement-details",
+            "requirement-library-items",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": standard_requirement.id,
+                "library_id": library.id,
             },
         )
         first_detail_response = api_client.post(
@@ -715,10 +707,10 @@ class TestRequirementApp:
         ]
 
         detail_url = reverse(
-            "requirement-detail-item",
+            "requirement-library-item",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": standard_requirement.id,
+                "library_id": library.id,
                 "pk": first_detail_response.data["id"],
             },
         )
@@ -775,10 +767,10 @@ class TestRequirementApp:
         assert confirmed_response.status_code == status.HTTP_200_OK
 
         bulk_delete_url = reverse(
-            "requirement-detail-bulk-delete",
+            "requirement-library-item-bulk-delete",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": standard_requirement.id,
+                "library_id": library.id,
             },
         )
         bulk_delete_response = api_client.post(
@@ -792,9 +784,7 @@ class TestRequirementApp:
             format="json",
         )
         assert bulk_delete_response.status_code == status.HTTP_204_NO_CONTENT
-        assert not RequirementDetail.objects.filter(
-            requirement=standard_requirement
-        ).exists()
+        assert not RequirementDetail.objects.filter(library=library).exists()
 
     def test_requirement_detail_bulk_save_applies_mixed_operations_atomically(
         self, api_client
@@ -817,31 +807,32 @@ class TestRequirementApp:
             sort_order=1000,
         )
         field_id = str(field.id)
-        requirement = self.create_standard_requirement(template)
+        library = self.create_library(template)
         first_detail = RequirementDetail.objects.create(
-            requirement=requirement,
+            library=library,
             data={field_id: "First"},
             sort_order=1000,
         )
         second_detail = RequirementDetail.objects.create(
-            requirement=requirement,
+            library=library,
             data={field_id: "Second"},
             sort_order=2000,
         )
         client_id = uuid4()
         second_client_id = uuid4()
         bulk_save_url = reverse(
-            "requirement-detail-bulk-save",
+            "requirement-library-item-bulk-save",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": requirement.id,
+                "library_id": library.id,
             },
         )
 
         response = api_client.post(
             bulk_save_url,
             {
-                "expected_updated_at": requirement.updated_at.isoformat(),
+                # 库条目的乐观锁基准是模板 —— 改字段动的是模板行
+                "expected_updated_at": template.updated_at.isoformat(),
                 "creates": [
                     {
                         "client_id": str(client_id),
@@ -878,9 +869,7 @@ class TestRequirementApp:
         assert str(response.data["updated"][0]["id"]) == str(first_detail.id)
         assert response.data["deleted_ids"] == [str(second_detail.id)]
         saved_details = list(
-            RequirementDetail.objects.filter(requirement=requirement).order_by(
-                "sort_order"
-            )
+            RequirementDetail.objects.filter(library=library).order_by("sort_order")
         )
         assert [detail.data[field_id] for detail in saved_details] == [
             "Updated",
@@ -909,21 +898,22 @@ class TestRequirementApp:
             default_value=None,
         )
         field_id = str(field.id)
-        requirement = self.create_standard_requirement(template)
+        library = self.create_library(template)
         detail = RequirementDetail.objects.create(
-            requirement=requirement,
+            library=library,
             data={field_id: "Original"},
             sort_order=1000,
         )
         bulk_save_url = reverse(
-            "requirement-detail-bulk-save",
+            "requirement-library-item-bulk-save",
             kwargs={
                 "slug": self.workspace.slug,
-                "requirement_id": requirement.id,
+                "library_id": library.id,
             },
         )
         base_payload = {
-            "expected_updated_at": requirement.updated_at.isoformat(),
+            # 库条目的乐观锁基准是模板 —— 改字段动的是模板行
+            "expected_updated_at": template.updated_at.isoformat(),
             "creates": [
                 {
                     "client_id": str(uuid4()),
@@ -955,7 +945,7 @@ class TestRequirementApp:
         )
         detail.refresh_from_db()
         assert detail.data[field_id] == "Original"
-        assert RequirementDetail.objects.filter(requirement=requirement).count() == 1
+        assert RequirementDetail.objects.filter(library=library).count() == 1
 
         invalid_response = api_client.post(
             bulk_save_url,
@@ -981,7 +971,7 @@ class TestRequirementApp:
         assert invalid_response.status_code == status.HTTP_400_BAD_REQUEST
         detail.refresh_from_db()
         assert detail.data[field_id] == "Original"
-        assert RequirementDetail.objects.filter(requirement=requirement).count() == 1
+        assert RequirementDetail.objects.filter(library=library).count() == 1
 
     def test_selector_field_configuration_values_search_filter_and_data_loss(
         self, api_client

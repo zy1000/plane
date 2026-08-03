@@ -54,16 +54,11 @@ export function RequirementTemplateSettingsModal(props: Props) {
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.TOP} width={EModalWidth.XXL}>
       <div className="flex items-center justify-between border-b border-subtle px-5 py-4">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5">
           <span className="grid size-8 place-items-center rounded-md bg-layer-2 text-secondary">
             <Settings2 className="size-4" />
           </span>
-          <div>
-            <h2 className="text-14 font-medium text-primary">{t("workspace_templates.requirements.editor.settings")}</h2>
-            <p className="text-11 text-secondary">
-              {t("workspace_templates.requirements.editor.settings_description")}
-            </p>
-          </div>
+          <h2 className="text-14 font-medium text-primary">{t("workspace_templates.requirements.editor.settings")}</h2>
         </div>
         <button
           type="button"
