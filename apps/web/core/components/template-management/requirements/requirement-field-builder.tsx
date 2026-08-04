@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlignLeft,
   ArrowDownToLine,
@@ -76,7 +76,6 @@ type TRequirementFieldBuilderProps = {
 
 type TFieldLibraryProps = {
   compact?: boolean;
-  onAdd: (type: TRequirementFieldType) => void;
   onDragStart: (type: TRequirementFieldType) => void;
   onDragEnd: () => void;
 };
@@ -202,10 +201,9 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
 };
 
 function FieldLibrary(props: TFieldLibraryProps) {
-  const { compact = false, onAdd, onDragStart, onDragEnd } = props;
+  const { compact = false, onDragStart, onDragEnd } = props;
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
-  const draggedFieldTypeRef = useRef<TRequirementFieldType | null>(null);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
 
   if (compact) {
@@ -216,34 +214,24 @@ function FieldLibrary(props: TFieldLibraryProps) {
           {ROOT_FIELD_TYPES.map((type) => {
             const Icon = FIELD_ICONS[type];
             return (
-              <button
+              <div
                 key={type}
-                type="button"
+                role="button"
+                tabIndex={0}
                 draggable
                 onDragStart={(event) => {
-                  draggedFieldTypeRef.current = type;
                   onDragStart(type);
                   event.dataTransfer.effectAllowed = "copy";
                   event.dataTransfer.setData(FIELD_LIBRARY_DRAG_TYPE, type);
                 }}
-                onDragEnd={() => {
-                  onDragEnd();
-                  window.setTimeout(() => {
-                    draggedFieldTypeRef.current = null;
-                  }, 0);
-                }}
-                onClick={() => {
-                  if (draggedFieldTypeRef.current === type) return;
-                  onAdd(type);
-                }}
+                onDragEnd={onDragEnd}
                 className="group flex h-9 w-full cursor-grab items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-left transition-colors duration-150 hover:border-strong hover:bg-layer-transparent-hover active:cursor-grabbing"
               >
                 <Icon className="size-4 shrink-0 text-secondary" />
                 <span className="truncate text-12 text-primary">
                   {t(`workspace_templates.requirements.field_types.${type}`)}
                 </span>
-                <Plus className="ml-auto size-3.5 shrink-0 text-placeholder opacity-0 transition-opacity group-hover:opacity-100" />
-              </button>
+              </div>
             );
           })}
         </div>
@@ -281,26 +269,17 @@ function FieldLibrary(props: TFieldLibraryProps) {
                 {types.map((type) => {
                   const Icon = FIELD_ICONS[type];
                   return (
-                    <button
+                    <div
                       key={type}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       draggable
                       onDragStart={(event) => {
-                        draggedFieldTypeRef.current = type;
                         onDragStart(type);
                         event.dataTransfer.effectAllowed = "copy";
                         event.dataTransfer.setData(FIELD_LIBRARY_DRAG_TYPE, type);
                       }}
-                      onDragEnd={() => {
-                        onDragEnd();
-                        window.setTimeout(() => {
-                          draggedFieldTypeRef.current = null;
-                        }, 0);
-                      }}
-                      onClick={() => {
-                        if (draggedFieldTypeRef.current === type) return;
-                        onAdd(type);
-                      }}
+                      onDragEnd={onDragEnd}
                       className="group flex h-10 w-full cursor-grab items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-left transition-colors duration-150 hover:border-strong hover:bg-layer-transparent-hover active:cursor-grabbing"
                     >
                       <GripVertical className="size-3.5 shrink-0 text-placeholder group-hover:text-tertiary" />
@@ -310,8 +289,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
                       <span className="truncate text-12 font-medium text-primary">
                         {t(`workspace_templates.requirements.field_types.${type}`)}
                       </span>
-                      <Plus className="ml-auto size-3.5 shrink-0 text-placeholder opacity-0 transition-opacity group-hover:opacity-100" />
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1147,7 +1125,6 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         <div className="min-h-0 flex-1">
           <FieldLibrary
             compact={compactLayout}
-            onAdd={(type) => insertRootField(fields.length, type)}
             onDragStart={(type) => {
               setDraggedLibraryFieldType(type);
               setDropTarget(null);
