@@ -150,6 +150,7 @@ from .requirement import (
     RequirementApprovalAction,
     RequirementApprovalType,
     RequirementApprover,
+    RequirementBuiltinFieldKey,
     RequirementChangeApproval,
     RequirementChangeItem,
     RequirementChangeRequest,

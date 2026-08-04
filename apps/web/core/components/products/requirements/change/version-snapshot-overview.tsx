@@ -8,6 +8,7 @@ import type {
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL, sanitizeHTML } from "@plane/utils";
+import { ChangeTemplateTabs } from "./change-template-tabs";
 import { PILL_BASE } from "./styles";
 import { VersionSnapshotPreview } from "./version-snapshot-preview";
 
@@ -24,6 +25,9 @@ type TProps = {
   prevCursor?: string;
   nextPageResults?: boolean;
   prevPageResults?: boolean;
+  /** 多模板快照才有值：明细区按模板分视图，字段区按模板分节 */
+  activeTemplateId?: string;
+  onTemplateChange: (templateId: string) => void;
   onPerPageChange: (value: number) => void;
   onCursorChange: (value: string | undefined) => void;
 };
@@ -132,12 +136,36 @@ export function VersionSnapshotOverview(props: TProps) {
     prevCursor,
     nextPageResults,
     prevPageResults,
+    activeTemplateId,
+    onTemplateChange,
     onPerPageChange,
     onCursorChange,
   } = props;
   const { t } = useTranslation();
   const snapshot = versionDetail.requirement_snapshot as TRequirementSnapshot;
+  const templateStats = versionDetail.template_stats ?? [];
+  const isMultiTemplate = templateStats.length > 1;
+  const templateTabs = templateStats.map((template) => ({
+    id: template.id,
+    title: template.title,
+    total: template.detail_count,
+  }));
   const fieldRows = flattenFields(versionDetail.fields_snapshot);
+  /** 明细表头只取当前模板的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
+  const templateFields = activeTemplateId
+    ? versionDetail.fields_snapshot.filter((field) => field.template_id === activeTemplateId)
+    : versionDetail.fields_snapshot;
+  // 字段区按模板分节：各模板都有内置的标题/描述，平铺一张表根本分不清归属
+  const fieldGroups = isMultiTemplate
+    ? templateStats
+        .map((template) => ({
+          key: template.id,
+          title: template.title,
+          rows: fieldRows.filter((row) => (row.field.template_id ?? "") === template.id),
+        }))
+        .filter((group) => group.rows.length > 0)
+    : null;
+
   const membersById = new Map(members.map((member) => [member.id, member]));
   const owner = membersById.get(snapshot.owner_id);
   const approvers = snapshot.approver_ids.map((id) => ({ id, member: membersById.get(id) }));
@@ -153,6 +181,79 @@ export function VersionSnapshotOverview(props: TProps) {
           total: snapshot.approver_ids.length,
         })
       : t(`workspace_products.requirements.approval.${snapshot.approval_type}`);
+
+  const renderFieldTable = (rowsToRender: TSnapshotFieldRow[]) => (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[52rem] border-collapse text-left">
+        <thead className="bg-layer-1 text-11 font-medium text-secondary">
+          <tr>
+            <th className="w-[28%] border-b border-subtle px-4 py-2.5">
+              {t("workspace_products.requirements.version.field_columns.name")}
+            </th>
+            <th className="w-[17%] border-b border-subtle px-4 py-2.5">
+              {t("workspace_products.requirements.version.field_columns.type")}
+            </th>
+            <th className="w-[12%] border-b border-subtle px-4 py-2.5">
+              {t("workspace_products.requirements.version.field_columns.required")}
+            </th>
+            <th className="w-[18%] border-b border-subtle px-4 py-2.5">
+              {t("workspace_products.requirements.version.field_columns.default_value")}
+            </th>
+            <th className="border-b border-subtle px-4 py-2.5">
+              {t("workspace_products.requirements.version.field_columns.description")}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-subtle">
+          {rowsToRender.map(({ field, parentName }) => (
+            <tr key={field.id} className="transition-colors hover:bg-layer-transparent-hover">
+              <td className="px-4 py-2.5 text-12 text-primary">
+                <div className={cn("flex min-w-0 items-center gap-2", parentName && "pl-4")}>
+                  {parentName && <span aria-hidden className="bg-subtle h-px w-3 shrink-0" />}
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{field.name || emptyValue}</p>
+                    {parentName && (
+                      <p className="mt-0.5 truncate text-10 text-tertiary">
+                        {t("workspace_products.requirements.version.child_of", { name: parentName })}
+                      </p>
+                    )}
+                  </div>
+                  {!field.is_active && (
+                    <span className={cn(PILL_BASE, "shrink-0 bg-layer-2 text-tertiary")}>
+                      {t("workspace_templates.requirements.inactive")}
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="px-4 py-2.5 text-12">
+                <span className={cn(PILL_BASE, "rounded-md bg-layer-2 text-secondary")}>
+                  {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
+                </span>
+              </td>
+              <td className="px-4 py-2.5 text-12 text-secondary">
+                {field.is_required ? (
+                  <span className="inline-flex items-center gap-1 text-primary">
+                    <Check className="size-3.5 text-success-primary" />
+                    {yes}
+                  </span>
+                ) : (
+                  no
+                )}
+              </td>
+              <td className="max-w-56 truncate px-4 py-2.5 text-12 text-secondary">
+                {formatDefaultValue(field, emptyValue, yes, no)}
+              </td>
+              <td className="max-w-72 truncate px-4 py-2.5 text-12 text-secondary">
+                {typeof field.config.description === "string" && field.config.description
+                  ? field.config.description
+                  : emptyValue}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="space-y-3 p-3 lg:p-4">
@@ -253,76 +354,25 @@ export function VersionSnapshotOverview(props: TProps) {
           meta={t("workspace_products.requirements.version.item_count", { count: fieldRows.length })}
         />
         {fieldRows.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] border-collapse text-left">
-              <thead className="bg-layer-1 text-11 font-medium text-secondary">
-                <tr>
-                  <th className="w-[28%] border-b border-subtle px-4 py-2.5">
-                    {t("workspace_products.requirements.version.field_columns.name")}
-                  </th>
-                  <th className="w-[17%] border-b border-subtle px-4 py-2.5">
-                    {t("workspace_products.requirements.version.field_columns.type")}
-                  </th>
-                  <th className="w-[12%] border-b border-subtle px-4 py-2.5">
-                    {t("workspace_products.requirements.version.field_columns.required")}
-                  </th>
-                  <th className="w-[18%] border-b border-subtle px-4 py-2.5">
-                    {t("workspace_products.requirements.version.field_columns.default_value")}
-                  </th>
-                  <th className="border-b border-subtle px-4 py-2.5">
-                    {t("workspace_products.requirements.version.field_columns.description")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-subtle">
-                {fieldRows.map(({ field, parentName }) => (
-                  <tr key={field.id} className="transition-colors hover:bg-layer-transparent-hover">
-                    <td className="px-4 py-2.5 text-12 text-primary">
-                      <div className={cn("flex min-w-0 items-center gap-2", parentName && "pl-4")}>
-                        {parentName && <span aria-hidden className="bg-subtle h-px w-3 shrink-0" />}
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{field.name || emptyValue}</p>
-                          {parentName && (
-                            <p className="mt-0.5 truncate text-10 text-tertiary">
-                              {t("workspace_products.requirements.version.child_of", { name: parentName })}
-                            </p>
-                          )}
-                        </div>
-                        {!field.is_active && (
-                          <span className={cn(PILL_BASE, "shrink-0 bg-layer-2 text-tertiary")}>
-                            {t("workspace_templates.requirements.inactive")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-12">
-                      <span className={cn(PILL_BASE, "rounded-md bg-layer-2 text-secondary")}>
-                        {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-12 text-secondary">
-                      {field.is_required ? (
-                        <span className="inline-flex items-center gap-1 text-primary">
-                          <Check className="size-3.5 text-success-primary" />
-                          {yes}
-                        </span>
-                      ) : (
-                        no
-                      )}
-                    </td>
-                    <td className="max-w-56 truncate px-4 py-2.5 text-12 text-secondary">
-                      {formatDefaultValue(field, emptyValue, yes, no)}
-                    </td>
-                    <td className="max-w-72 truncate px-4 py-2.5 text-12 text-secondary">
-                      {typeof field.config.description === "string" && field.config.description
-                        ? field.config.description
-                        : emptyValue}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          fieldGroups ? (
+            <div className="divide-y divide-subtle">
+              {fieldGroups.map((group) => (
+                <div key={group.key || "unassigned"} className="min-w-0">
+                  <div className="flex items-baseline gap-2 bg-layer-1/40 px-4 py-2">
+                    <h4 className="text-12 font-semibold text-primary">
+                      {group.title || t("workspace_products.requirements.change.templates.untitled")}
+                    </h4>
+                    <span className="text-11 text-tertiary tabular-nums">
+                      {t("workspace_products.requirements.version.item_count", { count: group.rows.length })}
+                    </span>
+                  </div>
+                  {renderFieldTable(group.rows)}
+                </div>
+              ))}
+            </div>
+          ) : (
+            renderFieldTable(fieldRows)
+          )
         ) : (
           <p className="px-4 py-8 text-center text-12 text-tertiary">
             {t("workspace_templates.requirements.fields.empty")}
@@ -339,9 +389,18 @@ export function VersionSnapshotOverview(props: TProps) {
             count: versionDetail.detail_count,
           })}
         />
+        {isMultiTemplate && activeTemplateId && (
+          <div className="border-b border-subtle bg-layer-1/40 px-3 py-2">
+            <ChangeTemplateTabs
+              templates={templateTabs}
+              activeTemplateId={activeTemplateId}
+              onChange={onTemplateChange}
+            />
+          </div>
+        )}
         <VersionSnapshotPreview
           workspaceSlug={workspaceSlug}
-          fields={versionDetail.fields_snapshot}
+          fields={templateFields}
           rows={rows}
           totalCount={totalCount}
           isLoading={isLoading}

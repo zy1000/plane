@@ -7,7 +7,7 @@
  * - draft 且曾发布：「提交审批」+「撤回草稿」（提示会恢复到 v{n}）
  * - in_review：提交人「撤回审批」、审批人「去审批」、其余人只看到状态
  */
-import { Pencil, RotateCcw, Send } from "lucide-react";
+import { Pencil, RotateCcw } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirement } from "@plane/types";
@@ -99,8 +99,7 @@ export function RequirementStatusActions(props: TProps) {
               </CustomMenu>
             </>
           )}
-          <Button variant="primary" disabled={isMutating} onClick={onSubmitReview}>
-            <Send className="size-3.5" />
+          <Button variant="primary" size="lg" disabled={isMutating} onClick={onSubmitReview}>
             {t("workspace_products.requirements.state.submit_review")}
           </Button>
         </>

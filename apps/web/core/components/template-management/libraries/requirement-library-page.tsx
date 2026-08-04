@@ -113,6 +113,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               workspaceSlug={workspaceSlug}
               entityId={libraryId ?? ""}
               expectedUpdatedAt={store.configuration?.expected_updated_at}
+              createTemplateId={store.templateId ?? undefined}
               fields={store.configuration?.fields ?? []}
               details={store.detailsPage.results}
               totalCount={store.detailsPage.total_count ?? 0}

@@ -1,13 +1,10 @@
 import { useMemo } from "react";
-import { FileText, Settings2, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { FileText, ShieldCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementApprovalType, TRequirementStatus, IUserLite } from "@plane/types";
-import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { RequirementApprovalSettings } from "./requirement-approval-settings";
 import { RequirementSettingsCard, RequirementStatusSummary } from "./requirement-settings-layout";
-
-export type TRequirementConfigurationSection = "settings" | "fields";
 
 export type TRequirementSettingsDraft = {
   title: string;
@@ -18,67 +15,6 @@ export type TRequirementSettingsDraft = {
   approval_type: TRequirementApprovalType;
   required_count: number | null;
 };
-
-type TRequirementConfigurationNavigationProps = {
-  activeSection: TRequirementConfigurationSection;
-  onSectionChange: (section: TRequirementConfigurationSection) => void;
-  orientation?: "horizontal" | "vertical";
-};
-
-export function RequirementConfigurationNavigation({
-  activeSection,
-  onSectionChange,
-  orientation = "vertical",
-}: TRequirementConfigurationNavigationProps) {
-  const { t } = useTranslation();
-  const items = [
-    {
-      key: "settings" as const,
-      icon: Settings2,
-      label: t("workspace_products.requirements.configuration.settings"),
-    },
-    {
-      key: "fields" as const,
-      icon: SlidersHorizontal,
-      label: t("workspace_products.requirements.configuration.custom_fields"),
-    },
-  ];
-
-  return (
-    <nav
-      className={cn(orientation === "vertical" ? "px-3 py-4" : "flex items-center gap-1 overflow-x-auto px-3 py-2")}
-      aria-label={t("workspace_products.requirements.configuration.items")}
-    >
-      {orientation === "vertical" && (
-        <p className="mb-2 px-3 text-11 font-semibold text-secondary">
-          {t("workspace_products.requirements.configuration.items")}
-        </p>
-      )}
-      {items.map((item) => {
-        const Icon = item.icon;
-        const isActive = activeSection === item.key;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => onSectionChange(item.key)}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "flex h-10 items-center gap-2.5 rounded-md px-3 text-12 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong",
-              orientation === "vertical" ? "mb-1 w-full" : "shrink-0",
-              isActive
-                ? "bg-accent-subtle font-medium text-accent-primary"
-                : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-            )}
-          >
-            <Icon className="size-4 shrink-0" />
-            {item.label}
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
 
 type TRequirementSettingsPanelProps = {
   draft: TRequirementSettingsDraft;

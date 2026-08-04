@@ -11,7 +11,7 @@ from plane.app.serializers.requirement import RequirementDetailSerializer
 from plane.app.serializers.requirement_library import RequirementLibrarySerializer
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.detail_base import BaseRequirementDetailViewSet
-from plane.app.views.requirement.mixins import DetailLayer
+from plane.app.views.requirement.mixins import DetailLayer, DetailTemplateResolver
 from plane.db.models import RequirementDetail, RequirementLibrary
 from plane.utils.requirement import (
     get_library_field_specs,
@@ -75,6 +75,7 @@ class RequirementLibraryItemViewSet(BaseRequirementDetailViewSet):
         return True
 
     def resolve_layer(self, owner, *, for_write):
+        fields = get_library_field_specs(owner)
         return (
             DetailLayer(
                 queryset=RequirementDetail.objects.filter(library=owner).order_by(
@@ -82,18 +83,28 @@ class RequirementLibraryItemViewSet(BaseRequirementDetailViewSet):
                 ),
                 serializer_class=RequirementDetailSerializer,
                 serializer_context={},
-                fields=get_library_field_specs(owner),
+                template_ids=[owner.template_id],
+                fields=fields,
+                fields_by_template={str(owner.template_id): fields},
+                template_resolver=DetailTemplateResolver(
+                    workspace_id=owner.workspace_id,
+                    allowed_template_id=owner.template_id,
+                ),
+                # 库固定一个模板，条目不需要（也不允许）自己指定
+                default_template_id=owner.template_id,
+                # 乐观锁基准取模板而不是库：改字段动的是模板行，库行的 updated_at
+                # 不会变，用库的值会让「字段被人改了」这种冲突漏过去。
+                expected_updated_at=owner.template.updated_at,
+                is_frozen=False,
                 insert=lambda **kwargs: insert_library_item(library=owner, **kwargs),
                 save_batch=lambda **kwargs: save_library_item_batch(
                     library=owner, **kwargs
                 ),
+                import_items=None,
                 hard_delete=False,
             ),
             None,
         )
-
-    def expected_updated_at(self, owner):
-        return owner.template.updated_at
 
     def get_queryset(self):
         return (

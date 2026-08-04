@@ -165,19 +165,21 @@ export const useRequirementChangeRequests = ({
 /**
  * 变更对比页：变更单详情 + 明细数据组分页 + 审批动作。
  *
- * `changeType` 由调用方（URL query）持有，作为服务端筛选参数传入 —— 千行明细下分段
- * 筛选必须落到查询里，不能在前端过滤当前页。
+ * `changeType` 与 `templateId` 由调用方（URL query）持有，作为服务端筛选参数传入 ——
+ * 千行明细下分段筛选和模板分视图都必须落到查询里，不能在前端过滤当前页。
  */
 export const useRequirementChangeRequestDetail = ({
   workspaceSlug,
   requirementId,
   changeRequestId,
   changeType,
+  templateId,
 }: {
   workspaceSlug: string | undefined;
   requirementId: string | undefined;
   changeRequestId: string | undefined;
   changeType?: TRequirementChangeType;
+  templateId?: string;
 }) => {
   const isScoped = Boolean(workspaceSlug && requirementId && changeRequestId);
   const [changeRequest, setChangeRequest] = useState<TRequirementChangeRequestDetail | null>(null);
@@ -215,6 +217,7 @@ export const useRequirementChangeRequestDetail = ({
         cursor,
         perPage,
         changeType,
+        templateId,
       });
       setItemsPage(response);
       return response;
@@ -224,7 +227,7 @@ export const useRequirementChangeRequestDetail = ({
     } finally {
       setIsItemsLoading(false);
     }
-  }, [changeRequestId, changeType, cursor, perPage, requirementId, workspaceSlug]);
+  }, [changeRequestId, changeType, cursor, perPage, requirementId, templateId, workspaceSlug]);
 
   useEffect(() => {
     setChangeRequest(null);
@@ -235,7 +238,7 @@ export const useRequirementChangeRequestDetail = ({
     void fetchItems().catch(() => undefined);
   }, [fetchItems]);
 
-  useEffect(() => setCursor(undefined), [changeType]);
+  useEffect(() => setCursor(undefined), [changeType, templateId]);
 
   const actOnChangeRequest = useCallback(
     async (action: TRequirementApprovalAction, comment?: string) => {

@@ -11,9 +11,11 @@ from plane.app.serializers.requirement import (
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.app.views.requirement.detail_base import BaseRequirementDetailViewSet
+from plane.app.views.requirement.library_item import get_scoped_library
 from plane.app.views.requirement.mixins import (
     RequirementDraftDispatchMixin,
     resolve_detail_layer,
+    resolve_requirement_fields,
 )
 from plane.db.models import (
     Product,
@@ -23,6 +25,7 @@ from plane.db.models import (
     RequirementChangeRequest,
     RequirementChangeStatus,
     RequirementDetail,
+    RequirementDraftDetail,
     RequirementLibrary,
     Workspace,
 )
@@ -32,10 +35,13 @@ from plane.utils.product import (
     can_view_product,
 )
 from plane.utils.requirement import (
+    RequirementBuiltinFieldError,
     RequirementDataLossError,
+    detail_grid_expected_updated_at,
+    field_tree_from_specs,
     serialize_requirement_field_tree,
+    templates_field_payload_from_specs,
 )
-from plane.utils.requirement_draft import get_draft_field_tree
 
 
 def pending_change_requests():
@@ -248,10 +254,15 @@ class RequirementViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        # 标准库实时引用模板的字段，模板被引用时删掉会让库内条目失去字段定义
-        if (
-            requirement.is_template
-            and RequirementLibrary.objects.filter(template=requirement).exists()
+        # 字段实时引用模板，模板被引用时删掉会让引用方失去字段定义。
+        #
+        # 这个判断是**唯一的实际保护**，不是防御性检查：软删除不会触发外键的
+        # PROTECT，而 soft_delete_related_objects 把 PROTECT 当 CASCADE 处理，
+        # 所以真删下去会把引用它的明细行一起软删掉。
+        if requirement.is_template and (
+            RequirementLibrary.objects.filter(template=requirement).exists()
+            or RequirementDetail.objects.filter(template=requirement).exists()
+            or RequirementDraftDetail.objects.filter(template=requirement).exists()
         ):
             return Response(
                 {
@@ -309,7 +320,7 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
             .get()
         )
         draft = self.draft_for_read(requirement)
-        return {
+        payload = {
             "requirement": RequirementSerializer(
                 requirement,
                 context={
@@ -317,13 +328,29 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
                     "workspace": requirement.workspace,
                 },
             ).data,
-            "fields": (
-                get_draft_field_tree(draft)
-                if draft is not None
-                else serialize_requirement_field_tree(requirement)
-            ),
             "created_field_ids": created_field_ids or {},
         }
+
+        if requirement.is_template:
+            payload["fields"] = serialize_requirement_field_tree(requirement)
+            payload["templates"] = []
+            payload["is_frozen"] = False
+            return payload
+
+        # 产品需求是模板的集合：templates 供数据页分视图，fields 保留成扁平并集，
+        # 让变更记录与版本对比这两个 tab 完全不用改。
+        template_ids, specs, by_template, is_frozen = resolve_requirement_fields(
+            requirement=requirement, draft=draft
+        )
+        payload["templates"] = templates_field_payload_from_specs(
+            template_ids, by_template
+        )
+        payload["fields"] = field_tree_from_specs(specs)
+        payload["is_frozen"] = is_frozen
+        payload["detail_expected_updated_at"] = detail_grid_expected_updated_at(
+            owner=requirement, template_ids=template_ids
+        )
+        return payload
 
     def get(self, request, slug, pk):
         requirement = self._get_requirement(slug, pk)
@@ -355,7 +382,6 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
                 "request": request,
                 "workspace": requirement.workspace,
                 "requirement": requirement,
-                "draft": self.draft_for_write(requirement, request.user),
             },
         )
         serializer.is_valid(raise_exception=True)
@@ -377,6 +403,11 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
                     "affected_detail_count": exc.affected_detail_count,
                 },
                 status=status.HTTP_409_CONFLICT,
+            )
+        except RequirementBuiltinFieldError as exc:
+            return Response(
+                {"error": str(exc), "code": exc.code},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         except ValueError as exc:
             return Response(
@@ -434,8 +465,11 @@ class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseRequirementDet
             None,
         )
 
-    def expected_updated_at(self, owner):
-        return owner.updated_at
+    def resolve_library(self, library_id):
+        return get_scoped_library(
+            slug=self.workspace_slug,
+            library_id=library_id,
+        )
 
     def get_queryset(self):
         return (

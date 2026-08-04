@@ -97,6 +97,11 @@ urlpatterns = [
         name="requirement-detail-bulk-save",
     ),
     path(
+        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/import/",
+        RequirementDetailViewSet.as_view({"post": "import_from_library"}),
+        name="requirement-detail-import",
+    ),
+    path(
         "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/<uuid:pk>/",
         RequirementDetailViewSet.as_view(
             {"patch": "partial_update", "delete": "destroy"}

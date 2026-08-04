@@ -13,6 +13,8 @@ export type TRequirementFieldType =
   | "image"
   | "boolean";
 export type TRequirementSelectMode = "single" | "multiple";
+/** 每个需求模板必有的两个字段，前后端都不可删除 */
+export type TRequirementBuiltinFieldKey = "title" | "description";
 
 export type TRequirementSelectOption = {
   id: string;
@@ -60,6 +62,8 @@ export type TRequirement = {
   approver_ids: string[];
   approver_details: IUserLite[];
   field_count: number;
+  /** 产品需求内部包含多少个模板 —— 数据页会有多少个模板视图 */
+  template_count: number;
   detail_count: number;
   can_edit: boolean;
   /** null = 从未发布，前端靠它区分「撤回草稿」的两种语义 */
@@ -82,6 +86,10 @@ export type TRequirementField = {
   is_required: boolean;
   is_active: boolean;
   sort_order: number;
+  /** 非 null 时为模板内置字段：不可删除、类型与启用状态不可更改 */
+  builtin_key: TRequirementBuiltinFieldKey | null;
+  /** 定义该字段的需求模板 */
+  template_id?: string | null;
   config: {
     description?: string;
     placeholder?: string;
@@ -99,17 +107,35 @@ export type TRequirementFieldDraft = Omit<TRequirementField, "id" | "sort_order"
   children: TRequirementFieldDraft[];
 };
 
+/** 产品需求引用到的一个模板：id/title + 该模板的字段树 */
+export type TRequirementTemplateSchema = {
+  id: string;
+  title: string;
+  fields: TRequirementField[];
+  /** 默认视图要跨模板对齐标题/描述两列，而各模板的字段 UUID 不同 */
+  builtin_field_ids: Partial<Record<TRequirementBuiltinFieldKey, string>>;
+};
+
 export type TRequirementConfiguration = {
   requirement: TRequirement;
+  /** 需求模板自己的字段树；产品需求恒为「所有引用模板字段的扁平并集」 */
   fields: TRequirementField[];
+  /** 产品需求引用到的模板；需求模板恒为 [] */
+  templates: TRequirementTemplateSchema[];
+  /** true = 字段取自发版时冻结的快照（已发布只读态） */
+  is_frozen: boolean;
+  /** 明细网格的乐观锁基准，与 requirement.updated_at 是两个不同的值 */
+  detail_expected_updated_at?: string;
   created_field_ids: Record<string, string>;
 };
 
-/** 一行明细：requirement_id 与 library_id 恒有且仅有一个非空 */
+/** 一行明细：requirement_id 与 library_id 恒有且仅有一个非空，template_id 恒有 */
 export type TRequirementDetail = {
   id: string;
   requirement_id: string | null;
   library_id: string | null;
+  /** 定义本行字段的需求模板 */
+  template_id: string;
   data: TRequirementDetailData;
   sort_order: number;
   version: number;
@@ -122,6 +148,7 @@ export type TRequirementDetail = {
 export type TRequirementDetailBatchCreate = {
   client_id: string;
   data: TRequirementDetailData;
+  template_id?: string;
   before_id?: string;
   after_id?: string;
 };
@@ -241,11 +268,32 @@ export type TRequirementConfigurationPayload = {
       | "is_active"
     >
   >;
-  fields: TRequirementFieldDraft[];
+  /** 只有需求模板能改字段；产品需求的列来自模板，不传这个键 */
+  fields?: TRequirementFieldDraft[];
   confirm_data_loss?: boolean;
 };
 
 export type TRequirementDetailsResponse = TPaginatedResponse<TRequirementDetail[]>;
+
+/* --- 从标准库导入 -------------------------------------------------------- */
+
+export type TRequirementDetailImportPayload = {
+  library_id: string;
+  item_ids: string[];
+  before_id?: string;
+  after_id?: string;
+};
+
+export type TRequirementDetailImportResponse = {
+  created: {
+    client_id: string;
+    detail: TRequirementDetail;
+  }[];
+  updated: TRequirementDetail[];
+  deleted_ids: string[];
+  /** 本次导入的行绑定到的模板，前端据此把视图切过去 */
+  template_id: string;
+};
 
 /* --- 变更审批与版本 ------------------------------------------------------ */
 
@@ -276,6 +324,8 @@ export type TRequirementSchemaChangeSnapshot = {
   id: string;
   parent_field_id: string | null;
   parent_name: string | null;
+  template_id: string | null;
+  builtin_key: TRequirementBuiltinFieldKey | null;
   name: string;
   field_type: TRequirementFieldType;
   is_required: boolean;
@@ -289,6 +339,7 @@ export type TRequirementSchemaChangeSnapshot = {
 /** 明细数据组的变更项快照形状 */
 export type TRequirementDetailChangeSnapshot = {
   id: string;
+  template_id: string;
   data: TRequirementDetailData;
   sort_order: number;
 };
@@ -332,12 +383,25 @@ export type TRequirementChangeRequest = {
   completed_at: string | null;
 };
 
+/** 本次变更涉及的一个模板：评审页据此分视图，计数用来画切换器上的徽标 */
+export type TRequirementChangeTemplateStat = {
+  id: string;
+  /** 模板已被删除时为空串 */
+  title: string;
+  created_count: number;
+  updated_count: number;
+  deleted_count: number;
+  schema_item_count: number;
+};
+
 /** 变更单详情只内联基本信息与字段定义两组，明细组走 items 分页端点 */
 export type TRequirementChangeRequestDetail = TRequirementChangeRequest & {
   requirement_title: string;
   requirement_items: TRequirementChangeItem[];
   schema_items: TRequirementChangeItem[];
   detail_item_count: number;
+  /** 单模板需求恒为长度 1；需求模板自身的变更单为空 */
+  template_stats: TRequirementChangeTemplateStat[];
 };
 
 export type TRequirementVersion = {
@@ -354,10 +418,21 @@ export type TRequirementVersion = {
   created_at: string;
 };
 
+/** 版本快照涉及的一个模板：快照没有「变更」概念，计数是字段数与行数 */
+export type TRequirementVersionTemplateStat = {
+  id: string;
+  /** 模板已被删除时为空串 */
+  title: string;
+  field_count: number;
+  detail_count: number;
+};
+
 export type TRequirementVersionDetail = TRequirementVersion & {
   requirement_snapshot: Record<string, unknown>;
   fields_snapshot: TRequirementField[];
   detail_count: number;
+  /** 单模板需求恒为长度 1 */
+  template_stats: TRequirementVersionTemplateStat[];
 };
 
 export type TRequirementVersionComparisonResponse = TPaginatedResponse<TRequirementChangeItem[]> & {
@@ -368,6 +443,8 @@ export type TRequirementVersionComparisonResponse = TPaginatedResponse<TRequirem
   detail_item_count: number;
   changed_field_ids: string[];
   to_fields_snapshot: TRequirementField[];
+  /** 与变更单详情同形；不含无变更的模板 */
+  template_stats: TRequirementChangeTemplateStat[];
 };
 
 export type TRequirementWorkingCopyResponse = {

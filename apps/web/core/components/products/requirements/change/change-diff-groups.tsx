@@ -9,6 +9,7 @@ import type {
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
 import { cn, sanitizeHTML } from "@plane/utils";
+import type { TChangeTemplateTab } from "./change-template-tabs";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 const SCHEMA_COMPARE_KEYS = [
@@ -193,9 +194,36 @@ const getConfigSummary = (
   return parts;
 };
 
-/** 字段定义：按字段聚合属性差异，避免重复卡片抢占注意力。 */
-export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
+type TSchemaDiffListProps = {
+  items: TRequirementChangeItem[];
+  /** 多模板需求才传：字段定义按模板分节，否则同名字段跨模板完全分不清归属 */
+  templates?: TChangeTemplateTab[];
+};
+
+/** 字段定义：按模板分节、节内按字段聚合属性差异，避免重复卡片抢占注意力。 */
+export function SchemaDiffList({ items, templates }: TSchemaDiffListProps) {
   const { t } = useTranslation();
+
+  const groups = useMemo(() => {
+    if (!templates || templates.length <= 1) return null;
+    const byTemplate = new Map<string, TRequirementChangeItem[]>();
+    items.forEach((item) => {
+      const snapshot = (item.proposed_snapshot ?? item.before_snapshot) as TRequirementSchemaChangeSnapshot | null;
+      const key = snapshot?.template_id ?? "";
+      byTemplate.set(key, [...(byTemplate.get(key) ?? []), item]);
+    });
+    // 顺序跟随明细区的模板切换器，两处保持一致
+    const ordered = templates
+      .map((template) => ({ key: template.id, title: template.title, items: byTemplate.get(template.id) ?? [] }))
+      .filter((group) => group.items.length > 0);
+    const known = new Set(templates.map((template) => template.id));
+    // 快照里没有模板归属（历史数据）或模板已被删除时兜底，否则这些变更项会凭空消失
+    const orphans = Array.from(byTemplate.entries())
+      .filter(([key]) => !known.has(key))
+      .flatMap(([, list]) => list);
+    if (orphans.length) ordered.push({ key: "", title: "", items: orphans });
+    return ordered;
+  }, [items, templates]);
 
   const formatValue = (
     key: TSchemaCompareKey,
@@ -226,131 +254,153 @@ export function SchemaDiffList({ items }: { items: TRequirementChangeItem[] }) {
     return String(value);
   };
 
+  const renderTable = (rows: TRequirementChangeItem[]) => (
+    <div className="overflow-x-auto rounded-md border border-subtle">
+      <table className="w-full min-w-[680px] table-fixed border-collapse text-left">
+        <colgroup>
+          <col className="w-[10%]" />
+          <col className="w-[40%]" />
+          <col className="w-1/2" />
+        </colgroup>
+        <thead className="bg-layer-1 text-12 font-medium text-secondary">
+          <tr className="border-b border-subtle">
+            <th className="px-4 py-2.5">
+              {t("workspace_products.requirements.change.schema_review.columns.change")}
+            </th>
+            <th className="px-4 py-2.5">
+              {t("workspace_products.requirements.change.schema_review.columns.field")}
+            </th>
+            <th className="px-4 py-2.5">
+              {t("workspace_products.requirements.change.schema_review.columns.properties")}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((item) => {
+            const before = item.before_snapshot as TRequirementSchemaChangeSnapshot | null;
+            const after = item.proposed_snapshot as TRequirementSchemaChangeSnapshot | null;
+            const field = after ?? before;
+            if (!field) return null;
+            const isUpdate = item.change_type === "update" && Boolean(before && after);
+            const valueFor = (
+              snapshot: TRequirementSchemaChangeSnapshot | null,
+              key: TSchemaCompareKey
+            ): unknown => {
+              if (key !== "position" || snapshot?.position !== undefined) return snapshot?.[key];
+              const sortOrder = snapshot?.sort_order;
+              if (typeof sortOrder !== "number") return undefined;
+              const legacyPosition = sortOrder / 1000;
+              return Number.isInteger(legacyPosition) ? legacyPosition : undefined;
+            };
+            const visibleKeys = SCHEMA_COMPARE_KEYS.filter((key) => {
+              if (!isUpdate) return key !== "name" && key !== "field_type";
+              return !isEqual(valueFor(before, key), valueFor(after, key));
+            });
+
+            return (
+              <tr
+                key={item.id}
+                className={cn(
+                  "border-b border-subtle align-top last:border-b-0",
+                  CHANGE_TYPE_ROW[item.change_type]
+                )}
+              >
+                <td className="px-4 py-4">
+                  <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type])}>
+                    {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
+                  </span>
+                </td>
+                <th className="px-4 py-4 font-normal">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-13 font-semibold text-primary">{field.name}</span>
+                    <span className="rounded bg-layer-2 px-1.5 py-0.5 text-11 text-secondary">
+                      {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-12 text-tertiary">
+                    {field.parent_name
+                      ? t("workspace_products.requirements.change.schema_review.child_field", {
+                          name: field.parent_name,
+                        })
+                      : t("workspace_products.requirements.change.schema_review.root_field")}
+                  </p>
+                </th>
+                <td className="px-4 py-4">
+                  {visibleKeys.length > 0 ? (
+                    <dl className="space-y-1.5 text-13">
+                      {visibleKeys.map((key) => {
+                        const beforeValue = valueFor(before, key);
+                        const afterValue = valueFor(after, key);
+                        return (
+                          <div key={key} className="flex min-w-0 items-baseline gap-2">
+                            <dt className="w-20 shrink-0 text-tertiary">
+                              {t(`workspace_products.requirements.change.field_props.${key}`)}
+                            </dt>
+                            <dd className="min-w-0 text-secondary">
+                              {isUpdate ? (
+                                <>
+                                  <span className={DIFF_OLD_VALUE}>{formatValue(key, beforeValue, before)}</span>
+                                  <span className="mx-2 text-tertiary">→</span>
+                                  <span className={DIFF_NEW_VALUE}>{formatValue(key, afterValue, after)}</span>
+                                </>
+                              ) : (
+                                <span className={item.change_type === "create" ? DIFF_NEW_VALUE : DIFF_OLD_VALUE}>
+                                  {formatValue(
+                                    key,
+                                    item.change_type === "delete" ? beforeValue : afterValue,
+                                    field
+                                  )}
+                                </span>
+                              )}
+                            </dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  ) : (
+                    <span className="text-12 text-tertiary">
+                      {t("workspace_products.requirements.change.no_changes")}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <section aria-labelledby="change-schema-title" className="min-w-0">
       <h2 id="change-schema-title" className="sr-only">
         {t("workspace_products.requirements.change.schema_review.title")}
       </h2>
 
-      {items.length > 0 ? (
-        <div className="overflow-x-auto rounded-md border border-subtle">
-          <table className="w-full min-w-[680px] table-fixed border-collapse text-left">
-            <colgroup>
-              <col className="w-[10%]" />
-              <col className="w-[40%]" />
-              <col className="w-1/2" />
-            </colgroup>
-            <thead className="bg-layer-1 text-12 font-medium text-secondary">
-              <tr className="border-b border-subtle">
-                <th className="px-4 py-2.5">
-                  {t("workspace_products.requirements.change.schema_review.columns.change")}
-                </th>
-                <th className="px-4 py-2.5">
-                  {t("workspace_products.requirements.change.schema_review.columns.field")}
-                </th>
-                <th className="px-4 py-2.5">
-                  {t("workspace_products.requirements.change.schema_review.columns.properties")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const before = item.before_snapshot as TRequirementSchemaChangeSnapshot | null;
-                const after = item.proposed_snapshot as TRequirementSchemaChangeSnapshot | null;
-                const field = after ?? before;
-                if (!field) return null;
-                const isUpdate = item.change_type === "update" && Boolean(before && after);
-                const valueFor = (
-                  snapshot: TRequirementSchemaChangeSnapshot | null,
-                  key: TSchemaCompareKey
-                ): unknown => {
-                  if (key !== "position" || snapshot?.position !== undefined) return snapshot?.[key];
-                  const sortOrder = snapshot?.sort_order;
-                  if (typeof sortOrder !== "number") return undefined;
-                  const legacyPosition = sortOrder / 1000;
-                  return Number.isInteger(legacyPosition) ? legacyPosition : undefined;
-                };
-                const visibleKeys = SCHEMA_COMPARE_KEYS.filter((key) => {
-                  if (!isUpdate) return key !== "name" && key !== "field_type";
-                  return !isEqual(valueFor(before, key), valueFor(after, key));
-                });
-
-                return (
-                  <tr
-                    key={item.id}
-                    className={cn(
-                      "border-b border-subtle align-top last:border-b-0",
-                      CHANGE_TYPE_ROW[item.change_type]
-                    )}
-                  >
-                    <td className="px-4 py-4">
-                      <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type])}>
-                        {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
-                      </span>
-                    </td>
-                    <th className="px-4 py-4 font-normal">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-13 font-semibold text-primary">{field.name}</span>
-                        <span className="rounded bg-layer-2 px-1.5 py-0.5 text-11 text-secondary">
-                          {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-12 text-tertiary">
-                        {field.parent_name
-                          ? t("workspace_products.requirements.change.schema_review.child_field", {
-                              name: field.parent_name,
-                            })
-                          : t("workspace_products.requirements.change.schema_review.root_field")}
-                      </p>
-                    </th>
-                    <td className="px-4 py-4">
-                      {visibleKeys.length > 0 ? (
-                        <dl className="space-y-1.5 text-13">
-                          {visibleKeys.map((key) => {
-                            const beforeValue = valueFor(before, key);
-                            const afterValue = valueFor(after, key);
-                            return (
-                              <div key={key} className="flex min-w-0 items-baseline gap-2">
-                                <dt className="w-20 shrink-0 text-tertiary">
-                                  {t(`workspace_products.requirements.change.field_props.${key}`)}
-                                </dt>
-                                <dd className="min-w-0 text-secondary">
-                                  {isUpdate ? (
-                                    <>
-                                      <span className={DIFF_OLD_VALUE}>{formatValue(key, beforeValue, before)}</span>
-                                      <span className="mx-2 text-tertiary">→</span>
-                                      <span className={DIFF_NEW_VALUE}>{formatValue(key, afterValue, after)}</span>
-                                    </>
-                                  ) : (
-                                    <span className={item.change_type === "create" ? DIFF_NEW_VALUE : DIFF_OLD_VALUE}>
-                                      {formatValue(
-                                        key,
-                                        item.change_type === "delete" ? beforeValue : afterValue,
-                                        field
-                                      )}
-                                    </span>
-                                  )}
-                                </dd>
-                              </div>
-                            );
-                          })}
-                        </dl>
-                      ) : (
-                        <span className="text-12 text-tertiary">
-                          {t("workspace_products.requirements.change.no_changes")}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
+      {items.length === 0 ? (
         <p className="rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
           {t("workspace_products.requirements.change.schema_review.empty")}
         </p>
+      ) : groups ? (
+        <div className="space-y-5">
+          {groups.map((group) => (
+            <div key={group.key || "unassigned"} className="min-w-0">
+              <div className="mb-2 flex items-baseline gap-2">
+                <h3 className="text-13 font-semibold text-primary">
+                  {group.title || t("workspace_products.requirements.change.templates.untitled")}
+                </h3>
+                <span className="text-12 text-tertiary tabular-nums">
+                  {t("workspace_products.requirements.change.schema_review.group_count", {
+                    count: group.items.length,
+                  })}
+                </span>
+              </div>
+              {renderTable(group.items)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        renderTable(items)
       )}
     </section>
   );

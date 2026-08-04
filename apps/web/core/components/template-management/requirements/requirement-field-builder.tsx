@@ -9,6 +9,7 @@ import {
   FormInput,
   GripVertical,
   ListChecks,
+  Lock,
   MoreHorizontal,
   PanelRightOpen,
   Paperclip,
@@ -164,6 +165,7 @@ const createField = (
   field_type: type,
   is_required: false,
   is_active: true,
+  builtin_key: null,
   config:
     type === "select"
       ? {
@@ -174,6 +176,9 @@ const createField = (
   default_value: null,
   children: [],
 });
+
+/** 内置字段（标题/描述）不可删除、类型与启用状态不可更改。 */
+export const isBuiltinRequirementField = (field: TRequirementFieldDraft) => Boolean(field.builtin_key);
 
 const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequirementFieldDraft => {
   const config =
@@ -187,6 +192,8 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
     ...field,
     id: undefined,
     client_id: uuidv4(),
+    // 复制出来的是普通字段：内置标识全模板唯一，不能跟着复制
+    builtin_key: null,
     name: `${field.name}${suffix}`,
     config,
     default_value: field.field_type === "select" ? (getRequirementSelectMode(field) === "multiple" ? [] : null) : null,
@@ -321,6 +328,15 @@ function FieldStateBadges({ field, isSelected }: { field: TRequirementFieldDraft
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
+      {isBuiltinRequirementField(field) && (
+        <span
+          className="inline-flex items-center gap-1 rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary"
+          title={t("workspace_templates.requirements.editor.builder.builtin_locked_hint")}
+        >
+          <Lock className="size-2.5" />
+          {t("workspace_templates.requirements.editor.builder.builtin_badge")}
+        </span>
+      )}
       {field.is_required && (
         <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-10 font-medium text-danger-primary">
           {t("workspace_templates.requirements.fields.required")}
@@ -365,6 +381,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
   const { t } = useTranslation();
   const Icon = FIELD_ICONS[field.field_type];
   const isForm = field.field_type === "form" && !isChild;
+  const isBuiltin = isBuiltinRequirementField(field);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const fieldTypeDescription =
     field.field_type === "select"
@@ -493,7 +510,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
             <CustomMenu.MenuItem onClick={onDuplicate}>
               <MenuRowLabel icon={Copy} label={t("workspace_templates.requirements.editor.builder.duplicate_field")} />
             </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={onRemove}>
+            <CustomMenu.MenuItem onClick={onRemove} disabled={isBuiltin}>
               <MenuRowLabel
                 icon={Trash2}
                 label={t("workspace_templates.requirements.editor.builder.delete_field")}
@@ -511,6 +528,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
 function FieldInspector(props: TFieldInspectorProps) {
   const { field, isChild, showClose = false, onClose, onChange, onDuplicate, onRemove } = props;
   const { t } = useTranslation();
+  const isBuiltin = Boolean(field && isBuiltinRequirementField(field));
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
   const selectOptions = field?.field_type === "select" ? getRequirementSelectOptions(field) : [];
   const hasValidSelectOptions = field?.field_type !== "select" || hasValidRequirementSelectOptions(field);
@@ -619,8 +637,9 @@ function FieldInspector(props: TFieldInspectorProps) {
               </span>
               <select
                 value={field.field_type}
+                disabled={isBuiltin}
                 onChange={(event) => updateType(event.target.value as TRequirementFieldType)}
-                className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none"
+                className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
               >
                 {availableTypes.map((type) => (
                   <option key={type} value={type}>
@@ -629,6 +648,11 @@ function FieldInspector(props: TFieldInspectorProps) {
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
+              {isBuiltin && (
+                <span className="mt-1.5 block text-11 text-tertiary">
+                  {t("workspace_templates.requirements.editor.builder.builtin_type_locked")}
+                </span>
+              )}
             </label>
             {field.field_type === "select" && (
               <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
@@ -792,11 +816,18 @@ function FieldInspector(props: TFieldInspectorProps) {
                 </div>
                 <ToggleSwitch
                   value={field.is_active}
+                  // 停用内置字段会让它从所有网格里消失，包括靠它定义列的默认视图
+                  disabled={isBuiltin}
                   onChange={(value) => onChange({ ...field, is_active: value })}
                   size="sm"
                   label={t("workspace_templates.requirements.editor.builder.enabled_title")}
                 />
               </div>
+              {isBuiltin && (
+                <p className="px-4 pb-3 text-10 leading-4 text-tertiary">
+                  {t("workspace_templates.requirements.editor.builder.builtin_locked_hint")}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center justify-between gap-2 border-t border-subtle px-4 py-3">
@@ -804,14 +835,16 @@ function FieldInspector(props: TFieldInspectorProps) {
               <Copy className="size-3.5" />
               {t("workspace_templates.requirements.editor.builder.duplicate_field")}
             </Button>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-12 font-medium text-danger-primary hover:bg-danger-subtle"
-            >
-              <Trash2 className="size-3.5" />
-              {t("workspace_templates.requirements.editor.builder.delete_field")}
-            </button>
+            {!isBuiltin && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-12 font-medium text-danger-primary hover:bg-danger-subtle"
+              >
+                <Trash2 className="size-3.5" />
+                {t("workspace_templates.requirements.editor.builder.delete_field")}
+              </button>
+            )}
           </div>
         </>
       )}
@@ -949,6 +982,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const rootIndex = fields.findIndex((field) => fieldKey(field) === targetSelection.rootKey);
     if (rootIndex === -1) return;
     const root = fields[rootIndex];
+    // 内置字段是模板的硬性组成，删掉就没法在默认视图里对齐标题/描述两列了
+    if (!targetSelection.childKey && isBuiltinRequirementField(root)) return;
     if (targetSelection.childKey) {
       const nextChildren = root.children.filter((field) => fieldKey(field) !== targetSelection.childKey);
       onChange(

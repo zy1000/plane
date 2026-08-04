@@ -5,7 +5,7 @@ import { ChevronLeft, Database, FileText, GitBranch, History, Save, Settings2 } 
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirement, TRequirementField, TRequirementFieldDraft, IUserLite } from "@plane/types";
+import type { TRequirement, IUserLite } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -13,8 +13,6 @@ import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { RequirementDetailGrid } from "@/components/template-management/requirements/requirement-detail-grid";
-import { RequirementFieldBuilder } from "@/components/template-management/requirements/requirement-field-builder";
-import { hasValidRequirementSelectOptions } from "@/components/template-management/requirements/requirement-select";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { useRequirementDetails } from "@/hooks/store/use-requirement-template-details";
@@ -25,31 +23,22 @@ import { SubmitChangeModal } from "./change/submit-change-modal";
 import { useRequirementStateActions } from "./change/use-requirement-state-actions";
 import { VersionHistory } from "./change/version-history";
 import { useProductRequirementsContext } from "./context";
-import { ReadOnlyFieldStructure, ReadOnlyRequirementSettings } from "./requirement-read-only-configuration";
+import { RequirementImportFromLibraryModal } from "./import-from-library-modal";
+import { ReadOnlyRequirementSettings } from "./requirement-read-only-configuration";
 import {
-  RequirementConfigurationNavigation,
-  RequirementSettingsPanel,
-  type TRequirementConfigurationSection,
-  type TRequirementSettingsDraft,
-} from "./requirement-settings-panel";
+  DEFAULT_VIEW_KEY,
+  getViewKey,
+  RequirementDataViewSwitcher,
+  resolveRequirementDataView,
+  type TRequirementDataView,
+} from "./requirement-data-views";
+import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
+import { RequirementSettingsPanel, type TRequirementSettingsDraft } from "./requirement-settings-panel";
+import { RequirementTemplatePickerModal } from "./template-picker-modal";
 
 const TABS = ["data", "configuration", "changes", "versions"] as const;
 
 type TRequirementDetailTab = (typeof TABS)[number];
-
-const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
-  id: field.id,
-  client_id: field.client_id,
-  name: field.name,
-  field_type: field.field_type,
-  is_required: field.is_required,
-  is_active: field.is_active,
-  config: { ...field.config },
-  default_value: field.default_value,
-  children: field.children.map(toDraftField),
-});
-
-const serializeFields = (fields: TRequirementFieldDraft[]) => JSON.stringify(fields);
 
 const toSettingsDraft = (requirement: TRequirement): TRequirementSettingsDraft => ({
   title: requirement.title,
@@ -73,9 +62,10 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
   const { data: currentUser } = useUser();
   const [isDataEditing, setIsDataEditing] = useState(false);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
-  const [configurationSection, setConfigurationSection] = useState<TRequirementConfigurationSection>("settings");
-  const [draftFields, setDraftFields] = useState<TRequirementFieldDraft[]>([]);
-  const [fieldBaseline, setFieldBaseline] = useState("");
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  /** 鼠标移到「导入」上就开始预热条目，点开时基本无等待 */
+  const [shouldPrefetchImport, setShouldPrefetchImport] = useState(false);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<TRequirementSettingsDraft | null>(null);
   const [settingsBaseline, setSettingsBaseline] = useState("");
   const detailsStore = useRequirementDetails({
@@ -115,31 +105,48 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     if (currentUser) byId.set(currentUser.id, currentUser);
     return Array.from(byId.values());
   }, [currentUser, members, requirement]);
-  const areFieldsDirty = useMemo(
-    () => Boolean(fieldBaseline && serializeFields(draftFields) !== fieldBaseline),
-    [draftFields, fieldBaseline]
-  );
-  const areSettingsDirty = useMemo(
+  const isDirty = useMemo(
     () => Boolean(settingsBaseline && settingsDraft && serializeSettings(settingsDraft) !== settingsBaseline),
     [settingsBaseline, settingsDraft]
   );
-  const isDirty = areFieldsDirty || areSettingsDirty;
+
+  const templates = detailsStore.templates;
+  const activeView = useMemo(
+    () => resolveRequirementDataView(templates, searchParams.get("view")),
+    [searchParams, templates]
+  );
+  const activeTemplate = activeView.kind === "template" ? templates.find((item) => item.id === activeView.templateId) : undefined;
 
   useEffect(() => {
     if (!detailsStore.configuration) return;
-    const nextFields = detailsStore.configuration.fields.map(toDraftField);
     const nextSettings = toSettingsDraft(detailsStore.configuration.requirement);
-    setDraftFields(nextFields);
-    setFieldBaseline(serializeFields(nextFields));
     setSettingsDraft(nextSettings);
     setSettingsBaseline(serializeSettings(nextSettings));
   }, [detailsStore.configuration]);
+
+  /**
+   * 视图与明细过滤保持同步：单模板时也要把过滤设成那个模板，否则会拉到全部行。
+   * 依赖只取用到的两个值 —— detailsStore 每次渲染都是新对象，整个放进依赖会死循环。
+   */
+  const { templateFilter, setTemplateFilter } = detailsStore;
+  useEffect(() => {
+    const nextFilter = activeView.kind === "template" ? activeView.templateId : undefined;
+    if (templateFilter !== nextFilter) setTemplateFilter(nextFilter);
+  }, [activeView, setTemplateFilter, templateFilter]);
 
   const setTab = (tab: TRequirementDetailTab) => {
     if (isDataEditing || (activeTab === "configuration" && isDirty)) return;
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
     next.delete("cr");
+    setSearchParams(next, { replace: true });
+  };
+
+  const changeView = (view: TRequirementDataView) => {
+    if (isDataEditing) return;
+    const next = new URLSearchParams(searchParams);
+    if (getViewKey(view) === DEFAULT_VIEW_KEY) next.delete("view");
+    else next.set("view", getViewKey(view));
     setSearchParams(next, { replace: true });
   };
 
@@ -165,7 +172,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     onSubmitted: () => setTab("changes"),
   });
 
-  const saveConfiguration = async (confirmDataLoss = false) => {
+  /** 只保存基本信息与审批配置 —— 字段归模板所有，这里已经不再提交 fields。 */
+  const saveConfiguration = async () => {
     if (!detailsStore.configuration || !requirement || !settingsDraft) return;
     if (!settingsDraft.title.trim()) {
       setToast({
@@ -173,7 +181,6 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         title: t("error"),
         message: t("workspace_products.requirements.validation.title"),
       });
-      setConfigurationSection("settings");
       return;
     }
     if (!settingsDraft.owner_id) {
@@ -182,7 +189,6 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         title: t("error"),
         message: t("workspace_products.requirements.validation.owner"),
       });
-      setConfigurationSection("settings");
       return;
     }
     if (
@@ -197,26 +203,6 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         title: t("error"),
         message: t("workspace_products.requirements.validation.required_count"),
       });
-      setConfigurationSection("settings");
-      return;
-    }
-    const allFields = draftFields.flatMap((field) => [field, ...field.children]);
-    if (allFields.some((field) => !field.name.trim())) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_templates.requirements.validation.field_name"),
-      });
-      setConfigurationSection("fields");
-      return;
-    }
-    if (allFields.some((field) => field.field_type === "select" && !hasValidRequirementSelectOptions(field))) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_templates.requirements.validation.selector_options"),
-      });
-      setConfigurationSection("fields");
       return;
     }
     try {
@@ -234,13 +220,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               ? settingsDraft.required_count
               : null,
         },
-        fields: draftFields,
-        confirm_data_loss: confirmDataLoss,
       });
-      const nextFields = response.fields.map(toDraftField);
       const nextSettings = toSettingsDraft(response.requirement);
-      setDraftFields(nextFields);
-      setFieldBaseline(serializeFields(nextFields));
       setSettingsDraft(nextSettings);
       setSettingsBaseline(serializeSettings(nextSettings));
       setToast({
@@ -249,19 +230,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         message: t("workspace_products.requirements.toast.configuration_saved"),
       });
     } catch (error) {
-      const payload = error as { code?: string; error?: string; affected_detail_count?: number };
-      if (
-        payload?.code === "REQUIREMENT_SCHEMA_DATA_LOSS" &&
-        !confirmDataLoss &&
-        window.confirm(
-          t("workspace_templates.requirements.editor.data_loss_confirm", {
-            count: payload.affected_detail_count ?? 0,
-          })
-        )
-      ) {
-        await saveConfiguration(true);
-        return;
-      }
+      const payload = error as { code?: string; error?: string };
       if (payload?.code === "REQUIREMENT_CONFIGURATION_CONFLICT") {
         await detailsStore.fetchConfiguration().catch(() => undefined);
       }
@@ -389,9 +358,39 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </div>
           </div>
           {activeTab === "data" && (
-            <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 shrink-0 items-center pl-2" />
+            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 pl-2">
+              {/* 网格工具栏（搜索等）在前；导入/录入放在 host 外，避免被编辑态内容整体替换 */}
+              <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
+              {isEditable && !isDataEditing && (
+                <>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onMouseEnter={() => setShouldPrefetchImport(true)}
+                    onFocus={() => setShouldPrefetchImport(true)}
+                    onClick={() => setIsImportOpen(true)}
+                  >
+                    {t("workspace_products.requirements.data.import_from_library")}
+                  </Button>
+                  <Button variant="primary" size="lg" onClick={() => setIsTemplatePickerOpen(true)}>
+                    {t("workspace_products.requirements.data.manual_entry")}
+                  </Button>
+                </>
+              )}
+            </div>
           )}
         </nav>
+
+        {activeTab === "data" && templates.length > 1 && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-subtle px-4 py-1.5 md:px-6">
+            <RequirementDataViewSwitcher
+              templates={templates}
+              activeKey={getViewKey(activeView)}
+              disabled={isDataEditing}
+              onChange={changeView}
+            />
+          </div>
+        )}
 
         {detailsStore.configurationError && !detailsStore.configuration ? (
           <div className="grid flex-1 place-items-center p-6 text-center">
@@ -440,119 +439,164 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </div>
           )
         ) : activeTab === "data" ? (
-          <RequirementDetailGrid
-            workspaceSlug={workspaceSlug}
-            entityId={requirementId ?? ""}
-            readOnly={!isEditable}
-            expectedUpdatedAt={detailsStore.configuration?.requirement.updated_at}
-            fields={detailsStore.configuration?.fields ?? []}
-            details={detailsStore.detailsPage.results}
-            totalCount={detailsStore.detailsPage.total_count ?? 0}
-            totalPages={detailsStore.detailsPage.total_pages ?? 0}
-            nextCursor={detailsStore.detailsPage.next_cursor}
-            prevCursor={detailsStore.detailsPage.prev_cursor}
-            nextPageResults={detailsStore.detailsPage.next_page_results}
-            prevPageResults={detailsStore.detailsPage.prev_page_results}
-            isLoading={isLoading || detailsStore.isDetailsLoading}
-            isMutating={detailsStore.isMutating}
-            error={detailsStore.detailsError}
-            search={detailsStore.search}
-            filters={detailsStore.filters}
-            perPage={detailsStore.perPage}
-            onSearchChange={detailsStore.setSearch}
-            onFiltersChange={detailsStore.setFilters}
-            onPerPageChange={detailsStore.setPerPage}
-            onCursorChange={detailsStore.setCursor}
-            onRefresh={detailsStore.fetchDetails}
-            onBulkSave={detailsStore.saveDetailBatch}
-            onEditingChange={setIsDataEditing}
-            toolbarPortalEl={dataToolbarHost}
-          />
+          templates.length === 0 ? (
+            <div className="grid flex-1 place-items-center p-6 text-center">
+              <div className="max-w-md">
+                <p className="text-13 font-medium text-primary">
+                  {t("workspace_products.requirements.data.empty.title")}
+                </p>
+                <p className="mt-1 text-12 text-secondary">
+                  {t("workspace_products.requirements.data.empty.description")}
+                </p>
+                {isEditable && (
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <Button
+                      variant="primary"
+                      onMouseEnter={() => setShouldPrefetchImport(true)}
+                      onFocus={() => setShouldPrefetchImport(true)}
+                      onClick={() => setIsImportOpen(true)}
+                    >
+                      {t("workspace_products.requirements.data.import_from_library")}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setIsTemplatePickerOpen(true)}>
+                      {t("workspace_products.requirements.data.manual_entry")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : activeView.kind === "default" ? (
+            <RequirementDefaultViewGrid
+              workspaceSlug={workspaceSlug}
+              templates={templates}
+              details={detailsStore.detailsPage.results}
+              totalCount={detailsStore.detailsPage.total_count ?? 0}
+              perPage={detailsStore.perPage}
+              nextCursor={detailsStore.detailsPage.next_cursor}
+              prevCursor={detailsStore.detailsPage.prev_cursor}
+              nextPageResults={detailsStore.detailsPage.next_page_results}
+              prevPageResults={detailsStore.detailsPage.prev_page_results}
+              isLoading={isLoading || detailsStore.isDetailsLoading}
+              isMutating={detailsStore.isMutating}
+              error={detailsStore.detailsError}
+              readOnly={!isEditable}
+              search={detailsStore.search}
+              onSearchChange={detailsStore.setSearch}
+              onCursorChange={detailsStore.setCursor}
+              onPerPageChange={detailsStore.setPerPage}
+              onDelete={detailsStore.deleteDetails}
+              onDuplicate={({ templateId, data, afterId }) =>
+                detailsStore.createDetail(data, templateId, { after_id: afterId })
+              }
+              onOpenTemplateView={(templateId) => changeView({ kind: "template", templateId })}
+              toolbarPortalEl={dataToolbarHost}
+            />
+          ) : (
+            <RequirementDetailGrid
+              // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
+              key={activeView.templateId}
+              workspaceSlug={workspaceSlug}
+              entityId={requirementId ?? ""}
+              readOnly={!isEditable}
+              expectedUpdatedAt={detailsStore.configuration?.detail_expected_updated_at}
+              createTemplateId={activeView.templateId}
+              columnStorageId={activeView.templateId}
+              fields={activeTemplate?.fields ?? []}
+              details={detailsStore.detailsPage.results}
+              totalCount={detailsStore.detailsPage.total_count ?? 0}
+              totalPages={detailsStore.detailsPage.total_pages ?? 0}
+              nextCursor={detailsStore.detailsPage.next_cursor}
+              prevCursor={detailsStore.detailsPage.prev_cursor}
+              nextPageResults={detailsStore.detailsPage.next_page_results}
+              prevPageResults={detailsStore.detailsPage.prev_page_results}
+              isLoading={isLoading || detailsStore.isDetailsLoading}
+              isMutating={detailsStore.isMutating}
+              error={detailsStore.detailsError}
+              search={detailsStore.search}
+              filters={detailsStore.filters}
+              perPage={detailsStore.perPage}
+              onSearchChange={detailsStore.setSearch}
+              onFiltersChange={detailsStore.setFilters}
+              onPerPageChange={detailsStore.setPerPage}
+              onCursorChange={detailsStore.setCursor}
+              onRefresh={detailsStore.fetchDetails}
+              onBulkSave={detailsStore.saveDetailBatch}
+              onEditingChange={setIsDataEditing}
+              toolbarPortalEl={dataToolbarHost}
+            />
+          )
         ) : detailsStore.isConfigurationLoading ? (
           <div className="p-6">
             <Loader>
               <Loader.Item height="420px" />
             </Loader>
           </div>
-        ) : isEditable ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-subtle xl:hidden">
-              <RequirementConfigurationNavigation
-                activeSection={configurationSection}
-                onSectionChange={setConfigurationSection}
-                orientation="horizontal"
-              />
-            </div>
-
-            {configurationSection === "settings" ? (
-              <div className="flex min-h-0 flex-1">
-                <aside className="hidden w-52 shrink-0 border-r border-subtle bg-surface-1 xl:block">
-                  <RequirementConfigurationNavigation
-                    activeSection={configurationSection}
-                    onSectionChange={setConfigurationSection}
-                  />
-                </aside>
-                {settingsDraft ? (
-                  <RequirementSettingsPanel
-                    draft={settingsDraft}
-                    currentVersion={requirement?.current_version ?? null}
-                    memberOptions={memberOptions}
-                    onChange={setSettingsDraft}
-                  />
-                ) : (
-                  <div className="min-w-0 flex-1 p-6">
-                    <Loader>
-                      <Loader.Item height="420px" />
-                    </Loader>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <RequirementFieldBuilder
-                fields={draftFields}
-                onChange={setDraftFields}
-                compactLayout
-                title={t("workspace_products.requirements.configuration.custom_fields")}
-                description={t("workspace_products.requirements.configuration.custom_fields_description")}
-                sidebarHeader={
-                  <div className="shrink-0 border-b border-subtle">
-                    <RequirementConfigurationNavigation
-                      activeSection={configurationSection}
-                      onSectionChange={setConfigurationSection}
-                    />
-                  </div>
-                }
-              />
-            )}
-          </div>
         ) : (
+          /* 配置只剩基本信息与审批 —— 字段已经改由「模板管理 → 需求模板」维护 */
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-subtle xl:hidden">
-              <RequirementConfigurationNavigation
-                activeSection={configurationSection}
-                onSectionChange={setConfigurationSection}
-                orientation="horizontal"
-              />
+            <div className="shrink-0 border-b border-subtle px-4 py-2 text-11 text-tertiary md:px-6">
+              {t("workspace_products.requirements.configuration.fields_moved_hint")}
             </div>
             <div className="flex min-h-0 flex-1">
-              <aside className="hidden w-52 shrink-0 border-r border-subtle bg-surface-1 xl:block">
-                <RequirementConfigurationNavigation
-                  activeSection={configurationSection}
-                  onSectionChange={setConfigurationSection}
-                />
-              </aside>
-              {configurationSection === "settings" && requirement ? (
+              {!isEditable && requirement ? (
                 <ReadOnlyRequirementSettings requirement={requirement} hint={configurationReadOnlyHint} />
-              ) : (
-                <ReadOnlyFieldStructure
-                  fields={detailsStore.configuration?.fields ?? []}
-                  hint={configurationReadOnlyHint}
+              ) : settingsDraft ? (
+                <RequirementSettingsPanel
+                  draft={settingsDraft}
+                  currentVersion={requirement?.current_version ?? null}
+                  memberOptions={memberOptions}
+                  onChange={setSettingsDraft}
                 />
+              ) : (
+                <div className="min-w-0 flex-1 p-6">
+                  <Loader>
+                    <Loader.Item height="420px" />
+                  </Loader>
+                </div>
               )}
             </div>
           </div>
         )}
       </ContentWrapper>
+
+      {/*
+        常驻挂载（不加 isImportOpen && 门槛）：内部的 hook 会在挂载时把标准库列表拉好，
+        换来「打开即有内容」。代价是进页面多一个很轻的列表请求，比打开后白屏 1 秒划算。
+        条目那一层更重，所以留给 shouldPrefetch 在 hover 时再拉。
+      */}
+      <RequirementImportFromLibraryModal
+        isOpen={isImportOpen}
+        shouldPrefetch={shouldPrefetchImport}
+        workspaceSlug={workspaceSlug}
+        isMutating={detailsStore.isMutating}
+        onClose={() => setIsImportOpen(false)}
+        onImport={async (payloads) => {
+          const responses = await detailsStore.importFromLibraries(payloads);
+          if (!responses.length) return responses;
+          // 跨库导入时切到第一批的模板视图，用户马上能看到刚导进来的数据
+          changeView({ kind: "template", templateId: responses[0].template_id });
+          setToast({
+            type: TOAST_TYPE.SUCCESS,
+            title: t("success"),
+            message: t("workspace_products.requirements.data.toast.imported", {
+              count: responses.reduce((total, item) => total + item.created.length, 0),
+            }),
+          });
+          return responses;
+        }}
+      />
+      {isTemplatePickerOpen && (
+        <RequirementTemplatePickerModal
+          isOpen={isTemplatePickerOpen}
+          workspaceSlug={workspaceSlug}
+          onClose={() => setIsTemplatePickerOpen(false)}
+          onConfirm={(templateId) => {
+            setIsTemplatePickerOpen(false);
+            // 切到该模板的视图，用户在那里用表格下方的「新增数据」录入
+            changeView({ kind: "template", templateId });
+          }}
+        />
+      )}
 
       <SubmitChangeModal
         isOpen={stateActions.isSubmitModalOpen}

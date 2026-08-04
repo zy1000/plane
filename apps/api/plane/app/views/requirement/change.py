@@ -45,8 +45,10 @@ from plane.utils.paginator import Cursor
 from plane.utils.requirement_change import (
     RequirementChangeError,
     act_on_change_request,
+    build_change_template_stats,
     build_version_comparison,
     cancel_change_request,
+    filter_change_items_by_template,
     rollback_to_version,
     submit_change_request,
 )
@@ -267,6 +269,7 @@ class RequirementChangeRequestViewSet(RequirementScopedMixin, BaseViewSet):
                 context={
                     "request": request,
                     "detail_item_count": change_request.detail_item_count,
+                    "template_stats": build_change_template_stats(change_request.id),
                 },
             ).data,
             status=status.HTTP_200_OK,
@@ -401,6 +404,9 @@ class RequirementChangeItemViewSet(RequirementScopedMixin, BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             queryset = queryset.filter(change_type=change_type)
+        template_id = request.query_params.get("template_id")
+        if template_id:
+            queryset = filter_change_items_by_template(queryset, template_id)
         return self.paginate(
             request=request,
             queryset=queryset,
@@ -471,6 +477,15 @@ class RequirementVersionViewSet(RequirementScopedMixin, BaseViewSet):
         if requirement_version is None:
             return self.version_not_found()
         rows = (requirement_version.snapshot or {}).get("details") or []
+        # 快照里的明细是多个模板拼在一起的，切片前先按模板裁，否则前端只能拿到混着
+        # 别的模板的一页数据
+        template_id = request.query_params.get("template_id")
+        if template_id:
+            rows = [
+                row
+                for row in rows
+                if str(row.get("template_id") or "") == template_id
+            ]
         return paginate_sequence(self, request, rows)
 
     def _compare_versions(self, request, from_version, to_version):
@@ -491,6 +506,22 @@ class RequirementVersionViewSet(RequirementScopedMixin, BaseViewSet):
         if change_type:
             detail_items = [
                 item for item in detail_items if item["change_type"] == change_type
+            ]
+        # template_stats 已经在 build_version_comparison 里按全量算好，这里只裁当前页
+        template_id = request.query_params.get("template_id")
+        if template_id:
+            detail_items = [
+                item
+                for item in detail_items
+                if str(
+                    (
+                        item.get("proposed_snapshot")
+                        or item.get("before_snapshot")
+                        or {}
+                    ).get("template_id")
+                    or ""
+                )
+                == template_id
             ]
 
         response = paginate_sequence(self, request, detail_items)

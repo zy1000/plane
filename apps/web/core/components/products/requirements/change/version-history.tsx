@@ -3,7 +3,7 @@
  *
  * 回滚不直接改正式表 —— 它把历史快照灌入工作副本，需求回到草稿态，仍要再走一次审批。
  */
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeftRight, ChevronLeft, ChevronRight, GitBranch, RotateCcw } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -38,12 +38,20 @@ type TProps = {
 
 export function VersionHistory({ workspaceSlug, requirement, members, onRequirementUpdate }: TProps) {
   const { t } = useTranslation();
-  const { changeType, changedColumnsOnly, setChangeType, setChangedColumnsOnly } = useChangeItemFilters();
+  const {
+    changeType,
+    changedColumnsOnly,
+    requestedTemplateId,
+    setChangeType,
+    setChangedColumnsOnly,
+    setTemplateId,
+  } = useChangeItemFilters();
   const store = useRequirementVersions({
     workspaceSlug,
     requirementId: requirement.id,
     currentVersion: requirement.current_version,
     changeType,
+    templateId: requestedTemplateId,
     onRequirementUpdate,
   });
   const [pendingRollback, setPendingRollback] = useState<number | null>(null);
@@ -65,6 +73,28 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   const snapshotFields = store.versionDetail?.fields_snapshot ?? [];
   const snapshotFieldCount = snapshotFields.reduce((count, field) => count + 1 + field.children.length, 0);
   const comparison = store.comparisonPage;
+  // 两种模式的模板清单来源不同，但共用 URL 上的同一个 tpl：快照看的是「这版有哪些模板」，
+  // 对比看的是「这次差异涉及哪些模板」
+  const templateStats = isComparing
+    ? (comparison?.template_stats ?? [])
+    : (store.versionDetail?.template_stats ?? []);
+  const activeTemplateId =
+    templateStats.length > 1
+      ? (templateStats.find((item) => item.id === requestedTemplateId)?.id ?? templateStats[0].id)
+      : undefined;
+  const isTemplateStatsReady = isComparing ? Boolean(comparison) : Boolean(store.versionDetail);
+  const comparisonFields = activeTemplateId
+    ? (comparison?.to_fields_snapshot ?? []).filter((field) => field.template_id === activeTemplateId)
+    : (comparison?.to_fields_snapshot ?? []);
+
+  // 明细分页在服务端按 template_id 过滤，URL 上的值必须和这里收敛出的一致
+  useEffect(() => {
+    if (!isTemplateStatsReady) return;
+    if (activeTemplateId) {
+      if (activeTemplateId !== requestedTemplateId) setTemplateId(activeTemplateId);
+    } else if (requestedTemplateId) setTemplateId(undefined);
+  }, [activeTemplateId, isTemplateStatsReady, requestedTemplateId, setTemplateId]);
+
   const comparisonSectionCounts: Record<TComparisonSection, number> = {
     basic: comparison?.requirement_items.length ?? 0,
     schema: comparison?.schema_items.length ?? 0,
@@ -486,13 +516,16 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                   </div>
                 ) : activeComparisonSection === "schema" ? (
                   <div className="p-4 md:p-6">
-                    <SchemaDiffList items={comparison.schema_items} />
+                    <SchemaDiffList items={comparison.schema_items} templates={templateStats} />
                   </div>
                 ) : (
                   <DetailDiffGrid
                     workspaceSlug={workspaceSlug}
-                    fields={comparison.to_fields_snapshot}
+                    fields={comparisonFields}
                     changedFieldIds={comparison.changed_field_ids}
+                    templates={templateStats}
+                    activeTemplateId={activeTemplateId}
+                    onTemplateChange={setTemplateId}
                     items={comparison.results}
                     totalCount={comparison.total_count ?? 0}
                     isLoading={store.isComparisonLoading}
@@ -551,6 +584,8 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                 prevCursor={store.detailsPage.prev_cursor}
                 nextPageResults={store.detailsPage.next_page_results}
                 prevPageResults={store.detailsPage.prev_page_results}
+                activeTemplateId={activeTemplateId}
+                onTemplateChange={setTemplateId}
                 onPerPageChange={store.setDetailsPerPage}
                 onCursorChange={store.setDetailsCursor}
               />

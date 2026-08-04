@@ -131,7 +131,8 @@ export function ProductRequirementModal() {
         title: t("success"),
         message: t("workspace_products.requirements.toast.created"),
       });
-      navigate(`/${workspaceSlug}/products/${productId}/requirements/${created.id}?tab=configuration`);
+      // 落到数据页：字段已不在配置页维护，建完需求下一步就是导入或录入明细
+      navigate(`/${workspaceSlug}/products/${productId}/requirements/${created.id}?tab=data`);
     } catch (requestError) {
       setError(errorMessage(requestError, t("workspace_products.requirements.toast.failed")));
     }
@@ -271,7 +272,7 @@ export function ProductRequirementModal() {
               {t("cancel")}
             </Button>
             <Button variant="primary" onClick={() => void handleSave()} loading={isMutating}>
-              {t(isEdit ? "save" : "workspace_products.requirements.modal.create_and_configure")}
+              {t(isEdit ? "save" : "workspace_products.requirements.modal.create_action")}
             </Button>
           </div>
         </footer>

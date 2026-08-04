@@ -179,6 +179,7 @@ from .requirement import (
     RequirementDetailBatchSaveSerializer,
     RequirementDetailCreateSerializer,
     RequirementDetailFilterSerializer,
+    RequirementDetailImportSerializer,
     RequirementDetailSerializer,
     RequirementDetailUpdateSerializer,
     RequirementDraftDetailSerializer,

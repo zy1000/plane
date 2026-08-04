@@ -3,7 +3,7 @@
  *
  * 概览与字段定义直接消费详情响应中的内联快照，明细数据继续走独立分页端点。
  */
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -40,11 +40,46 @@ type TProps = {
 export function ChangeRequestDetail(props: TProps) {
   const { workspaceSlug, requirementId, changeRequestId, fields, members, onBack, onSettled } = props;
   const { t } = useTranslation();
-  const { changeType, changedColumnsOnly, setChangeType, setChangedColumnsOnly } = useChangeItemFilters();
-  const store = useRequirementChangeRequestDetail({ workspaceSlug, requirementId, changeRequestId, changeType });
+  const {
+    changeType,
+    changedColumnsOnly,
+    requestedTemplateId,
+    setChangeType,
+    setChangedColumnsOnly,
+    setTemplateId,
+  } = useChangeItemFilters();
+  // 详情要先回来才知道有哪些模板，所以先按 URL 上的值取数，收敛后再由 effect 纠正
+  const store = useRequirementChangeRequestDetail({
+    workspaceSlug,
+    requirementId,
+    changeRequestId,
+    changeType,
+    templateId: requestedTemplateId,
+  });
   const { changeRequest } = store;
   const [sectionSelection, setSectionSelection] = useState<TSectionSelection | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  // 单模板需求（含需求模板自身）不分视图，行为与今天完全一致
+  const templateStats = changeRequest?.template_stats ?? [];
+  const activeTemplateId =
+    templateStats.length > 1
+      ? (templateStats.find((item) => item.id === requestedTemplateId)?.id ?? templateStats[0].id)
+      : undefined;
+  /** 表头只取当前模板的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
+  const templateFields = useMemo(
+    () => (activeTemplateId ? fields.filter((field) => field.template_id === activeTemplateId) : fields),
+    [activeTemplateId, fields]
+  );
+
+  // 把收敛后的模板写回 URL：明细分页在服务端按 template_id 过滤，两边必须是同一个值。
+  // 详情没回来之前不能动 URL，否则会把分享链接上的 tpl 抹掉。
+  useEffect(() => {
+    if (!changeRequest) return;
+    if (activeTemplateId) {
+      if (activeTemplateId !== requestedTemplateId) setTemplateId(activeTemplateId);
+    } else if (requestedTemplateId) setTemplateId(undefined);
+  }, [activeTemplateId, changeRequest, requestedTemplateId, setTemplateId]);
 
   const act = async (action: TRequirementApprovalAction, comment: string) => {
     try {
@@ -259,12 +294,15 @@ export function ChangeRequestDetail(props: TProps) {
           {activeSection === "overview" ? (
             <MetaDiffTable items={changeRequest.requirement_items} members={members} />
           ) : activeSection === "schema" ? (
-            <SchemaDiffList items={changeRequest.schema_items} />
+            <SchemaDiffList items={changeRequest.schema_items} templates={templateStats} />
           ) : (
             <DetailDiffGrid
               workspaceSlug={workspaceSlug}
-              fields={fields}
+              fields={templateFields}
               changedFieldIds={changeRequest.changed_field_ids}
+              templates={templateStats}
+              activeTemplateId={activeTemplateId}
+              onTemplateChange={setTemplateId}
               items={store.itemsPage.results}
               totalCount={store.itemsPage.total_count ?? 0}
               isLoading={store.isItemsLoading}

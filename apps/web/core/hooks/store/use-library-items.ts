@@ -191,6 +191,8 @@ export const useLibraryItems = ({
   return {
     configuration,
     library: configuration?.library ?? null,
+    /** 库固定一个模板 —— 网格建行时用它绑定 */
+    templateId: configuration?.library.template_id ?? null,
     detailsPage,
     isConfigurationLoading,
     isDetailsLoading,

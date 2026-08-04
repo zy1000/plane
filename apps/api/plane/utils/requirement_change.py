@@ -18,10 +18,13 @@ draft --提交--> in_review --通过--> published（物化 + 新版本）
 
 from copy import deepcopy
 
-from django.db.models import Max
+from django.db.models import Count, Max, Q
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from plane.db.models import (
+    Requirement,
     RequirementApprovalAction,
     RequirementApprovalType,
     RequirementChangeApproval,
@@ -38,15 +41,17 @@ from plane.db.models import (
     RequirementVersion,
 )
 from plane.utils.requirement import (
+    field_specs_for_templates,
     field_specs_from_tree,
+    field_tree_from_specs,
+    get_referenced_template_ids,
     replace_requirement_approvers,
-    serialize_requirement_field_tree,
 )
 from plane.utils.requirement_draft import (
     drop_draft,
     get_draft,
+    get_draft_baseline_field_tree,
     get_draft_baseline_meta,
-    get_draft_field_tree,
     load_snapshot_into_draft,
     materialize_draft,
     requirement_meta_snapshot,
@@ -88,13 +93,29 @@ class RequirementChangeError(Exception):
 def _detail_row(detail):
     return {
         "id": str(detail.id),
+        "template_id": str(detail.template_id),
         "data": deepcopy(detail.data),
         "sort_order": detail.sort_order,
     }
 
 
-def build_snapshot(requirement):
+def _live_field_tree(*, model, scope):
+    """这批明细当前生效的字段树：各引用模板的字段树按模板顺序拼接。
+
+    保持成「扁平的根字段树列表」而不是按模板分组的嵌套结构 —— 字段 UUID 全局唯一，
+    所以 _flatten_fields / diff_snapshots / 版本对比全都不用改；要分视图时前端按
+    节点上的 template_id 分组即可。
+    """
+    template_ids = get_referenced_template_ids(model=model, scope=scope)
+    specs, _ = field_specs_for_templates(template_ids)
+    return field_tree_from_specs(specs)
+
+
+def build_snapshot(requirement, *, fields=None):
     """从正式表构造整份快照，版本记录与 diff 基准共用。
+
+    fields 不给时按正式明细引用到的模板实时派生 —— 写版本时这就是「冻结」动作。
+    审批通过走的是提交时冻结的那份（见 _publish），避免提交到通过之间模板被改掉。
 
     明细分块读，避免千行一次性驻留。
     """
@@ -107,7 +128,13 @@ def build_snapshot(requirement):
 
     return {
         "requirement": requirement_meta_snapshot(requirement),
-        "fields": serialize_requirement_field_tree(requirement),
+        "fields": (
+            deepcopy(fields)
+            if fields is not None
+            else _live_field_tree(
+                model=RequirementDetail, scope={"requirement": requirement}
+            )
+        ),
         "details": details,
     }
 
@@ -115,7 +142,8 @@ def build_snapshot(requirement):
 def build_draft_full_snapshot(*, requirement, draft):
     """把工作副本读成与 build_snapshot 同构的整份快照。
 
-    meta 取正式行上的当前值 —— meta 编辑不经过草稿层。
+    meta 取正式行上的当前值 —— meta 编辑不经过草稿层。字段实时取自草稿明细引用到
+    的模板，这正是「提案」的一部分：模板改了字段，就会在 diff 里显示出来。
     """
     details = []
     queryset = RequirementDraftDetail.objects.filter(draft=draft).order_by(
@@ -126,17 +154,24 @@ def build_draft_full_snapshot(*, requirement, draft):
 
     return {
         "requirement": requirement_meta_snapshot(requirement),
-        "fields": get_draft_field_tree(draft),
+        "fields": _live_field_tree(
+            model=RequirementDraftDetail, scope={"draft": draft}
+        ),
         "details": details,
     }
 
 
 def build_change_snapshots(*, requirement, draft):
-    """算出 diff 的两侧 (before, after)。"""
+    """算出 diff 的两侧 (before, after)。
+
+    「变更前」的字段必须取草稿里冻结的基线，不能实时派生：字段现在住在模板里，
+    两侧都实时取的话永远是同一份，模板的字段改动就一条 diff 都出不来 —— 而这恰恰
+    是模板改动抵达已发布内容的唯一通道。
+    """
     if draft is None:
         return {}, build_snapshot(requirement)
 
-    before = build_snapshot(requirement)
+    before = build_snapshot(requirement, fields=get_draft_baseline_field_tree(draft))
     before["requirement"] = get_draft_baseline_meta(draft)
     return before, build_draft_full_snapshot(requirement=requirement, draft=draft)
 
@@ -146,11 +181,17 @@ def _flatten_fields(tree):
     flat = {}
     sibling_positions = {}
     for spec in field_specs_from_tree(tree):
-        position = sibling_positions.get(spec.parent_field_id, 0) + 1
-        sibling_positions[spec.parent_field_id] = position
+        # position 按 (模板, 父字段) 分组计数，而不是全局。字段树现在是多个模板的
+        # 拼接，全局计数会让「引用的模板集合变了」把其他模板的根字段整体重新编号，
+        # 而 position 在 FIELD_COMPARE_KEYS 里 —— 那会凭空炸出一堆假的字段变更项。
+        position_key = (spec.template_id, spec.parent_field_id)
+        position = sibling_positions.get(position_key, 0) + 1
+        sibling_positions[position_key] = position
         flat[spec.id] = {
             "id": spec.id,
             "parent_field_id": spec.parent_field_id,
+            "template_id": spec.template_id,
+            "builtin_key": spec.builtin_key,
             "name": spec.name,
             "field_type": spec.field_type,
             "is_required": spec.is_required,
@@ -363,18 +404,220 @@ def build_version_comparison(*, before, after, from_version, to_version):
         grouped.sort(key=item_sort_key)
 
     detail_items = grouped_items[RequirementChangeTargetKind.DETAIL_DATA]
+    schema_items = grouped_items[RequirementChangeTargetKind.SCHEMA]
+    fields_snapshot = deepcopy(after.get("fields") or [])
     return {
         "from_version": from_version,
         "to_version": to_version,
         "requirement_items": grouped_items[
             RequirementChangeTargetKind.REQUIREMENT
         ],
-        "schema_items": grouped_items[RequirementChangeTargetKind.SCHEMA],
+        "schema_items": schema_items,
         "detail_items": detail_items,
         "detail_item_count": len(detail_items),
         "changed_field_ids": stats["changed_field_ids"],
-        "to_fields_snapshot": deepcopy(after.get("fields") or []),
+        "to_fields_snapshot": fields_snapshot,
+        "template_stats": _comparison_template_stats(
+            schema_items=schema_items,
+            detail_items=detail_items,
+            fields=fields_snapshot,
+        ),
     }
+
+
+def _template_key_expression():
+    """变更项所属模板的取值表达式。
+
+    模板 ID 只存在于快照 JSON 里 —— 变更项表上没有这一列。新增项没有
+    before_snapshot、删除项没有 proposed_snapshot，所以两侧取先有的那个。
+    """
+    return Coalesce(
+        KeyTextTransform("template_id", "proposed_snapshot"),
+        KeyTextTransform("template_id", "before_snapshot"),
+    )
+
+
+def filter_change_items_by_template(queryset, template_id):
+    """按模板裁剪变更项。
+
+    分页在服务端，一页里混着多个模板的行，前端没法自己分组。
+    """
+    return queryset.filter(
+        Q(proposed_snapshot__template_id=str(template_id))
+        | Q(before_snapshot__template_id=str(template_id))
+    )
+
+
+def build_change_template_stats(change_request_id):
+    """变更单涉及的模板及各自的变更计数。
+
+    产品需求是多个模板的拼接，评审页据此按模板分视图 —— 否则表头是所有模板字段的
+    并集，而每行明细只属于一个模板，只填得满自己那几列，其余全是空洞。
+
+    计数在库侧按 JSON key 分组算：上千条变更项每条都带两份完整行快照，不能为了数
+    个数把它们读进内存。
+    """
+    rows = (
+        RequirementChangeItem.objects.filter(change_request_id=change_request_id)
+        .exclude(target_kind=RequirementChangeTargetKind.REQUIREMENT)
+        .annotate(template_key=_template_key_expression())
+        # 必须清掉 Meta.ordering：排序字段会被一并塞进 GROUP BY，分组会退化成不聚合
+        .order_by()
+        .values("template_key")
+        .annotate(
+            created_count=Count(
+                "id",
+                filter=Q(
+                    target_kind=RequirementChangeTargetKind.DETAIL_DATA,
+                    change_type=RequirementChangeType.CREATE,
+                ),
+            ),
+            updated_count=Count(
+                "id",
+                filter=Q(
+                    target_kind=RequirementChangeTargetKind.DETAIL_DATA,
+                    change_type=RequirementChangeType.UPDATE,
+                ),
+            ),
+            deleted_count=Count(
+                "id",
+                filter=Q(
+                    target_kind=RequirementChangeTargetKind.DETAIL_DATA,
+                    change_type=RequirementChangeType.DELETE,
+                ),
+            ),
+            schema_item_count=Count(
+                "id",
+                filter=Q(target_kind=RequirementChangeTargetKind.SCHEMA),
+            ),
+        )
+    )
+    counts = {row["template_key"]: row for row in rows if row["template_key"]}
+    if not counts:
+        return []
+
+    def stat(template_id, title, row):
+        return {
+            "id": template_id,
+            "title": title,
+            "created_count": row["created_count"],
+            "updated_count": row["updated_count"],
+            "deleted_count": row["deleted_count"],
+            "schema_item_count": row["schema_item_count"],
+        }
+
+    # 顺序跟随模板自身的 (sort_order, created_at, id)，与数据页的视图切换器一致
+    stats = []
+    ordered = (
+        Requirement.objects.filter(id__in=list(counts))
+        .order_by("sort_order", "created_at", "id")
+        .values_list("id", "title")
+    )
+    for template_id, title in ordered:
+        row = counts.pop(str(template_id), None)
+        if row is not None:
+            stats.append(stat(str(template_id), title, row))
+    # 模板已被删除时也要保留分组，否则这部分变更项在评审页里没有任何入口
+    stats.extend(stat(template_key, "", row) for template_key, row in counts.items())
+    return stats
+
+
+def _template_titles(template_ids):
+    ids = [item for item in template_ids if item]
+    if not ids:
+        return {}
+    return {
+        str(key): value
+        for key, value in Requirement.objects.filter(id__in=ids).values_list(
+            "id", "title"
+        )
+    }
+
+
+def snapshot_template_stats(snapshot):
+    """版本快照涉及的模板 + 各自的字段数与明细行数。
+
+    顺序取字段树里模板首次出现的顺序：快照里的字段树本来就是按模板顺序拼接的，不必
+    再回查模板表排序 —— 快照是冻结的，模板此刻可能已经被删了。
+    """
+    field_counts = {}
+    order = []
+
+    def bucket(key):
+        if key not in field_counts:
+            field_counts[key] = 0
+            order.append(key)
+        return key
+
+    for node in snapshot.get("fields") or []:
+        key = bucket(str(node.get("template_id") or ""))
+        field_counts[key] += 1 + len(node.get("children") or [])
+
+    detail_counts = {}
+    for row in snapshot.get("details") or []:
+        key = bucket(str(row.get("template_id") or ""))
+        detail_counts[key] = detail_counts.get(key, 0) + 1
+
+    titles = _template_titles(order)
+    return [
+        {
+            "id": key,
+            "title": titles.get(key, ""),
+            "field_count": field_counts[key],
+            "detail_count": detail_counts.get(key, 0),
+        }
+        for key in order
+    ]
+
+
+_CHANGE_TYPE_COUNT_KEYS = {
+    RequirementChangeType.CREATE: "created_count",
+    RequirementChangeType.UPDATE: "updated_count",
+    RequirementChangeType.DELETE: "deleted_count",
+}
+
+
+def _comparison_template_stats(*, schema_items, detail_items, fields):
+    """版本对比的按模板计数，形状与 build_change_template_stats 对齐。
+
+    对比结果不落库，全在内存里，所以直接按快照上的 template_id 分组即可。
+    """
+    counts = {}
+    order = []
+
+    def bucket(key):
+        if key not in counts:
+            counts[key] = {
+                "created_count": 0,
+                "updated_count": 0,
+                "deleted_count": 0,
+                "schema_item_count": 0,
+            }
+            order.append(key)
+        return counts[key]
+
+    # 先按目标版本的字段树排一遍模板顺序，与快照视图保持一致
+    for node in fields or []:
+        bucket(str(node.get("template_id") or ""))
+
+    def template_key(item):
+        snapshot = item.get("proposed_snapshot") or item.get("before_snapshot") or {}
+        return str(snapshot.get("template_id") or "")
+
+    for item in schema_items:
+        bucket(template_key(item))["schema_item_count"] += 1
+    for item in detail_items:
+        count_key = _CHANGE_TYPE_COUNT_KEYS.get(item["change_type"])
+        if count_key:
+            bucket(template_key(item))[count_key] += 1
+
+    titles = _template_titles(order)
+    return [
+        {"id": key, "title": titles.get(key, ""), **counts[key]}
+        for key in order
+        # 目标版本里没有任何变更的模板不出现在切换器上 —— 切过去只会是一张空表
+        if any(counts[key].values())
+    ]
 
 
 def _next_sequence_id(requirement):
@@ -495,6 +738,9 @@ def submit_change_request(*, requirement, reason="", actor=None):
         required_count=required_count,
         status=RequirementChangeStatus.PENDING,
         reason=reason or "",
+        # 冻结提案里的字段树：模板不走审批、随时可改，不冻结的话审批人看到的字段
+        # 结构与通过后真正落库的可能不是同一份
+        proposed_fields=deepcopy(after.get("fields") or []),
         created_by=actor,
         **stats,
     )
@@ -566,7 +812,11 @@ def _publish(*, change_request, requirement, actor=None):
             if change_request.base_version is None
             else RequirementChangeType.UPDATE
         ),
-        snapshot=build_snapshot(requirement),
+        # 用提交时冻结的字段树，而不是此刻再去模板上实时取 —— 否则提交到通过之间
+        # 有人改了模板，落库的版本就和审批人看过的对不上
+        snapshot=build_snapshot(
+            requirement, fields=change_request.proposed_fields or None
+        ),
         change_request=change_request,
         approved_by=approved_by,
         created_by=actor,

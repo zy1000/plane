@@ -23,6 +23,8 @@ export type TRequirementDetailDraftRow = {
   detailId?: string;
   clientId?: string;
   version?: number;
+  /** 该行绑定的需求模板；新增行取自当前视图，已有行取自后端 */
+  templateId?: string;
   isDeleted: boolean;
   isCopy?: boolean;
 };
@@ -72,6 +74,7 @@ const createDraftRows = (details: TRequirementDetail[]): TRequirementDetailDraft
     mode: "update",
     detailId: detail.id,
     version: detail.version,
+    templateId: detail.template_id,
     data: cloneDeep(detail.data),
     originalData: cloneDeep(detail.data),
     isDeleted: false,
@@ -94,6 +97,7 @@ export const useRequirementDetailGridEditor = ({
   fields,
   workspaceSlug,
   expectedUpdatedAt,
+  createTemplateId,
   discardMessage,
   onSave,
   onEditingChange,
@@ -102,6 +106,8 @@ export const useRequirementDetailGridEditor = ({
   fields: TRequirementField[];
   workspaceSlug: string;
   expectedUpdatedAt?: string;
+  /** 新增行绑定到的模板 —— 就是当前视图的模板 */
+  createTemplateId?: string;
   discardMessage: string;
   onSave: (payload: TRequirementDetailBatchSavePayload) => Promise<TRequirementDetailBatchSaveResponse>;
   onEditingChange?: (isEditing: boolean) => void;
@@ -156,6 +162,7 @@ export const useRequirementDetailGridEditor = ({
       beforeKey,
       afterKey,
       isCopy = false,
+      templateId,
     }: {
       data?: TRequirementDetailData;
       beforeId?: string;
@@ -163,12 +170,15 @@ export const useRequirementDetailGridEditor = ({
       beforeKey?: string;
       afterKey?: string;
       isCopy?: boolean;
+      /** 复制行时沿用源行的模板，其余情况用当前视图的模板 */
+      templateId?: string;
     } = {}) => {
       const currentRows = isEditing ? [...draftRowsRef.current] : createDraftRows(details);
       const nextRow: TRequirementDetailDraftRow = {
         key: uuidv4(),
         mode: "create",
         clientId: uuidv4(),
+        templateId: templateId ?? createTemplateId,
         data: data ? copyRequirementDetailData(data, fields) : createEmptyRequirementDetailData(fields),
         isDeleted: false,
         isCopy,
@@ -187,7 +197,7 @@ export const useRequirementDetailGridEditor = ({
       setConflictIds([]);
       setIsEditing(true);
     },
-    [commitDraftRows, details, fields, isEditing]
+    [commitDraftRows, createTemplateId, details, fields, isEditing]
   );
 
   const updateRowData = useCallback(
@@ -283,6 +293,8 @@ export const useRequirementDetailGridEditor = ({
         const create = {
           client_id: row.clientId,
           data: row.data,
+          // 标准库不用传（库本身固定了模板），产品需求必须传当前视图的模板
+          ...(row.templateId ? { template_id: row.templateId } : {}),
         };
         if (nextExisting?.detailId) return Object.assign(create, { before_id: nextExisting.detailId });
         if (previousExisting?.detailId) return Object.assign(create, { after_id: previousExisting.detailId });

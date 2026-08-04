@@ -16,6 +16,7 @@ from plane.app.serializers.requirement import (
     RequirementDetailBatchSaveSerializer,
     RequirementDetailCreateSerializer,
     RequirementDetailFilterSerializer,
+    RequirementDetailImportSerializer,
     RequirementDetailSerializer,
     RequirementDetailUpdateSerializer,
 )
@@ -42,10 +43,6 @@ class BaseRequirementDetailViewSet(BaseViewSet):
 
     def resolve_layer(self, owner, *, for_write):
         """返回 (DetailLayer, error_response)；error_response 非 None 时直接返回它。"""
-        raise NotImplementedError
-
-    def expected_updated_at(self, owner):
-        """bulk_save 的乐观锁基准 —— 字段定义变化时这个值必须跟着变。"""
         raise NotImplementedError
 
     # --- 公共流程 -------------------------------------------------------
@@ -106,6 +103,11 @@ class BaseRequirementDetailViewSet(BaseViewSet):
         ]
 
         queryset = layer.queryset
+        # 按模板切视图必须在服务端过滤 —— 明细是游标分页的，前端拿到的只是一页
+        template_id = request.query_params.get("template_id")
+        if template_id:
+            queryset = queryset.filter(template_id=template_id)
+
         search = request.query_params.get("search", "")
         if search.strip() or normalized_filters:
             matching_ids = filter_requirement_detail_ids(
@@ -113,6 +115,7 @@ class BaseRequirementDetailViewSet(BaseViewSet):
                 details=queryset,
                 search=search,
                 filters=normalized_filters,
+                fields_by_template=layer.fields_by_template,
             )
             queryset = queryset.filter(id__in=matching_ids)
         return self.paginate(
@@ -136,13 +139,18 @@ class BaseRequirementDetailViewSet(BaseViewSet):
             return error
         serializer = RequirementDetailCreateSerializer(
             data=request.data,
-            context={"owner": owner, "fields": layer.fields},
+            context={
+                "owner": owner,
+                "template_resolver": layer.template_resolver,
+                "default_template_id": layer.default_template_id,
+            },
         )
         serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
                 detail = layer.insert(
                     data=serializer.validated_data["data"],
+                    template_id=serializer.validated_data["template_id"],
                     actor=request.user,
                     before_id=serializer.validated_data.get("before_id"),
                     after_id=serializer.validated_data.get("after_id"),
@@ -161,9 +169,21 @@ class BaseRequirementDetailViewSet(BaseViewSet):
         layer, error = self.resolve_layer(owner, for_write=True)
         if error is not None:
             return error
+        # 先取这一行绑定的模板 —— data 要按它自己的字段校验，而不是全部模板的并集
+        row_template_id = (
+            layer.queryset.filter(id=pk).values_list("template_id", flat=True).first()
+        )
+        if row_template_id is None:
+            return Response(
+                {"error": "Requirement detail not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         serializer = RequirementDetailUpdateSerializer(
             data=request.data,
-            context={"owner": owner, "fields": layer.fields},
+            context={
+                "owner": owner,
+                "fields": layer.template_resolver.specs(row_template_id),
+            },
         )
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -241,17 +261,25 @@ class BaseRequirementDetailViewSet(BaseViewSet):
 
             serializer = RequirementDetailBatchSaveSerializer(
                 data=request.data,
-                context={"owner": owner, "fields": layer.fields},
+                context={
+                    "owner": owner,
+                    "template_resolver": layer.template_resolver,
+                    "default_template_id": layer.default_template_id,
+                    # 每行按自己绑定的模板校验
+                    "row_templates": dict(
+                        layer.queryset.values_list("id", "template_id")
+                    ),
+                },
             )
             serializer.is_valid(raise_exception=True)
-            if self.expected_updated_at(owner) != serializer.validated_data[
+            if layer.expected_updated_at != serializer.validated_data[
                 "expected_updated_at"
             ]:
                 return Response(
                     {
                         "error": "The requirement changed before the batch was saved.",
                         "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
-                        "current_updated_at": self.expected_updated_at(owner),
+                        "current_updated_at": layer.expected_updated_at,
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
@@ -291,3 +319,63 @@ class BaseRequirementDetailViewSet(BaseViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    def import_from_library(self, request, *args, **kwargs):
+        """把标准库里的条目导入成本需求的明细行。
+
+        走的是和其它写入完全一样的分派：需要时自动开工作副本，排序与锁复用
+        save_batch 那一套，所以这里不需要任何特殊处理。
+        """
+        with transaction.atomic():
+            owner, error = self._owner_or_error(for_update=True)
+            if error is not None:
+                return error
+            layer, error = self.resolve_layer(owner, for_write=True)
+            if error is not None:
+                return error
+
+            serializer = RequirementDetailImportSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            library = self.resolve_library(serializer.validated_data["library_id"])
+            if library is None:
+                return Response(
+                    {"error": "Requirement library not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            try:
+                created, _, _ = layer.import_items(
+                    library=library,
+                    item_ids=serializer.validated_data["item_ids"],
+                    actor=request.user,
+                    before_id=serializer.validated_data.get("before_id"),
+                    after_id=serializer.validated_data.get("after_id"),
+                )
+            except ValueError as exc:
+                return Response(
+                    {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return Response(
+            {
+                "created": [
+                    {
+                        "client_id": str(client_id),
+                        "detail": layer.serializer_class(
+                            detail, context=layer.serializer_context
+                        ).data,
+                    }
+                    for client_id, detail in created
+                ],
+                "updated": [],
+                "deleted_ids": [],
+                # 引用的模板集合可能变大了，前端据此决定要不要重取 configuration
+                "template_id": str(library.template_id),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def resolve_library(self, library_id):
+        """导入源标准库；只有产品需求的明细入口支持导入。"""
+        raise NotImplementedError

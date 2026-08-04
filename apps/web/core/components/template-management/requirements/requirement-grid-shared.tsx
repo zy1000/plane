@@ -7,6 +7,7 @@
 import { Fragment, useState } from "react";
 import { observer } from "mobx-react";
 import { Download, File } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Modal, Typography } from "antd";
 import { useTranslation } from "@plane/i18n";
 import type {
@@ -67,6 +68,22 @@ export const getCurrentPageOffset = (
   if (nextOffset !== null && (nextPageResults || nextOffset > 0)) return Math.max(0, nextOffset - 1);
   return 0;
 };
+
+/** 行操作菜单里的一行：图标 + 文案，危险动作转红。编辑态网格与默认视图共用。 */
+export const MenuRowLabel = ({
+  icon: Icon,
+  label,
+  tone = "default",
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone?: "default" | "danger";
+}) => (
+  <span className={cn("flex items-center gap-2", tone === "danger" && "text-danger-primary")}>
+    <Icon className="size-3.5 shrink-0" />
+    <span className="truncate">{label}</span>
+  </span>
+);
 
 export const ChangedFieldCorner = () => (
   <span

@@ -28,6 +28,7 @@ import {
   LeafValue,
   RequirementGridHeader,
 } from "@/components/template-management/requirements/requirement-grid-shared";
+import { ChangeTemplateTabs, type TChangeTemplateTab } from "./change-template-tabs";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 const PER_PAGE_OPTIONS = [20, 50, 100];
@@ -181,6 +182,10 @@ type TProps = {
   prevPageResults?: boolean;
   changeType: TRequirementChangeType | undefined;
   changedColumnsOnly: boolean;
+  /** 多模板需求才传：给满 2 个才出切换器，fields 已由调用方按模板裁好 */
+  templates?: TChangeTemplateTab[];
+  activeTemplateId?: string;
+  onTemplateChange?: (templateId: string) => void;
   /** 仅变更详情页使用舒适密度；版本历史保持默认密度。 */
   density?: "default" | "comfortable";
   onChangeTypeChange: (value: TRequirementChangeType | undefined) => void;
@@ -205,6 +210,9 @@ export function DetailDiffGrid(props: TProps) {
     prevPageResults,
     changeType,
     changedColumnsOnly,
+    templates,
+    activeTemplateId,
+    onTemplateChange,
     density = "default",
     onChangeTypeChange,
     onChangedColumnsOnlyChange,
@@ -219,7 +227,9 @@ export function DetailDiffGrid(props: TProps) {
   const rootFields = useMemo(() => {
     const active = fields.filter((field) => field.is_active);
     if (!changedColumnsOnly || !changedFieldIds.length) return active;
-    return active.filter((field) => changedFieldIds.includes(field.id));
+    const changed = active.filter((field) => changedFieldIds.includes(field.id));
+    // changedFieldIds 是跨模板的全集：当前模板一列都没命中时退回全列，别渲染出空表
+    return changed.length ? changed : active;
   }, [changedColumnsOnly, changedFieldIds, fields]);
   const formFields = useMemo(() => rootFields.filter((field) => field.field_type === "form"), [rootFields]);
 
@@ -386,40 +396,53 @@ export function DetailDiffGrid(props: TProps) {
         {t("workspace_products.requirements.change.detail_review.title")}
       </h2>
 
-      <div
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-3 border-b border-subtle bg-layer-1/40 px-3 py-2",
-          isComfortable && "min-h-[50px] px-4"
-        )}
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center rounded-md border border-subtle p-0.5">
-            {SEGMENTS.map((segment) => (
-              <button
-                key={segment ?? "all"}
-                type="button"
-                onClick={() => onChangeTypeChange(segment)}
-                className={cn(
-                  "rounded px-2.5 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong",
-                  isComfortable ? "h-8 text-13" : "h-7 text-12",
-                  changeType === segment
-                    ? "bg-accent-subtle font-medium text-accent-primary"
-                    : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-                )}
-              >
-                {t(`workspace_products.requirements.change.filters.${segment ?? "all"}`)}
-              </button>
-            ))}
-          </div>
-          <div className={cn("flex min-h-8 items-center gap-2 text-secondary", isComfortable ? "text-13" : "text-12")}>
-            <span>{t("workspace_products.requirements.change.filters.changed_only")}</span>
-            <ToggleSwitch
-              value={changedColumnsOnly}
-              onChange={onChangedColumnsOnlyChange}
-              label={t("workspace_products.requirements.change.filters.changed_only")}
-              size="sm"
-              className="focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:ring-offset-1"
+      <div className={cn("border-b border-subtle bg-layer-1/40 px-3 py-2", isComfortable && "px-4")}>
+        {templates && templates.length > 1 && activeTemplateId && onTemplateChange && (
+          <div className="mb-2 border-b border-subtle pb-2">
+            <ChangeTemplateTabs
+              templates={templates}
+              activeTemplateId={activeTemplateId}
+              onChange={onTemplateChange}
             />
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-3",
+            isComfortable && "min-h-[34px]"
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center rounded-md border border-subtle p-0.5">
+              {SEGMENTS.map((segment) => (
+                <button
+                  key={segment ?? "all"}
+                  type="button"
+                  onClick={() => onChangeTypeChange(segment)}
+                  className={cn(
+                    "rounded px-2.5 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong",
+                    isComfortable ? "h-8 text-13" : "h-7 text-12",
+                    changeType === segment
+                      ? "bg-accent-subtle font-medium text-accent-primary"
+                      : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                  )}
+                >
+                  {t(`workspace_products.requirements.change.filters.${segment ?? "all"}`)}
+                </button>
+              ))}
+            </div>
+            <div
+              className={cn("flex min-h-8 items-center gap-2 text-secondary", isComfortable ? "text-13" : "text-12")}
+            >
+              <span>{t("workspace_products.requirements.change.filters.changed_only")}</span>
+              <ToggleSwitch
+                value={changedColumnsOnly}
+                onChange={onChangedColumnsOnlyChange}
+                label={t("workspace_products.requirements.change.filters.changed_only")}
+                size="sm"
+                className="focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:ring-offset-1"
+              />
+            </div>
           </div>
         </div>
       </div>

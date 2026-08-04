@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from django.db import transaction
 from django.utils.html import strip_tags
 from rest_framework import serializers
@@ -11,6 +9,7 @@ from plane.db.models import (
     Project,
     Requirement,
     RequirementApprovalType,
+    RequirementBuiltinFieldKey,
     RequirementChangeStatus,
     RequirementDetail,
     RequirementDraftDetail,
@@ -21,17 +20,16 @@ from plane.db.models import (
 from plane.utils.content_validator import validate_html_content
 from plane.utils.product import can_edit_product_requirements
 from plane.utils.requirement import (
-    clone_requirement_children,
+    ensure_builtin_fields,
     field_attr,
+    get_referenced_template_ids,
     get_requirement_eligible_user_ids,
-    get_requirement_field_specs,
     get_requirement_select_mode,
     get_requirement_select_options,
     replace_requirement_approvers,
     sync_requirement_fields,
     uses_change_flow,
 )
-from plane.utils.requirement_draft import get_draft_field_specs, save_draft_fields
 
 from .base import BaseSerializer
 
@@ -50,12 +48,8 @@ class RequirementSerializer(BaseSerializer):
         required=False,
         allow_null=True,
     )
-    template_id = serializers.PrimaryKeyRelatedField(
-        source="template",
-        queryset=Requirement.objects.filter(is_template=True),
-        required=False,
-        allow_null=True,
-    )
+    # 只读：产品需求不再「来自某个模板」，模板归属记在每一行明细的 template_id 上
+    template_id = serializers.PrimaryKeyRelatedField(source="template", read_only=True)
     owner_id = serializers.PrimaryKeyRelatedField(
         source="owner",
         queryset=User.objects.all(),
@@ -75,10 +69,8 @@ class RequirementSerializer(BaseSerializer):
     )
     approver_details = serializers.SerializerMethodField()
     scope = serializers.CharField(read_only=True)
-    import_fields = serializers.BooleanField(
-        required=False, default=False, write_only=True
-    )
     field_count = serializers.SerializerMethodField()
+    template_count = serializers.SerializerMethodField()
     detail_count = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
     pending_change_request_id = serializers.SerializerMethodField()
@@ -103,8 +95,8 @@ class RequirementSerializer(BaseSerializer):
             "required_count",
             "approver_ids",
             "approver_details",
-            "import_fields",
             "field_count",
+            "template_count",
             "detail_count",
             "can_edit",
             "current_version",
@@ -123,7 +115,9 @@ class RequirementSerializer(BaseSerializer):
             "scope",
             "owner_detail",
             "approver_details",
+            "template_id",
             "field_count",
+            "template_count",
             "detail_count",
             "can_edit",
             "current_version",
@@ -139,9 +133,30 @@ class RequirementSerializer(BaseSerializer):
         approvers = [link.approver for link in obj.approvers.all()]
         return UserLiteSerializer(approvers, many=True).data
 
+    def _referenced_template_ids(self, obj):
+        return get_referenced_template_ids(
+            model=RequirementDetail, scope={"requirement": obj}
+        )
+
     def get_field_count(self, obj):
-        annotated_count = getattr(obj, "field_count", None)
-        return annotated_count if annotated_count is not None else obj.fields.count()
+        """模板数自己的字段；产品需求数它引用到的那些模板的字段总数。"""
+        if obj.is_template:
+            annotated_count = getattr(obj, "field_count", None)
+            return (
+                annotated_count if annotated_count is not None else obj.fields.count()
+            )
+        template_ids = self._referenced_template_ids(obj)
+        if not template_ids:
+            return 0
+        return RequirementField.objects.filter(
+            requirement_id__in=template_ids
+        ).count()
+
+    def get_template_count(self, obj):
+        """产品需求内部包含多少个模板 —— 也就是数据页会有多少个视图。"""
+        if obj.is_template:
+            return 0
+        return len(self._referenced_template_ids(obj))
 
     def get_detail_count(self, obj):
         annotated_count = getattr(obj, "detail_count", None)
@@ -211,7 +226,6 @@ class RequirementSerializer(BaseSerializer):
             "is_template": ("is_template", self.instance.is_template),
             "product_id": ("product", self.instance.product_id),
             "project_id": ("project", self.instance.project_id),
-            "template_id": ("template", self.instance.template_id),
         }
         for request_field, (attribute, current_value) in immutable_fields.items():
             if request_field not in self.initial_data:
@@ -235,13 +249,11 @@ class RequirementSerializer(BaseSerializer):
                 self.instance.is_template,
                 self.instance.product,
                 self.instance.project,
-                self.instance.template,
             )
 
         is_template = attrs.get("is_template", False)
         product = attrs.get("product")
         project = attrs.get("project")
-        source_template = attrs.get("template")
         errors = {}
 
         if is_template:
@@ -249,8 +261,6 @@ class RequirementSerializer(BaseSerializer):
                 errors["product_id"] = "A workspace template cannot belong to a product."
             if project is not None:
                 errors["project_id"] = "A workspace template cannot belong to a project."
-            if source_template is not None:
-                errors["template_id"] = "A workspace template cannot import another template."
         elif len([scope for scope in (product, project) if scope]) != 1:
             errors["scope"] = (
                 "A non-template requirement must belong to exactly one product "
@@ -261,15 +271,10 @@ class RequirementSerializer(BaseSerializer):
             errors["product_id"] = "Product does not belong to this workspace."
         if project is not None and project.workspace_id != workspace.id:
             errors["project_id"] = "Project does not belong to this workspace."
-        if source_template is not None:
-            if source_template.workspace_id != workspace.id:
-                errors["template_id"] = "Template does not belong to this workspace."
-            elif not source_template.is_template:
-                errors["template_id"] = "Source requirement must be a workspace template."
 
         if errors:
             raise serializers.ValidationError(errors)
-        return is_template, product, project, source_template
+        return is_template, product, project
 
     def _get_effective_approver_ids(
         self,
@@ -278,7 +283,6 @@ class RequirementSerializer(BaseSerializer):
         workspace,
         product,
         project,
-        source_template,
     ):
         if "approver_ids" in attrs:
             approver_ids = list(dict.fromkeys(attrs["approver_ids"]))
@@ -357,18 +361,7 @@ class RequirementSerializer(BaseSerializer):
         workspace = self.context.get("workspace")
         if workspace is None:
             raise serializers.ValidationError({"workspace": "Workspace is required."})
-        if self.instance and "import_fields" in self.initial_data:
-            raise serializers.ValidationError(
-                {"import_fields": "Import options can only be used when creating a requirement."}
-            )
-
-        is_template, product, project, source_template = self._validate_scope(
-            attrs, workspace
-        )
-        if attrs.get("import_fields", False) and source_template is None:
-            raise serializers.ValidationError(
-                {"import_fields": "A template is required when importing fields."}
-            )
+        is_template, product, project = self._validate_scope(attrs, workspace)
 
         title = attrs.get("title", getattr(self.instance, "title", None))
         if not title:
@@ -411,7 +404,6 @@ class RequirementSerializer(BaseSerializer):
             workspace=workspace,
             product=product,
             project=project,
-            source_template=source_template,
         )
         self._validate_approval_rule(attrs, approver_ids)
         return attrs
@@ -419,8 +411,6 @@ class RequirementSerializer(BaseSerializer):
     @transaction.atomic
     def create(self, validated_data):
         approver_ids = validated_data.pop("approver_ids", [])
-        import_fields = validated_data.pop("import_fields", False)
-        source_template = validated_data.get("template")
         request = self.context.get("request")
         actor = getattr(request, "user", None)
 
@@ -428,17 +418,10 @@ class RequirementSerializer(BaseSerializer):
         requirement.full_clean(exclude=["created_by", "updated_by"])
         requirement.save()
 
-        if source_template is not None and import_fields:
-            try:
-                clone_requirement_children(
-                    source=source_template,
-                    target=requirement,
-                    actor=actor,
-                )
-            except ValueError as exc:
-                raise serializers.ValidationError(
-                    {"template_id": str(exc)}
-                ) from exc
+        # 标题与描述是每个模板的硬性组成，建模板的同时就补上
+        if requirement.is_template:
+            ensure_builtin_fields(template=requirement, actor=actor)
+
         replace_requirement_approvers(
             requirement=requirement,
             approver_ids=approver_ids,
@@ -449,7 +432,6 @@ class RequirementSerializer(BaseSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         approver_ids = validated_data.pop("approver_ids", serializers.empty)
-        validated_data.pop("import_fields", None)
         for attribute, value in validated_data.items():
             setattr(instance, attribute, value)
 
@@ -475,6 +457,13 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(required=False, default=True)
     config = serializers.DictField(required=False, default=dict)
     default_value = serializers.JSONField(required=False, allow_null=True)
+    # 让前端能原样回传字段树；sync_requirement_fields 只做一致性校验，从不写它
+    builtin_key = serializers.ChoiceField(
+        choices=RequirementBuiltinFieldKey.choices,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
 
     def validate_name(self, value):
         value = value.strip()
@@ -709,20 +698,19 @@ def validate_requirement_leaf_value(*, owner, field, value, enforce_required=Tru
     return value
 
 
-def validate_requirement_detail_data(*, owner, data, fields=None):
+def validate_requirement_detail_data(*, owner, data, fields):
     """校验并规范化一行明细数据。
 
     owner 是这行数据的归属（需求或标准库），只用于取 workspace_id 做资产与成员
-    校验。fields 为 None 时从正式表读取字段定义；草稿路径传入草稿快照解析出的
-    spec 列表，从而与正式表共用同一套校验语义。
+    校验。fields 必须由调用方显式给出 —— 就是这一行所绑定的那个模板的字段。
+
+    刻意不留「fields 为 None 就自己去查」的兜底：产品需求本身没有字段，兜底会解析
+    成空列表，然后把任何非空 data 都报成「Unknown root field ids」，错得很难查。
     """
     if not isinstance(data, dict):
         raise serializers.ValidationError("Detail data must be an object.")
 
-    if fields is None:
-        fields = get_requirement_field_specs(owner)
-    else:
-        fields = list(fields)
+    fields = list(fields)
     roots = [field for field in fields if field.parent_field_id is None]
     children_by_parent = {}
     for field in fields:
@@ -810,8 +798,24 @@ def validate_requirement_detail_data(*, owner, data, fields=None):
 class RequirementConfigurationWriteSerializer(serializers.Serializer):
     expected_updated_at = serializers.DateTimeField()
     requirement = serializers.DictField()
-    fields = RequirementFieldNodeWriteSerializer(many=True)
+    # 只有工作区模板能改字段；产品需求的列来自模板，这里不接受 fields
+    fields = RequirementFieldNodeWriteSerializer(many=True, required=False)
     confirm_data_loss = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        requirement = self.context["requirement"]
+        if requirement.is_template:
+            if "fields" not in attrs:
+                raise serializers.ValidationError(
+                    {"fields": "This field is required for a workspace template."}
+                )
+        elif "fields" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "fields": "产品需求的列来自模板，请到模板管理里修改字段。",
+                }
+            )
+        return attrs
 
     def validate_fields(self, value):
         names = [item["name"].casefold() for item in value]
@@ -819,17 +823,11 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
             raise serializers.ValidationError("Root field names must be unique.")
 
         requirement = self.context["requirement"]
-        draft = self.context.get("draft")
-        if draft is not None:
-            existing_ids = {
-                UUID(spec.id) for spec in get_draft_field_specs(draft)
-            }
-        else:
-            existing_ids = set(
-                RequirementField.objects.filter(requirement=requirement).values_list(
-                    "id", flat=True
-                )
+        existing_ids = set(
+            RequirementField.objects.filter(requirement=requirement).values_list(
+                "id", flat=True
             )
+        )
         submitted_ids = []
         for root in value:
             if root.get("id"):
@@ -898,16 +896,9 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
         self._requirement_serializer.instance = requirement
         requirement = self._requirement_serializer.save()
         request = self.context.get("request")
-        draft = self.context.get("draft")
         actor = getattr(request, "user", None)
-        if draft is not None:
-            created_field_ids = save_draft_fields(
-                draft=draft,
-                field_payloads=self.validated_data["fields"],
-                actor=actor,
-                confirm_data_loss=self.validated_data["confirm_data_loss"],
-            )
-        else:
+        created_field_ids = {}
+        if "fields" in self.validated_data:
             created_field_ids = sync_requirement_fields(
                 requirement=requirement,
                 field_payloads=self.validated_data["fields"],
@@ -929,6 +920,7 @@ class RequirementDetailSerializer(BaseSerializer):
             "id",
             "requirement_id",
             "library_id",
+            "template_id",
             "data",
             "sort_order",
             "version",
@@ -955,6 +947,7 @@ class RequirementDraftDetailSerializer(BaseSerializer):
             "id",
             "requirement_id",
             "library_id",
+            "template_id",
             "data",
             "sort_order",
             "version",
@@ -976,7 +969,14 @@ class RequirementDraftDetailSerializer(BaseSerializer):
 
 
 class RequirementDetailCreateSerializer(serializers.Serializer):
+    """新增一行明细。
+
+    必须指明这行绑定哪个模板 —— 字段由模板提供，data 也按该模板的字段校验。
+    标准库的条目不用传，库本身就固定了模板（default_template_id）。
+    """
+
     data = serializers.DictField()
+    template_id = serializers.UUIDField(required=False)
     before_id = serializers.UUIDField(required=False, allow_null=True)
     after_id = serializers.UUIDField(required=False, allow_null=True)
 
@@ -985,15 +985,36 @@ class RequirementDetailCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Only one insertion anchor can be provided."
             )
+
+        resolver = self.context["template_resolver"]
+        template_id = attrs.get("template_id") or self.context.get(
+            "default_template_id"
+        )
+        if template_id is None:
+            raise serializers.ValidationError(
+                {"template_id": "This field is required."}
+            )
+        if resolver.resolve(template_id) is None:
+            raise serializers.ValidationError(
+                {"template_id": "The requirement template was not found."}
+            )
+
+        attrs["template_id"] = template_id
         attrs["data"] = validate_requirement_detail_data(
             owner=self.context["owner"],
             data=attrs["data"],
-            fields=self.context.get("fields"),
+            fields=resolver.specs(template_id),
         )
         return attrs
 
 
 class RequirementDetailUpdateSerializer(serializers.Serializer):
+    """更新一行明细。
+
+    不接受 template_id —— 行与模板的绑定创建后不可变，调用方按行上已存的
+    template_id 取字段传进 context["fields"]。
+    """
+
     data = serializers.DictField()
     version = serializers.IntegerField(min_value=1)
 
@@ -1001,7 +1022,7 @@ class RequirementDetailUpdateSerializer(serializers.Serializer):
         return validate_requirement_detail_data(
             owner=self.context["owner"],
             data=value,
-            fields=self.context.get("fields"),
+            fields=self.context["fields"],
         )
 
 
@@ -1009,13 +1030,57 @@ class RequirementDetailBatchCreateSerializer(RequirementDetailCreateSerializer):
     client_id = serializers.UUIDField()
 
 
-class RequirementDetailBatchUpdateSerializer(RequirementDetailUpdateSerializer):
+class RequirementDetailBatchUpdateSerializer(serializers.Serializer):
+    """批量更新的一项：按行自己的模板校验 data。
+
+    validate_data 看不到同级的 id，所以校验整体放在 validate 里做。
+    """
+
     id = serializers.UUIDField()
+    data = serializers.DictField()
+    version = serializers.IntegerField(min_value=1)
+
+    def validate(self, attrs):
+        row_templates = self.context["row_templates"]
+        template_id = row_templates.get(attrs["id"])
+        if template_id is None:
+            raise serializers.ValidationError(
+                {"id": "The requirement detail was not found."}
+            )
+        attrs["data"] = validate_requirement_detail_data(
+            owner=self.context["owner"],
+            data=attrs["data"],
+            fields=self.context["template_resolver"].specs(template_id),
+        )
+        return attrs
 
 
 class RequirementDetailBatchDeleteSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     version = serializers.IntegerField(min_value=1)
+
+
+class RequirementDetailImportSerializer(serializers.Serializer):
+    """从标准库导入条目到产品需求。
+
+    只收归属与条目，不收 data —— data 是从库条目原样拷过来的。两侧引用的是同一个
+    模板，字段 UUID 因此完全一致，不需要任何重映射。
+    """
+
+    library_id = serializers.UUIDField()
+    item_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False, max_length=500
+    )
+    before_id = serializers.UUIDField(required=False, allow_null=True)
+    after_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        if attrs.get("before_id") and attrs.get("after_id"):
+            raise serializers.ValidationError(
+                "Only one insertion anchor can be provided."
+            )
+        attrs["item_ids"] = list(dict.fromkeys(attrs["item_ids"]))
+        return attrs
 
 
 class RequirementDetailBatchSaveSerializer(serializers.Serializer):

@@ -49,6 +49,7 @@ import {
   getMaxFormRows,
   isEmptyDetailValue,
   LeafValue,
+  MenuRowLabel,
   RequirementGridHeader,
 } from "./requirement-grid-shared";
 import { getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
@@ -65,6 +66,15 @@ type TProps = {
   entityId: string;
   readOnly?: boolean;
   expectedUpdatedAt?: string;
+  /**
+   * 新增行绑定到的需求模板。产品需求传当前视图的模板，标准库传 library.template_id。
+   * 表格下方的「新增数据」因此永远挂在模板上，不会挂到标准库上。
+   */
+  createTemplateId?: string;
+  /**
+   * 列显隐的存储命名空间后缀。产品需求按视图区分，否则不同模板视图会互相覆盖列配置。
+   */
+  columnStorageId?: string;
   fields: TRequirementField[];
   details: TRequirementDetail[];
   totalCount: number;
@@ -89,21 +99,6 @@ type TProps = {
   /** When set, search/filter/display/edit (and bulk-edit actions) render into this host instead of the grid toolbar. */
   toolbarPortalEl?: HTMLElement | null;
 };
-
-const MenuRowLabel = ({
-  icon: Icon,
-  label,
-  tone = "default",
-}: {
-  icon: typeof Trash2;
-  label: string;
-  tone?: "default" | "danger";
-}) => (
-  <span className={cn("flex items-center gap-2", tone === "danger" && "text-danger-primary")}>
-    <Icon className="size-3.5 shrink-0" />
-    <span className="truncate">{label}</span>
-  </span>
-);
 
 const LeafEditor = ({
   field,
@@ -312,6 +307,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     entityId,
     readOnly = false,
     expectedUpdatedAt,
+    createTemplateId,
+    columnStorageId,
     fields,
     details,
     totalCount,
@@ -344,7 +341,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const [filterFieldId, setFilterFieldId] = useState("");
   const [filterOperator, setFilterOperator] = useState<TRequirementDetailFilter["operator"]>("contains");
   const [filterValue, setFilterValue] = useState("");
-  const storageKey = `requirement:columns:${workspaceSlug}:${entityId}`;
+  const storageKey = `requirement:columns:${workspaceSlug}:${entityId}${columnStorageId ? `:${columnStorageId}` : ""}`;
   const [hiddenFieldIds, setHiddenFieldIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -361,6 +358,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     fields: activeFields,
     workspaceSlug,
     expectedUpdatedAt,
+    createTemplateId,
     discardMessage: t("workspace_templates.requirements.data.discard_all_confirm"),
     onSave: onBulkSave,
     onEditingChange,

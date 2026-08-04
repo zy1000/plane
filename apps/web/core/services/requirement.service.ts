@@ -18,6 +18,8 @@ import type {
   TRequirementDetailBatchSaveResponse,
   TRequirementDetailData,
   TRequirementDetailFilter,
+  TRequirementDetailImportPayload,
+  TRequirementDetailImportResponse,
   TRequirementDetailsResponse,
   TRequirementDiscardDraftResponse,
   TRequirementLibrary,
@@ -289,6 +291,8 @@ export class RequirementService extends APIService {
       perPage?: number;
       search?: string;
       filters?: TRequirementDetailFilter[];
+      /** 按模板切视图必须走服务端过滤 —— 明细是游标分页的 */
+      templateId?: string;
     } = {}
   ): Promise<TRequirementDetailsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/details/`, {
@@ -297,6 +301,7 @@ export class RequirementService extends APIService {
         ...(params.perPage ? { per_page: params.perPage } : {}),
         ...(params.search ? { search: params.search } : {}),
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
+        ...(params.templateId ? { template_id: params.templateId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -310,11 +315,26 @@ export class RequirementService extends APIService {
     requirementId: string,
     payload: {
       data: TRequirementDetailData;
+      /** 新行绑定哪个需求模板 —— 字段与校验都以它为准 */
+      template_id: string;
       before_id?: string;
       after_id?: string;
     }
   ): Promise<TRequirementDetail> {
     return this.post(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/details/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 从标准库导入条目，成为本需求绑定该库模板的明细行 */
+  async importLibraryItems(
+    workspaceSlug: string,
+    requirementId: string,
+    payload: TRequirementDetailImportPayload
+  ): Promise<TRequirementDetailImportResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/details/import/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -423,7 +443,12 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     requirementId: string,
     changeRequestId: string,
-    params: { cursor?: string; perPage?: number; changeType?: TRequirementChangeType } = {}
+    params: {
+      cursor?: string;
+      perPage?: number;
+      changeType?: TRequirementChangeType;
+      templateId?: string;
+    } = {}
   ): Promise<TRequirementChangeItemsResponse> {
     return this.get(
       `/api/workspaces/${workspaceSlug}/requirements/${requirementId}/change-requests/${changeRequestId}/items/`,
@@ -432,6 +457,7 @@ export class RequirementService extends APIService {
           ...(params.cursor ? { cursor: params.cursor } : {}),
           ...(params.perPage ? { per_page: params.perPage } : {}),
           ...(params.changeType ? { change_type: params.changeType } : {}),
+          ...(params.templateId ? { template_id: params.templateId } : {}),
         },
       }
     )
@@ -515,12 +541,13 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     requirementId: string,
     version: number,
-    params: { cursor?: string; perPage?: number } = {}
+    params: { cursor?: string; perPage?: number; templateId?: string } = {}
   ): Promise<TRequirementVersionDetailsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/details/`, {
       params: {
         ...(params.cursor ? { cursor: params.cursor } : {}),
         ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.templateId ? { template_id: params.templateId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -539,6 +566,7 @@ export class RequirementService extends APIService {
       cursor?: string;
       perPage?: number;
       changeType?: TRequirementChangeType;
+      templateId?: string;
     } = {}
   ): Promise<TRequirementVersionComparisonResponse> {
     return this.get(
@@ -549,6 +577,7 @@ export class RequirementService extends APIService {
           ...(params.cursor ? { cursor: params.cursor } : {}),
           ...(params.perPage ? { per_page: params.perPage } : {}),
           ...(params.changeType ? { change_type: params.changeType } : {}),
+          ...(params.templateId ? { template_id: params.templateId } : {}),
         },
       }
     )

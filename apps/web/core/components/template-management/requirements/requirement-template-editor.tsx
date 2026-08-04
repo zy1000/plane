@@ -29,6 +29,8 @@ const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   field_type: field.field_type,
   is_required: field.is_required,
   is_active: field.is_active,
+  // 必须原样带回：后端把 builtin_key 的任何变化都当成「改内置标识」而拒绝
+  builtin_key: field.builtin_key ?? null,
   config: { ...field.config },
   default_value: field.default_value,
   children: field.children.map(toDraftField),

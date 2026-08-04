@@ -45,6 +45,13 @@ class RequirementFieldType(models.TextChoices):
     BOOLEAN = "boolean", "布尔值"
 
 
+class RequirementBuiltinFieldKey(models.TextChoices):
+    """每个需求模板都必有的两个字段，不可删除、不可改类型。"""
+
+    TITLE = "title", "标题"
+    DESCRIPTION = "description", "描述"
+
+
 class RequirementApprovalType(models.TextChoices):
     ANY = "any", "任一人通过"
     ALL = "all", "全部通过"
@@ -86,13 +93,20 @@ class RequirementChangeRequestKind(models.TextChoices):
 # 是唯一硬保证；clean() 只保留 DB 表达不了的跨表/跨行规则，供 serializer 显式调用。
 # save() 不再执行 full_clean，仅在 workspace_id 缺失时最小反填作用域字段。
 #
-# 需求模型自身承载字段定义（RequirementField）与明细数据（RequirementDetail）。
-# 工作区模板即 is_template=True 的需求，只定义字段、不持有明细；在产品/项目中创建
-# 需求时可通过 template 引用某个模板并复制其字段定义。
+# 字段定义（RequirementField）只归工作区模板所有 —— 模板即 is_template=True 的需求。
+# 产品需求与需求标准库都不拷贝字段，而是通过明细行上的 template 外键实时引用模板，
+# 因此模板改字段会立刻反映到所有实时引用它的地方（失效的值由 sync_requirement_fields
+# 清理）。
 #
-# 需求标准库（RequirementLibrary）直接持有条目：条目就是 library 非空的
-# RequirementDetail 行，字段不拷贝而是实时引用库所选的工作区模板。因此一个
-# RequirementDetail 要么属于某个需求，要么属于某个标准库，二者必居其一。
+# 产品需求因此是一个「集合」：它的每一行明细各自绑定一个模板，一个需求内部可以同时
+# 存在多个模板的数据，前端按模板分视图展示。
+#
+# RequirementDetail 一行要么属于某个需求，要么属于某个标准库，二者必居其一；但无论
+# 哪种归属，template 都必填。
+#
+# 例外是「已发布」的产品需求：它按发版时冻结进 RequirementVersion.snapshot["fields"]
+# 的字段快照渲染，模板此后的改动要等下一次编辑并通过审批才会生效（见
+# plane.utils.requirement_change.build_change_snapshots）。
 
 
 class Requirement(BaseModel):
@@ -320,10 +334,30 @@ class RequirementField(BaseModel):
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     config = models.JSONField(default=dict, blank=True, verbose_name="字段配置")
     default_value = models.JSONField(null=True, blank=True, verbose_name="默认值")
+    builtin_key = models.CharField(
+        max_length=20,
+        choices=RequirementBuiltinFieldKey.choices,
+        null=True,
+        blank=True,
+        verbose_name="内置字段标识（null 表示普通自定义字段）",
+    )
 
     class Meta:
         db_table = "requirement_fields"
         ordering = ("sort_order", "created_at", "id")
+        constraints = [
+            # 每个模板对每个内置标识只能有一行
+            models.UniqueConstraint(
+                fields=["requirement", "builtin_key"],
+                condition=Q(builtin_key__isnull=False, deleted_at__isnull=True),
+                name="req_field_unique_requirement_builtin_key",
+            ),
+            # 内置字段只能是根字段
+            models.CheckConstraint(
+                check=Q(builtin_key__isnull=True) | Q(parent_field__isnull=True),
+                name="req_field_builtin_must_be_root",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} <{self.requirement_id}>"
@@ -360,8 +394,11 @@ class RequirementDetail(BaseModel):
     """一行明细数据：要么是某个需求的明细行，要么是某个标准库的条目。
 
     两种归属共用同一张表，因为行结构与读写语义完全一致（data / sort_order /
-    version）；区别只在字段定义从哪来 —— 需求读自己的 RequirementField，标准库
-    读所选模板的。
+    version）。字段定义两者都来自 template —— 标准库的条目恒等于 library.template，
+    产品需求则每行各自绑定，从而让一个需求内部可以容纳多个模板的数据。
+
+    data 以字段 UUID 为 key，而字段 UUID 属于模板；所以只要两行引用同一个模板，
+    data 就可以直接互相拷贝（标准库条目导入产品需求正是靠这一点，无需重映射）。
     """
 
     requirement = models.ForeignKey(
@@ -380,6 +417,12 @@ class RequirementDetail(BaseModel):
         blank=True,
         verbose_name="所属需求标准库",
     )
+    template = models.ForeignKey(
+        Requirement,
+        on_delete=models.PROTECT,
+        related_name="bound_details",
+        verbose_name="所属需求模板",
+    )
     data = models.JSONField(default=dict, blank=True, verbose_name="明细数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     version = models.PositiveIntegerField(default=1, verbose_name="当前版本")
@@ -396,6 +439,11 @@ class RequirementDetail(BaseModel):
                 fields=["library", "sort_order"],
                 name="req_detail_library_sort",
             ),
+            # 按模板切视图是服务端过滤（明细是游标分页的）
+            models.Index(
+                fields=["requirement", "template", "sort_order"],
+                name="req_detail_req_template_sort",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -407,6 +455,17 @@ class RequirementDetail(BaseModel):
 
     def __str__(self):
         return f"{self.requirement_id or self.library_id} / {self.id}"
+
+    def clean(self):
+        super().clean()
+        # 跨表规则，DB 表达不了
+        if self.template_id:
+            if not self.template.is_template:
+                raise ValidationError({"template": "明细只能绑定工作区模板。"})
+            if self.library_id and self.template_id != self.library.template_id:
+                raise ValidationError(
+                    {"template": "标准库条目的模板必须与所属标准库一致。"}
+                )
 
 
 class RequirementDraft(BaseModel):
@@ -483,6 +542,12 @@ class RequirementDraftDetail(BaseModel):
         related_name="details",
         verbose_name="所属草稿",
     )
+    template = models.ForeignKey(
+        Requirement,
+        on_delete=models.PROTECT,
+        related_name="bound_draft_details",
+        verbose_name="所属需求模板",
+    )
     data = models.JSONField(default=dict, blank=True, verbose_name="明细数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     version = models.PositiveIntegerField(default=1, verbose_name="当前版本")
@@ -494,7 +559,11 @@ class RequirementDraftDetail(BaseModel):
             models.Index(
                 fields=["draft", "sort_order"],
                 name="req_draft_detail_draft_sort",
-            )
+            ),
+            models.Index(
+                fields=["draft", "template", "sort_order"],
+                name="req_draft_detail_template_sort",
+            ),
         ]
 
     def __str__(self):
@@ -592,6 +661,13 @@ class RequirementChangeRequest(BaseModel):
         default=list,
         blank=True,
         verbose_name="本次变更涉及的字段 ID（供「仅显示变化列」使用）",
+    )
+    # 字段现在实时取自模板，而模板不走审批、随时可改。不在提交时冻结的话，审批人
+    # 看到的字段结构与通过后真正落库的可能不是同一份。
+    proposed_fields = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="提交时冻结的字段树",
     )
     approval_type = models.CharField(
         max_length=10,

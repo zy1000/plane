@@ -38,18 +38,23 @@ const EMPTY_DETAILS: TRequirementVersionDetailsResponse = {
 /**
  * 版本历史 Tab。选中版本后按需拉取快照详情，快照里的明细数组在服务端切片，
  * 所以千行需求的预览与现有明细网格是同一套分页口径。
+ *
+ * `templateId` 由调用方（URL query）持有：产品需求的快照是多个模板拼接的，明细必须
+ * 在服务端按模板裁完再切片，否则一页里混着别的模板的行。
  */
 export const useRequirementVersions = ({
   workspaceSlug,
   requirementId,
   currentVersion,
   changeType,
+  templateId,
   onRequirementUpdate,
 }: {
   workspaceSlug: string | undefined;
   requirementId: string | undefined;
   currentVersion: number | null;
   changeType?: TRequirementChangeType;
+  templateId?: string;
   onRequirementUpdate?: (requirement: TRequirement) => void;
 }) => {
   const [versionsPage, setVersionsPage] = useState<TRequirementVersionsResponse>(EMPTY_VERSIONS);
@@ -159,6 +164,7 @@ export const useRequirementVersions = ({
       const response = await requirementService.listVersionDetails(workspaceSlug, requirementId, selectedVersion, {
         cursor: detailsCursor,
         perPage: detailsPerPage,
+        templateId,
       });
       setDetailsPage(response);
       return response;
@@ -168,7 +174,7 @@ export const useRequirementVersions = ({
     } finally {
       setIsDetailsLoading(false);
     }
-  }, [detailsCursor, detailsPerPage, requirementId, selectedVersion, workspaceSlug]);
+  }, [detailsCursor, detailsPerPage, requirementId, selectedVersion, templateId, workspaceSlug]);
 
   useEffect(() => {
     void fetchVersionDetail().catch(() => undefined);
@@ -196,6 +202,7 @@ export const useRequirementVersions = ({
           cursor: comparisonCursor,
           perPage: comparisonPerPage,
           changeType,
+          templateId,
         }
       );
       setComparisonPage(response);
@@ -206,12 +213,27 @@ export const useRequirementVersions = ({
     } finally {
       setIsComparisonLoading(false);
     }
-  }, [changeType, compareVersion, comparisonCursor, comparisonPerPage, requirementId, selectedVersion, workspaceSlug]);
+  }, [
+    changeType,
+    compareVersion,
+    comparisonCursor,
+    comparisonPerPage,
+    requirementId,
+    selectedVersion,
+    templateId,
+    workspaceSlug,
+  ]);
 
   useEffect(() => {
     if (compareVersion === null) return;
     void fetchComparison().catch(() => undefined);
   }, [compareVersion, fetchComparison]);
+
+  // 换模板等于换了数据集，旧游标指向的页在新数据集里没有意义
+  useEffect(() => {
+    setDetailsCursor(undefined);
+    setComparisonCursor(undefined);
+  }, [templateId]);
 
   /** 回滚只是把历史快照灌入工作副本，需求会回到草稿态，仍需再走一次审批 */
   const rollbackToVersion = useCallback(

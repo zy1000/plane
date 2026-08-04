@@ -6,7 +6,9 @@ import type {
   TRequirementDetailBatchSavePayload,
   TRequirementDetailData,
   TRequirementDetailFilter,
+  TRequirementDetailImportPayload,
   TRequirementDetailsResponse,
+  TRequirementTemplateSchema,
 } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
 
@@ -29,6 +31,9 @@ const EMPTY_PAGE: TRequirementDetailsResponse = {
   count: 0,
 };
 
+/** 稳定引用，避免每次渲染都产生新数组把下游 memo 打穿 */
+const EMPTY_TEMPLATES: TRequirementTemplateSchema[] = [];
+
 export const useRequirementDetails = ({
   workspaceSlug,
   requirementId,
@@ -49,6 +54,8 @@ export const useRequirementDetails = ({
   const [filters, setFilters] = useState<TRequirementDetailFilter[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
+  /** 当前模板视图；undefined = 不按模板过滤（默认视图 / 单模板） */
+  const [templateFilter, setTemplateFilter] = useState<string | undefined>();
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !requirementId) return null;
@@ -77,6 +84,7 @@ export const useRequirementDetails = ({
         perPage,
         search,
         filters,
+        templateId: templateFilter,
       });
       setDetailsPage(response);
       return response;
@@ -86,7 +94,7 @@ export const useRequirementDetails = ({
     } finally {
       setIsDetailsLoading(false);
     }
-  }, [cursor, filters, perPage, search, requirementId, workspaceSlug]);
+  }, [cursor, filters, perPage, search, templateFilter, requirementId, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);
@@ -116,11 +124,19 @@ export const useRequirementDetails = ({
   );
 
   const createDetail = useCallback(
-    async (data: TRequirementDetailData, position: { before_id?: string; after_id?: string } = {}) => {
+    async (
+      data: TRequirementDetailData,
+      templateId: string,
+      position: { before_id?: string; after_id?: string } = {}
+    ) => {
       if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.createDetail(workspaceSlug, requirementId, { data, ...position });
+        const response = await requirementService.createDetail(workspaceSlug, requirementId, {
+          data,
+          template_id: templateId,
+          ...position,
+        });
         await fetchDetails();
         return response;
       } finally {
@@ -128,6 +144,33 @@ export const useRequirementDetails = ({
       }
     },
     [fetchDetails, requirementId, workspaceSlug]
+  );
+
+  /**
+   * 从一个或多个标准库导入。
+   *
+   * 导入弹窗允许跨库勾选，而接口一次只收一个 library_id，所以这里按库分组顺序调用，
+   * 最后只刷新一次。返回各批次的响应，调用方用第一批的 template_id 决定切到哪个视图。
+   */
+  const importFromLibraries = useCallback(
+    async (payloads: TRequirementDetailImportPayload[]) => {
+      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
+      if (!payloads.length) return [];
+      setIsMutating(true);
+      try {
+        const responses = [];
+        for (const payload of payloads) {
+          responses.push(await requirementService.importLibraryItems(workspaceSlug, requirementId, payload));
+        }
+        // 先刷配置：引用的模板集合可能变大了，页面要据此更新视图列表并切过去
+        await fetchConfiguration();
+        await fetchDetails();
+        return responses;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [fetchConfiguration, fetchDetails, requirementId, workspaceSlug]
   );
 
   const updateDetail = useCallback(
@@ -197,9 +240,17 @@ export const useRequirementDetails = ({
     setCursor(undefined);
     setPerPage(value);
   }, []);
+  /** 切模板视图。搜索与筛选一并清空 —— 筛选条件是按字段 ID 定的，换个模板就没有意义了 */
+  const updateTemplateFilter = useCallback((value: string | undefined) => {
+    setCursor(undefined);
+    setSearch("");
+    setFilters([]);
+    setTemplateFilter(value);
+  }, []);
 
   return {
     configuration,
+    templates: configuration?.templates ?? EMPTY_TEMPLATES,
     detailsPage,
     isConfigurationLoading,
     isDetailsLoading,
@@ -210,10 +261,12 @@ export const useRequirementDetails = ({
     filters,
     cursor,
     perPage,
+    templateFilter,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
     setPerPage: updatePerPage,
+    setTemplateFilter: updateTemplateFilter,
     fetchConfiguration,
     fetchDetails,
     updateConfiguration,
@@ -221,6 +274,7 @@ export const useRequirementDetails = ({
     updateDetail,
     deleteDetails,
     saveDetailBatch,
+    importFromLibraries,
   };
 };
 
