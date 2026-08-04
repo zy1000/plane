@@ -7,7 +7,7 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles, type TRequirement } from "@plane/types";
 import { AlertModalCore, Avatar, Breadcrumbs, Header, Loader } from "@plane/ui";
-import { cn, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { cn, getFileURL, renderFormattedDate, renderFormattedTime, stripAndTruncateHTML } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -23,26 +23,12 @@ import { ProductRequirementSearch } from "./requirement-search";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
-const formatRelativeTime = (time: string | number | Date | null, locale: string) => {
+/** 列表「更新时间」用绝对时间：yyyy-MM-dd HH:mm */
+const formatUpdatedAt = (time: string | null | undefined) => {
   if (!time) return "";
-  const date = time instanceof Date ? time : new Date(time);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const secondsFromNow = (date.getTime() - Date.now()) / 1000;
-  const ranges: { unit: Intl.RelativeTimeFormatUnit; seconds: number }[] = [
-    { unit: "year", seconds: 31_536_000 },
-    { unit: "month", seconds: 2_592_000 },
-    { unit: "week", seconds: 604_800 },
-    { unit: "day", seconds: 86_400 },
-    { unit: "hour", seconds: 3_600 },
-    { unit: "minute", seconds: 60 },
-    { unit: "second", seconds: 1 },
-  ];
-  const range = ranges.find((item) => Math.abs(secondsFromNow) >= item.seconds) ?? ranges[ranges.length - 1];
-  return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
-    Math.round(secondsFromNow / range.seconds),
-    range.unit
-  );
+  const datePart = renderFormattedDate(time, "yyyy-MM-dd");
+  if (!datePart) return "";
+  return `${datePart} ${renderFormattedTime(time)}`;
 };
 
 const approvalSummary = (requirement: TRequirement, t: (key: string, values?: Record<string, unknown>) => string) => {
@@ -57,7 +43,7 @@ const approvalSummary = (requirement: TRequirement, t: (key: string, values?: Re
 };
 
 export const ProductRequirementList = observer(function ProductRequirementList() {
-  const { t, currentLocale } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data: currentUser } = useUser();
   const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
@@ -229,7 +215,7 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                 <table className="w-full min-w-[400px] border-collapse text-left sm:min-w-[520px] md:min-w-[640px]">
                   <thead className="sticky top-0 z-[2] bg-layer-1 text-13 font-medium text-secondary">
                     <tr className="border-b border-subtle">
-                      <th className="min-w-64 px-4 py-3">{t("workspace_products.requirements.fields.title")}</th>
+                      <th className="min-w-48 px-4 py-3">{t("workspace_products.requirements.fields.title")}</th>
                       <th className="hidden w-28 px-3 py-3 sm:table-cell">
                         {t("workspace_products.requirements.fields.status")}
                       </th>
@@ -245,7 +231,7 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                       <th className="hidden w-24 px-3 py-3 xl:table-cell">
                         {t("workspace_products.requirements.fields.detail_count")}
                       </th>
-                      <th className="hidden w-28 px-3 py-3 lg:table-cell">
+                      <th className="hidden w-40 whitespace-nowrap px-3 py-3 lg:table-cell">
                         {t("workspace_products.requirements.fields.updated_at")}
                       </th>
                       <th className="sticky right-0 w-24 bg-layer-1 px-3 py-3" />
@@ -261,11 +247,11 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                           <button
                             type="button"
                             onClick={() => openRequirement(requirement)}
-                            className="focus-visible:outline-accent-primary block max-w-sm truncate text-left text-sm font-medium text-accent-primary hover:underline focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2"
+                            className="focus-visible:outline-accent-primary block max-w-xs truncate text-left text-sm font-medium text-accent-primary hover:underline focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2"
                           >
                             {requirement.title}
                           </button>
-                          <p className="mt-1 max-w-sm truncate text-12 text-secondary">
+                          <p className="mt-1 max-w-xs truncate text-12 text-secondary">
                             {requirement.description_html
                               ? stripAndTruncateHTML(requirement.description_html, 100)
                               : t("workspace_products.requirements.fields.no_description")}
@@ -295,9 +281,7 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                               <span className="truncate">{approvalSummary(requirement, t)}</span>
                             )}
                             <span>·</span>
-                            <span className="shrink-0">
-                              {formatRelativeTime(requirement.updated_at, currentLocale)}
-                            </span>
+                            <span className="shrink-0">{formatUpdatedAt(requirement.updated_at)}</span>
                           </div>
                         </td>
                         <td className="hidden py-3.5 pr-3 pl-1 sm:table-cell">
@@ -348,8 +332,8 @@ export const ProductRequirementList = observer(function ProductRequirementList()
                         <td className="hidden px-3 py-3.5 text-secondary tabular-nums xl:table-cell">
                           {requirement.detail_count}
                         </td>
-                        <td className="hidden px-3 py-3.5 text-12 text-tertiary lg:table-cell">
-                          {formatRelativeTime(requirement.updated_at, currentLocale)}
+                        <td className="hidden whitespace-nowrap px-3 py-3.5 text-12 text-tertiary tabular-nums lg:table-cell">
+                          {formatUpdatedAt(requirement.updated_at)}
                         </td>
                         <td className="sticky right-0 bg-surface-1 px-3 py-3.5 group-hover:bg-surface-2">
                           {requirement.can_edit && (
