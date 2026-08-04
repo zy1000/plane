@@ -13,7 +13,7 @@ import type {
   TRequirementDetail,
   TRequirementDetailData,
   TRequirementField,
-  TRequirementTemplateSchema,
+  TRequirementTypeSchema,
 } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -21,19 +21,19 @@ import {
   getCurrentPageOffset,
   LeafValue,
   MenuRowLabel,
-} from "@/components/template-management/requirements/requirement-grid-shared";
-import { copyRequirementDetailData } from "@/components/template-management/requirements/use-requirement-detail-grid-editor";
+} from "@/components/requirements/requirement-grid-shared";
+import { copyRequirementDetailData } from "@/components/requirements/use-requirement-detail-grid-editor";
 import { getBuiltinValue } from "./requirement-data-views";
 
 /**
- * 多模板时的默认视图：跨全部模板的总览。
+ * 多类型时的默认视图：跨全部需求类型的总览。
  *
- * 只展示每个模板都必有的标题与描述，外加一列「所属模板」。刻意做成只读 —— 在只有
- * 两列的视图里新增一行，其余必填字段无处可填；要录入就点进对应的模板视图。
+ * 只展示每个类型都必有的标题与描述，外加一列「所属类型」。刻意做成只读 —— 在只有
+ * 两列的视图里新增一行，其余必填字段无处可填；要录入就点进对应的类型视图。
  */
 type TProps = {
   workspaceSlug: string;
-  templates: TRequirementTemplateSchema[];
+  requirementTypes: TRequirementTypeSchema[];
   details: TRequirementDetail[];
   totalCount: number;
   perPage: number;
@@ -50,28 +50,28 @@ type TProps = {
   onCursorChange: (value: string | undefined) => void;
   onPerPageChange: (value: number) => void;
   onDelete: (ids: string[]) => Promise<unknown>;
-  /** 复制一行：新行绑定同一个模板，插在原行后面 */
-  onDuplicate: (payload: { templateId: string; data: TRequirementDetailData; afterId: string }) => Promise<unknown>;
-  onOpenTemplateView: (templateId: string) => void;
-  /** 与模板视图共用顶部工具栏容器：切视图时右上角不该整排控件消失 */
+  /** 复制一行：新行绑定同一个类型，插在原行后面 */
+  onDuplicate: (payload: { requirementTypeId: string; data: TRequirementDetailData; afterId: string }) => Promise<unknown>;
+  onOpenRequirementTypeView: (requirementTypeId: string) => void;
+  /** 与类型视图共用顶部工具栏容器：切视图时右上角不该整排控件消失 */
   toolbarPortalEl?: HTMLElement | null;
 };
 
-/** 借标题/描述字段的定义来渲染值，这样富文本、附件等类型的呈现与模板视图完全一致。 */
+/** 借标题/描述字段的定义来渲染值，这样富文本、附件等类型的呈现与类型视图完全一致。 */
 const findBuiltinField = (
-  templates: TRequirementTemplateSchema[],
+  requirementTypes: TRequirementTypeSchema[],
   detail: TRequirementDetail,
   key: "title" | "description"
 ): TRequirementField | undefined => {
-  const template = templates.find((item) => item.id === detail.template_id);
-  const fieldId = template?.builtin_field_ids?.[key];
-  return template?.fields.find((field) => field.id === fieldId);
+  const requirementType = requirementTypes.find((item) => item.id === detail.requirement_type_id);
+  const fieldId = requirementType?.builtin_field_ids?.[key];
+  return requirementType?.fields.find((field) => field.id === fieldId);
 };
 
 export const RequirementDefaultViewGrid = (props: TProps) => {
   const {
     workspaceSlug,
-    templates,
+    requirementTypes,
     details,
     totalCount,
     perPage,
@@ -89,7 +89,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     onPerPageChange,
     onDelete,
     onDuplicate,
-    onOpenTemplateView,
+    onOpenRequirementTypeView,
     toolbarPortalEl,
   } = props;
   const { t } = useTranslation();
@@ -149,9 +149,9 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     []
   );
 
-  const templateTitles = useMemo(
-    () => Object.fromEntries(templates.map((template) => [template.id, template.title])),
-    [templates]
+  const requirementTypeNames = useMemo(
+    () => Object.fromEntries(requirementTypes.map((requirementType) => [requirementType.id, requirementType.name])),
+    [requirementTypes]
   );
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
   const visibleIds = details.map((detail) => detail.id);
@@ -165,7 +165,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
    * 删除一律走二次确认。
    *
    * 主网格的删除是「暂存 + 保存更改」的两步，本身就有反悔余地；这里是点一下就直接
-   * 打接口，没有撤销，所以必须挡一道 —— 与模板列表等其他删除入口的 AlertModalCore
+   * 打接口，没有撤销，所以必须挡一道 —— 与类型列表等其他删除入口的 AlertModalCore
    * 保持一致。
    */
   const confirmDelete = async () => {
@@ -180,9 +180,9 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
    * 重新分配 UUID，否则新旧两行的表单行 ID 会撞在一起。
    */
   const handleDuplicate = (detail: TRequirementDetail) => {
-    const fields = templates.find((template) => template.id === detail.template_id)?.fields ?? [];
+    const fields = requirementTypes.find((requirementType) => requirementType.id === detail.requirement_type_id)?.fields ?? [];
     return onDuplicate({
-      templateId: detail.template_id,
+      requirementTypeId: detail.requirement_type_id,
       data: copyRequirementDetailData(detail.data, fields),
       afterId: detail.id,
     });
@@ -262,7 +262,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
       <div className="flex-1 overflow-auto">
         {/*
           table-fixed + colgroup 定列宽：只有三列时如果任由浏览器分配，标题列会被撑到
-          几百像素而内容只有几个字，「所属模板」被甩到最右，中间一大片空白。
+          几百像素而内容只有几个字，「所属类型」被甩到最右，中间一大片空白。
           表头/竖线/字号/行高一律对齐 RequirementGridHeader，切换视图时不该换一副样子。
         */}
         <table className="w-full table-fixed border-collapse text-left text-13">
@@ -298,19 +298,19 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   !readOnly && "border-r border-subtle"
                 )}
               >
-                {t("workspace_products.requirements.data.views.template_column")}
+                {t("workspace_products.requirements.data.views.requirement_type_column")}
               </th>
               {!readOnly && (
                 <th className="px-2 py-2.5 text-center align-middle text-primary">
-                  {t("workspace_templates.requirements.fields.actions")}
+                  {t("requirement_fields.fields.actions")}
                 </th>
               )}
             </tr>
           </thead>
           <tbody>
             {details.map((detail) => {
-              const titleField = findBuiltinField(templates, detail, "title");
-              const descriptionField = findBuiltinField(templates, detail, "description");
+              const titleField = findBuiltinField(requirementTypes, detail, "title");
+              const descriptionField = findBuiltinField(requirementTypes, detail, "description");
               return (
                 <tr key={detail.id} className="group/detail border-b border-subtle hover:bg-layer-1">
                   <td className="border-r border-subtle px-3 py-2 align-middle">
@@ -328,7 +328,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     {titleField ? (
                       <LeafValue
                         field={titleField}
-                        value={getBuiltinValue(detail, templates, "title") ?? undefined}
+                        value={getBuiltinValue(detail, requirementTypes, "title") ?? undefined}
                         workspaceSlug={workspaceSlug}
                       />
                     ) : null}
@@ -337,7 +337,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     {descriptionField ? (
                       <LeafValue
                         field={descriptionField}
-                        value={getBuiltinValue(detail, templates, "description") ?? undefined}
+                        value={getBuiltinValue(detail, requirementTypes, "description") ?? undefined}
                         workspaceSlug={workspaceSlug}
                       />
                     ) : null}
@@ -345,21 +345,21 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   <td className={cn("px-3 py-2 align-middle", !readOnly && "border-r border-subtle")}>
                     <button
                       type="button"
-                      onClick={() => onOpenTemplateView(detail.template_id)}
-                      title={t("workspace_products.requirements.data.views.open_template_view", {
-                        name: templateTitles[detail.template_id] ?? "",
+                      onClick={() => onOpenRequirementTypeView(detail.requirement_type_id)}
+                      title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
+                        name: requirementTypeNames[detail.requirement_type_id] ?? "",
                       })}
                       className={cn(
                         "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
                         "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
                       )}
                     >
-                      <span className="truncate">{templateTitles[detail.template_id] ?? "—"}</span>
+                      <span className="truncate">{requirementTypeNames[detail.requirement_type_id] ?? "—"}</span>
                     </button>
                   </td>
                   {!readOnly && (
                     <td className="px-2 py-2 text-center align-middle">
-                      {/* 总览视图只给复制与删除：改字段值要回到对应的模板视图 */}
+                      {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
                       <div className="flex justify-center">
                         <CustomMenu
                           ellipsis
@@ -370,7 +370,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                             onClick={() => void handleDuplicate(detail)}
                             disabled={isMutating}
                           >
-                            <MenuRowLabel icon={Copy} label={t("workspace_templates.requirements.data.copy")} />
+                            <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
                           </CustomMenu.MenuItem>
                           <CustomMenu.MenuItem
                             onClick={() => setIdsToDelete([detail.id])}
@@ -398,7 +398,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
         <span className="text-sm text-secondary">
           {isLoading && <LoaderIcon className="mr-1 inline size-3.5 animate-spin" />}
           {totalCount > 0
-            ? t("workspace_templates.requirements.data.range", {
+            ? t("requirement_grid.data.range", {
                 start: currentPageOffset * perPage + 1,
                 end: Math.min(currentPageOffset * perPage + details.length, totalCount),
                 total: totalCount,

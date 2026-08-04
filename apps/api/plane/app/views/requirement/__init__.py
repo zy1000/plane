@@ -14,6 +14,10 @@ from .library_item import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
 )
+from .type import (
+    RequirementTypeConfigurationAPIView,
+    RequirementTypeViewSet,
+)
 
 __all__ = [
     "RequirementChangeItemViewSet",
@@ -23,6 +27,8 @@ __all__ = [
     "RequirementLibraryConfigurationAPIView",
     "RequirementLibraryItemViewSet",
     "RequirementLibraryViewSet",
+    "RequirementTypeConfigurationAPIView",
+    "RequirementTypeViewSet",
     "RequirementVersionViewSet",
     "RequirementViewSet",
     "RequirementWorkingCopyAPIView",

@@ -8,6 +8,8 @@ from plane.app.views.requirement import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
+    RequirementTypeConfigurationAPIView,
+    RequirementTypeViewSet,
     RequirementVersionViewSet,
     RequirementViewSet,
     RequirementWorkingCopyAPIView,
@@ -15,6 +17,28 @@ from plane.app.views.requirement import (
 
 
 urlpatterns = [
+    path(
+        "workspaces/<str:slug>/requirement-types/",
+        RequirementTypeViewSet.as_view({"get": "list", "post": "create"}),
+        name="requirement-types",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-types/<uuid:pk>/",
+        RequirementTypeViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="requirement-type-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-types/<uuid:pk>/configuration/",
+        RequirementTypeConfigurationAPIView.as_view(),
+        name="requirement-type-configuration",
+    ),
     path(
         "workspaces/<str:slug>/requirement-libraries/",
         RequirementLibraryViewSet.as_view({"get": "list", "post": "create"}),

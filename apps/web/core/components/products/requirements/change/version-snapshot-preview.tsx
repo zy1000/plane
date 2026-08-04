@@ -14,7 +14,7 @@ import {
   getMaxFormRows,
   LeafValue,
   RequirementGridHeader,
-} from "@/components/template-management/requirements/requirement-grid-shared";
+} from "@/components/requirements/requirement-grid-shared";
 
 const PER_PAGE_OPTIONS = [20, 50, 100];
 
@@ -71,7 +71,7 @@ export function VersionSnapshotPreview(props: TProps) {
         <p className="px-4 py-6 text-12 text-danger-primary">{error}</p>
       ) : !rows.length ? (
         <p className="px-4 py-10 text-center text-13 text-tertiary">
-          {t("workspace_templates.requirements.data.empty")}
+          {t("requirement_grid.data.empty")}
         </p>
       ) : (
         <div className="overflow-auto">
@@ -108,7 +108,7 @@ export function VersionSnapshotPreview(props: TProps) {
                                 groupCellClass
                               )}
                             >
-                              {rowIndex === 0 ? t("workspace_templates.requirements.fields.no_children") : null}
+                              {rowIndex === 0 ? t("requirement_fields.fields.no_children") : null}
                             </td>,
                           ];
                         }
@@ -166,7 +166,7 @@ export function VersionSnapshotPreview(props: TProps) {
             disabled={!prevPageResults}
             onClick={() => onCursorChange(prevCursor)}
             className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover disabled:opacity-40"
-            aria-label={t("workspace_templates.requirements.list.previous_page")}
+            aria-label={t("requirement_grid.pagination.previous_page")}
           >
             <ChevronLeft className="size-3.5" />
           </button>
@@ -176,7 +176,7 @@ export function VersionSnapshotPreview(props: TProps) {
             disabled={!nextPageResults}
             onClick={() => onCursorChange(nextCursor)}
             className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover disabled:opacity-40"
-            aria-label={t("workspace_templates.requirements.list.next_page")}
+            aria-label={t("requirement_grid.pagination.next_page")}
           >
             <ChevronRight className="size-3.5" />
           </button>

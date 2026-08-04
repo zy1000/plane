@@ -43,43 +43,43 @@ export function ChangeRequestDetail(props: TProps) {
   const {
     changeType,
     changedColumnsOnly,
-    requestedTemplateId,
+    requestedRequirementTypeId,
     setChangeType,
     setChangedColumnsOnly,
-    setTemplateId,
+    setRequirementTypeId,
   } = useChangeItemFilters();
-  // 详情要先回来才知道有哪些模板，所以先按 URL 上的值取数，收敛后再由 effect 纠正
+  // 详情要先回来才知道有哪些需求类型，所以先按 URL 上的值取数，收敛后再由 effect 纠正
   const store = useRequirementChangeRequestDetail({
     workspaceSlug,
     requirementId,
     changeRequestId,
     changeType,
-    templateId: requestedTemplateId,
+    requirementTypeId: requestedRequirementTypeId,
   });
   const { changeRequest } = store;
   const [sectionSelection, setSectionSelection] = useState<TSectionSelection | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // 单模板需求（含需求模板自身）不分视图，行为与今天完全一致
-  const templateStats = changeRequest?.template_stats ?? [];
-  const activeTemplateId =
-    templateStats.length > 1
-      ? (templateStats.find((item) => item.id === requestedTemplateId)?.id ?? templateStats[0].id)
+  // 单类型需求（含需求类型自身）不分视图，行为与今天完全一致
+  const requirementTypeStats = changeRequest?.requirement_type_stats ?? [];
+  const activeRequirementTypeId =
+    requirementTypeStats.length > 1
+      ? (requirementTypeStats.find((item) => item.id === requestedRequirementTypeId)?.id ?? requirementTypeStats[0].id)
       : undefined;
-  /** 表头只取当前模板的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
-  const templateFields = useMemo(
-    () => (activeTemplateId ? fields.filter((field) => field.template_id === activeTemplateId) : fields),
-    [activeTemplateId, fields]
+  /** 表头只取当前类型的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
+  const requirementTypeFields = useMemo(
+    () => (activeRequirementTypeId ? fields.filter((field) => field.requirement_type_id === activeRequirementTypeId) : fields),
+    [activeRequirementTypeId, fields]
   );
 
-  // 把收敛后的模板写回 URL：明细分页在服务端按 template_id 过滤，两边必须是同一个值。
+  // 把收敛后的类型写回 URL：明细分页在服务端按 requirement_type_id 过滤，两边必须是同一个值。
   // 详情没回来之前不能动 URL，否则会把分享链接上的 tpl 抹掉。
   useEffect(() => {
     if (!changeRequest) return;
-    if (activeTemplateId) {
-      if (activeTemplateId !== requestedTemplateId) setTemplateId(activeTemplateId);
-    } else if (requestedTemplateId) setTemplateId(undefined);
-  }, [activeTemplateId, changeRequest, requestedTemplateId, setTemplateId]);
+    if (activeRequirementTypeId) {
+      if (activeRequirementTypeId !== requestedRequirementTypeId) setRequirementTypeId(activeRequirementTypeId);
+    } else if (requestedRequirementTypeId) setRequirementTypeId(undefined);
+  }, [activeRequirementTypeId, changeRequest, requestedRequirementTypeId, setRequirementTypeId]);
 
   const act = async (action: TRequirementApprovalAction, comment: string) => {
     try {
@@ -294,15 +294,15 @@ export function ChangeRequestDetail(props: TProps) {
           {activeSection === "overview" ? (
             <MetaDiffTable items={changeRequest.requirement_items} members={members} />
           ) : activeSection === "schema" ? (
-            <SchemaDiffList items={changeRequest.schema_items} templates={templateStats} />
+            <SchemaDiffList items={changeRequest.schema_items} requirementTypes={requirementTypeStats} />
           ) : (
             <DetailDiffGrid
               workspaceSlug={workspaceSlug}
-              fields={templateFields}
+              fields={requirementTypeFields}
               changedFieldIds={changeRequest.changed_field_ids}
-              templates={templateStats}
-              activeTemplateId={activeTemplateId}
-              onTemplateChange={setTemplateId}
+              requirementTypes={requirementTypeStats}
+              activeRequirementTypeId={activeRequirementTypeId}
+              onTemplateChange={setRequirementTypeId}
               items={store.itemsPage.results}
               totalCount={store.itemsPage.total_count ?? 0}
               isLoading={store.isItemsLoading}

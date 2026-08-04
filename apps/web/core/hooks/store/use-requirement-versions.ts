@@ -39,7 +39,7 @@ const EMPTY_DETAILS: TRequirementVersionDetailsResponse = {
  * 版本历史 Tab。选中版本后按需拉取快照详情，快照里的明细数组在服务端切片，
  * 所以千行需求的预览与现有明细网格是同一套分页口径。
  *
- * `templateId` 由调用方（URL query）持有：产品需求的快照是多个模板拼接的，明细必须
+ * `requirementTypeId` 由调用方（URL query）持有：产品需求的快照是多个类型拼接的，明细必须
  * 在服务端按模板裁完再切片，否则一页里混着别的模板的行。
  */
 export const useRequirementVersions = ({
@@ -47,14 +47,14 @@ export const useRequirementVersions = ({
   requirementId,
   currentVersion,
   changeType,
-  templateId,
+  requirementTypeId,
   onRequirementUpdate,
 }: {
   workspaceSlug: string | undefined;
   requirementId: string | undefined;
   currentVersion: number | null;
   changeType?: TRequirementChangeType;
-  templateId?: string;
+  requirementTypeId?: string;
   onRequirementUpdate?: (requirement: TRequirement) => void;
 }) => {
   const [versionsPage, setVersionsPage] = useState<TRequirementVersionsResponse>(EMPTY_VERSIONS);
@@ -164,7 +164,7 @@ export const useRequirementVersions = ({
       const response = await requirementService.listVersionDetails(workspaceSlug, requirementId, selectedVersion, {
         cursor: detailsCursor,
         perPage: detailsPerPage,
-        templateId,
+        requirementTypeId,
       });
       setDetailsPage(response);
       return response;
@@ -174,7 +174,7 @@ export const useRequirementVersions = ({
     } finally {
       setIsDetailsLoading(false);
     }
-  }, [detailsCursor, detailsPerPage, requirementId, selectedVersion, templateId, workspaceSlug]);
+  }, [detailsCursor, detailsPerPage, requirementId, selectedVersion, requirementTypeId, workspaceSlug]);
 
   useEffect(() => {
     void fetchVersionDetail().catch(() => undefined);
@@ -202,7 +202,7 @@ export const useRequirementVersions = ({
           cursor: comparisonCursor,
           perPage: comparisonPerPage,
           changeType,
-          templateId,
+          requirementTypeId,
         }
       );
       setComparisonPage(response);
@@ -220,7 +220,7 @@ export const useRequirementVersions = ({
     comparisonPerPage,
     requirementId,
     selectedVersion,
-    templateId,
+    requirementTypeId,
     workspaceSlug,
   ]);
 
@@ -233,7 +233,7 @@ export const useRequirementVersions = ({
   useEffect(() => {
     setDetailsCursor(undefined);
     setComparisonCursor(undefined);
-  }, [templateId]);
+  }, [requirementTypeId]);
 
   /** 回滚只是把历史快照灌入工作副本，需求会回到草稿态，仍需再走一次审批 */
   const rollbackToVersion = useCallback(

@@ -45,10 +45,10 @@ from plane.utils.paginator import Cursor
 from plane.utils.requirement_change import (
     RequirementChangeError,
     act_on_change_request,
-    build_change_template_stats,
+    build_change_requirement_type_stats,
     build_version_comparison,
     cancel_change_request,
-    filter_change_items_by_template,
+    filter_change_items_by_requirement_type,
     rollback_to_version,
     submit_change_request,
 )
@@ -133,14 +133,6 @@ class RequirementScopedMixin:
         requirement = self.resolve_requirement(for_update=for_update)
         if requirement is None:
             return None, self.not_found()
-        if requirement.is_template:
-            return None, Response(
-                {
-                    "error": "Workspace templates do not go through the approval flow.",
-                    "code": "REQUIREMENT_TEMPLATE_NOT_APPROVABLE",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         if not can_write_requirement(self.request.user, requirement):
             return None, self.forbidden()
         return requirement, None
@@ -269,7 +261,7 @@ class RequirementChangeRequestViewSet(RequirementScopedMixin, BaseViewSet):
                 context={
                     "request": request,
                     "detail_item_count": change_request.detail_item_count,
-                    "template_stats": build_change_template_stats(change_request.id),
+                    "requirement_type_stats": build_change_requirement_type_stats(change_request.id),
                 },
             ).data,
             status=status.HTTP_200_OK,
@@ -404,9 +396,9 @@ class RequirementChangeItemViewSet(RequirementScopedMixin, BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             queryset = queryset.filter(change_type=change_type)
-        template_id = request.query_params.get("template_id")
-        if template_id:
-            queryset = filter_change_items_by_template(queryset, template_id)
+        requirement_type_id = request.query_params.get("requirement_type_id")
+        if requirement_type_id:
+            queryset = filter_change_items_by_requirement_type(queryset, requirement_type_id)
         return self.paginate(
             request=request,
             queryset=queryset,
@@ -477,14 +469,14 @@ class RequirementVersionViewSet(RequirementScopedMixin, BaseViewSet):
         if requirement_version is None:
             return self.version_not_found()
         rows = (requirement_version.snapshot or {}).get("details") or []
-        # 快照里的明细是多个模板拼在一起的，切片前先按模板裁，否则前端只能拿到混着
-        # 别的模板的一页数据
-        template_id = request.query_params.get("template_id")
-        if template_id:
+        # 快照里的明细是多个需求类型拼在一起的，切片前先按类型裁，否则前端只能拿到
+        # 混着别的类型的一页数据
+        requirement_type_id = request.query_params.get("requirement_type_id")
+        if requirement_type_id:
             rows = [
                 row
                 for row in rows
-                if str(row.get("template_id") or "") == template_id
+                if str(row.get("requirement_type_id") or "") == requirement_type_id
             ]
         return paginate_sequence(self, request, rows)
 
@@ -507,9 +499,9 @@ class RequirementVersionViewSet(RequirementScopedMixin, BaseViewSet):
             detail_items = [
                 item for item in detail_items if item["change_type"] == change_type
             ]
-        # template_stats 已经在 build_version_comparison 里按全量算好，这里只裁当前页
-        template_id = request.query_params.get("template_id")
-        if template_id:
+        # requirement_type_stats 已经在 build_version_comparison 里按全量算好，这里只裁当前页
+        requirement_type_id = request.query_params.get("requirement_type_id")
+        if requirement_type_id:
             detail_items = [
                 item
                 for item in detail_items
@@ -518,10 +510,10 @@ class RequirementVersionViewSet(RequirementScopedMixin, BaseViewSet):
                         item.get("proposed_snapshot")
                         or item.get("before_snapshot")
                         or {}
-                    ).get("template_id")
+                    ).get("requirement_type_id")
                     or ""
                 )
-                == template_id
+                == requirement_type_id
             ]
 
         response = paginate_sequence(self, request, detail_items)

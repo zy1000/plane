@@ -32,7 +32,7 @@ export const countRequirementColumns = (fields: TPreviewField[]) =>
 /**
  * 字段结构的只读表头预览，含子表单的两行表头。
  *
- * 模板编辑器与模板详情页共用：两处展示的是同一份结构，没有理由渲染出两种样子。
+ * 类型编辑器与类型详情页共用：两处展示的是同一份结构，没有理由渲染出两种样子。
  */
 export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }) {
   const { t } = useTranslation();
@@ -53,7 +53,7 @@ export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }
                   colSpan={Math.max(field.children.filter((child) => child.is_active).length, 1)}
                   className="min-w-40 border-r border-subtle px-3 py-2 text-center text-primary"
                 >
-                  {field.name || t("workspace_templates.requirements.fields.untitled")}
+                  {field.name || t("requirement_fields.fields.untitled")}
                 </th>
               ) : (
                 <th
@@ -61,7 +61,7 @@ export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }
                   rowSpan={hasForms ? 2 : 1}
                   className="min-w-40 border-r border-subtle px-3 py-2"
                 >
-                  {field.name || t("workspace_templates.requirements.fields.untitled")}
+                  {field.name || t("requirement_fields.fields.untitled")}
                 </th>
               )
             )}
@@ -73,12 +73,12 @@ export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }
                 return children.length ? (
                   children.map((child) => (
                     <th key={previewFieldKey(child)} className="min-w-40 border-r border-subtle px-3 py-2">
-                      {child.name || t("workspace_templates.requirements.fields.untitled")}
+                      {child.name || t("requirement_fields.fields.untitled")}
                     </th>
                   ))
                 ) : (
                   <th key={`${previewFieldKey(field)}-empty`} className="min-w-40 border-r border-subtle px-3 py-2">
-                    {t("workspace_templates.requirements.fields.no_children")}
+                    {t("requirement_fields.fields.no_children")}
                   </th>
                 );
               })}
@@ -88,7 +88,7 @@ export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }
         <tbody>
           <tr>
             <td colSpan={Math.max(1, columnCount)} className="h-24 px-4 text-center text-11 text-placeholder">
-              {t("workspace_templates.requirements.preview.empty")}
+              {t("requirement_fields.preview.empty")}
             </td>
           </tr>
         </tbody>

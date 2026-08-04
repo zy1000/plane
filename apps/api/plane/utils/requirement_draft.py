@@ -5,15 +5,15 @@
 的内容会被覆盖，首次发布的 diff 以空快照为基线。一旦发过版本，「编辑」会克隆出
 工作副本，之后所有改动都落在这里，正式表继续持有最后一次批准通过的内容。
 
-草稿层只承载**明细行**（RequirementDraftDetail）。字段定义不在这里 —— 它归工作区
-模板所有，草稿行通过 template 外键实时引用，所以「编辑」态看到的永远是模板的最新
-字段。
+草稿层只承载**明细行**（RequirementDraftDetail）。字段定义不在这里 —— 它归需求
+类型所有，草稿行通过 requirement_type 外键实时引用，所以「编辑」态看到的永远是
+类型的最新字段。
 
 snapshot 里存两份**冻结的基线**，都只用来算 diff 的「变更前」：
 - `requirement`：meta 基线（标题/描述/负责人/审批规则）。meta 继续直接写正式行，
   基线还用于撤回草稿时把 meta 恢复回上一版本。
-- `fields`：已发布版本里冻结的字段树。没有它，diff 两侧都会实时取模板，模板的字段
-  改动就永远显示不出来。
+- `fields`：已发布版本里冻结的字段树。没有它，diff 两侧都会实时取需求类型，类型的
+  字段改动就永远显示不出来。
 
 草稿明细在服务端预分配 UUID，物化时直接复用为正式表主键，因此明细 data 里以字段
 ID 为 key 的结构不需要任何 remap。
@@ -31,10 +31,8 @@ from plane.db.models import (
 from plane.utils.requirement import (
     SORT_ORDER_STEP,
     build_library_import_creates,
-    field_specs_for_templates,
     field_specs_from_tree,
     get_published_field_tree,
-    get_referenced_template_ids,
     insert_detail_row,
     replace_requirement_approvers,
     save_detail_row_batch,
@@ -76,22 +74,14 @@ def get_draft(requirement):
 def get_draft_baseline_field_tree(draft):
     """「编辑」那一刻已发布的字段树 —— diff 的「变更前」。
 
-    刻意与 get_draft_field_specs 那个旧名字区分开：语义已经从「可编辑的字段树」
-    翻转成「冻结的基线」，同名会让调用方误以为它还是当前生效的字段。
+    名字里刻意带上 baseline：它是**冻结的基线**，不是草稿当前生效的字段（后者由
+    草稿明细引用到的需求类型实时解析）。
     """
     return deepcopy((draft.snapshot or {}).get("fields") or [])
 
 
 def get_draft_baseline_field_specs(draft):
     return field_specs_from_tree(get_draft_baseline_field_tree(draft))
-
-
-def get_draft_field_specs(draft):
-    """草稿当前生效的字段：由草稿明细引用到的模板实时解析。"""
-    template_ids = get_referenced_template_ids(
-        model=RequirementDraftDetail, scope={"draft": draft}
-    )
-    return field_specs_for_templates(template_ids)[0]
 
 
 def get_draft_baseline_meta(draft):
@@ -104,10 +94,10 @@ def _draft_detail_scope(draft):
 
 
 def _new_draft_detail(draft):
-    def factory(data, sort_order, actor, template_id):
+    def factory(data, sort_order, actor, requirement_type_id):
         return RequirementDraftDetail(
             draft=draft,
-            template_id=template_id,
+            requirement_type_id=requirement_type_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -147,7 +137,7 @@ def start_editing(*, requirement, actor=None):
                 RequirementDraftDetail(
                     id=detail.id,
                     draft=draft,
-                    template_id=detail.template_id,
+                    requirement_type_id=detail.requirement_type_id,
                     data=deepcopy(detail.data),
                     sort_order=detail.sort_order,
                     version=detail.version,
@@ -232,14 +222,14 @@ def _restore_baseline_meta(requirement, draft, *, actor=None):
 
 
 def insert_draft_detail(
-    *, draft, data, template_id, actor=None, before_id=None, after_id=None
+    *, draft, data, requirement_type_id, actor=None, before_id=None, after_id=None
 ):
     return insert_detail_row(
         model=RequirementDraftDetail,
         scope=_draft_detail_scope(draft),
         new_row=_new_draft_detail(draft),
         data=data,
-        template_id=template_id,
+        requirement_type_id=requirement_type_id,
         actor=actor,
         before_id=before_id,
         after_id=after_id,
@@ -281,8 +271,8 @@ def import_draft_library_items(
 def materialize_draft(*, requirement, draft, actor=None):
     """审批通过时把工作副本的明细写进正式表。
 
-    字段不在这里处理 —— 它归模板所有，正式行只是通过 template 外键引用它。
-    meta 也不在这里 —— 它一直直接写在正式行上。
+    字段不在这里处理 —— 它归需求类型所有，正式行只是通过 requirement_type 外键
+    引用它。meta 也不在这里 —— 它一直直接写在正式行上。
 
     草稿是整份工作副本而不是增量，所以先清空正式表的旧明细再重建。清空走
     all_objects 的真删除 —— 草稿行会复用同一批 UUID，任何残留（含历史软删除行）
@@ -301,7 +291,7 @@ def materialize_draft(*, requirement, draft, actor=None):
             RequirementDetail(
                 id=detail.id,
                 requirement=requirement,
-                template_id=detail.template_id,
+                requirement_type_id=detail.requirement_type_id,
                 data=deepcopy(detail.data),
                 sort_order=(index + 1) * SORT_ORDER_STEP,
                 version=detail.version,
@@ -326,20 +316,20 @@ def load_snapshot_into_draft(*, draft, snapshot, actor=None):
     meta 基线与字段基线都保持不动 —— 它们记录的是「编辑」那一刻已批准的内容，
     回滚不该改写它们，否则 diff 的「变更前」就不再是已发布的内容。
 
-    回滚只搬明细行；行上的 template_id 从快照里取回，字段结构随之自动恢复。
+    回滚只搬明细行；行上的 requirement_type_id 从快照里取回，字段结构随之自动恢复。
     """
     RequirementDraftDetail.all_objects.filter(draft=draft).delete()
     pending = []
     for index, row in enumerate(snapshot.get("details") or []):
-        template_id = row.get("template_id")
-        if not template_id:
-            # 0313 之前的快照没有这个字段，无法确定字段来源，只能跳过
+        requirement_type_id = row.get("requirement_type_id")
+        if not requirement_type_id:
+            # 快照里没有这个字段就无法确定字段来源，只能跳过
             continue
         pending.append(
             RequirementDraftDetail(
                 id=row.get("id") or uuid4(),
                 draft=draft,
-                template_id=template_id,
+                requirement_type_id=requirement_type_id,
                 data=deepcopy(row.get("data") or {}),
                 sort_order=(index + 1) * SORT_ORDER_STEP,
                 created_by=actor,

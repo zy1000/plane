@@ -425,13 +425,17 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
   templates: {
     key: "templates",
     labelTranslationKey: "templates",
-    href: `/templates/requirements/`,
+    /** 点进来的落地页；改这里不影响下面的高亮范围 */
+    href: `/templates/requirement-types/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => {
       const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
       const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
-      const templatesBaseUrl = normalizedUrl.replace(/requirements\/$/, "");
-      return normalizedPathname.startsWith(templatesBaseUrl);
+      // 整个 /templates 子树都算命中，与默认落地的是哪个 tab 无关
+      const marker = "/templates/";
+      const markerIndex = normalizedUrl.indexOf(marker);
+      if (markerIndex === -1) return normalizedPathname.startsWith(normalizedUrl);
+      return normalizedPathname.startsWith(normalizedUrl.slice(0, markerIndex + marker.length));
     },
   },
 };

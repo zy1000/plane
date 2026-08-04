@@ -150,14 +150,14 @@ export const coreRoutes: RouteConfigEntry[] = [
         // Template Management
         layout("./(all)/[workspaceSlug]/(projects)/templates/layout.tsx", [
           route(":workspaceSlug/templates", "./(all)/[workspaceSlug]/(projects)/templates/page.tsx"),
-          layout("./(all)/[workspaceSlug]/(projects)/templates/requirements/layout.tsx", [
+          layout("./(all)/[workspaceSlug]/(projects)/templates/requirement-types/layout.tsx", [
             route(
-              ":workspaceSlug/templates/requirements",
-              "./(all)/[workspaceSlug]/(projects)/templates/requirements/page.tsx"
+              ":workspaceSlug/templates/requirement-types",
+              "./(all)/[workspaceSlug]/(projects)/templates/requirement-types/page.tsx"
             ),
             route(
-              ":workspaceSlug/templates/requirements/:templateId",
-              "./(all)/[workspaceSlug]/(projects)/templates/requirements/[templateId]/page.tsx"
+              ":workspaceSlug/templates/requirement-types/:requirementTypeId",
+              "./(all)/[workspaceSlug]/(projects)/templates/requirement-types/[requirementTypeId]/page.tsx"
             ),
           ]),
           layout("./(all)/[workspaceSlug]/(projects)/templates/libraries/layout.tsx", [
@@ -669,11 +669,10 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Timesheets: 旧路径 /timesheets/manage → /timesheets
   route(":workspaceSlug/timesheets/manage", "routes/redirects/core/timesheets-manage.tsx"),
 
-  // 需求模板: 旧路径 /templates/requirements/:templateId/edit → /templates/requirements/:templateId
-  route(
-    ":workspaceSlug/templates/requirements/:templateId/edit",
-    "routes/redirects/core/requirement-template-edit.tsx"
-  ),
+  // 需求类型: 旧路径 /templates/requirements/** → /templates/requirement-types/**
+  // 裸路径与 splat 都注册，不依赖 splat 能否匹配空串
+  route(":workspaceSlug/templates/requirements", "routes/redirects/core/requirement-types.tsx"),
+  route(":workspaceSlug/templates/requirements/*", "routes/redirects/core/requirement-types.tsx"),
 
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens

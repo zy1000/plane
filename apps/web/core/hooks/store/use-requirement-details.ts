@@ -8,7 +8,7 @@ import type {
   TRequirementDetailFilter,
   TRequirementDetailImportPayload,
   TRequirementDetailsResponse,
-  TRequirementTemplateSchema,
+  TRequirementTypeSchema,
 } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
 
@@ -19,9 +19,9 @@ const getErrorMessage = (error: unknown) => {
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
     const payload = error as { error?: string; detail?: string };
-    return payload.error ?? payload.detail ?? "Unable to load the requirement template.";
+    return payload.error ?? payload.detail ?? "Unable to load the requirement.";
   }
-  return "Unable to load the requirement template.";
+  return "Unable to load the requirement.";
 };
 
 const EMPTY_PAGE: TRequirementDetailsResponse = {
@@ -32,7 +32,7 @@ const EMPTY_PAGE: TRequirementDetailsResponse = {
 };
 
 /** 稳定引用，避免每次渲染都产生新数组把下游 memo 打穿 */
-const EMPTY_TEMPLATES: TRequirementTemplateSchema[] = [];
+const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
 
 export const useRequirementDetails = ({
   workspaceSlug,
@@ -54,8 +54,8 @@ export const useRequirementDetails = ({
   const [filters, setFilters] = useState<TRequirementDetailFilter[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
-  /** 当前模板视图；undefined = 不按模板过滤（默认视图 / 单模板） */
-  const [templateFilter, setTemplateFilter] = useState<string | undefined>();
+  /** 当前需求类型视图；undefined = 不按类型过滤（默认视图 / 单类型） */
+  const [requirementTypeFilter, setRequirementTypeFilter] = useState<string | undefined>();
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !requirementId) return null;
@@ -84,7 +84,7 @@ export const useRequirementDetails = ({
         perPage,
         search,
         filters,
-        templateId: templateFilter,
+        requirementTypeId: requirementTypeFilter,
       });
       setDetailsPage(response);
       return response;
@@ -94,7 +94,7 @@ export const useRequirementDetails = ({
     } finally {
       setIsDetailsLoading(false);
     }
-  }, [cursor, filters, perPage, search, templateFilter, requirementId, workspaceSlug]);
+  }, [cursor, filters, perPage, search, requirementTypeFilter, requirementId, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);
@@ -126,7 +126,7 @@ export const useRequirementDetails = ({
   const createDetail = useCallback(
     async (
       data: TRequirementDetailData,
-      templateId: string,
+      requirementTypeId: string,
       position: { before_id?: string; after_id?: string } = {}
     ) => {
       if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
@@ -134,7 +134,7 @@ export const useRequirementDetails = ({
       try {
         const response = await requirementService.createDetail(workspaceSlug, requirementId, {
           data,
-          template_id: templateId,
+          requirement_type_id: requirementTypeId,
           ...position,
         });
         await fetchDetails();
@@ -150,7 +150,7 @@ export const useRequirementDetails = ({
    * 从一个或多个标准库导入。
    *
    * 导入弹窗允许跨库勾选，而接口一次只收一个 library_id，所以这里按库分组顺序调用，
-   * 最后只刷新一次。返回各批次的响应，调用方用第一批的 template_id 决定切到哪个视图。
+   * 最后只刷新一次。返回各批次的响应，调用方用第一批的类型 ID 决定切到哪个视图。
    */
   const importFromLibraries = useCallback(
     async (payloads: TRequirementDetailImportPayload[]) => {
@@ -162,7 +162,7 @@ export const useRequirementDetails = ({
         for (const payload of payloads) {
           responses.push(await requirementService.importLibraryItems(workspaceSlug, requirementId, payload));
         }
-        // 先刷配置：引用的模板集合可能变大了，页面要据此更新视图列表并切过去
+        // 先刷配置：引用的需求类型集合可能变大了，页面要据此更新视图列表并切过去
         await fetchConfiguration();
         await fetchDetails();
         return responses;
@@ -240,17 +240,17 @@ export const useRequirementDetails = ({
     setCursor(undefined);
     setPerPage(value);
   }, []);
-  /** 切模板视图。搜索与筛选一并清空 —— 筛选条件是按字段 ID 定的，换个模板就没有意义了 */
-  const updateTemplateFilter = useCallback((value: string | undefined) => {
+  /** 切类型视图。搜索与筛选一并清空 —— 筛选条件是按字段 ID 定的，换个类型就没有意义了 */
+  const updateRequirementTypeFilter = useCallback((value: string | undefined) => {
     setCursor(undefined);
     setSearch("");
     setFilters([]);
-    setTemplateFilter(value);
+    setRequirementTypeFilter(value);
   }, []);
 
   return {
     configuration,
-    templates: configuration?.templates ?? EMPTY_TEMPLATES,
+    requirementTypes: configuration?.requirement_types ?? EMPTY_REQUIREMENT_TYPES,
     detailsPage,
     isConfigurationLoading,
     isDetailsLoading,
@@ -261,12 +261,12 @@ export const useRequirementDetails = ({
     filters,
     cursor,
     perPage,
-    templateFilter,
+    requirementTypeFilter,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
     setPerPage: updatePerPage,
-    setTemplateFilter: updateTemplateFilter,
+    setRequirementTypeFilter: updateRequirementTypeFilter,
     fetchConfiguration,
     fetchDetails,
     updateConfiguration,
@@ -278,17 +278,3 @@ export const useRequirementDetails = ({
   };
 };
 
-export const useRequirementTemplateDetails = ({
-  workspaceSlug,
-  templateId,
-  onTemplateUpdate,
-}: {
-  workspaceSlug: string | undefined;
-  templateId: string | undefined;
-  onTemplateUpdate?: (template: TRequirement) => void;
-}) =>
-  useRequirementDetails({
-    workspaceSlug,
-    requirementId: templateId,
-    onRequirementUpdate: onTemplateUpdate,
-  });

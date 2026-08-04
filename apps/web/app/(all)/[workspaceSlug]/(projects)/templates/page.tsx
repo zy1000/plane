@@ -5,5 +5,5 @@ import { getTemplateManagementTabPath } from "@/components/template-management";
 import type { Route } from "./+types/page";
 
 export default function TemplateManagementIndexPage({ params }: Route.ComponentProps) {
-  return <Navigate to={getTemplateManagementTabPath(params.workspaceSlug, "requirements")} replace />;
+  return <Navigate to={getTemplateManagementTabPath(params.workspaceSlug, "requirement-types")} replace />;
 }

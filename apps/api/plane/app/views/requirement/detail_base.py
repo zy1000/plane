@@ -103,10 +103,10 @@ class BaseRequirementDetailViewSet(BaseViewSet):
         ]
 
         queryset = layer.queryset
-        # 按模板切视图必须在服务端过滤 —— 明细是游标分页的，前端拿到的只是一页
-        template_id = request.query_params.get("template_id")
-        if template_id:
-            queryset = queryset.filter(template_id=template_id)
+        # 按需求类型切视图必须在服务端过滤 —— 明细是游标分页的，前端拿到的只是一页
+        requirement_type_id = request.query_params.get("requirement_type_id")
+        if requirement_type_id:
+            queryset = queryset.filter(requirement_type_id=requirement_type_id)
 
         search = request.query_params.get("search", "")
         if search.strip() or normalized_filters:
@@ -115,7 +115,7 @@ class BaseRequirementDetailViewSet(BaseViewSet):
                 details=queryset,
                 search=search,
                 filters=normalized_filters,
-                fields_by_template=layer.fields_by_template,
+                fields_by_requirement_type=layer.fields_by_requirement_type,
             )
             queryset = queryset.filter(id__in=matching_ids)
         return self.paginate(
@@ -141,8 +141,8 @@ class BaseRequirementDetailViewSet(BaseViewSet):
             data=request.data,
             context={
                 "owner": owner,
-                "template_resolver": layer.template_resolver,
-                "default_template_id": layer.default_template_id,
+                "requirement_type_resolver": layer.requirement_type_resolver,
+                "default_requirement_type_id": layer.default_requirement_type_id,
             },
         )
         serializer.is_valid(raise_exception=True)
@@ -150,7 +150,7 @@ class BaseRequirementDetailViewSet(BaseViewSet):
             with transaction.atomic():
                 detail = layer.insert(
                     data=serializer.validated_data["data"],
-                    template_id=serializer.validated_data["template_id"],
+                    requirement_type_id=serializer.validated_data["requirement_type_id"],
                     actor=request.user,
                     before_id=serializer.validated_data.get("before_id"),
                     after_id=serializer.validated_data.get("after_id"),
@@ -169,11 +169,11 @@ class BaseRequirementDetailViewSet(BaseViewSet):
         layer, error = self.resolve_layer(owner, for_write=True)
         if error is not None:
             return error
-        # 先取这一行绑定的模板 —— data 要按它自己的字段校验，而不是全部模板的并集
-        row_template_id = (
-            layer.queryset.filter(id=pk).values_list("template_id", flat=True).first()
+        # 先取这一行绑定的需求类型 —— data 要按它自己的字段校验，而不是全部类型的并集
+        row_requirement_type_id = (
+            layer.queryset.filter(id=pk).values_list("requirement_type_id", flat=True).first()
         )
-        if row_template_id is None:
+        if row_requirement_type_id is None:
             return Response(
                 {"error": "Requirement detail not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -182,7 +182,7 @@ class BaseRequirementDetailViewSet(BaseViewSet):
             data=request.data,
             context={
                 "owner": owner,
-                "fields": layer.template_resolver.specs(row_template_id),
+                "fields": layer.requirement_type_resolver.specs(row_requirement_type_id),
             },
         )
         serializer.is_valid(raise_exception=True)
@@ -263,11 +263,11 @@ class BaseRequirementDetailViewSet(BaseViewSet):
                 data=request.data,
                 context={
                     "owner": owner,
-                    "template_resolver": layer.template_resolver,
-                    "default_template_id": layer.default_template_id,
-                    # 每行按自己绑定的模板校验
-                    "row_templates": dict(
-                        layer.queryset.values_list("id", "template_id")
+                    "requirement_type_resolver": layer.requirement_type_resolver,
+                    "default_requirement_type_id": layer.default_requirement_type_id,
+                    # 每行按自己绑定的需求类型校验
+                    "row_requirement_types": dict(
+                        layer.queryset.values_list("id", "requirement_type_id")
                     ),
                 },
             )
@@ -370,8 +370,8 @@ class BaseRequirementDetailViewSet(BaseViewSet):
                 ],
                 "updated": [],
                 "deleted_ids": [],
-                # 引用的模板集合可能变大了，前端据此决定要不要重取 configuration
-                "template_id": str(library.template_id),
+                # 引用的需求类型集合可能变大了，前端据此决定要不要重取 configuration
+                "requirement_type_id": str(library.requirement_type_id),
             },
             status=status.HTTP_201_CREATED,
         )

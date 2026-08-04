@@ -19,12 +19,13 @@ from plane.db.models import (
     RequirementFieldType,
     RequirementLibrary,
     RequirementStatus,
+    RequirementType,
     WorkspaceMember,
 )
 from plane.tests.factories import ProjectFactory, UserFactory, WorkspaceFactory
 
 
-# 回传字段树时必须原样带上 builtin_key —— sync_requirement_fields 会校验它没被改过
+# 回传字段树时必须原样带上 builtin_key —— 保存时会校验它没被改过
 FIELD_PAYLOAD_KEYS = (
     "id",
     "name",
@@ -100,25 +101,24 @@ class TestRequirementApp:
             ProductMember.objects.create(product=product, member=member)
         return product
 
-    def create_template(self, title=None, **kwargs):
-        """直接落库建模板。
+    def create_requirement_type(self, name=None, **kwargs):
+        """直接落库建需求类型。
 
-        走 ORM 不会补内置字段，适合只需要一个「空模板」来给明细行挂 template_id 的
-        用例；需要内置字段时走创建接口。
+        走 ORM 不会补内置字段，适合只需要一个「空类型」来给明细行挂
+        requirement_type_id 的用例；需要内置字段时走创建接口。
         """
-        return Requirement.objects.create(
+        return RequirementType.objects.create(
             workspace=self.workspace,
-            is_template=True,
-            title=title or f"Requirement template {uuid4()}",
+            name=name or f"Requirement type {uuid4()}",
             owner=self.owner,
             **kwargs,
         )
 
-    def create_library(self, template, name=None):
-        """标准库：模板只定义字段，条目直接挂在库上。"""
+    def create_library(self, requirement_type, name=None):
+        """标准库：需求类型只定义字段，条目直接挂在库上。"""
         return RequirementLibrary.objects.create(
             workspace=self.workspace,
-            template=template,
+            requirement_type=requirement_type,
             name=name or f"Requirement library {uuid4()}",
         )
 
@@ -142,32 +142,12 @@ class TestRequirementApp:
         project = self.create_project(self.owner, approver)
         self.authenticate(api_client, self.owner)
 
-        template_response = api_client.post(
-            self.list_url,
-            {
-                "is_template": True,
-                "title": "  Requirement template  ",
-                "description_html": '<p>Template</p><script>alert("x")</script>',
-                "approver_ids": [str(approver.id)],
-            },
-            format="json",
-        )
-        assert template_response.status_code == status.HTTP_201_CREATED
-        assert template_response.data["scope"] == "workspace"
-        assert template_response.data["title"] == "Requirement template"
-        assert "<script" not in template_response.data["description_html"]
-        assert [str(item) for item in template_response.data["approver_ids"]] == [
-            str(approver.id)
-        ]
-        assert str(template_response.data["approver_details"][0]["id"]) == str(
-            approver.id
-        )
-
         product_response = api_client.post(
             self.list_url,
             {
                 "product_id": str(product.id),
-                "title": "Product requirement",
+                "title": "  Product requirement  ",
+                "description_html": '<p>Product</p><script>alert("x")</script>',
                 "approval_type": RequirementApprovalType.ALL,
                 "approver_ids": [str(approver.id)],
             },
@@ -175,9 +155,17 @@ class TestRequirementApp:
         )
         assert product_response.status_code == status.HTTP_201_CREATED
         assert product_response.data["scope"] == "product"
+        assert product_response.data["title"] == "Product requirement"
+        assert "<script" not in product_response.data["description_html"]
         assert str(product_response.data["product_id"]) == str(product.id)
         assert product_response.data["field_count"] == 0
         assert product_response.data["detail_count"] == 0
+        assert [str(item) for item in product_response.data["approver_ids"]] == [
+            str(approver.id)
+        ]
+        assert str(product_response.data["approver_details"][0]["id"]) == str(
+            approver.id
+        )
 
         project_response = api_client.post(
             self.list_url,
@@ -192,16 +180,12 @@ class TestRequirementApp:
         assert project_response.data["scope"] == "project"
         assert str(project_response.data["project_id"]) == str(project.id)
 
-        template_list = api_client.get(self.list_url, {"is_template": "true"})
         product_list = api_client.get(
             self.list_url, {"product_id": str(product.id)}
         )
         project_list = api_client.get(
             self.list_url, {"project_id": str(project.id)}
         )
-        assert [item["id"] for item in template_list.data] == [
-            template_response.data["id"]
-        ]
         assert [item["id"] for item in product_list.data] == [
             product_response.data["id"]
         ]
@@ -323,7 +307,7 @@ class TestRequirementApp:
         assert invalid_count_response.status_code == status.HTTP_400_BAD_REQUEST
         assert "required_count" in invalid_count_response.data
 
-    def test_product_requirement_owns_no_fields_and_columns_come_from_templates(
+    def test_product_requirement_owns_no_fields_and_columns_come_from_types(
         self, api_client
     ):
         eligible_approver = self.add_workspace_member()
@@ -331,22 +315,21 @@ class TestRequirementApp:
         product = self.create_product(self.owner, eligible_approver)
         self.authenticate(api_client, self.owner)
 
-        # 新建模板自动带上标题与描述两个内置字段
-        template_response = api_client.post(
-            self.list_url,
+        # 新建需求类型自动带上标题与描述两个内置字段
+        type_response = api_client.post(
+            reverse("requirement-types", kwargs={"slug": self.workspace.slug}),
             {
-                "is_template": True,
-                "title": f"Builtin template {uuid4()}",
-                "description_html": "<p>Template description</p>",
+                "name": f"Builtin type {uuid4()}",
+                "description": "Type description",
                 "owner_id": str(self.owner.id),
             },
             format="json",
         )
-        assert template_response.status_code == status.HTTP_201_CREATED
-        assert template_response.data["field_count"] == 2
-        template = Requirement.objects.get(id=template_response.data["id"])
+        assert type_response.status_code == status.HTTP_201_CREATED
+        assert type_response.data["field_count"] == 2
+        requirement_type = RequirementType.objects.get(id=type_response.data["id"])
         assert list(
-            template.fields.order_by("sort_order").values_list(
+            requirement_type.fields.order_by("sort_order").values_list(
                 "builtin_key", "name", "field_type", "is_required"
             )
         ) == [
@@ -364,12 +347,11 @@ class TestRequirementApp:
             ),
         ]
 
-        # 产品需求不再「从模板导入字段」：template_id 只读，字段永远归模板
+        # 产品需求自己不持有字段，字段永远归需求类型
         created_response = api_client.post(
             self.list_url,
             {
                 "product_id": str(product.id),
-                "template_id": str(template.id),
                 "title": "Product requirement",
                 "description_html": "<p>Product-specific description</p>",
                 "approval_type": RequirementApprovalType.ALL,
@@ -378,26 +360,24 @@ class TestRequirementApp:
             format="json",
         )
         assert created_response.status_code == status.HTTP_201_CREATED
-        assert created_response.data["template_id"] is None
         assert created_response.data["status"] == RequirementStatus.DRAFT
         assert created_response.data["approval_type"] == RequirementApprovalType.ALL
         assert created_response.data["required_count"] is None
         assert [str(item) for item in created_response.data["approver_ids"]] == [
             str(eligible_approver.id)
         ]
-        # 还没有任何明细行，也就没有引用到任何模板
+        # 还没有任何明细行，也就没有引用到任何需求类型
         assert created_response.data["field_count"] == 0
-        assert created_response.data["template_count"] == 0
+        assert created_response.data["requirement_type_count"] == 0
         assert created_response.data["detail_count"] == 0
         requirement = Requirement.objects.get(id=created_response.data["id"])
-        assert not requirement.fields.exists()
 
-        # 列是由明细行引用到的模板决定的：加一行就带出这个模板的两列
+        # 列是由明细行引用到的需求类型决定的：加一行就带出这个类型的两列
         title_id = builtin_field_ids(
             api_client.get(
                 reverse(
-                    "requirement-configuration",
-                    kwargs={"slug": self.workspace.slug, "pk": template.id},
+                    "requirement-type-configuration",
+                    kwargs={"slug": self.workspace.slug, "pk": requirement_type.id},
                 )
             ).data["fields"]
         )[RequirementBuiltinFieldKey.TITLE]
@@ -410,13 +390,15 @@ class TestRequirementApp:
                 },
             ),
             {
-                "template_id": str(template.id),
+                "requirement_type_id": str(requirement_type.id),
                 "data": {title_id: "First row"},
             },
             format="json",
         )
         assert detail_response.status_code == status.HTTP_201_CREATED
-        assert str(detail_response.data["template_id"]) == str(template.id)
+        assert str(detail_response.data["requirement_type_id"]) == str(
+            requirement_type.id
+        )
 
         reloaded = api_client.get(
             reverse(
@@ -425,17 +407,14 @@ class TestRequirementApp:
             )
         )
         assert reloaded.data["field_count"] == 2
-        assert reloaded.data["template_count"] == 1
+        assert reloaded.data["requirement_type_count"] == 1
         assert reloaded.data["detail_count"] == 1
-        # 字段仍然只属于模板，需求自己一个都没有
-        assert not requirement.fields.exists()
 
-        # 审批人依旧按目标作用域过滤，模板上的审批人不会被继承
+        # 审批人依旧按目标作用域过滤
         invalid_response = api_client.post(
             self.list_url,
             {
                 "product_id": str(product.id),
-                "template_id": str(template.id),
                 "title": "Requirement with an outside approver",
                 "approver_ids": [str(filtered_approver.id)],
             },
@@ -451,10 +430,9 @@ class TestRequirementApp:
         outsider = UserFactory(username=f"requirement-outsider-{uuid4()}")
         self.authenticate(api_client, outsider)
         create_response = api_client.post(
-            self.list_url,
+            reverse("requirement-types", kwargs={"slug": self.workspace.slug}),
             {
-                "is_template": True,
-                "title": "Created without workspace permission",
+                "name": "Created without workspace permission",
                 "owner_id": str(self.owner.id),
             },
             format="json",
@@ -471,8 +449,8 @@ class TestRequirementApp:
         outsider = UserFactory(username=f"requirement-outsider-{uuid4()}")
         product = self.create_product(self.owner, product_member)
         product.reviewers.add(reviewer)
-        # 明细行必须绑定一个工作区模板
-        template = self.create_template()
+        # 明细行必须绑定一个需求类型
+        requirement_type = self.create_requirement_type()
 
         self.authenticate(api_client, self.owner)
         create_response = api_client.post(
@@ -542,7 +520,7 @@ class TestRequirementApp:
         )
         assert member_create.status_code == status.HTTP_201_CREATED
         configuration = api_client.get(configuration_url).data
-        assert configuration["templates"] == []
+        assert configuration["requirement_types"] == []
         assert (
             api_client.put(
                 configuration_url,
@@ -554,7 +532,7 @@ class TestRequirementApp:
             ).status_code
             == status.HTTP_200_OK
         )
-        # 产品需求的列来自模板，配置接口不接受 fields
+        # 产品需求的列来自需求类型，配置接口不接受 fields
         rejected_fields_response = api_client.put(
             configuration_url,
             {
@@ -569,7 +547,7 @@ class TestRequirementApp:
         assert (
             api_client.post(
                 details_url,
-                {"template_id": str(template.id), "data": {}},
+                {"requirement_type_id": str(requirement_type.id), "data": {}},
                 format="json",
             ).status_code
             == status.HTTP_201_CREATED
@@ -599,27 +577,28 @@ class TestRequirementApp:
             == status.HTTP_404_NOT_FOUND
         )
 
-    def test_template_configuration_and_detail_crud_contract(self, api_client):
+    def test_requirement_type_configuration_and_library_item_crud_contract(
+        self, api_client
+    ):
         self.authenticate(api_client, self.owner)
-        template_response = api_client.post(
-            self.list_url,
+        type_response = api_client.post(
+            reverse("requirement-types", kwargs={"slug": self.workspace.slug}),
             {
-                "is_template": True,
-                "title": "Dynamic requirement template",
+                "name": "Dynamic requirement type",
                 "owner_id": str(self.owner.id),
             },
             format="json",
         )
-        assert template_response.status_code == status.HTTP_201_CREATED
-        template_id = template_response.data["id"]
+        assert type_response.status_code == status.HTTP_201_CREATED
+        requirement_type_id = type_response.data["id"]
         configuration_url = reverse(
-            "requirement-configuration",
-            kwargs={"slug": self.workspace.slug, "pk": template_id},
+            "requirement-type-configuration",
+            kwargs={"slug": self.workspace.slug, "pk": requirement_type_id},
         )
 
         configuration_response = api_client.get(configuration_url)
         assert configuration_response.status_code == status.HTTP_200_OK
-        # 模板天生带标题与描述两列，每次保存都要原样带回去
+        # 需求类型天生带标题与描述两列，每次保存都要原样带回去
         builtin_fields = builtin_payloads(configuration_response.data["fields"])
         assert len(builtin_fields) == 2
         title_id = builtin_field_ids(configuration_response.data["fields"])[
@@ -631,12 +610,11 @@ class TestRequirementApp:
         save_configuration_response = api_client.put(
             configuration_url,
             {
-                "expected_updated_at": configuration_response.data["requirement"][
-                    "updated_at"
-                ],
-                "requirement": {
-                    "description_html": "<p>Collect structured requirements.</p>",
-                    "status": RequirementStatus.PUBLISHED,
+                "expected_updated_at": configuration_response.data[
+                    "requirement_type"
+                ]["updated_at"],
+                "requirement_type": {
+                    "description": "Collect structured requirements.",
                 },
                 "fields": [
                     *builtin_fields,
@@ -675,8 +653,8 @@ class TestRequirementApp:
             format="json",
         )
         assert save_configuration_response.status_code == status.HTTP_200_OK
-        assert save_configuration_response.data["requirement"]["status"] == (
-            RequirementStatus.PUBLISHED
+        assert save_configuration_response.data["requirement_type"]["description"] == (
+            "Collect structured requirements."
         )
         # 2 个内置字段 + 2 个自定义根字段
         assert len(save_configuration_response.data["fields"]) == 4
@@ -693,22 +671,10 @@ class TestRequirementApp:
         builtin_fields = builtin_payloads(save_configuration_response.data["fields"])
         form_configuration_payload = payload_by_id(saved_fields, form_id)
 
-        # 模板只定义字段，数据走标准库里的条目（字段实时引用该模板）
-        assert (
-            api_client.post(
-                reverse(
-                    "requirement-details",
-                    kwargs={
-                        "slug": self.workspace.slug,
-                        "requirement_id": template_id,
-                    },
-                ),
-                {"data": {}},
-                format="json",
-            ).status_code
-            == status.HTTP_404_NOT_FOUND
+        # 需求类型只定义字段，数据走标准库里的条目（字段实时引用该类型）
+        library = self.create_library(
+            RequirementType.objects.get(id=requirement_type_id)
         )
-        library = self.create_library(Requirement.objects.get(id=template_id))
         details_url = reverse(
             "requirement-library-items",
             kwargs={
@@ -811,9 +777,8 @@ class TestRequirementApp:
             configuration_url,
             {
                 "expected_updated_at": save_configuration_response.data[
-                    "requirement"
+                    "requirement_type"
                 ]["updated_at"],
-                "requirement": {},
                 "fields": [*builtin_fields, form_configuration_payload],
             },
             format="json",
@@ -824,9 +789,8 @@ class TestRequirementApp:
             configuration_url,
             {
                 "expected_updated_at": save_configuration_response.data[
-                    "requirement"
+                    "requirement_type"
                 ]["updated_at"],
-                "requirement": {},
                 "fields": [*builtin_fields, form_configuration_payload],
                 "confirm_data_loss": True,
             },
@@ -838,10 +802,9 @@ class TestRequirementApp:
         delete_builtin_response = api_client.put(
             configuration_url,
             {
-                "expected_updated_at": confirmed_response.data["requirement"][
+                "expected_updated_at": confirmed_response.data["requirement_type"][
                     "updated_at"
                 ],
-                "requirement": {},
                 "fields": [form_configuration_payload],
                 "confirm_data_loss": True,
             },
@@ -873,14 +836,13 @@ class TestRequirementApp:
         self, api_client
     ):
         self.authenticate(api_client, self.owner)
-        template = Requirement.objects.create(
+        requirement_type = RequirementType.objects.create(
             workspace=self.workspace,
-            is_template=True,
-            title=f"Bulk save template {uuid4()}",
+            name=f"Bulk save type {uuid4()}",
             owner=self.owner,
         )
         field = RequirementField.objects.create(
-            requirement=template,
+            requirement_type=requirement_type,
             name="Summary",
             field_type=RequirementFieldType.TEXT,
             is_required=True,
@@ -890,16 +852,16 @@ class TestRequirementApp:
             sort_order=1000,
         )
         field_id = str(field.id)
-        library = self.create_library(template)
+        library = self.create_library(requirement_type)
         first_detail = RequirementDetail.objects.create(
             library=library,
-            template=template,
+            requirement_type=requirement_type,
             data={field_id: "First"},
             sort_order=1000,
         )
         second_detail = RequirementDetail.objects.create(
             library=library,
-            template=template,
+            requirement_type=requirement_type,
             data={field_id: "Second"},
             sort_order=2000,
         )
@@ -917,7 +879,7 @@ class TestRequirementApp:
             bulk_save_url,
             {
                 # 库条目的乐观锁基准是模板 —— 改字段动的是模板行
-                "expected_updated_at": template.updated_at.isoformat(),
+                "expected_updated_at": requirement_type.updated_at.isoformat(),
                 "creates": [
                     {
                         "client_id": str(client_id),
@@ -967,14 +929,13 @@ class TestRequirementApp:
         self, api_client
     ):
         self.authenticate(api_client, self.owner)
-        template = Requirement.objects.create(
+        requirement_type = RequirementType.objects.create(
             workspace=self.workspace,
-            is_template=True,
-            title=f"Atomic bulk save template {uuid4()}",
+            name=f"Atomic bulk save type {uuid4()}",
             owner=self.owner,
         )
         field = RequirementField.objects.create(
-            requirement=template,
+            requirement_type=requirement_type,
             name="Summary",
             field_type=RequirementFieldType.TEXT,
             is_required=True,
@@ -983,10 +944,10 @@ class TestRequirementApp:
             default_value=None,
         )
         field_id = str(field.id)
-        library = self.create_library(template)
+        library = self.create_library(requirement_type)
         detail = RequirementDetail.objects.create(
             library=library,
-            template=template,
+            requirement_type=requirement_type,
             data={field_id: "Original"},
             sort_order=1000,
         )
@@ -999,7 +960,7 @@ class TestRequirementApp:
         )
         base_payload = {
             # 库条目的乐观锁基准是模板 —— 改字段动的是模板行
-            "expected_updated_at": template.updated_at.isoformat(),
+            "expected_updated_at": requirement_type.updated_at.isoformat(),
             "creates": [
                 {
                     "client_id": str(uuid4()),
@@ -1063,20 +1024,19 @@ class TestRequirementApp:
         self, api_client
     ):
         self.authenticate(api_client, self.owner)
-        template_response = api_client.post(
-            self.list_url,
+        type_response = api_client.post(
+            reverse("requirement-types", kwargs={"slug": self.workspace.slug}),
             {
-                "is_template": True,
-                "title": "Selector requirement template",
+                "name": "Selector requirement type",
                 "owner_id": str(self.owner.id),
             },
             format="json",
         )
-        assert template_response.status_code == status.HTTP_201_CREATED
-        template_id = template_response.data["id"]
+        assert type_response.status_code == status.HTTP_201_CREATED
+        requirement_type_id = type_response.data["id"]
         configuration_url = reverse(
-            "requirement-configuration",
-            kwargs={"slug": self.workspace.slug, "pk": template_id},
+            "requirement-type-configuration",
+            kwargs={"slug": self.workspace.slug, "pk": requirement_type_id},
         )
         configuration_response = api_client.get(configuration_url)
         builtin_fields = builtin_payloads(configuration_response.data["fields"])
@@ -1092,10 +1052,9 @@ class TestRequirementApp:
         invalid_configuration_response = api_client.put(
             configuration_url,
             {
-                "expected_updated_at": configuration_response.data["requirement"][
-                    "updated_at"
-                ],
-                "requirement": {},
+                "expected_updated_at": configuration_response.data[
+                    "requirement_type"
+                ]["updated_at"],
                 "fields": [
                     *builtin_fields,
                     {
@@ -1123,10 +1082,9 @@ class TestRequirementApp:
         save_configuration_response = api_client.put(
             configuration_url,
             {
-                "expected_updated_at": configuration_response.data["requirement"][
-                    "updated_at"
-                ],
-                "requirement": {},
+                "expected_updated_at": configuration_response.data[
+                    "requirement_type"
+                ]["updated_at"],
                 "fields": [
                     *builtin_fields,
                     {
@@ -1192,7 +1150,9 @@ class TestRequirementApp:
             child_client_id
         ]
         # 模板只定义字段，值走标准库的条目
-        library = self.create_library(Requirement.objects.get(id=template_id))
+        library = self.create_library(
+            RequirementType.objects.get(id=requirement_type_id)
+        )
         details_url = reverse(
             "requirement-library-items",
             kwargs={
@@ -1274,9 +1234,8 @@ class TestRequirementApp:
             configuration_url,
             {
                 "expected_updated_at": save_configuration_response.data[
-                    "requirement"
+                    "requirement_type"
                 ]["updated_at"],
-                "requirement": {},
                 "fields": renamed_fields,
             },
             format="json",
@@ -1293,10 +1252,9 @@ class TestRequirementApp:
         data_loss_response = api_client.put(
             configuration_url,
             {
-                "expected_updated_at": rename_response.data["requirement"][
+                "expected_updated_at": rename_response.data["requirement_type"][
                     "updated_at"
                 ],
-                "requirement": {},
                 "fields": removed_option_fields,
             },
             format="json",
@@ -1308,10 +1266,9 @@ class TestRequirementApp:
         confirmed_remove_response = api_client.put(
             configuration_url,
             {
-                "expected_updated_at": rename_response.data["requirement"][
+                "expected_updated_at": rename_response.data["requirement_type"][
                     "updated_at"
                 ],
-                "requirement": {},
                 "fields": removed_option_fields,
                 "confirm_data_loss": True,
             },
@@ -1332,9 +1289,8 @@ class TestRequirementApp:
             configuration_url,
             {
                 "expected_updated_at": confirmed_remove_response.data[
-                    "requirement"
+                    "requirement_type"
                 ]["updated_at"],
-                "requirement": {},
                 "fields": changed_mode_fields,
             },
             format="json",
@@ -1344,9 +1300,8 @@ class TestRequirementApp:
             configuration_url,
             {
                 "expected_updated_at": confirmed_remove_response.data[
-                    "requirement"
+                    "requirement_type"
                 ]["updated_at"],
-                "requirement": {},
                 "fields": changed_mode_fields,
                 "confirm_data_loss": True,
             },

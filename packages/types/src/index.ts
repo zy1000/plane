@@ -37,6 +37,7 @@ export * from "./layout";
 export * from "./module";
 export * from "./release";
 export * from "./requirement";
+export * from "./requirement-type";
 export * from "./page";
 export * from "./payment";
 export * from "./pragmatic";

@@ -12,7 +12,6 @@ from plane.db.models import (
     Product,
     ProductMember,
     ProjectMember,
-    Requirement,
     RequirementApprover,
     RequirementBuiltinFieldKey,
     RequirementChangeTargetKind,
@@ -20,6 +19,7 @@ from plane.db.models import (
     RequirementDraftDetail,
     RequirementField,
     RequirementFieldType,
+    RequirementType,
     RequirementVersion,
     User,
     Workspace,
@@ -29,7 +29,7 @@ from plane.db.models import (
 
 SORT_ORDER_STEP = 1000
 
-# 每个需求模板必有的两个字段：(builtin_key, 名称, 字段类型, 是否必填)
+# 每个需求类型必有的两个字段：(builtin_key, 名称, 字段类型, 是否必填)
 BUILTIN_FIELD_DEFS = (
     (RequirementBuiltinFieldKey.TITLE, "标题", RequirementFieldType.TEXT, True),
     (
@@ -54,10 +54,11 @@ def field_attr(field, name, default=None):
 
 @dataclass(frozen=True)
 class RequirementFieldSpec:
-    """字段定义的统一形状，桥接「模板表的 DB 行」与「版本快照里的 JSON 树」。
+    """字段定义的统一形状，桥接「需求类型表的 DB 行」与「版本快照里的 JSON 树」。
 
     id / parent_field_id 一律是字符串，让明细 data 里以字段 ID 为 key 的结构在
-    两条路径上走同一套索引逻辑。template_id 让扁平并集能重新分组回各自的模板。
+    两条路径上走同一套索引逻辑。requirement_type_id 让扁平并集能重新分组回各自的
+    需求类型。
     """
 
     id: str
@@ -70,7 +71,7 @@ class RequirementFieldSpec:
     config: dict
     default_value: Any = None
     builtin_key: Optional[str] = None
-    template_id: Optional[str] = None
+    requirement_type_id: Optional[str] = None
 
 
 def field_specs_from_models(fields):
@@ -88,19 +89,18 @@ def field_specs_from_models(fields):
             config=deepcopy(field.config) or {},
             default_value=deepcopy(field.default_value),
             builtin_key=field.builtin_key,
-            # 字段只归模板所有，所以 requirement_id 就是模板 ID
-            template_id=str(field.requirement_id),
+            requirement_type_id=str(field.requirement_type_id),
         )
         for field in fields
     ]
 
 
-def field_specs_from_tree(tree, *, parent_id=None, template_id=None):
-    """把 serialize_requirement_field_tree 形状的嵌套树摊平成 spec 列表。"""
+def field_specs_from_tree(tree, *, parent_id=None, requirement_type_id=None):
+    """把字段树形状的嵌套结构摊平成 spec 列表。"""
     specs = []
     for index, node in enumerate(tree or []):
         node_id = str(node.get("id") or uuid4())
-        node_template_id = node.get("template_id") or template_id
+        node_type_id = node.get("requirement_type_id") or requirement_type_id
         specs.append(
             RequirementFieldSpec(
                 id=node_id,
@@ -113,7 +113,7 @@ def field_specs_from_tree(tree, *, parent_id=None, template_id=None):
                 config=deepcopy(node.get("config") or {}),
                 default_value=deepcopy(node.get("default_value")),
                 builtin_key=node.get("builtin_key"),
-                template_id=str(node_template_id) if node_template_id else None,
+                requirement_type_id=str(node_type_id) if node_type_id else None,
             )
         )
         if node.get("children"):
@@ -121,14 +121,14 @@ def field_specs_from_tree(tree, *, parent_id=None, template_id=None):
                 field_specs_from_tree(
                     node["children"],
                     parent_id=node_id,
-                    template_id=node_template_id,
+                    requirement_type_id=node_type_id,
                 )
             )
     return specs
 
 
 def field_tree_from_specs(specs):
-    """specs -> 嵌套树，与 serialize_requirement_field_tree 输出同构。
+    """specs -> 嵌套树，与字段树接口输出同构。
 
     保持传入顺序，不重新排序 —— 调用方（DB 查询或快照树遍历）已经是有序的。
     """
@@ -145,7 +145,7 @@ def field_tree_from_specs(specs):
             "config": deepcopy(spec.config),
             "default_value": deepcopy(spec.default_value),
             "builtin_key": spec.builtin_key,
-            "template_id": spec.template_id,
+            "requirement_type_id": spec.requirement_type_id,
             "children": [],
         }
         if spec.parent_field_id:
@@ -256,34 +256,24 @@ def get_requirement_eligible_user_ids(
     return workspace_member_ids
 
 
-def uses_change_flow(requirement):
-    """是否走「工作副本 + 变更审批 + 版本」流程。
-
-    只有产品/项目需求走；工作区模板直接编辑直接生效。
-    """
-    return not requirement.is_template
-
-
-def details_affected_by_fields(requirement):
+def details_affected_by_fields(requirement_type):
     """字段变更会波及的明细行，按模型分组返回 [(model, queryset), ...]。
 
-    只包含**实时引用**该模板的行 —— 标准库条目、还没发布过的产品需求的正式行、
+    只包含**实时引用**该需求类型的行 —— 标准库条目、还没发布过的产品需求的正式行、
     以及所有工作副本的行。已发布产品需求的正式行不在内：它们渲染的是版本里冻结
-    的字段，值不能因为模板改动就被抹掉（模板的改动要走下一次编辑 + 变更审批）。
+    的字段，值不能因为类型改动就被抹掉（类型的改动要走下一次编辑 + 变更审批）。
     """
-    if not requirement.is_template:
-        return []
     return [
         (
             RequirementDetail,
             RequirementDetail.objects.filter(
                 Q(library__isnull=False) | Q(requirement__current_version__isnull=True),
-                template=requirement,
+                requirement_type=requirement_type,
             ),
         ),
         (
             RequirementDraftDetail,
-            RequirementDraftDetail.objects.filter(template=requirement),
+            RequirementDraftDetail.objects.filter(requirement_type=requirement_type),
         ),
     ]
 
@@ -314,112 +304,99 @@ def _field_specs_of(owner):
     )
 
 
-def get_template_field_specs(template):
-    """模板自己的字段定义 —— 字段只归模板所有。"""
-    return _field_specs_of(template)
+def get_requirement_type_field_specs(requirement_type):
+    """需求类型自己的字段定义 —— 字段只归需求类型所有。"""
+    return _field_specs_of(requirement_type)
 
 
-def get_requirement_field_specs(requirement):
-    """需求的字段定义。
-
-    模板读自己的；产品需求没有自有字段，读它的明细引用到的那些模板的并集。
-    """
-    if requirement.is_template:
-        return get_template_field_specs(requirement)
-    template_ids = get_referenced_template_ids(
-        model=RequirementDetail, scope={"requirement": requirement}
-    )
-    return field_specs_for_templates(template_ids)[0]
-
-
-def serialize_requirement_field_tree(requirement):
-    return field_tree_from_specs(get_requirement_field_specs(requirement))
+def serialize_requirement_type_field_tree(requirement_type):
+    return field_tree_from_specs(get_requirement_type_field_specs(requirement_type))
 
 
 def get_library_field_specs(library):
-    """标准库的字段实时引用所选模板，不拷贝。"""
-    return get_template_field_specs(library.template)
+    """标准库的字段实时引用所选需求类型，不拷贝。"""
+    return get_requirement_type_field_specs(library.requirement_type)
 
 
 def serialize_library_field_tree(library):
     return field_tree_from_specs(get_library_field_specs(library))
 
 
-def get_referenced_template_ids(*, model, scope):
-    """这批明细引用到的模板 ID。
+def get_referenced_requirement_type_ids(*, model, scope):
+    """这批明细引用到的需求类型 ID。
 
-    排序取模板自身的 (sort_order, created_at, id)，而不是「明细里首次出现的顺序」——
+    排序取类型自身的 (sort_order, created_at, id)，而不是「明细里首次出现的顺序」——
     后者会随着行的增删改序而变，让 snapshot["fields"] 无谓地重排，diff 里冒出一堆
     并不存在的字段变更。
     """
-    template_ids = (
+    requirement_type_ids = (
         model.objects.filter(**scope)
-        .exclude(template_id=None)
-        .values_list("template_id", flat=True)
+        .exclude(requirement_type_id=None)
+        .values_list("requirement_type_id", flat=True)
         .distinct()
     )
     return list(
-        Requirement.objects.filter(id__in=list(template_ids))
+        RequirementType.objects.filter(id__in=list(requirement_type_ids))
         .order_by("sort_order", "created_at", "id")
         .values_list("id", flat=True)
     )
 
 
-def field_specs_for_templates(template_ids):
-    """返回 (扁平并集, 按 template_id 分组)。
+def field_specs_for_requirement_types(requirement_type_ids):
+    """返回 (扁平并集, 按 requirement_type_id 分组)。
 
     并集给筛选/搜索/变更快照用 —— 字段 UUID 全局唯一，摊平不会撞 key；分组给逐行
-    校验用 —— 每行只能用它自己那个模板的字段。
+    校验用 —— 每行只能用它自己那个需求类型的字段。
     """
-    template_ids = list(template_ids)
-    if not template_ids:
+    requirement_type_ids = list(requirement_type_ids)
+    if not requirement_type_ids:
         return [], {}
 
     rows = (
-        RequirementField.objects.filter(requirement_id__in=template_ids)
+        RequirementField.objects.filter(requirement_type_id__in=requirement_type_ids)
         .select_related("parent_field")
         .order_by("sort_order", "created_at", "id")
     )
-    by_template = {}
+    by_requirement_type = {}
     for spec in field_specs_from_models(rows):
-        by_template.setdefault(spec.template_id, []).append(spec)
+        by_requirement_type.setdefault(spec.requirement_type_id, []).append(spec)
 
-    # 保持调用方给定的模板顺序
+    # 保持调用方给定的需求类型顺序
     flat = []
-    ordered_by_template = {}
-    for template_id in template_ids:
-        key = str(template_id)
-        specs = by_template.get(key, [])
-        ordered_by_template[key] = specs
+    ordered_by_type = {}
+    for requirement_type_id in requirement_type_ids:
+        key = str(requirement_type_id)
+        specs = by_requirement_type.get(key, [])
+        ordered_by_type[key] = specs
         flat.extend(specs)
-    return flat, ordered_by_template
+    return flat, ordered_by_type
 
 
-def templates_field_payload_from_specs(template_ids, specs_by_template):
-    """产品需求配置接口里的 templates[]：每个模板一份 id/title/字段树。
+def requirement_types_field_payload_from_specs(requirement_type_ids, specs_by_type):
+    """产品需求配置接口里的 requirement_types[]：每个类型一份 id/name/字段树。
 
     字段取调用方给的 specs 而不是自己去查库 —— 已发布的需求传进来的是版本里冻结
     的那份，自己查库会把冻结语义直接绕过去。
     """
-    template_ids = [str(item) for item in template_ids]
-    if not template_ids:
+    requirement_type_ids = [str(item) for item in requirement_type_ids]
+    if not requirement_type_ids:
         return []
 
-    titles = {
+    names = {
         str(key): value
-        for key, value in Requirement.objects.filter(
-            id__in=template_ids
-        ).values_list("id", "title")
+        for key, value in RequirementType.objects.filter(
+            id__in=requirement_type_ids
+        ).values_list("id", "name")
     }
     payload = []
-    for template_id in template_ids:
-        specs = specs_by_template.get(template_id, [])
+    for requirement_type_id in requirement_type_ids:
+        specs = specs_by_type.get(requirement_type_id, [])
         payload.append(
             {
-                "id": template_id,
-                "title": titles.get(template_id, ""),
+                "id": requirement_type_id,
+                "name": names.get(requirement_type_id, ""),
                 "fields": field_tree_from_specs(specs),
-                # 默认视图要跨模板对齐标题/描述两列，而各模板的字段 UUID 不同
+                # 默认视图要跨类型对齐标题/描述两列，而各类型的字段 UUID 不同
                 "builtin_field_ids": {
                     spec.builtin_key: spec.id for spec in specs if spec.builtin_key
                 },
@@ -431,8 +408,8 @@ def templates_field_payload_from_specs(template_ids, specs_by_template):
 def get_published_field_tree(requirement):
     """已发布内容的字段树 —— 取当前版本里冻结的那份。
 
-    模板随时可改且不走审批，所以已发布的产品需求不能实时跟随模板，否则已批准的
-    内容会被悄悄改掉。返回 [] 表示从未发布过。
+    需求类型随时可改且不走审批，所以已发布的产品需求不能实时跟随类型，否则已批准
+    的内容会被悄悄改掉。返回 [] 表示从未发布过。
     """
     if requirement.current_version is None:
         return []
@@ -448,28 +425,28 @@ def get_published_field_tree(requirement):
     return deepcopy(snapshot.get("fields") or [])
 
 
-def detail_grid_expected_updated_at(*, owner, template_ids):
+def detail_grid_expected_updated_at(*, owner, requirement_type_ids):
     """明细网格的乐观锁基准。
 
-    必须把模板的 updated_at 算进来：列定义住在模板里，改模板字段不会动需求行，
+    必须把需求类型的 updated_at 算进来：列定义住在类型里，改类型字段不会动需求行，
     只看 owner.updated_at 会让「字段被人改了」这类冲突整个漏过去。标准库的条目
     入口早就是这么做的（见 library_item.py 的注释）。
     """
     stamps = [owner.updated_at]
-    if template_ids:
+    if requirement_type_ids:
         stamps.extend(
-            Requirement.objects.filter(id__in=list(template_ids)).values_list(
-                "updated_at", flat=True
-            )
+            RequirementType.objects.filter(
+                id__in=list(requirement_type_ids)
+            ).values_list("updated_at", flat=True)
         )
     return max(stamp for stamp in stamps if stamp is not None)
 
 
-def ensure_builtin_fields(*, template, actor=None):
-    """保证模板拥有标题与描述两个内置字段。幂等，模板创建时调用。"""
+def ensure_builtin_fields(*, requirement_type, actor=None):
+    """保证需求类型拥有标题与描述两个内置字段。幂等，类型创建时调用。"""
     existing = set(
         RequirementField.objects.filter(
-            requirement=template, builtin_key__isnull=False
+            requirement_type=requirement_type, builtin_key__isnull=False
         ).values_list("builtin_key", flat=True)
     )
     missing = [item for item in BUILTIN_FIELD_DEFS if item[0] not in existing]
@@ -480,7 +457,9 @@ def ensure_builtin_fields(*, template, actor=None):
     shifted = []
     for index, field in enumerate(
         RequirementField.objects.filter(
-            requirement=template, parent_field__isnull=True, builtin_key__isnull=True
+            requirement_type=requirement_type,
+            parent_field__isnull=True,
+            builtin_key__isnull=True,
         ).order_by("sort_order", "created_at", "id")
     ):
         field.sort_order = offset + (index + 1) * SORT_ORDER_STEP
@@ -491,7 +470,7 @@ def ensure_builtin_fields(*, template, actor=None):
     RequirementField.objects.bulk_create(
         [
             RequirementField(
-                requirement=template,
+                requirement_type=requirement_type,
                 name=name,
                 field_type=field_type,
                 is_required=is_required,
@@ -628,21 +607,18 @@ def apply_field_change_cleanup(
     return changed_details
 
 
-def sync_requirement_fields(
+def sync_requirement_type_fields(
     *,
-    requirement,
+    requirement_type,
     field_payloads,
     actor=None,
     confirm_data_loss=False,
 ):
-    if not requirement.is_template:
-        raise ValueError("产品需求的列来自模板，不能在这里编辑字段。")
-
     existing_fields = {
         field.id: field
-        for field in RequirementField.objects.filter(requirement=requirement).select_related(
-            "parent_field"
-        )
+        for field in RequirementField.objects.filter(
+            requirement_type=requirement_type
+        ).select_related("parent_field")
     }
     submitted_ids = set()
     created_field_ids = {}
@@ -654,11 +630,13 @@ def sync_requirement_fields(
         if field_id:
             field = existing_fields.get(field_id)
             if field is None:
-                raise ValueError("A submitted field does not belong to this requirement.")
+                raise ValueError(
+                    "A submitted field does not belong to this requirement type."
+                )
             expected_parent_id = parent.id if parent else None
             if field.parent_field_id != expected_parent_id:
                 raise ValueError("Existing fields cannot be moved between field levels.")
-            # 内置字段（标题/描述）是每个模板的硬性组成，只允许改名称与说明
+            # 内置字段（标题/描述）是每个需求类型的硬性组成，只允许改名称与说明
             if field.builtin_key:
                 if field.field_type != payload["field_type"]:
                     raise RequirementBuiltinFieldError("内置字段不能修改类型。")
@@ -677,7 +655,9 @@ def sync_requirement_fields(
         else:
             if payload.get("builtin_key"):
                 raise RequirementBuiltinFieldError("内置字段由系统创建，不能手动新增。")
-            field = RequirementField(requirement=requirement, parent_field=parent)
+            field = RequirementField(
+                requirement_type=requirement_type, parent_field=parent
+            )
 
         field.name = payload["name"]
         field.field_type = payload["field_type"]
@@ -716,7 +696,7 @@ def sync_requirement_fields(
     changed_by_model = []
     total_changed = 0
     if cleanup_fields or reset_select_fields:
-        for model, queryset in details_affected_by_fields(requirement):
+        for model, queryset in details_affected_by_fields(requirement_type):
             changed = apply_field_change_cleanup(
                 # of=("self",) 只锁明细行本身 —— 这些 queryset 都要 join 到需求或
                 # 标准库，不该把那些行一起锁住。
@@ -741,8 +721,8 @@ def sync_requirement_fields(
                 changed, ["data", "version", "updated_at", "updated_by"]
             )
 
-    requirement.updated_by = actor
-    requirement.save(update_fields=["updated_at", "updated_by"])
+    requirement_type.updated_by = actor
+    requirement_type.save(update_fields=["updated_at", "updated_by"])
     return created_field_ids
 
 
@@ -752,7 +732,7 @@ def insert_detail_row(
     scope,
     new_row,
     data,
-    template_id,
+    requirement_type_id,
     actor=None,
     before_id=None,
     after_id=None,
@@ -788,7 +768,7 @@ def insert_detail_row(
         data=deepcopy(data),
         sort_order=(insert_at + 1) * SORT_ORDER_STEP,
         actor=actor,
-        template_id=template_id,
+        requirement_type_id=requirement_type_id,
     )
     detail.save()
     existing.insert(insert_at, detail)
@@ -800,10 +780,10 @@ def insert_detail_row(
 
 
 def _new_requirement_detail(requirement):
-    def factory(data, sort_order, actor, template_id):
+    def factory(data, sort_order, actor, requirement_type_id):
         return RequirementDetail(
             requirement=requirement,
-            template_id=template_id,
+            requirement_type_id=requirement_type_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -813,11 +793,11 @@ def _new_requirement_detail(requirement):
 
 
 def _new_library_item(library):
-    def factory(data, sort_order, actor, template_id):
-        # 库内条目的模板恒等于库所选的模板，不接受调用方指定
+    def factory(data, sort_order, actor, requirement_type_id):
+        # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定
         return RequirementDetail(
             library=library,
-            template_id=library.template_id,
+            requirement_type_id=library.requirement_type_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -830,7 +810,7 @@ def insert_requirement_detail(
     *,
     requirement,
     data,
-    template_id,
+    requirement_type_id,
     actor=None,
     before_id=None,
     after_id=None,
@@ -840,7 +820,7 @@ def insert_requirement_detail(
         scope={"requirement": requirement},
         new_row=_new_requirement_detail(requirement),
         data=data,
-        template_id=template_id,
+        requirement_type_id=requirement_type_id,
         actor=actor,
         before_id=before_id,
         after_id=after_id,
@@ -851,7 +831,7 @@ def insert_library_item(
     *,
     library,
     data,
-    template_id=None,
+    requirement_type_id=None,
     actor=None,
     before_id=None,
     after_id=None,
@@ -861,7 +841,7 @@ def insert_library_item(
         scope={"library": library},
         new_row=_new_library_item(library),
         data=data,
-        template_id=library.template_id,
+        requirement_type_id=library.requirement_type_id,
         actor=actor,
         before_id=before_id,
         after_id=after_id,
@@ -973,7 +953,7 @@ def save_detail_row_batch(
             data=deepcopy(item["data"]),
             sort_order=(insert_at + 1) * SORT_ORDER_STEP,
             actor=actor,
-            template_id=item.get("template_id"),
+            requirement_type_id=item.get("requirement_type_id"),
         )
         detail.save()
         ordered_details.insert(insert_at, detail)
@@ -1020,7 +1000,7 @@ def save_requirement_detail_batch(
 def build_library_import_creates(*, library, item_ids, before_id=None, after_id=None):
     """把选中的库条目整理成 save_detail_row_batch 认识的 creates 列表。
 
-    data 原样深拷贝 —— 库条目与目标行引用的是同一个模板，字段 UUID 完全一致，
+    data 原样深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全一致，
     不做任何重映射。只顺手裁掉不属于当前字段集的残留 key（字段后来被删过）。
     这里**不重跑必填校验**：库条目本来就允许留空，导入不该因此失败。
     """
@@ -1039,7 +1019,7 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
         {
             "client_id": uuid4(),
             "data": prune_detail_data_to_fields(items_by_id[item_id].data, specs),
-            "template_id": library.template_id,
+            "requirement_type_id": library.requirement_type_id,
             **({"before_id": before_id} if before_id else {}),
             **({"after_id": after_id} if after_id else {}),
         }
@@ -1177,13 +1157,13 @@ def get_requirement_detail_field_values(detail_data, field):
 
 
 def filter_requirement_detail_ids(
-    *, fields, details, search="", filters=None, fields_by_template=None
+    *, fields, details, search="", filters=None, fields_by_requirement_type=None
 ):
     """按搜索词与筛选条件筛出命中的明细行 ID。
 
-    fields 是扁平并集，用来解析筛选条件里的 field_id；fields_by_template 给定时，
-    每一行只用它自己模板的那套字段 —— 针对模板 B 某个字段的筛选不会误伤模板 A 的
-    行（那些行根本没有这个字段，判定为不命中）。
+    fields 是扁平并集，用来解析筛选条件里的 field_id；fields_by_requirement_type
+    给定时，每一行只用它自己需求类型的那套字段 —— 针对类型 B 某个字段的筛选不会
+    误伤类型 A 的行（那些行根本没有这个字段，判定为不命中）。
 
     fields 接受任意字段来源（模型行 / spec / dict），details 接受任意明细序列，
     因此正式表与草稿表共用同一套搜索与筛选语义。
@@ -1194,9 +1174,9 @@ def filter_requirement_detail_ids(
     fields_by_id = {str(field_attr(field, "id")): field for field in fields}
 
     def row_fields(detail):
-        if fields_by_template is None:
+        if fields_by_requirement_type is None:
             return fields
-        return fields_by_template.get(str(detail.template_id), [])
+        return fields_by_requirement_type.get(str(detail.requirement_type_id), [])
 
     member_ids = set()
     for detail in details:
@@ -1266,7 +1246,7 @@ def filter_requirement_detail_ids(
             if (
                 field is None
                 or field_attr(field, "field_type") == RequirementFieldType.FORM
-                # 这一行的模板没有这个字段 —— 跨模板的筛选条件不命中它
+                # 这一行的需求类型没有这个字段 —— 跨类型的筛选条件不命中它
                 or str(field_attr(field, "id")) not in own_field_ids
             ):
                 matches = False

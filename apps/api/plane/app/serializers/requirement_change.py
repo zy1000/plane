@@ -11,7 +11,7 @@ from plane.db.models import (
     RequirementChangeType,
     RequirementVersion,
 )
-from plane.utils.requirement_change import snapshot_template_stats
+from plane.utils.requirement_change import snapshot_requirement_type_stats
 
 from .base import BaseSerializer
 
@@ -150,7 +150,7 @@ class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerialize
     requirement_items = serializers.SerializerMethodField()
     schema_items = serializers.SerializerMethodField()
     detail_item_count = serializers.SerializerMethodField()
-    template_stats = serializers.SerializerMethodField()
+    requirement_type_stats = serializers.SerializerMethodField()
     requirement_title = serializers.CharField(
         source="requirement.title", read_only=True
     )
@@ -161,7 +161,7 @@ class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerialize
             "requirement_items",
             "schema_items",
             "detail_item_count",
-            "template_stats",
+            "requirement_type_stats",
         ]
         read_only_fields = fields
 
@@ -187,8 +187,8 @@ class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerialize
     def get_detail_item_count(self, obj):
         return self.context.get("detail_item_count", 0)
 
-    def get_template_stats(self, obj):
-        return self.context.get("template_stats") or []
+    def get_requirement_type_stats(self, obj):
+        return self.context.get("requirement_type_stats") or []
 
 
 class RequirementChangeSubmitSerializer(serializers.Serializer):
@@ -245,14 +245,14 @@ class RequirementVersionDetailSerializer(RequirementVersionSerializer):
     requirement_snapshot = serializers.SerializerMethodField()
     fields_snapshot = serializers.SerializerMethodField()
     detail_count = serializers.SerializerMethodField()
-    template_stats = serializers.SerializerMethodField()
+    requirement_type_stats = serializers.SerializerMethodField()
 
     class Meta(RequirementVersionSerializer.Meta):
         fields = RequirementVersionSerializer.Meta.fields + [
             "requirement_snapshot",
             "fields_snapshot",
             "detail_count",
-            "template_stats",
+            "requirement_type_stats",
         ]
         read_only_fields = fields
 
@@ -265,8 +265,8 @@ class RequirementVersionDetailSerializer(RequirementVersionSerializer):
     def get_detail_count(self, obj):
         return len((obj.snapshot or {}).get("details") or [])
 
-    def get_template_stats(self, obj):
-        return snapshot_template_stats(obj.snapshot or {})
+    def get_requirement_type_stats(self, obj):
+        return snapshot_requirement_type_stats(obj.snapshot or {})
 
 
 class RequirementVersionComparisonItemSerializer(serializers.Serializer):
@@ -294,4 +294,4 @@ class RequirementVersionComparisonSerializer(serializers.Serializer):
     detail_item_count = serializers.IntegerField()
     changed_field_ids = serializers.ListField(child=serializers.CharField())
     to_fields_snapshot = serializers.JSONField()
-    template_stats = serializers.JSONField()
+    requirement_type_stats = serializers.JSONField()

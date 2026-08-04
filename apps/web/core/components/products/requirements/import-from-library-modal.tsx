@@ -7,7 +7,7 @@ import { Button } from "@plane/propel/button";
 import type { TRequirementDetail, TRequirementDetailImportPayload } from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { LeafValue } from "@/components/template-management/requirements/requirement-grid-shared";
+import { LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
 
@@ -67,7 +67,7 @@ export const RequirementImportFromLibraryModal = ({
     return libraries.filter(
       (library) =>
         library.name.toLowerCase().includes(keyword) ||
-        (library.template_detail?.title ?? "").toLowerCase().includes(keyword)
+        (library.requirement_type_detail?.name ?? "").toLowerCase().includes(keyword)
     );
   }, [libraries, librarySearch]);
 
@@ -178,7 +178,7 @@ export const RequirementImportFromLibraryModal = ({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
             {isLibrariesLoading ? (
-              /* 每条按真实条目的两行结构排（名称 + 模板/条数），避免加载完之后列表跳一下 */
+              /* 每条按真实条目的两行结构排（名称 + 类型/条数），避免加载完之后列表跳一下 */
               <ul className="space-y-0.5">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <li key={index} className="rounded-md px-2.5 py-2" style={{ animationDelay: `${index * 60}ms` }}>
@@ -226,7 +226,7 @@ export const RequirementImportFromLibraryModal = ({
                         </div>
                         <span className="mt-0.5 block truncate text-10 text-tertiary">
                           {t("workspace_products.requirements.import_modal.library_meta", {
-                            template: library.template_detail?.title ?? "",
+                            requirement_type: library.requirement_type_detail?.name ?? "",
                             count: library.item_count,
                           })}
                         </span>

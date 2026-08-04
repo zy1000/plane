@@ -17,15 +17,16 @@ import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirement } from "@plane/types";
+import type { TRequirementType } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Checkbox, Header, Loader } from "@plane/ui";
-import { cn, renderFormattedDateTime, stripAndTruncateHTML } from "@plane/utils";
+import { cn, renderFormattedDateTime } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
-import { useRequirementTemplatesContext } from "./context";
+import { useRequirementTypesContext } from "./context";
+import { getRequirementTypePath } from "../navigation";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const SKELETON_COLUMNS = ["select", "name", "description", "fields", "usage", "updated", "actions"];
@@ -33,57 +34,56 @@ const SKELETON_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5", "row-6", "ro
 const SKELETON_GRID =
   "grid-cols-[44px_minmax(180px,1.2fr)_minmax(200px,1.2fr)_80px_128px_144px_56px]";
 
-export const RequirementTemplateList = observer(function RequirementTemplateList() {
+export const RequirementTypeList = observer(function RequirementTypeList() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const {
     workspaceSlug,
-    templates,
+    requirementTypes,
     isLoading,
     isMutating,
     error,
-    fetchTemplates,
-    deleteTemplates,
+    fetchRequirementTypes,
+    deleteRequirementTypes,
     setIsCreateModalOpen,
-  } = useRequirementTemplatesContext();
+  } = useRequirementTypesContext();
   const { libraries } = useRequirementLibraries(workspaceSlug);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(PAGE_SIZE_OPTIONS[0]);
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
-  const [templatesToDelete, setTemplatesToDelete] = useState<TRequirement[]>([]);
+  const [selectedRequirementTypeIds, setSelectedRequirementTypeIds] = useState<string[]>([]);
+  const [requirementTypesToDelete, setRequirementTypesToDelete] = useState<TRequirementType[]>([]);
 
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
-  const filteredTemplates = useMemo(
+  const filteredRequirementTypes = useMemo(
     () =>
-      templates.filter((template) => {
+      requirementTypes.filter((requirementType) => {
         if (!normalizedSearch) return true;
-        const description = template.description_html
-          ? stripAndTruncateHTML(template.description_html, 1000).toLocaleLowerCase()
-          : "";
-        return [template.title, description].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
+        return [requirementType.name, requirementType.description].some((value) =>
+          value.toLocaleLowerCase().includes(normalizedSearch)
+        );
       }),
-    [normalizedSearch, templates]
+    [normalizedSearch, requirementTypes]
   );
-  // 被标准库引用的模板不能删——库内标准需求靠它解析字段
-  const libraryCountByTemplate = useMemo(() => {
+  // 被标准库引用的类型不能删——库内标准需求靠它解析字段
+  const libraryCountByRequirementType = useMemo(() => {
     const counts = new Map<string, number>();
     for (const library of libraries) {
-      counts.set(library.template_id, (counts.get(library.template_id) ?? 0) + 1);
+      counts.set(library.requirement_type_id, (counts.get(library.requirement_type_id) ?? 0) + 1);
     }
     return counts;
   }, [libraries]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / perPage));
-  const paginatedTemplates = filteredTemplates.slice((page - 1) * perPage, page * perPage);
-  // 被引用的模板不可删，也就不该被勾选——否则批量删除必然 409
-  const paginatedTemplateIds = paginatedTemplates
-    .filter((template) => !libraryCountByTemplate.has(template.id))
-    .map((template) => template.id);
-  const selectedOnPageCount = paginatedTemplateIds.filter((id) => selectedTemplateIds.includes(id)).length;
-  const isPageSelected = paginatedTemplateIds.length > 0 && selectedOnPageCount === paginatedTemplateIds.length;
+  const totalPages = Math.max(1, Math.ceil(filteredRequirementTypes.length / perPage));
+  const paginatedRequirementTypes = filteredRequirementTypes.slice((page - 1) * perPage, page * perPage);
+  // 被引用的类型不可删，也就不该被勾选——否则批量删除必然 409
+  const paginatedRequirementTypeIds = paginatedRequirementTypes
+    .filter((requirementType) => !libraryCountByRequirementType.has(requirementType.id))
+    .map((requirementType) => requirementType.id);
+  const selectedOnPageCount = paginatedRequirementTypeIds.filter((id) => selectedRequirementTypeIds.includes(id)).length;
+  const isPageSelected = paginatedRequirementTypeIds.length > 0 && selectedOnPageCount === paginatedRequirementTypeIds.length;
   const isPagePartiallySelected = selectedOnPageCount > 0 && !isPageSelected;
 
   useEffect(() => {
@@ -95,9 +95,9 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
   }, [totalPages]);
 
   useEffect(() => {
-    const availableIds = new Set(templates.map((template) => template.id));
-    setSelectedTemplateIds((current) => current.filter((id) => availableIds.has(id)));
-  }, [templates]);
+    const availableIds = new Set(requirementTypes.map((requirementType) => requirementType.id));
+    setSelectedRequirementTypeIds((current) => current.filter((id) => availableIds.has(id)));
+  }, [requirementTypes]);
 
   const clearSearch = () => {
     setSearchQuery("");
@@ -124,36 +124,36 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
   };
 
   const togglePageSelection = () => {
-    setSelectedTemplateIds((current) => {
-      if (isPageSelected) return current.filter((id) => !paginatedTemplateIds.includes(id));
-      return Array.from(new Set([...current, ...paginatedTemplateIds]));
+    setSelectedRequirementTypeIds((current) => {
+      if (isPageSelected) return current.filter((id) => !paginatedRequirementTypeIds.includes(id));
+      return Array.from(new Set([...current, ...paginatedRequirementTypeIds]));
     });
   };
 
   const handleDelete = async () => {
-    if (templatesToDelete.length === 0) return;
+    if (requirementTypesToDelete.length === 0) return;
     try {
-      await deleteTemplates(templatesToDelete.map((template) => template.id));
-      setSelectedTemplateIds((current) =>
-        current.filter((id) => !templatesToDelete.some((template) => template.id === id))
+      await deleteRequirementTypes(requirementTypesToDelete.map((requirementType) => requirementType.id));
+      setSelectedRequirementTypeIds((current) =>
+        current.filter((id) => !requirementTypesToDelete.some((requirementType) => requirementType.id === id))
       );
-      setTemplatesToDelete([]);
+      setRequirementTypesToDelete([]);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
         message:
-          templatesToDelete.length > 1
-            ? t("workspace_templates.requirements.list.delete_success", { count: templatesToDelete.length })
-            : t("workspace_templates.requirements.toast.deleted"),
+          requirementTypesToDelete.length > 1
+            ? t("workspace_templates.requirement_types.list.delete_success", { count: requirementTypesToDelete.length })
+            : t("workspace_templates.requirement_types.toast.deleted"),
       });
     } catch (requestError) {
       const payload = requestError as { error?: string; detail?: string };
-      setTemplatesToDelete([]);
-      void fetchTemplates().catch(() => undefined);
+      setRequirementTypesToDelete([]);
+      void fetchRequirementTypes().catch(() => undefined);
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
-        message: payload?.error ?? payload?.detail ?? t("workspace_templates.requirements.toast.failed"),
+        message: payload?.error ?? payload?.detail ?? t("workspace_templates.requirement_types.toast.failed"),
       });
     }
   };
@@ -169,15 +169,15 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
           <h2 className="mt-3 text-14 font-medium text-primary">
             {t(
               hasFilters
-                ? "workspace_templates.requirements.list.empty_filtered_title"
-                : "workspace_templates.requirements.empty.title"
+                ? "workspace_templates.requirement_types.list.empty_filtered_title"
+                : "workspace_templates.requirement_types.empty.title"
             )}
           </h2>
           <p className="mt-1 text-12 leading-5 text-secondary">
             {t(
               hasFilters
-                ? "workspace_templates.requirements.list.empty_filtered_description"
-                : "workspace_templates.requirements.empty.description"
+                ? "workspace_templates.requirement_types.list.empty_filtered_description"
+                : "workspace_templates.requirement_types.empty.description"
             )}
           </p>
           <Button
@@ -187,8 +187,8 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
           >
             {t(
               hasFilters
-                ? "workspace_templates.requirements.list.reset_view"
-                : "workspace_templates.requirements.create"
+                ? "workspace_templates.requirement_types.list.reset_view"
+                : "workspace_templates.requirement_types.create"
             )}
           </Button>
         </div>
@@ -198,7 +198,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
 
   return (
     <>
-      <PageHead title={`${t("workspace_templates.requirements.title")} - ${t("workspace_templates.title")}`} />
+      <PageHead title={`${t("workspace_templates.requirement_types.title")} - ${t("workspace_templates.title")}`} />
       <AppHeader
         header={
           <Header>
@@ -207,7 +207,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                 <Breadcrumbs.Item
                   component={
                     <BreadcrumbLink
-                      label={t("workspace_templates.requirements.title")}
+                      label={t("workspace_templates.requirement_types.title")}
                       icon={<FileText className="size-4 text-secondary" />}
                       isLast
                     />
@@ -215,16 +215,16 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                   isLast
                 />
               </Breadcrumbs>
-              {selectedTemplateIds.length > 0 && (
+              {selectedRequirementTypeIds.length > 0 && (
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    setTemplatesToDelete(templates.filter((template) => selectedTemplateIds.includes(template.id)))
+                    setRequirementTypesToDelete(requirementTypes.filter((requirementType) => selectedRequirementTypeIds.includes(requirementType.id)))
                   }
                 >
                   <Trash2 className="size-3.5 text-danger-primary" />
-                  {t("workspace_templates.requirements.list.delete_selected", {
-                    count: selectedTemplateIds.length,
+                  {t("workspace_templates.requirement_types.list.delete_selected", {
+                    count: selectedRequirementTypeIds.length,
                   })}
                 </Button>
               )}
@@ -241,7 +241,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                       window.setTimeout(() => searchInputRef.current?.focus(), 0);
                     }}
                     icon={SearchIcon}
-                    aria-label={t("workspace_templates.requirements.list.search_placeholder")}
+                    aria-label={t("workspace_templates.requirement_types.list.search_placeholder")}
                   />
                 )}
                 <div
@@ -256,7 +256,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                   <input
                     ref={searchInputRef}
                     className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-                    placeholder={t("workspace_templates.requirements.list.search_placeholder")}
+                    placeholder={t("workspace_templates.requirement_types.list.search_placeholder")}
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     onKeyDown={handleSearchKeyDown}
@@ -270,7 +270,7 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
               </div>
               <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
                 <Plus className="size-3.5" />
-                {t("workspace_templates.requirements.create")}
+                {t("workspace_templates.requirement_types.create")}
               </Button>
             </Header.RightItem>
           </Header>
@@ -305,15 +305,15 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                 <AlertCircle className="size-5" />
               </span>
               <h2 className="mt-3 text-14 font-medium text-primary">
-                {t("workspace_templates.requirements.list.error_title")}
+                {t("workspace_templates.requirement_types.list.error_title")}
               </h2>
               <p className="mt-1 max-w-sm text-12 text-secondary">{error}</p>
-              <Button className="mt-4" variant="secondary" onClick={() => void fetchTemplates().catch(() => undefined)}>
+              <Button className="mt-4" variant="secondary" onClick={() => void fetchRequirementTypes().catch(() => undefined)}>
                 {t("retry")}
               </Button>
             </div>
           </div>
-        ) : filteredTemplates.length === 0 ? (
+        ) : filteredRequirementTypes.length === 0 ? (
           renderEmptyState()
         ) : (
           <>
@@ -326,29 +326,28 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                         checked={isPageSelected}
                         indeterminate={isPagePartiallySelected}
                         onChange={togglePageSelection}
-                        aria-label={t("workspace_templates.requirements.list.select_page")}
+                        aria-label={t("workspace_templates.requirement_types.list.select_page")}
                       />
                     </th>
                     {/* 名称与说明各占 28%：说明原来没设宽度，table-fixed 下会吃掉全部余量（1920 时占 53%） */}
-                    <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirements.fields.name")}</th>
-                    <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirements.fields.description")}</th>
-                    <th className="w-20 px-3 py-2.5">{t("workspace_templates.requirements.list.field_count")}</th>
-                    <th className="w-32 px-3 py-2.5">{t("workspace_templates.requirements.list.used_by")}</th>
-                    <th className="w-36 px-3 py-2.5">{t("workspace_templates.requirements.list.updated_at")}</th>
-                    <th className="w-14 px-3 py-2.5">{t("workspace_templates.requirements.fields.actions")}</th>
+                    <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirement_types.fields.name")}</th>
+                    <th className="w-[28%] px-3 py-2.5">{t("workspace_templates.requirement_types.fields.description")}</th>
+                    <th className="w-20 px-3 py-2.5">{t("workspace_templates.requirement_types.list.field_count")}</th>
+                    <th className="w-32 px-3 py-2.5">{t("workspace_templates.requirement_types.list.used_by")}</th>
+                    <th className="w-36 px-3 py-2.5">{t("workspace_templates.requirement_types.list.updated_at")}</th>
+                    <th className="w-14 px-3 py-2.5">{t("requirement_fields.fields.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedTemplates.map((template) => {
-                    const isSelected = selectedTemplateIds.includes(template.id);
-                    const description = template.description_html
-                      ? stripAndTruncateHTML(template.description_html, 180)
-                      : t("workspace_templates.requirements.list.no_description");
-                    const usedByCount = libraryCountByTemplate.get(template.id) ?? 0;
+                  {paginatedRequirementTypes.map((requirementType) => {
+                    const isSelected = selectedRequirementTypeIds.includes(requirementType.id);
+                    const description =
+                      requirementType.description || t("workspace_templates.requirement_types.list.no_description");
+                    const usedByCount = libraryCountByRequirementType.get(requirementType.id) ?? 0;
                     return (
                       <tr
-                        key={template.id}
-                        onClick={() => navigate(`/${workspaceSlug}/templates/requirements/${template.id}`)}
+                        key={requirementType.id}
+                        onClick={() => navigate(getRequirementTypePath(workspaceSlug, requirementType.id))}
                         className={`group cursor-pointer border-b border-subtle transition-colors hover:bg-layer-transparent-hover ${
                           isSelected ? "bg-accent-primary/[0.05]" : ""
                         }`}
@@ -358,44 +357,44 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                             checked={isSelected}
                             disabled={usedByCount > 0}
                             onChange={() =>
-                              setSelectedTemplateIds((current) =>
-                                isSelected ? current.filter((id) => id !== template.id) : [...current, template.id]
+                              setSelectedRequirementTypeIds((current) =>
+                                isSelected ? current.filter((id) => id !== requirementType.id) : [...current, requirementType.id]
                               )
                             }
-                            aria-label={t("workspace_templates.requirements.list.select_template", {
-                              name: template.title,
+                            aria-label={t("workspace_templates.requirement_types.list.select_requirement_type", {
+                              name: requirementType.name,
                             })}
                           />
                         </td>
                         <td className="px-3 py-2.5 align-middle">
                           <Link
-                            to={`/${workspaceSlug}/templates/requirements/${template.id}`}
+                            to={getRequirementTypePath(workspaceSlug, requirementType.id)}
                             onClick={(event) => event.stopPropagation()}
                             className="block truncate text-13 font-medium text-primary group-hover:text-accent-primary"
                           >
-                            {template.title}
+                            {requirementType.name}
                           </Link>
                         </td>
                         <td className="px-3 py-2.5 align-middle">
                           <span className="block truncate text-12 text-secondary">{description}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-12 tabular-nums text-secondary">{template.field_count}</td>
+                        <td className="px-3 py-2.5 text-12 tabular-nums text-secondary">{requirementType.field_count}</td>
                         <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
                           {usedByCount > 0 ? (
                             <Link
                               to={`/${workspaceSlug}/templates/libraries`}
                               className="inline-block rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
                             >
-                              {t("workspace_templates.requirements.list.used_by_count", { count: usedByCount })}
+                              {t("workspace_templates.requirement_types.list.used_by_count", { count: usedByCount })}
                             </Link>
                           ) : (
                             <span className="text-11 text-tertiary">
-                              {t("workspace_templates.requirements.list.not_used")}
+                              {t("workspace_templates.requirement_types.list.not_used")}
                             </span>
                           )}
                         </td>
                         <td className="px-3 py-2.5 text-11 whitespace-nowrap text-secondary">
-                          {renderFormattedDateTime(template.updated_at)}
+                          {renderFormattedDateTime(requirementType.updated_at)}
                         </td>
                         <td
                           className="px-3 py-2.5 text-center align-middle"
@@ -404,17 +403,17 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                           <Tooltip
                             tooltipContent={
                               usedByCount > 0
-                                ? t("workspace_templates.requirements.list.delete_blocked", { count: usedByCount })
+                                ? t("workspace_templates.requirement_types.list.delete_blocked", { count: usedByCount })
                                 : t("delete")
                             }
                           >
                             <button
                               type="button"
                               disabled={usedByCount > 0}
-                              onClick={() => setTemplatesToDelete([template])}
+                              onClick={() => setRequirementTypesToDelete([requirementType])}
                               className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-tertiary"
-                              aria-label={t("workspace_templates.requirements.list.delete_template", {
-                                name: template.title,
+                              aria-label={t("workspace_templates.requirement_types.list.delete_requirement_type", {
+                                name: requirementType.name,
                               })}
                             >
                               <Trash2 className="size-3.5" />
@@ -430,19 +429,19 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
             <div className="flex h-11 shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 text-11 text-secondary">
               <div className="flex items-center gap-2">
                 <span>
-                  {t("workspace_templates.requirements.list.total", {
-                    count: filteredTemplates.length,
+                  {t("workspace_templates.requirement_types.list.total", {
+                    count: filteredRequirementTypes.length,
                   })}
                 </span>
                 <select
                   value={perPage}
                   onChange={(event) => setPerPage(Number(event.target.value))}
                   className="h-7 rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:bg-layer-transparent-hover"
-                  aria-label={t("workspace_templates.requirements.list.per_page")}
+                  aria-label={t("requirement_grid.pagination.per_page")}
                 >
                   {PAGE_SIZE_OPTIONS.map((value) => (
                     <option key={value} value={value}>
-                      {t("workspace_templates.requirements.list.per_page_value", { count: value })}
+                      {t("requirement_grid.pagination.per_page_value", { count: value })}
                     </option>
                   ))}
                 </select>
@@ -453,19 +452,19 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
                   disabled={page <= 1}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
                   className="grid size-7 place-items-center rounded-md border border-subtle text-secondary hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label={t("workspace_templates.requirements.list.previous_page")}
+                  aria-label={t("requirement_grid.pagination.previous_page")}
                 >
                   <ChevronLeft className="size-3.5" />
                 </button>
                 <span className="min-w-16 text-center tabular-nums">
-                  {t("workspace_templates.requirements.list.page", { page, total: totalPages })}
+                  {t("requirement_grid.pagination.page", { page, total: totalPages })}
                 </span>
                 <button
                   type="button"
                   disabled={page >= totalPages}
                   onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                   className="grid size-7 place-items-center rounded-md border border-subtle text-secondary hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label={t("workspace_templates.requirements.list.next_page")}
+                  aria-label={t("requirement_grid.pagination.next_page")}
                 >
                   <ChevronRight className="size-3.5" />
                 </button>
@@ -475,26 +474,26 @@ export const RequirementTemplateList = observer(function RequirementTemplateList
         )}
       </ContentWrapper>
       <AlertModalCore
-        handleClose={() => setTemplatesToDelete([])}
+        handleClose={() => setRequirementTypesToDelete([])}
         handleSubmit={handleDelete}
-        isSubmitDisabled={templatesToDelete.length === 0}
+        isSubmitDisabled={requirementTypesToDelete.length === 0}
         isSubmitting={isMutating}
-        isOpen={templatesToDelete.length > 0}
+        isOpen={requirementTypesToDelete.length > 0}
         title={t(
-          templatesToDelete.length > 1
-            ? "workspace_templates.requirements.list.delete_many_title"
-            : "workspace_templates.requirements.list.delete_one_title"
+          requirementTypesToDelete.length > 1
+            ? "workspace_templates.requirement_types.list.delete_many_title"
+            : "workspace_templates.requirement_types.list.delete_one_title"
         )}
         content={
-          templatesToDelete.length > 1 ? (
-            t("workspace_templates.requirements.list.delete_many_description", {
-              count: templatesToDelete.length,
+          requirementTypesToDelete.length > 1 ? (
+            t("workspace_templates.requirement_types.list.delete_many_description", {
+              count: requirementTypesToDelete.length,
             })
           ) : (
             <>
-              {t("workspace_templates.requirements.list.delete_one_description_prefix")}
-              <span className="font-medium text-primary">{templatesToDelete[0]?.title}</span>
-              {t("workspace_templates.requirements.list.delete_one_description_suffix")}
+              {t("workspace_templates.requirement_types.list.delete_one_description_prefix")}
+              <span className="font-medium text-primary">{requirementTypesToDelete[0]?.name}</span>
+              {t("workspace_templates.requirement_types.list.delete_one_description_suffix")}
             </>
           )
         }

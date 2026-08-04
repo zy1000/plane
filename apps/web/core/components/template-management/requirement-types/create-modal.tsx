@@ -5,44 +5,42 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { useRequirementTemplatesContext } from "./context";
+import { useRequirementTypesContext } from "./context";
+import { getRequirementTypePath } from "../navigation";
 
-export function RequirementTemplateCreateModal() {
+export function RequirementTypeCreateModal() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { workspaceSlug, isCreateModalOpen, setIsCreateModalOpen, createTemplate, isMutating } =
-    useRequirementTemplatesContext();
-  const [title, setTitle] = useState("");
+  const { workspaceSlug, isCreateModalOpen, setIsCreateModalOpen, createRequirementType, isMutating } =
+    useRequirementTypesContext();
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isCreateModalOpen) return;
-    setTitle("");
+    setName("");
     setError(null);
   }, [isCreateModalOpen]);
 
   const handleCreate = async () => {
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) {
-      setError(t("workspace_templates.requirements.validation.name_required"));
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setError(t("workspace_templates.requirement_types.validation.name_required"));
       return;
     }
     setError(null);
     try {
-      const template = await createTemplate({
-        is_template: true,
-        title: normalizedTitle,
-      });
+      const requirementType = await createRequirementType({ name: normalizedName });
       setIsCreateModalOpen(false);
-      navigate(`/${workspaceSlug}/templates/requirements/${template.id}`);
+      navigate(getRequirementTypePath(workspaceSlug, requirementType.id));
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
-        message: t("workspace_templates.requirements.toast.created"),
+        message: t("workspace_templates.requirement_types.toast.created"),
       });
     } catch (requestError) {
-      const payload = requestError as { title?: string[]; error?: string };
-      setError(payload?.title?.[0] ?? payload?.error ?? t("workspace_templates.requirements.toast.failed"));
+      const payload = requestError as { name?: string[]; error?: string };
+      setError(payload?.name?.[0] ?? payload?.error ?? t("workspace_templates.requirement_types.toast.failed"));
     }
   };
 
@@ -59,8 +57,8 @@ export function RequirementTemplateCreateModal() {
             <FilePlus2 className="size-4" />
           </span>
           <div>
-            <h2 className="text-14 font-medium text-primary">{t("workspace_templates.requirements.create")}</h2>
-            <p className="text-11 text-secondary">{t("workspace_templates.requirements.create_description")}</p>
+            <h2 className="text-14 font-medium text-primary">{t("workspace_templates.requirement_types.create")}</h2>
+            <p className="text-11 text-secondary">{t("workspace_templates.requirement_types.create_description")}</p>
           </div>
         </div>
         <button
@@ -75,14 +73,14 @@ export function RequirementTemplateCreateModal() {
       <div className="space-y-4 px-5 py-5">
         <label className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">
-            {t("workspace_templates.requirements.fields.name")}
+            {t("workspace_templates.requirement_types.fields.name")}
           </span>
           <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
             maxLength={255}
             className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t("workspace_templates.requirements.fields.name_placeholder")}
+            placeholder={t("workspace_templates.requirement_types.fields.name_placeholder")}
           />
         </label>
         {error && <p className="text-11 text-danger-primary">{error}</p>}
@@ -92,7 +90,7 @@ export function RequirementTemplateCreateModal() {
           {t("cancel")}
         </Button>
         <Button variant="primary" onClick={() => void handleCreate()} loading={isMutating}>
-          {t("workspace_templates.requirements.create_and_edit")}
+          {t("workspace_templates.requirement_types.create_and_edit")}
         </Button>
       </div>
     </ModalCore>

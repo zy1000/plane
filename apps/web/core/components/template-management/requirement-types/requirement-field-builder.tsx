@@ -34,7 +34,7 @@ import {
   getRequirementSelectMode,
   getRequirementSelectOptions,
   hasValidRequirementSelectOptions,
-} from "./requirement-select";
+} from "@/components/requirements/requirement-select";
 
 const MenuRowLabel = ({
   icon: Icon,
@@ -122,15 +122,15 @@ const FIELD_LIBRARY_GROUPS: Array<{
   types: TRequirementFieldType[];
 }> = [
   {
-    labelKey: "workspace_templates.requirements.editor.builder.basic_fields",
+    labelKey: "requirement_fields.builder.basic_fields",
     types: ["text", "rich_text", "member", "select", "boolean"],
   },
   {
-    labelKey: "workspace_templates.requirements.editor.builder.media_fields",
+    labelKey: "requirement_fields.builder.media_fields",
     types: ["attachment", "image"],
   },
   {
-    labelKey: "workspace_templates.requirements.editor.builder.structure_fields",
+    labelKey: "requirement_fields.builder.structure_fields",
     types: ["form"],
   },
 ];
@@ -191,7 +191,7 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
     ...field,
     id: undefined,
     client_id: uuidv4(),
-    // 复制出来的是普通字段：内置标识全模板唯一，不能跟着复制
+    // 复制出来的是普通字段：内置标识全需求类型唯一，不能跟着复制
     builtin_key: null,
     name: `${field.name}${suffix}`,
     config,
@@ -209,7 +209,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
   if (compact) {
     return (
       <div className="flex h-full min-h-0 flex-col px-4 py-4">
-        <h2 className="mb-3 text-12 font-semibold text-primary">{t("workspace_templates.requirements.fields.add")}</h2>
+        <h2 className="mb-3 text-12 font-semibold text-primary">{t("requirement_fields.fields.add")}</h2>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
           {ROOT_FIELD_TYPES.map((type) => {
             const Icon = FIELD_ICONS[type];
@@ -229,7 +229,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
               >
                 <Icon className="size-4 shrink-0 text-secondary" />
                 <span className="truncate text-12 text-primary">
-                  {t(`workspace_templates.requirements.field_types.${type}`)}
+                  {t(`requirement_fields.field_types.${type}`)}
                 </span>
               </div>
             );
@@ -243,7 +243,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-subtle px-4 py-4">
         <h2 className="text-14 font-semibold text-primary">
-          {t("workspace_templates.requirements.editor.builder.field_library")}
+          {t("requirement_fields.builder.field_library")}
         </h2>
         <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
@@ -251,7 +251,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t("workspace_templates.requirements.editor.builder.search_fields")}
+            placeholder={t("requirement_fields.builder.search_fields")}
             className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-8 text-12 text-primary outline-none placeholder:text-placeholder"
           />
         </label>
@@ -259,7 +259,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {FIELD_LIBRARY_GROUPS.map((group) => {
           const types = group.types.filter((type) =>
-            t(`workspace_templates.requirements.field_types.${type}`).toLocaleLowerCase().includes(normalizedSearch)
+            t(`requirement_fields.field_types.${type}`).toLocaleLowerCase().includes(normalizedSearch)
           );
           if (types.length === 0) return null;
           return (
@@ -287,7 +287,7 @@ function FieldLibrary(props: TFieldLibraryProps) {
                         <Icon className="size-3.5" />
                       </span>
                       <span className="truncate text-12 font-medium text-primary">
-                        {t(`workspace_templates.requirements.field_types.${type}`)}
+                        {t(`requirement_fields.field_types.${type}`)}
                       </span>
                     </div>
                   );
@@ -309,15 +309,15 @@ function FieldStateBadges({ field, isSelected }: { field: TRequirementFieldDraft
       {isBuiltinRequirementField(field) && (
         <span
           className="inline-flex items-center gap-1 rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary"
-          title={t("workspace_templates.requirements.editor.builder.builtin_locked_hint")}
+          title={t("requirement_fields.builder.builtin_locked_hint")}
         >
           <Lock className="size-2.5" />
-          {t("workspace_templates.requirements.editor.builder.builtin_badge")}
+          {t("requirement_fields.builder.builtin_badge")}
         </span>
       )}
       {field.is_required && (
         <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-10 font-medium text-danger-primary">
-          {t("workspace_templates.requirements.fields.required")}
+          {t("requirement_fields.fields.required")}
         </span>
       )}
       <span
@@ -328,13 +328,13 @@ function FieldStateBadges({ field, isSelected }: { field: TRequirementFieldDraft
       >
         {t(
           field.is_active
-            ? "workspace_templates.requirements.editor.builder.enabled_badge"
-            : "workspace_templates.requirements.inactive"
+            ? "requirement_fields.builder.enabled_badge"
+            : "requirement_fields.inactive"
         )}
       </span>
       {isSelected && (
         <span className="hidden rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary 2xl:inline">
-          {t("workspace_templates.requirements.editor.builder.configuring")}
+          {t("requirement_fields.builder.configuring")}
         </span>
       )}
     </div>
@@ -363,15 +363,15 @@ function RequirementFieldRow(props: TFieldRowProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const fieldTypeDescription =
     field.field_type === "select"
-      ? t("workspace_templates.requirements.editor.builder.selector_summary", {
+      ? t("requirement_fields.builder.selector_summary", {
           mode: t(
-            `workspace_templates.requirements.editor.builder.${
+            `requirement_fields.builder.${
               getRequirementSelectMode(field) === "multiple" ? "multiple_select" : "single_select"
             }`
           ),
           count: getRequirementSelectOptions(field).length,
         })
-      : t(`workspace_templates.requirements.field_types.${field.field_type}`);
+      : t(`requirement_fields.field_types.${field.field_type}`);
 
   useEffect(() => {
     if (hasSelectedChild || isDropTarget || isInvalidDropTarget) setIsCollapsed(false);
@@ -414,8 +414,8 @@ function RequirementFieldRow(props: TFieldRowProps) {
             aria-expanded={!isCollapsed}
             aria-label={t(
               isCollapsed
-                ? "workspace_templates.requirements.editor.builder.expand_form"
-                : "workspace_templates.requirements.editor.builder.collapse_form"
+                ? "requirement_fields.builder.expand_form"
+                : "requirement_fields.builder.collapse_form"
             )}
           >
             <ChevronDown
@@ -439,10 +439,10 @@ function RequirementFieldRow(props: TFieldRowProps) {
           </span>
           <span className="min-w-0">
             <span className={cn("block truncate font-medium text-primary", compact ? "text-12" : "text-13")}>
-              {field.name || t("workspace_templates.requirements.fields.untitled")}
+              {field.name || t("requirement_fields.fields.untitled")}
               {compact && field.is_required && (
                 <span className="ml-1 font-normal text-secondary">
-                  ({t("workspace_templates.requirements.fields.required")})
+                  ({t("requirement_fields.fields.required")})
                 </span>
               )}
             </span>
@@ -452,16 +452,16 @@ function RequirementFieldRow(props: TFieldRowProps) {
         {!compact && <FieldStateBadges field={field} isSelected={isSelected} />}
         {compact && isForm && (
           <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
-            {t("workspace_templates.requirements.field_types.form")}
+            {t("requirement_fields.field_types.form")}
           </span>
         )}
         <div className="flex shrink-0 items-center gap-0.5">
-          <Tooltip tooltipContent={t("workspace_templates.requirements.editor.builder.duplicate_field")}>
+          <Tooltip tooltipContent={t("requirement_fields.builder.duplicate_field")}>
             <button
               type="button"
               onClick={onDuplicate}
               className="grid size-7 place-items-center rounded-md text-tertiary opacity-0 transition-all group-hover/field-row:opacity-100 hover:bg-layer-2 hover:text-primary focus:opacity-100"
-              aria-label={t("workspace_templates.requirements.editor.builder.duplicate_field")}
+              aria-label={t("requirement_fields.builder.duplicate_field")}
             >
               <Copy className="size-3.5" />
             </button>
@@ -471,7 +471,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
               <button
                 type="button"
                 className="grid size-7 place-items-center rounded-md text-secondary hover:bg-layer-2 hover:text-primary"
-                aria-label={t("workspace_templates.requirements.fields.actions")}
+                aria-label={t("requirement_fields.fields.actions")}
               >
                 <MoreHorizontal className="size-4" />
               </button>
@@ -480,18 +480,18 @@ function RequirementFieldRow(props: TFieldRowProps) {
             portalElement={getMenuPortalElement()}
           >
             <CustomMenu.MenuItem onClick={() => onInsert("above")}>
-              <MenuRowLabel icon={ArrowUpToLine} label={t("workspace_templates.requirements.fields.insert_above")} />
+              <MenuRowLabel icon={ArrowUpToLine} label={t("requirement_fields.fields.insert_above")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={() => onInsert("below")}>
-              <MenuRowLabel icon={ArrowDownToLine} label={t("workspace_templates.requirements.fields.insert_below")} />
+              <MenuRowLabel icon={ArrowDownToLine} label={t("requirement_fields.fields.insert_below")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={onDuplicate}>
-              <MenuRowLabel icon={Copy} label={t("workspace_templates.requirements.editor.builder.duplicate_field")} />
+              <MenuRowLabel icon={Copy} label={t("requirement_fields.builder.duplicate_field")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={onRemove} disabled={isBuiltin}>
               <MenuRowLabel
                 icon={Trash2}
-                label={t("workspace_templates.requirements.editor.builder.delete_field")}
+                label={t("requirement_fields.builder.delete_field")}
                 tone="danger"
               />
             </CustomMenu.MenuItem>
@@ -512,8 +512,8 @@ function FieldInspector(props: TFieldInspectorProps) {
   const hasValidSelectOptions = field?.field_type !== "select" || hasValidRequirementSelectOptions(field);
 
   const defaultSelectOptionLabels = [
-    t("workspace_templates.requirements.editor.builder.default_option", { index: 1 }),
-    t("workspace_templates.requirements.editor.builder.default_option", { index: 2 }),
+    t("requirement_fields.builder.default_option", { index: 1 }),
+    t("requirement_fields.builder.default_option", { index: 2 }),
   ];
 
   const updateType = (fieldType: TRequirementFieldType) => {
@@ -553,10 +553,10 @@ function FieldInspector(props: TFieldInspectorProps) {
     if (!field || field.field_type !== "select") return;
     const existingLabels = new Set(selectOptions.map((option) => option.label.trim().toLocaleLowerCase()));
     let index = selectOptions.length + 1;
-    let label = t("workspace_templates.requirements.editor.builder.default_option", { index });
+    let label = t("requirement_fields.builder.default_option", { index });
     while (existingLabels.has(label.toLocaleLowerCase())) {
       index += 1;
-      label = t("workspace_templates.requirements.editor.builder.default_option", { index });
+      label = t("requirement_fields.builder.default_option", { index });
     }
     updateSelectOptions([...selectOptions, { id: uuidv4(), label }]);
   };
@@ -567,7 +567,7 @@ function FieldInspector(props: TFieldInspectorProps) {
         <div className="flex min-w-0 items-center gap-2">
           <Settings2 className="size-4 shrink-0 text-secondary" />
           <h2 className="truncate text-14 font-semibold text-primary">
-            {t("workspace_templates.requirements.editor.builder.field_settings")}
+            {t("requirement_fields.builder.field_settings")}
           </h2>
         </div>
         {showClose && (
@@ -588,10 +588,10 @@ function FieldInspector(props: TFieldInspectorProps) {
               <Settings2 className="size-4" />
             </span>
             <p className="mt-3 text-13 font-medium text-primary">
-              {t("workspace_templates.requirements.editor.builder.no_field_selected")}
+              {t("requirement_fields.builder.no_field_selected")}
             </p>
             <p className="mt-1 text-11 leading-4 text-secondary">
-              {t("workspace_templates.requirements.editor.builder.no_field_selected_description")}
+              {t("requirement_fields.builder.no_field_selected_description")}
             </p>
           </div>
         </div>
@@ -600,18 +600,18 @@ function FieldInspector(props: TFieldInspectorProps) {
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             <label className="block">
               <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("workspace_templates.requirements.editor.builder.field_name")}
+                {t("requirement_fields.builder.field_name")}
               </span>
               <input
                 value={field.name}
                 onChange={(event) => onChange({ ...field, name: event.target.value })}
                 className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none"
-                placeholder={t("workspace_templates.requirements.fields.field_name_placeholder")}
+                placeholder={t("requirement_fields.fields.field_name_placeholder")}
               />
             </label>
             <label className="relative block">
               <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("workspace_templates.requirements.editor.builder.field_type")}
+                {t("requirement_fields.builder.field_type")}
               </span>
               <select
                 value={field.field_type}
@@ -621,14 +621,14 @@ function FieldInspector(props: TFieldInspectorProps) {
               >
                 {availableTypes.map((type) => (
                   <option key={type} value={type}>
-                    {t(`workspace_templates.requirements.field_types.${type}`)}
+                    {t(`requirement_fields.field_types.${type}`)}
                   </option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
               {isBuiltin && (
                 <span className="mt-1.5 block text-11 text-tertiary">
-                  {t("workspace_templates.requirements.editor.builder.builtin_type_locked")}
+                  {t("requirement_fields.builder.builtin_type_locked")}
                 </span>
               )}
             </label>
@@ -636,7 +636,7 @@ function FieldInspector(props: TFieldInspectorProps) {
               <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
                 <div className="border-b border-subtle px-3 py-3">
                   <p className="text-12 font-medium text-primary">
-                    {t("workspace_templates.requirements.editor.builder.selection_mode")}
+                    {t("requirement_fields.builder.selection_mode")}
                   </p>
                   <div className="mt-2 grid grid-cols-2 rounded-md border border-subtle bg-surface-1 p-0.5">
                     {(["single", "multiple"] as const).map((mode) => {
@@ -660,7 +660,7 @@ function FieldInspector(props: TFieldInspectorProps) {
                           )}
                         >
                           {t(
-                            `workspace_templates.requirements.editor.builder.${
+                            `requirement_fields.builder.${
                               mode === "multiple" ? "multiple_select" : "single_select"
                             }`
                           )}
@@ -673,10 +673,10 @@ function FieldInspector(props: TFieldInspectorProps) {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-12 font-medium text-primary">
-                        {t("workspace_templates.requirements.editor.builder.selector_options")}
+                        {t("requirement_fields.builder.selector_options")}
                       </p>
                       <p className="mt-0.5 text-10 text-secondary">
-                        {t("workspace_templates.requirements.editor.builder.selector_options_description")}
+                        {t("requirement_fields.builder.selector_options_description")}
                       </p>
                     </div>
                     <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
@@ -706,7 +706,7 @@ function FieldInspector(props: TFieldInspectorProps) {
                             )
                           }
                           className="h-7 min-w-0 flex-1 bg-transparent px-1 text-12 text-primary outline-none"
-                          aria-label={t("workspace_templates.requirements.editor.builder.option_label", {
+                          aria-label={t("requirement_fields.builder.option_label", {
                             index: index + 1,
                           })}
                         />
@@ -715,7 +715,7 @@ function FieldInspector(props: TFieldInspectorProps) {
                           disabled={selectOptions.length <= 1}
                           onClick={() => updateSelectOptions(selectOptions.filter((item) => item.id !== option.id))}
                           className="grid size-7 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-20"
-                          aria-label={t("workspace_templates.requirements.editor.builder.delete_option")}
+                          aria-label={t("requirement_fields.builder.delete_option")}
                         >
                           <Trash2 className="size-3.5" />
                         </button>
@@ -724,7 +724,7 @@ function FieldInspector(props: TFieldInspectorProps) {
                   />
                   {!hasValidSelectOptions && (
                     <p className="mt-2 text-10 leading-4 text-danger-primary">
-                      {t("workspace_templates.requirements.validation.selector_options")}
+                      {t("requirement_fields.validation.selector_options")}
                     </p>
                   )}
                   <button
@@ -733,14 +733,14 @@ function FieldInspector(props: TFieldInspectorProps) {
                     className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary transition-colors hover:border-accent-subtle hover:bg-accent-subtle"
                   >
                     <Plus className="size-3.5" />
-                    {t("workspace_templates.requirements.editor.builder.add_option")}
+                    {t("requirement_fields.builder.add_option")}
                   </button>
                 </div>
               </section>
             )}
             <label className="block">
               <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("workspace_templates.requirements.fields.placeholder")}
+                {t("requirement_fields.fields.placeholder")}
               </span>
               <input
                 value={String(field.config.placeholder ?? "")}
@@ -749,12 +749,12 @@ function FieldInspector(props: TFieldInspectorProps) {
                 }
                 disabled={field.field_type === "form"}
                 className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
-                placeholder={t("workspace_templates.requirements.editor.builder.placeholder_example")}
+                placeholder={t("requirement_fields.builder.placeholder_example")}
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("workspace_templates.requirements.fields.description")}
+                {t("workspace_templates.requirement_types.fields.description")}
               </span>
               <textarea
                 value={String(field.config.description ?? "")}
@@ -763,33 +763,33 @@ function FieldInspector(props: TFieldInspectorProps) {
                 }
                 rows={4}
                 className="focus:border-accent-primary w-full resize-y rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none"
-                placeholder={t("workspace_templates.requirements.editor.builder.description_example")}
+                placeholder={t("requirement_fields.builder.description_example")}
               />
             </label>
             <div className="divide-y divide-subtle rounded-lg border border-subtle">
               <div className="flex items-center justify-between gap-4 px-3 py-3">
                 <div>
                   <p className="text-12 font-medium text-primary">
-                    {t("workspace_templates.requirements.editor.builder.required_title")}
+                    {t("requirement_fields.builder.required_title")}
                   </p>
                   <p className="mt-0.5 text-10 leading-4 text-secondary">
-                    {t("workspace_templates.requirements.editor.builder.required_description")}
+                    {t("requirement_fields.builder.required_description")}
                   </p>
                 </div>
                 <ToggleSwitch
                   value={field.is_required}
                   onChange={(value) => onChange({ ...field, is_required: value })}
                   size="sm"
-                  label={t("workspace_templates.requirements.editor.builder.required_title")}
+                  label={t("requirement_fields.builder.required_title")}
                 />
               </div>
               <div className="flex items-center justify-between gap-4 px-3 py-3">
                 <div>
                   <p className="text-12 font-medium text-primary">
-                    {t("workspace_templates.requirements.editor.builder.enabled_title")}
+                    {t("requirement_fields.builder.enabled_title")}
                   </p>
                   <p className="mt-0.5 text-10 leading-4 text-secondary">
-                    {t("workspace_templates.requirements.editor.builder.enabled_description")}
+                    {t("requirement_fields.builder.enabled_description")}
                   </p>
                 </div>
                 <ToggleSwitch
@@ -798,12 +798,12 @@ function FieldInspector(props: TFieldInspectorProps) {
                   disabled={isBuiltin}
                   onChange={(value) => onChange({ ...field, is_active: value })}
                   size="sm"
-                  label={t("workspace_templates.requirements.editor.builder.enabled_title")}
+                  label={t("requirement_fields.builder.enabled_title")}
                 />
               </div>
               {isBuiltin && (
                 <p className="px-4 pb-3 text-10 leading-4 text-tertiary">
-                  {t("workspace_templates.requirements.editor.builder.builtin_locked_hint")}
+                  {t("requirement_fields.builder.builtin_locked_hint")}
                 </p>
               )}
             </div>
@@ -811,7 +811,7 @@ function FieldInspector(props: TFieldInspectorProps) {
           <div className="flex shrink-0 items-center justify-between gap-2 border-t border-subtle px-4 py-3">
             <Button variant="secondary" onClick={onDuplicate}>
               <Copy className="size-3.5" />
-              {t("workspace_templates.requirements.editor.builder.duplicate_field")}
+              {t("requirement_fields.builder.duplicate_field")}
             </Button>
             {!isBuiltin && (
               <button
@@ -820,7 +820,7 @@ function FieldInspector(props: TFieldInspectorProps) {
                 className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-12 font-medium text-danger-primary hover:bg-danger-subtle"
               >
                 <Trash2 className="size-3.5" />
-                {t("workspace_templates.requirements.editor.builder.delete_field")}
+                {t("requirement_fields.builder.delete_field")}
               </button>
             )}
           </div>
@@ -844,8 +844,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       ? selectedRoot.children.find((field) => fieldKey(field) === selection.childKey)
       : selectedRoot;
   const defaultSelectOptionLabels = [
-    t("workspace_templates.requirements.editor.builder.default_option", { index: 1 }),
-    t("workspace_templates.requirements.editor.builder.default_option", { index: 2 }),
+    t("requirement_fields.builder.default_option", { index: 1 }),
+    t("requirement_fields.builder.default_option", { index: 2 }),
   ];
 
   useEffect(() => {
@@ -873,7 +873,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(
       type,
-      t(`workspace_templates.requirements.field_types.${type}`),
+      t(`requirement_fields.field_types.${type}`),
       defaultSelectOptionLabels
     );
     const nextFields = [...fields];
@@ -885,7 +885,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   const insertChildField = (rootKey: string, index: number, type: TRequirementFieldType) => {
     const nextField = createField(
       type,
-      t(`workspace_templates.requirements.field_types.${type}`),
+      t(`requirement_fields.field_types.${type}`),
       defaultSelectOptionLabels
     );
     onChange(
@@ -932,7 +932,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     if (rootIndex === -1) return;
     const root = fields[rootIndex];
     if (!targetSelection.childKey) {
-      const duplicate = duplicateField(root, t("workspace_templates.requirements.editor.builder.copy_suffix"));
+      const duplicate = duplicateField(root, t("requirement_fields.builder.copy_suffix"));
       const nextFields = [...fields];
       nextFields.splice(rootIndex + 1, 0, duplicate);
       onChange(nextFields);
@@ -943,7 +943,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     if (childIndex === -1) return;
     const duplicate = duplicateField(
       root.children[childIndex],
-      t("workspace_templates.requirements.editor.builder.copy_suffix")
+      t("requirement_fields.builder.copy_suffix")
     );
     const nextChildren = [...root.children];
     nextChildren.splice(childIndex + 1, 0, duplicate);
@@ -960,7 +960,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const rootIndex = fields.findIndex((field) => fieldKey(field) === targetSelection.rootKey);
     if (rootIndex === -1) return;
     const root = fields[rootIndex];
-    // 内置字段是模板的硬性组成，删掉就没法在默认视图里对齐标题/描述两列了
+    // 内置字段是需求类型的硬性组成，删掉就没法在默认视图里对齐标题/描述两列了
     if (!targetSelection.childKey && isBuiltinRequirementField(root)) return;
     if (targetSelection.childKey) {
       const nextChildren = root.children.filter((field) => fieldKey(field) !== targetSelection.childKey);
@@ -1013,7 +1013,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           >
             {isInvalidChildDropTarget && (
               <div className="mb-2 rounded-md border border-danger-subtle bg-danger-subtle px-3 py-2 text-11 text-danger-primary">
-                {t("workspace_templates.requirements.editor.builder.nested_form_not_supported")}
+                {t("requirement_fields.builder.nested_form_not_supported")}
               </div>
             )}
             {field.children.length > 0 && (
@@ -1061,8 +1061,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                   <Plus className="size-3.5" />
                   {t(
                     isChildDropTarget
-                      ? "workspace_templates.requirements.editor.builder.child_drop_hint"
-                      : "workspace_templates.requirements.fields.add_child"
+                      ? "requirement_fields.builder.child_drop_hint"
+                      : "requirement_fields.fields.add_child"
                   )}
                 </span>
               }
@@ -1079,7 +1079,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                     key={type}
                     onClick={() => insertChildField(rootKey, field.children.length, type)}
                   >
-                    <MenuRowLabel icon={Icon} label={t(`workspace_templates.requirements.field_types.${type}`)} />
+                    <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
                   </CustomMenu.MenuItem>
                 );
               })}
@@ -1095,7 +1095,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       customButton={
         <Button variant="secondary">
           <Plus className="size-3.5" />
-          {t("workspace_templates.requirements.fields.add")}
+          {t("requirement_fields.fields.add")}
         </Button>
       }
       placement="bottom-end"
@@ -1106,7 +1106,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         const Icon = FIELD_ICONS[type];
         return (
           <CustomMenu.MenuItem key={type} onClick={() => insertRootField(fields.length, type)}>
-            <MenuRowLabel icon={Icon} label={t(`workspace_templates.requirements.field_types.${type}`)} />
+            <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
           </CustomMenu.MenuItem>
         );
       })}
@@ -1143,14 +1143,14 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className={cn("font-semibold text-primary", compactLayout ? "text-20" : "text-14")}>
-                {title ?? t("workspace_templates.requirements.editor.builder.field_structure")}
+                {title ?? t("requirement_fields.builder.field_structure")}
               </h1>
               <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
                 {fields.length}
               </span>
             </div>
             <p className="mt-0.5 truncate text-11 text-secondary">
-              {description ?? t("workspace_templates.requirements.editor.builder.field_structure_description")}
+              {description ?? t("requirement_fields.builder.field_structure_description")}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -1162,7 +1162,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
               disabled={!selectedField}
             >
               <PanelRightOpen className="size-3.5" />
-              {t("workspace_templates.requirements.editor.builder.field_settings")}
+              {t("requirement_fields.builder.field_settings")}
             </Button>
           </div>
         </div>
@@ -1198,10 +1198,10 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                     <Plus className="size-5" />
                   </span>
                   <p className="mt-3 text-13 font-medium text-primary">
-                    {t("workspace_templates.requirements.fields.empty")}
+                    {t("requirement_fields.fields.empty")}
                   </p>
                   <p className="mt-1 text-11 leading-4 text-secondary">
-                    {t("workspace_templates.requirements.editor.builder.empty_description")}
+                    {t("requirement_fields.builder.empty_description")}
                   </p>
                   <div className="mt-4 inline-flex xl:hidden">{libraryMenu}</div>
                 </div>
@@ -1225,7 +1225,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                     : "border-subtle bg-surface-1 text-secondary"
                 )}
               >
-                {t("workspace_templates.requirements.editor.builder.root_drop_hint")}
+                {t("requirement_fields.builder.root_drop_hint")}
               </div>
             )}
           </div>

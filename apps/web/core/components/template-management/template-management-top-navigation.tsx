@@ -29,7 +29,7 @@ export const TemplateManagementTopNavigation = observer(function TemplateManagem
           <Header.LeftItem className="flex h-full w-full max-w-full items-center gap-2">
             <div className="flex size-full items-center gap-3 overflow-hidden">
               <Link
-                to={getTemplateManagementTabPath(workspaceSlug, "requirements")}
+                to={getTemplateManagementTabPath(workspaceSlug, "requirement-types")}
                 className="shrink-0 text-13 font-medium text-primary"
               >
                 {t("workspace_templates.title")}

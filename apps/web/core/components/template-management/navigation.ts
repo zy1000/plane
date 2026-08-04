@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Library, ListChecks, ListTodo, Workflow } from "lucide-react";
 
-export type TTemplateManagementTabKey = "requirements" | "libraries" | "work-items" | "workflow";
+export type TTemplateManagementTabKey = "requirement-types" | "libraries" | "work-items" | "workflow";
 
 export type TTemplateManagementNavigationItem = {
   key: TTemplateManagementTabKey;
@@ -11,9 +11,9 @@ export type TTemplateManagementNavigationItem = {
 
 export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigationItem[] = [
   {
-    key: "requirements",
+    key: "requirement-types",
     icon: ListChecks,
-    i18nKey: "workspace_templates.navigation.requirements",
+    i18nKey: "workspace_templates.navigation.requirement_types",
   },
   {
     key: "libraries",
@@ -32,8 +32,15 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
   },
 ];
 
+/** tab key 就是路径段，改 key 即改路由 */
 export const getTemplateManagementTabPath = (workspaceSlug: string, tabKey: TTemplateManagementTabKey) =>
   `/${workspaceSlug}/templates/${tabKey}`;
+
+/** 需求类型详情页；把散在各处的路由字面量收敛到这里 */
+export const getRequirementTypePath = (workspaceSlug: string, requirementTypeId?: string) =>
+  requirementTypeId
+    ? `/${workspaceSlug}/templates/requirement-types/${requirementTypeId}`
+    : `/${workspaceSlug}/templates/requirement-types`;
 
 export const getTemplateManagementNavigationItem = (tabKey: TTemplateManagementTabKey) =>
   TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.find((item) => item.key === tabKey) ?? TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS[0];

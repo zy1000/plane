@@ -17,9 +17,10 @@ import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useRequirementLibrariesContext } from "./context";
+import { getRequirementTypePath } from "../navigation";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
-const SKELETON_COLUMNS = ["select", "name", "template", "description", "fields", "requirements", "updated", "actions"];
+const SKELETON_COLUMNS = ["select", "name", "requirement_type", "description", "fields", "requirements", "updated", "actions"];
 const SKELETON_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5", "row-6"];
 const GRID_TEMPLATE =
   "grid-cols-[44px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(180px,1.3fr)_80px_96px_144px_56px]";
@@ -45,35 +46,35 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [librariesToDelete, setLibrariesToDelete] = useState<TRequirementLibrary[]>([]);
 
-  // ?template=<id>：从模板页「N 个标准库在用」跳进来时按模板收窄，可分享可移除
+  // ?requirement_type=<id>：从需求类型页「N 个标准库在用」跳进来时按类型收窄，可分享可移除
   const [searchParams, setSearchParams] = useSearchParams();
-  const templateFilter = searchParams.get("template");
+  const requirementTypeFilter = searchParams.get("requirement_type");
 
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const filteredLibraries = useMemo(
     () =>
       libraries.filter((library) => {
-        if (templateFilter && library.template_id !== templateFilter) return false;
+        if (requirementTypeFilter && library.requirement_type_id !== requirementTypeFilter) return false;
         if (!normalizedSearch) return true;
-        return [library.name, library.description, library.template_detail?.title ?? ""].some((value) =>
+        return [library.name, library.description, library.requirement_type_detail?.name ?? ""].some((value) =>
           value.toLocaleLowerCase().includes(normalizedSearch)
         );
       }),
-    [libraries, normalizedSearch, templateFilter]
+    [libraries, normalizedSearch, requirementTypeFilter]
   );
 
-  /** 被筛掉的模板名取自任一命中库的 template_detail，避免为了个标题再拉一次模板 */
-  const filteredTemplateName = useMemo(
+  /** 被筛掉的类型名取自任一命中库的 requirement_type_detail，避免为了个名字再拉一次类型 */
+  const filteredRequirementTypeName = useMemo(
     () =>
-      templateFilter
-        ? (libraries.find((library) => library.template_id === templateFilter)?.template_detail?.title ?? null)
+      requirementTypeFilter
+        ? (libraries.find((library) => library.requirement_type_id === requirementTypeFilter)?.requirement_type_detail?.name ?? null)
         : null,
-    [libraries, templateFilter]
+    [libraries, requirementTypeFilter]
   );
 
-  const clearTemplateFilter = () => {
+  const clearRequirementTypeFilter = () => {
     const next = new URLSearchParams(searchParams);
-    next.delete("template");
+    next.delete("requirement_type");
     setSearchParams(next, { replace: true });
   };
   const totalPages = Math.max(1, Math.ceil(filteredLibraries.length / perPage));
@@ -88,7 +89,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
 
   useEffect(() => {
     setPage(1);
-  }, [normalizedSearch, perPage, templateFilter]);
+  }, [normalizedSearch, perPage, requirementTypeFilter]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
@@ -120,7 +121,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
 
   const resetView = () => {
     clearSearch();
-    clearTemplateFilter();
+    clearRequirementTypeFilter();
     setPage(1);
   };
 
@@ -160,7 +161,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
   };
 
   const renderEmptyState = () => {
-    const hasFilters = Boolean(normalizedSearch || templateFilter);
+    const hasFilters = Boolean(normalizedSearch || requirementTypeFilter);
     return (
       <div className="flex h-full min-h-80 items-center justify-center p-6">
         <div className="max-w-sm text-center">
@@ -265,16 +266,16 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
         }
       />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        {templateFilter && (
+        {requirementTypeFilter && (
           <div className="flex shrink-0 items-center gap-2 border-b border-subtle bg-layer-1 px-3 py-2">
             <span className="text-11 text-tertiary">{t("requirement_libraries.list.filtered_by")}</span>
             <span className="inline-flex items-center gap-1.5 rounded border border-accent-primary/25 bg-accent-primary/[0.06] px-2 py-0.5 text-11 text-accent-primary">
-              {filteredTemplateName ?? t("requirement_libraries.list.template_filter_fallback")}
+              {filteredRequirementTypeName ?? t("requirement_libraries.list.requirement_type_filter_fallback")}
               <button
                 type="button"
                 className="grid place-items-center hover:text-primary"
-                onClick={clearTemplateFilter}
-                aria-label={t("requirement_libraries.list.clear_template_filter")}
+                onClick={clearRequirementTypeFilter}
+                aria-label={t("requirement_libraries.list.clear_requirement_type_filter")}
               >
                 <CloseIcon className="h-2.5 w-2.5" />
               </button>
@@ -327,7 +328,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                     </th>
                     {/* 描述原来没设宽度，table-fixed 下会吃掉全部余量；改成和名称等宽 */}
                     <th className="w-[22%] px-3 py-2.5">{t("requirement_libraries.fields.name")}</th>
-                    <th className="w-[15%] px-3 py-2.5">{t("requirement_libraries.fields.template")}</th>
+                    <th className="w-[15%] px-3 py-2.5">{t("requirement_libraries.fields.requirement_type")}</th>
                     <th className="w-[22%] px-3 py-2.5">{t("requirement_libraries.fields.description")}</th>
                     <th className="w-20 px-3 py-2.5">{t("requirement_libraries.fields.field_count")}</th>
                     <th className="w-24 px-3 py-2.5">{t("requirement_libraries.fields.item_count")}</th>
@@ -370,10 +371,10 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                         </td>
                         <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
                           <Link
-                            to={`/${workspaceSlug}/templates/requirements/${library.template_id}`}
+                            to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                             className="inline-block max-w-full truncate rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
                           >
-                            {library.template_detail?.title}
+                            {library.requirement_type_detail?.name}
                           </Link>
                         </td>
                         <td className="px-3 py-2.5 align-middle">

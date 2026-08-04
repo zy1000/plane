@@ -41,17 +41,17 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   const {
     changeType,
     changedColumnsOnly,
-    requestedTemplateId,
+    requestedRequirementTypeId,
     setChangeType,
     setChangedColumnsOnly,
-    setTemplateId,
+    setRequirementTypeId,
   } = useChangeItemFilters();
   const store = useRequirementVersions({
     workspaceSlug,
     requirementId: requirement.id,
     currentVersion: requirement.current_version,
     changeType,
-    templateId: requestedTemplateId,
+    requirementTypeId: requestedRequirementTypeId,
     onRequirementUpdate,
   });
   const [pendingRollback, setPendingRollback] = useState<number | null>(null);
@@ -73,27 +73,27 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   const snapshotFields = store.versionDetail?.fields_snapshot ?? [];
   const snapshotFieldCount = snapshotFields.reduce((count, field) => count + 1 + field.children.length, 0);
   const comparison = store.comparisonPage;
-  // 两种模式的模板清单来源不同，但共用 URL 上的同一个 tpl：快照看的是「这版有哪些模板」，
-  // 对比看的是「这次差异涉及哪些模板」
-  const templateStats = isComparing
-    ? (comparison?.template_stats ?? [])
-    : (store.versionDetail?.template_stats ?? []);
-  const activeTemplateId =
-    templateStats.length > 1
-      ? (templateStats.find((item) => item.id === requestedTemplateId)?.id ?? templateStats[0].id)
+  // 两种模式的类型清单来源不同，但共用 URL 上的同一个 tpl：快照看的是「这版有哪些需求类型」，
+  // 对比看的是「这次差异涉及哪些需求类型」
+  const requirementTypeStats = isComparing
+    ? (comparison?.requirement_type_stats ?? [])
+    : (store.versionDetail?.requirement_type_stats ?? []);
+  const activeRequirementTypeId =
+    requirementTypeStats.length > 1
+      ? (requirementTypeStats.find((item) => item.id === requestedRequirementTypeId)?.id ?? requirementTypeStats[0].id)
       : undefined;
-  const isTemplateStatsReady = isComparing ? Boolean(comparison) : Boolean(store.versionDetail);
-  const comparisonFields = activeTemplateId
-    ? (comparison?.to_fields_snapshot ?? []).filter((field) => field.template_id === activeTemplateId)
+  const isRequirementTypeStatsReady = isComparing ? Boolean(comparison) : Boolean(store.versionDetail);
+  const comparisonFields = activeRequirementTypeId
+    ? (comparison?.to_fields_snapshot ?? []).filter((field) => field.requirement_type_id === activeRequirementTypeId)
     : (comparison?.to_fields_snapshot ?? []);
 
-  // 明细分页在服务端按 template_id 过滤，URL 上的值必须和这里收敛出的一致
+  // 明细分页在服务端按 requirement_type_id 过滤，URL 上的值必须和这里收敛出的一致
   useEffect(() => {
-    if (!isTemplateStatsReady) return;
-    if (activeTemplateId) {
-      if (activeTemplateId !== requestedTemplateId) setTemplateId(activeTemplateId);
-    } else if (requestedTemplateId) setTemplateId(undefined);
-  }, [activeTemplateId, isTemplateStatsReady, requestedTemplateId, setTemplateId]);
+    if (!isRequirementTypeStatsReady) return;
+    if (activeRequirementTypeId) {
+      if (activeRequirementTypeId !== requestedRequirementTypeId) setRequirementTypeId(activeRequirementTypeId);
+    } else if (requestedRequirementTypeId) setRequirementTypeId(undefined);
+  }, [activeRequirementTypeId, isRequirementTypeStatsReady, requestedRequirementTypeId, setRequirementTypeId]);
 
   const comparisonSectionCounts: Record<TComparisonSection, number> = {
     basic: comparison?.requirement_items.length ?? 0,
@@ -277,7 +277,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                 disabled={!store.versionsPage.prev_page_results}
                 onClick={() => store.setCursor(store.versionsPage.prev_cursor)}
                 className="grid size-7 place-items-center rounded-md border border-subtle text-secondary transition-colors hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={t("workspace_templates.requirements.list.previous_page")}
+                aria-label={t("requirement_grid.pagination.previous_page")}
               >
                 <ChevronLeft className="size-3.5" />
               </button>
@@ -286,7 +286,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                 disabled={!store.versionsPage.next_page_results}
                 onClick={() => store.setCursor(store.versionsPage.next_cursor)}
                 className="grid size-7 place-items-center rounded-md border border-subtle text-secondary transition-colors hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={t("workspace_templates.requirements.list.next_page")}
+                aria-label={t("requirement_grid.pagination.next_page")}
               >
                 <ChevronRight className="size-3.5" />
               </button>
@@ -516,16 +516,16 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                   </div>
                 ) : activeComparisonSection === "schema" ? (
                   <div className="p-4 md:p-6">
-                    <SchemaDiffList items={comparison.schema_items} templates={templateStats} />
+                    <SchemaDiffList items={comparison.schema_items} requirementTypes={requirementTypeStats} />
                   </div>
                 ) : (
                   <DetailDiffGrid
                     workspaceSlug={workspaceSlug}
                     fields={comparisonFields}
                     changedFieldIds={comparison.changed_field_ids}
-                    templates={templateStats}
-                    activeTemplateId={activeTemplateId}
-                    onTemplateChange={setTemplateId}
+                    requirementTypes={requirementTypeStats}
+                    activeRequirementTypeId={activeRequirementTypeId}
+                    onTemplateChange={setRequirementTypeId}
                     items={comparison.results}
                     totalCount={comparison.total_count ?? 0}
                     isLoading={store.isComparisonLoading}
@@ -584,8 +584,8 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                 prevCursor={store.detailsPage.prev_cursor}
                 nextPageResults={store.detailsPage.next_page_results}
                 prevPageResults={store.detailsPage.prev_page_results}
-                activeTemplateId={activeTemplateId}
-                onTemplateChange={setTemplateId}
+                activeRequirementTypeId={activeRequirementTypeId}
+                onTemplateChange={setRequirementTypeId}
                 onPerPageChange={store.setDetailsPerPage}
                 onCursorChange={store.setDetailsCursor}
               />

@@ -8,7 +8,7 @@ import type {
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL, sanitizeHTML } from "@plane/utils";
-import { ChangeTemplateTabs } from "./change-template-tabs";
+import { ChangeRequirementTypeTabs } from "./change-requirement-type-tabs";
 import { PILL_BASE } from "./styles";
 import { VersionSnapshotPreview } from "./version-snapshot-preview";
 
@@ -25,9 +25,9 @@ type TProps = {
   prevCursor?: string;
   nextPageResults?: boolean;
   prevPageResults?: boolean;
-  /** 多模板快照才有值：明细区按模板分视图，字段区按模板分节 */
-  activeTemplateId?: string;
-  onTemplateChange: (templateId: string) => void;
+  /** 多类型快照才有值：明细区按类型分视图，字段区按类型分节 */
+  activeRequirementTypeId?: string;
+  onTemplateChange: (requirementTypeId: string) => void;
   onPerPageChange: (value: number) => void;
   onCursorChange: (value: string | undefined) => void;
 };
@@ -136,32 +136,32 @@ export function VersionSnapshotOverview(props: TProps) {
     prevCursor,
     nextPageResults,
     prevPageResults,
-    activeTemplateId,
+    activeRequirementTypeId,
     onTemplateChange,
     onPerPageChange,
     onCursorChange,
   } = props;
   const { t } = useTranslation();
   const snapshot = versionDetail.requirement_snapshot as TRequirementSnapshot;
-  const templateStats = versionDetail.template_stats ?? [];
-  const isMultiTemplate = templateStats.length > 1;
-  const templateTabs = templateStats.map((template) => ({
-    id: template.id,
-    title: template.title,
-    total: template.detail_count,
+  const requirementTypeStats = versionDetail.requirement_type_stats ?? [];
+  const isMultiRequirementType = requirementTypeStats.length > 1;
+  const requirementTypeTabs = requirementTypeStats.map((requirementType) => ({
+    id: requirementType.id,
+    name: requirementType.name,
+    total: requirementType.detail_count,
   }));
   const fieldRows = flattenFields(versionDetail.fields_snapshot);
-  /** 明细表头只取当前模板的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
-  const templateFields = activeTemplateId
-    ? versionDetail.fields_snapshot.filter((field) => field.template_id === activeTemplateId)
+  /** 明细表头只取当前类型的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
+  const requirementTypeFields = activeRequirementTypeId
+    ? versionDetail.fields_snapshot.filter((field) => field.requirement_type_id === activeRequirementTypeId)
     : versionDetail.fields_snapshot;
-  // 字段区按模板分节：各模板都有内置的标题/描述，平铺一张表根本分不清归属
-  const fieldGroups = isMultiTemplate
-    ? templateStats
-        .map((template) => ({
-          key: template.id,
-          title: template.title,
-          rows: fieldRows.filter((row) => (row.field.template_id ?? "") === template.id),
+  // 字段区按类型分节：各需求类型都有内置的标题/描述，平铺一张表根本分不清归属
+  const fieldGroups = isMultiRequirementType
+    ? requirementTypeStats
+        .map((requirementType) => ({
+          key: requirementType.id,
+          title: requirementType.name,
+          rows: fieldRows.filter((row) => (row.field.requirement_type_id ?? "") === requirementType.id),
         }))
         .filter((group) => group.rows.length > 0)
     : null;
@@ -220,14 +220,14 @@ export function VersionSnapshotOverview(props: TProps) {
                   </div>
                   {!field.is_active && (
                     <span className={cn(PILL_BASE, "shrink-0 bg-layer-2 text-tertiary")}>
-                      {t("workspace_templates.requirements.inactive")}
+                      {t("requirement_fields.inactive")}
                     </span>
                   )}
                 </div>
               </td>
               <td className="px-4 py-2.5 text-12">
                 <span className={cn(PILL_BASE, "rounded-md bg-layer-2 text-secondary")}>
-                  {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
+                  {t(`requirement_fields.field_types.${field.field_type}`)}
                 </span>
               </td>
               <td className="px-4 py-2.5 text-12 text-secondary">
@@ -360,7 +360,7 @@ export function VersionSnapshotOverview(props: TProps) {
                 <div key={group.key || "unassigned"} className="min-w-0">
                   <div className="flex items-baseline gap-2 bg-layer-1/40 px-4 py-2">
                     <h4 className="text-12 font-semibold text-primary">
-                      {group.title || t("workspace_products.requirements.change.templates.untitled")}
+                      {group.title || t("workspace_products.requirements.change.requirement_types.untitled")}
                     </h4>
                     <span className="text-11 text-tertiary tabular-nums">
                       {t("workspace_products.requirements.version.item_count", { count: group.rows.length })}
@@ -375,7 +375,7 @@ export function VersionSnapshotOverview(props: TProps) {
           )
         ) : (
           <p className="px-4 py-8 text-center text-12 text-tertiary">
-            {t("workspace_templates.requirements.fields.empty")}
+            {t("requirement_fields.fields.empty")}
           </p>
         )}
       </section>
@@ -389,18 +389,18 @@ export function VersionSnapshotOverview(props: TProps) {
             count: versionDetail.detail_count,
           })}
         />
-        {isMultiTemplate && activeTemplateId && (
+        {isMultiRequirementType && activeRequirementTypeId && (
           <div className="border-b border-subtle bg-layer-1/40 px-3 py-2">
-            <ChangeTemplateTabs
-              templates={templateTabs}
-              activeTemplateId={activeTemplateId}
+            <ChangeRequirementTypeTabs
+              requirementTypes={requirementTypeTabs}
+              activeRequirementTypeId={activeRequirementTypeId}
               onChange={onTemplateChange}
             />
           </div>
         )}
         <VersionSnapshotPreview
           workspaceSlug={workspaceSlug}
-          fields={templateFields}
+          fields={requirementTypeFields}
           rows={rows}
           totalCount={totalCount}
           isLoading={isLoading}

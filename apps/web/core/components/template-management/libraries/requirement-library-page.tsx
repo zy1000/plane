@@ -10,14 +10,15 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { RequirementDetailGrid } from "@/components/template-management/requirements/requirement-detail-grid";
+import { RequirementDetailGrid } from "@/components/requirements/requirement-detail-grid";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementLibrariesContext } from "./context";
+import { getRequirementTypePath } from "../navigation";
 
 /**
  * 标准库的条目页。
  *
- * 库直接持有条目，字段来自库所选模板（后端实时解析），条目读写走的接口与产品需求
+ * 库直接持有条目，字段来自库所选类型（后端实时解析），条目读写走的接口与产品需求
  * 的明细完全同构，所以这里直接复用 RequirementDetailGrid，不做任何分支。
  */
 export const RequirementLibraryPage = observer(function RequirementLibraryPage() {
@@ -53,12 +54,12 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate text-13 font-medium text-primary">{pageTitle}</span>
                       {library && (
-                        <Tooltip tooltipContent={t("requirement_libraries.detail.template_tooltip")} position="bottom">
+                        <Tooltip tooltipContent={t("requirement_libraries.detail.requirement_type_tooltip")} position="bottom">
                           <Link
-                            to={`/${workspaceSlug}/templates/requirements/${library.template_id}`}
+                            to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                             className="max-w-48 shrink-0 truncate rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
                           >
-                            {library.template_detail?.title}
+                            {library.requirement_type_detail?.name}
                           </Link>
                         </Tooltip>
                       )}
@@ -100,10 +101,10 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 <span>
                   {t("requirement_libraries.items.fields_readonly_prefix")}
                   <Link
-                    to={`/${workspaceSlug}/templates/requirements/${library.template_id}`}
+                    to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                     className="font-medium text-accent-primary hover:underline"
                   >
-                    {library.template_detail?.title}
+                    {library.requirement_type_detail?.name}
                   </Link>
                   {t("requirement_libraries.items.fields_readonly_suffix")}
                 </span>
@@ -113,7 +114,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               workspaceSlug={workspaceSlug}
               entityId={libraryId ?? ""}
               expectedUpdatedAt={store.configuration?.expected_updated_at}
-              createTemplateId={store.templateId ?? undefined}
+              createRequirementTypeId={store.requirementTypeId ?? undefined}
               fields={store.configuration?.fields ?? []}
               details={store.detailsPage.results}
               totalCount={store.detailsPage.total_count ?? 0}

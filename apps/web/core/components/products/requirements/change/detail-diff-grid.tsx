@@ -27,8 +27,8 @@ import {
   getFormRows,
   LeafValue,
   RequirementGridHeader,
-} from "@/components/template-management/requirements/requirement-grid-shared";
-import { ChangeTemplateTabs, type TChangeTemplateTab } from "./change-template-tabs";
+} from "@/components/requirements/requirement-grid-shared";
+import { ChangeRequirementTypeTabs, type TChangeRequirementTypeTab } from "./change-requirement-type-tabs";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 const PER_PAGE_OPTIONS = [20, 50, 100];
@@ -182,10 +182,10 @@ type TProps = {
   prevPageResults?: boolean;
   changeType: TRequirementChangeType | undefined;
   changedColumnsOnly: boolean;
-  /** 多模板需求才传：给满 2 个才出切换器，fields 已由调用方按模板裁好 */
-  templates?: TChangeTemplateTab[];
-  activeTemplateId?: string;
-  onTemplateChange?: (templateId: string) => void;
+  /** 多类型需求才传：给满 2 个才出切换器，fields 已由调用方按类型裁好 */
+  requirementTypes?: TChangeRequirementTypeTab[];
+  activeRequirementTypeId?: string;
+  onTemplateChange?: (requirementTypeId: string) => void;
   /** 仅变更详情页使用舒适密度；版本历史保持默认密度。 */
   density?: "default" | "comfortable";
   onChangeTypeChange: (value: TRequirementChangeType | undefined) => void;
@@ -210,8 +210,8 @@ export function DetailDiffGrid(props: TProps) {
     prevPageResults,
     changeType,
     changedColumnsOnly,
-    templates,
-    activeTemplateId,
+    requirementTypes,
+    activeRequirementTypeId,
     onTemplateChange,
     density = "default",
     onChangeTypeChange,
@@ -228,7 +228,7 @@ export function DetailDiffGrid(props: TProps) {
     const active = fields.filter((field) => field.is_active);
     if (!changedColumnsOnly || !changedFieldIds.length) return active;
     const changed = active.filter((field) => changedFieldIds.includes(field.id));
-    // changedFieldIds 是跨模板的全集：当前模板一列都没命中时退回全列，别渲染出空表
+    // changedFieldIds 是跨类型的全集：当前需求类型一列都没命中时退回全列，别渲染出空表
     return changed.length ? changed : active;
   }, [changedColumnsOnly, changedFieldIds, fields]);
   const formFields = useMemo(() => rootFields.filter((field) => field.field_type === "form"), [rootFields]);
@@ -309,7 +309,7 @@ export function DetailDiffGrid(props: TProps) {
                         groupCellClass
                       )}
                     >
-                      {isFirstRow ? t("workspace_templates.requirements.fields.no_children") : null}
+                      {isFirstRow ? t("requirement_fields.fields.no_children") : null}
                     </td>,
                   ];
                 }
@@ -397,11 +397,11 @@ export function DetailDiffGrid(props: TProps) {
       </h2>
 
       <div className={cn("border-b border-subtle bg-layer-1/40 px-3 py-2", isComfortable && "px-4")}>
-        {templates && templates.length > 1 && activeTemplateId && onTemplateChange && (
+        {requirementTypes && requirementTypes.length > 1 && activeRequirementTypeId && onTemplateChange && (
           <div className="mb-2 border-b border-subtle pb-2">
-            <ChangeTemplateTabs
-              templates={templates}
-              activeTemplateId={activeTemplateId}
+            <ChangeRequirementTypeTabs
+              requirementTypes={requirementTypes}
+              activeRequirementTypeId={activeRequirementTypeId}
               onChange={onTemplateChange}
             />
           </div>
@@ -508,7 +508,7 @@ export function DetailDiffGrid(props: TProps) {
             disabled={!prevPageResults}
             onClick={() => onCursorChange(prevCursor)}
             className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
-            aria-label={t("workspace_templates.requirements.list.previous_page")}
+            aria-label={t("requirement_grid.pagination.previous_page")}
           >
             <ChevronLeft className="size-3.5" />
           </button>
@@ -518,7 +518,7 @@ export function DetailDiffGrid(props: TProps) {
             disabled={!nextPageResults}
             onClick={() => onCursorChange(nextCursor)}
             className="grid size-7 place-items-center rounded-md border border-subtle transition-colors hover:bg-layer-transparent-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong disabled:opacity-40"
-            aria-label={t("workspace_templates.requirements.list.next_page")}
+            aria-label={t("requirement_grid.pagination.next_page")}
           >
             <ChevronRight className="size-3.5" />
           </button>

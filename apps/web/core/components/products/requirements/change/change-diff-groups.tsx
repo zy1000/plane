@@ -9,7 +9,7 @@ import type {
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
 import { cn, sanitizeHTML } from "@plane/utils";
-import type { TChangeTemplateTab } from "./change-template-tabs";
+import type { TChangeRequirementTypeTab } from "./change-requirement-type-tabs";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 const SCHEMA_COMPARE_KEYS = [
@@ -47,7 +47,7 @@ function useMetaValueFormatter(members: IUserLite[]) {
     }
 
     if (fieldKey === "approval_type" && typeof value === "string") {
-      return t(`workspace_templates.requirements.approval.${value}`);
+      return t(`workspace_products.requirements.approval.${value}`);
     }
 
     if (typeof value === "boolean") {
@@ -166,8 +166,8 @@ const getConfigSummary = (
     parts.push(
       t(
         config.selection_mode === "multiple"
-          ? "workspace_templates.requirements.editor.builder.multiple_select"
-          : "workspace_templates.requirements.editor.builder.single_select"
+          ? "requirement_fields.builder.multiple_select"
+          : "requirement_fields.builder.single_select"
       )
     );
   }
@@ -179,10 +179,10 @@ const getConfigSummary = (
     );
   }
   if (typeof config.placeholder === "string" && config.placeholder.trim()) {
-    parts.push(`${t("workspace_templates.requirements.fields.placeholder")}: ${config.placeholder.trim()}`);
+    parts.push(`${t("requirement_fields.fields.placeholder")}: ${config.placeholder.trim()}`);
   }
   if (typeof config.description === "string" && config.description.trim()) {
-    parts.push(`${t("workspace_templates.requirements.fields.description")}: ${config.description.trim()}`);
+    parts.push(`${t("workspace_templates.requirement_types.fields.description")}: ${config.description.trim()}`);
   }
   const extraConfig = Object.fromEntries(
     Object.entries(config).filter(
@@ -196,34 +196,34 @@ const getConfigSummary = (
 
 type TSchemaDiffListProps = {
   items: TRequirementChangeItem[];
-  /** 多模板需求才传：字段定义按模板分节，否则同名字段跨模板完全分不清归属 */
-  templates?: TChangeTemplateTab[];
+  /** 多类型需求才传：字段定义按类型分节，否则同名字段跨类型完全分不清归属 */
+  requirementTypes?: TChangeRequirementTypeTab[];
 };
 
-/** 字段定义：按模板分节、节内按字段聚合属性差异，避免重复卡片抢占注意力。 */
-export function SchemaDiffList({ items, templates }: TSchemaDiffListProps) {
+/** 字段定义：按类型分节、节内按字段聚合属性差异，避免重复卡片抢占注意力。 */
+export function SchemaDiffList({ items, requirementTypes }: TSchemaDiffListProps) {
   const { t } = useTranslation();
 
   const groups = useMemo(() => {
-    if (!templates || templates.length <= 1) return null;
-    const byTemplate = new Map<string, TRequirementChangeItem[]>();
+    if (!requirementTypes || requirementTypes.length <= 1) return null;
+    const byRequirementType = new Map<string, TRequirementChangeItem[]>();
     items.forEach((item) => {
       const snapshot = (item.proposed_snapshot ?? item.before_snapshot) as TRequirementSchemaChangeSnapshot | null;
-      const key = snapshot?.template_id ?? "";
-      byTemplate.set(key, [...(byTemplate.get(key) ?? []), item]);
+      const key = snapshot?.requirement_type_id ?? "";
+      byRequirementType.set(key, [...(byRequirementType.get(key) ?? []), item]);
     });
-    // 顺序跟随明细区的模板切换器，两处保持一致
-    const ordered = templates
-      .map((template) => ({ key: template.id, title: template.title, items: byTemplate.get(template.id) ?? [] }))
+    // 顺序跟随明细区的类型切换器，两处保持一致
+    const ordered = requirementTypes
+      .map((requirementType) => ({ key: requirementType.id, title: requirementType.name, items: byRequirementType.get(requirementType.id) ?? [] }))
       .filter((group) => group.items.length > 0);
-    const known = new Set(templates.map((template) => template.id));
-    // 快照里没有模板归属（历史数据）或模板已被删除时兜底，否则这些变更项会凭空消失
-    const orphans = Array.from(byTemplate.entries())
+    const known = new Set(requirementTypes.map((requirementType) => requirementType.id));
+    // 快照里没有类型归属（历史数据）或需求类型已被删除时兜底，否则这些变更项会凭空消失
+    const orphans = Array.from(byRequirementType.entries())
       .filter(([key]) => !known.has(key))
       .flatMap(([, list]) => list);
     if (orphans.length) ordered.push({ key: "", title: "", items: orphans });
     return ordered;
-  }, [items, templates]);
+  }, [items, requirementTypes]);
 
   const formatValue = (
     key: TSchemaCompareKey,
@@ -232,7 +232,7 @@ export function SchemaDiffList({ items, templates }: TSchemaDiffListProps) {
   ): string => {
     if (isEmptyValue(value)) return t("workspace_products.requirements.change.empty_value");
     if (key === "field_type" && typeof value === "string") {
-      return t(`workspace_templates.requirements.field_types.${value}`);
+      return t(`requirement_fields.field_types.${value}`);
     }
     if (key === "position" && typeof value === "number") {
       return t("workspace_products.requirements.change.field_position", { position: value });
@@ -314,7 +314,7 @@ export function SchemaDiffList({ items, templates }: TSchemaDiffListProps) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-13 font-semibold text-primary">{field.name}</span>
                     <span className="rounded bg-layer-2 px-1.5 py-0.5 text-11 text-secondary">
-                      {t(`workspace_templates.requirements.field_types.${field.field_type}`)}
+                      {t(`requirement_fields.field_types.${field.field_type}`)}
                     </span>
                   </div>
                   <p className="mt-1 text-12 text-tertiary">
@@ -387,7 +387,7 @@ export function SchemaDiffList({ items, templates }: TSchemaDiffListProps) {
             <div key={group.key || "unassigned"} className="min-w-0">
               <div className="mb-2 flex items-baseline gap-2">
                 <h3 className="text-13 font-semibold text-primary">
-                  {group.title || t("workspace_products.requirements.change.templates.untitled")}
+                  {group.title || t("workspace_products.requirements.change.requirement_types.untitled")}
                 </h3>
                 <span className="text-12 text-tertiary tabular-nums">
                   {t("workspace_products.requirements.change.schema_review.group_count", {

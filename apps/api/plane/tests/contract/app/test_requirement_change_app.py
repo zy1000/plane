@@ -27,6 +27,7 @@ from plane.db.models import (
     RequirementField,
     RequirementFieldType,
     RequirementStatus,
+    RequirementType,
     RequirementVersion,
     WorkspaceMember,
 )
@@ -77,44 +78,43 @@ class TestRequirementChangeApp:
             )
         return requirement
 
-    def create_template(self, title=None):
-        """字段只归工作区模板所有，产品需求的列由明细行引用到的模板决定。"""
-        return Requirement.objects.create(
+    def create_requirement_type(self, name=None):
+        """字段只归需求类型所有，产品需求的列由明细行引用到的类型决定。"""
+        return RequirementType.objects.create(
             workspace=self.workspace,
-            is_template=True,
-            title=title or f"Template {uuid4()}",
+            name=name or f"Type {uuid4()}",
             owner=self.owner,
         )
 
-    def add_field(self, template, name="Summary", **kwargs):
+    def add_field(self, requirement_type, name="Summary", **kwargs):
         return RequirementField.objects.create(
-            requirement=template,
+            requirement_type=requirement_type,
             name=name,
             field_type=kwargs.pop("field_type", RequirementFieldType.TEXT),
             **kwargs,
         )
 
-    def create_detail(self, requirement, *, template, data, **kwargs):
+    def create_detail(self, requirement, *, requirement_type, data, **kwargs):
         return RequirementDetail.objects.create(
             requirement=requirement,
-            template=template,
+            requirement_type=requirement_type,
             data=data,
             **kwargs,
         )
 
     def seed_content(self, requirement, value="Seed", **kwargs):
-        """给需求准备一份可提交的内容：一个模板 + 一行引用它的明细。
+        """给需求准备一份可提交的内容：一个需求类型 + 一行引用它的明细。
 
-        返回 (template, field, detail) —— 需求本身没有字段，列全部来自 template。
+        返回 (requirement_type, field, detail) —— 需求本身没有字段，列全部来自类型。
         """
-        template = self.create_template()
-        field = self.add_field(template, **kwargs)
+        requirement_type = self.create_requirement_type()
+        field = self.add_field(requirement_type, **kwargs)
         detail = self.create_detail(
             requirement,
-            template=template,
+            requirement_type=requirement_type,
             data={str(field.id): value},
         )
-        return template, field, detail
+        return requirement_type, field, detail
 
     # --- URL helpers -----------------------------------------------------
 
@@ -144,6 +144,9 @@ class TestRequirementChangeApp:
 
     def configuration_url(self, requirement):
         return self.url("requirement-configuration", pk=requirement.id)
+
+    def type_configuration_url(self, requirement_type):
+        return self.url("requirement-type-configuration", pk=requirement_type.id)
 
     # --- flows -----------------------------------------------------------
 
@@ -248,7 +251,7 @@ class TestRequirementChangeApp:
     ):
         approver = self.add_member()
         requirement = self.create_requirement(approver)
-        template, field, _ = self.seed_content(requirement, "Pending")
+        requirement_type, field, _ = self.seed_content(requirement, "Pending")
         api_client.force_authenticate(user=self.owner)
 
         change_request_id = self.submit(api_client, requirement).data["id"]
@@ -271,7 +274,7 @@ class TestRequirementChangeApp:
             api_client.post(
                 self.details_url(requirement),
                 {
-                    "template_id": str(template.id),
+                    "requirement_type_id": str(requirement_type.id),
                     "data": {str(field.id): "Second"},
                 },
                 format="json",
@@ -725,21 +728,21 @@ class TestRequirementChangeApp:
         assert [item["before_snapshot"]["field"] for item in meta_items] == ["title"]
         assert meta_items[0]["proposed_snapshot"]["value"] == "新的标题"
 
-    def test_template_field_change_reaches_the_published_requirement_as_schema_items(
+    def test_requirement_type_field_change_reaches_the_published_requirement_as_schema_items(
         self, api_client
     ):
-        """模板改字段是字段变更抵达已发布需求的唯一通道。
+        """需求类型改字段是字段变更抵达已发布需求的唯一通道。
 
         变更单的「变更前」取草稿里冻结的基线（发布时的字段快照），「变更后」实时
-        取自明细行引用的模板，所以改模板会在下一次变更单里显示成 schema 变更项。
+        取自明细行引用的类型，所以改类型会在下一次变更单里显示成 schema 变更项。
         """
         approver = self.add_member()
         requirement = self.create_requirement(approver)
-        template, field, _ = self.seed_content(requirement)
+        requirement_type, field, _ = self.seed_content(requirement)
         self.publish(api_client, requirement, approver)
 
         api_client.post(self.working_copy_url(requirement))
-        # 字段只能在模板上改 —— 产品需求的配置接口不接受 fields
+        # 字段只能在需求类型上改 —— 产品需求的配置接口不接受 fields
         rejected_response = api_client.put(
             self.configuration_url(requirement),
             {
@@ -754,17 +757,16 @@ class TestRequirementChangeApp:
         assert rejected_response.status_code == status.HTTP_400_BAD_REQUEST
         assert "fields" in rejected_response.data
 
-        template_configuration = api_client.get(
-            self.configuration_url(template)
+        type_configuration = api_client.get(
+            self.type_configuration_url(requirement_type)
         ).data
         client_id = f"new-field-{uuid4()}"
         save_response = api_client.put(
-            self.configuration_url(template),
+            self.type_configuration_url(requirement_type),
             {
-                "expected_updated_at": template_configuration["requirement"][
+                "expected_updated_at": type_configuration["requirement_type"][
                     "updated_at"
                 ],
-                "requirement": {},
                 "fields": [
                     {
                         "id": str(field.id),
@@ -796,8 +798,6 @@ class TestRequirementChangeApp:
             "重命名的字段",
             "新增字段",
         ]
-        # 字段永远归模板，需求自己一个都没有
-        assert not requirement.fields.exists()
         # 已发布内容仍按发版时冻结的字段快照渲染
         assert [
             item["name"]
@@ -842,23 +842,24 @@ class TestRequirementChangeApp:
     def test_field_reordering_is_a_submittable_schema_change(self, api_client):
         approver = self.add_member()
         requirement = self.create_requirement(approver)
-        template = self.create_template()
-        first_field = self.add_field(template, name="First", sort_order=1000)
-        second_field = self.add_field(template, name="Second", sort_order=2000)
+        requirement_type = self.create_requirement_type()
+        first_field = self.add_field(requirement_type, name="First", sort_order=1000)
+        second_field = self.add_field(requirement_type, name="Second", sort_order=2000)
         self.create_detail(
             requirement,
-            template=template,
+            requirement_type=requirement_type,
             data={str(first_field.id): "值"},
         )
         self.publish(api_client, requirement, approver)
 
         api_client.post(self.working_copy_url(requirement))
-        configuration = api_client.get(self.configuration_url(template)).data
+        configuration = api_client.get(self.type_configuration_url(requirement_type)).data
         save_response = api_client.put(
-            self.configuration_url(template),
+            self.type_configuration_url(requirement_type),
             {
-                "expected_updated_at": configuration["requirement"]["updated_at"],
-                "requirement": {},
+                "expected_updated_at": configuration["requirement_type"][
+                    "updated_at"
+                ],
                 "fields": list(reversed(configuration["fields"])),
             },
             format="json",
@@ -1034,17 +1035,17 @@ class TestRequirementChangeApp:
     ):
         approver = self.add_member()
         requirement = self.create_requirement(approver)
-        template = self.create_template()
-        field = self.add_field(template, sort_order=1000)
+        requirement_type = self.create_requirement_type()
+        field = self.add_field(requirement_type, sort_order=1000)
         first_detail = self.create_detail(
             requirement,
-            template=template,
+            requirement_type=requirement_type,
             data={str(field.id): "First"},
             sort_order=1000,
         )
         second_detail = self.create_detail(
             requirement,
-            template=template,
+            requirement_type=requirement_type,
             data={str(field.id): "Second"},
             sort_order=2000,
         )
@@ -1064,14 +1065,15 @@ class TestRequirementChangeApp:
             == status.HTTP_200_OK
         )
 
-        # 字段改动走模板；产品需求的下一次变更单会把它显示成 schema 变更
-        configuration = api_client.get(self.configuration_url(template)).data
+        # 字段改动走需求类型；产品需求的下一次变更单会把它显示成 schema 变更
+        configuration = api_client.get(self.type_configuration_url(requirement_type)).data
         client_id = f"compare-field-{uuid4()}"
         configuration_response = api_client.put(
-            self.configuration_url(template),
+            self.type_configuration_url(requirement_type),
             {
-                "expected_updated_at": configuration["requirement"]["updated_at"],
-                "requirement": {},
+                "expected_updated_at": configuration["requirement_type"][
+                    "updated_at"
+                ],
                 "fields": [
                     {
                         **configuration["fields"][0],
@@ -1125,7 +1127,7 @@ class TestRequirementChangeApp:
         created_detail_response = api_client.post(
             self.details_url(requirement),
             {
-                "template_id": str(template.id),
+                "requirement_type_id": str(requirement_type.id),
                 "data": {
                     str(field.id): "Third",
                     added_field_id: "Created value",
@@ -1303,33 +1305,6 @@ class TestRequirementChangeApp:
         )
         assert (
             api_client.get(compare_url, {"to_version": 99}).status_code
-            == status.HTTP_404_NOT_FOUND
-        )
-
-    def test_templates_stay_out_of_the_approval_flow(self, api_client):
-        template = Requirement.objects.create(
-            workspace=self.workspace,
-            is_template=True,
-            title=f"Template {uuid4()}",
-            owner=self.owner,
-        )
-        api_client.force_authenticate(user=self.owner)
-
-        assert (
-            api_client.post(self.working_copy_url(template)).status_code
-            == status.HTTP_400_BAD_REQUEST
-        )
-        assert (
-            self.submit(api_client, template).status_code
-            == status.HTTP_400_BAD_REQUEST
-        )
-        # 模板只定义字段，不再持有明细
-        assert (
-            api_client.post(
-                self.details_url(template),
-                {"data": {}},
-                format="json",
-            ).status_code
             == status.HTTP_404_NOT_FOUND
         )
 

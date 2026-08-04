@@ -12,10 +12,10 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { RequirementDetailGrid } from "@/components/template-management/requirements/requirement-detail-grid";
+import { RequirementDetailGrid } from "@/components/requirements/requirement-detail-grid";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
-import { useRequirementDetails } from "@/hooks/store/use-requirement-template-details";
+import { useRequirementDetails } from "@/hooks/store/use-requirement-details";
 import { useUser } from "@/hooks/store/user";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
 import { RequirementStatusActions, RequirementStatusMeta } from "./change/requirement-status-actions";
@@ -34,7 +34,7 @@ import {
 } from "./requirement-data-views";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 import { RequirementSettingsPanel, type TRequirementSettingsDraft } from "./requirement-settings-panel";
-import { RequirementTemplatePickerModal } from "./template-picker-modal";
+import { RequirementTypePickerModal } from "./requirement-type-picker-modal";
 
 const TABS = ["data", "configuration", "changes", "versions"] as const;
 
@@ -110,12 +110,12 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     [settingsBaseline, settingsDraft]
   );
 
-  const templates = detailsStore.templates;
+  const requirementTypes = detailsStore.requirementTypes;
   const activeView = useMemo(
-    () => resolveRequirementDataView(templates, searchParams.get("view")),
-    [searchParams, templates]
+    () => resolveRequirementDataView(requirementTypes, searchParams.get("view")),
+    [searchParams, requirementTypes]
   );
-  const activeTemplate = activeView.kind === "template" ? templates.find((item) => item.id === activeView.templateId) : undefined;
+  const activeTemplate = activeView.kind === "requirementType" ? requirementTypes.find((item) => item.id === activeView.requirementTypeId) : undefined;
 
   useEffect(() => {
     if (!detailsStore.configuration) return;
@@ -125,14 +125,14 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
   }, [detailsStore.configuration]);
 
   /**
-   * 视图与明细过滤保持同步：单模板时也要把过滤设成那个模板，否则会拉到全部行。
+   * 视图与明细过滤保持同步：单类型时也要把过滤设成那个类型，否则会拉到全部行。
    * 依赖只取用到的两个值 —— detailsStore 每次渲染都是新对象，整个放进依赖会死循环。
    */
-  const { templateFilter, setTemplateFilter } = detailsStore;
+  const { requirementTypeFilter, setRequirementTypeFilter } = detailsStore;
   useEffect(() => {
-    const nextFilter = activeView.kind === "template" ? activeView.templateId : undefined;
-    if (templateFilter !== nextFilter) setTemplateFilter(nextFilter);
-  }, [activeView, setTemplateFilter, templateFilter]);
+    const nextFilter = activeView.kind === "requirementType" ? activeView.requirementTypeId : undefined;
+    if (requirementTypeFilter !== nextFilter) setRequirementTypeFilter(nextFilter);
+  }, [activeView, setRequirementTypeFilter, requirementTypeFilter]);
 
   const setTab = (tab: TRequirementDetailTab) => {
     if (isDataEditing || (activeTab === "configuration" && isDirty)) return;
@@ -172,7 +172,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     onSubmitted: () => setTab("changes"),
   });
 
-  /** 只保存基本信息与审批配置 —— 字段归模板所有，这里已经不再提交 fields。 */
+  /** 只保存基本信息与审批配置 —— 字段归类型所有，这里已经不再提交 fields。 */
   const saveConfiguration = async () => {
     if (!detailsStore.configuration || !requirement || !settingsDraft) return;
     if (!settingsDraft.title.trim()) {
@@ -381,10 +381,10 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
           )}
         </nav>
 
-        {activeTab === "data" && templates.length > 1 && (
+        {activeTab === "data" && requirementTypes.length > 1 && (
           <div className="flex shrink-0 items-center gap-2 border-b border-subtle px-4 py-1.5 md:px-6">
             <RequirementDataViewSwitcher
-              templates={templates}
+              requirementTypes={requirementTypes}
               activeKey={getViewKey(activeView)}
               disabled={isDataEditing}
               onChange={changeView}
@@ -439,7 +439,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </div>
           )
         ) : activeTab === "data" ? (
-          templates.length === 0 ? (
+          requirementTypes.length === 0 ? (
             <div className="grid flex-1 place-items-center p-6 text-center">
               <div className="max-w-md">
                 <p className="text-13 font-medium text-primary">
@@ -468,7 +468,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
           ) : activeView.kind === "default" ? (
             <RequirementDefaultViewGrid
               workspaceSlug={workspaceSlug}
-              templates={templates}
+              requirementTypes={requirementTypes}
               details={detailsStore.detailsPage.results}
               totalCount={detailsStore.detailsPage.total_count ?? 0}
               perPage={detailsStore.perPage}
@@ -485,22 +485,22 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               onCursorChange={detailsStore.setCursor}
               onPerPageChange={detailsStore.setPerPage}
               onDelete={detailsStore.deleteDetails}
-              onDuplicate={({ templateId, data, afterId }) =>
-                detailsStore.createDetail(data, templateId, { after_id: afterId })
+              onDuplicate={({ requirementTypeId, data, afterId }) =>
+                detailsStore.createDetail(data, requirementTypeId, { after_id: afterId })
               }
-              onOpenTemplateView={(templateId) => changeView({ kind: "template", templateId })}
+              onOpenRequirementTypeView={(requirementTypeId) => changeView({ kind: "requirementType", requirementTypeId })}
               toolbarPortalEl={dataToolbarHost}
             />
           ) : (
             <RequirementDetailGrid
               // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
-              key={activeView.templateId}
+              key={activeView.requirementTypeId}
               workspaceSlug={workspaceSlug}
               entityId={requirementId ?? ""}
               readOnly={!isEditable}
               expectedUpdatedAt={detailsStore.configuration?.detail_expected_updated_at}
-              createTemplateId={activeView.templateId}
-              columnStorageId={activeView.templateId}
+              createRequirementTypeId={activeView.requirementTypeId}
+              columnStorageId={activeView.requirementTypeId}
               fields={activeTemplate?.fields ?? []}
               details={detailsStore.detailsPage.results}
               totalCount={detailsStore.detailsPage.total_count ?? 0}
@@ -532,7 +532,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </Loader>
           </div>
         ) : (
-          /* 配置只剩基本信息与审批 —— 字段已经改由「模板管理 → 需求模板」维护 */
+          /* 配置只剩基本信息与审批 —— 字段已经改由「模板管理 → 需求类型」维护 */
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="shrink-0 border-b border-subtle px-4 py-2 text-11 text-tertiary md:px-6">
               {t("workspace_products.requirements.configuration.fields_moved_hint")}
@@ -573,8 +573,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         onImport={async (payloads) => {
           const responses = await detailsStore.importFromLibraries(payloads);
           if (!responses.length) return responses;
-          // 跨库导入时切到第一批的模板视图，用户马上能看到刚导进来的数据
-          changeView({ kind: "template", templateId: responses[0].template_id });
+          // 跨库导入时切到第一批的类型视图，用户马上能看到刚导进来的数据
+          changeView({ kind: "requirementType", requirementTypeId: responses[0].requirement_type_id });
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title: t("success"),
@@ -586,14 +586,14 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         }}
       />
       {isTemplatePickerOpen && (
-        <RequirementTemplatePickerModal
+        <RequirementTypePickerModal
           isOpen={isTemplatePickerOpen}
           workspaceSlug={workspaceSlug}
           onClose={() => setIsTemplatePickerOpen(false)}
-          onConfirm={(templateId) => {
+          onConfirm={(requirementTypeId) => {
             setIsTemplatePickerOpen(false);
-            // 切到该模板的视图，用户在那里用表格下方的「新增数据」录入
-            changeView({ kind: "template", templateId });
+            // 切到该需求类型的视图，用户在那里用表格下方的「新增数据」录入
+            changeView({ kind: "requirementType", requirementTypeId });
           }}
         />
       )}

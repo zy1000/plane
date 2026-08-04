@@ -205,7 +205,7 @@ export function ChangeRequestList(props: TProps) {
             disabled={!prevPageResults}
             onClick={() => onCursorChange(prevCursor)}
             className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
-            aria-label={t("workspace_templates.requirements.list.previous_page")}
+            aria-label={t("requirement_grid.pagination.previous_page")}
           >
             <ChevronLeft className="size-3.5" />
           </button>
@@ -215,7 +215,7 @@ export function ChangeRequestList(props: TProps) {
             disabled={!nextPageResults}
             onClick={() => onCursorChange(nextCursor)}
             className="grid size-7 place-items-center rounded border border-subtle disabled:opacity-40"
-            aria-label={t("workspace_templates.requirements.list.next_page")}
+            aria-label={t("requirement_grid.pagination.next_page")}
           >
             <ChevronRight className="size-3.5" />
           </button>
@@ -223,7 +223,7 @@ export function ChangeRequestList(props: TProps) {
             value={perPage}
             onChange={(event) => onPerPageChange(Number(event.target.value))}
             className="h-7 rounded border border-subtle bg-surface-1 px-1.5 outline-none"
-            aria-label={t("workspace_templates.requirements.list.per_page")}
+            aria-label={t("requirement_grid.pagination.per_page")}
           >
             {PER_PAGE_OPTIONS.map((value) => (
               <option key={value} value={value}>

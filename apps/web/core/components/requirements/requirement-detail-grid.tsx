@@ -29,6 +29,7 @@ import type {
   TRequirementDetail,
   TRequirementDetailBatchSavePayload,
   TRequirementDetailBatchSaveResponse,
+  TRequirementDetailData,
   TRequirementDetailFilter,
   TRequirementDetailValue,
   TRequirementField,
@@ -67,12 +68,12 @@ type TProps = {
   readOnly?: boolean;
   expectedUpdatedAt?: string;
   /**
-   * 新增行绑定到的需求模板。产品需求传当前视图的模板，标准库传 library.template_id。
-   * 表格下方的「新增数据」因此永远挂在模板上，不会挂到标准库上。
+   * 新增行绑定到的需求类型。产品需求传当前视图的类型，标准库传 library.requirement_type_id。
+   * 表格下方的「新增数据」因此永远挂在类型上，不会挂到标准库上。
    */
-  createTemplateId?: string;
+  createRequirementTypeId?: string;
   /**
-   * 列显隐的存储命名空间后缀。产品需求按视图区分，否则不同模板视图会互相覆盖列配置。
+   * 列显隐的存储命名空间后缀。产品需求按视图区分，否则不同类型视图会互相覆盖列配置。
    */
   columnStorageId?: string;
   fields: TRequirementField[];
@@ -121,7 +122,7 @@ const LeafEditor = ({
   }
   if (field.field_type === "select") {
     const options = getRequirementSelectOptions(field);
-    const placeholder = field.config.placeholder ?? t("workspace_templates.requirements.data.select_option");
+    const placeholder = field.config.placeholder ?? t("requirement_grid.data.select_option");
     if (getRequirementSelectMode(field) === "multiple") {
       const currentValue = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
       const dropdownOptions: TDropdownOption[] = options.map((option) => ({
@@ -179,7 +180,7 @@ const LeafEditor = ({
       >
         {!field.is_required && (
           <CustomSelect.Option value={null}>
-            <span className="text-14 text-secondary">{t("workspace_templates.requirements.data.clear_selection")}</span>
+            <span className="text-14 text-secondary">{t("requirement_grid.data.clear_selection")}</span>
           </CustomSelect.Option>
         )}
         {options.map((option) => (
@@ -199,7 +200,7 @@ const LeafEditor = ({
         buttonVariant="border-with-text"
         buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 text-14 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
         buttonContainerClassName="w-full min-w-0"
-        placeholder={field.config.placeholder ?? t("workspace_templates.requirements.data.select_member")}
+        placeholder={field.config.placeholder ?? t("requirement_grid.data.select_member")}
         showUserDetails
       />
     );
@@ -261,8 +262,8 @@ const LeafEditor = ({
           <span className="truncate">
             {t(
               field.field_type === "image"
-                ? "workspace_templates.requirements.data.upload_image"
-                : "workspace_templates.requirements.data.upload_file"
+                ? "requirement_grid.data.upload_image"
+                : "requirement_grid.data.upload_file"
             )}
           </span>
           <input
@@ -307,7 +308,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     entityId,
     readOnly = false,
     expectedUpdatedAt,
-    createTemplateId,
+    createRequirementTypeId,
     columnStorageId,
     fields,
     details,
@@ -358,8 +359,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     fields: activeFields,
     workspaceSlug,
     expectedUpdatedAt,
-    createTemplateId,
-    discardMessage: t("workspace_templates.requirements.data.discard_all_confirm"),
+    createRequirementTypeId,
+    discardMessage: t("requirement_grid.data.discard_all_confirm"),
     onSave: onBulkSave,
     onEditingChange,
   });
@@ -488,7 +489,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
-        message: t("workspace_templates.requirements.data.saved_all", {
+        message: t("requirement_grid.data.saved_all", {
           count: editor.changedCount,
         }),
       });
@@ -500,8 +501,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         message:
           payload?.code === "REQUIREMENT_DETAIL_BATCH_CONFLICT" ||
           payload?.code === "REQUIREMENT_CONFIGURATION_CONFLICT"
-            ? t("workspace_templates.requirements.data.conflict")
-            : (payload?.error ?? t("workspace_templates.requirements.toast.failed")),
+            ? t("requirement_grid.data.conflict")
+            : (payload?.error ?? t("workspace_templates.requirement_types.toast.failed")),
       });
     }
   };
@@ -585,14 +586,14 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             editor.stageCreate(target.beforeKey ? { beforeKey: target.beforeKey } : { beforeId: target.beforeId })
           }
         >
-          <MenuRowLabel icon={ArrowUpToLine} label={t("workspace_templates.requirements.data.insert_above")} />
+          <MenuRowLabel icon={ArrowUpToLine} label={t("requirement_grid.data.insert_above")} />
         </CustomMenu.MenuItem>
         <CustomMenu.MenuItem
           onClick={() =>
             editor.stageCreate(target.afterKey ? { afterKey: target.afterKey } : { afterId: target.afterId })
           }
         >
-          <MenuRowLabel icon={ArrowDownToLine} label={t("workspace_templates.requirements.data.insert_below")} />
+          <MenuRowLabel icon={ArrowDownToLine} label={t("requirement_grid.data.insert_below")} />
         </CustomMenu.MenuItem>
         <CustomMenu.MenuItem
           onClick={() =>
@@ -603,7 +604,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             )
           }
         >
-          <MenuRowLabel icon={Copy} label={t("workspace_templates.requirements.data.copy")} />
+          <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
         </CustomMenu.MenuItem>
         <CustomMenu.MenuItem onClick={() => handleDelete([deleteTarget])}>
           <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
@@ -669,8 +670,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                     <span className="inline-flex items-center rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
                       {t(
                         detailDraft.isCopy
-                          ? "workspace_templates.requirements.data.copy_badge"
-                          : "workspace_templates.requirements.data.new"
+                          ? "requirement_grid.data.copy_badge"
+                          : "requirement_grid.data.new"
                       )}
                     </span>
                   ) : detail && !readOnly ? (
@@ -684,7 +685,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                           event.target.checked ? [...current, detail.id] : current.filter((id) => id !== detail.id)
                         )
                       }
-                      aria-label={t("workspace_templates.requirements.data.select_row")}
+                      aria-label={t("requirement_grid.data.select_row")}
                     />
                   ) : null}
                 </td>
@@ -729,7 +730,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                         groupCellClass
                       )}
                     >
-                      {isFirstRow ? t("workspace_templates.requirements.fields.no_children") : null}
+                      {isFirstRow ? t("requirement_fields.fields.no_children") : null}
                     </td>,
                   ];
                 }
@@ -746,7 +747,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                         className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle px-2 text-13 font-medium text-accent-primary transition-colors duration-150 hover:border-accent-subtle hover:bg-accent-subtle motion-reduce:transition-none"
                       >
                         <Plus className="size-3.5" />
-                        {t("workspace_templates.requirements.data.add_child")}
+                        {t("requirement_grid.data.add_child")}
                       </button>
                     </td>,
                   ];
@@ -801,7 +802,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                     {!isDeleted && row ? (
                       <div className="flex justify-center">
                         <CustomMenu
-                          ariaLabel={t("workspace_templates.requirements.data.child_actions")}
+                          ariaLabel={t("requirement_grid.data.child_actions")}
                           customButton={
                             <span className="grid size-6 place-items-center rounded text-tertiary opacity-0 transition-colors group-hover:opacity-100 focus-within:opacity-100 hover:bg-layer-transparent-hover hover:text-primary">
                               <MoreHorizontal className="size-3.5" />
@@ -812,13 +813,13 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                           <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, rowIndex)}>
                             <MenuRowLabel
                               icon={ArrowUpToLine}
-                              label={t("workspace_templates.requirements.data.insert_above")}
+                              label={t("requirement_grid.data.insert_above")}
                             />
                           </CustomMenu.MenuItem>
                           <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, rowIndex + 1)}>
                             <MenuRowLabel
                               icon={ArrowDownToLine}
-                              label={t("workspace_templates.requirements.data.insert_below")}
+                              label={t("requirement_grid.data.insert_below")}
                             />
                           </CustomMenu.MenuItem>
                           <CustomMenu.MenuItem onClick={() => deleteFormRow(key, form.id, row.id)}>
@@ -836,7 +837,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   {isEditing && isDeleted ? (
                     <Button variant="secondary" size="sm" onClick={() => editor.undoDelete(key)}>
                       <Undo2 className="size-3.5" />
-                      {t("workspace_templates.requirements.data.undo")}
+                      {t("requirement_grid.data.undo")}
                     </Button>
                   ) : isEditing ? (
                     renderDetailActionMenu({ beforeKey: key, afterKey: key, copyData: data }, key)
@@ -887,14 +888,14 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           <Pencil className="size-3.5" />
         </span>
         <span className="truncate text-12 font-medium text-primary">
-          {t("workspace_templates.requirements.data.bulk_edit_mode")}
+          {t("requirement_grid.data.bulk_edit_mode")}
         </span>
         <span className="bg-border-subtle h-4 w-px shrink-0" />
         <span
           className="shrink-0 rounded-full bg-layer-2 px-2 py-0.5 text-10 font-medium text-secondary"
           aria-live="polite"
         >
-          {t("workspace_templates.requirements.data.changed_count", { count: editor.changedCount })}
+          {t("requirement_grid.data.changed_count", { count: editor.changedCount })}
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -908,17 +909,17 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           disabled={!editor.isDirty || Boolean(editor.saveError && editor.conflictIds.length)}
         >
           <Save className="size-3.5" />
-          {t("workspace_templates.requirements.data.save_changes")}
+          {t("requirement_grid.data.save_changes")}
         </Button>
       </div>
     </>
   ) : showSelectionActions ? (
     <div className="flex shrink-0 items-center gap-1.5">
       <span className="px-1 text-12 font-medium text-primary tabular-nums" aria-live="polite">
-        {t("workspace_templates.requirements.data.selected_count", { count: selectedIds.length })}
+        {t("requirement_grid.data.selected_count", { count: selectedIds.length })}
       </span>
       <Button variant="ghost" size="lg" onClick={() => setSelectedIds([])}>
-        {t("workspace_templates.requirements.data.clear_selection")}
+        {t("requirement_grid.data.clear_selection")}
       </Button>
       <Button variant="error-outline" size="lg" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
         <Trash2 className="size-3.5" />
@@ -938,7 +939,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
               window.setTimeout(() => searchInputRef.current?.focus(), 0);
             }}
             icon={SearchIcon}
-            aria-label={t("workspace_templates.requirements.data.search")}
+            aria-label={t("requirement_grid.data.search")}
           />
         )}
         <div
@@ -953,7 +954,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           <input
             ref={searchInputRef}
             className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-            placeholder={t("workspace_templates.requirements.data.search")}
+            placeholder={t("requirement_grid.data.search")}
             value={searchInput}
             onChange={(event) => {
               const value = event.target.value;
@@ -975,7 +976,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           variant="secondary"
           icon={hasActiveFilters ? FilterAppliedIcon : FilterIcon}
           onClick={() => setIsFilterOpen((value) => !value)}
-          aria-label={t("workspace_templates.requirements.data.filter")}
+          aria-label={t("requirement_grid.data.filter")}
           className={cn({
             "border-accent-subtle-1 hover:border-accent-subtle-1 focus:border-accent-subtle-1 active:border-accent-subtle-1 border bg-accent-subtle text-accent-primary hover:bg-accent-subtle hover:text-accent-primary focus:bg-accent-subtle focus:text-accent-primary active:bg-accent-subtle active:text-accent-primary":
               hasActiveFilters,
@@ -1012,7 +1013,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
               }}
               className="h-8 w-full rounded-md border border-subtle bg-surface-1 px-2 text-12"
             >
-              <option value="">{t("workspace_templates.requirements.data.select_field")}</option>
+              <option value="">{t("requirement_grid.data.select_field")}</option>
               {filterableFields.map((field) => (
                 <option key={field.id} value={field.id}>
                   {field.name}
@@ -1029,15 +1030,15 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   selectedFilterField?.field_type === "rich_text" ||
                   (selectedFilterField?.field_type === "select" &&
                     getRequirementSelectMode(selectedFilterField) === "multiple")) && (
-                  <option value="contains">{t("workspace_templates.requirements.filters.contains")}</option>
+                  <option value="contains">{t("requirement_grid.filters.contains")}</option>
                 )}
                 {!["attachment", "image"].includes(selectedFilterField?.field_type ?? "") &&
                   !(
                     selectedFilterField?.field_type === "select" &&
                     getRequirementSelectMode(selectedFilterField) === "multiple"
-                  ) && <option value="equals">{t("workspace_templates.requirements.filters.equals")}</option>}
-                <option value="is_empty">{t("workspace_templates.requirements.filters.is_empty")}</option>
-                <option value="is_not_empty">{t("workspace_templates.requirements.filters.is_not_empty")}</option>
+                  ) && <option value="equals">{t("requirement_grid.filters.equals")}</option>}
+                <option value="is_empty">{t("requirement_grid.filters.is_empty")}</option>
+                <option value="is_not_empty">{t("requirement_grid.filters.is_not_empty")}</option>
               </select>
               {filterRequiresValue && selectedFilterField?.field_type === "select" ? (
                 <select
@@ -1059,7 +1060,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   buttonVariant="border-with-text"
                   buttonClassName="h-8 min-w-0 border !border-subtle bg-surface-1"
                   buttonContainerClassName="min-w-0"
-                  placeholder={t("workspace_templates.requirements.data.select_member")}
+                  placeholder={t("requirement_grid.data.select_member")}
                   showUserDetails
                 />
               ) : filterRequiresValue && selectedFilterField?.field_type === "boolean" ? (
@@ -1068,15 +1069,15 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   onChange={(event) => setFilterValue(event.target.value)}
                   className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
                 >
-                  <option value="true">{t("workspace_templates.requirements.data.yes")}</option>
-                  <option value="false">{t("workspace_templates.requirements.data.no")}</option>
+                  <option value="true">{t("requirement_grid.data.yes")}</option>
+                  <option value="false">{t("requirement_grid.data.no")}</option>
                 </select>
               ) : filterRequiresValue ? (
                 <input
                   value={filterValue}
                   onChange={(event) => setFilterValue(event.target.value)}
                   className="focus:border-accent-primary h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12 outline-none"
-                  placeholder={t("workspace_templates.requirements.data.filter_value")}
+                  placeholder={t("requirement_grid.data.filter_value")}
                 />
               ) : null}
             </div>
@@ -1192,7 +1193,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           role="alert"
         >
           <span>
-            {editor.conflictIds.length ? t("workspace_templates.requirements.data.conflict") : editor.saveError}
+            {editor.conflictIds.length ? t("requirement_grid.data.conflict") : editor.saveError}
           </span>
           {editor.conflictIds.length > 0 && (
             <button
@@ -1204,7 +1205,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                 })();
               }}
             >
-              {t("workspace_templates.requirements.data.reload_to_continue")}
+              {t("requirement_grid.data.reload_to_continue")}
             </button>
           )}
         </div>
@@ -1239,7 +1240,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         ) : error ? (
           <div className="flex min-h-72 items-center justify-center p-6 text-center">
             <div>
-              <p className="text-13 font-medium text-primary">{t("workspace_templates.requirements.error.title")}</p>
+              <p className="text-13 font-medium text-primary">{t("workspace_templates.requirement_types.error.title")}</p>
               <p className="mt-1 text-12 text-secondary">{error}</p>
               <Button className="mt-3" variant="secondary" onClick={() => void onRefresh()}>
                 {t("retry")}
@@ -1251,10 +1252,10 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             <div>
               <Columns3 className="mx-auto size-8 text-placeholder" />
               <p className="mt-2 text-13 font-medium text-primary">
-                {t("workspace_templates.requirements.data.no_fields")}
+                {t("requirement_grid.data.no_fields")}
               </p>
               <p className="mt-1 text-12 text-secondary">
-                {t("workspace_templates.requirements.data.no_fields_description")}
+                {t("requirement_grid.data.no_fields_description")}
               </p>
             </div>
           </div>
@@ -1263,11 +1264,11 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             <div>
               <Plus className="mx-auto size-8 text-placeholder" />
               <p className="mt-2 text-13 font-medium text-primary">
-                {t("workspace_templates.requirements.data.empty")}
+                {t("requirement_grid.data.empty")}
               </p>
               {!readOnly && (
                 <Button className="mt-3" variant="primary" onClick={() => editor.stageCreate()}>
-                  {t("workspace_templates.requirements.data.add")}
+                  {t("requirement_grid.data.add")}
                 </Button>
               )}
             </div>
@@ -1289,13 +1290,13 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                       selectableDetailIds.every((detailId) => selectedIds.includes(detailId))
                     }
                     onChange={(event) => setSelectedIds(event.target.checked ? selectableDetailIds : [])}
-                    aria-label={t("workspace_templates.requirements.data.select_all")}
+                    aria-label={t("requirement_grid.data.select_all")}
                   />
                 ),
               }}
               trailingHeader={{
                 className: "w-16 px-2 py-2.5 text-center text-primary",
-                content: t("workspace_templates.requirements.fields.actions"),
+                content: t("requirement_fields.fields.actions"),
               }}
             />
             {rowGroups}
@@ -1310,7 +1311,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                         className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-13 font-medium text-accent-primary transition-colors duration-150 hover:border-accent-subtle hover:bg-accent-subtle motion-reduce:transition-none"
                       >
                         <Plus className="size-3.5" />
-                        {t("workspace_templates.requirements.data.add")}
+                        {t("requirement_grid.data.add")}
                       </button>
                     </td>
                   </tr>
@@ -1324,7 +1325,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
         <div className="flex items-center gap-4 text-sm">
           <span className="text-secondary">
             {displayedTotalCount > 0
-              ? t("workspace_templates.requirements.data.range", {
+              ? t("requirement_grid.data.range", {
                   start: currentPageOffset * perPage + 1,
                   end: Math.min(currentPageOffset * perPage + pageItemCount, displayedTotalCount),
                   total: displayedTotalCount,

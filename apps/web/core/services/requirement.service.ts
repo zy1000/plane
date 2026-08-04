@@ -2,7 +2,6 @@ import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateProductRequirementPayload,
   TCreateRequirementLibraryPayload,
-  TCreateRequirementTemplatePayload,
   TRequirement,
   TRequirementApprovalAction,
   TRequirementChangeItemsResponse,
@@ -37,32 +36,6 @@ import { APIService } from "@/services/api.service";
 export class RequirementService extends APIService {
   constructor() {
     super(API_BASE_URL);
-  }
-
-  async listTemplates(workspaceSlug: string): Promise<TRequirement[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/requirements/`, {
-      params: { is_template: true },
-    })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async createTemplate(workspaceSlug: string, payload: TCreateRequirementTemplatePayload): Promise<TRequirement> {
-    return this.post(`/api/workspaces/${workspaceSlug}/requirements/`, payload)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async deleteTemplate(workspaceSlug: string, templateId: string): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/requirements/${templateId}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
   }
 
   /* --- 需求标准库 ------------------------------------------------------- */
@@ -292,7 +265,7 @@ export class RequirementService extends APIService {
       search?: string;
       filters?: TRequirementDetailFilter[];
       /** 按模板切视图必须走服务端过滤 —— 明细是游标分页的 */
-      templateId?: string;
+      requirementTypeId?: string;
     } = {}
   ): Promise<TRequirementDetailsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/details/`, {
@@ -301,7 +274,7 @@ export class RequirementService extends APIService {
         ...(params.perPage ? { per_page: params.perPage } : {}),
         ...(params.search ? { search: params.search } : {}),
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
-        ...(params.templateId ? { template_id: params.templateId } : {}),
+        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -316,7 +289,7 @@ export class RequirementService extends APIService {
     payload: {
       data: TRequirementDetailData;
       /** 新行绑定哪个需求模板 —— 字段与校验都以它为准 */
-      template_id: string;
+      requirement_type_id: string;
       before_id?: string;
       after_id?: string;
     }
@@ -447,7 +420,7 @@ export class RequirementService extends APIService {
       cursor?: string;
       perPage?: number;
       changeType?: TRequirementChangeType;
-      templateId?: string;
+      requirementTypeId?: string;
     } = {}
   ): Promise<TRequirementChangeItemsResponse> {
     return this.get(
@@ -457,7 +430,7 @@ export class RequirementService extends APIService {
           ...(params.cursor ? { cursor: params.cursor } : {}),
           ...(params.perPage ? { per_page: params.perPage } : {}),
           ...(params.changeType ? { change_type: params.changeType } : {}),
-          ...(params.templateId ? { template_id: params.templateId } : {}),
+          ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
         },
       }
     )
@@ -541,13 +514,13 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     requirementId: string,
     version: number,
-    params: { cursor?: string; perPage?: number; templateId?: string } = {}
+    params: { cursor?: string; perPage?: number; requirementTypeId?: string } = {}
   ): Promise<TRequirementVersionDetailsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirements/${requirementId}/versions/${version}/details/`, {
       params: {
         ...(params.cursor ? { cursor: params.cursor } : {}),
         ...(params.perPage ? { per_page: params.perPage } : {}),
-        ...(params.templateId ? { template_id: params.templateId } : {}),
+        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -566,7 +539,7 @@ export class RequirementService extends APIService {
       cursor?: string;
       perPage?: number;
       changeType?: TRequirementChangeType;
-      templateId?: string;
+      requirementTypeId?: string;
     } = {}
   ): Promise<TRequirementVersionComparisonResponse> {
     return this.get(
@@ -577,7 +550,7 @@ export class RequirementService extends APIService {
           ...(params.cursor ? { cursor: params.cursor } : {}),
           ...(params.perPage ? { per_page: params.perPage } : {}),
           ...(params.changeType ? { change_type: params.changeType } : {}),
-          ...(params.templateId ? { template_id: params.templateId } : {}),
+          ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
         },
       }
     )

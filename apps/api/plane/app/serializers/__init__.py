@@ -186,6 +186,10 @@ from .requirement import (
     RequirementSerializer,
 )
 from .requirement_library import RequirementLibrarySerializer
+from .requirement_type import (
+    RequirementTypeConfigurationWriteSerializer,
+    RequirementTypeSerializer,
+)
 from .requirement_change import (
     RequirementChangeActionSerializer,
     RequirementChangeApprovalSerializer,

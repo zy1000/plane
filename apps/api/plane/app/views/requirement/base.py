@@ -25,8 +25,6 @@ from plane.db.models import (
     RequirementChangeRequest,
     RequirementChangeStatus,
     RequirementDetail,
-    RequirementDraftDetail,
-    RequirementLibrary,
     Workspace,
 )
 from plane.utils.product import (
@@ -35,12 +33,9 @@ from plane.utils.product import (
     can_view_product,
 )
 from plane.utils.requirement import (
-    RequirementBuiltinFieldError,
-    RequirementDataLossError,
     detail_grid_expected_updated_at,
     field_tree_from_specs,
-    serialize_requirement_field_tree,
-    templates_field_payload_from_specs,
+    requirement_types_field_payload_from_specs,
 )
 
 
@@ -65,10 +60,8 @@ class RequirementViewSet(BaseViewSet):
     serializer_class = RequirementSerializer
     search_fields = ["title"]
     filterset_fields = {
-        "is_template": ["exact"],
         "product_id": ["exact"],
         "project_id": ["exact"],
-        "template_id": ["exact"],
         "status": ["exact", "in"],
         "owner_id": ["exact"],
         "is_active": ["exact"],
@@ -86,7 +79,6 @@ class RequirementViewSet(BaseViewSet):
                 "workspace",
                 "product",
                 "project",
-                "template",
                 "owner",
                 "created_by",
                 "updated_by",
@@ -100,8 +92,11 @@ class RequirementViewSet(BaseViewSet):
                 ),
             )
             .annotate(
-                field_count=Count("fields", distinct=True),
-                detail_count=Count("details", distinct=True),
+                detail_count=Count(
+                    "details",
+                    filter=Q(details__deleted_at__isnull=True),
+                    distinct=True,
+                ),
             )
         )
         workspace = Workspace.objects.filter(slug=self.workspace_slug).first()
@@ -115,6 +110,7 @@ class RequirementViewSet(BaseViewSet):
             )
             if is_workspace_member(self.request.user, self.workspace_slug):
                 product_visibility |= Q(product__network=2)
+            # product__isnull=True 这一支放行的是项目需求（它们没有产品可见性）
             queryset = queryset.filter(
                 Q(product__isnull=True) | product_visibility
             ).distinct()
@@ -254,24 +250,6 @@ class RequirementViewSet(BaseViewSet):
                 {"error": "You do not have permission to maintain this requirement."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        # 字段实时引用模板，模板被引用时删掉会让引用方失去字段定义。
-        #
-        # 这个判断是**唯一的实际保护**，不是防御性检查：软删除不会触发外键的
-        # PROTECT，而 soft_delete_related_objects 把 PROTECT 当 CASCADE 处理，
-        # 所以真删下去会把引用它的明细行一起软删掉。
-        if requirement.is_template and (
-            RequirementLibrary.objects.filter(template=requirement).exists()
-            or RequirementDetail.objects.filter(template=requirement).exists()
-            or RequirementDraftDetail.objects.filter(template=requirement).exists()
-        ):
-            return Response(
-                {
-                    "error": "This template is still used by one or more libraries.",
-                    "code": "REQUIREMENT_TEMPLATE_IN_USE",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
         requirement.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -279,9 +257,9 @@ class RequirementViewSet(BaseViewSet):
 class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView):
     def _get_requirement(self, slug, pk, *, for_update=False):
         queryset = (
-            Requirement.objects.filter(workspace__slug=slug, id=pk)
-            .filter(Q(is_template=True) | Q(product__isnull=False))
-            .select_related("workspace", "product", "owner")
+            Requirement.objects.filter(
+                workspace__slug=slug, id=pk, product__isnull=False
+            ).select_related("workspace", "product", "owner")
         )
         if for_update:
             queryset = queryset.select_for_update(of=("self",))
@@ -300,7 +278,7 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
             user, requirement.product
         )
 
-    def _response_payload(self, requirement, created_field_ids=None):
+    def _response_payload(self, requirement):
         requirement = (
             Requirement.objects.filter(id=requirement.id)
             .select_related("workspace", "owner")
@@ -328,27 +306,23 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
                     "workspace": requirement.workspace,
                 },
             ).data,
-            "created_field_ids": created_field_ids or {},
         }
 
-        if requirement.is_template:
-            payload["fields"] = serialize_requirement_field_tree(requirement)
-            payload["templates"] = []
-            payload["is_frozen"] = False
-            return payload
-
-        # 产品需求是模板的集合：templates 供数据页分视图，fields 保留成扁平并集，
-        # 让变更记录与版本对比这两个 tab 完全不用改。
-        template_ids, specs, by_template, is_frozen = resolve_requirement_fields(
-            requirement=requirement, draft=draft
-        )
-        payload["templates"] = templates_field_payload_from_specs(
-            template_ids, by_template
+        # 产品需求是需求类型的集合：requirement_types 供数据页分视图，fields 保留成
+        # 扁平并集，让变更记录与版本对比这两个 tab 完全不用改。
+        (
+            requirement_type_ids,
+            specs,
+            by_requirement_type,
+            is_frozen,
+        ) = resolve_requirement_fields(requirement=requirement, draft=draft)
+        payload["requirement_types"] = requirement_types_field_payload_from_specs(
+            requirement_type_ids, by_requirement_type
         )
         payload["fields"] = field_tree_from_specs(specs)
         payload["is_frozen"] = is_frozen
         payload["detail_expected_updated_at"] = detail_grid_expected_updated_at(
-            owner=requirement, template_ids=template_ids
+            owner=requirement, requirement_type_ids=requirement_type_ids
         )
         return payload
 
@@ -386,36 +360,17 @@ class RequirementConfigurationAPIView(RequirementDraftDispatchMixin, BaseAPIView
         )
         serializer.is_valid(raise_exception=True)
         try:
-            requirement, created_field_ids = serializer.save()
+            requirement = serializer.save()
         except RequirementConfigurationConflict:
             return Response(
                 {
-                    "error": "The template was updated by another request.",
+                    "error": "The requirement was updated by another request.",
                     "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
                 },
                 status=status.HTTP_409_CONFLICT,
             )
-        except RequirementDataLossError as exc:
-            return Response(
-                {
-                    "error": "Saving this structure will remove existing values.",
-                    "code": "REQUIREMENT_SCHEMA_DATA_LOSS",
-                    "affected_detail_count": exc.affected_detail_count,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-        except RequirementBuiltinFieldError as exc:
-            return Response(
-                {"error": str(exc), "code": exc.code},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        except ValueError as exc:
-            return Response(
-                {"error": str(exc)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         return Response(
-            self._response_payload(requirement, created_field_ids),
+            self._response_payload(requirement),
             status=status.HTTP_200_OK,
         )
 
@@ -424,7 +379,7 @@ class RequirementDetailViewSet(RequirementDraftDispatchMixin, BaseRequirementDet
     """产品需求的明细行，按需分派到正式表或工作副本。"""
 
     def resolve_owner(self, *, for_update=False):
-        # 模板只定义字段、不持有明细，所以明细入口只放行产品需求
+        # 需求类型只定义字段、不持有明细，所以明细入口只放行产品需求
         queryset = (
             Requirement.objects.filter(
                 id=self.kwargs.get("requirement_id"),

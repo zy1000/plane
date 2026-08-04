@@ -166,5 +166,6 @@ from .requirement import (
     RequirementLibrary,
     RequirementScope,
     RequirementStatus,
+    RequirementType,
     RequirementVersion,
 )

@@ -5,7 +5,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { useRequirementTemplates } from "@/hooks/store/use-requirement-templates";
+import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { useRequirementLibrariesContext } from "./context";
 
 export function RequirementLibraryCreateModal() {
@@ -13,17 +13,17 @@ export function RequirementLibraryCreateModal() {
   const navigate = useNavigate();
   const { workspaceSlug, isCreateModalOpen, setIsCreateModalOpen, createLibrary, isMutating } =
     useRequirementLibrariesContext();
-  const { templates, isLoading: isTemplatesLoading } = useRequirementTemplates(workspaceSlug);
+  const { requirementTypes, isLoading: isRequirementTypesLoading } = useRequirementTypes(workspaceSlug);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [templateId, setTemplateId] = useState("");
+  const [requirementTypeId, setRequirementTypeId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isCreateModalOpen) return;
     setName("");
     setDescription("");
-    setTemplateId("");
+    setRequirementTypeId("");
     setError(null);
   }, [isCreateModalOpen]);
 
@@ -33,15 +33,15 @@ export function RequirementLibraryCreateModal() {
       setError(t("requirement_libraries.validation.name_required"));
       return;
     }
-    if (!templateId) {
-      setError(t("requirement_libraries.validation.template_required"));
+    if (!requirementTypeId) {
+      setError(t("requirement_libraries.validation.requirement_type_required"));
       return;
     }
     setError(null);
     try {
       const library = await createLibrary({
         name: normalizedName,
-        template_id: templateId,
+        requirement_type_id: requirementTypeId,
         description: description.trim(),
       });
       setIsCreateModalOpen(false);
@@ -52,9 +52,9 @@ export function RequirementLibraryCreateModal() {
         message: t("requirement_libraries.toast.created"),
       });
     } catch (requestError) {
-      const payload = requestError as { name?: string[]; template_id?: string[]; error?: string };
+      const payload = requestError as { name?: string[]; requirement_type_id?: string[]; error?: string };
       setError(
-        payload?.name?.[0] ?? payload?.template_id?.[0] ?? payload?.error ?? t("requirement_libraries.toast.failed")
+        payload?.name?.[0] ?? payload?.requirement_type_id?.[0] ?? payload?.error ?? t("requirement_libraries.toast.failed")
       );
     }
   };
@@ -100,22 +100,25 @@ export function RequirementLibraryCreateModal() {
         </label>
         <label className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">
-            {t("requirement_libraries.fields.template")}
+            {t("requirement_libraries.fields.requirement_type")}
           </span>
           <select
-            value={templateId}
-            onChange={(event) => setTemplateId(event.target.value)}
-            disabled={isTemplatesLoading}
+            value={requirementTypeId}
+            onChange={(event) => setRequirementTypeId(event.target.value)}
+            disabled={isRequirementTypesLoading}
             className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <option value="">{t("requirement_libraries.fields.template_placeholder")}</option>
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.title}
-              </option>
-            ))}
+            <option value="">{t("requirement_libraries.fields.requirement_type_placeholder")}</option>
+            {/* 与产品需求的类型选择器口径一致：停用的类型不可再新建引用 */}
+            {requirementTypes
+              .filter((requirementType) => requirementType.is_active)
+              .map((requirementType) => (
+                <option key={requirementType.id} value={requirementType.id}>
+                  {requirementType.name}
+                </option>
+              ))}
           </select>
-          <span className="mt-1.5 block text-11 text-tertiary">{t("requirement_libraries.fields.template_hint")}</span>
+          <span className="mt-1.5 block text-11 text-tertiary">{t("requirement_libraries.fields.requirement_type_hint")}</span>
         </label>
         <label className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">

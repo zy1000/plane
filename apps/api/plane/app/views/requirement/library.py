@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -8,13 +8,13 @@ from plane.db.models import RequirementLibrary, Workspace
 
 
 class RequirementLibraryViewSet(BaseViewSet):
-    """需求标准库：工作区级资源，权限与需求模板一致（工作区成员即可维护）。"""
+    """需求标准库：工作区级资源，权限与需求类型一致（工作区成员即可维护）。"""
 
     model = RequirementLibrary
     serializer_class = RequirementLibrarySerializer
     search_fields = ["name"]
     filterset_fields = {
-        "template_id": ["exact"],
+        "requirement_type_id": ["exact"],
         "is_active": ["exact"],
     }
 
@@ -23,10 +23,14 @@ class RequirementLibraryViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.workspace_slug)
-            .select_related("workspace", "template", "created_by", "updated_by")
+            .select_related("workspace", "requirement_type", "created_by", "updated_by")
             .annotate(
                 item_count=Count("items", distinct=True),
-                field_count=Count("template__fields", distinct=True),
+                field_count=Count(
+                    "requirement_type__fields",
+                    filter=Q(requirement_type__fields__deleted_at__isnull=True),
+                    distinct=True,
+                ),
             )
         )
 

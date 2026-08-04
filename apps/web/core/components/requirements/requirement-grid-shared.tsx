@@ -161,7 +161,7 @@ const RequirementImageValue = ({
         title={
           <div className="flex items-center justify-between gap-3 pr-8" style={{ marginTop: -16, marginBottom: -16 }}>
             <Typography.Text strong className="min-w-0 truncate">
-              {preview?.name ?? t("workspace_templates.requirements.field_types.image")}
+              {preview?.name ?? t("requirement_fields.field_types.image")}
             </Typography.Text>
             {preview?.downloadSrc && (
               <a
@@ -226,7 +226,7 @@ export const LeafValue = ({
           className
         )}
       >
-        {t(value ? "workspace_templates.requirements.data.yes" : "workspace_templates.requirements.data.no")}
+        {t(value ? "requirement_grid.data.yes" : "requirement_grid.data.no")}
       </span>
     );
   }
@@ -375,7 +375,7 @@ export const RequirementGridHeader = ({
                 key={`${field.id}-empty`}
                 className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-placeholder"
               >
-                {t("workspace_templates.requirements.fields.no_children")}
+                {t("requirement_fields.fields.no_children")}
               </th>
             )
           )}
