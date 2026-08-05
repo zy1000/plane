@@ -18,8 +18,9 @@ export const useOutsideClickDetector = (
       const preventOutsideClickElement = (event.target as unknown as HTMLElement | undefined)?.closest(
         "[data-prevent-outside-click]"
       );
-      // if the closest element with attribute name data-prevent-outside-click is found, return
-      if (preventOutsideClickElement) {
+      // 仅当点击落在「不含本组件」的防关闭区域时跳过（例如 portaled 下拉面板）。
+      // 若本组件本身就在同一防关闭容器内（如 Dialog），点击容器其他区域仍应关闭下拉。
+      if (preventOutsideClickElement && !preventOutsideClickElement.contains(ref.current)) {
         return;
       }
       // else call the callback

@@ -13,6 +13,24 @@ import { IssueActivityBlockComponent } from "./helpers/activity-block";
 
 type TProps = { activityId: string; ends: "top" | "bottom" | undefined };
 
+/** 解析后端写入的取消审批 comment，例如：必填字段缺失，审批已取消（A → B）：xxx */
+function parseWorkflowCancelComment(comment: string | undefined, fallbackFrom: string) {
+  const text = (comment || "").trim();
+  const matched = text.match(/^(.*?)（(.+?) → (.+?)）(?:：([\s\S]+))?$/);
+  if (matched) {
+    return {
+      prefix: matched[1].trim() || "已取消待审批流程",
+      fromName: matched[2] || fallbackFrom,
+      toName: matched[3] || undefined,
+      detail: matched[4]?.trim() || undefined,
+    };
+  }
+  if (text) {
+    return { prefix: text, fromName: fallbackFrom, toName: undefined, detail: undefined };
+  }
+  return { prefix: "已取消待审批流程", fromName: fallbackFrom, toName: undefined, detail: undefined };
+}
+
 /**
  * 展示「发起审批申请」或「审批最终被拒绝」这两个系统事件。
  * field = "workflow_approval_request"
@@ -35,6 +53,9 @@ export const IssueWorkflowApprovalRequestActivity = observer(function IssueWorkf
     activity.new_value && activity.new_value !== "rejected" && activity.new_value !== "cancelled"
       ? activity.new_value
       : activity.old_value || "—";
+  const cancelContent = isCancelled ? parseWorkflowCancelComment(activity.comment, fromName) : null;
+  // 校验失败取消由系统触发；仅「直接更改状态」保留操作者
+  const isSystemCancel = Boolean(cancelContent && !cancelContent.prefix.includes("直接更改状态"));
 
   return (
     <IssueActivityBlockComponent
@@ -47,7 +68,7 @@ export const IssueWorkflowApprovalRequestActivity = observer(function IssueWorkf
       }
       activityId={activityId}
       ends={ends}
-      customUserName={isRejected ? "系统" : undefined}
+      customUserName={isRejected || isSystemCancel ? "系统" : undefined}
     >
       {isRejected ? (
         <>
@@ -56,10 +77,14 @@ export const IssueWorkflowApprovalRequestActivity = observer(function IssueWorkf
             （{activity.old_value} → {toName}）
           </span>
         </>
-      ) : isCancelled ? (
+      ) : isCancelled && cancelContent ? (
         <>
-          直接更改状态，已取消待审批流程
-          <span className="font-medium text-primary">（{fromName}）</span>
+          {cancelContent.prefix}
+          <span className="font-medium text-primary">
+            （{cancelContent.fromName}
+            {cancelContent.toName ? ` → ${cancelContent.toName}` : ""}）
+          </span>
+          {cancelContent.detail ? `：${cancelContent.detail}` : null}
         </>
       ) : (
         <>
@@ -72,7 +97,6 @@ export const IssueWorkflowApprovalRequestActivity = observer(function IssueWorkf
     </IssueActivityBlockComponent>
   );
 });
-
 /**
  * 展示单个审批人的「通过」或「拒绝」操作。
  * field = "workflow_approval_action"
