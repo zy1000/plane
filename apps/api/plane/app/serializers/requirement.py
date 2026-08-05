@@ -9,29 +9,36 @@ from plane.db.models import (
     Project,
     Requirement,
     RequirementApprovalType,
+    RequirementBaseline,
     RequirementBuiltinFieldKey,
     RequirementChangeStatus,
-    RequirementDetail,
-    RequirementDraftDetail,
-    RequirementField,
+    RequirementDraftRow,
     RequirementFieldType,
     User,
 )
 from plane.utils.content_validator import validate_html_content
 from plane.utils.product import can_edit_product_requirements
 from plane.utils.requirement import (
+    TITLE_MAX_LENGTH,
+    builtin_field_index,
     field_attr,
-    get_referenced_requirement_type_ids,
     get_requirement_eligible_user_ids,
     get_requirement_select_mode,
     get_requirement_select_options,
+    merge_builtin_values,
     replace_requirement_approvers,
 )
 
 from .base import BaseSerializer
 
 
-class RequirementSerializer(BaseSerializer):
+class RequirementBaselineSerializer(BaseSerializer):
+    """需求基线：一个产品（或项目）全部需求的审批与版本单元。
+
+    标题与描述不在这里 —— 它们是需求条目自己的字段。基线只持有状态、负责人与
+    审批配置。
+    """
+
     workspace_id = serializers.UUIDField(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         source="product",
@@ -51,12 +58,6 @@ class RequirementSerializer(BaseSerializer):
         required=False,
     )
     owner_detail = UserLiteSerializer(source="owner", read_only=True)
-    title = serializers.CharField(max_length=255, required=False)
-    description_html = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        allow_null=True,
-    )
     approver_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=False,
@@ -64,23 +65,18 @@ class RequirementSerializer(BaseSerializer):
     )
     approver_details = serializers.SerializerMethodField()
     scope = serializers.CharField(read_only=True)
-    field_count = serializers.SerializerMethodField()
-    requirement_type_count = serializers.SerializerMethodField()
-    detail_count = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
     pending_change_request_id = serializers.SerializerMethodField()
     can_approve = serializers.SerializerMethodField()
 
     class Meta:
-        model = Requirement
+        model = RequirementBaseline
         fields = [
             "id",
             "workspace_id",
             "scope",
             "product_id",
             "project_id",
-            "title",
-            "description_html",
             "status",
             "owner_id",
             "owner_detail",
@@ -88,15 +84,10 @@ class RequirementSerializer(BaseSerializer):
             "required_count",
             "approver_ids",
             "approver_details",
-            "field_count",
-            "requirement_type_count",
-            "detail_count",
             "can_edit",
             "current_version",
             "pending_change_request_id",
             "can_approve",
-            "is_active",
-            "sort_order",
             "created_at",
             "updated_at",
             "created_by",
@@ -108,9 +99,6 @@ class RequirementSerializer(BaseSerializer):
             "scope",
             "owner_detail",
             "approver_details",
-            "field_count",
-            "requirement_type_count",
-            "detail_count",
             "can_edit",
             "current_version",
             "pending_change_request_id",
@@ -124,28 +112,6 @@ class RequirementSerializer(BaseSerializer):
     def get_approver_details(self, obj):
         approvers = [link.approver for link in obj.approvers.all()]
         return UserLiteSerializer(approvers, many=True).data
-
-    def _referenced_requirement_type_ids(self, obj):
-        return get_referenced_requirement_type_ids(
-            model=RequirementDetail, scope={"requirement": obj}
-        )
-
-    def get_field_count(self, obj):
-        """需求自己没有字段，数的是它引用到的那些需求类型的字段总数。"""
-        requirement_type_ids = self._referenced_requirement_type_ids(obj)
-        if not requirement_type_ids:
-            return 0
-        return RequirementField.objects.filter(
-            requirement_type_id__in=requirement_type_ids
-        ).count()
-
-    def get_requirement_type_count(self, obj):
-        """需求内部包含多少个需求类型 —— 也就是数据页会有多少个视图。"""
-        return len(self._referenced_requirement_type_ids(obj))
-
-    def get_detail_count(self, obj):
-        annotated_count = getattr(obj, "detail_count", None)
-        return annotated_count if annotated_count is not None else obj.details.count()
 
     def get_can_edit(self, obj):
         request = self.context.get("request")
@@ -189,22 +155,6 @@ class RequirementSerializer(BaseSerializer):
         ]
         return data
 
-    def validate_title(self, value):
-        title = value.strip()
-        if not title:
-            raise serializers.ValidationError("Requirement title cannot be empty.")
-        return title
-
-    def validate_description_html(self, value):
-        if value is None or value == "":
-            return value
-        is_valid, error_message, sanitized_html = validate_html_content(value)
-        if not is_valid:
-            raise serializers.ValidationError(
-                error_message or "HTML content is not valid."
-            )
-        return sanitized_html if sanitized_html is not None else value
-
     def _validate_immutable_scope(self, attrs):
         errors = {}
         immutable_fields = {
@@ -231,7 +181,7 @@ class RequirementSerializer(BaseSerializer):
 
         if len([scope for scope in (product, project) if scope]) != 1:
             errors["scope"] = (
-                "A requirement must belong to exactly one product or project."
+                "A baseline must belong to exactly one product or project."
             )
 
         if product is not None and product.workspace_id != workspace.id:
@@ -268,7 +218,7 @@ class RequirementSerializer(BaseSerializer):
                 raise serializers.ValidationError(
                     {
                         "approver_ids": (
-                            "Approvers must be valid members of the requirement target: "
+                            "Approvers must be valid members of the baseline target: "
                             + ", ".join(str(item) for item in invalid_ids)
                         )
                     }
@@ -330,10 +280,6 @@ class RequirementSerializer(BaseSerializer):
             raise serializers.ValidationError({"workspace": "Workspace is required."})
         product, project = self._validate_scope(attrs, workspace)
 
-        title = attrs.get("title", getattr(self.instance, "title", None))
-        if not title:
-            raise serializers.ValidationError({"title": "This field is required."})
-
         owner = attrs.get("owner", getattr(self.instance, "owner", None))
         if owner is None:
             request = self.context.get("request")
@@ -350,7 +296,7 @@ class RequirementSerializer(BaseSerializer):
         )
         if owner.id not in eligible_owner_ids:
             raise serializers.ValidationError(
-                {"owner_id": "Owner must be a valid member of the requirement target."}
+                {"owner_id": "Owner must be a valid member of the baseline target."}
             )
 
         approver_ids = self._get_effective_approver_ids(
@@ -368,16 +314,16 @@ class RequirementSerializer(BaseSerializer):
         request = self.context.get("request")
         actor = getattr(request, "user", None)
 
-        requirement = Requirement(**validated_data)
-        requirement.full_clean(exclude=["created_by", "updated_by"])
-        requirement.save()
+        baseline = RequirementBaseline(**validated_data)
+        baseline.full_clean(exclude=["created_by", "updated_by"])
+        baseline.save()
 
         replace_requirement_approvers(
-            requirement=requirement,
+            baseline=baseline,
             approver_ids=approver_ids,
             actor=actor,
         )
-        return requirement
+        return baseline
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -391,7 +337,7 @@ class RequirementSerializer(BaseSerializer):
         if approver_ids is not serializers.empty:
             request = self.context.get("request")
             replace_requirement_approvers(
-                requirement=instance,
+                baseline=instance,
                 approver_ids=approver_ids,
                 actor=getattr(request, "user", None),
             )
@@ -648,17 +594,17 @@ def validate_requirement_leaf_value(*, owner, field, value, enforce_required=Tru
     return value
 
 
-def validate_requirement_detail_data(*, owner, data, fields):
-    """校验并规范化一行明细数据。
+def validate_requirement_data(*, owner, data, fields):
+    """校验并规范化一行需求数据（合并态，含内置字段）。
 
-    owner 是这行数据的归属（需求或标准库），只用于取 workspace_id 做资产与成员
+    owner 是这行数据的归属（基线或标准库），只用于取 workspace_id 做资产与成员
     校验。fields 必须由调用方显式给出 —— 就是这一行所绑定的那个需求类型的字段。
 
-    刻意不留「fields 为 None 就自己去查」的兜底：产品需求本身没有字段，兜底会解析
-    成空列表，然后把任何非空 data 都报成「Unknown root field ids」，错得很难查。
+    刻意不留「fields 为 None 就自己去查」的兜底：兜底会解析成空列表，然后把任何非空
+    data 都报成「Unknown root field ids」，错得很难查。
     """
     if not isinstance(data, dict):
-        raise serializers.ValidationError("Detail data must be an object.")
+        raise serializers.ValidationError("Requirement data must be an object.")
 
     fields = list(fields)
     roots = [field for field in fields if field.parent_field_id is None]
@@ -679,12 +625,27 @@ def validate_requirement_detail_data(*, owner, data, fields):
         field_key = str(field.id)
         raw_value = data.get(field_key, field.default_value)
         if field.field_type != RequirementFieldType.FORM:
-            canonical[field_key] = validate_requirement_leaf_value(
+            value = validate_requirement_leaf_value(
                 owner=owner,
                 field=field,
                 value=raw_value,
                 enforce_required=field.is_active,
             )
+            # 标题落在 CharField(255) 列上，超长要在这里拦下来 —— 批量保存路径不走
+            # full_clean，漏过去就是数据库层面的 DataError
+            if (
+                field.builtin_key == RequirementBuiltinFieldKey.TITLE
+                and isinstance(value, str)
+                and len(value) > TITLE_MAX_LENGTH
+            ):
+                raise serializers.ValidationError(
+                    {
+                        field_key: (
+                            f"The title cannot exceed {TITLE_MAX_LENGTH} characters."
+                        )
+                    }
+                )
+            canonical[field_key] = value
             continue
 
         rows = raw_value if raw_value is not None else []
@@ -745,15 +706,15 @@ def validate_requirement_detail_data(*, owner, data, fields):
     return canonical
 
 
-class RequirementConfigurationWriteSerializer(serializers.Serializer):
-    """在乐观锁下更新需求的 meta。
+class RequirementBaselineConfigurationWriteSerializer(serializers.Serializer):
+    """在乐观锁下更新基线的 meta。
 
-    需求本身没有字段，字段编辑走需求类型的配置接口，所以这里显式拒绝 fields
+    基线本身没有字段，字段编辑走需求类型的配置接口，所以这里显式拒绝 fields
     而不是默默忽略 —— 前端把字段树发到错误的端点时应该拿到明确的报错。
     """
 
     expected_updated_at = serializers.DateTimeField()
-    requirement = serializers.DictField()
+    baseline = serializers.DictField()
 
     def validate(self, attrs):
         if "fields" in self.initial_data:
@@ -764,12 +725,12 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
             )
         return attrs
 
-    def validate_requirement(self, value):
-        requirement = self.context["requirement"]
+    def validate_baseline(self, value):
+        baseline = self.context["baseline"]
         # 状态只能由审批流转推动，配置保存里带上的 status 一律忽略
         value = {key: item for key, item in value.items() if key != "status"}
-        serializer = RequirementSerializer(
-            requirement,
+        serializer = RequirementBaselineSerializer(
+            baseline,
             data=value,
             partial=True,
             context={
@@ -778,91 +739,127 @@ class RequirementConfigurationWriteSerializer(serializers.Serializer):
             },
         )
         serializer.is_valid(raise_exception=True)
-        self._requirement_serializer = serializer
+        self._baseline_serializer = serializer
         return value
 
     @transaction.atomic
     def save(self, **kwargs):
-        requirement = (
-            Requirement.objects.select_for_update()
+        baseline = (
+            RequirementBaseline.objects.select_for_update()
             .filter(
-                id=self.context["requirement"].id,
+                id=self.context["baseline"].id,
                 workspace=self.context["workspace"],
             )
             .first()
         )
-        if requirement is None:
-            raise serializers.ValidationError("Requirement not found.")
-        if requirement.updated_at != self.validated_data["expected_updated_at"]:
+        if baseline is None:
+            raise serializers.ValidationError("Requirement baseline not found.")
+        if baseline.updated_at != self.validated_data["expected_updated_at"]:
             raise RequirementConfigurationConflict
 
-        self._requirement_serializer.instance = requirement
-        requirement = self._requirement_serializer.save()
-        requirement.refresh_from_db()
-        return requirement
+        self._baseline_serializer.instance = baseline
+        baseline = self._baseline_serializer.save()
+        baseline.refresh_from_db()
+        return baseline
 
 
 class RequirementConfigurationConflict(Exception):
     pass
 
 
-class RequirementDetailSerializer(BaseSerializer):
+class _RequirementRowSerializerMixin:
+    """把列上的标题与描述合并回 data，让接口契约与存储解耦。
+
+    前端网格拿到的永远是「data 里以字段 UUID 为 key 的完整一行」，不知道标题与描述
+    其实住在列上。context["builtin_field_ids_by_type"] 给定时直接用（列表页由
+    RowLayer 一次算好），否则按遇到的类型惰性补一次查询。
+    """
+
+    def _builtin_ids(self, requirement_type_id):
+        key = str(requirement_type_id)
+        cache = self.context.get("builtin_field_ids_by_type")
+        if cache is None:
+            cache = getattr(self, "_builtin_cache", None)
+            if cache is None:
+                cache = self._builtin_cache = {}
+        if key not in cache:
+            cache.update(builtin_field_index([requirement_type_id]))
+            cache.setdefault(key, {})
+        return cache[key]
+
+    def get_data(self, obj):
+        return merge_builtin_values(obj, self._builtin_ids(obj.requirement_type_id))
+
+    def get_change_kind(self, obj):
+        """相对上一个已发布版本的变更标记，由列表入口按需注解。"""
+        return getattr(obj, "change_kind", None)
+
+
+ROW_FIELDS = [
+    "id",
+    "product_id",
+    "project_id",
+    "library_id",
+    "requirement_type_id",
+    "title",
+    "description_html",
+    "data",
+    "sort_order",
+    "version",
+    "change_kind",
+    "last_changed_version",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by",
+]
+
+
+class RequirementSerializer(_RequirementRowSerializerMixin, BaseSerializer):
+    """一条需求条目。"""
+
+    data = serializers.SerializerMethodField()
+    change_kind = serializers.SerializerMethodField()
+
     class Meta:
-        model = RequirementDetail
-        fields = [
-            "id",
-            "requirement_id",
-            "library_id",
-            "requirement_type_id",
-            "data",
-            "sort_order",
-            "version",
-            "created_at",
-            "updated_at",
-            "created_by",
-            "updated_by",
-        ]
+        model = Requirement
+        fields = ROW_FIELDS
         read_only_fields = fields
 
 
-class RequirementDraftDetailSerializer(BaseSerializer):
-    """草稿明细行，输出形状与正式明细行完全一致。
+class RequirementDraftRowSerializer(_RequirementRowSerializerMixin, BaseSerializer):
+    """草稿里的需求条目，输出形状与正式行完全一致。
 
-    前端的明细网格因此不需要为草稿态做任何分支 —— 它看到的始终是同一份契约。
+    前端的网格因此不需要为草稿态做任何分支 —— 它看到的始终是同一份契约。
     """
 
-    requirement_id = serializers.SerializerMethodField()
+    data = serializers.SerializerMethodField()
+    change_kind = serializers.SerializerMethodField()
+    product_id = serializers.SerializerMethodField()
+    project_id = serializers.SerializerMethodField()
     library_id = serializers.SerializerMethodField()
 
     class Meta:
-        model = RequirementDraftDetail
-        fields = [
-            "id",
-            "requirement_id",
-            "library_id",
-            "requirement_type_id",
-            "data",
-            "sort_order",
-            "version",
-            "created_at",
-            "updated_at",
-            "created_by",
-            "updated_by",
-        ]
+        model = RequirementDraftRow
+        fields = ROW_FIELDS
         read_only_fields = fields
 
-    def get_requirement_id(self, obj):
-        requirement_id = self.context.get("requirement_id")
-        return str(requirement_id) if requirement_id else str(obj.draft.requirement_id)
+    def get_product_id(self, obj):
+        product_id = self.context.get("product_id")
+        return str(product_id) if product_id else None
+
+    def get_project_id(self, obj):
+        project_id = self.context.get("project_id")
+        return str(project_id) if project_id else None
 
     def get_library_id(self, obj):
-        # 草稿只属于产品/项目需求，永远不会挂在标准库上；这里恒为 None，只是为了
+        # 草稿只属于产品/项目作用域，永远不会挂在标准库上；这里恒为 None，只是为了
         # 让草稿行与正式行的输出形状保持一致。
         return None
 
 
-class RequirementDetailCreateSerializer(serializers.Serializer):
-    """新增一行明细。
+class RequirementCreateSerializer(serializers.Serializer):
+    """新增一条需求。
 
     必须指明这行绑定哪个需求类型 —— 字段由类型提供，data 也按该类型的字段校验。
     标准库的条目不用传，库本身就固定了类型（default_requirement_type_id）。
@@ -893,7 +890,7 @@ class RequirementDetailCreateSerializer(serializers.Serializer):
             )
 
         attrs["requirement_type_id"] = requirement_type_id
-        attrs["data"] = validate_requirement_detail_data(
+        attrs["data"] = validate_requirement_data(
             owner=self.context["owner"],
             data=attrs["data"],
             fields=resolver.specs(requirement_type_id),
@@ -901,8 +898,8 @@ class RequirementDetailCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class RequirementDetailUpdateSerializer(serializers.Serializer):
-    """更新一行明细。
+class RequirementUpdateSerializer(serializers.Serializer):
+    """更新一条需求。
 
     不接受 requirement_type_id —— 行与需求类型的绑定创建后不可变，调用方按行上
     已存的 requirement_type_id 取字段传进 context["fields"]。
@@ -912,18 +909,18 @@ class RequirementDetailUpdateSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
     def validate_data(self, value):
-        return validate_requirement_detail_data(
+        return validate_requirement_data(
             owner=self.context["owner"],
             data=value,
             fields=self.context["fields"],
         )
 
 
-class RequirementDetailBatchCreateSerializer(RequirementDetailCreateSerializer):
+class RequirementBatchCreateSerializer(RequirementCreateSerializer):
     client_id = serializers.UUIDField()
 
 
-class RequirementDetailBatchUpdateSerializer(serializers.Serializer):
+class RequirementBatchUpdateSerializer(serializers.Serializer):
     """批量更新的一项：按行自己的需求类型校验 data。
 
     validate_data 看不到同级的 id，所以校验整体放在 validate 里做。
@@ -938,9 +935,9 @@ class RequirementDetailBatchUpdateSerializer(serializers.Serializer):
         requirement_type_id = row_requirement_types.get(attrs["id"])
         if requirement_type_id is None:
             raise serializers.ValidationError(
-                {"id": "The requirement detail was not found."}
+                {"id": "The requirement was not found."}
             )
-        attrs["data"] = validate_requirement_detail_data(
+        attrs["data"] = validate_requirement_data(
             owner=self.context["owner"],
             data=attrs["data"],
             fields=self.context["requirement_type_resolver"].specs(
@@ -950,12 +947,12 @@ class RequirementDetailBatchUpdateSerializer(serializers.Serializer):
         return attrs
 
 
-class RequirementDetailBatchDeleteSerializer(serializers.Serializer):
+class RequirementBatchDeleteSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     version = serializers.IntegerField(min_value=1)
 
 
-class RequirementDetailImportSerializer(serializers.Serializer):
+class RequirementImportSerializer(serializers.Serializer):
     """从标准库导入条目到产品需求。
 
     只收归属与条目，不收 data —— data 是从库条目原样拷过来的。两侧引用的是同一个
@@ -978,15 +975,15 @@ class RequirementDetailImportSerializer(serializers.Serializer):
         return attrs
 
 
-class RequirementDetailBatchSaveSerializer(serializers.Serializer):
+class RequirementBatchSaveSerializer(serializers.Serializer):
     expected_updated_at = serializers.DateTimeField()
-    creates = RequirementDetailBatchCreateSerializer(
+    creates = RequirementBatchCreateSerializer(
         many=True, required=False, default=list
     )
-    updates = RequirementDetailBatchUpdateSerializer(
+    updates = RequirementBatchUpdateSerializer(
         many=True, required=False, default=list
     )
-    deletes = RequirementDetailBatchDeleteSerializer(
+    deletes = RequirementBatchDeleteSerializer(
         many=True, required=False, default=list
     )
 
@@ -996,7 +993,7 @@ class RequirementDetailBatchSaveSerializer(serializers.Serializer):
         deletes = attrs["deletes"]
         if not creates and not updates and not deletes:
             raise serializers.ValidationError(
-                "At least one detail operation is required."
+                "At least one requirement operation is required."
             )
 
         client_ids = [item["client_id"] for item in creates]
@@ -1008,22 +1005,22 @@ class RequirementDetailBatchSaveSerializer(serializers.Serializer):
         update_ids = [item["id"] for item in updates]
         if len(update_ids) != len(set(update_ids)):
             raise serializers.ValidationError(
-                {"updates": "Detail ids cannot contain duplicates."}
+                {"updates": "Requirement ids cannot contain duplicates."}
             )
 
         delete_ids = [item["id"] for item in deletes]
         if len(delete_ids) != len(set(delete_ids)):
             raise serializers.ValidationError(
-                {"deletes": "Detail ids cannot contain duplicates."}
+                {"deletes": "Requirement ids cannot contain duplicates."}
             )
         if set(update_ids).intersection(delete_ids):
             raise serializers.ValidationError(
-                "A detail cannot be updated and deleted in the same request."
+                "A requirement cannot be updated and deleted in the same request."
             )
         return attrs
 
 
-class RequirementDetailFilterSerializer(serializers.Serializer):
+class RequirementFilterSerializer(serializers.Serializer):
     field_id = serializers.UUIDField()
     operator = serializers.ChoiceField(
         choices=["contains", "equals", "is_empty", "is_not_empty"]
@@ -1032,7 +1029,7 @@ class RequirementDetailFilterSerializer(serializers.Serializer):
 
     def _resolve_field(self, field_id):
         """字段可能是正式表的模型对象，也可能是草稿快照解析出的 spec，用
-        field_attr 一视同仁。调用方（明细列表入口）总是从 DetailLayer 取好字段传
+        field_attr 一视同仁。调用方（需求列表入口）总是从 RowLayer 取好字段传
         进来，所以这里只认 context["fields"]。"""
         return next(
             (

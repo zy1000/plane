@@ -6,7 +6,7 @@
  */
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirementDetailChangeSnapshot, TRequirementField } from "@plane/types";
+import type { TRequirementChangeSnapshot, TRequirementField } from "@plane/types";
 import { CustomSelect, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import {
@@ -21,7 +21,7 @@ const PER_PAGE_OPTIONS = [20, 50, 100];
 type TProps = {
   workspaceSlug: string;
   fields: TRequirementField[];
-  rows: TRequirementDetailChangeSnapshot[];
+  rows: TRequirementChangeSnapshot[];
   totalCount: number;
   isLoading: boolean;
   error: string | null;

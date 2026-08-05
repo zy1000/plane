@@ -1,28 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
-import { ChevronLeft, Database, FileText, GitBranch, History, Save, Settings2 } from "lucide-react";
+import { useParams, useSearchParams } from "react-router";
+import { Database, GitBranch, History, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirement, IUserLite } from "@plane/types";
-import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
+import type { TRequirementBaseline, IUserLite } from "@plane/types";
+import { AlertModalCore, Header, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { RequirementDetailGrid } from "@/components/requirements/requirement-detail-grid";
+import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { useProductMembers } from "@/hooks/store/use-product-members";
+import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
-import { useRequirementDetails } from "@/hooks/store/use-requirement-details";
 import { useUser } from "@/hooks/store/user";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
 import { RequirementStatusActions, RequirementStatusMeta } from "./change/requirement-status-actions";
 import { SubmitChangeModal } from "./change/submit-change-modal";
 import { useRequirementStateActions } from "./change/use-requirement-state-actions";
 import { VersionHistory } from "./change/version-history";
-import { useProductRequirementsContext } from "./context";
 import { RequirementImportFromLibraryModal } from "./import-from-library-modal";
 import { ReadOnlyRequirementSettings } from "./requirement-read-only-configuration";
 import {
@@ -38,26 +36,29 @@ import { RequirementTypePickerModal } from "./requirement-type-picker-modal";
 
 const TABS = ["data", "configuration", "changes", "versions"] as const;
 
-type TRequirementDetailTab = (typeof TABS)[number];
+type TProductRequirementsTab = (typeof TABS)[number];
 
-const toSettingsDraft = (requirement: TRequirement): TRequirementSettingsDraft => ({
-  title: requirement.title,
-  description_html: requirement.description_html,
-  owner_id: requirement.owner_id,
-  status: requirement.status,
-  approver_ids: requirement.approver_ids,
-  approval_type: requirement.approval_type,
-  required_count: requirement.required_count,
+const toSettingsDraft = (baseline: TRequirementBaseline): TRequirementSettingsDraft => ({
+  owner_id: baseline.owner_id,
+  status: baseline.status,
+  approver_ids: baseline.approver_ids,
+  approval_type: baseline.approval_type,
+  required_count: baseline.required_count,
 });
 
 const serializeSettings = (settings: TRequirementSettingsDraft) => JSON.stringify(settings);
 
-export const ProductRequirementDetailPage = observer(function ProductRequirementDetailPage() {
+/**
+ * 产品需求页。
+ *
+ * 这里就是需求条目本身的落脚点 —— 没有中间的「需求集合」层了。审批的单位是整条
+ * 基线（本产品的全部需求），所以状态、审批配置、变更记录与版本都挂在页面级，
+ * 数据页则是按需求类型分视图的网格。
+ */
+export const ProductRequirementsPage = observer(function ProductRequirementsPage() {
   const { t } = useTranslation();
-  const { requirementId } = useParams();
-  const navigate = useNavigate();
+  const { workspaceSlug, productId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { workspaceSlug, productId, requirements, upsertRequirement } = useProductRequirementsContext();
   const { members } = useProductMembers(workspaceSlug, productId);
   const { data: currentUser } = useUser();
   const [isDataEditing, setIsDataEditing] = useState(false);
@@ -65,76 +66,72 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
   const [isImportOpen, setIsImportOpen] = useState(false);
   /** 鼠标移到「导入」上就开始预热条目，点开时基本无等待 */
   const [shouldPrefetchImport, setShouldPrefetchImport] = useState(false);
-  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<TRequirementSettingsDraft | null>(null);
   const [settingsBaseline, setSettingsBaseline] = useState("");
-  const detailsStore = useRequirementDetails({
-    workspaceSlug,
-    requirementId,
-    onRequirementUpdate: upsertRequirement,
-  });
-  const requirement = detailsStore.configuration?.requirement ?? requirements.find((item) => item.id === requirementId);
-  const requestedTab = searchParams.get("tab") as TRequirementDetailTab | null;
-  const activeTab: TRequirementDetailTab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "data";
+
+  const store = useProductRequirements({ workspaceSlug, productId });
+  const baseline = store.baseline;
+  const requestedTab = searchParams.get("tab") as TProductRequirementsTab | null;
+  const activeTab: TProductRequirementsTab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "data";
   const openedChangeRequestId = searchParams.get("cr");
-  const canEdit = Boolean(requirement?.can_edit);
+  const canEdit = Boolean(baseline?.can_edit);
   /**
    * 只有草稿态可写，与后端 READ_ONLY_REASONS 一致：已发布内容要先点「编辑」生成工作
    * 副本，审批期草稿已被冻结成变更单快照。否则用户能进编辑态但保存拿到 409。
    */
-  const isEditable = canEdit && requirement?.status === "draft";
+  const isEditable = canEdit && baseline?.status === "draft";
   const configurationReadOnlyHint = t(
     !canEdit
       ? "workspace_products.requirements.configuration.read_only"
-      : requirement?.status === "in_review"
+      : baseline?.status === "in_review"
         ? "workspace_products.requirements.configuration.read_only_in_review"
         : "workspace_products.requirements.configuration.read_only_published"
   );
-  const changesStore = useRequirementChangeRequests({
-    workspaceSlug,
-    requirementId,
-    onRequirementUpdate: upsertRequirement,
-  });
+  const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
   const pendingChangeRequest = changesStore.changeRequestsPage.results.find((item) => item.status === "pending");
   const pendingCount = changesStore.changeRequestsPage.results.filter((item) => item.status === "pending").length;
   const memberOptions = useMemo(() => {
     const byId = new Map<string, IUserLite>();
     members.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    if (requirement?.owner_detail) byId.set(requirement.owner_id, requirement.owner_detail);
-    requirement?.approver_details.forEach((member) => byId.set(member.id, member));
+    if (baseline?.owner_detail) byId.set(baseline.owner_id, baseline.owner_detail);
+    baseline?.approver_details.forEach((member) => byId.set(member.id, member));
     if (currentUser) byId.set(currentUser.id, currentUser);
     return Array.from(byId.values());
-  }, [currentUser, members, requirement]);
+  }, [currentUser, members, baseline]);
   const isDirty = useMemo(
     () => Boolean(settingsBaseline && settingsDraft && serializeSettings(settingsDraft) !== settingsBaseline),
     [settingsBaseline, settingsDraft]
   );
 
-  const requirementTypes = detailsStore.requirementTypes;
+  const requirementTypes = store.requirementTypes;
   const activeView = useMemo(
     () => resolveRequirementDataView(requirementTypes, searchParams.get("view")),
     [searchParams, requirementTypes]
   );
-  const activeTemplate = activeView.kind === "requirementType" ? requirementTypes.find((item) => item.id === activeView.requirementTypeId) : undefined;
+  const activeType =
+    activeView.kind === "requirementType"
+      ? requirementTypes.find((item) => item.id === activeView.requirementTypeId)
+      : undefined;
 
   useEffect(() => {
-    if (!detailsStore.configuration) return;
-    const nextSettings = toSettingsDraft(detailsStore.configuration.requirement);
+    if (!store.configuration) return;
+    const nextSettings = toSettingsDraft(store.configuration.baseline);
     setSettingsDraft(nextSettings);
     setSettingsBaseline(serializeSettings(nextSettings));
-  }, [detailsStore.configuration]);
+  }, [store.configuration]);
 
   /**
-   * 视图与明细过滤保持同步：单类型时也要把过滤设成那个类型，否则会拉到全部行。
-   * 依赖只取用到的两个值 —— detailsStore 每次渲染都是新对象，整个放进依赖会死循环。
+   * 视图与条目过滤保持同步：单类型时也要把过滤设成那个类型，否则会拉到全部行。
+   * 依赖只取用到的两个值 —— store 每次渲染都是新对象，整个放进依赖会死循环。
    */
-  const { requirementTypeFilter, setRequirementTypeFilter } = detailsStore;
+  const { requirementTypeFilter, setRequirementTypeFilter } = store;
   useEffect(() => {
     const nextFilter = activeView.kind === "requirementType" ? activeView.requirementTypeId : undefined;
     if (requirementTypeFilter !== nextFilter) setRequirementTypeFilter(nextFilter);
   }, [activeView, setRequirementTypeFilter, requirementTypeFilter]);
 
-  const setTab = (tab: TRequirementDetailTab) => {
+  const setTab = (tab: TProductRequirementsTab) => {
     if (isDataEditing || (activeTab === "configuration" && isDirty)) return;
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
@@ -159,30 +156,21 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
   };
 
   const refreshLayer = () => {
-    void detailsStore.fetchConfiguration().catch(() => undefined);
-    void detailsStore.fetchDetails().catch(() => undefined);
+    void store.fetchConfiguration().catch(() => undefined);
+    void store.fetchRequirements().catch(() => undefined);
   };
 
   const stateActions = useRequirementStateActions({
-    requirement,
+    baseline,
     changesStore,
     pendingChangeRequestId: pendingChangeRequest?.id ?? null,
     onLayerChanged: refreshLayer,
-    onDeleted: () => navigate(`/${workspaceSlug}/products/${productId}/requirements`),
     onSubmitted: () => setTab("changes"),
   });
 
-  /** 只保存基本信息与审批配置 —— 字段归类型所有，这里已经不再提交 fields。 */
+  /** 只保存负责人与审批配置 —— 字段归需求类型，标题描述归每一条需求 */
   const saveConfiguration = async () => {
-    if (!detailsStore.configuration || !requirement || !settingsDraft) return;
-    if (!settingsDraft.title.trim()) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_products.requirements.validation.title"),
-      });
-      return;
-    }
+    if (!store.configuration || !settingsDraft) return;
     if (!settingsDraft.owner_id) {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -206,13 +194,10 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
       return;
     }
     try {
-      const response = await detailsStore.updateConfiguration({
-        expected_updated_at: detailsStore.configuration.requirement.updated_at,
-        requirement: {
-          title: settingsDraft.title.trim(),
-          description_html: settingsDraft.description_html,
+      const response = await store.updateConfiguration({
+        expected_updated_at: store.configuration.baseline.updated_at,
+        baseline: {
           owner_id: settingsDraft.owner_id,
-          status: settingsDraft.status,
           approver_ids: settingsDraft.approver_ids,
           approval_type: settingsDraft.approver_ids.length ? settingsDraft.approval_type : "any",
           required_count:
@@ -221,7 +206,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               : null,
         },
       });
-      const nextSettings = toSettingsDraft(response.requirement);
+      const nextSettings = toSettingsDraft(response.baseline);
       setSettingsDraft(nextSettings);
       setSettingsBaseline(serializeSettings(nextSettings));
       setToast({
@@ -232,7 +217,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     } catch (error) {
       const payload = error as { code?: string; error?: string };
       if (payload?.code === "REQUIREMENT_CONFIGURATION_CONFLICT") {
-        await detailsStore.fetchConfiguration().catch(() => undefined);
+        await store.fetchConfiguration().catch(() => undefined);
       }
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -242,64 +227,36 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     }
   };
 
-  const isLoading = detailsStore.isConfigurationLoading || !requirement;
+  const isLoading = store.isConfigurationLoading || !baseline;
 
   return (
     <>
-      <PageHead title={requirement?.title ?? t("workspace_products.navigation.requirements")} />
+      <PageHead title={t("workspace_products.navigation.requirements")} />
       <AppHeader
         rowClassName="h-[52px]"
         header={
           <Header className="min-w-0">
             <Header.LeftItem className="max-w-none min-w-0 flex-nowrap">
-              <button
-                type="button"
-                onClick={() => navigate(`/${workspaceSlug}/products/${productId}/requirements`)}
-                className="grid h-11 w-7 shrink-0 place-items-center rounded-md text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent-strong"
-                aria-label={t("common.back")}
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <Breadcrumbs className="min-w-0 flex-grow-0">
-                <Breadcrumbs.Item
-                  component={
-                    <BreadcrumbLink
-                      href={`/${workspaceSlug}/products/${productId}/requirements`}
-                      label={t("workspace_products.navigation.requirements")}
-                      icon={<FileText className="size-4 text-tertiary" />}
-                    />
-                  }
-                />
-                <Breadcrumbs.Item
-                  component={
-                    isLoading ? (
-                      <Loader className="w-40">
-                        <Loader.Item height="22px" />
-                      </Loader>
-                    ) : (
-                      <BreadcrumbLink label={requirement.title} isLast />
-                    )
-                  }
-                  isLast
-                />
-              </Breadcrumbs>
-              {requirement && <RequirementStatusMeta requirement={requirement} className="hidden sm:flex" />}
+              <h1 className="truncate text-13 font-medium text-primary">
+                {t("workspace_products.navigation.requirements")}
+              </h1>
+              {baseline && <RequirementStatusMeta baseline={baseline} className="hidden sm:flex" />}
             </Header.LeftItem>
             <Header.RightItem className="shrink-0 gap-2">
               {activeTab === "configuration" && isEditable && (
                 <Button
                   variant="primary"
                   disabled={!isDirty}
-                  loading={detailsStore.isMutating}
+                  loading={store.isMutating}
                   onClick={() => void saveConfiguration()}
                 >
                   <Save className="size-3.5" />
                   {t("workspace_products.requirements.configuration.save")}
                 </Button>
               )}
-              {requirement && (
+              {baseline && (
                 <RequirementStatusActions
-                  requirement={requirement}
+                  baseline={baseline}
                   isSubmitter={Boolean(pendingChangeRequest?.can_cancel)}
                   isMutating={changesStore.isMutating}
                   onEdit={() => void stateActions.startEditing()}
@@ -372,7 +329,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   >
                     {t("workspace_products.requirements.data.import_from_library")}
                   </Button>
-                  <Button variant="primary" size="lg" onClick={() => setIsTemplatePickerOpen(true)}>
+                  <Button variant="primary" size="lg" onClick={() => setIsTypePickerOpen(true)}>
                     {t("workspace_products.requirements.data.manual_entry")}
                   </Button>
                 </>
@@ -392,15 +349,15 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
           </div>
         )}
 
-        {detailsStore.configurationError && !detailsStore.configuration ? (
+        {store.configurationError && !store.configuration ? (
           <div className="grid flex-1 place-items-center p-6 text-center">
             <div>
               <p className="text-13 font-medium text-primary">{t("workspace_products.requirements.error.title")}</p>
-              <p className="mt-1 text-12 text-secondary">{detailsStore.configurationError}</p>
+              <p className="mt-1 text-12 text-secondary">{store.configurationError}</p>
               <Button
                 className="mt-3"
                 variant="secondary"
-                onClick={() => void detailsStore.fetchConfiguration().catch(() => undefined)}
+                onClick={() => void store.fetchConfiguration().catch(() => undefined)}
               >
                 {t("retry")}
               </Button>
@@ -408,9 +365,9 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
           </div>
         ) : activeTab === "changes" ? (
           <RequirementChangesTab
-            workspaceSlug={workspaceSlug}
-            requirementId={requirementId ?? ""}
-            fields={detailsStore.configuration?.fields ?? []}
+            workspaceSlug={workspaceSlug ?? ""}
+            productId={productId ?? ""}
+            fields={store.configuration?.fields ?? []}
             members={memberOptions}
             store={changesStore}
             openedChangeRequestId={openedChangeRequestId}
@@ -421,15 +378,13 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             }}
           />
         ) : activeTab === "versions" ? (
-          requirement ? (
+          baseline ? (
             <VersionHistory
-              workspaceSlug={workspaceSlug}
-              requirement={requirement}
+              workspaceSlug={workspaceSlug ?? ""}
+              productId={productId ?? ""}
+              baseline={baseline}
               members={memberOptions}
-              onRequirementUpdate={(next) => {
-                upsertRequirement(next);
-                refreshLayer();
-              }}
+              onBaselineUpdate={() => refreshLayer()}
             />
           ) : (
             <div className="p-6">
@@ -458,7 +413,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                     >
                       {t("workspace_products.requirements.data.import_from_library")}
                     </Button>
-                    <Button variant="secondary" onClick={() => setIsTemplatePickerOpen(true)}>
+                    <Button variant="secondary" onClick={() => setIsTypePickerOpen(true)}>
                       {t("workspace_products.requirements.data.manual_entry")}
                     </Button>
                   </div>
@@ -467,83 +422,86 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </div>
           ) : activeView.kind === "default" ? (
             <RequirementDefaultViewGrid
-              workspaceSlug={workspaceSlug}
+              workspaceSlug={workspaceSlug ?? ""}
               requirementTypes={requirementTypes}
-              details={detailsStore.detailsPage.results}
-              totalCount={detailsStore.detailsPage.total_count ?? 0}
-              perPage={detailsStore.perPage}
-              nextCursor={detailsStore.detailsPage.next_cursor}
-              prevCursor={detailsStore.detailsPage.prev_cursor}
-              nextPageResults={detailsStore.detailsPage.next_page_results}
-              prevPageResults={detailsStore.detailsPage.prev_page_results}
-              isLoading={isLoading || detailsStore.isDetailsLoading}
-              isMutating={detailsStore.isMutating}
-              error={detailsStore.detailsError}
+              requirements={store.requirementsPage.results}
+              totalCount={store.requirementsPage.total_count ?? 0}
+              perPage={store.perPage}
+              nextCursor={store.requirementsPage.next_cursor}
+              prevCursor={store.requirementsPage.prev_cursor}
+              nextPageResults={store.requirementsPage.next_page_results}
+              prevPageResults={store.requirementsPage.prev_page_results}
+              isLoading={isLoading || store.isRequirementsLoading}
+              isMutating={store.isMutating}
+              error={store.requirementsError}
               readOnly={!isEditable}
-              search={detailsStore.search}
-              onSearchChange={detailsStore.setSearch}
-              onCursorChange={detailsStore.setCursor}
-              onPerPageChange={detailsStore.setPerPage}
-              onDelete={detailsStore.deleteDetails}
+              search={store.search}
+              onSearchChange={store.setSearch}
+              onCursorChange={store.setCursor}
+              onPerPageChange={store.setPerPage}
+              onDelete={store.deleteRequirements}
               onDuplicate={({ requirementTypeId, data, afterId }) =>
-                detailsStore.createDetail(data, requirementTypeId, { after_id: afterId })
+                store.createRequirement(data, requirementTypeId, { after_id: afterId })
               }
-              onOpenRequirementTypeView={(requirementTypeId) => changeView({ kind: "requirementType", requirementTypeId })}
+              onOpenRequirementTypeView={(requirementTypeId) =>
+                changeView({ kind: "requirementType", requirementTypeId })
+              }
               toolbarPortalEl={dataToolbarHost}
             />
           ) : (
-            <RequirementDetailGrid
+            <RequirementGrid
               // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
               key={activeView.requirementTypeId}
-              workspaceSlug={workspaceSlug}
-              entityId={requirementId ?? ""}
+              workspaceSlug={workspaceSlug ?? ""}
+              entityId={productId ?? ""}
+              showChangeColumns
               readOnly={!isEditable}
-              expectedUpdatedAt={detailsStore.configuration?.detail_expected_updated_at}
+              expectedUpdatedAt={store.configuration?.expected_updated_at}
               createRequirementTypeId={activeView.requirementTypeId}
               columnStorageId={activeView.requirementTypeId}
-              fields={activeTemplate?.fields ?? []}
-              details={detailsStore.detailsPage.results}
-              totalCount={detailsStore.detailsPage.total_count ?? 0}
-              totalPages={detailsStore.detailsPage.total_pages ?? 0}
-              nextCursor={detailsStore.detailsPage.next_cursor}
-              prevCursor={detailsStore.detailsPage.prev_cursor}
-              nextPageResults={detailsStore.detailsPage.next_page_results}
-              prevPageResults={detailsStore.detailsPage.prev_page_results}
-              isLoading={isLoading || detailsStore.isDetailsLoading}
-              isMutating={detailsStore.isMutating}
-              error={detailsStore.detailsError}
-              search={detailsStore.search}
-              filters={detailsStore.filters}
-              perPage={detailsStore.perPage}
-              onSearchChange={detailsStore.setSearch}
-              onFiltersChange={detailsStore.setFilters}
-              onPerPageChange={detailsStore.setPerPage}
-              onCursorChange={detailsStore.setCursor}
-              onRefresh={detailsStore.fetchDetails}
-              onBulkSave={detailsStore.saveDetailBatch}
+              fields={activeType?.fields ?? []}
+              requirements={store.requirementsPage.results}
+              totalCount={store.requirementsPage.total_count ?? 0}
+              totalPages={store.requirementsPage.total_pages ?? 0}
+              nextCursor={store.requirementsPage.next_cursor}
+              prevCursor={store.requirementsPage.prev_cursor}
+              nextPageResults={store.requirementsPage.next_page_results}
+              prevPageResults={store.requirementsPage.prev_page_results}
+              isLoading={isLoading || store.isRequirementsLoading}
+              isMutating={store.isMutating}
+              error={store.requirementsError}
+              search={store.search}
+              filters={store.filters}
+              perPage={store.perPage}
+              onSearchChange={store.setSearch}
+              onFiltersChange={store.setFilters}
+              onPerPageChange={store.setPerPage}
+              onCursorChange={store.setCursor}
+              onRefresh={store.fetchRequirements}
+              onBulkSave={store.saveRequirementBatch}
               onEditingChange={setIsDataEditing}
               toolbarPortalEl={dataToolbarHost}
             />
           )
-        ) : detailsStore.isConfigurationLoading ? (
+        ) : store.isConfigurationLoading ? (
           <div className="p-6">
             <Loader>
               <Loader.Item height="420px" />
             </Loader>
           </div>
         ) : (
-          /* 配置只剩基本信息与审批 —— 字段已经改由「模板管理 → 需求类型」维护 */
+          /* 配置只剩负责人与审批 —— 字段由「需求类型」维护，标题描述在每条需求上 */
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="shrink-0 border-b border-subtle px-4 py-2 text-11 text-tertiary md:px-6">
               {t("workspace_products.requirements.configuration.fields_moved_hint")}
             </div>
             <div className="flex min-h-0 flex-1">
-              {!isEditable && requirement ? (
-                <ReadOnlyRequirementSettings requirement={requirement} hint={configurationReadOnlyHint} />
+              {!isEditable && baseline ? (
+                <ReadOnlyRequirementSettings baseline={baseline} hint={configurationReadOnlyHint} />
               ) : settingsDraft ? (
                 <RequirementSettingsPanel
                   draft={settingsDraft}
-                  currentVersion={requirement?.current_version ?? null}
+                  currentVersion={baseline?.current_version ?? null}
                   memberOptions={memberOptions}
                   onChange={setSettingsDraft}
                 />
@@ -567,11 +525,11 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
       <RequirementImportFromLibraryModal
         isOpen={isImportOpen}
         shouldPrefetch={shouldPrefetchImport}
-        workspaceSlug={workspaceSlug}
-        isMutating={detailsStore.isMutating}
+        workspaceSlug={workspaceSlug ?? ""}
+        isMutating={store.isMutating}
         onClose={() => setIsImportOpen(false)}
         onImport={async (payloads) => {
-          const responses = await detailsStore.importFromLibraries(payloads);
+          const responses = await store.importFromLibraries(payloads);
           if (!responses.length) return responses;
           // 跨库导入时切到第一批的类型视图，用户马上能看到刚导进来的数据
           changeView({ kind: "requirementType", requirementTypeId: responses[0].requirement_type_id });
@@ -585,13 +543,13 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
           return responses;
         }}
       />
-      {isTemplatePickerOpen && (
+      {isTypePickerOpen && (
         <RequirementTypePickerModal
-          isOpen={isTemplatePickerOpen}
-          workspaceSlug={workspaceSlug}
-          onClose={() => setIsTemplatePickerOpen(false)}
+          isOpen={isTypePickerOpen}
+          workspaceSlug={workspaceSlug ?? ""}
+          onClose={() => setIsTypePickerOpen(false)}
           onConfirm={(requirementTypeId) => {
-            setIsTemplatePickerOpen(false);
+            setIsTypePickerOpen(false);
             // 切到该需求类型的视图，用户在那里用表格下方的「新增数据」录入
             changeView({ kind: "requirementType", requirementTypeId });
           }}
@@ -612,14 +570,14 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         title={t(
           stateActions.hasPublishedVersion
             ? "workspace_products.requirements.state.discard_draft_title"
-            : "workspace_products.requirements.state.delete_requirement_title"
+            : "workspace_products.requirements.state.clear_requirements_title"
         )}
         content={
           stateActions.hasPublishedVersion
             ? t("workspace_products.requirements.state.discard_draft_description", {
-                version: requirement?.current_version ?? "",
+                version: baseline?.current_version ?? "",
               })
-            : t("workspace_products.requirements.state.delete_requirement_description")
+            : t("workspace_products.requirements.state.clear_requirements_description")
         }
       />
       <AlertModalCore

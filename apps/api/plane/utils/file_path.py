@@ -193,16 +193,20 @@ class _Resolver:
             )
 
         if et == "REQUIREMENT_ATTACHMENT":
-            requirement_id = getattr(asset, "entity_identifier", None)
-            if not requirement_id:
+            # 附件挂在网格的归属方（产品或标准库）上而不是单条需求：新行在上传那一刻
+            # 还没有 id，而草稿物化会重建行，挂在行上的路径会跟着失效。
+            owner_id = getattr(asset, "entity_identifier", None)
+            if not owner_id:
                 return self._temp_node(parent_for_category=ws_node, asset=asset)
-            from plane.db.models import Requirement
+            from plane.db.models import Product, RequirementLibrary
 
-            requirement = Requirement.objects.filter(
-                id=requirement_id,
-                workspace=workspace,
-            ).first()
-            if requirement is None:
+            owner = (
+                Product.objects.filter(id=owner_id, workspace=workspace).first()
+                or RequirementLibrary.objects.filter(
+                    id=owner_id, workspace=workspace
+                ).first()
+            )
+            if owner is None:
                 return self._temp_node(parent_for_category=ws_node, asset=asset)
             category_node = self._category_node(
                 parent=ws_node, entity_type=et
@@ -210,8 +214,8 @@ class _Resolver:
             return self._get_or_create_node(
                 parent=category_node,
                 entity_type="REQUIREMENT",
-                entity_id=requirement.pk,
-                display_name=requirement.title,
+                entity_id=owner.pk,
+                display_name=getattr(owner, "name", "") or "",
             )
 
         project = self._get_related(asset, "project")

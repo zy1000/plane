@@ -175,6 +175,14 @@ export const WORKSPACE_SETTINGS = {
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
   },
+  "requirement-types": {
+    key: "requirement-types",
+    i18n_label: "workspace_settings.settings.requirement_types.title",
+    href: `/settings/requirement-types`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    requiresMembership: true,
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/requirement-types`),
+  },
   changelog: {
     key: "changelog",
     i18n_label: "更新日志管理",
@@ -426,7 +434,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     key: "templates",
     labelTranslationKey: "templates",
     /** 点进来的落地页；改这里不影响下面的高亮范围 */
-    href: `/templates/requirement-types/`,
+    href: `/templates/libraries/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => {
       const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;

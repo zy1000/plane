@@ -5,10 +5,10 @@ import type {
   IUserLite,
   TRequirementChangeItem,
   TRequirementField,
-  TRequirementMetaChangeSnapshot,
+  TRequirementBaselineChangeSnapshot,
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
-import { cn, sanitizeHTML } from "@plane/utils";
+import { cn } from "@plane/utils";
 import type { TChangeRequirementTypeTab } from "./change-requirement-type-tabs";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
@@ -32,10 +32,6 @@ function useMetaValueFormatter(members: IUserLite[]) {
 
   return (fieldKey: string, value: unknown): string => {
     if (isEmptyValue(value)) return t("workspace_products.requirements.change.empty_value");
-
-    if (fieldKey === "description_html" && typeof value === "string") {
-      return sanitizeHTML(value) || t("workspace_products.requirements.change.empty_value");
-    }
 
     if (fieldKey === "owner_id" && typeof value === "string") {
       return membersById.get(value)?.display_name ?? value;
@@ -71,13 +67,13 @@ type TMetaDiffTableProps = {
 };
 
 /** 概览：以清晰的并列视图展示需求基本信息的前后差异。 */
-export function MetaDiffTable({ items, members }: TMetaDiffTableProps) {
+export function BaselineDiffTable({ items, members }: TMetaDiffTableProps) {
   const { t } = useTranslation();
   const formatValue = useMetaValueFormatter(members);
 
   const rows = items.map((item) => {
-    const before = item.before_snapshot as TRequirementMetaChangeSnapshot | null;
-    const after = item.proposed_snapshot as TRequirementMetaChangeSnapshot | null;
+    const before = item.before_snapshot as TRequirementBaselineChangeSnapshot | null;
+    const after = item.proposed_snapshot as TRequirementBaselineChangeSnapshot | null;
     const fieldKey = after?.field ?? before?.field ?? "";
     return {
       id: item.id,

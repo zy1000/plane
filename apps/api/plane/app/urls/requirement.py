@@ -1,10 +1,9 @@
 from django.urls import path
 
 from plane.app.views.requirement import (
+    RequirementBaselineConfigurationAPIView,
     RequirementChangeItemViewSet,
     RequirementChangeRequestViewSet,
-    RequirementConfigurationAPIView,
-    RequirementDetailViewSet,
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
@@ -83,117 +82,102 @@ urlpatterns = [
         ),
         name="requirement-library-item",
     ),
+    # --- 产品需求：条目本身 ---------------------------------------------
     path(
-        "workspaces/<str:slug>/requirements/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/",
         RequirementViewSet.as_view({"get": "list", "post": "create"}),
-        name="requirements",
+        name="product-requirements",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:pk>/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/bulk-delete/",
+        RequirementViewSet.as_view({"post": "bulk_destroy"}),
+        name="product-requirement-bulk-delete",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/bulk-save/",
+        RequirementViewSet.as_view({"post": "bulk_save"}),
+        name="product-requirement-bulk-save",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/import/",
+        RequirementViewSet.as_view({"post": "import_from_library"}),
+        name="product-requirement-import",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/",
         RequirementViewSet.as_view(
-            {
-                "get": "retrieve",
-                "put": "update",
-                "patch": "partial_update",
-                "delete": "destroy",
-            }
-        ),
-        name="requirement-detail",
-    ),
-    path(
-        "workspaces/<str:slug>/requirements/<uuid:pk>/configuration/",
-        RequirementConfigurationAPIView.as_view(),
-        name="requirement-configuration",
-    ),
-    path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/",
-        RequirementDetailViewSet.as_view({"get": "list", "post": "create"}),
-        name="requirement-details",
-    ),
-    path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/bulk-delete/",
-        RequirementDetailViewSet.as_view({"post": "bulk_destroy"}),
-        name="requirement-detail-bulk-delete",
-    ),
-    path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/bulk-save/",
-        RequirementDetailViewSet.as_view({"post": "bulk_save"}),
-        name="requirement-detail-bulk-save",
-    ),
-    path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/import/",
-        RequirementDetailViewSet.as_view({"post": "import_from_library"}),
-        name="requirement-detail-import",
-    ),
-    path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/details/<uuid:pk>/",
-        RequirementDetailViewSet.as_view(
             {"patch": "partial_update", "delete": "destroy"}
         ),
-        name="requirement-detail-item",
+        name="product-requirement-item",
+    ),
+    # --- 产品需求：基线（审批配置 / 工作副本 / 变更单 / 版本）-------------
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/",
+        RequirementBaselineConfigurationAPIView.as_view(),
+        name="requirement-baseline",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/working-copy/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/working-copy/",
         RequirementWorkingCopyAPIView.as_view(),
         name="requirement-working-copy",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/change-requests/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/",
         RequirementChangeRequestViewSet.as_view({"get": "list"}),
         name="requirement-change-requests",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/change-requests/submit/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/submit/",
         RequirementChangeRequestViewSet.as_view({"post": "submit"}),
         name="requirement-change-request-submit",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/change-requests/<uuid:pk>/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/",
         RequirementChangeRequestViewSet.as_view({"get": "retrieve"}),
         name="requirement-change-request-detail",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/change-requests/<uuid:pk>/items/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/items/",
         RequirementChangeItemViewSet.as_view({"get": "list"}),
         name="requirement-change-request-items",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/change-requests/<uuid:pk>/act/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/act/",
         RequirementChangeRequestViewSet.as_view({"post": "act"}),
         name="requirement-change-request-act",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/change-requests/<uuid:pk>/cancel/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/cancel/",
         RequirementChangeRequestViewSet.as_view({"post": "cancel"}),
         name="requirement-change-request-cancel",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/",
         RequirementVersionViewSet.as_view({"get": "list"}),
         name="requirement-versions",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/",
         RequirementVersionViewSet.as_view({"get": "retrieve"}),
         name="requirement-version-detail",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/details/",
-        RequirementVersionViewSet.as_view({"get": "details"}),
-        name="requirement-version-details",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/requirements/",
+        RequirementVersionViewSet.as_view({"get": "requirements"}),
+        name="requirement-version-requirements",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/compare/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/compare/",
         RequirementVersionViewSet.as_view({"get": "compare"}),
         name="requirement-version-compare",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/compare-current/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/compare-current/",
         RequirementVersionViewSet.as_view({"get": "compare_current"}),
         name="requirement-version-compare-current",
     ),
     path(
-        "workspaces/<str:slug>/requirements/<uuid:requirement_id>/versions/<int:version>/rollback/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/rollback/",
         RequirementVersionViewSet.as_view({"post": "rollback"}),
         name="requirement-version-rollback",
     ),

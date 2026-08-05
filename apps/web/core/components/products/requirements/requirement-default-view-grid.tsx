@@ -10,8 +10,8 @@ import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import type {
-  TRequirementDetail,
-  TRequirementDetailData,
+  TRequirement,
+  TRequirementData,
   TRequirementField,
   TRequirementTypeSchema,
 } from "@plane/types";
@@ -22,8 +22,7 @@ import {
   LeafValue,
   MenuRowLabel,
 } from "@/components/requirements/requirement-grid-shared";
-import { copyRequirementDetailData } from "@/components/requirements/use-requirement-detail-grid-editor";
-import { getBuiltinValue } from "./requirement-data-views";
+import { copyRequirementData } from "@/components/requirements/use-requirement-grid-editor";
 
 /**
  * 多类型时的默认视图：跨全部需求类型的总览。
@@ -34,7 +33,7 @@ import { getBuiltinValue } from "./requirement-data-views";
 type TProps = {
   workspaceSlug: string;
   requirementTypes: TRequirementTypeSchema[];
-  details: TRequirementDetail[];
+  requirements: TRequirement[];
   totalCount: number;
   perPage: number;
   nextCursor?: string;
@@ -51,7 +50,7 @@ type TProps = {
   onPerPageChange: (value: number) => void;
   onDelete: (ids: string[]) => Promise<unknown>;
   /** 复制一行：新行绑定同一个类型，插在原行后面 */
-  onDuplicate: (payload: { requirementTypeId: string; data: TRequirementDetailData; afterId: string }) => Promise<unknown>;
+  onDuplicate: (payload: { requirementTypeId: string; data: TRequirementData; afterId: string }) => Promise<unknown>;
   onOpenRequirementTypeView: (requirementTypeId: string) => void;
   /** 与类型视图共用顶部工具栏容器：切视图时右上角不该整排控件消失 */
   toolbarPortalEl?: HTMLElement | null;
@@ -60,10 +59,10 @@ type TProps = {
 /** 借标题/描述字段的定义来渲染值，这样富文本、附件等类型的呈现与类型视图完全一致。 */
 const findBuiltinField = (
   requirementTypes: TRequirementTypeSchema[],
-  detail: TRequirementDetail,
+  requirement: TRequirement,
   key: "title" | "description"
 ): TRequirementField | undefined => {
-  const requirementType = requirementTypes.find((item) => item.id === detail.requirement_type_id);
+  const requirementType = requirementTypes.find((item) => item.id === requirement.requirement_type_id);
   const fieldId = requirementType?.builtin_field_ids?.[key];
   return requirementType?.fields.find((field) => field.id === fieldId);
 };
@@ -72,7 +71,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   const {
     workspaceSlug,
     requirementTypes,
-    details,
+    requirements,
     totalCount,
     perPage,
     nextCursor,
@@ -154,7 +153,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     [requirementTypes]
   );
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
-  const visibleIds = details.map((detail) => detail.id);
+  const visibleIds = requirements.map((requirement) => requirement.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
   const toggleAll = () => setSelectedIds(allSelected ? [] : visibleIds);
@@ -179,16 +178,16 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
    * 复制一行。走 copyRequirementDetailData 而不是直接深拷贝 —— 它会给子表单的每一行
    * 重新分配 UUID，否则新旧两行的表单行 ID 会撞在一起。
    */
-  const handleDuplicate = (detail: TRequirementDetail) => {
-    const fields = requirementTypes.find((requirementType) => requirementType.id === detail.requirement_type_id)?.fields ?? [];
+  const handleDuplicate = (requirement: TRequirement) => {
+    const fields = requirementTypes.find((requirementType) => requirementType.id === requirement.requirement_type_id)?.fields ?? [];
     return onDuplicate({
-      requirementTypeId: detail.requirement_type_id,
-      data: copyRequirementDetailData(detail.data, fields),
-      afterId: detail.id,
+      requirementTypeId: requirement.requirement_type_id,
+      data: copyRequirementData(requirement.data, fields),
+      afterId: requirement.id,
     });
   };
 
-  if (isLoading && !details.length) {
+  if (isLoading && !requirements.length) {
     return (
       <div className="p-6">
         <Loader>
@@ -308,18 +307,18 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
             </tr>
           </thead>
           <tbody>
-            {details.map((detail) => {
-              const titleField = findBuiltinField(requirementTypes, detail, "title");
-              const descriptionField = findBuiltinField(requirementTypes, detail, "description");
+            {requirements.map((requirement) => {
+              const titleField = findBuiltinField(requirementTypes, requirement, "title");
+              const descriptionField = findBuiltinField(requirementTypes, requirement, "description");
               return (
-                <tr key={detail.id} className="group/detail border-b border-subtle hover:bg-layer-1">
+                <tr key={requirement.id} className="group/requirement border-b border-subtle hover:bg-layer-1">
                   <td className="border-r border-subtle px-3 py-2 align-middle">
                     {!readOnly && (
                       <input
                         type="checkbox"
                         className="size-3.5 cursor-pointer"
-                        checked={selectedIds.includes(detail.id)}
-                        onChange={() => toggleOne(detail.id)}
+                        checked={selectedIds.includes(requirement.id)}
+                        onChange={() => toggleOne(requirement.id)}
                       />
                     )}
                   </td>
@@ -328,7 +327,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     {titleField ? (
                       <LeafValue
                         field={titleField}
-                        value={getBuiltinValue(detail, requirementTypes, "title") ?? undefined}
+                        value={requirement.title || undefined}
                         workspaceSlug={workspaceSlug}
                       />
                     ) : null}
@@ -337,7 +336,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     {descriptionField ? (
                       <LeafValue
                         field={descriptionField}
-                        value={getBuiltinValue(detail, requirementTypes, "description") ?? undefined}
+                        value={requirement.description_html ?? undefined}
                         workspaceSlug={workspaceSlug}
                       />
                     ) : null}
@@ -345,16 +344,16 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   <td className={cn("px-3 py-2 align-middle", !readOnly && "border-r border-subtle")}>
                     <button
                       type="button"
-                      onClick={() => onOpenRequirementTypeView(detail.requirement_type_id)}
+                      onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
                       title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
-                        name: requirementTypeNames[detail.requirement_type_id] ?? "",
+                        name: requirementTypeNames[requirement.requirement_type_id] ?? "",
                       })}
                       className={cn(
                         "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
                         "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
                       )}
                     >
-                      <span className="truncate">{requirementTypeNames[detail.requirement_type_id] ?? "—"}</span>
+                      <span className="truncate">{requirementTypeNames[requirement.requirement_type_id] ?? "—"}</span>
                     </button>
                   </td>
                   {!readOnly && (
@@ -367,13 +366,13 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                           buttonClassName="text-tertiary hover:text-primary"
                         >
                           <CustomMenu.MenuItem
-                            onClick={() => void handleDuplicate(detail)}
+                            onClick={() => void handleDuplicate(requirement)}
                             disabled={isMutating}
                           >
                             <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
                           </CustomMenu.MenuItem>
                           <CustomMenu.MenuItem
-                            onClick={() => setIdsToDelete([detail.id])}
+                            onClick={() => setIdsToDelete([requirement.id])}
                             disabled={isMutating}
                           >
                             <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
@@ -387,7 +386,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
             })}
           </tbody>
         </table>
-        {!details.length && (
+        {!requirements.length && (
           <div className="grid place-items-center p-10 text-center">
             <p className="text-13 text-secondary">{t("workspace_products.requirements.data.views.empty")}</p>
           </div>
@@ -400,7 +399,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
           {totalCount > 0
             ? t("requirement_grid.data.range", {
                 start: currentPageOffset * perPage + 1,
-                end: Math.min(currentPageOffset * perPage + details.length, totalCount),
+                end: Math.min(currentPageOffset * perPage + requirements.length, totalCount),
                 total: totalCount,
               })
             : ""}

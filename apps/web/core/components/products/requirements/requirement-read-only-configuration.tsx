@@ -1,9 +1,9 @@
 import { type ReactNode } from "react";
 import { FileText, Lock, ShieldCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirement } from "@plane/types";
+import type { TRequirementBaseline } from "@plane/types";
 import { Avatar } from "@plane/ui";
-import { cn, getFileURL, sanitizeHTML } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 import { RequirementSettingsCard, RequirementStatusSummary } from "./requirement-settings-layout";
 
 function ReadOnlyNotice({ hint, fullWidth = false }: { hint: string; fullWidth?: boolean }) {
@@ -69,19 +69,23 @@ function MemberTag({ name, avatarUrl }: { name: string; avatarUrl: string | null
   );
 }
 
-export function ReadOnlyRequirementSettings({ requirement, hint }: { requirement: TRequirement; hint: string }) {
+export function ReadOnlyRequirementSettings({
+  baseline,
+  hint,
+}: {
+  baseline: TRequirementBaseline;
+  hint: string;
+}) {
   const { t } = useTranslation();
   const emptyValue = t("workspace_products.requirements.change.empty_value");
-  // description_html 由富文本模态框写入，直接渲染会把 `<p></p>` 之类的标签当正文显示
-  const description = sanitizeHTML(requirement.description_html ?? "").trim();
-  const approvalRule = !requirement.approver_ids.length
+  const approvalRule = !baseline.approver_ids.length
     ? t("workspace_products.requirements.approval.unconfigured")
-    : requirement.approval_type === "n_of_m"
+    : baseline.approval_type === "n_of_m"
       ? t("workspace_products.requirements.approval.n_summary", {
-          required: requirement.required_count ?? 1,
-          total: requirement.approver_ids.length,
+          required: baseline.required_count ?? 1,
+          total: baseline.approver_ids.length,
         })
-      : t(`workspace_products.requirements.approval.${requirement.approval_type}`);
+      : t(`workspace_products.requirements.approval.${baseline.approval_type}`);
 
   return (
     <ReadOnlySection
@@ -96,21 +100,13 @@ export function ReadOnlyRequirementSettings({ requirement, hint }: { requirement
           bodyClassName="px-0 pt-3 pb-0 sm:px-0 sm:pb-0"
         >
           <dl className="divide-y divide-subtle">
-            <DefinitionRow label={t("workspace_products.requirements.fields.title")}>{requirement.title}</DefinitionRow>
             <DefinitionRow label={t("workspace_products.requirements.fields.owner")}>
-              <MemberTag name={requirement.owner_detail.display_name} avatarUrl={requirement.owner_detail.avatar_url} />
-            </DefinitionRow>
-            <DefinitionRow label={t("workspace_products.requirements.fields.description")}>
-              {description ? (
-                <span className="whitespace-pre-line">{description}</span>
-              ) : (
-                <span className="text-tertiary">{t("workspace_products.requirements.fields.no_description")}</span>
-              )}
+              <MemberTag name={baseline.owner_detail.display_name} avatarUrl={baseline.owner_detail.avatar_url} />
             </DefinitionRow>
           </dl>
         </RequirementSettingsCard>
 
-        <RequirementStatusSummary status={requirement.status} currentVersion={requirement.current_version} />
+        <RequirementStatusSummary status={baseline.status} currentVersion={baseline.current_version} />
       </div>
 
       <RequirementSettingsCard
@@ -121,9 +117,9 @@ export function ReadOnlyRequirementSettings({ requirement, hint }: { requirement
       >
         <dl className="divide-y divide-subtle">
           <DefinitionRow label={t("workspace_products.requirements.fields.approvers")}>
-            {requirement.approver_details.length ? (
+            {baseline.approver_details.length ? (
               <span className="flex flex-wrap items-center gap-1.5">
-                {requirement.approver_details.map((approver) => (
+                {baseline.approver_details.map((approver) => (
                   <MemberTag key={approver.id} name={approver.display_name} avatarUrl={approver.avatar_url} />
                 ))}
               </span>

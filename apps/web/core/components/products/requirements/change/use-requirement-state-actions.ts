@@ -1,5 +1,5 @@
 /**
- * 详情页状态流转的编排层：编辑 / 提交审批 / 撤回草稿 / 撤回审批。
+ * 基线状态流转的编排层：编辑 / 提交审批 / 撤回草稿 / 撤回审批。
  *
  * 每个动作都是「调 hook → 弹 toast → 通知外层」的固定三段，加上两个确认弹窗的开合，
  * 放在页面组件里会把它撑到没法读，所以整体抽成 hook。
@@ -7,7 +7,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirement } from "@plane/types";
+import type { TRequirementBaseline } from "@plane/types";
 import type { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 
 type TChangesStore = ReturnType<typeof useRequirementChangeRequests>;
@@ -15,23 +15,20 @@ type TChangesStore = ReturnType<typeof useRequirementChangeRequests>;
 const LOCALIZED_STATE_ERROR_CODES = new Set(["REQUIREMENT_APPROVER_REQUIRED"]);
 
 export const useRequirementStateActions = ({
-  requirement,
+  baseline,
   changesStore,
   pendingChangeRequestId,
   onLayerChanged,
-  onDeleted,
   onSubmitted,
 }: {
-  requirement: TRequirement | undefined;
+  baseline: TRequirementBaseline | null | undefined;
   changesStore: TChangesStore;
   pendingChangeRequestId: string | null;
   /**
-   * 状态流转会切换读写的数据层（正式表 ↔ 草稿层），字段配置与明细都得重新拉一遍，
+   * 状态流转会切换读写的数据层（正式表 ↔ 草稿层），字段配置与条目都得重新拉一遍，
    * 否则页面还拿着上一层的内容和乐观锁时间戳。
    */
   onLayerChanged: () => void;
-  /** 撤回草稿把新建需求整条删掉之后，页面得退回列表 */
-  onDeleted: () => void;
   /** 提交成功后跳到变更记录 Tab */
   onSubmitted: () => void;
 }) => {
@@ -98,12 +95,11 @@ export const useRequirementStateActions = ({
         title: t("success"),
         message: t(`workspace_products.requirements.state.toast.${response.outcome}`),
       });
-      if (response.outcome === "deleted") onDeleted();
-      else onLayerChanged();
+      onLayerChanged();
     } catch (error) {
       notifyFailure(error);
     }
-  }, [changesStore, notifyFailure, onDeleted, onLayerChanged, t]);
+  }, [changesStore, notifyFailure, onLayerChanged, t]);
 
   const withdrawReview = useCallback(async () => {
     if (!pendingChangeRequestId) return;
@@ -131,7 +127,7 @@ export const useRequirementStateActions = ({
     closeDiscardModal: () => setIsDiscardModalOpen(false),
     openWithdrawModal: () => setIsWithdrawModalOpen(true),
     closeWithdrawModal: () => setIsWithdrawModalOpen(false),
-    hasPublishedVersion: (requirement?.current_version ?? null) !== null,
+    hasPublishedVersion: (baseline?.current_version ?? null) !== null,
     startEditing,
     submitReview,
     discardDraft,

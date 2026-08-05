@@ -1,5 +1,5 @@
 /**
- * 详情页头部按状态渲染的动作条。
+ * 页面头部按基线状态渲染的动作条。
  *
  * 四种组合：
  * - published：「编辑」
@@ -10,13 +10,13 @@
 import { Pencil, RotateCcw } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TRequirement } from "@plane/types";
+import type { TRequirementBaseline } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { PILL_BASE, REQUIREMENT_STATUS_PILL } from "./styles";
 
 type TProps = {
-  requirement: TRequirement;
+  baseline: TRequirementBaseline;
   /** 当前用户是否是待审批变更单的提交人 */
   isSubmitter: boolean;
   isMutating: boolean;
@@ -27,9 +27,9 @@ type TProps = {
   onGoApprove: () => void;
 };
 
-export function RequirementStatusMeta({ requirement, className }: { requirement: TRequirement; className?: string }) {
+export function RequirementStatusMeta({ baseline, className }: { baseline: TRequirementBaseline; className?: string }) {
   const { t } = useTranslation();
-  const { status, current_version: currentVersion } = requirement;
+  const { status, current_version: currentVersion } = baseline;
 
   return (
     <span className={cn("flex shrink-0 items-center gap-2", className)}>
@@ -49,7 +49,7 @@ export function RequirementStatusMeta({ requirement, className }: { requirement:
 
 export function RequirementStatusActions(props: TProps) {
   const {
-    requirement,
+    baseline,
     isSubmitter,
     isMutating,
     onEdit,
@@ -59,19 +59,19 @@ export function RequirementStatusActions(props: TProps) {
     onGoApprove,
   } = props;
   const { t } = useTranslation();
-  const { status, current_version: currentVersion } = requirement;
+  const { status, current_version: currentVersion } = baseline;
   const hasPublishedVersion = currentVersion !== null;
 
   return (
     <>
-      {status === "published" && requirement.can_edit && (
+      {status === "published" && baseline.can_edit && (
         <Button variant="primary" loading={isMutating} onClick={onEdit}>
           <Pencil className="size-3.5" />
           {t("workspace_products.requirements.state.edit")}
         </Button>
       )}
 
-      {status === "draft" && requirement.can_edit && (
+      {status === "draft" && baseline.can_edit && (
         <>
           {hasPublishedVersion && (
             <>
@@ -111,7 +111,7 @@ export function RequirementStatusActions(props: TProps) {
           {t("workspace_products.requirements.state.withdraw_review")}
         </Button>
       )}
-      {status === "in_review" && !isSubmitter && requirement.can_approve && (
+      {status === "in_review" && !isSubmitter && baseline.can_approve && (
         <Button variant="primary" onClick={onGoApprove}>
           {t("workspace_products.requirements.state.go_approve")}
         </Button>

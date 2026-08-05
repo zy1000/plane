@@ -2,7 +2,7 @@ import { Check, FileText, Rows3, ShieldCheck, UsersRound } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
   IUserLite,
-  TRequirementDetailChangeSnapshot,
+  TRequirementChangeSnapshot,
   TRequirementField,
   TRequirementVersionDetail,
 } from "@plane/types";
@@ -16,7 +16,7 @@ type TProps = {
   workspaceSlug: string;
   versionDetail: TRequirementVersionDetail;
   members: IUserLite[];
-  rows: TRequirementDetailChangeSnapshot[];
+  rows: TRequirementChangeSnapshot[];
   totalCount: number;
   isLoading: boolean;
   error: string | null;
@@ -142,13 +142,13 @@ export function VersionSnapshotOverview(props: TProps) {
     onCursorChange,
   } = props;
   const { t } = useTranslation();
-  const snapshot = versionDetail.requirement_snapshot as TRequirementSnapshot;
+  const snapshot = versionDetail.baseline_snapshot as TRequirementSnapshot;
   const requirementTypeStats = versionDetail.requirement_type_stats ?? [];
   const isMultiRequirementType = requirementTypeStats.length > 1;
   const requirementTypeTabs = requirementTypeStats.map((requirementType) => ({
     id: requirementType.id,
     name: requirementType.name,
-    total: requirementType.detail_count,
+    total: requirementType.requirement_count,
   }));
   const fieldRows = flattenFields(versionDetail.fields_snapshot);
   /** 明细表头只取当前类型的字段：并集会让每行只填得满自己那几列，其余全是空洞 */
@@ -319,7 +319,7 @@ export function VersionSnapshotOverview(props: TProps) {
               },
               {
                 icon: Rows3,
-                value: versionDetail.detail_count,
+                value: versionDetail.requirement_count,
                 label: t("workspace_products.requirements.version.summary.details"),
               },
               {
@@ -386,7 +386,7 @@ export function VersionSnapshotOverview(props: TProps) {
           icon={Rows3}
           title={t("workspace_products.requirements.version.sections.details")}
           meta={t("workspace_products.requirements.version.row_count", {
-            count: versionDetail.detail_count,
+            count: versionDetail.requirement_count,
           })}
         />
         {isMultiRequirementType && activeRequirementTypeId && (

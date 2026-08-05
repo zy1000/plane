@@ -3,11 +3,11 @@ import { cloneDeep, isEqual } from "lodash-es";
 import { useBlocker } from "react-router";
 import { v4 as uuidv4 } from "uuid";
 import type {
-  TRequirementDetail,
-  TRequirementDetailBatchSavePayload,
-  TRequirementDetailBatchSaveResponse,
-  TRequirementDetailData,
-  TRequirementDetailValue,
+  TRequirement,
+  TRequirementBatchSavePayload,
+  TRequirementBatchSaveResponse,
+  TRequirementData,
+  TRequirementValue,
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
@@ -15,12 +15,12 @@ import { FileService } from "@/services/file.service";
 
 const fileService = new FileService();
 
-export type TRequirementDetailDraftRow = {
+export type TRequirementDraftRow = {
   key: string;
   mode: "create" | "update";
-  data: TRequirementDetailData;
-  originalData?: TRequirementDetailData;
-  detailId?: string;
+  data: TRequirementData;
+  originalData?: TRequirementData;
+  requirementId?: string;
   clientId?: string;
   version?: number;
   /** 该行绑定的需求类型；新增行取自当前视图，已有行取自后端 */
@@ -39,20 +39,20 @@ type TBatchSaveError = {
   }[];
 };
 
-const initialLeafValue = (field: TRequirementField): TRequirementDetailValue => {
+const initialLeafValue = (field: TRequirementField): TRequirementValue => {
   if (field.default_value !== null && field.default_value !== undefined) return cloneDeep(field.default_value);
   if (field.field_type === "attachment" || field.field_type === "image") return [];
   if (field.field_type === "select" && field.config.selection_mode === "multiple") return [];
   return null;
 };
 
-export const createEmptyRequirementDetailData = (fields: TRequirementField[]): TRequirementDetailData =>
+export const createEmptyRequirementData = (fields: TRequirementField[]): TRequirementData =>
   Object.fromEntries(fields.map((field) => [field.id, field.field_type === "form" ? [] : initialLeafValue(field)]));
 
-export const copyRequirementDetailData = (
-  data: TRequirementDetailData,
+export const copyRequirementData = (
+  data: TRequirementData,
   fields: TRequirementField[]
-): TRequirementDetailData => {
+): TRequirementData => {
   const copied = cloneDeep(data);
   fields
     .filter((field) => field.field_type === "form")
@@ -68,15 +68,15 @@ export const copyRequirementDetailData = (
   return copied;
 };
 
-const createDraftRows = (details: TRequirementDetail[]): TRequirementDetailDraftRow[] =>
-  details.map((detail) => ({
-    key: detail.id,
+const createDraftRows = (requirements: TRequirement[]): TRequirementDraftRow[] =>
+  requirements.map((requirement) => ({
+    key: requirement.id,
     mode: "update",
-    detailId: detail.id,
-    version: detail.version,
-    requirementTypeId: detail.requirement_type_id,
-    data: cloneDeep(detail.data),
-    originalData: cloneDeep(detail.data),
+    requirementId: requirement.id,
+    version: requirement.version,
+    requirementTypeId: requirement.requirement_type_id,
+    data: cloneDeep(requirement.data),
+    originalData: cloneDeep(requirement.data),
     isDeleted: false,
   }));
 
@@ -90,10 +90,10 @@ const collectAssetIds = (value: unknown): string[] => {
   });
 };
 
-const getDraftAssetIds = (data: TRequirementDetailData) => Object.values(data).flatMap(collectAssetIds);
+const getDraftAssetIds = (data: TRequirementData) => Object.values(data).flatMap(collectAssetIds);
 
-export const useRequirementDetailGridEditor = ({
-  details,
+export const useRequirementGridEditor = ({
+  requirements,
   fields,
   workspaceSlug,
   expectedUpdatedAt,
@@ -102,25 +102,25 @@ export const useRequirementDetailGridEditor = ({
   onSave,
   onEditingChange,
 }: {
-  details: TRequirementDetail[];
+  requirements: TRequirement[];
   fields: TRequirementField[];
   workspaceSlug: string;
   expectedUpdatedAt?: string;
   /** 新增行绑定到的类型 —— 就是当前视图的类型 */
   createRequirementTypeId?: string;
   discardMessage: string;
-  onSave: (payload: TRequirementDetailBatchSavePayload) => Promise<TRequirementDetailBatchSaveResponse>;
+  onSave: (payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
   onEditingChange?: (isEditing: boolean) => void;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [draftRows, setDraftRows] = useState<TRequirementDetailDraftRow[]>([]);
+  const [draftRows, setDraftRows] = useState<TRequirementDraftRow[]>([]);
   const [pendingAssetIds, setPendingAssetIds] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
-  const draftRowsRef = useRef<TRequirementDetailDraftRow[]>([]);
+  const draftRowsRef = useRef<TRequirementDraftRow[]>([]);
   const pendingAssetIdsRef = useRef<string[]>([]);
 
-  const commitDraftRows = useCallback((nextRows: TRequirementDetailDraftRow[]) => {
+  const commitDraftRows = useCallback((nextRows: TRequirementDraftRow[]) => {
     draftRowsRef.current = nextRows;
     setDraftRows(nextRows);
   }, []);
@@ -148,11 +148,11 @@ export const useRequirementDetailGridEditor = ({
   }, [commitDraftRows]);
 
   const startEditing = useCallback(() => {
-    commitDraftRows(createDraftRows(details));
+    commitDraftRows(createDraftRows(requirements));
     setSaveError(null);
     setConflictIds([]);
     setIsEditing(true);
-  }, [commitDraftRows, details]);
+  }, [commitDraftRows, requirements]);
 
   const stageCreate = useCallback(
     ({
@@ -164,7 +164,7 @@ export const useRequirementDetailGridEditor = ({
       isCopy = false,
       requirementTypeId,
     }: {
-      data?: TRequirementDetailData;
+      data?: TRequirementData;
       beforeId?: string;
       afterId?: string;
       beforeKey?: string;
@@ -173,22 +173,22 @@ export const useRequirementDetailGridEditor = ({
       /** 复制行时沿用源行的类型，其余情况用当前视图的类型 */
       requirementTypeId?: string;
     } = {}) => {
-      const currentRows = isEditing ? [...draftRowsRef.current] : createDraftRows(details);
-      const nextRow: TRequirementDetailDraftRow = {
+      const currentRows = isEditing ? [...draftRowsRef.current] : createDraftRows(requirements);
+      const nextRow: TRequirementDraftRow = {
         key: uuidv4(),
         mode: "create",
         clientId: uuidv4(),
         requirementTypeId: requirementTypeId ?? createRequirementTypeId,
-        data: data ? copyRequirementDetailData(data, fields) : createEmptyRequirementDetailData(fields),
+        data: data ? copyRequirementData(data, fields) : createEmptyRequirementData(fields),
         isDeleted: false,
         isCopy,
       };
       let insertAt = currentRows.length;
       if (beforeKey || beforeId) {
-        const beforeIndex = currentRows.findIndex((row) => row.key === beforeKey || row.detailId === beforeId);
+        const beforeIndex = currentRows.findIndex((row) => row.key === beforeKey || row.requirementId === beforeId);
         if (beforeIndex >= 0) insertAt = beforeIndex;
       } else if (afterKey || afterId) {
-        const afterIndex = currentRows.findIndex((row) => row.key === afterKey || row.detailId === afterId);
+        const afterIndex = currentRows.findIndex((row) => row.key === afterKey || row.requirementId === afterId);
         if (afterIndex >= 0) insertAt = afterIndex + 1;
       }
       currentRows.splice(insertAt, 0, nextRow);
@@ -197,11 +197,11 @@ export const useRequirementDetailGridEditor = ({
       setConflictIds([]);
       setIsEditing(true);
     },
-    [commitDraftRows, createRequirementTypeId, details, fields, isEditing]
+    [commitDraftRows, createRequirementTypeId, requirements, fields, isEditing]
   );
 
   const updateRowData = useCallback(
-    (rowKey: string, updater: (data: TRequirementDetailData) => TRequirementDetailData) => {
+    (rowKey: string, updater: (data: TRequirementData) => TRequirementData) => {
       commitDraftRows(
         draftRowsRef.current.map((row) => (row.key === rowKey ? { ...row, data: updater(row.data) } : row))
       );
@@ -213,7 +213,7 @@ export const useRequirementDetailGridEditor = ({
 
   const stageDelete = useCallback(
     (rowKeys: string[]) => {
-      const currentRows = isEditing ? draftRowsRef.current : createDraftRows(details);
+      const currentRows = isEditing ? draftRowsRef.current : createDraftRows(requirements);
       const keySet = new Set(rowKeys);
       const removedCreateRows = currentRows.filter((row) => keySet.has(row.key) && row.mode === "create");
       const pendingIdsToDelete = removedCreateRows
@@ -229,7 +229,7 @@ export const useRequirementDetailGridEditor = ({
       setConflictIds([]);
       setIsEditing(true);
     },
-    [cleanupPendingAssets, commitDraftRows, details, isEditing]
+    [cleanupPendingAssets, commitDraftRows, requirements, isEditing]
   );
 
   const undoDelete = useCallback(
@@ -281,11 +281,11 @@ export const useRequirementDetailGridEditor = ({
     const creates = activeRows
       .map((row, index) => {
         if (row.mode !== "create" || !row.clientId) return null;
-        const nextExisting = activeRows.slice(index + 1).find((item) => item.mode === "update" && item.detailId);
-        let previousExisting: TRequirementDetailDraftRow | undefined;
+        const nextExisting = activeRows.slice(index + 1).find((item) => item.mode === "update" && item.requirementId);
+        let previousExisting: TRequirementDraftRow | undefined;
         for (let previousIndex = index - 1; previousIndex >= 0; previousIndex -= 1) {
           const item = activeRows[previousIndex];
-          if (item.mode === "update" && item.detailId) {
+          if (item.mode === "update" && item.requirementId) {
             previousExisting = item;
             break;
           }
@@ -296,8 +296,8 @@ export const useRequirementDetailGridEditor = ({
           // 标准库不用传（库本身固定了需求类型），产品需求必须传当前视图的类型
           ...(row.requirementTypeId ? { requirement_type_id: row.requirementTypeId } : {}),
         };
-        if (nextExisting?.detailId) return Object.assign(create, { before_id: nextExisting.detailId });
-        if (previousExisting?.detailId) return Object.assign(create, { after_id: previousExisting.detailId });
+        if (nextExisting?.requirementId) return Object.assign(create, { before_id: nextExisting.requirementId });
+        if (previousExisting?.requirementId) return Object.assign(create, { after_id: previousExisting.requirementId });
         return create;
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -306,20 +306,20 @@ export const useRequirementDetailGridEditor = ({
         (row) =>
           row.mode === "update" &&
           !row.isDeleted &&
-          row.detailId &&
+          row.requirementId &&
           row.version &&
           row.originalData !== undefined &&
           !isEqual(row.data, row.originalData)
       )
       .map((row) => ({
-        id: row.detailId as string,
+        id: row.requirementId as string,
         version: row.version as number,
         data: row.data,
       }));
     const deletes = draftRowsRef.current
-      .filter((row) => row.mode === "update" && row.isDeleted && row.detailId && row.version)
+      .filter((row) => row.mode === "update" && row.isDeleted && row.requirementId && row.version)
       .map((row) => ({
-        id: row.detailId as string,
+        id: row.requirementId as string,
         version: row.version as number,
       }));
 
@@ -337,7 +337,7 @@ export const useRequirementDetailGridEditor = ({
       return response;
     } catch (error) {
       const payload = error as TBatchSaveError;
-      setSaveError(payload?.error ?? "Unable to save requirement details.");
+      setSaveError(payload?.error ?? "Unable to save requirements.");
       setConflictIds(payload?.conflicts?.map((conflict) => conflict.id) ?? []);
       throw error;
     }

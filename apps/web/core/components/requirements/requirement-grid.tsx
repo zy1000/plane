@@ -26,12 +26,12 @@ import { CloseIcon, FilterAppliedIcon, FilterIcon, SearchIcon } from "@plane/pro
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirementAssetRef,
-  TRequirementDetail,
-  TRequirementDetailBatchSavePayload,
-  TRequirementDetailBatchSaveResponse,
-  TRequirementDetailData,
-  TRequirementDetailFilter,
-  TRequirementDetailValue,
+  TRequirement,
+  TRequirementBatchSavePayload,
+  TRequirementBatchSaveResponse,
+  TRequirementData,
+  TRequirementFilter,
+  TRequirementValue,
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
@@ -44,27 +44,70 @@ import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import {
   ChangedFieldCorner,
   getCurrentPageOffset,
-  getDetailRowKey,
+  getRequirementRowKey,
   getFormColumnCount,
   getFormRows,
   getMaxFormRows,
-  isEmptyDetailValue,
+  isEmptyRequirementValue,
   LeafValue,
   MenuRowLabel,
   RequirementGridHeader,
 } from "./requirement-grid-shared";
 import { getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 import {
-  createEmptyRequirementDetailData,
-  type TRequirementDetailDraftRow,
-  useRequirementDetailGridEditor,
-} from "./use-requirement-detail-grid-editor";
+  createEmptyRequirementData,
+  type TRequirementDraftRow,
+  useRequirementGridEditor,
+} from "./use-requirement-grid-editor";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
+
+const CHANGE_KIND_PILL: Record<"created" | "updated", string> = {
+  created: "bg-success-subtle text-success-primary",
+  updated: "bg-warning-subtle text-warning-primary",
+};
+
+/**
+ * 「变更」列：相对上一个已发布版本这一行发生了什么。
+ *
+ * 编辑态下未保存的改动还没进后端的 change_kind，所以草稿行自己的状态优先 ——
+ * 否则刚敲完一个单元格，这一列还显示「未变更」。
+ */
+const ChangeKindBadge = ({
+  requirement,
+  draft,
+}: {
+  requirement: TRequirement | null;
+  draft: TRequirementDraftRow | null;
+}) => {
+  const { t } = useTranslation();
+  const kind =
+    draft?.mode === "create"
+      ? "created"
+      : draft && draft.originalData !== undefined && !isEqual(draft.data, draft.originalData)
+        ? "updated"
+        : (requirement?.change_kind ?? null);
+  if (!kind) return <span className="text-12 text-tertiary">—</span>;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded px-1.5 py-0.5 text-10 font-medium",
+        CHANGE_KIND_PILL[kind]
+      )}
+    >
+      {t(`requirement_grid.data.change_kind.${kind}`)}
+    </span>
+  );
+};
 
 type TProps = {
   workspaceSlug: string;
-  /** 这批明细的归属：产品需求传 requirementId，标准库条目传 libraryId */
+  /** 这批需求的归属：产品需求传 productId，标准库条目传 libraryId。附件也挂在它上面 */
   entityId: string;
+  /**
+   * 是否显示「变更 / 最后变更于」两列。只有受基线管辖的产品需求有这个概念，
+   * 标准库条目创建即生效，没有「相对上一版」可言。
+   */
+  showChangeColumns?: boolean;
   readOnly?: boolean;
   expectedUpdatedAt?: string;
   /**
@@ -77,7 +120,7 @@ type TProps = {
    */
   columnStorageId?: string;
   fields: TRequirementField[];
-  details: TRequirementDetail[];
+  requirements: TRequirement[];
   totalCount: number;
   totalPages: number;
   nextCursor?: string;
@@ -88,14 +131,14 @@ type TProps = {
   isMutating: boolean;
   error: string | null;
   search: string;
-  filters: TRequirementDetailFilter[];
+  filters: TRequirementFilter[];
   perPage: number;
   onSearchChange: (value: string) => void;
-  onFiltersChange: (value: TRequirementDetailFilter[]) => void;
+  onFiltersChange: (value: TRequirementFilter[]) => void;
   onPerPageChange: (value: number) => void;
   onCursorChange: (value: string | undefined) => void;
   onRefresh: () => Promise<unknown>;
-  onBulkSave: (payload: TRequirementDetailBatchSavePayload) => Promise<TRequirementDetailBatchSaveResponse>;
+  onBulkSave: (payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
   onEditingChange?: (isEditing: boolean) => void;
   /** When set, search/filter/display/edit (and bulk-edit actions) render into this host instead of the grid toolbar. */
   toolbarPortalEl?: HTMLElement | null;
@@ -110,9 +153,9 @@ const LeafEditor = ({
   onRemoveAsset,
 }: {
   field: TRequirementField;
-  value: TRequirementDetailValue | undefined;
+  value: TRequirementValue | undefined;
   workspaceSlug: string;
-  onChange: (value: TRequirementDetailValue) => void;
+  onChange: (value: TRequirementValue) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
   onRemoveAsset?: (assetId: string) => void;
 }) => {
@@ -302,16 +345,17 @@ const LeafEditor = ({
   );
 };
 
-export const RequirementDetailGrid = observer(function RequirementDetailGrid(props: TProps) {
+export const RequirementGrid = observer(function RequirementGrid(props: TProps) {
   const {
     workspaceSlug,
     entityId,
+    showChangeColumns = false,
     readOnly = false,
     expectedUpdatedAt,
     createRequirementTypeId,
     columnStorageId,
     fields,
-    details,
+    requirements,
     totalCount,
     nextCursor,
     prevCursor,
@@ -340,7 +384,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isColumnsOpen, setIsColumnsOpen] = useState(false);
   const [filterFieldId, setFilterFieldId] = useState("");
-  const [filterOperator, setFilterOperator] = useState<TRequirementDetailFilter["operator"]>("contains");
+  const [filterOperator, setFilterOperator] = useState<TRequirementFilter["operator"]>("contains");
   const [filterValue, setFilterValue] = useState("");
   const storageKey = `requirement:columns:${workspaceSlug}:${entityId}${columnStorageId ? `:${columnStorageId}` : ""}`;
   const [hiddenFieldIds, setHiddenFieldIds] = useState<string[]>(() => {
@@ -354,8 +398,8 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeFields = useMemo(() => fields.filter((field) => field.is_active), [fields]);
-  const editor = useRequirementDetailGridEditor({
-    details,
+  const editor = useRequirementGridEditor({
+    requirements,
     fields: activeFields,
     workspaceSlug,
     expectedUpdatedAt,
@@ -413,9 +457,9 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
   }, [hiddenFieldIds, storageKey]);
 
   useEffect(() => {
-    const visibleDetailIds = new Set(details.map((detail) => detail.id));
+    const visibleDetailIds = new Set(requirements.map((requirement) => requirement.id));
     setSelectedIds((current) => current.filter((id) => visibleDetailIds.has(id)));
-  }, [details]);
+  }, [requirements]);
 
   // Preserve configured root-field order; only filter visibility / inactive children.
   const visibleRootFields = useMemo(
@@ -443,8 +487,9 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter) : 1),
         0
       ) +
+      (showChangeColumns ? 2 : 0) + // 变更 / 最后变更于
       1, // trailing actions column
-    [showActionGutter, visibleRootFields]
+    [showActionGutter, showChangeColumns, visibleRootFields]
   );
   const filterableFields = useMemo(
     () =>
@@ -507,7 +552,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     }
   };
 
-  const setRootValue = (draftKey: string, fieldId: string, value: TRequirementDetailValue) => {
+  const setRootValue = (draftKey: string, fieldId: string, value: TRequirementValue) => {
     editor.updateRowData(draftKey, (data) => ({ ...data, [fieldId]: value }));
   };
 
@@ -516,7 +561,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     formId: string,
     rowId: string,
     childId: string,
-    value: TRequirementDetailValue
+    value: TRequirementValue
   ) => {
     editor.updateRowData(draftKey, (data) => {
       const rows = getFormRows(data, formId).map((row) =>
@@ -531,7 +576,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
       const rows = [...getFormRows(data, form.id)];
       const row: TRequirementFormRow = {
         id: uuidv4(),
-        values: createEmptyRequirementDetailData(form.children),
+        values: createEmptyRequirementData(form.children),
       };
       rows.splice(index ?? rows.length, 0, row);
       return { ...data, [form.id]: rows };
@@ -555,7 +600,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
 
   const addFilter = () => {
     if (!filterFieldId) return;
-    const nextFilter: TRequirementDetailFilter = {
+    const nextFilter: TRequirementFilter = {
       field_id: filterFieldId,
       operator: filterOperator,
       ...(!["is_empty", "is_not_empty"].includes(filterOperator)
@@ -569,13 +614,13 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     setFilterValue("");
   };
 
-  const renderDetailActionMenu = (
+  const renderRowActionMenu = (
     target: {
       beforeId?: string;
       afterId?: string;
       beforeKey?: string;
       afterKey?: string;
-      copyData: TRequirementDetailData;
+      copyData: TRequirementData;
     },
     deleteTarget: string
   ) => (
@@ -613,20 +658,20 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     </div>
   );
 
-  const renderDetailRows = (
-    detail: TRequirementDetail | null,
-    detailDraft: TRequirementDetailDraftRow | null,
+  const renderRequirementRows = (
+    requirement: TRequirement | null,
+    requirementDraft: TRequirementDraftRow | null,
     key: string
   ) => {
-    const data = detailDraft?.data ?? detail?.data ?? {};
-    const isEditing = Boolean(detailDraft);
-    const isDeleted = Boolean(detailDraft?.isDeleted);
-    const isConflicted = Boolean(detailDraft?.detailId && editor.conflictIds.includes(detailDraft.detailId));
+    const data = requirementDraft?.data ?? requirement?.data ?? {};
+    const isEditing = Boolean(requirementDraft);
+    const isDeleted = Boolean(requirementDraft?.isDeleted);
+    const isConflicted = Boolean(requirementDraft?.requirementId && editor.conflictIds.includes(requirementDraft.requirementId));
     const isChanged = Boolean(
-      detailDraft &&
-      (detailDraft.mode === "create" ||
-        detailDraft.isDeleted ||
-        (detailDraft.originalData !== undefined && !isEqual(detailDraft.data, detailDraft.originalData)))
+      requirementDraft &&
+      (requirementDraft.mode === "create" ||
+        requirementDraft.isDeleted ||
+        (requirementDraft.originalData !== undefined && !isEqual(requirementDraft.data, requirementDraft.originalData)))
     );
     const canAddChild = isEditing && !isDeleted && formFields.some((form) => form.children.length > 0);
     const rawRowCount = getMaxFormRows(data, formFields);
@@ -641,21 +686,21 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           ? "bg-accent-subtle/30"
           : isEditing
             ? "bg-surface-1"
-            : "bg-surface-1 group-hover/detail:bg-accent-subtle/30";
+            : "bg-surface-1 group-hover/requirement:bg-accent-subtle/30";
     const groupCellClass = "border-b border-b-subtle transition-colors duration-150 motion-reduce:transition-none";
     const isRootFieldChanged = (fieldId: string) => {
-      if (!detailDraft || isDeleted) return false;
-      const currentValue = detailDraft.data[fieldId];
-      if (detailDraft.mode === "create") return !isEmptyDetailValue(currentValue);
-      return detailDraft.originalData !== undefined && !isEqual(currentValue, detailDraft.originalData[fieldId]);
+      if (!requirementDraft || isDeleted) return false;
+      const currentValue = requirementDraft.data[fieldId];
+      if (requirementDraft.mode === "create") return !isEmptyRequirementValue(currentValue);
+      return requirementDraft.originalData !== undefined && !isEqual(currentValue, requirementDraft.originalData[fieldId]);
     };
 
     return (
-      <tbody key={key} className="group/detail">
+      <tbody key={key} className="group/requirement">
         {Array.from({ length: totalRows }, (_, rowIndex) => {
           const isAdderRow = canAddChild && rowIndex === dataRowCount;
           const isFirstRow = rowIndex === 0;
-          const renderKey = isAdderRow ? `${key}-adder` : getDetailRowKey(key, data, formFields, rowIndex);
+          const renderKey = isAdderRow ? `${key}-adder` : getRequirementRowKey(key, data, formFields, rowIndex);
           return (
             <tr
               key={renderKey}
@@ -666,23 +711,23 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   rowSpan={totalRows}
                   className={cn("w-12 border-r border-subtle px-1.5 py-2 text-center align-middle", groupCellClass)}
                 >
-                  {detailDraft?.mode === "create" ? (
+                  {requirementDraft?.mode === "create" ? (
                     <span className="inline-flex items-center rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
                       {t(
-                        detailDraft.isCopy
+                        requirementDraft.isCopy
                           ? "requirement_grid.data.copy_badge"
                           : "requirement_grid.data.new"
                       )}
                     </span>
-                  ) : detail && !readOnly ? (
+                  ) : requirement && !readOnly ? (
                     <input
                       type="checkbox"
                       className="size-3.5 cursor-pointer"
-                      checked={selectedIds.includes(detail.id)}
+                      checked={selectedIds.includes(requirement.id)}
                       disabled={isDeleted || readOnly}
                       onChange={(event) =>
                         setSelectedIds((current) =>
-                          event.target.checked ? [...current, detail.id] : current.filter((id) => id !== detail.id)
+                          event.target.checked ? [...current, requirement.id] : current.filter((id) => id !== requirement.id)
                         )
                       }
                       aria-label={t("requirement_grid.data.select_row")}
@@ -753,18 +798,18 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                   ];
                 }
                 const row = getFormRows(data, form.id)[rowIndex];
-                const originalRow = detailDraft?.originalData
-                  ? getFormRows(detailDraft.originalData, form.id).find((item) => item.id === row?.id)
+                const originalRow = requirementDraft?.originalData
+                  ? getFormRows(requirementDraft.originalData, form.id).find((item) => item.id === row?.id)
                   : undefined;
                 const childCells = form.children.map((child) => {
                   const currentValue = row?.values[child.id];
                   const isChildFieldChanged = Boolean(
-                    detailDraft &&
+                    requirementDraft &&
                     !isDeleted &&
                     row &&
                     (originalRow
                       ? !isEqual(currentValue, originalRow.values[child.id])
-                      : !isEmptyDetailValue(currentValue))
+                      : !isEmptyRequirementValue(currentValue))
                   );
                   return (
                     <td
@@ -832,6 +877,28 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                 );
                 return [...childCells, gutterCell];
               })}
+              {isFirstRow && showChangeColumns && (
+                <>
+                  <td
+                    rowSpan={totalRows}
+                    className={cn(
+                      "w-24 border-r border-subtle px-3 py-2 text-center align-middle",
+                      groupCellClass
+                    )}
+                  >
+                    <ChangeKindBadge requirement={requirement} draft={requirementDraft} />
+                  </td>
+                  <td
+                    rowSpan={totalRows}
+                    className={cn(
+                      "w-28 border-r border-subtle px-3 py-2 text-center align-middle text-12 text-secondary",
+                      groupCellClass
+                    )}
+                  >
+                    {requirement?.last_changed_version ? `v${requirement.last_changed_version}` : "—"}
+                  </td>
+                </>
+              )}
               {isFirstRow && (
                 <td rowSpan={totalRows} className={cn("w-16 px-2 py-2 text-center align-middle", groupCellClass)}>
                   {isEditing && isDeleted ? (
@@ -840,11 +907,11 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                       {t("requirement_grid.data.undo")}
                     </Button>
                   ) : isEditing ? (
-                    renderDetailActionMenu({ beforeKey: key, afterKey: key, copyData: data }, key)
-                  ) : detail ? (
-                    renderDetailActionMenu(
-                      { beforeId: detail.id, afterId: detail.id, copyData: detail.data },
-                      detail.id
+                    renderRowActionMenu({ beforeKey: key, afterKey: key, copyData: data }, key)
+                  ) : requirement ? (
+                    renderRowActionMenu(
+                      { beforeId: requirement.id, afterId: requirement.id, copyData: requirement.data },
+                      requirement.id
                     )
                   ) : null}
                 </td>
@@ -856,28 +923,28 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
     );
   };
 
-  const detailsById = new Map(details.map((detail) => [detail.id, detail]));
+  const requirementsById = new Map(requirements.map((requirement) => [requirement.id, requirement]));
   const rowGroups = editor.isEditing
     ? editor.draftRows.map((draftRow) =>
-        renderDetailRows(
-          draftRow.detailId ? (detailsById.get(draftRow.detailId) ?? null) : null,
+        renderRequirementRows(
+          draftRow.requirementId ? (requirementsById.get(draftRow.requirementId) ?? null) : null,
           draftRow,
           draftRow.key
         )
       )
-    : details.map((detail) => renderDetailRows(detail, null, detail.id));
-  const selectableDetailIds = editor.isEditing
+    : requirements.map((requirement) => renderRequirementRows(requirement, null, requirement.id));
+  const selectableRequirementIds = editor.isEditing
     ? editor.draftRows
-        .filter((draftRow) => draftRow.mode === "update" && !draftRow.isDeleted && draftRow.detailId)
-        .map((draftRow) => draftRow.detailId as string)
-    : details.map((detail) => detail.id);
+        .filter((draftRow) => draftRow.mode === "update" && !draftRow.isDeleted && draftRow.requirementId)
+        .map((draftRow) => draftRow.requirementId as string)
+    : requirements.map((requirement) => requirement.id);
   const displayedTotalCount = editor.isEditing
     ? totalCount +
       editor.draftRows.filter((draftRow) => draftRow.mode === "create").length -
       editor.draftRows.filter((draftRow) => draftRow.mode === "update" && draftRow.isDeleted).length
     : totalCount;
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
-  const pageItemCount = editor.isEditing ? editor.draftRows.length : details.length;
+  const pageItemCount = editor.isEditing ? editor.draftRows.length : requirements.length;
   const showSelectionActions = !readOnly && !editor.isEditing && selectedIds.length > 0;
   const useExternalToolbar = Boolean(toolbarPortalEl);
 
@@ -1023,7 +1090,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={filterOperator}
-                onChange={(event) => setFilterOperator(event.target.value as TRequirementDetailFilter["operator"])}
+                onChange={(event) => setFilterOperator(event.target.value as TRequirementFilter["operator"])}
                 className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
               >
                 {(selectedFilterField?.field_type === "text" ||
@@ -1164,7 +1231,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
           variant="primary"
           size="lg"
           onClick={editor.startEditing}
-          disabled={isLoading || details.length === 0}
+          disabled={isLoading || requirements.length === 0}
         >
           {t("edit")}
         </Button>
@@ -1259,7 +1326,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
               </p>
             </div>
           </div>
-        ) : details.length === 0 && !editor.isEditing ? (
+        ) : requirements.length === 0 && !editor.isEditing ? (
           <div className="flex min-h-72 items-center justify-center p-6 text-center">
             <div>
               <Plus className="mx-auto size-8 text-placeholder" />
@@ -1286,14 +1353,30 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
                     className="size-3.5 cursor-pointer"
                     disabled={readOnly}
                     checked={
-                      selectableDetailIds.length > 0 &&
-                      selectableDetailIds.every((detailId) => selectedIds.includes(detailId))
+                      selectableRequirementIds.length > 0 &&
+                      selectableRequirementIds.every((requirementId) => selectedIds.includes(requirementId))
                     }
-                    onChange={(event) => setSelectedIds(event.target.checked ? selectableDetailIds : [])}
+                    onChange={(event) => setSelectedIds(event.target.checked ? selectableRequirementIds : [])}
                     aria-label={t("requirement_grid.data.select_all")}
                   />
                 ),
               }}
+              extraHeaders={
+                showChangeColumns
+                  ? [
+                      {
+                        key: "change-kind",
+                        className: "w-24 border-r border-subtle px-3 py-2.5 text-center text-primary",
+                        content: t("requirement_grid.data.change_kind.label"),
+                      },
+                      {
+                        key: "last-changed-version",
+                        className: "w-28 border-r border-subtle px-3 py-2.5 text-center text-primary",
+                        content: t("requirement_grid.data.last_changed_version"),
+                      },
+                    ]
+                  : undefined
+              }
               trailingHeader={{
                 className: "w-16 px-2 py-2.5 text-center text-primary",
                 content: t("requirement_fields.fields.actions"),
@@ -1301,7 +1384,7 @@ export const RequirementDetailGrid = observer(function RequirementDetailGrid(pro
             />
             {rowGroups}
             {!readOnly &&
-              (editor.isEditing ? editor.draftRows.length > 0 : details.length > 0) && (
+              (editor.isEditing ? editor.draftRows.length > 0 : requirements.length > 0) && (
                 <tbody>
                   <tr>
                     <td colSpan={totalColumnCount} className="border-b border-subtle px-3 py-2">

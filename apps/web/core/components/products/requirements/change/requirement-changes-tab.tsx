@@ -6,7 +6,7 @@ import { ChangeRequestList } from "./change-request-list";
 
 type TProps = {
   workspaceSlug: string;
-  requirementId: string;
+  productId: string;
   fields: TRequirementField[];
   members: IUserLite[];
   store: ReturnType<typeof useRequirementChangeRequests>;
@@ -18,7 +18,7 @@ type TProps = {
 export function RequirementChangesTab(props: TProps) {
   const {
     workspaceSlug,
-    requirementId,
+    productId,
     fields,
     members,
     store,
@@ -31,7 +31,7 @@ export function RequirementChangesTab(props: TProps) {
     return (
       <ChangeRequestDetail
         workspaceSlug={workspaceSlug}
-        requirementId={requirementId}
+        productId={productId}
         changeRequestId={openedChangeRequestId}
         fields={fields}
         members={members}

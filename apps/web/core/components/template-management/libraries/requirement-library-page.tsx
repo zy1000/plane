@@ -10,16 +10,16 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { RequirementDetailGrid } from "@/components/requirements/requirement-detail-grid";
+import { RequirementGrid } from "@/components/requirements/requirement-grid";
+import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementLibrariesContext } from "./context";
-import { getRequirementTypePath } from "../navigation";
 
 /**
  * 标准库的条目页。
  *
  * 库直接持有条目，字段来自库所选类型（后端实时解析），条目读写走的接口与产品需求
- * 的明细完全同构，所以这里直接复用 RequirementDetailGrid，不做任何分支。
+ * 的明细完全同构，所以这里直接复用 RequirementGrid，不做任何分支。
  */
 export const RequirementLibraryPage = observer(function RequirementLibraryPage() {
   const { t } = useTranslation();
@@ -56,7 +56,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                       {library && (
                         <Tooltip tooltipContent={t("requirement_libraries.detail.requirement_type_tooltip")} position="bottom">
                           <Link
-                            to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
+                            to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                             className="max-w-48 shrink-0 truncate rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
                           >
                             {library.requirement_type_detail?.name}
@@ -101,7 +101,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 <span>
                   {t("requirement_libraries.items.fields_readonly_prefix")}
                   <Link
-                    to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
+                    to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                     className="font-medium text-accent-primary hover:underline"
                   >
                     {library.requirement_type_detail?.name}
@@ -110,22 +110,22 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 </span>
               </div>
             )}
-            <RequirementDetailGrid
+            <RequirementGrid
               workspaceSlug={workspaceSlug}
               entityId={libraryId ?? ""}
               expectedUpdatedAt={store.configuration?.expected_updated_at}
               createRequirementTypeId={store.requirementTypeId ?? undefined}
               fields={store.configuration?.fields ?? []}
-              details={store.detailsPage.results}
-              totalCount={store.detailsPage.total_count ?? 0}
-              totalPages={store.detailsPage.total_pages ?? 0}
-              nextCursor={store.detailsPage.next_cursor}
-              prevCursor={store.detailsPage.prev_cursor}
-              nextPageResults={store.detailsPage.next_page_results}
-              prevPageResults={store.detailsPage.prev_page_results}
-              isLoading={store.isConfigurationLoading || store.isDetailsLoading}
+              requirements={store.requirementsPage.results}
+              totalCount={store.requirementsPage.total_count ?? 0}
+              totalPages={store.requirementsPage.total_pages ?? 0}
+              nextCursor={store.requirementsPage.next_cursor}
+              prevCursor={store.requirementsPage.prev_cursor}
+              nextPageResults={store.requirementsPage.next_page_results}
+              prevPageResults={store.requirementsPage.prev_page_results}
+              isLoading={store.isConfigurationLoading || store.isRequirementsLoading}
               isMutating={store.isMutating}
-              error={store.detailsError}
+              error={store.requirementsError}
               search={store.search}
               filters={store.filters}
               perPage={store.perPage}
@@ -133,8 +133,8 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               onFiltersChange={store.setFilters}
               onPerPageChange={store.setPerPage}
               onCursorChange={store.setCursor}
-              onRefresh={store.fetchDetails}
-              onBulkSave={store.saveDetailBatch}
+              onRefresh={store.fetchRequirements}
+              onBulkSave={store.saveRequirementBatch}
               toolbarPortalEl={dataToolbarHost}
             />
           </>

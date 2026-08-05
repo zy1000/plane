@@ -1,12 +1,3 @@
-import { useParams } from "react-router";
-import { ProductRequirementList, ProductRequirementsProvider } from "@/components/products/requirements";
+import { ProductRequirementsPage } from "@/components/products/requirements";
 
-export default function ProductRequirementsPage() {
-  const { workspaceSlug, productId } = useParams();
-  if (!workspaceSlug || !productId) return null;
-  return (
-    <ProductRequirementsProvider workspaceSlug={workspaceSlug} productId={productId}>
-      <ProductRequirementList />
-    </ProductRequirementsProvider>
-  );
-}
+export default ProductRequirementsPage;

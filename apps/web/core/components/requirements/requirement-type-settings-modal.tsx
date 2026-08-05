@@ -13,8 +13,8 @@ type Props = {
   onClose: () => void;
   /** 页面草稿的当前值，打开弹窗时作为本地草稿的初值 */
   metadata: TMetadataDraft;
-  /** 点「确定」才回写页面草稿；「取消」丢弃本次弹窗内的修改 */
-  onApply: (next: TMetadataDraft) => void;
+  /** 点「确定」才回写；可返回 Promise，失败时弹窗保持打开 */
+  onApply: (next: TMetadataDraft) => void | Promise<void>;
   requirementType: TRequirementType | undefined;
   fieldSummary: { topLevel: number; columns: number };
 };
@@ -42,13 +42,17 @@ export function RequirementTypeSettingsModal(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!draft.name.trim()) {
       setError(t("workspace_templates.requirement_types.validation.name_required"));
       return;
     }
-    onApply({ ...draft, name: draft.name.trim() });
-    onClose();
+    try {
+      await onApply({ ...draft, name: draft.name.trim() });
+      onClose();
+    } catch {
+      // 调用方负责 toast；失败时保留弹窗与草稿
+    }
   };
 
   return (

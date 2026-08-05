@@ -1,7 +1,7 @@
 /**
  * 需求明细网格的可复用件。
  *
- * 编辑态网格（requirement-detail-grid.tsx）、变更 diff 网格和版本只读快照共用同一套
+ * 编辑态网格（requirement-grid.tsx）、变更 diff 网格和版本只读快照共用同一套
  * 二级表头结构、值渲染和行内子表单排布逻辑，所以这些纯 helper 与展示组件抽在这里。
  */
 import { Fragment, useState } from "react";
@@ -12,8 +12,8 @@ import { Modal, Typography } from "antd";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirementAssetRef,
-  TRequirementDetailData,
-  TRequirementDetailValue,
+  TRequirementData,
+  TRequirementValue,
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
@@ -22,32 +22,32 @@ import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndT
 import { useMember } from "@/hooks/store/use-member";
 import { getRequirementSelectLabel } from "./requirement-select";
 
-export const getFormRows = (data: TRequirementDetailData, fieldId: string): TRequirementFormRow[] => {
+export const getFormRows = (data: TRequirementData, fieldId: string): TRequirementFormRow[] => {
   const value = data[fieldId];
   return Array.isArray(value) ? (value as TRequirementFormRow[]) : [];
 };
 
-export const getMaxFormRows = (data: TRequirementDetailData, formFields: TRequirementField[]) =>
+export const getMaxFormRows = (data: TRequirementData, formFields: TRequirementField[]) =>
   formFields.reduce((max, field) => Math.max(max, getFormRows(data, field.id).length), 0);
 
 /** Number of table columns a repeatable form occupies: one per visible child, plus a trailing action gutter. */
 export const getFormColumnCount = (form: TRequirementField, withGutter: boolean) =>
   form.children.length ? form.children.length + (withGutter ? 1 : 0) : 1;
 
-export const getDetailRowKey = (
-  detailKey: string,
-  data: TRequirementDetailData,
+export const getRequirementRowKey = (
+  rowKey: string,
+  data: TRequirementData,
   formFields: TRequirementField[],
   rowPosition: number
 ) =>
-  `${detailKey}-${
+  `${rowKey}-${
     formFields
       .map((form) => getFormRows(data, form.id)[rowPosition]?.id)
       .filter(Boolean)
       .join("-") || "root"
   }`;
 
-export const isEmptyDetailValue = (value: TRequirementDetailValue | undefined) =>
+export const isEmptyRequirementValue = (value: TRequirementValue | undefined) =>
   value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
 
 export const getCursorPageOffset = (cursor?: string) => {
@@ -209,7 +209,7 @@ export const LeafValue = ({
   className,
 }: {
   field: TRequirementField;
-  value: TRequirementDetailValue | undefined;
+  value: TRequirementValue | undefined;
   workspaceSlug: string;
   /** diff 网格用它给旧值套删除线、给新值套绿色 */
   className?: string;
@@ -302,11 +302,14 @@ export const RequirementGridHeader = ({
   rootFields,
   showActionGutter,
   leadingHeader,
+  extraHeaders,
   trailingHeader,
 }: {
   rootFields: TRequirementField[];
   showActionGutter: boolean;
   leadingHeader?: { className: string; content: React.ReactNode };
+  /** 字段列之后、操作列之前的附加列（产品需求的「变更 / 最后变更于」） */
+  extraHeaders?: { key: string; className: string; content: React.ReactNode }[];
   trailingHeader?: { className: string; content: React.ReactNode };
 }) => {
   const { t } = useTranslation();
@@ -344,6 +347,11 @@ export const RequirementGridHeader = ({
             </th>
           )
         )}
+        {extraHeaders?.map((header) => (
+          <th key={header.key} rowSpan={spanRows} className={header.className}>
+            {header.content}
+          </th>
+        ))}
         {trailingHeader && (
           <th rowSpan={spanRows} className={trailingHeader.className}>
             {trailingHeader.content}

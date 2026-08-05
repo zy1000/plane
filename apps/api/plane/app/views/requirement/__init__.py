@@ -1,6 +1,5 @@
 from .base import (
-    RequirementConfigurationAPIView,
-    RequirementDetailViewSet,
+    RequirementBaselineConfigurationAPIView,
     RequirementViewSet,
 )
 from .change import (
@@ -20,10 +19,9 @@ from .type import (
 )
 
 __all__ = [
+    "RequirementBaselineConfigurationAPIView",
     "RequirementChangeItemViewSet",
     "RequirementChangeRequestViewSet",
-    "RequirementConfigurationAPIView",
-    "RequirementDetailViewSet",
     "RequirementLibraryConfigurationAPIView",
     "RequirementLibraryItemViewSet",
     "RequirementLibraryViewSet",

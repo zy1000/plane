@@ -125,10 +125,6 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirements/page.tsx"
             ),
             route(
-              ":workspaceSlug/products/:productId/requirements/:requirementId",
-              "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirements/[requirementId]/page.tsx"
-            ),
-            route(
               ":workspaceSlug/products/:productId/plans",
               "./(all)/[workspaceSlug]/(projects)/products/[productId]/plans/page.tsx"
             ),
@@ -150,16 +146,6 @@ export const coreRoutes: RouteConfigEntry[] = [
         // Template Management
         layout("./(all)/[workspaceSlug]/(projects)/templates/layout.tsx", [
           route(":workspaceSlug/templates", "./(all)/[workspaceSlug]/(projects)/templates/page.tsx"),
-          layout("./(all)/[workspaceSlug]/(projects)/templates/requirement-types/layout.tsx", [
-            route(
-              ":workspaceSlug/templates/requirement-types",
-              "./(all)/[workspaceSlug]/(projects)/templates/requirement-types/page.tsx"
-            ),
-            route(
-              ":workspaceSlug/templates/requirement-types/:requirementTypeId",
-              "./(all)/[workspaceSlug]/(projects)/templates/requirement-types/[requirementTypeId]/page.tsx"
-            ),
-          ]),
           layout("./(all)/[workspaceSlug]/(projects)/templates/libraries/layout.tsx", [
             route(
               ":workspaceSlug/templates/libraries",
@@ -514,6 +500,15 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/issue-type-categories",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/issue-type-categories/page.tsx"
           ),
+          // Workspace Requirement Types
+          route(
+            ":workspaceSlug/settings/requirement-types",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/requirement-types/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/settings/requirement-types/:requirementTypeId",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/requirement-types/[requirementTypeId]/page.tsx"
+          ),
         ]),
 
         // --------------------------------------------------------------------
@@ -669,10 +664,12 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Timesheets: 旧路径 /timesheets/manage → /timesheets
   route(":workspaceSlug/timesheets/manage", "routes/redirects/core/timesheets-manage.tsx"),
 
-  // 需求类型: 旧路径 /templates/requirements/** → /templates/requirement-types/**
+  // 需求类型: 模板管理下的旧路径 → /settings/requirement-types/**
   // 裸路径与 splat 都注册，不依赖 splat 能否匹配空串
   route(":workspaceSlug/templates/requirements", "routes/redirects/core/requirement-types.tsx"),
   route(":workspaceSlug/templates/requirements/*", "routes/redirects/core/requirement-types.tsx"),
+  route(":workspaceSlug/templates/requirement-types", "routes/redirects/core/requirement-types.tsx"),
+  route(":workspaceSlug/templates/requirement-types/*", "routes/redirects/core/requirement-types.tsx"),
 
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens

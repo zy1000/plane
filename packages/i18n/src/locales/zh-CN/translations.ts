@@ -1561,6 +1561,12 @@ export default {
       is_not_empty: "不为空",
     },
     data: {
+      change_kind: {
+        label: "变更",
+        created: "新增",
+        updated: "已修改",
+      },
+      last_changed_version: "最后变更于",
       add: "新增记录",
       new: "新增",
       copy_badge: "副本",
@@ -1953,16 +1959,6 @@ export default {
         n_summary: "{required}/{total} 人通过",
         configuration_only: "本期仅保存审批配置，不生成审批待办。",
       },
-      filters: {
-        status: "按状态筛选",
-        owner: "按负责人筛选",
-        all_statuses: "全部状态",
-        all_owners: "全部负责人",
-        quick: {
-          all: "全部",
-          unconfigured: "待配置审批",
-        },
-      },
       actions: {
         open: "打开",
         open_named: "打开「{name}」",
@@ -1972,15 +1968,6 @@ export default {
         preview: "预览",
         edit: "编辑",
         delete: "删除",
-      },
-      modal: {
-        create_title: "新建产品需求",
-        create_description: "填写需求基本信息并配置审批规则。",
-        edit_title: "编辑产品需求",
-        edit_description: "维护负责人、生命周期状态和审批规则。",
-        basic: "需求信息",
-        approval: "审批配置",
-        create_action: "创建",
       },
       validation: {
         title: "请输入需求名称。",
@@ -2002,18 +1989,6 @@ export default {
       },
       error: {
         title: "无法加载产品需求",
-      },
-      pagination: {
-        total: "共 {count} 条需求",
-        page: "第 {page}/{total} 页",
-        per_page: "每页需求数量",
-        per_page_value: "每页 {count} 条",
-        previous_page: "上一页",
-        next_page: "下一页",
-      },
-      preview: {
-        title: "需求预览",
-        open: "预览「{name}」",
       },
       delete: {
         title: "删除需求？",
@@ -2081,24 +2056,24 @@ export default {
         draft_notice: "草稿修改将在审批通过后生效",
         in_review_banner: "变更审批中，内容暂时只读",
         view_change_request: "查看变更单",
-        more_actions: "更多需求操作",
+        more_actions: "更多基线操作",
         edit: "编辑",
         submit_review: "提交审批",
         discard_draft: "撤回草稿",
-        delete_requirement: "删除需求",
+        clear_requirements: "清空全部需求",
         withdraw_review: "撤回审批",
         go_approve: "去审批",
         discard_draft_title: "撤回草稿？",
         discard_draft_description: "撤回后草稿内容会被丢弃，需求恢复到已发布的 v{version}。此操作无法撤销。",
-        delete_requirement_title: "删除需求？",
-        delete_requirement_description:
-          "该需求从未发布过，撤回草稿等于删除整个需求及其字段配置和数据。此操作无法撤销。",
+        clear_requirements_title: "清空全部需求？",
+        clear_requirements_description:
+          "这条基线从未发布过，撤回草稿会删除该产品下的全部需求。此操作无法撤销。",
         withdraw_review_title: "撤回审批？",
         withdraw_review_description: "撤回后变更单作废，需求回到草稿状态，改完可以再次提交。",
         toast: {
           editing: "已进入草稿编辑，修改暂不影响已发布内容。",
           submitted: "已提交审批，等待审批人处理。",
-          deleted: "需求已删除。",
+          cleared: "草稿已撤回，全部需求已清空。",
           reverted: "草稿已撤回，需求恢复到上一个已发布版本。",
           failed: "操作未能完成，请稍后重试。",
         },
@@ -2143,23 +2118,23 @@ export default {
           created: "新增 {count}",
           updated: "修改 {count}",
           deleted: "删除 {count}",
-          total_rows: "共 {count} 行明细",
+          total_rows: "共 {count} 条需求",
         },
         views: {
           label: "变更审阅视图",
           overview: "概览",
           schema: "字段定义",
-          detail: "明细数据",
+          detail: "需求条目",
         },
         requirement_types: {
-          label: "按模板查看",
-          untitled: "未归属模板",
+          label: "按需求类型查看",
+          untitled: "未归属需求类型",
         },
         groups: {
           approval: "审批进度",
-          requirement: "基本信息",
+          baseline: "审批配置",
           schema: "字段定义",
-          detail: "明细数据",
+          detail: "需求条目",
         },
         no_changes: "无变更",
         rule: {
@@ -2226,8 +2201,6 @@ export default {
         },
         field_position: "第 {position} 位",
         meta_fields: {
-          title: "名称",
-          description_html: "描述",
           owner_id: "负责人",
           approval_type: "审批规则",
           required_count: "最少通过人数",
@@ -2270,7 +2243,7 @@ export default {
           rejected: "已拒绝该变更。",
           cancelled: "已撤回该变更单。",
           discarded: "已撤回草稿，需求恢复到上一个已发布版本。",
-          deleted: "需求已删除。",
+          cleared: "已撤回草稿，全部需求已清空。",
           failed: "操作未能完成，请稍后重试。",
         },
       },
@@ -2290,9 +2263,9 @@ export default {
         comparing: "{from} → {to} 对比",
         comparison_views: "版本对比视图",
         comparison_sections: {
-          basic: "基础信息",
+          basic: "审批配置",
           schema: "字段定义",
-          detail: "明细数据",
+          detail: "需求条目",
         },
         comparison_error: "无法比较版本",
         rollback: "回滚到此版本",
@@ -2806,6 +2779,16 @@ export default {
       },
       issue_type_categories: {
         title: "工作项类别",
+      },
+      requirement_types: {
+        title: "需求类型",
+        description: "需求类型定义字段结构，产品需求与需求标准库共用这套字段。",
+        list: {
+          field_count: "{count} 个字段",
+          enabled: "已启用",
+          disabled: "已停用",
+          delete_in_use: "该需求类型仍在被引用，无法删除。",
+        },
       },
       api_tokens: {
         title: "API 令牌",

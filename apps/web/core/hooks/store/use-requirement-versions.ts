@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
-  TRequirement,
+  TRequirementBaseline,
   TRequirementChangeType,
   TRequirementVersionComparisonResponse,
   TRequirementVersionDetail,
-  TRequirementVersionDetailsResponse,
+  TRequirementVersionRequirementsResponse,
   TRequirementVersionsResponse,
 } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
@@ -28,7 +28,7 @@ const EMPTY_VERSIONS: TRequirementVersionsResponse = {
   count: 0,
 };
 
-const EMPTY_DETAILS: TRequirementVersionDetailsResponse = {
+const EMPTY_REQUIREMENTS: TRequirementVersionRequirementsResponse = {
   results: [],
   total_count: 0,
   total_pages: 0,
@@ -36,37 +36,37 @@ const EMPTY_DETAILS: TRequirementVersionDetailsResponse = {
 };
 
 /**
- * 版本历史 Tab。选中版本后按需拉取快照详情，快照里的明细数组在服务端切片，
- * 所以千行需求的预览与现有明细网格是同一套分页口径。
+ * 版本历史 Tab。选中版本后按需拉取快照详情，快照里的需求条目数组在服务端切片，
+ * 所以千行需求的预览与现有网格是同一套分页口径。
  *
- * `requirementTypeId` 由调用方（URL query）持有：产品需求的快照是多个类型拼接的，明细必须
- * 在服务端按模板裁完再切片，否则一页里混着别的模板的行。
+ * `requirementTypeId` 由调用方（URL query）持有：快照可能是多个需求类型拼接的，条目必须
+ * 在服务端按类型裁完再切片，否则一页里混着别的类型的行。
  */
 export const useRequirementVersions = ({
   workspaceSlug,
-  requirementId,
+  productId,
   currentVersion,
   changeType,
   requirementTypeId,
-  onRequirementUpdate,
+  onBaselineUpdate,
 }: {
   workspaceSlug: string | undefined;
-  requirementId: string | undefined;
+  productId: string | undefined;
   currentVersion: number | null;
   changeType?: TRequirementChangeType;
   requirementTypeId?: string;
-  onRequirementUpdate?: (requirement: TRequirement) => void;
+  onBaselineUpdate?: (baseline: TRequirementBaseline) => void;
 }) => {
   const [versionsPage, setVersionsPage] = useState<TRequirementVersionsResponse>(EMPTY_VERSIONS);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [versionDetail, setVersionDetail] = useState<TRequirementVersionDetail | null>(null);
-  const [detailsPage, setDetailsPage] = useState<TRequirementVersionDetailsResponse>(EMPTY_DETAILS);
-  const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && requirementId));
+  const [snapshotPage, setSnapshotPage] = useState<TRequirementVersionRequirementsResponse>(EMPTY_REQUIREMENTS);
+  const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && productId));
   const [isVersionLoading, setIsVersionLoading] = useState(false);
-  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
   const [detailsCursor, setDetailsCursor] = useState<string | undefined>();
@@ -88,13 +88,13 @@ export const useRequirementVersions = ({
       setDetailsCursor(undefined);
       setComparisonCursor(undefined);
       setVersionDetail(null);
-      setDetailsPage(EMPTY_DETAILS);
+      setSnapshotPage(EMPTY_REQUIREMENTS);
       setComparisonPage(null);
       setError(null);
-      setDetailsError(null);
+      setSnapshotError(null);
       setComparisonError(null);
       setIsVersionLoading(version !== null);
-      setIsDetailsLoading(version !== null && compareVersion === null);
+      setIsSnapshotLoading(version !== null && compareVersion === null);
       setIsComparisonLoading(version !== null && compareVersion !== null);
       setSelectedVersion(version);
     },
@@ -110,11 +110,11 @@ export const useRequirementVersions = ({
   }, []);
 
   const fetchVersions = useCallback(async () => {
-    if (!workspaceSlug || !requirementId) return EMPTY_VERSIONS;
+    if (!workspaceSlug || !productId) return EMPTY_VERSIONS;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await requirementService.listVersions(workspaceSlug, requirementId, { cursor, perPage });
+      const response = await requirementService.listVersions(workspaceSlug, productId, { cursor, perPage });
       setVersionsPage(response);
       return response;
     } catch (requestError) {
@@ -123,7 +123,7 @@ export const useRequirementVersions = ({
     } finally {
       setIsLoading(false);
     }
-  }, [cursor, perPage, requirementId, workspaceSlug]);
+  }, [cursor, perPage, productId, workspaceSlug]);
 
   useEffect(() => {
     void fetchVersions().catch(() => undefined);
@@ -136,13 +136,13 @@ export const useRequirementVersions = ({
   }, [selectVersion, selectedVersion, versionsPage]);
 
   const fetchVersionDetail = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || selectedVersion === null) {
+    if (!workspaceSlug || !productId || selectedVersion === null) {
       setVersionDetail(null);
       return null;
     }
     setIsVersionLoading(true);
     try {
-      const response = await requirementService.getVersion(workspaceSlug, requirementId, selectedVersion);
+      const response = await requirementService.getVersion(workspaceSlug, productId, selectedVersion);
       setVersionDetail(response);
       return response;
     } catch (requestError) {
@@ -151,30 +151,30 @@ export const useRequirementVersions = ({
     } finally {
       setIsVersionLoading(false);
     }
-  }, [requirementId, selectedVersion, workspaceSlug]);
+  }, [productId, selectedVersion, workspaceSlug]);
 
-  const fetchVersionDetails = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || selectedVersion === null) {
-      setDetailsPage(EMPTY_DETAILS);
-      return EMPTY_DETAILS;
+  const fetchVersionRequirements = useCallback(async () => {
+    if (!workspaceSlug || !productId || selectedVersion === null) {
+      setSnapshotPage(EMPTY_REQUIREMENTS);
+      return EMPTY_REQUIREMENTS;
     }
-    setIsDetailsLoading(true);
-    setDetailsError(null);
+    setIsSnapshotLoading(true);
+    setSnapshotError(null);
     try {
-      const response = await requirementService.listVersionDetails(workspaceSlug, requirementId, selectedVersion, {
+      const response = await requirementService.listVersionRequirements(workspaceSlug, productId, selectedVersion, {
         cursor: detailsCursor,
         perPage: detailsPerPage,
         requirementTypeId,
       });
-      setDetailsPage(response);
+      setSnapshotPage(response);
       return response;
     } catch (requestError) {
-      setDetailsError(getErrorMessage(requestError, "Unable to load the version snapshot rows."));
+      setSnapshotError(getErrorMessage(requestError, "Unable to load the version snapshot rows."));
       throw requestError;
     } finally {
-      setIsDetailsLoading(false);
+      setIsSnapshotLoading(false);
     }
-  }, [detailsCursor, detailsPerPage, requirementId, selectedVersion, requirementTypeId, workspaceSlug]);
+  }, [detailsCursor, detailsPerPage, productId, selectedVersion, requirementTypeId, workspaceSlug]);
 
   useEffect(() => {
     void fetchVersionDetail().catch(() => undefined);
@@ -182,11 +182,11 @@ export const useRequirementVersions = ({
 
   useEffect(() => {
     if (compareVersion !== null) return;
-    void fetchVersionDetails().catch(() => undefined);
-  }, [compareVersion, fetchVersionDetails]);
+    void fetchVersionRequirements().catch(() => undefined);
+  }, [compareVersion, fetchVersionRequirements]);
 
   const fetchComparison = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || selectedVersion === null || compareVersion === null) {
+    if (!workspaceSlug || !productId || selectedVersion === null || compareVersion === null) {
       setComparisonPage(null);
       return null;
     }
@@ -195,7 +195,7 @@ export const useRequirementVersions = ({
     try {
       const response = await requirementService.compareVersions(
         workspaceSlug,
-        requirementId,
+        productId,
         selectedVersion,
         {
           toVersion: compareVersion ?? undefined,
@@ -218,7 +218,7 @@ export const useRequirementVersions = ({
     compareVersion,
     comparisonCursor,
     comparisonPerPage,
-    requirementId,
+    productId,
     selectedVersion,
     requirementTypeId,
     workspaceSlug,
@@ -235,20 +235,20 @@ export const useRequirementVersions = ({
     setComparisonCursor(undefined);
   }, [requirementTypeId]);
 
-  /** 回滚只是把历史快照灌入工作副本，需求会回到草稿态，仍需再走一次审批 */
+  /** 回滚只是把历史快照灌入工作副本，基线会回到草稿态，仍需再走一次审批 */
   const rollbackToVersion = useCallback(
     async (version: number) => {
-      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
+      if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.rollbackToVersion(workspaceSlug, requirementId, version);
-        onRequirementUpdate?.(response.requirement);
-        return response.requirement;
+        const response = await requirementService.rollbackToVersion(workspaceSlug, productId, version);
+        onBaselineUpdate?.(response.baseline);
+        return response.baseline;
       } finally {
         setIsMutating(false);
       }
     },
-    [onRequirementUpdate, requirementId, workspaceSlug]
+    [onBaselineUpdate, productId, workspaceSlug]
   );
 
   const updatePerPage = useCallback((value: number) => {
@@ -268,17 +268,17 @@ export const useRequirementVersions = ({
     versionsPage,
     selectedVersion,
     versionDetail,
-    detailsPage,
+    snapshotPage,
     compareVersion,
     comparisonPage,
     setCompareVersion: selectCompareVersion,
     isLoading,
     isVersionLoading,
-    isDetailsLoading,
+    isSnapshotLoading,
     isComparisonLoading,
     isMutating,
     error,
-    detailsError,
+    snapshotError,
     comparisonError,
     cursor,
     perPage,
@@ -295,7 +295,7 @@ export const useRequirementVersions = ({
     selectVersion,
     fetchVersions,
     fetchVersionDetail,
-    fetchVersionDetails,
+    fetchVersionRequirements,
     fetchComparison,
     rollbackToVersion,
   };

@@ -1,26 +1,30 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
 import { FilePlus2, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { TCreateRequirementTypePayload, TRequirementType } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { useRequirementTypesContext } from "./context";
-import { getRequirementTypePath } from "../navigation";
 
-export function RequirementTypeCreateModal() {
+type Props = {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreate: (payload: TCreateRequirementTypePayload) => Promise<TRequirementType>;
+  onCreated: (requirementType: TRequirementType) => void;
+  isSubmitting: boolean;
+};
+
+/** 纯 props 驱动，不依赖模板管理的 context —— 那个 provider 以后要删。 */
+export function RequirementTypeCreateModal(props: Props) {
+  const { isOpen, onClose, onCreate, onCreated, isSubmitting } = props;
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { workspaceSlug, isCreateModalOpen, setIsCreateModalOpen, createRequirementType, isMutating } =
-    useRequirementTypesContext();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isCreateModalOpen) return;
+    if (!isOpen) return;
     setName("");
     setError(null);
-  }, [isCreateModalOpen]);
+  }, [isOpen]);
 
   const handleCreate = async () => {
     const normalizedName = name.trim();
@@ -30,14 +34,7 @@ export function RequirementTypeCreateModal() {
     }
     setError(null);
     try {
-      const requirementType = await createRequirementType({ name: normalizedName });
-      setIsCreateModalOpen(false);
-      navigate(getRequirementTypePath(workspaceSlug, requirementType.id));
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: t("workspace_templates.requirement_types.toast.created"),
-      });
+      onCreated(await onCreate({ name: normalizedName }));
     } catch (requestError) {
       const payload = requestError as { name?: string[]; error?: string };
       setError(payload?.name?.[0] ?? payload?.error ?? t("workspace_templates.requirement_types.toast.failed"));
@@ -45,12 +42,7 @@ export function RequirementTypeCreateModal() {
   };
 
   return (
-    <ModalCore
-      isOpen={isCreateModalOpen}
-      handleClose={() => setIsCreateModalOpen(false)}
-      position={EModalPosition.CENTER}
-      width={EModalWidth.LG}
-    >
+    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.LG}>
       <div className="flex items-center justify-between border-b border-subtle px-5 py-4">
         <div className="flex items-center gap-2.5">
           <span className="grid size-8 place-items-center rounded-md bg-layer-2 text-secondary">
@@ -64,7 +56,7 @@ export function RequirementTypeCreateModal() {
         <button
           type="button"
           className="grid size-8 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover"
-          onClick={() => setIsCreateModalOpen(false)}
+          onClick={onClose}
           aria-label={t("close")}
         >
           <X className="size-4" />
@@ -86,10 +78,10 @@ export function RequirementTypeCreateModal() {
         {error && <p className="text-11 text-danger-primary">{error}</p>}
       </div>
       <div className="flex justify-end gap-2 border-t border-subtle px-5 py-3">
-        <Button variant="secondary" onClick={() => setIsCreateModalOpen(false)} disabled={isMutating}>
+        <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
           {t("cancel")}
         </Button>
-        <Button variant="primary" onClick={() => void handleCreate()} loading={isMutating}>
+        <Button variant="primary" onClick={() => void handleCreate()} loading={isSubmitting}>
           {t("workspace_templates.requirement_types.create_and_edit")}
         </Button>
       </div>

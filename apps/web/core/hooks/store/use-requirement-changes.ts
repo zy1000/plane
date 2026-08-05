@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
-  TRequirement,
   TRequirementApprovalAction,
+  TRequirementBaseline,
   TRequirementChangeItemsResponse,
   TRequirementChangeRequest,
   TRequirementChangeRequestDetail,
@@ -39,28 +39,26 @@ const EMPTY_ITEMS: TRequirementChangeItemsResponse = {
 /** 变更记录 Tab：变更单列表 + 工作副本与审批动作 */
 export const useRequirementChangeRequests = ({
   workspaceSlug,
-  requirementId,
-  onRequirementUpdate,
-  onRequirementDelete,
+  productId,
+  onBaselineUpdate,
 }: {
   workspaceSlug: string | undefined;
-  requirementId: string | undefined;
-  onRequirementUpdate?: (requirement: TRequirement) => void;
-  onRequirementDelete?: (requirementId: string) => void;
+  productId: string | undefined;
+  onBaselineUpdate?: (baseline: TRequirementBaseline) => void;
 }) => {
   const [changeRequestsPage, setChangeRequestsPage] = useState<TRequirementChangeRequestsResponse>(EMPTY_REQUESTS);
-  const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && requirementId));
+  const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && productId));
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
 
   const fetchChangeRequests = useCallback(async () => {
-    if (!workspaceSlug || !requirementId) return EMPTY_REQUESTS;
+    if (!workspaceSlug || !productId) return EMPTY_REQUESTS;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await requirementService.listChangeRequests(workspaceSlug, requirementId, { cursor, perPage });
+      const response = await requirementService.listChangeRequests(workspaceSlug, productId, { cursor, perPage });
       setChangeRequestsPage(response);
       return response;
     } catch (requestError) {
@@ -69,67 +67,66 @@ export const useRequirementChangeRequests = ({
     } finally {
       setIsLoading(false);
     }
-  }, [cursor, perPage, requirementId, workspaceSlug]);
+  }, [cursor, perPage, productId, workspaceSlug]);
 
   useEffect(() => {
     void fetchChangeRequests().catch(() => undefined);
   }, [fetchChangeRequests]);
 
   const startEditing = useCallback(async () => {
-    if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
+    if (!workspaceSlug || !productId) throw new Error("Product is required.");
     setIsMutating(true);
     try {
-      const response = await requirementService.startEditing(workspaceSlug, requirementId);
-      onRequirementUpdate?.(response.requirement);
-      return response.requirement;
+      const response = await requirementService.startEditing(workspaceSlug, productId);
+      onBaselineUpdate?.(response.baseline);
+      return response.baseline;
     } finally {
       setIsMutating(false);
     }
-  }, [onRequirementUpdate, requirementId, workspaceSlug]);
+  }, [onBaselineUpdate, productId, workspaceSlug]);
 
-  /** 返回 outcome，调用方靠它决定留在详情页还是跳回列表 */
+  /** 返回 outcome：cleared = 从未发布过、条目已清空；reverted = 回到上一个已发布版本 */
   const discardDraft = useCallback(async () => {
-    if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
+    if (!workspaceSlug || !productId) throw new Error("Product is required.");
     setIsMutating(true);
     try {
-      const response = await requirementService.discardDraft(workspaceSlug, requirementId);
-      if (response.outcome === "deleted") onRequirementDelete?.(requirementId);
-      else if (response.requirement) onRequirementUpdate?.(response.requirement);
+      const response = await requirementService.discardDraft(workspaceSlug, productId);
+      onBaselineUpdate?.(response.baseline);
       return response;
     } finally {
       setIsMutating(false);
     }
-  }, [onRequirementDelete, onRequirementUpdate, requirementId, workspaceSlug]);
+  }, [onBaselineUpdate, productId, workspaceSlug]);
 
   const submitChangeRequest = useCallback(
     async (reason: string) => {
-      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
+      if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.submitChangeRequest(workspaceSlug, requirementId, { reason });
+        const response = await requirementService.submitChangeRequest(workspaceSlug, productId, { reason });
         await fetchChangeRequests().catch(() => undefined);
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchChangeRequests, requirementId, workspaceSlug]
+    [fetchChangeRequests, productId, workspaceSlug]
   );
 
-  /** 详情页头部的「撤回审批」直接作用在待审变更单上，不必先进对比页 */
+  /** 页面头部的「撤回审批」直接作用在待审变更单上，不必先进对比页 */
   const cancelChangeRequest = useCallback(
     async (changeRequestId: string) => {
-      if (!workspaceSlug || !requirementId) throw new Error("Requirement is required.");
+      if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.cancelChangeRequest(workspaceSlug, requirementId, changeRequestId);
+        const response = await requirementService.cancelChangeRequest(workspaceSlug, productId, changeRequestId);
         await fetchChangeRequests().catch(() => undefined);
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchChangeRequests, requirementId, workspaceSlug]
+    [fetchChangeRequests, productId, workspaceSlug]
   );
 
   const upsertChangeRequest = useCallback((changeRequest: TRequirementChangeRequest) => {
@@ -163,25 +160,25 @@ export const useRequirementChangeRequests = ({
 };
 
 /**
- * 变更对比页：变更单详情 + 明细数据组分页 + 审批动作。
+ * 变更对比页：变更单详情 + 需求条目组分页 + 审批动作。
  *
  * `changeType` 与 `requirementTypeId` 由调用方（URL query）持有，作为服务端筛选参数传入 ——
- * 千行明细下分段筛选和模板分视图都必须落到查询里，不能在前端过滤当前页。
+ * 千行需求下分段筛选和按类型分视图都必须落到查询里，不能在前端过滤当前页。
  */
 export const useRequirementChangeRequestDetail = ({
   workspaceSlug,
-  requirementId,
+  productId,
   changeRequestId,
   changeType,
   requirementTypeId,
 }: {
   workspaceSlug: string | undefined;
-  requirementId: string | undefined;
+  productId: string | undefined;
   changeRequestId: string | undefined;
   changeType?: TRequirementChangeType;
   requirementTypeId?: string;
 }) => {
-  const isScoped = Boolean(workspaceSlug && requirementId && changeRequestId);
+  const isScoped = Boolean(workspaceSlug && productId && changeRequestId);
   const [changeRequest, setChangeRequest] = useState<TRequirementChangeRequestDetail | null>(null);
   const [itemsPage, setItemsPage] = useState<TRequirementChangeItemsResponse>(EMPTY_ITEMS);
   const [isLoading, setIsLoading] = useState(isScoped);
@@ -193,11 +190,11 @@ export const useRequirementChangeRequestDetail = ({
   const [perPage, setPerPage] = useState(20);
 
   const fetchChangeRequest = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || !changeRequestId) return null;
+    if (!workspaceSlug || !productId || !changeRequestId) return null;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await requirementService.getChangeRequest(workspaceSlug, requirementId, changeRequestId);
+      const response = await requirementService.getChangeRequest(workspaceSlug, productId, changeRequestId);
       setChangeRequest(response);
       return response;
     } catch (requestError) {
@@ -206,14 +203,14 @@ export const useRequirementChangeRequestDetail = ({
     } finally {
       setIsLoading(false);
     }
-  }, [changeRequestId, requirementId, workspaceSlug]);
+  }, [changeRequestId, productId, workspaceSlug]);
 
   const fetchItems = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || !changeRequestId) return EMPTY_ITEMS;
+    if (!workspaceSlug || !productId || !changeRequestId) return EMPTY_ITEMS;
     setIsItemsLoading(true);
     setItemsError(null);
     try {
-      const response = await requirementService.listChangeItems(workspaceSlug, requirementId, changeRequestId, {
+      const response = await requirementService.listChangeItems(workspaceSlug, productId, changeRequestId, {
         cursor,
         perPage,
         changeType,
@@ -227,7 +224,7 @@ export const useRequirementChangeRequestDetail = ({
     } finally {
       setIsItemsLoading(false);
     }
-  }, [changeRequestId, changeType, cursor, perPage, requirementId, requirementTypeId, workspaceSlug]);
+  }, [changeRequestId, changeType, cursor, perPage, productId, requirementTypeId, workspaceSlug]);
 
   useEffect(() => {
     setChangeRequest(null);
@@ -242,10 +239,10 @@ export const useRequirementChangeRequestDetail = ({
 
   const actOnChangeRequest = useCallback(
     async (action: TRequirementApprovalAction, comment?: string) => {
-      if (!workspaceSlug || !requirementId || !changeRequestId) throw new Error("Change request is required.");
+      if (!workspaceSlug || !productId || !changeRequestId) throw new Error("Change request is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.actOnChangeRequest(workspaceSlug, requirementId, changeRequestId, {
+        const response = await requirementService.actOnChangeRequest(workspaceSlug, productId, changeRequestId, {
           action,
           comment,
         });
@@ -255,20 +252,20 @@ export const useRequirementChangeRequestDetail = ({
         setIsMutating(false);
       }
     },
-    [changeRequestId, fetchChangeRequest, requirementId, workspaceSlug]
+    [changeRequestId, fetchChangeRequest, productId, workspaceSlug]
   );
 
   const cancelChangeRequest = useCallback(async () => {
-    if (!workspaceSlug || !requirementId || !changeRequestId) throw new Error("Change request is required.");
+    if (!workspaceSlug || !productId || !changeRequestId) throw new Error("Change request is required.");
     setIsMutating(true);
     try {
-      const response = await requirementService.cancelChangeRequest(workspaceSlug, requirementId, changeRequestId);
+      const response = await requirementService.cancelChangeRequest(workspaceSlug, productId, changeRequestId);
       await fetchChangeRequest().catch(() => undefined);
       return response;
     } finally {
       setIsMutating(false);
     }
-  }, [changeRequestId, fetchChangeRequest, requirementId, workspaceSlug]);
+  }, [changeRequestId, fetchChangeRequest, productId, workspaceSlug]);
 
   const updatePerPage = useCallback((value: number) => {
     setCursor(undefined);

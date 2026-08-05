@@ -68,7 +68,7 @@ class RequirementChangeRequestSerializer(BaseSerializer):
         model = RequirementChangeRequest
         fields = [
             "id",
-            "requirement_id",
+            "baseline_id",
             "sequence_id",
             "request_kind",
             "status",
@@ -143,24 +143,20 @@ class RequirementChangeRequestSerializer(BaseSerializer):
 class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerializer):
     """变更单详情。
 
-    针对千行明细专门设计：只内联「基本信息」与「字段定义」两组变更项（这两组天然
-    很小），明细数据组只给计数，实际内容由独立的分页端点按需拉取。
+    针对千行需求专门设计：只内联「审批配置」与「字段定义」两组变更项（这两组天然
+    很小），需求条目组只给计数，实际内容由独立的分页端点按需拉取。
     """
 
-    requirement_items = serializers.SerializerMethodField()
+    baseline_items = serializers.SerializerMethodField()
     schema_items = serializers.SerializerMethodField()
-    detail_item_count = serializers.SerializerMethodField()
+    requirement_item_count = serializers.SerializerMethodField()
     requirement_type_stats = serializers.SerializerMethodField()
-    requirement_title = serializers.CharField(
-        source="requirement.title", read_only=True
-    )
 
     class Meta(RequirementChangeRequestSerializer.Meta):
         fields = RequirementChangeRequestSerializer.Meta.fields + [
-            "requirement_title",
-            "requirement_items",
+            "baseline_items",
             "schema_items",
-            "detail_item_count",
+            "requirement_item_count",
             "requirement_type_stats",
         ]
         read_only_fields = fields
@@ -172,9 +168,9 @@ class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerialize
             if item.target_kind == target_kind
         ]
 
-    def get_requirement_items(self, obj):
+    def get_baseline_items(self, obj):
         return RequirementChangeItemSerializer(
-            self._grouped_items(obj, RequirementChangeTargetKind.REQUIREMENT),
+            self._grouped_items(obj, RequirementChangeTargetKind.BASELINE),
             many=True,
         ).data
 
@@ -184,8 +180,8 @@ class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerialize
             many=True,
         ).data
 
-    def get_detail_item_count(self, obj):
-        return self.context.get("detail_item_count", 0)
+    def get_requirement_item_count(self, obj):
+        return self.context.get("requirement_item_count", 0)
 
     def get_requirement_type_stats(self, obj):
         return self.context.get("requirement_type_stats") or []
@@ -225,7 +221,7 @@ class RequirementVersionSerializer(BaseSerializer):
         model = RequirementVersion
         fields = [
             "id",
-            "requirement_id",
+            "baseline_id",
             "version",
             "change_type",
             "approved_by",
@@ -240,30 +236,30 @@ class RequirementVersionSerializer(BaseSerializer):
 
 
 class RequirementVersionDetailSerializer(RequirementVersionSerializer):
-    """版本详情：带 meta 与字段定义，明细走独立分页端点。"""
+    """版本详情：带 meta 与字段定义，需求条目走独立分页端点。"""
 
-    requirement_snapshot = serializers.SerializerMethodField()
+    baseline_snapshot = serializers.SerializerMethodField()
     fields_snapshot = serializers.SerializerMethodField()
-    detail_count = serializers.SerializerMethodField()
+    requirement_count = serializers.SerializerMethodField()
     requirement_type_stats = serializers.SerializerMethodField()
 
     class Meta(RequirementVersionSerializer.Meta):
         fields = RequirementVersionSerializer.Meta.fields + [
-            "requirement_snapshot",
+            "baseline_snapshot",
             "fields_snapshot",
-            "detail_count",
+            "requirement_count",
             "requirement_type_stats",
         ]
         read_only_fields = fields
 
-    def get_requirement_snapshot(self, obj):
-        return (obj.snapshot or {}).get("requirement") or {}
+    def get_baseline_snapshot(self, obj):
+        return (obj.snapshot or {}).get("baseline") or {}
 
     def get_fields_snapshot(self, obj):
         return (obj.snapshot or {}).get("fields") or []
 
-    def get_detail_count(self, obj):
-        return len((obj.snapshot or {}).get("details") or [])
+    def get_requirement_count(self, obj):
+        return len((obj.snapshot or {}).get("requirements") or [])
 
     def get_requirement_type_stats(self, obj):
         return snapshot_requirement_type_stats(obj.snapshot or {})
@@ -285,13 +281,13 @@ class RequirementVersionComparisonItemSerializer(serializers.Serializer):
 
 
 class RequirementVersionComparisonSerializer(serializers.Serializer):
-    """版本比较的非分页部分；明细结果由通用分页响应的 results 承载。"""
+    """版本比较的非分页部分；需求条目结果由通用分页响应的 results 承载。"""
 
     from_version = serializers.IntegerField()
     to_version = serializers.IntegerField()
-    requirement_items = RequirementVersionComparisonItemSerializer(many=True)
+    baseline_items = RequirementVersionComparisonItemSerializer(many=True)
     schema_items = RequirementVersionComparisonItemSerializer(many=True)
-    detail_item_count = serializers.IntegerField()
+    requirement_item_count = serializers.IntegerField()
     changed_field_ids = serializers.ListField(child=serializers.CharField())
     to_fields_snapshot = serializers.JSONField()
     requirement_type_stats = serializers.JSONField()

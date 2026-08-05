@@ -9,8 +9,8 @@ from plane.app.serializers.requirement_type import (
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import (
-    RequirementDetail,
-    RequirementDraftDetail,
+    Requirement,
+    RequirementDraftRow,
     RequirementLibrary,
     RequirementType,
     Workspace,
@@ -130,13 +130,13 @@ class RequirementTypeViewSet(BaseViewSet):
         #
         # 这个判断是**唯一的实际保护**，不是防御性检查：软删除不会触发外键的
         # PROTECT，而 soft_delete_related_objects 把 PROTECT 当 CASCADE 处理，
-        # 所以真删下去会把引用它的明细行一起软删掉。
+        # 所以真删下去会把引用它的需求行一起软删掉。
         if (
             RequirementLibrary.objects.filter(requirement_type=requirement_type).exists()
-            or RequirementDetail.objects.filter(
+            or Requirement.objects.filter(
                 requirement_type=requirement_type
             ).exists()
-            or RequirementDraftDetail.objects.filter(
+            or RequirementDraftRow.objects.filter(
                 requirement_type=requirement_type
             ).exists()
         ):
@@ -214,7 +214,7 @@ class RequirementTypeConfigurationAPIView(BaseAPIView):
                 {
                     "error": "Saving this structure will remove existing values.",
                     "code": "REQUIREMENT_SCHEMA_DATA_LOSS",
-                    "affected_detail_count": exc.affected_detail_count,
+                    "affected_requirement_count": exc.affected_row_count,
                 },
                 status=status.HTTP_409_CONFLICT,
             )

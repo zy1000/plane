@@ -14,8 +14,8 @@ import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane
 import { useRequirementChangeRequestDetail } from "@/hooks/store/use-requirement-changes";
 import { ChangeApprovalBar } from "./change-approval-bar";
 import { ChangeApprovalProgress } from "./change-approval-progress";
-import { MetaDiffTable, SchemaDiffList } from "./change-diff-groups";
-import { DetailDiffGrid } from "./detail-diff-grid";
+import { BaselineDiffTable, SchemaDiffList } from "./change-diff-groups";
+import { RequirementDiffGrid } from "./requirement-diff-grid";
 import { approvalRuleLabel } from "./styles";
 import { useChangeItemFilters } from "./use-change-item-filters";
 
@@ -28,7 +28,7 @@ type TSectionSelection = {
 
 type TProps = {
   workspaceSlug: string;
-  requirementId: string;
+  productId: string;
   changeRequestId: string;
   fields: TRequirementField[];
   members: IUserLite[];
@@ -38,7 +38,7 @@ type TProps = {
 };
 
 export function ChangeRequestDetail(props: TProps) {
-  const { workspaceSlug, requirementId, changeRequestId, fields, members, onBack, onSettled } = props;
+  const { workspaceSlug, productId, changeRequestId, fields, members, onBack, onSettled } = props;
   const { t } = useTranslation();
   const {
     changeType,
@@ -51,7 +51,7 @@ export function ChangeRequestDetail(props: TProps) {
   // 详情要先回来才知道有哪些需求类型，所以先按 URL 上的值取数，收敛后再由 effect 纠正
   const store = useRequirementChangeRequestDetail({
     workspaceSlug,
-    requirementId,
+    productId,
     changeRequestId,
     changeType,
     requirementTypeId: requestedRequirementTypeId,
@@ -155,9 +155,9 @@ export function ChangeRequestDetail(props: TProps) {
     approved: changeRequest.approved_count,
   });
   const sectionCounts: Record<TReviewSection, number> = {
-    overview: changeRequest.requirement_items.length,
+    overview: changeRequest.baseline_items.length,
     schema: changeRequest.schema_items.length,
-    detail: changeRequest.detail_item_count,
+    detail: changeRequest.requirement_item_count,
   };
   const defaultSection = REVIEW_SECTIONS.find((section) => sectionCounts[section] > 0) ?? "overview";
   const activeSection =
@@ -292,11 +292,11 @@ export function ChangeRequestDetail(props: TProps) {
           className={cn(activeSection !== "detail" && "px-4 py-4 md:px-6")}
         >
           {activeSection === "overview" ? (
-            <MetaDiffTable items={changeRequest.requirement_items} members={members} />
+            <BaselineDiffTable items={changeRequest.baseline_items} members={members} />
           ) : activeSection === "schema" ? (
             <SchemaDiffList items={changeRequest.schema_items} requirementTypes={requirementTypeStats} />
           ) : (
-            <DetailDiffGrid
+            <RequirementDiffGrid
               workspaceSlug={workspaceSlug}
               fields={requirementTypeFields}
               changedFieldIds={changeRequest.changed_field_ids}

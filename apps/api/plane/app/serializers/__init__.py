@@ -175,15 +175,15 @@ from .qa import (
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
 from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer
 from .requirement import (
-    RequirementConfigurationWriteSerializer,
-    RequirementDetailBatchSaveSerializer,
-    RequirementDetailCreateSerializer,
-    RequirementDetailFilterSerializer,
-    RequirementDetailImportSerializer,
-    RequirementDetailSerializer,
-    RequirementDetailUpdateSerializer,
-    RequirementDraftDetailSerializer,
+    RequirementBaselineConfigurationWriteSerializer,
+    RequirementBaselineSerializer,
+    RequirementBatchSaveSerializer,
+    RequirementCreateSerializer,
+    RequirementDraftRowSerializer,
+    RequirementFilterSerializer,
+    RequirementImportSerializer,
     RequirementSerializer,
+    RequirementUpdateSerializer,
 )
 from .requirement_library import RequirementLibrarySerializer
 from .requirement_type import (

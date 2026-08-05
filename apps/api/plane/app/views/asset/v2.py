@@ -25,7 +25,7 @@ from plane.db.models import (
     Workspace,
     Project,
     Product,
-    Requirement,
+    RequirementLibrary,
     User,
     Cycle,
     Release,
@@ -39,6 +39,27 @@ from plane.throttles.asset import AssetRateThrottle
 from plane.utils.file_path import build_resolver, rebind_asset_to_path
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.product import can_create_product, can_manage_product, can_view_product
+
+
+def requirement_asset_owner_exists(workspace, entity_identifier):
+    """需求附件挂在**网格的归属方**（产品或标准库）上，而不是某一行需求。
+
+    网格允许在还没落库的新行里上传附件，那一刻并没有需求行的 id 可用；归属方在
+    整个编辑过程中都是稳定的，也不会因为草稿物化时重建行而失效。
+    """
+    if not entity_identifier:
+        return False
+    try:
+        return (
+            Product.objects.filter(
+                id=entity_identifier, workspace=workspace
+            ).exists()
+            or RequirementLibrary.objects.filter(
+                id=entity_identifier, workspace=workspace
+            ).exists()
+        )
+    except (DjangoValidationError, ValueError):
+        return False
 
 
 def _rebind_assets_to_final_path(assets, request):
@@ -457,13 +478,9 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
             entity_type=entity_type, entity_id=entity_identifier
         )
         if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
-            requirement = Requirement.objects.filter(
-                id=entity_identifier,
-                workspace=workspace,
-            ).first()
-            if requirement is None:
+            if not requirement_asset_owner_exists(workspace, entity_identifier):
                 return Response(
-                    {"error": "Requirement not found."},
+                    {"error": "Requirement owner not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
         if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
@@ -1162,12 +1179,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
         if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
-            if not Requirement.objects.filter(
-                id=entity_id,
-                workspace=workspace,
-            ).exists():
+            if not requirement_asset_owner_exists(workspace, entity_id):
                 return Response(
-                    {"error": "Requirement not found."},
+                    {"error": "Requirement owner not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 

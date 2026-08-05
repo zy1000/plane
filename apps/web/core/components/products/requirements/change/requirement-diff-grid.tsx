@@ -15,9 +15,9 @@ import { useTranslation } from "@plane/i18n";
 import type {
   TRequirementChangeItem,
   TRequirementChangeType,
-  TRequirementDetailChangeSnapshot,
-  TRequirementDetailData,
-  TRequirementDetailValue,
+  TRequirementChangeSnapshot,
+  TRequirementData,
+  TRequirementValue,
   TRequirementField,
 } from "@plane/types";
 import { CustomSelect, Loader, ToggleSwitch } from "@plane/ui";
@@ -38,8 +38,8 @@ type TSubRowState = "same" | "created" | "updated" | "deleted";
 
 type TAlignedSubRow = {
   key: string;
-  before?: TRequirementDetailData;
-  after?: TRequirementDetailData;
+  before?: TRequirementData;
+  after?: TRequirementData;
   state: TSubRowState;
 };
 
@@ -66,8 +66,8 @@ const SUB_ROW_MARKER_TONE: Record<TSubRowState, string> = {
 
 /** 子表单行按 row id 并集对齐：两侧都有的配对，只在一侧的算增/删 */
 const alignSubRows = (
-  beforeData: TRequirementDetailData,
-  afterData: TRequirementDetailData,
+  beforeData: TRequirementData,
+  afterData: TRequirementData,
   formId: string
 ): TAlignedSubRow[] => {
   const beforeRows = getFormRows(beforeData, formId);
@@ -112,8 +112,8 @@ function DiffCell({
 }: {
   field: TRequirementField;
   changeType: TRequirementChangeType;
-  before: TRequirementDetailValue | undefined;
-  after: TRequirementDetailValue | undefined;
+  before: TRequirementValue | undefined;
+  after: TRequirementValue | undefined;
   workspaceSlug: string;
   valueClassName?: string;
 }) {
@@ -194,7 +194,7 @@ type TProps = {
   onCursorChange: (value: string | undefined) => void;
 };
 
-export function DetailDiffGrid(props: TProps) {
+export function RequirementDiffGrid(props: TProps) {
   const {
     workspaceSlug,
     fields,
@@ -237,8 +237,8 @@ export function DetailDiffGrid(props: TProps) {
   const pageStart = (Math.max(currentPage, 1) - 1) * perPage + 1;
 
   const renderChangeItem = (item: TRequirementChangeItem) => {
-    const before = item.before_snapshot as TRequirementDetailChangeSnapshot | null;
-    const after = item.proposed_snapshot as TRequirementDetailChangeSnapshot | null;
+    const before = item.before_snapshot as TRequirementChangeSnapshot | null;
+    const after = item.proposed_snapshot as TRequirementChangeSnapshot | null;
     const beforeData = before?.data ?? {};
     const afterData = after?.data ?? {};
     const alignedByForm = new Map(

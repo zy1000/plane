@@ -1398,6 +1398,12 @@ export default {
       is_not_empty: "Is not empty",
     },
     data: {
+      change_kind: {
+        label: "Change",
+        created: "Added",
+        updated: "Modified",
+      },
+      last_changed_version: "Last changed in",
       add: "Add record",
       new: "New",
       copy_badge: "Copy",
@@ -1792,16 +1798,6 @@ export default {
         n_summary: "{required} of {total} approvers",
         configuration_only: "This release only saves the approval configuration and does not create approval tasks.",
       },
-      filters: {
-        status: "Filter by status",
-        owner: "Filter by owner",
-        all_statuses: "All statuses",
-        all_owners: "All owners",
-        quick: {
-          all: "All",
-          unconfigured: "Approval not configured",
-        },
-      },
       actions: {
         open: "Open",
         open_named: "Open {name}",
@@ -1811,15 +1807,6 @@ export default {
         preview: "Preview",
         edit: "Edit",
         delete: "Delete",
-      },
-      modal: {
-        create_title: "Create requirement",
-        create_description: "Fill in the requirement details and configure the approval rule.",
-        edit_title: "Edit requirement",
-        edit_description: "Update ownership, lifecycle status, and the approval rule.",
-        basic: "Requirement details",
-        approval: "Approval settings",
-        create_action: "Create",
       },
       validation: {
         title: "Enter a requirement name.",
@@ -1841,18 +1828,6 @@ export default {
       },
       error: {
         title: "Requirements could not be loaded",
-      },
-      pagination: {
-        total: "{count} requirements",
-        page: "Page {page} of {total}",
-        per_page: "Requirements per page",
-        per_page_value: "{count} / page",
-        previous_page: "Previous page",
-        next_page: "Next page",
-      },
-      preview: {
-        title: "Requirement preview",
-        open: "Preview {name}",
       },
       delete: {
         title: "Delete requirement?",
@@ -1922,27 +1897,27 @@ export default {
         draft_notice: "Draft changes take effect after approval.",
         in_review_banner: "A change request is under review, so the content is read-only for now.",
         view_change_request: "View change request",
-        more_actions: "More requirement actions",
+        more_actions: "More baseline actions",
         edit: "Edit",
         submit_review: "Submit for approval",
         discard_draft: "Discard draft",
-        delete_requirement: "Delete requirement",
+        clear_requirements: "Clear all requirements",
         withdraw_review: "Withdraw request",
         go_approve: "Review it",
         discard_draft_title: "Discard this draft?",
         discard_draft_description:
-          "The draft will be dropped and the requirement returns to the published v{version}. This cannot be undone.",
-        delete_requirement_title: "Delete this requirement?",
-        delete_requirement_description:
-          "This requirement was never published, so discarding the draft deletes the whole requirement along with its fields and data. This cannot be undone.",
+          "The draft will be dropped and the requirements return to the published v{version}. This cannot be undone.",
+        clear_requirements_title: "Clear all requirements?",
+        clear_requirements_description:
+          "This baseline was never published, so discarding the draft removes every requirement under this product. This cannot be undone.",
         withdraw_review_title: "Withdraw this change request?",
         withdraw_review_description:
-          "The change request is voided and the requirement returns to draft. You can submit it again after further edits.",
+          "The change request is voided and the baseline returns to draft. You can submit it again after further edits.",
         toast: {
           editing: "Draft editing started. Your changes do not affect the published content yet.",
           submitted: "Submitted for approval.",
-          deleted: "Requirement deleted.",
-          reverted: "Draft discarded. The requirement is back on its last published version.",
+          cleared: "Draft discarded. All requirements were removed.",
+          reverted: "Draft discarded. The requirements are back on their last published version.",
           failed: "That action could not be completed. Please try again.",
         },
         errors: {
@@ -1986,23 +1961,23 @@ export default {
           created: "{count} added",
           updated: "{count} modified",
           deleted: "{count} removed",
-          total_rows: "{count} rows in total",
+          total_rows: "{count} requirements in total",
         },
         views: {
           label: "Change request sections",
           overview: "Overview",
           schema: "Field definitions",
-          detail: "Record data",
+          detail: "Requirements",
         },
         requirement_types: {
-          label: "View by template",
-          untitled: "No template",
+          label: "View by requirement type",
+          untitled: "No requirement type",
         },
         groups: {
           approval: "Approval progress",
-          requirement: "Basic information",
+          baseline: "Approval settings",
           schema: "Field definitions",
-          detail: "Record data",
+          detail: "Requirements",
         },
         no_changes: "No changes",
         rule: {
@@ -2069,8 +2044,6 @@ export default {
         },
         field_position: "Position {position}",
         meta_fields: {
-          title: "Name",
-          description_html: "Description",
           owner_id: "Owner",
           approval_type: "Approval rule",
           required_count: "Minimum approvals",
@@ -2113,8 +2086,8 @@ export default {
           approved: "You approved this change request.",
           rejected: "You rejected this change request.",
           cancelled: "The change request has been withdrawn.",
-          discarded: "The draft was discarded and the requirement is back to its last published version.",
-          deleted: "The requirement has been deleted.",
+          discarded: "The draft was discarded and the requirements are back to their last published version.",
+          cleared: "The draft was discarded and all requirements were removed.",
           failed: "Something went wrong. Please try again.",
         },
       },
@@ -2134,9 +2107,9 @@ export default {
         comparing: "{from} → {to} comparison",
         comparison_views: "Version comparison views",
         comparison_sections: {
-          basic: "Basic information",
+          basic: "Approval settings",
           schema: "Field definitions",
-          detail: "Detail data",
+          detail: "Requirements",
         },
         comparison_error: "Unable to compare these versions",
         rollback: "Roll back to this version",
@@ -2662,6 +2635,17 @@ export default {
       },
       issue_type_categories: {
         title: "Issue Type Categories",
+      },
+      requirement_types: {
+        title: "Requirement types",
+        description:
+          "Requirement types define the field structure shared by product requirements and standard libraries.",
+        list: {
+          field_count: "{count} fields",
+          enabled: "Enabled",
+          disabled: "Disabled",
+          delete_in_use: "This requirement type is still in use and cannot be deleted.",
+        },
       },
       api_tokens: {
         title: "Personal Access Tokens",

@@ -12,11 +12,12 @@ from plane.db.models import (
     Product,
     ProductMember,
     ProjectMember,
+    Requirement,
     RequirementApprover,
+    RequirementBaseline,
     RequirementBuiltinFieldKey,
     RequirementChangeTargetKind,
-    RequirementDetail,
-    RequirementDraftDetail,
+    RequirementDraftRow,
     RequirementField,
     RequirementFieldType,
     RequirementType,
@@ -39,6 +40,18 @@ BUILTIN_FIELD_DEFS = (
         False,
     ),
 )
+
+# 内置字段的值住在 Requirement 的真实列上，不在 data 里 —— 列表排序、关键字搜索、
+# 面包屑与附件路径都要直接拿标题，塞在 JSON 里会让这些路径全部退化成 JSONB 取值。
+BUILTIN_COLUMN_BY_KEY = {
+    RequirementBuiltinFieldKey.TITLE: "title",
+    RequirementBuiltinFieldKey.DESCRIPTION: "description_html",
+}
+
+# 列缺省值：split 一定返回完整的两列，调用方可以直接当模型 kwargs 用
+BUILTIN_COLUMN_DEFAULTS = {"title": "", "description_html": None}
+
+TITLE_MAX_LENGTH = 255
 
 
 def field_attr(field, name, default=None):
@@ -158,10 +171,74 @@ def field_tree_from_specs(specs):
     return roots
 
 
+# --- 内置字段 <-> 列 -----------------------------------------------------
+#
+# 存储上标题与描述是 Requirement 的列，但**接口契约里它们仍然是 data 里的两个
+# 字段 UUID**。拆分只发生在存储边界：写入前 split，读出后 merge。网格、字段校验、
+# 筛选、搜索、变更 diff 因此完全不需要为内置字段分支。
+
+
+def builtin_ids_from_specs(specs):
+    """{builtin_key: field_id}。specs 可以是模型行、spec 或快照 dict。"""
+    ids = {}
+    for spec in specs or []:
+        builtin_key = field_attr(spec, "builtin_key")
+        if builtin_key:
+            ids[builtin_key] = str(field_attr(spec, "id"))
+    return ids
+
+
+def builtin_field_index(requirement_type_ids):
+    """{requirement_type_id: {builtin_key: field_id}}，一次查库。
+
+    批量写入时每行的需求类型可能不同，逐行查库会退化成 N+1。
+    """
+    index = {}
+    requirement_type_ids = [item for item in requirement_type_ids if item]
+    if not requirement_type_ids:
+        return index
+    rows = RequirementField.objects.filter(
+        requirement_type_id__in=requirement_type_ids,
+        builtin_key__isnull=False,
+    ).values_list("requirement_type_id", "builtin_key", "id")
+    for requirement_type_id, builtin_key, field_id in rows:
+        index.setdefault(str(requirement_type_id), {})[builtin_key] = str(field_id)
+    return index
+
+
+def split_builtin_values(data, builtin_ids):
+    """data -> (列值, 剩余的自定义字段 data)。
+
+    列值一定包含全部两列（用缺省值补齐），可以直接展开成模型 kwargs。
+    """
+    payload = deepcopy(data or {})
+    columns = dict(BUILTIN_COLUMN_DEFAULTS)
+    for builtin_key, column in BUILTIN_COLUMN_BY_KEY.items():
+        field_id = (builtin_ids or {}).get(builtin_key)
+        if field_id is None or field_id not in payload:
+            continue
+        value = payload.pop(field_id)
+        if column == "title":
+            columns[column] = "" if value is None else str(value)
+        else:
+            columns[column] = value
+    return columns, payload
+
+
+def merge_builtin_values(row, builtin_ids):
+    """列值 -> 按字段 UUID 塞回 data。序列化与快照都走这里。"""
+    merged = deepcopy(field_attr(row, "data") or {})
+    for builtin_key, column in BUILTIN_COLUMN_BY_KEY.items():
+        field_id = (builtin_ids or {}).get(builtin_key)
+        if field_id is not None:
+            merged[field_id] = field_attr(row, column)
+    return merged
+
+
 class RequirementDataLossError(Exception):
-    def __init__(self, affected_detail_count):
-        self.affected_detail_count = affected_detail_count
-        super().__init__("Saving this field structure will remove existing detail values.")
+    def __init__(self, affected_row_count):
+        self.affected_row_count = affected_row_count
+        super().__init__("Saving this field structure will remove existing requirement values.")
 
 
 class RequirementBuiltinFieldError(ValueError):
@@ -174,10 +251,10 @@ class RequirementBuiltinFieldError(ValueError):
     code = "REQUIREMENT_BUILTIN_FIELD_LOCKED"
 
 
-class RequirementDetailBatchConflict(Exception):
+class RequirementBatchConflict(Exception):
     def __init__(self, conflicts):
         self.conflicts = conflicts
-        super().__init__("One or more requirement details changed before the batch was saved.")
+        super().__init__("One or more requirements changed before the batch was saved.")
 
 
 def get_requirement_select_mode(field):
@@ -256,35 +333,44 @@ def get_requirement_eligible_user_ids(
     return workspace_member_ids
 
 
-def details_affected_by_fields(requirement_type):
-    """字段变更会波及的明细行，按模型分组返回 [(model, queryset), ...]。
+def rows_affected_by_fields(requirement_type):
+    """字段变更会波及的需求行，按模型分组返回 [(model, queryset), ...]。
 
-    只包含**实时引用**该需求类型的行 —— 标准库条目、还没发布过的产品需求的正式行、
-    以及所有工作副本的行。已发布产品需求的正式行不在内：它们渲染的是版本里冻结
+    只包含**实时引用**该需求类型的行 —— 标准库条目、所属基线还没发布过的正式行、
+    以及所有工作副本的行。已发布基线下的正式行不在内：它们渲染的是版本里冻结
     的字段，值不能因为类型改动就被抹掉（类型的改动要走下一次编辑 + 变更审批）。
     """
+    # 用「已发布的作用域 id 集合」反查，而不是 join 到 baseline：还没建过基线的
+    # 产品同样属于「从未发布」，join 会把这些行整批漏掉。
+    published = RequirementBaseline.objects.filter(current_version__isnull=False)
+    published_product_ids = list(
+        published.exclude(product__isnull=True).values_list("product_id", flat=True)
+    )
+    published_project_ids = list(
+        published.exclude(project__isnull=True).values_list("project_id", flat=True)
+    )
     return [
         (
-            RequirementDetail,
-            RequirementDetail.objects.filter(
-                Q(library__isnull=False) | Q(requirement__current_version__isnull=True),
-                requirement_type=requirement_type,
+            Requirement,
+            Requirement.objects.filter(requirement_type=requirement_type).exclude(
+                Q(product_id__in=published_product_ids)
+                | Q(project_id__in=published_project_ids)
             ),
         ),
         (
-            RequirementDraftDetail,
-            RequirementDraftDetail.objects.filter(requirement_type=requirement_type),
+            RequirementDraftRow,
+            RequirementDraftRow.objects.filter(requirement_type=requirement_type),
         ),
     ]
 
 
-def replace_requirement_approvers(*, requirement, approver_ids, actor=None):
+def replace_requirement_approvers(*, baseline, approver_ids, actor=None):
     """Replace the active approver list while preserving the submitted order."""
-    RequirementApprover.objects.filter(requirement=requirement).delete()
+    RequirementApprover.objects.filter(baseline=baseline).delete()
     RequirementApprover.objects.bulk_create(
         [
             RequirementApprover(
-                requirement=requirement,
+                baseline=baseline,
                 approver_id=approver_id,
                 sort_order=index,
                 created_by=actor,
@@ -292,8 +378,8 @@ def replace_requirement_approvers(*, requirement, approver_ids, actor=None):
             for index, approver_id in enumerate(approver_ids)
         ]
     )
-    if hasattr(requirement, "_prefetched_objects_cache"):
-        requirement._prefetched_objects_cache.pop("approvers", None)
+    if hasattr(baseline, "_prefetched_objects_cache"):
+        baseline._prefetched_objects_cache.pop("approvers", None)
 
 
 def _field_specs_of(owner):
@@ -323,9 +409,9 @@ def serialize_library_field_tree(library):
 
 
 def get_referenced_requirement_type_ids(*, model, scope):
-    """这批明细引用到的需求类型 ID。
+    """这批需求行引用到的需求类型 ID。
 
-    排序取类型自身的 (sort_order, created_at, id)，而不是「明细里首次出现的顺序」——
+    排序取类型自身的 (sort_order, created_at, id)，而不是「行里首次出现的顺序」——
     后者会随着行的增删改序而变，让 snapshot["fields"] 无谓地重排，diff 里冒出一堆
     并不存在的字段变更。
     """
@@ -405,19 +491,19 @@ def requirement_types_field_payload_from_specs(requirement_type_ids, specs_by_ty
     return payload
 
 
-def get_published_field_tree(requirement):
+def get_published_field_tree(baseline):
     """已发布内容的字段树 —— 取当前版本里冻结的那份。
 
-    需求类型随时可改且不走审批，所以已发布的产品需求不能实时跟随类型，否则已批准
+    需求类型随时可改且不走审批，所以已发布的基线不能实时跟随类型，否则已批准
     的内容会被悄悄改掉。返回 [] 表示从未发布过。
     """
-    if requirement.current_version is None:
+    if baseline is None or baseline.current_version is None:
         return []
     snapshot = (
         RequirementVersion.objects.filter(
-            requirement=requirement,
-            target_kind=RequirementChangeTargetKind.REQUIREMENT,
-            version=requirement.current_version,
+            baseline=baseline,
+            target_kind=RequirementChangeTargetKind.BASELINE,
+            version=baseline.current_version,
         )
         .values_list("snapshot", flat=True)
         .first()
@@ -425,8 +511,8 @@ def get_published_field_tree(requirement):
     return deepcopy(snapshot.get("fields") or [])
 
 
-def detail_grid_expected_updated_at(*, owner, requirement_type_ids):
-    """明细网格的乐观锁基准。
+def requirement_grid_expected_updated_at(*, owner, requirement_type_ids):
+    """需求网格的乐观锁基准。owner 是基线（产品/项目作用域）或标准库。
 
     必须把需求类型的 updated_at 算进来：列定义住在类型里，改类型字段不会动需求行，
     只看 owner.updated_at 会让「字段被人改了」这类冲突整个漏过去。标准库的条目
@@ -488,7 +574,7 @@ def ensure_builtin_fields(*, requirement_type, actor=None):
     )
 
 
-def _clean_detail_data_for_fields(data, removed_fields):
+def _clean_requirement_data_for_fields(data, removed_fields):
     cleaned = deepcopy(data)
     changed = False
     removed_root_ids = {
@@ -523,14 +609,14 @@ def _clean_detail_data_for_fields(data, removed_fields):
     return cleaned, changed
 
 
-def _clear_detail_value_for_field(data, field, empty_value):
+def _clear_requirement_value_for_field(data, field, empty_value):
     cleaned = deepcopy(data)
     field_id = str(field_attr(field, "id"))
     parent_field_id = field_attr(field, "parent_field_id")
     changed = False
 
     if parent_field_id is None:
-        if not _is_empty_detail_value(cleaned.get(field_id)):
+        if not _is_empty_requirement_value(cleaned.get(field_id)):
             cleaned[field_id] = deepcopy(empty_value)
             changed = True
         return cleaned, changed
@@ -541,7 +627,7 @@ def _clear_detail_value_for_field(data, field, empty_value):
     for row in rows:
         if not isinstance(row, dict) or not isinstance(row.get("values"), dict):
             continue
-        if not _is_empty_detail_value(row["values"].get(field_id)):
+        if not _is_empty_requirement_value(row["values"].get(field_id)):
             row["values"][field_id] = deepcopy(empty_value)
             changed = True
     return cleaned, changed
@@ -572,39 +658,41 @@ def select_config_removes_values(field, payload):
 
 def apply_field_change_cleanup(
     *,
-    details,
+    rows,
     removed_fields,
     reset_select_fields,
     actor=None,
 ):
-    """清掉因字段被删除 / 换类型 / 选项收缩而失效的明细值。
+    """清掉因字段被删除 / 换类型 / 选项收缩而失效的字段值。
 
     正式表与草稿表的行结构一致（data / version / updated_by），所以两条路径
     共用这一份逻辑；调用方各自对自己的模型做 bulk_update。
+
+    内置的标题与描述不会走到这里 —— 它们不可删除也不可改类型，值也不在 data 里。
     """
-    changed_details = []
+    changed_rows = []
     if not removed_fields and not reset_select_fields:
-        return changed_details
+        return changed_rows
 
     now = timezone.now()
-    for detail in details:
-        cleaned_data, changed = _clean_detail_data_for_fields(
-            detail.data, removed_fields
+    for row in rows:
+        cleaned_data, changed = _clean_requirement_data_for_fields(
+            row.data, removed_fields
         )
         for field, empty_value in reset_select_fields:
-            cleaned_data, select_changed = _clear_detail_value_for_field(
+            cleaned_data, select_changed = _clear_requirement_value_for_field(
                 cleaned_data,
                 field,
                 empty_value,
             )
             changed = changed or select_changed
         if changed:
-            detail.data = cleaned_data
-            detail.version += 1
-            detail.updated_at = now
-            detail.updated_by = actor
-            changed_details.append(detail)
-    return changed_details
+            row.data = cleaned_data
+            row.version += 1
+            row.updated_at = now
+            row.updated_by = actor
+            changed_rows.append(row)
+    return changed_rows
 
 
 def sync_requirement_type_fields(
@@ -696,11 +784,11 @@ def sync_requirement_type_fields(
     changed_by_model = []
     total_changed = 0
     if cleanup_fields or reset_select_fields:
-        for model, queryset in details_affected_by_fields(requirement_type):
+        for model, queryset in rows_affected_by_fields(requirement_type):
             changed = apply_field_change_cleanup(
-                # of=("self",) 只锁明细行本身 —— 这些 queryset 都要 join 到需求或
+                # of=("self",) 只锁需求行本身 —— 这些 queryset 都要 join 到产品或
                 # 标准库，不该把那些行一起锁住。
-                details=queryset.select_for_update(of=("self",)),
+                rows=queryset.select_for_update(of=("self",)),
                 removed_fields=cleanup_fields,
                 reset_select_fields=list(reset_select_fields.values()),
                 actor=actor,
@@ -726,7 +814,7 @@ def sync_requirement_type_fields(
     return created_field_ids
 
 
-def insert_detail_row(
+def insert_requirement_row(
     *,
     model,
     scope,
@@ -737,10 +825,10 @@ def insert_detail_row(
     before_id=None,
     after_id=None,
 ):
-    """在指定位置插入一行明细并重排整列 sort_order。
+    """在指定位置插入一行需求并重排整列 sort_order。
 
-    model / scope / new_row 三个参数让正式明细表与草稿明细表共用同一套插入与
-    重排语义。
+    model / scope / new_row 三个参数让正式表与草稿表共用同一套插入与重排语义。
+    传入的 data 是**合并态**（含内置字段 UUID），落库前在这里拆成列。
     """
     if before_id and after_id:
         raise ValueError("Only one insertion anchor can be provided.")
@@ -750,7 +838,7 @@ def insert_detail_row(
         .filter(**scope)
         .order_by("sort_order", "created_at", "id")
     )
-    ids = [detail.id for detail in existing]
+    ids = [row.id for row in existing]
     if before_id:
         try:
             insert_at = ids.index(before_id)
@@ -764,61 +852,78 @@ def insert_detail_row(
     else:
         insert_at = len(existing)
 
-    detail = new_row(
-        data=deepcopy(data),
+    builtin_ids = builtin_field_index([requirement_type_id]).get(
+        str(requirement_type_id), {}
+    )
+    columns, custom_data = split_builtin_values(data, builtin_ids)
+    row = new_row(
+        data=custom_data,
+        columns=columns,
         sort_order=(insert_at + 1) * SORT_ORDER_STEP,
         actor=actor,
         requirement_type_id=requirement_type_id,
     )
-    detail.save()
-    existing.insert(insert_at, detail)
+    row.save()
+    existing.insert(insert_at, row)
     for index, item in enumerate(existing):
         item.sort_order = (index + 1) * SORT_ORDER_STEP
         item.updated_at = timezone.now()
     model.objects.bulk_update(existing, ["sort_order", "updated_at"])
-    return detail
+    return row
 
 
-def _new_requirement_detail(requirement):
-    def factory(data, sort_order, actor, requirement_type_id):
-        return RequirementDetail(
-            requirement=requirement,
+def _new_scoped_requirement(*, product=None, project=None):
+    def factory(data, columns, sort_order, actor, requirement_type_id):
+        return Requirement(
+            product=product,
+            project=project,
             requirement_type_id=requirement_type_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
+            **columns,
         )
 
     return factory
 
 
 def _new_library_item(library):
-    def factory(data, sort_order, actor, requirement_type_id):
+    def factory(data, columns, sort_order, actor, requirement_type_id):
         # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定
-        return RequirementDetail(
+        return Requirement(
             library=library,
             requirement_type_id=library.requirement_type_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
+            **columns,
         )
 
     return factory
 
 
-def insert_requirement_detail(
+def baseline_row_scope(baseline):
+    """基线管辖的正式行的过滤条件。标准库的行永远不在其中。"""
+    if baseline.product_id:
+        return {"product_id": baseline.product_id}
+    return {"project_id": baseline.project_id}
+
+
+def insert_baseline_requirement(
     *,
-    requirement,
+    baseline,
     data,
     requirement_type_id,
     actor=None,
     before_id=None,
     after_id=None,
 ):
-    return insert_detail_row(
-        model=RequirementDetail,
-        scope={"requirement": requirement},
-        new_row=_new_requirement_detail(requirement),
+    return insert_requirement_row(
+        model=Requirement,
+        scope=baseline_row_scope(baseline),
+        new_row=_new_scoped_requirement(
+            product=baseline.product, project=baseline.project
+        ),
         data=data,
         requirement_type_id=requirement_type_id,
         actor=actor,
@@ -836,8 +941,8 @@ def insert_library_item(
     before_id=None,
     after_id=None,
 ):
-    return insert_detail_row(
-        model=RequirementDetail,
+    return insert_requirement_row(
+        model=Requirement,
         scope={"library": library},
         new_row=_new_library_item(library),
         data=data,
@@ -848,7 +953,7 @@ def insert_library_item(
     )
 
 
-def save_detail_row_batch(
+def save_requirement_row_batch(
     *,
     model,
     scope,
@@ -859,10 +964,10 @@ def save_detail_row_batch(
     actor=None,
     hard_delete=False,
 ):
-    """批量保存明细的新增/修改/删除，并保持 sort_order 连续。
+    """批量保存需求行的新增/修改/删除，并保持 sort_order 连续。
 
-    正式明细表与草稿明细表共用这份实现，因此两条路径的响应形状完全一致，前端
-    的明细网格无需为草稿态做任何分支。
+    正式表与草稿表共用这份实现，因此两条路径的响应形状完全一致，前端的网格无需
+    为草稿态做任何分支。creates/updates 里的 data 都是**合并态**，落库前统一拆列。
 
     hard_delete 供草稿层使用：草稿行的 UUID 会在物化时复用为正式表主键，也会
     在重新「编辑」时被再次克隆，所以软删除留下的行会撞上 id 的唯一约束。
@@ -872,24 +977,24 @@ def save_detail_row_batch(
         .filter(**scope)
         .order_by("sort_order", "created_at", "id")
     )
-    details_by_id = {detail.id: detail for detail in existing}
+    rows_by_id = {row.id: row for row in existing}
     conflicts = []
 
     for item in [*updates, *deletes]:
-        detail = details_by_id.get(item["id"])
-        if detail is None:
+        row = rows_by_id.get(item["id"])
+        if row is None:
             conflicts.append(
                 {
                     "id": str(item["id"]),
                     "reason": "not_found",
                 }
             )
-        elif detail.version != item["version"]:
+        elif row.version != item["version"]:
             conflicts.append(
                 {
                     "id": str(item["id"]),
                     "reason": "version_conflict",
-                    "current_version": detail.version,
+                    "current_version": row.version,
                 }
             )
 
@@ -905,7 +1010,7 @@ def save_detail_row_batch(
                     "reason": "anchor_deleted",
                 }
             )
-        elif anchor_id not in details_by_id:
+        elif anchor_id not in rows_by_id:
             conflicts.append(
                 {
                     "id": str(anchor_id),
@@ -914,32 +1019,51 @@ def save_detail_row_batch(
             )
 
     if conflicts:
-        raise RequirementDetailBatchConflict(conflicts)
+        raise RequirementBatchConflict(conflicts)
 
-    now = timezone.now()
-    updated_details = []
-    for item in updates:
-        detail = details_by_id[item["id"]]
-        detail.data = deepcopy(item["data"])
-        detail.version += 1
-        detail.updated_at = now
-        detail.updated_by = actor
-        updated_details.append(detail)
-    if updated_details:
-        model.objects.bulk_update(
-            updated_details,
-            ["data", "version", "updated_at", "updated_by"],
+    # 更新行沿用行上已绑定的类型（绑定后不可变），新增行用载荷里给的类型
+    builtin_index = builtin_field_index(
+        {rows_by_id[item["id"]].requirement_type_id for item in updates}
+        | {item.get("requirement_type_id") for item in creates}
+    )
+
+    def split_for(requirement_type_id, data):
+        return split_builtin_values(
+            data, builtin_index.get(str(requirement_type_id), {})
         )
 
-    ordered_details = [
-        detail for detail in existing if detail.id not in delete_ids
-    ]
-    created_details = []
+    now = timezone.now()
+    updated_rows = []
+    for item in updates:
+        row = rows_by_id[item["id"]]
+        columns, custom_data = split_for(row.requirement_type_id, item["data"])
+        row.title = columns["title"]
+        row.description_html = columns["description_html"]
+        row.data = custom_data
+        row.version += 1
+        row.updated_at = now
+        row.updated_by = actor
+        updated_rows.append(row)
+    if updated_rows:
+        model.objects.bulk_update(
+            updated_rows,
+            [
+                "title",
+                "description_html",
+                "data",
+                "version",
+                "updated_at",
+                "updated_by",
+            ],
+        )
+
+    ordered_rows = [row for row in existing if row.id not in delete_ids]
+    created_rows = []
     after_anchor_offsets = {}
     for item in creates:
         before_id = item.get("before_id")
         after_id = item.get("after_id")
-        ordered_ids = [detail.id for detail in ordered_details]
+        ordered_ids = [row.id for row in ordered_rows]
         if before_id:
             insert_at = ordered_ids.index(before_id)
         elif after_id:
@@ -947,17 +1071,21 @@ def save_detail_row_batch(
             insert_at = ordered_ids.index(after_id) + 1 + anchor_offset
             after_anchor_offsets[after_id] = anchor_offset + 1
         else:
-            insert_at = len(ordered_details)
+            insert_at = len(ordered_rows)
 
-        detail = new_row(
-            data=deepcopy(item["data"]),
+        columns, custom_data = split_for(
+            item.get("requirement_type_id"), item["data"]
+        )
+        row = new_row(
+            data=custom_data,
+            columns=columns,
             sort_order=(insert_at + 1) * SORT_ORDER_STEP,
             actor=actor,
             requirement_type_id=item.get("requirement_type_id"),
         )
-        detail.save()
-        ordered_details.insert(insert_at, detail)
-        created_details.append((item["client_id"], detail))
+        row.save()
+        ordered_rows.insert(insert_at, row)
+        created_rows.append((item["client_id"], row))
 
     if delete_ids:
         doomed = model.objects.filter(**scope, id__in=delete_ids)
@@ -967,29 +1095,31 @@ def save_detail_row_batch(
             doomed.delete()
 
     if creates or deletes:
-        for index, detail in enumerate(ordered_details):
-            detail.sort_order = (index + 1) * SORT_ORDER_STEP
-            detail.updated_at = now
+        for index, row in enumerate(ordered_rows):
+            row.sort_order = (index + 1) * SORT_ORDER_STEP
+            row.updated_at = now
         model.objects.bulk_update(
-            ordered_details,
+            ordered_rows,
             ["sort_order", "updated_at"],
         )
 
-    return created_details, updated_details, list(delete_ids)
+    return created_rows, updated_rows, list(delete_ids)
 
 
-def save_requirement_detail_batch(
+def save_baseline_requirement_batch(
     *,
-    requirement,
+    baseline,
     creates,
     updates,
     deletes,
     actor=None,
 ):
-    return save_detail_row_batch(
-        model=RequirementDetail,
-        scope={"requirement": requirement},
-        new_row=_new_requirement_detail(requirement),
+    return save_requirement_row_batch(
+        model=Requirement,
+        scope=baseline_row_scope(baseline),
+        new_row=_new_scoped_requirement(
+            product=baseline.product, project=baseline.project
+        ),
         creates=creates,
         updates=updates,
         deletes=deletes,
@@ -998,15 +1128,16 @@ def save_requirement_detail_batch(
 
 
 def build_library_import_creates(*, library, item_ids, before_id=None, after_id=None):
-    """把选中的库条目整理成 save_detail_row_batch 认识的 creates 列表。
+    """把选中的库条目整理成 save_requirement_row_batch 认识的 creates 列表。
 
-    data 原样深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全一致，
-    不做任何重映射。只顺手裁掉不属于当前字段集的残留 key（字段后来被删过）。
+    data 走合并态深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全
+    一致，不做任何重映射；标题与描述也就顺着内置字段 UUID 一起带过去了。只顺手
+    裁掉不属于当前字段集的残留 key（字段后来被删过）。
     这里**不重跑必填校验**：库条目本来就允许留空，导入不该因此失败。
     """
     items_by_id = {
         item.id: item
-        for item in RequirementDetail.objects.filter(
+        for item in Requirement.objects.filter(
             library=library, id__in=item_ids
         ).order_by("sort_order", "created_at", "id")
     }
@@ -1015,10 +1146,13 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
         raise ValueError("One or more library items were not found.")
 
     specs = get_library_field_specs(library)
+    builtin_ids = builtin_ids_from_specs(specs)
     return [
         {
             "client_id": uuid4(),
-            "data": prune_detail_data_to_fields(items_by_id[item_id].data, specs),
+            "data": prune_requirement_data_to_fields(
+                merge_builtin_values(items_by_id[item_id], builtin_ids), specs
+            ),
             "requirement_type_id": library.requirement_type_id,
             **({"before_id": before_id} if before_id else {}),
             **({"after_id": after_id} if after_id else {}),
@@ -1028,11 +1162,11 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
 
 
 def import_library_items(
-    *, requirement, library, item_ids, actor=None, before_id=None, after_id=None
+    *, baseline, library, item_ids, actor=None, before_id=None, after_id=None
 ):
-    """把标准库条目导入产品需求的正式明细表。"""
-    return save_requirement_detail_batch(
-        requirement=requirement,
+    """把标准库条目导入基线管辖的正式表。"""
+    return save_baseline_requirement_batch(
+        baseline=baseline,
         creates=build_library_import_creates(
             library=library,
             item_ids=item_ids,
@@ -1053,8 +1187,8 @@ def save_library_item_batch(
     deletes,
     actor=None,
 ):
-    return save_detail_row_batch(
-        model=RequirementDetail,
+    return save_requirement_row_batch(
+        model=Requirement,
         scope={"library": library},
         new_row=_new_library_item(library),
         creates=creates,
@@ -1064,7 +1198,7 @@ def save_library_item_batch(
     )
 
 
-def prune_detail_data_to_fields(data, fields):
+def prune_requirement_data_to_fields(data, fields):
     """丢掉不属于这套字段的 key。
 
     只是安全网 —— 库条目可能残留着某个后来被删掉的字段的值。**不重跑必填校验**：
@@ -1110,7 +1244,7 @@ def prune_detail_data_to_fields(data, fields):
     return pruned
 
 
-def _is_empty_detail_value(value):
+def _is_empty_requirement_value(value):
     if value is None:
         return True
     if isinstance(value, str):
@@ -1122,9 +1256,9 @@ def _is_empty_detail_value(value):
 
 def _value_matches_filter(value, operator, expected, field=None):
     if operator == "is_empty":
-        return _is_empty_detail_value(value)
+        return _is_empty_requirement_value(value)
     if operator == "is_not_empty":
-        return not _is_empty_detail_value(value)
+        return not _is_empty_requirement_value(value)
     if operator == "contains":
         if (
             field is not None
@@ -1140,12 +1274,12 @@ def _value_matches_filter(value, operator, expected, field=None):
     return False
 
 
-def get_requirement_detail_field_values(detail_data, field):
-    """取出某个字段在一行明细里的全部值（子表单字段可能有多行）。"""
+def get_requirement_field_values(row_data, field):
+    """取出某个字段在一行需求里的全部值（子表单字段可能有多行）。"""
     parent_field_id = field_attr(field, "parent_field_id")
     field_id = str(field_attr(field, "id"))
     if parent_field_id:
-        rows = detail_data.get(str(parent_field_id), [])
+        rows = row_data.get(str(parent_field_id), [])
         if not isinstance(rows, list):
             return []
         return [
@@ -1153,45 +1287,58 @@ def get_requirement_detail_field_values(detail_data, field):
             for row in rows
             if isinstance(row, dict)
         ]
-    return [detail_data.get(field_id)]
+    return [row_data.get(field_id)]
 
 
-def filter_requirement_detail_ids(
-    *, fields, details, search="", filters=None, fields_by_requirement_type=None
+def filter_requirement_row_ids(
+    *, fields, rows, search="", filters=None, fields_by_requirement_type=None
 ):
-    """按搜索词与筛选条件筛出命中的明细行 ID。
+    """按搜索词与筛选条件筛出命中的需求行 ID。
 
     fields 是扁平并集，用来解析筛选条件里的 field_id；fields_by_requirement_type
     给定时，每一行只用它自己需求类型的那套字段 —— 针对类型 B 某个字段的筛选不会
     误伤类型 A 的行（那些行根本没有这个字段，判定为不命中）。
 
-    fields 接受任意字段来源（模型行 / spec / dict），details 接受任意明细序列，
+    fields 接受任意字段来源（模型行 / spec / dict），rows 接受任意需求行序列，
     因此正式表与草稿表共用同一套搜索与筛选语义。
+
+    行数据一律先合并回内置字段 UUID 再比对，标题与描述因此和自定义字段走完全
+    相同的搜索与筛选路径，不需要任何特例分支。
     """
     filters = filters or []
     fields = list(fields)
-    details = list(details)
+    rows = list(rows)
     fields_by_id = {str(field_attr(field, "id")): field for field in fields}
 
-    def row_fields(detail):
+    def row_fields(row):
         if fields_by_requirement_type is None:
             return fields
-        return fields_by_requirement_type.get(str(detail.requirement_type_id), [])
+        return fields_by_requirement_type.get(str(row.requirement_type_id), [])
+
+    builtin_ids_cache = {}
+
+    def merged_data(row):
+        key = str(row.requirement_type_id)
+        if key not in builtin_ids_cache:
+            builtin_ids_cache[key] = builtin_ids_from_specs(row_fields(row))
+        return merge_builtin_values(row, builtin_ids_cache[key])
+
+    data_by_row = {row.id: merged_data(row) for row in rows}
 
     member_ids = set()
-    for detail in details:
-        for field in row_fields(detail):
+    for row in rows:
+        for field in row_fields(row):
             if field_attr(field, "field_type") != RequirementFieldType.MEMBER:
                 continue
-            for value in get_requirement_detail_field_values(detail.data, field):
+            for value in get_requirement_field_values(data_by_row[row.id], field):
                 if value:
                     member_ids.add(value)
     members = {}
     for member in User.objects.filter(id__in=member_ids):
         members[str(member.id)] = member.display_name
 
-    def get_field_values(detail, field):
-        return get_requirement_detail_field_values(detail.data, field)
+    def get_field_values(row, field):
+        return get_requirement_field_values(data_by_row[row.id], field)
 
     def searchable_value(field, value):
         field_type = field_attr(field, "field_type")
@@ -1226,16 +1373,16 @@ def filter_requirement_detail_ids(
 
     normalized_search = search.strip().casefold()
     matching_ids = []
-    for detail in details:
-        own_field_ids = {str(field_attr(field, "id")) for field in row_fields(detail)}
+    for row in rows:
+        own_field_ids = {str(field_attr(field, "id")) for field in row_fields(row)}
         if normalized_search:
             haystack = []
-            for field in row_fields(detail):
+            for field in row_fields(row):
                 if field_attr(field, "field_type") == RequirementFieldType.FORM:
                     continue
                 haystack.extend(
                     searchable_value(field, value)
-                    for value in get_field_values(detail, field)
+                    for value in get_field_values(row, field)
                 )
             if normalized_search not in " ".join(haystack).casefold():
                 continue
@@ -1251,7 +1398,7 @@ def filter_requirement_detail_ids(
             ):
                 matches = False
                 break
-            values = get_field_values(detail, field)
+            values = get_field_values(row, field)
             operator = item.get("operator")
             expected = item.get("value")
             if field_attr(field, "parent_field_id") and operator == "is_empty":
@@ -1268,5 +1415,5 @@ def filter_requirement_detail_ids(
                 matches = False
                 break
         if matches:
-            matching_ids.append(detail.id)
+            matching_ids.append(row.id)
     return matching_ids

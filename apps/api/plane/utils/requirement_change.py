@@ -11,9 +11,12 @@ draft --提交--> in_review --通过--> published（物化 + 新版本）
 - 后续变更（有工作副本）：基线是正式表 + 工作副本里冻结的 meta 基线，提案是工作
   副本的字段与明细 + 正式行上的当前 meta，通过时把工作副本物化进正式表。
 
-变更项按三类分组落库（基本信息 / 字段定义 / 明细数据）。明细数据组在千行量级下
-可能有上千条变更项，所以变更单详情只返回汇总计数与前两组，明细组由独立的分页
+变更项按三类分组落库（审批配置 / 字段定义 / 需求条目）。需求条目组在千行量级下
+可能有上千条变更项，所以变更单详情只返回汇总计数与前两组，条目组由独立的分页
 端点按需拉取。
+
+条目快照里的 data 是**合并态**（标题与描述按内置字段 UUID 塞回 data），diff 因此
+不必为「哪些值住在列上」分支 —— 标题变更和任何自定义字段变更走的是同一条路径。
 """
 
 from copy import deepcopy
@@ -24,6 +27,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from plane.db.models import (
+    Requirement,
     RequirementApprovalAction,
     RequirementApprovalType,
     RequirementChangeApproval,
@@ -33,38 +37,39 @@ from plane.db.models import (
     RequirementChangeStatus,
     RequirementChangeTargetKind,
     RequirementChangeType,
-    RequirementDetail,
-    RequirementDraftDetail,
+    RequirementDraftRow,
     RequirementFieldType,
     RequirementStatus,
     RequirementType,
     RequirementVersion,
 )
 from plane.utils.requirement import (
+    baseline_row_scope,
     field_specs_for_requirement_types,
     field_specs_from_tree,
     field_tree_from_specs,
     get_referenced_requirement_type_ids,
+    merge_builtin_values,
     replace_requirement_approvers,
 )
 from plane.utils.requirement_draft import (
+    baseline_meta_snapshot,
     drop_draft,
     get_draft,
     get_draft_baseline_field_tree,
     get_draft_baseline_meta,
     load_snapshot_into_draft,
     materialize_draft,
-    requirement_meta_snapshot,
+    snapshot_builtin_ids_by_type,
+    stamp_initial_versions,
     start_editing,
 )
 
 
 ITEM_BATCH_SIZE = 500
-DETAIL_CHUNK_SIZE = 500
+ROW_CHUNK_SIZE = 500
 
 META_KEYS = (
-    "title",
-    "description_html",
     "owner_id",
     "approval_type",
     "required_count",
@@ -90,17 +95,19 @@ class RequirementChangeError(Exception):
         super().__init__(message)
 
 
-def _detail_row(detail):
+def _requirement_row(row, builtin_by_type):
+    """行快照。data 走合并态 —— 标题与描述在这里回到它们的字段 UUID 下。"""
+    builtin_ids = builtin_by_type.get(str(row.requirement_type_id), {})
     return {
-        "id": str(detail.id),
-        "requirement_type_id": str(detail.requirement_type_id),
-        "data": deepcopy(detail.data),
-        "sort_order": detail.sort_order,
+        "id": str(row.id),
+        "requirement_type_id": str(row.requirement_type_id),
+        "data": merge_builtin_values(row, builtin_ids),
+        "sort_order": row.sort_order,
     }
 
 
 def _live_field_tree(*, model, scope):
-    """这批明细当前生效的字段树：各引用类型的字段树按类型顺序拼接。
+    """这批需求行当前生效的字段树：各引用类型的字段树按类型顺序拼接。
 
     保持成「扁平的根字段树列表」而不是按类型分组的嵌套结构 —— 字段 UUID 全局唯一，
     所以 _flatten_fields / diff_snapshots / 版本对比全都不用改；要分视图时前端按
@@ -111,57 +118,59 @@ def _live_field_tree(*, model, scope):
     return field_tree_from_specs(specs)
 
 
-def build_snapshot(requirement, *, fields=None):
+def _rows_snapshot(queryset, fields):
+    """把一批需求行读成快照列表。分块读，避免千行一次性驻留。
+
+    合并用的内置字段 ID 取自这份 fields —— 已发布态传进来的是冻结字段树，实时查
+    类型会把冻结语义绕过去。
+    """
+    builtin_by_type = snapshot_builtin_ids_by_type({"fields": fields})
+    return [
+        _requirement_row(row, builtin_by_type)
+        for row in queryset.order_by("sort_order", "created_at", "id").iterator(
+            chunk_size=ROW_CHUNK_SIZE
+        )
+    ]
+
+
+def build_snapshot(baseline, *, fields=None):
     """从正式表构造整份快照，版本记录与 diff 基准共用。
 
-    fields 不给时按正式明细引用到的类型实时派生 —— 写版本时这就是「冻结」动作。
+    fields 不给时按正式行引用到的类型实时派生 —— 写版本时这就是「冻结」动作。
     审批通过走的是提交时冻结的那份（见 _publish），避免提交到通过之间类型被改掉。
-
-    明细分块读，避免千行一次性驻留。
     """
-    details = []
-    queryset = RequirementDetail.objects.filter(requirement=requirement).order_by(
-        "sort_order", "created_at", "id"
+    scope = baseline_row_scope(baseline)
+    resolved_fields = (
+        deepcopy(fields)
+        if fields is not None
+        else _live_field_tree(model=Requirement, scope=scope)
     )
-    for detail in queryset.iterator(chunk_size=DETAIL_CHUNK_SIZE):
-        details.append(_detail_row(detail))
-
     return {
-        "requirement": requirement_meta_snapshot(requirement),
-        "fields": (
-            deepcopy(fields)
-            if fields is not None
-            else _live_field_tree(
-                model=RequirementDetail, scope={"requirement": requirement}
-            )
+        "baseline": baseline_meta_snapshot(baseline),
+        "fields": resolved_fields,
+        "requirements": _rows_snapshot(
+            Requirement.objects.filter(**scope), resolved_fields
         ),
-        "details": details,
     }
 
 
-def build_draft_full_snapshot(*, requirement, draft):
+def build_draft_full_snapshot(*, baseline, draft):
     """把工作副本读成与 build_snapshot 同构的整份快照。
 
-    meta 取正式行上的当前值 —— meta 编辑不经过草稿层。字段实时取自草稿明细引用到
+    meta 取基线行上的当前值 —— meta 编辑不经过草稿层。字段实时取自草稿行引用到
     的需求类型，这正是「提案」的一部分：类型改了字段，就会在 diff 里显示出来。
     """
-    details = []
-    queryset = RequirementDraftDetail.objects.filter(draft=draft).order_by(
-        "sort_order", "created_at", "id"
-    )
-    for detail in queryset.iterator(chunk_size=DETAIL_CHUNK_SIZE):
-        details.append(_detail_row(detail))
-
+    fields = _live_field_tree(model=RequirementDraftRow, scope={"draft": draft})
     return {
-        "requirement": requirement_meta_snapshot(requirement),
-        "fields": _live_field_tree(
-            model=RequirementDraftDetail, scope={"draft": draft}
+        "baseline": baseline_meta_snapshot(baseline),
+        "fields": fields,
+        "requirements": _rows_snapshot(
+            RequirementDraftRow.objects.filter(draft=draft), fields
         ),
-        "details": details,
     }
 
 
-def build_change_snapshots(*, requirement, draft):
+def build_change_snapshots(*, baseline, draft):
     """算出 diff 的两侧 (before, after)。
 
     「变更前」的字段必须取草稿里冻结的基线，不能实时派生：字段现在住在需求类型里，
@@ -169,11 +178,11 @@ def build_change_snapshots(*, requirement, draft):
     是类型改动抵达已发布内容的唯一通道。
     """
     if draft is None:
-        return {}, build_snapshot(requirement)
+        return {}, build_snapshot(baseline)
 
-    before = build_snapshot(requirement, fields=get_draft_baseline_field_tree(draft))
-    before["requirement"] = get_draft_baseline_meta(draft)
-    return before, build_draft_full_snapshot(requirement=requirement, draft=draft)
+    before = build_snapshot(baseline, fields=get_draft_baseline_field_tree(draft))
+    before["baseline"] = get_draft_baseline_meta(draft)
+    return before, build_draft_full_snapshot(baseline=baseline, draft=draft)
 
 
 def _flatten_fields(tree):
@@ -241,7 +250,7 @@ def _changed_root_field_ids(before_data, after_data, fields_by_id):
 
 
 def diff_snapshots(before, after):
-    """产出三组变更项：基本信息 / 字段定义 / 明细数据。
+    """产出三组变更项：审批配置 / 字段定义 / 需求条目。
 
     返回 (items, stats)。items 是未落库的 dict 列表，stats 带三个计数与本次涉及
     的字段 ID 集合（供前端「仅显示变化列」用）。
@@ -249,9 +258,9 @@ def diff_snapshots(before, after):
     items = []
     changed_field_ids = set()
 
-    # 没有基线 meta（首次发布）时不做 meta diff —— 「标题：无 → X」是噪音
-    before_meta = before.get("requirement")
-    after_meta = after.get("requirement") or {}
+    # 没有基线 meta（首次发布）时不做 meta diff —— 「负责人：无 → X」是噪音
+    before_meta = before.get("baseline")
+    after_meta = after.get("baseline") or {}
     for index, key in enumerate(META_KEYS if before_meta is not None else ()):
         if key not in after_meta and key not in before_meta:
             continue
@@ -259,7 +268,7 @@ def diff_snapshots(before, after):
             continue
         items.append(
             {
-                "target_kind": RequirementChangeTargetKind.REQUIREMENT,
+                "target_kind": RequirementChangeTargetKind.BASELINE,
                 "change_type": RequirementChangeType.UPDATE,
                 "target_id": None,
                 "before_snapshot": {"field": key, "value": before_meta.get(key)},
@@ -309,14 +318,14 @@ def diff_snapshots(before, after):
             }
         )
 
-    before_details = {row["id"]: row for row in before.get("details") or []}
-    after_details = {row["id"]: row for row in after.get("details") or []}
-    for row in after.get("details") or []:
-        previous = before_details.get(row["id"])
+    before_rows = {row["id"]: row for row in before.get("requirements") or []}
+    after_rows = {row["id"]: row for row in after.get("requirements") or []}
+    for row in after.get("requirements") or []:
+        previous = before_rows.get(row["id"])
         if previous is None:
             items.append(
                 {
-                    "target_kind": RequirementChangeTargetKind.DETAIL_DATA,
+                    "target_kind": RequirementChangeTargetKind.REQUIREMENT,
                     "change_type": RequirementChangeType.CREATE,
                     "target_id": row["id"],
                     "before_snapshot": None,
@@ -332,7 +341,7 @@ def diff_snapshots(before, after):
             changed_field_ids.update(changed_roots)
             items.append(
                 {
-                    "target_kind": RequirementChangeTargetKind.DETAIL_DATA,
+                    "target_kind": RequirementChangeTargetKind.REQUIREMENT,
                     "change_type": RequirementChangeType.UPDATE,
                     "target_id": row["id"],
                     "before_snapshot": previous,
@@ -340,12 +349,12 @@ def diff_snapshots(before, after):
                     "proposed_sort_order": row.get("sort_order"),
                 }
             )
-    for row in before.get("details") or []:
-        if row["id"] in after_details:
+    for row in before.get("requirements") or []:
+        if row["id"] in after_rows:
             continue
         items.append(
             {
-                "target_kind": RequirementChangeTargetKind.DETAIL_DATA,
+                "target_kind": RequirementChangeTargetKind.REQUIREMENT,
                 "change_type": RequirementChangeType.DELETE,
                 "target_id": row["id"],
                 "before_snapshot": row,
@@ -377,9 +386,9 @@ def build_version_comparison(*, before, after, from_version, to_version):
     """
     items, stats = diff_snapshots(before, after)
     grouped_items = {
-        RequirementChangeTargetKind.REQUIREMENT: [],
+        RequirementChangeTargetKind.BASELINE: [],
         RequirementChangeTargetKind.SCHEMA: [],
-        RequirementChangeTargetKind.DETAIL_DATA: [],
+        RequirementChangeTargetKind.REQUIREMENT: [],
     }
 
     for item in items:
@@ -403,23 +412,21 @@ def build_version_comparison(*, before, after, from_version, to_version):
     for grouped in grouped_items.values():
         grouped.sort(key=item_sort_key)
 
-    detail_items = grouped_items[RequirementChangeTargetKind.DETAIL_DATA]
+    requirement_items = grouped_items[RequirementChangeTargetKind.REQUIREMENT]
     schema_items = grouped_items[RequirementChangeTargetKind.SCHEMA]
     fields_snapshot = deepcopy(after.get("fields") or [])
     return {
         "from_version": from_version,
         "to_version": to_version,
-        "requirement_items": grouped_items[
-            RequirementChangeTargetKind.REQUIREMENT
-        ],
+        "baseline_items": grouped_items[RequirementChangeTargetKind.BASELINE],
         "schema_items": schema_items,
-        "detail_items": detail_items,
-        "detail_item_count": len(detail_items),
+        "requirement_items": requirement_items,
+        "requirement_item_count": len(requirement_items),
         "changed_field_ids": stats["changed_field_ids"],
         "to_fields_snapshot": fields_snapshot,
         "requirement_type_stats": _comparison_requirement_type_stats(
             schema_items=schema_items,
-            detail_items=detail_items,
+            requirement_items=requirement_items,
             fields=fields_snapshot,
         ),
     }
@@ -451,15 +458,15 @@ def filter_change_items_by_requirement_type(queryset, requirement_type_id):
 def build_change_requirement_type_stats(change_request_id):
     """变更单涉及的需求类型及各自的变更计数。
 
-    产品需求是多个类型的拼接，评审页据此按类型分视图 —— 否则表头是所有类型字段的
-    并集，而每行明细只属于一个类型，只填得满自己那几列，其余全是空洞。
+    一个产品下的需求可能分属多个类型，评审页据此按类型分视图 —— 否则表头是所有类型
+    字段的并集，而每行只属于一个类型，只填得满自己那几列，其余全是空洞。
 
     计数在库侧按 JSON key 分组算：上千条变更项每条都带两份完整行快照，不能为了数
     个数把它们读进内存。
     """
     rows = (
         RequirementChangeItem.objects.filter(change_request_id=change_request_id)
-        .exclude(target_kind=RequirementChangeTargetKind.REQUIREMENT)
+        .exclude(target_kind=RequirementChangeTargetKind.BASELINE)
         .annotate(requirement_type_key=_requirement_type_key_expression())
         # 必须清掉 Meta.ordering：排序字段会被一并塞进 GROUP BY，分组会退化成不聚合
         .order_by()
@@ -468,21 +475,21 @@ def build_change_requirement_type_stats(change_request_id):
             created_count=Count(
                 "id",
                 filter=Q(
-                    target_kind=RequirementChangeTargetKind.DETAIL_DATA,
+                    target_kind=RequirementChangeTargetKind.REQUIREMENT,
                     change_type=RequirementChangeType.CREATE,
                 ),
             ),
             updated_count=Count(
                 "id",
                 filter=Q(
-                    target_kind=RequirementChangeTargetKind.DETAIL_DATA,
+                    target_kind=RequirementChangeTargetKind.REQUIREMENT,
                     change_type=RequirementChangeType.UPDATE,
                 ),
             ),
             deleted_count=Count(
                 "id",
                 filter=Q(
-                    target_kind=RequirementChangeTargetKind.DETAIL_DATA,
+                    target_kind=RequirementChangeTargetKind.REQUIREMENT,
                     change_type=RequirementChangeType.DELETE,
                 ),
             ),
@@ -542,7 +549,7 @@ def _requirement_type_names(requirement_type_ids):
 
 
 def snapshot_requirement_type_stats(snapshot):
-    """版本快照涉及的需求类型 + 各自的字段数与明细行数。
+    """版本快照涉及的需求类型 + 各自的字段数与需求条目数。
 
     顺序取字段树里类型首次出现的顺序：快照里的字段树本来就是按类型顺序拼接的，不必
     再回查类型表排序 —— 快照是冻结的，类型此刻可能已经被删了。
@@ -560,10 +567,10 @@ def snapshot_requirement_type_stats(snapshot):
         key = bucket(str(node.get("requirement_type_id") or ""))
         field_counts[key] += 1 + len(node.get("children") or [])
 
-    detail_counts = {}
-    for row in snapshot.get("details") or []:
+    requirement_counts = {}
+    for row in snapshot.get("requirements") or []:
         key = bucket(str(row.get("requirement_type_id") or ""))
-        detail_counts[key] = detail_counts.get(key, 0) + 1
+        requirement_counts[key] = requirement_counts.get(key, 0) + 1
 
     names = _requirement_type_names(order)
     return [
@@ -571,7 +578,7 @@ def snapshot_requirement_type_stats(snapshot):
             "id": key,
             "name": names.get(key, ""),
             "field_count": field_counts[key],
-            "detail_count": detail_counts.get(key, 0),
+            "requirement_count": requirement_counts.get(key, 0),
         }
         for key in order
     ]
@@ -584,7 +591,7 @@ _CHANGE_TYPE_COUNT_KEYS = {
 }
 
 
-def _comparison_requirement_type_stats(*, schema_items, detail_items, fields):
+def _comparison_requirement_type_stats(*, schema_items, requirement_items, fields):
     """版本对比的按需求类型计数，形状与 build_change_requirement_type_stats 对齐。
 
     对比结果不落库，全在内存里，所以直接按快照上的 requirement_type_id 分组即可。
@@ -613,7 +620,7 @@ def _comparison_requirement_type_stats(*, schema_items, detail_items, fields):
 
     for item in schema_items:
         bucket(requirement_type_key(item))["schema_item_count"] += 1
-    for item in detail_items:
+    for item in requirement_items:
         count_key = _CHANGE_TYPE_COUNT_KEYS.get(item["change_type"])
         if count_key:
             bucket(requirement_type_key(item))[count_key] += 1
@@ -627,25 +634,27 @@ def _comparison_requirement_type_stats(*, schema_items, detail_items, fields):
     ]
 
 
-def _next_sequence_id(requirement):
+def _next_sequence_id(baseline):
     latest = RequirementChangeRequest.all_objects.filter(
-        requirement=requirement
+        baseline=baseline
     ).aggregate(latest=Max("sequence_id"))["latest"]
     return (latest or 0) + 1
 
 
-def _next_version_number(requirement):
+def _next_version_number(baseline):
     latest = RequirementVersion.objects.filter(
-        requirement=requirement,
-        target_kind=RequirementChangeTargetKind.REQUIREMENT,
+        baseline=baseline,
+        target_kind=RequirementChangeTargetKind.BASELINE,
     ).aggregate(latest=Max("version"))["latest"]
     return (latest or 0) + 1
 
 
-def get_pending_change_request(requirement):
+def get_pending_change_request(baseline):
+    if baseline is None:
+        return None
     return (
         RequirementChangeRequest.objects.filter(
-            requirement=requirement,
+            baseline=baseline,
             status=RequirementChangeStatus.PENDING,
         )
         .order_by("-created_at")
@@ -653,15 +662,15 @@ def get_pending_change_request(requirement):
     )
 
 
-def _get_effective_approval_config(*, requirement, draft):
+def _get_effective_approval_config(*, baseline, draft):
     """返回本次变更单必须遵循的已生效审批配置。
 
     首次发布还没有已生效版本，只能使用当前配置。后续变更的审批设置本身也是提案的
     一部分，因此必须从开始编辑时冻结的基线读取；否则提交人可以先把审批人改成自己，
     再用尚未生效的配置审批同一份变更。
     """
-    if requirement.current_version is None:
-        approval_meta = requirement_meta_snapshot(requirement)
+    if baseline.current_version is None:
+        approval_meta = baseline_meta_snapshot(baseline)
     else:
         approval_meta = get_draft_baseline_meta(draft) if draft is not None else {}
         required_keys = {"approval_type", "required_count", "approver_ids"}
@@ -699,21 +708,21 @@ def _get_effective_approval_config(*, requirement, draft):
     return approval_type, required_count, approver_ids
 
 
-def submit_change_request(*, requirement, reason="", actor=None):
+def submit_change_request(*, baseline, reason="", actor=None):
     """从 draft 提交审批。首次发布与后续变更走完全相同的这条链路。"""
-    if requirement.status != RequirementStatus.DRAFT:
+    if baseline.status != RequirementStatus.DRAFT:
         raise RequirementChangeError(
-            "Only a draft requirement can be submitted for approval.",
+            "Only a draft baseline can be submitted for approval.",
             code="REQUIREMENT_NOT_DRAFT",
         )
 
-    draft = get_draft(requirement)
+    draft = get_draft(baseline)
     approval_type, required_count, approver_ids = _get_effective_approval_config(
-        requirement=requirement,
+        baseline=baseline,
         draft=draft,
     )
     before, after = build_change_snapshots(
-        requirement=requirement,
+        baseline=baseline,
         draft=draft,
     )
     items, stats = diff_snapshots(before, after)
@@ -724,18 +733,18 @@ def submit_change_request(*, requirement, reason="", actor=None):
         )
 
     change_request = RequirementChangeRequest(
-        requirement=requirement,
-        workspace_id=requirement.workspace_id,
-        product_id=requirement.product_id,
-        project_id=requirement.project_id,
-        target_kind=RequirementChangeTargetKind.REQUIREMENT,
+        baseline=baseline,
+        workspace_id=baseline.workspace_id,
+        product_id=baseline.product_id,
+        project_id=baseline.project_id,
+        target_kind=RequirementChangeTargetKind.BASELINE,
         request_kind=(
             RequirementChangeRequestKind.INITIAL_PUBLISH
-            if requirement.current_version is None
+            if baseline.current_version is None
             else RequirementChangeRequestKind.CHANGE
         ),
-        sequence_id=_next_sequence_id(requirement),
-        base_version=requirement.current_version,
+        sequence_id=_next_sequence_id(baseline),
+        base_version=baseline.current_version,
         approval_type=approval_type,
         required_count=required_count,
         status=RequirementChangeStatus.PENDING,
@@ -753,7 +762,7 @@ def submit_change_request(*, requirement, reason="", actor=None):
         pending.append(
             RequirementChangeItem(
                 change_request=change_request,
-                base_version=requirement.current_version,
+                base_version=baseline.current_version,
                 created_by=actor,
                 **item,
             )
@@ -775,9 +784,9 @@ def submit_change_request(*, requirement, reason="", actor=None):
         ]
     )
 
-    requirement.status = RequirementStatus.IN_REVIEW
-    requirement.updated_by = actor
-    requirement.save(update_fields=["status", "updated_at", "updated_by"])
+    baseline.status = RequirementStatus.IN_REVIEW
+    baseline.updated_by = actor
+    baseline.save(update_fields=["status", "updated_at", "updated_by"])
     return change_request
 
 
@@ -789,12 +798,25 @@ def _is_approved(change_request, approved_count, total_count):
     return approved_count >= 1
 
 
-def _publish(*, change_request, requirement, actor=None):
-    """把提案落成已发布内容：物化工作副本（如果有）+ 写一个新版本。"""
-    draft = get_draft(requirement)
+def _publish(*, change_request, baseline, actor=None):
+    """把提案落成已发布内容：物化工作副本（如果有）+ 写一个新版本。
+
+    版本号必须先算出来 —— 物化时要用它给「本次真正变了的行」盖上
+    last_changed_version，那正是网格里「最后变更于 vN」那一列。
+    """
+    version_number = _next_version_number(baseline)
+    draft = get_draft(baseline)
     if draft is not None:
-        materialize_draft(requirement=requirement, draft=draft, actor=actor)
-    version_number = _next_version_number(requirement)
+        materialize_draft(
+            baseline=baseline,
+            draft=draft,
+            version_number=version_number,
+            actor=actor,
+        )
+    else:
+        # 首次发布没有工作副本：正式表里的行就是提案，整批记为第一个版本
+        stamp_initial_versions(baseline=baseline, version_number=version_number)
+
     approved_by = [
         str(approver_id)
         for approver_id in change_request.approvals.filter(
@@ -802,12 +824,12 @@ def _publish(*, change_request, requirement, actor=None):
         ).values_list("approver_id", flat=True)
     ]
     version = RequirementVersion(
-        requirement=requirement,
-        workspace_id=requirement.workspace_id,
-        product_id=requirement.product_id,
-        project_id=requirement.project_id,
-        target_kind=RequirementChangeTargetKind.REQUIREMENT,
-        target_id=requirement.id,
+        baseline=baseline,
+        workspace_id=baseline.workspace_id,
+        product_id=baseline.product_id,
+        project_id=baseline.project_id,
+        target_kind=RequirementChangeTargetKind.BASELINE,
+        target_id=baseline.id,
         version=version_number,
         change_type=(
             RequirementChangeType.CREATE
@@ -817,7 +839,7 @@ def _publish(*, change_request, requirement, actor=None):
         # 用提交时冻结的字段树，而不是此刻再去类型上实时取 —— 否则提交到通过之间
         # 有人改了类型，落库的版本就和审批人看过的对不上
         snapshot=build_snapshot(
-            requirement, fields=change_request.proposed_fields or None
+            baseline, fields=change_request.proposed_fields or None
         ),
         change_request=change_request,
         approved_by=approved_by,
@@ -827,10 +849,10 @@ def _publish(*, change_request, requirement, actor=None):
 
     if draft is not None:
         drop_draft(draft)
-    requirement.status = RequirementStatus.PUBLISHED
-    requirement.current_version = version_number
-    requirement.updated_by = actor
-    requirement.save(
+    baseline.status = RequirementStatus.PUBLISHED
+    baseline.current_version = version_number
+    baseline.updated_by = actor
+    baseline.save(
         update_fields=["status", "current_version", "updated_at", "updated_by"]
     )
     return version
@@ -866,7 +888,7 @@ def act_on_change_request(*, change_request, approver, action, comment=""):
     approval.updated_by = approver
     approval.save(update_fields=["action", "comment", "acted_at", "updated_at", "updated_by"])
 
-    requirement = change_request.requirement
+    baseline = change_request.baseline
     version = None
     if action == RequirementApprovalAction.REJECTED:
         change_request.status = RequirementChangeStatus.REJECTED
@@ -875,9 +897,9 @@ def act_on_change_request(*, change_request, approver, action, comment=""):
         change_request.save(
             update_fields=["status", "completed_at", "updated_at", "updated_by"]
         )
-        requirement.status = RequirementStatus.DRAFT
-        requirement.updated_by = approver
-        requirement.save(update_fields=["status", "updated_at", "updated_by"])
+        baseline.status = RequirementStatus.DRAFT
+        baseline.updated_by = approver
+        baseline.save(update_fields=["status", "updated_at", "updated_by"])
         return change_request, version
 
     approvals = list(change_request.approvals.all())
@@ -889,7 +911,7 @@ def act_on_change_request(*, change_request, approver, action, comment=""):
     if _is_approved(change_request, approved_count, len(approvals)):
         version = _publish(
             change_request=change_request,
-            requirement=requirement,
+            baseline=baseline,
             actor=approver,
         )
         change_request.status = RequirementChangeStatus.APPROVED
@@ -902,7 +924,7 @@ def act_on_change_request(*, change_request, approver, action, comment=""):
 
 
 def cancel_change_request(*, change_request, actor=None):
-    """撤回审批：变更单置为已撤回，需求回到 draft 并保留工作副本。"""
+    """撤回审批：变更单置为已撤回，基线回到 draft 并保留工作副本。"""
     if change_request.status != RequirementChangeStatus.PENDING:
         raise RequirementChangeError(
             "This change request has already been closed.",
@@ -915,62 +937,56 @@ def cancel_change_request(*, change_request, actor=None):
         update_fields=["status", "completed_at", "updated_at", "updated_by"]
     )
 
-    requirement = change_request.requirement
-    requirement.status = RequirementStatus.DRAFT
-    requirement.updated_by = actor
-    requirement.save(update_fields=["status", "updated_at", "updated_by"])
+    baseline = change_request.baseline
+    baseline.status = RequirementStatus.DRAFT
+    baseline.updated_by = actor
+    baseline.save(update_fields=["status", "updated_at", "updated_by"])
     return change_request
 
 
-def rollback_to_version(*, requirement, version, actor=None):
-    """把历史快照灌入工作副本，字段与明细不直接改正式表 —— 回滚也要再走一次审批。
+def rollback_to_version(*, baseline, version, actor=None):
+    """把历史快照灌入工作副本，字段与需求行不直接改正式表 —— 回滚也要再走一次审批。
 
-    meta 与常规编辑一样直接写正式行（diff 的「变更前」来自工作副本里冻结的基线，
+    meta 与常规编辑一样直接写基线行（diff 的「变更前」来自工作副本里冻结的基线，
     所以回滚出来的 meta 变化仍然会出现在变更单里）。
     """
-    if requirement.status == RequirementStatus.IN_REVIEW:
+    if baseline.status == RequirementStatus.IN_REVIEW:
         raise RequirementChangeError(
-            "Withdraw or complete the current review before rolling back this requirement.",
+            "Withdraw or complete the current review before rolling back.",
             code="REQUIREMENT_IN_REVIEW",
         )
-    draft = start_editing(requirement=requirement, actor=actor)
+    draft = start_editing(baseline=baseline, actor=actor)
     if draft is None:
         raise RequirementChangeError(
-            "This requirement has never been published, so there is nothing to roll back to.",
+            "This baseline has never been published, so there is nothing to roll back to.",
             code="REQUIREMENT_NEVER_PUBLISHED",
         )
     load_snapshot_into_draft(draft=draft, snapshot=version.snapshot, actor=actor)
     _apply_meta(
-        requirement=requirement,
-        meta=(version.snapshot or {}).get("requirement") or {},
+        baseline=baseline,
+        meta=(version.snapshot or {}).get("baseline") or {},
         actor=actor,
     )
     return draft
 
 
-def _apply_meta(*, requirement, meta, actor=None):
+def _apply_meta(*, baseline, meta, actor=None):
     if not meta:
-        return requirement
+        return baseline
 
-    requirement.title = meta.get("title", requirement.title)
-    requirement.description_html = meta.get(
-        "description_html", requirement.description_html
-    )
     if meta.get("owner_id"):
-        requirement.owner_id = meta["owner_id"]
-    requirement.approval_type = meta.get("approval_type", requirement.approval_type)
-    requirement.required_count = meta.get("required_count", requirement.required_count)
+        baseline.owner_id = meta["owner_id"]
+    baseline.approval_type = meta.get("approval_type", baseline.approval_type)
+    baseline.required_count = meta.get("required_count", baseline.required_count)
     if "approver_ids" in meta:
         replace_requirement_approvers(
-            requirement=requirement,
+            baseline=baseline,
             approver_ids=meta["approver_ids"],
             actor=actor,
         )
-    requirement.updated_by = actor
-    requirement.save(
+    baseline.updated_by = actor
+    baseline.save(
         update_fields=[
-            "title",
-            "description_html",
             "owner",
             "approval_type",
             "required_count",
@@ -978,4 +994,4 @@ def _apply_meta(*, requirement, meta, actor=None):
             "updated_by",
         ]
     )
-    return requirement
+    return baseline

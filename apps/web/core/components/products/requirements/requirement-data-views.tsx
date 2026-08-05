@@ -3,14 +3,16 @@
 import { useCallback, useMemo, useRef } from "react";
 import { Layers, Table2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirementDetail, TRequirementTypeSchema } from "@plane/types";
+import type { TRequirementTypeSchema } from "@plane/types";
 import { cn } from "@plane/utils";
 
 /**
- * 产品需求是需求类型的集合，数据页因此按类型分视图：
+ * 一个产品下的需求可以分属多个需求类型（形状不同），数据页因此按类型分视图：
  * - 0 个类型 -> 空态，引导去导入或手动录入
  * - 1 个类型 -> 不出切换器，直接平铺该需求类型的全部字段（就是标准库页今天的样子）
  * - N 个类型 -> 默认视图（标题/描述/所属类型，只读）+ 每个类型一个视图
+ *
+ * 这不是被移除的「集合」概念 —— 审批的单位始终是整条基线，视图只是渲染分组。
  */
 export type TRequirementDataView = { kind: "default" } | { kind: "requirementType"; requirementTypeId: string };
 
@@ -103,12 +105,3 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
   );
 };
 
-/** 默认视图里「标题/描述」两列的取值：各类型的字段 UUID 不同，得按行的类型查。 */
-export const getBuiltinValue = (
-  detail: TRequirementDetail,
-  requirementTypes: TRequirementTypeSchema[],
-  key: "title" | "description"
-) => {
-  const fieldId = requirementTypes.find((requirementType) => requirementType.id === detail.requirement_type_id)?.builtin_field_ids?.[key];
-  return fieldId ? detail.data[fieldId] : null;
-};

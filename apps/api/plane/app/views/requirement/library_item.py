@@ -1,24 +1,35 @@
-"""标准库的条目：库直接持有的一批明细行。
+"""标准库的条目：库直接持有的一批需求。
 
-与产品需求的明细相比少了三件事 —— 没有工作副本、没有只读态、没有产品级权限；
+与产品需求相比少了三件事 —— 没有工作副本、没有只读态、没有产品级权限；
 字段来自库所选的需求类型，只能在需求类型页改。
 """
 
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.serializers.requirement import RequirementDetailSerializer
+from plane.app.serializers.requirement import RequirementSerializer
 from plane.app.serializers.requirement_library import RequirementLibrarySerializer
 from plane.app.views.base import BaseAPIView
-from plane.app.views.requirement.detail_base import BaseRequirementDetailViewSet
-from plane.app.views.requirement.mixins import DetailLayer, RequirementTypeResolver
-from plane.db.models import RequirementDetail, RequirementLibrary
+from plane.app.views.requirement.mixins import (
+    RequirementTypeResolver,
+    RowLayer,
+    builtin_ids_by_type,
+)
+from plane.app.views.requirement.row_base import BaseRequirementRowViewSet
+from plane.db.models import Requirement, RequirementLibrary
 from plane.utils.requirement import (
     get_library_field_specs,
     insert_library_item,
     save_library_item_batch,
     serialize_library_field_tree,
 )
+
+
+def _no_change_kind(rows):
+    rows = list(rows)
+    for row in rows:
+        row.change_kind = None
+    return rows
 
 
 def get_scoped_library(*, slug, library_id, for_update=False):
@@ -59,7 +70,7 @@ class RequirementLibraryConfigurationAPIView(BaseAPIView):
         )
 
 
-class RequirementLibraryItemViewSet(BaseRequirementDetailViewSet):
+class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
     NOT_FOUND = "Requirement library not found."
     FORBIDDEN = "You do not have permission to maintain this library."
 
@@ -76,16 +87,21 @@ class RequirementLibraryItemViewSet(BaseRequirementDetailViewSet):
 
     def resolve_layer(self, owner, *, for_write):
         fields = get_library_field_specs(owner)
+        fields_by_requirement_type = {str(owner.requirement_type_id): fields}
         return (
-            DetailLayer(
-                queryset=RequirementDetail.objects.filter(library=owner).order_by(
+            RowLayer(
+                queryset=Requirement.objects.filter(library=owner).order_by(
                     "sort_order", "created_at", "id"
                 ),
-                serializer_class=RequirementDetailSerializer,
-                serializer_context={},
+                serializer_class=RequirementSerializer,
+                serializer_context={
+                    "builtin_field_ids_by_type": builtin_ids_by_type(
+                        fields_by_requirement_type
+                    ),
+                },
                 requirement_type_ids=[owner.requirement_type_id],
                 fields=fields,
-                fields_by_requirement_type={str(owner.requirement_type_id): fields},
+                fields_by_requirement_type=fields_by_requirement_type,
                 requirement_type_resolver=RequirementTypeResolver(
                     workspace_id=owner.workspace_id,
                     allowed_requirement_type_id=owner.requirement_type_id,
@@ -102,13 +118,15 @@ class RequirementLibraryItemViewSet(BaseRequirementDetailViewSet):
                 ),
                 import_items=None,
                 hard_delete=False,
+                # 库不走审批，没有「相对上一版」这回事
+                annotate_change_kind=_no_change_kind,
             ),
             None,
         )
 
     def get_queryset(self):
         return (
-            RequirementDetail.objects.filter(
+            Requirement.objects.filter(
                 library_id=self.kwargs.get("library_id"),
                 library__workspace__slug=self.workspace_slug,
             )

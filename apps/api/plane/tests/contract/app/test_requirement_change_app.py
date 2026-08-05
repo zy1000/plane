@@ -1,8 +1,10 @@
-"""需求变更审批与版本管理的契约测试。
+"""需求基线的变更审批与版本管理契约测试。
 
-覆盖的链路：首次发布（通过 / 驳回）、后续变更（工作副本隔离 / 通过 / 驳回）、
-多人审批规则（ALL / N_OF_M / 任一拒绝）、审批期与已发布态禁写、撤回草稿的两种
-语义、版本号递增、回滚。
+审批的单位是**基线**（一个产品的全部需求），所以这里验证的是：
+draft --提交--> in_review --通过--> published（物化工作副本 + 写新版本）
+
+以及重构新引入的两个派生值：每一行相对上一个已发布版本的 change_kind，
+和「最后变更于 vN」的 last_changed_version。
 """
 
 from uuid import uuid4
@@ -15,19 +17,8 @@ from plane.db.models import (
     Product,
     ProductMember,
     Requirement,
-    RequirementApprovalAction,
-    RequirementApprovalType,
-    RequirementApprover,
-    RequirementChangeStatus,
+    RequirementBaseline,
     RequirementChangeTargetKind,
-    RequirementChangeType,
-    RequirementDetail,
-    RequirementDraft,
-    RequirementDraftDetail,
-    RequirementField,
-    RequirementFieldType,
-    RequirementStatus,
-    RequirementType,
     RequirementVersion,
     WorkspaceMember,
 )
@@ -38,1297 +29,338 @@ from plane.tests.factories import UserFactory, WorkspaceFactory
 @pytest.mark.django_db
 class TestRequirementChangeApp:
     def setup_method(self):
-        self.owner = UserFactory(username=f"change-owner-{uuid4()}")
+        self.owner = UserFactory(username=f"req-change-owner-{uuid4()}")
+        self.approver = UserFactory(username=f"req-change-approver-{uuid4()}")
         self.workspace = WorkspaceFactory(owner=self.owner)
-        WorkspaceMember.objects.create(
-            workspace=self.workspace,
-            member=self.owner,
-            role=20,
-        )
-        self.product = Product.objects.create(
-            name=f"Change product {uuid4()}",
-            workspace=self.workspace,
-            owner=self.owner,
-        )
-
-    def add_member(self, role=15):
-        user = UserFactory(username=f"change-member-{uuid4()}")
-        WorkspaceMember.objects.create(
-            workspace=self.workspace,
-            member=user,
-            role=role,
-        )
-        ProductMember.objects.create(product=self.product, member=user)
-        return user
-
-    def create_requirement(self, *approvers, approval_type=None, required_count=None):
-        requirement = Requirement.objects.create(
-            workspace=self.workspace,
-            product=self.product,
-            title=f"Requirement {uuid4()}",
-            owner=self.owner,
-            approval_type=approval_type or RequirementApprovalType.ANY,
-            required_count=required_count,
-        )
-        for index, approver in enumerate(approvers):
-            RequirementApprover.objects.create(
-                requirement=requirement,
-                approver=approver,
-                sort_order=index,
+        for member in (self.owner, self.approver):
+            WorkspaceMember.objects.create(
+                workspace=self.workspace, member=member, role=20
             )
-        return requirement
-
-    def create_requirement_type(self, name=None):
-        """字段只归需求类型所有，产品需求的列由明细行引用到的类型决定。"""
-        return RequirementType.objects.create(
+        self.product = Product.objects.create(
+            name=f"Requirement product {uuid4()}",
             workspace=self.workspace,
-            name=name or f"Type {uuid4()}",
             owner=self.owner,
         )
+        ProductMember.objects.create(product=self.product, member=self.approver)
 
-    def add_field(self, requirement_type, name="Summary", **kwargs):
-        return RequirementField.objects.create(
-            requirement_type=requirement_type,
-            name=name,
-            field_type=kwargs.pop("field_type", RequirementFieldType.TEXT),
-            **kwargs,
-        )
-
-    def create_detail(self, requirement, *, requirement_type, data, **kwargs):
-        return RequirementDetail.objects.create(
-            requirement=requirement,
-            requirement_type=requirement_type,
-            data=data,
-            **kwargs,
-        )
-
-    def seed_content(self, requirement, value="Seed", **kwargs):
-        """给需求准备一份可提交的内容：一个需求类型 + 一行引用它的明细。
-
-        返回 (requirement_type, field, detail) —— 需求本身没有字段，列全部来自类型。
-        """
-        requirement_type = self.create_requirement_type()
-        field = self.add_field(requirement_type, **kwargs)
-        detail = self.create_detail(
-            requirement,
-            requirement_type=requirement_type,
-            data={str(field.id): value},
-        )
-        return requirement_type, field, detail
-
-    # --- URL helpers -----------------------------------------------------
+    # --- helpers -------------------------------------------------------
 
     def url(self, name, **kwargs):
         return reverse(
-            name,
-            kwargs={"slug": self.workspace.slug, **kwargs},
+            name, kwargs={"slug": self.workspace.slug, "product_id": self.product.id, **kwargs}
         )
 
-    def working_copy_url(self, requirement):
-        return self.url("requirement-working-copy", requirement_id=requirement.id)
+    def workspace_url(self, name, **kwargs):
+        return reverse(name, kwargs={"slug": self.workspace.slug, **kwargs})
 
-    def submit_url(self, requirement):
-        return self.url(
-            "requirement-change-request-submit", requirement_id=requirement.id
+    def requirements_url(self):
+        return self.url("product-requirements")
+
+    def create_requirement_type(self, api_client):
+        response = api_client.post(
+            self.workspace_url("requirement-types"),
+            {"name": f"Requirement type {uuid4()}"},
+            format="json",
         )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        return response.data["id"]
 
-    def act_url(self, requirement, change_request_id):
-        return self.url(
-            "requirement-change-request-act",
-            requirement_id=requirement.id,
-            pk=change_request_id,
+    def builtin_ids(self, api_client, type_id):
+        response = api_client.get(
+            self.workspace_url("requirement-type-configuration", pk=type_id)
         )
+        return {
+            field["builtin_key"]: field["id"]
+            for field in response.data["fields"]
+            if field.get("builtin_key")
+        }
 
-    def details_url(self, requirement):
-        return self.url("requirement-details", requirement_id=requirement.id)
+    def add_requirement(self, api_client, type_id, ids, title):
+        response = api_client.post(
+            self.requirements_url(),
+            {
+                "requirement_type_id": type_id,
+                "data": {ids["title"]: title, ids["description"]: None},
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        return response.data
 
-    def configuration_url(self, requirement):
-        return self.url("requirement-configuration", pk=requirement.id)
+    def configure_approver(self, api_client):
+        baseline = api_client.get(self.url("requirement-baseline")).data["baseline"]
+        response = api_client.put(
+            self.url("requirement-baseline"),
+            {
+                "expected_updated_at": baseline["updated_at"],
+                "baseline": {
+                    "owner_id": str(self.owner.id),
+                    "approver_ids": [str(self.approver.id)],
+                    "approval_type": "any",
+                    "required_count": None,
+                },
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        return response.data
 
-    def type_configuration_url(self, requirement_type):
-        return self.url("requirement-type-configuration", pk=requirement_type.id)
-
-    # --- flows -----------------------------------------------------------
-
-    def submit(self, api_client, requirement, reason="变更原因"):
-        return api_client.post(
-            self.submit_url(requirement),
+    def submit(self, api_client, reason="首次发布"):
+        response = api_client.post(
+            f"{self.url('requirement-change-requests')}submit/",
             {"reason": reason},
             format="json",
         )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        return response.data
 
-    def approve(self, api_client, requirement, change_request_id, approver, comment=""):
-        api_client.force_authenticate(user=approver)
-        return api_client.post(
-            self.act_url(requirement, change_request_id),
-            {"action": RequirementApprovalAction.APPROVED, "comment": comment},
+    def approve(self, api_client, change_request_id):
+        api_client.force_authenticate(user=self.approver)
+        response = api_client.post(
+            self.url("requirement-change-request-act", pk=change_request_id),
+            {"action": "approved"},
             format="json",
         )
-
-    def reject(self, api_client, requirement, change_request_id, approver, comment=""):
-        api_client.force_authenticate(user=approver)
-        return api_client.post(
-            self.act_url(requirement, change_request_id),
-            {"action": RequirementApprovalAction.REJECTED, "comment": comment},
-            format="json",
-        )
-
-    def publish(self, api_client, requirement, approver):
-        """把一个全新需求推到 published，返回变更单 id。"""
+        assert response.status_code == status.HTTP_200_OK, response.data
         api_client.force_authenticate(user=self.owner)
-        submit_response = self.submit(api_client, requirement, reason="首次发布")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-        change_request_id = submit_response.data["id"]
-        assert self.approve(
-            api_client, requirement, change_request_id, approver
-        ).status_code == status.HTTP_200_OK
+        return response.data
+
+    def publish_first_version(self, api_client):
+        """建两条需求并发布 v1，返回 (type_id, builtin ids, 两条需求)。"""
+        type_id = self.create_requirement_type(api_client)
+        ids = self.builtin_ids(api_client, type_id)
+        first = self.add_requirement(api_client, type_id, ids, "短信验证码登录")
+        second = self.add_requirement(api_client, type_id, ids, "扫码登录")
+        self.configure_approver(api_client)
+        change_request = self.submit(api_client)
+        self.approve(api_client, change_request["id"])
+        return type_id, ids, first, second
+
+    # --- tests ---------------------------------------------------------
+
+    def test_submit_requires_an_approver(self, api_client):
         api_client.force_authenticate(user=self.owner)
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.PUBLISHED
-        return change_request_id
+        type_id = self.create_requirement_type(api_client)
+        ids = self.builtin_ids(api_client, type_id)
+        self.add_requirement(api_client, type_id, ids, "无审批人")
 
-    def test_initial_publish_creates_first_version_and_freezes_content(
-        self, api_client
-    ):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        _, field, _ = self.seed_content(requirement, "First")
+        response = api_client.post(
+            f"{self.url('requirement-change-requests')}submit/", {}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT, response.data
+        assert response.data["code"] == "REQUIREMENT_APPROVER_REQUIRED"
+
+    def test_first_publish_freezes_a_version_and_stamps_every_row(self, api_client):
         api_client.force_authenticate(user=self.owner)
+        type_id, ids, first, second = self.publish_first_version(api_client)
 
-        submit_response = self.submit(api_client, requirement, reason="首次发布")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-        change_request_id = submit_response.data["id"]
-        assert submit_response.data["request_kind"] == "initial_publish"
-        assert submit_response.data["base_version"] is None
-        # 首次发布没有基线，字段与明细都是新增
-        assert submit_response.data["created_count"] == 2
-        assert submit_response.data["updated_count"] == 0
-        assert submit_response.data["deleted_count"] == 0
+        baseline = RequirementBaseline.objects.get(product=self.product)
+        assert baseline.status == "published"
+        assert baseline.current_version == 1
 
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.IN_REVIEW
-
-        # 审批期禁写
-        assert (
-            api_client.post(
-                self.details_url(requirement),
-                {"data": {str(field.id): "Blocked"}},
-                format="json",
-            ).status_code
-            == status.HTTP_409_CONFLICT
-        )
-
-        approve_response = self.approve(
-            api_client, requirement, change_request_id, approver, comment="同意"
-        )
-        assert approve_response.status_code == status.HTTP_200_OK
-        assert approve_response.data["status"] == RequirementChangeStatus.APPROVED
-
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.PUBLISHED
-        assert requirement.current_version == 1
-
-        version = RequirementVersion.objects.get(requirement=requirement, version=1)
-        assert version.change_type == RequirementChangeType.CREATE
-        assert version.snapshot["requirement"]["title"] == requirement.title
-        assert [row["data"] for row in version.snapshot["details"]] == [
-            {str(field.id): "First"}
-        ]
-        assert [str(item) for item in version.approved_by] == [str(approver.id)]
-
-        # 已发布态禁写
-        api_client.force_authenticate(user=self.owner)
-        published_write = api_client.post(
-            self.details_url(requirement),
-            {"data": {str(field.id): "Blocked"}},
-            format="json",
-        )
-        assert published_write.status_code == status.HTTP_409_CONFLICT
-        assert published_write.data["code"] == "REQUIREMENT_PUBLISHED"
-
-    def test_initial_publish_rejection_returns_to_draft_and_keeps_content(
-        self, api_client
-    ):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        requirement_type, field, _ = self.seed_content(requirement, "Pending")
-        api_client.force_authenticate(user=self.owner)
-
-        change_request_id = self.submit(api_client, requirement).data["id"]
-        reject_response = self.reject(
-            api_client, requirement, change_request_id, approver, comment="需要补充"
-        )
-        assert reject_response.status_code == status.HTTP_200_OK
-        assert reject_response.data["status"] == RequirementChangeStatus.REJECTED
-        assert reject_response.data["rejected_count"] == 1
-
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.DRAFT
-        assert requirement.current_version is None
-        assert not RequirementVersion.objects.filter(requirement=requirement).exists()
-
-        # 驳回后可以继续改，正式表内容没有被动过
-        api_client.force_authenticate(user=self.owner)
-        assert RequirementDetail.objects.filter(requirement=requirement).count() == 1
-        assert (
-            api_client.post(
-                self.details_url(requirement),
-                {
-                    "requirement_type_id": str(requirement_type.id),
-                    "data": {str(field.id): "Second"},
-                },
-                format="json",
-            ).status_code
-            == status.HTTP_201_CREATED
-        )
-
-    def test_change_flow_isolates_working_copy_until_approved(self, api_client):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        _, field, published_detail = self.seed_content(requirement, "Published")
-        self.publish(api_client, requirement, approver)
-
-        edit_response = api_client.post(self.working_copy_url(requirement))
-        assert edit_response.status_code == status.HTTP_200_OK
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.DRAFT
-        assert requirement.current_version == 1
-
-        draft = RequirementDraft.objects.get(requirement=requirement)
-        assert draft.base_version == 1
-        # 工作副本保留原 UUID，物化时直接复用为正式表主键
-        assert [item.id for item in draft.details.all()] == [published_detail.id]
-
-        # 明细的读写都落在工作副本上，正式表原封不动
-        patch_response = api_client.patch(
-            self.url(
-                "requirement-detail-item",
-                requirement_id=requirement.id,
-                pk=published_detail.id,
-            ),
-            {"data": {str(field.id): "Changed"}, "version": 1},
-            format="json",
-        )
-        assert patch_response.status_code == status.HTTP_200_OK
-        published_detail.refresh_from_db()
-        assert published_detail.data == {str(field.id): "Published"}
-        assert RequirementDraftDetail.objects.get(
-            draft=draft, id=published_detail.id
-        ).data == {str(field.id): "Changed"}
-
-        list_response = api_client.get(self.details_url(requirement))
-        assert list_response.status_code == status.HTTP_200_OK
-        assert [item["data"] for item in list_response.data["results"]] == [
-            {str(field.id): "Changed"}
-        ]
-        assert [str(item["requirement_id"]) for item in list_response.data["results"]] == [
-            str(requirement.id)
-        ]
-
-        submit_response = self.submit(api_client, requirement, reason="改一个值")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-        change_request_id = submit_response.data["id"]
-        assert submit_response.data["request_kind"] == "change"
-        assert submit_response.data["base_version"] == 1
-        assert submit_response.data["sequence_id"] == 2
-        assert submit_response.data["updated_count"] == 1
-        assert submit_response.data["changed_field_ids"] == [str(field.id)]
-
-        detail_response = api_client.get(
-            self.url(
-                "requirement-change-request-detail",
-                requirement_id=requirement.id,
-                pk=change_request_id,
+        version = RequirementVersion.objects.get(baseline=baseline, version=1)
+        assert version.target_kind == RequirementChangeTargetKind.BASELINE
+        assert {row["data"][ids["title"]] for row in version.snapshot["requirements"]} == {
+            "短信验证码登录",
+            "扫码登录",
+        }
+        # 首次发布：所有行都记为第 1 版
+        assert set(
+            Requirement.objects.filter(product=self.product).values_list(
+                "last_changed_version", flat=True
             )
+        ) == {1}
+
+    def test_published_content_is_read_only_until_editing_starts(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id, ids, first, _ = self.publish_first_version(api_client)
+
+        blocked = api_client.patch(
+            f"{self.requirements_url()}{first['id']}/",
+            {"data": {ids["title"]: "改不动", ids["description"]: None}, "version": first["version"]},
+            format="json",
         )
-        assert detail_response.status_code == status.HTTP_200_OK
-        assert detail_response.data["requirement_items"] == []
-        assert detail_response.data["schema_items"] == []
-        assert detail_response.data["detail_item_count"] == 1
+        assert blocked.status_code == status.HTTP_409_CONFLICT, blocked.data
+        assert blocked.data["code"] == "REQUIREMENT_PUBLISHED"
 
-        items_response = api_client.get(
-            self.url(
-                "requirement-change-request-items",
-                requirement_id=requirement.id,
-                pk=change_request_id,
-            ),
-            {"change_type": RequirementChangeType.UPDATE},
-        )
-        assert items_response.status_code == status.HTTP_200_OK
-        assert items_response.data["total_count"] == 1
-        item = items_response.data["results"][0]
-        assert item["target_kind"] == RequirementChangeTargetKind.DETAIL_DATA
-        assert item["before_snapshot"]["data"] == {str(field.id): "Published"}
-        assert item["proposed_snapshot"]["data"] == {str(field.id): "Changed"}
+        started = api_client.post(f"{self.url('requirement-working-copy')}", format="json")
+        assert started.status_code == status.HTTP_200_OK, started.data
+        assert started.data["baseline"]["status"] == "draft"
+        # 正式表仍持有已批准的内容
+        assert Requirement.objects.get(id=first["id"]).title == "短信验证码登录"
 
-        assert self.approve(
-            api_client, requirement, change_request_id, approver
-        ).status_code == status.HTTP_200_OK
+    def test_change_kind_marks_rows_against_the_published_baseline(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id, ids, first, second = self.publish_first_version(api_client)
+        api_client.post(f"{self.url('requirement-working-copy')}", format="json")
 
-        requirement.refresh_from_db()
-        published_detail.refresh_from_db()
-        assert requirement.status == RequirementStatus.PUBLISHED
-        assert requirement.current_version == 2
-        assert published_detail.data == {str(field.id): "Changed"}
-        assert not RequirementDraft.objects.filter(requirement=requirement).exists()
-        assert list(
-            RequirementVersion.objects.filter(requirement=requirement)
-            .order_by("version")
-            .values_list("version", flat=True)
-        ) == [1, 2]
-
-    def test_change_rejection_keeps_working_copy_and_published_content(
-        self, api_client
-    ):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        _, field, published_detail = self.seed_content(requirement, "Published")
-        self.publish(api_client, requirement, approver)
-
-        api_client.post(self.working_copy_url(requirement))
         api_client.patch(
-            self.url(
-                "requirement-detail-item",
-                requirement_id=requirement.id,
-                pk=published_detail.id,
-            ),
-            {"data": {str(field.id): "Proposed"}, "version": 1},
-            format="json",
-        )
-        change_request_id = self.submit(api_client, requirement).data["id"]
-        assert self.reject(
-            api_client, requirement, change_request_id, approver
-        ).status_code == status.HTTP_200_OK
-
-        requirement.refresh_from_db()
-        published_detail.refresh_from_db()
-        assert requirement.status == RequirementStatus.DRAFT
-        assert requirement.current_version == 1
-        assert published_detail.data == {str(field.id): "Published"}
-
-        draft = RequirementDraft.objects.get(requirement=requirement)
-        assert RequirementDraftDetail.objects.get(
-            draft=draft, id=published_detail.id
-        ).data == {str(field.id): "Proposed"}
-
-    def test_all_approval_rule_requires_every_approver(self, api_client):
-        first = self.add_member()
-        second = self.add_member()
-        requirement = self.create_requirement(
-            first, second, approval_type=RequirementApprovalType.ALL
-        )
-        self.seed_content(requirement)
-        api_client.force_authenticate(user=self.owner)
-
-        change_request_id = self.submit(api_client, requirement).data["id"]
-        first_response = self.approve(api_client, requirement, change_request_id, first)
-        assert first_response.status_code == status.HTTP_200_OK
-        assert first_response.data["status"] == RequirementChangeStatus.PENDING
-        assert first_response.data["approved_count"] == 1
-
-        # 同一人不能重复表态
-        repeat_response = self.approve(
-            api_client, requirement, change_request_id, first
-        )
-        assert repeat_response.status_code == status.HTTP_409_CONFLICT
-        assert repeat_response.data["code"] == "REQUIREMENT_ALREADY_ACTED"
-
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.IN_REVIEW
-
-        second_response = self.approve(
-            api_client, requirement, change_request_id, second
-        )
-        assert second_response.data["status"] == RequirementChangeStatus.APPROVED
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.PUBLISHED
-
-    def test_approval_setting_change_takes_effect_from_the_next_request(
-        self, api_client
-    ):
-        original_approver = self.add_member()
-        added_approver = self.add_member()
-        requirement = self.create_requirement(original_approver)
-        self.seed_content(requirement)
-        self.publish(api_client, requirement, original_approver)
-
-        api_client.force_authenticate(user=self.owner)
-        assert (
-            api_client.post(self.working_copy_url(requirement)).status_code
-            == status.HTTP_200_OK
-        )
-        configuration = api_client.get(self.configuration_url(requirement)).data
-        # 产品需求的列来自模板，配置保存里只带 meta
-        save_response = api_client.put(
-            self.configuration_url(requirement),
+            f"{self.requirements_url()}{first['id']}/",
             {
-                "expected_updated_at": configuration["requirement"]["updated_at"],
-                "requirement": {
-                    "approval_type": RequirementApprovalType.ALL,
-                    "approver_ids": [
-                        str(original_approver.id),
-                        str(added_approver.id),
-                    ],
-                },
+                "data": {ids["title"]: "短信验证码登录（改）", ids["description"]: None},
+                "version": first["version"],
             },
             format="json",
         )
-        assert save_response.status_code == status.HTTP_200_OK
+        self.add_requirement(api_client, type_id, ids, "新增：找回密码")
 
-        # 修改审批设置的这一单仍由变更前已生效的配置审批。
-        submit_response = self.submit(api_client, requirement, reason="调整审批设置")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-        assert submit_response.data["approval_type"] == RequirementApprovalType.ANY
-        assert submit_response.data["required_count"] is None
-        assert [
-            str(item["approver_id"]) for item in submit_response.data["approvals"]
-        ] == [str(original_approver.id)]
-        change_request_id = submit_response.data["id"]
+        rows = {
+            item["title"]: item
+            for item in api_client.get(self.requirements_url()).data["results"]
+        }
 
-        proposed_approver_response = self.approve(
-            api_client,
-            requirement,
-            change_request_id,
-            added_approver,
-        )
-        assert proposed_approver_response.status_code == status.HTTP_409_CONFLICT
-        assert (
-            proposed_approver_response.data["code"] == "REQUIREMENT_NOT_APPROVER"
-        )
-        assert (
-            self.approve(
-                api_client,
-                requirement,
-                change_request_id,
-                original_approver,
-            ).data["status"]
-            == RequirementChangeStatus.APPROVED
-        )
+        assert rows["短信验证码登录（改）"]["change_kind"] == "updated"
+        assert rows["新增：找回密码"]["change_kind"] == "created"
+        assert rows["扫码登录"]["change_kind"] is None
 
-        requirement.refresh_from_db()
-        assert requirement.approval_type == RequirementApprovalType.ALL
-        assert list(
-            requirement.approvers.order_by("sort_order").values_list(
-                "approver_id", flat=True
-            )
-        ) == [original_approver.id, added_approver.id]
-
-        # 上一单通过后，新配置才成为下一份变更单的审批快照。
+    def test_second_publish_only_bumps_rows_that_actually_changed(self, api_client):
         api_client.force_authenticate(user=self.owner)
-        assert (
-            api_client.post(self.working_copy_url(requirement)).status_code
-            == status.HTTP_200_OK
-        )
-        assert (
-            api_client.patch(
-                self.url("requirement-detail", pk=requirement.id),
-                {"title": "下一次变更"},
-                format="json",
-            ).status_code
-            == status.HTTP_200_OK
-        )
-        next_submit_response = self.submit(
-            api_client, requirement, reason="验证新审批设置"
-        )
-        assert next_submit_response.status_code == status.HTTP_201_CREATED
-        assert next_submit_response.data["approval_type"] == RequirementApprovalType.ALL
-        assert {
-            str(item["approver_id"])
-            for item in next_submit_response.data["approvals"]
-        } == {str(original_approver.id), str(added_approver.id)}
-
-        next_change_request_id = next_submit_response.data["id"]
-        assert (
-            self.approve(
-                api_client,
-                requirement,
-                next_change_request_id,
-                original_approver,
-            ).data["status"]
-            == RequirementChangeStatus.PENDING
-        )
-        assert (
-            self.approve(
-                api_client,
-                requirement,
-                next_change_request_id,
-                added_approver,
-            ).data["status"]
-            == RequirementChangeStatus.APPROVED
-        )
-
-    def test_n_of_m_rule_and_single_rejection_blocks_the_change(self, api_client):
-        first = self.add_member()
-        second = self.add_member()
-        third = self.add_member()
-        requirement = self.create_requirement(
-            first,
-            second,
-            third,
-            approval_type=RequirementApprovalType.N_OF_M,
-            required_count=2,
-        )
-        self.seed_content(requirement)
-        api_client.force_authenticate(user=self.owner)
-
-        change_request_id = self.submit(api_client, requirement).data["id"]
-        assert (
-            self.approve(api_client, requirement, change_request_id, first).data[
-                "status"
-            ]
-            == RequirementChangeStatus.PENDING
-        )
-        assert (
-            self.approve(api_client, requirement, change_request_id, second).data[
-                "status"
-            ]
-            == RequirementChangeStatus.APPROVED
-        )
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.PUBLISHED
-
-        # 终态之后不接受任何表态
-        late_response = self.approve(
-            api_client, requirement, change_request_id, third
-        )
-        assert late_response.status_code == status.HTTP_409_CONFLICT
-        assert late_response.data["code"] == "REQUIREMENT_CHANGE_CLOSED"
-
-        # 换一个需求验证「任一拒绝立即驳回」
-        rejected_requirement = self.create_requirement(
-            first, second, approval_type=RequirementApprovalType.ALL
-        )
-        self.seed_content(rejected_requirement)
-        api_client.force_authenticate(user=self.owner)
-        rejected_id = self.submit(api_client, rejected_requirement).data["id"]
-        assert self.approve(
-            api_client, rejected_requirement, rejected_id, first
-        ).status_code == status.HTTP_200_OK
-        assert (
-            self.reject(api_client, rejected_requirement, rejected_id, second).data[
-                "status"
-            ]
-            == RequirementChangeStatus.REJECTED
-        )
-        rejected_requirement.refresh_from_db()
-        assert rejected_requirement.status == RequirementStatus.DRAFT
-
-    def test_non_approver_cannot_act_and_submitter_can_withdraw(self, api_client):
-        approver = self.add_member()
-        outsider = self.add_member()
-        requirement = self.create_requirement(approver)
-        self.seed_content(requirement)
-        api_client.force_authenticate(user=self.owner)
-        change_request_id = self.submit(api_client, requirement).data["id"]
-
-        outsider_response = self.approve(
-            api_client, requirement, change_request_id, outsider
-        )
-        assert outsider_response.status_code == status.HTTP_409_CONFLICT
-        assert outsider_response.data["code"] == "REQUIREMENT_NOT_APPROVER"
-
-        cancel_url = self.url(
-            "requirement-change-request-cancel",
-            requirement_id=requirement.id,
-            pk=change_request_id,
-        )
-        api_client.force_authenticate(user=approver)
-        assert api_client.post(cancel_url).status_code == status.HTTP_403_FORBIDDEN
-
-        api_client.force_authenticate(user=self.owner)
-        cancel_response = api_client.post(cancel_url)
-        assert cancel_response.status_code == status.HTTP_200_OK
-        assert cancel_response.data["status"] == RequirementChangeStatus.CANCELLED
-        requirement.refresh_from_db()
-        assert requirement.status == RequirementStatus.DRAFT
-
-    def test_submit_requires_approvers_and_actual_changes(self, api_client):
-        requirement = self.create_requirement()
-        self.seed_content(requirement)
-        api_client.force_authenticate(user=self.owner)
-
-        no_approver_response = self.submit(api_client, requirement)
-        assert no_approver_response.status_code == status.HTTP_409_CONFLICT
-        assert no_approver_response.data["code"] == "REQUIREMENT_APPROVER_REQUIRED"
-
-        approver = self.add_member()
-        RequirementApprover.objects.create(
-            requirement=requirement,
-            approver=approver,
-            sort_order=0,
-        )
-        self.publish(api_client, requirement, approver)
-
-        api_client.post(self.working_copy_url(requirement))
-        empty_response = self.submit(api_client, requirement)
-        assert empty_response.status_code == status.HTTP_409_CONFLICT
-        assert empty_response.data["code"] == "REQUIREMENT_NO_CHANGES"
-
-    def test_discard_draft_deletes_new_requirement_and_reverts_published_one(
-        self, api_client
-    ):
-        approver = self.add_member()
-        new_requirement = self.create_requirement(approver)
-        api_client.force_authenticate(user=self.owner)
-
-        delete_response = api_client.delete(self.working_copy_url(new_requirement))
-        assert delete_response.status_code == status.HTTP_200_OK
-        assert delete_response.data["outcome"] == "deleted"
-        assert not Requirement.objects.filter(id=new_requirement.id).exists()
-
-        published = self.create_requirement(approver)
-        self.seed_content(published, "Published")
-        self.publish(api_client, published, approver)
-
-        api_client.post(self.working_copy_url(published))
+        type_id, ids, first, second = self.publish_first_version(api_client)
+        api_client.post(f"{self.url('requirement-working-copy')}", format="json")
         api_client.patch(
-            self.url("requirement-detail", pk=published.id),
-            {"title": "改过的标题"},
-            format="json",
-        )
-        revert_response = api_client.delete(self.working_copy_url(published))
-        assert revert_response.status_code == status.HTTP_200_OK
-        assert revert_response.data["outcome"] == "reverted"
-
-        published.refresh_from_db()
-        assert published.status == RequirementStatus.PUBLISHED
-        assert published.current_version == 1
-        # meta 也要跟着回到上一版本
-        assert published.title == RequirementVersion.objects.get(
-            requirement=published, version=1
-        ).snapshot["requirement"]["title"]
-        assert not RequirementDraft.objects.filter(requirement=published).exists()
-
-    def test_meta_change_shows_up_in_the_diff(self, api_client):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        self.seed_content(requirement)
-        self.publish(api_client, requirement, approver)
-
-        api_client.post(self.working_copy_url(requirement))
-        assert (
-            api_client.patch(
-                self.url("requirement-detail", pk=requirement.id),
-                {"title": "新的标题"},
-                format="json",
-            ).status_code
-            == status.HTTP_200_OK
-        )
-        submit_response = self.submit(api_client, requirement, reason="改标题")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-
-        detail_response = api_client.get(
-            self.url(
-                "requirement-change-request-detail",
-                requirement_id=requirement.id,
-                pk=submit_response.data["id"],
-            )
-        )
-        meta_items = detail_response.data["requirement_items"]
-        assert [item["before_snapshot"]["field"] for item in meta_items] == ["title"]
-        assert meta_items[0]["proposed_snapshot"]["value"] == "新的标题"
-
-    def test_requirement_type_field_change_reaches_the_published_requirement_as_schema_items(
-        self, api_client
-    ):
-        """需求类型改字段是字段变更抵达已发布需求的唯一通道。
-
-        变更单的「变更前」取草稿里冻结的基线（发布时的字段快照），「变更后」实时
-        取自明细行引用的类型，所以改类型会在下一次变更单里显示成 schema 变更项。
-        """
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        requirement_type, field, _ = self.seed_content(requirement)
-        self.publish(api_client, requirement, approver)
-
-        api_client.post(self.working_copy_url(requirement))
-        # 字段只能在需求类型上改 —— 产品需求的配置接口不接受 fields
-        rejected_response = api_client.put(
-            self.configuration_url(requirement),
+            f"{self.requirements_url()}{first['id']}/",
             {
-                "expected_updated_at": api_client.get(
-                    self.configuration_url(requirement)
-                ).data["requirement"]["updated_at"],
-                "requirement": {},
-                "fields": [],
+                "data": {ids["title"]: "短信验证码登录（改）", ids["description"]: None},
+                "version": first["version"],
             },
             format="json",
         )
-        assert rejected_response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "fields" in rejected_response.data
 
-        type_configuration = api_client.get(
-            self.type_configuration_url(requirement_type)
-        ).data
-        client_id = f"new-field-{uuid4()}"
-        save_response = api_client.put(
-            self.type_configuration_url(requirement_type),
-            {
-                "expected_updated_at": type_configuration["requirement_type"][
-                    "updated_at"
-                ],
-                "fields": [
-                    {
-                        "id": str(field.id),
-                        "name": "重命名的字段",
-                        "field_type": RequirementFieldType.TEXT,
-                        "is_required": False,
-                        "is_active": True,
-                        "config": {},
-                        "default_value": None,
-                        "children": [],
-                    },
-                    {
-                        "client_id": client_id,
-                        "name": "新增字段",
-                        "field_type": RequirementFieldType.TEXT,
-                        "is_required": False,
-                        "is_active": True,
-                        "config": {},
-                        "default_value": None,
-                        "children": [],
-                    },
-                ],
-            },
-            format="json",
+        change_request = self.submit(api_client, reason="调整登录方式")
+        # 需求条目组的变更项走独立分页端点
+        items = api_client.get(
+            self.url("requirement-change-request-items", pk=change_request["id"])
         )
-        assert save_response.status_code == status.HTTP_200_OK
-        assert client_id in save_response.data["created_field_ids"]
-        assert [item["name"] for item in save_response.data["fields"]] == [
-            "重命名的字段",
-            "新增字段",
-        ]
-        # 已发布内容仍按发版时冻结的字段快照渲染
-        assert [
-            item["name"]
-            for item in RequirementVersion.objects.get(
-                requirement=requirement, version=1
-            ).snapshot["fields"]
-        ] == ["Summary"]
+        assert items.status_code == status.HTTP_200_OK, items.data
+        assert [item["change_type"] for item in items.data["results"]] == ["update"]
+        assert items.data["results"][0]["target_id"] == str(first["id"])
 
-        submit_response = self.submit(api_client, requirement, reason="改字段")
-        change_request_id = submit_response.data["id"]
-        assert submit_response.data["created_count"] == 1
-        assert submit_response.data["updated_count"] == 1
+        self.approve(api_client, change_request["id"])
 
-        detail_response = api_client.get(
-            self.url(
-                "requirement-change-request-detail",
-                requirement_id=requirement.id,
-                pk=change_request_id,
-            )
-        )
-        schema_items = detail_response.data["schema_items"]
-        assert {item["change_type"] for item in schema_items} == {
-            RequirementChangeType.CREATE,
-            RequirementChangeType.UPDATE,
-        }
-        assert {item["target_id"] for item in schema_items} == {
-            str(field.id),
-            save_response.data["created_field_ids"][client_id],
-        }
+        baseline = RequirementBaseline.objects.get(product=self.product)
+        assert baseline.current_version == 2
+        assert Requirement.objects.get(id=first["id"]).last_changed_version == 2
+        # 没动过的行沿用上一版的版本号
+        assert Requirement.objects.get(id=second["id"]).last_changed_version == 1
 
-        assert self.approve(
-            api_client, requirement, change_request_id, approver
-        ).status_code == status.HTTP_200_OK
-        # 通过后新的字段结构才成为已发布内容的快照
-        assert [
-            item["name"]
-            for item in RequirementVersion.objects.get(
-                requirement=requirement, version=2
-            ).snapshot["fields"]
-        ] == ["重命名的字段", "新增字段"]
-
-    def test_field_reordering_is_a_submittable_schema_change(self, api_client):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        requirement_type = self.create_requirement_type()
-        first_field = self.add_field(requirement_type, name="First", sort_order=1000)
-        second_field = self.add_field(requirement_type, name="Second", sort_order=2000)
-        self.create_detail(
-            requirement,
-            requirement_type=requirement_type,
-            data={str(first_field.id): "值"},
-        )
-        self.publish(api_client, requirement, approver)
-
-        api_client.post(self.working_copy_url(requirement))
-        configuration = api_client.get(self.type_configuration_url(requirement_type)).data
-        save_response = api_client.put(
-            self.type_configuration_url(requirement_type),
-            {
-                "expected_updated_at": configuration["requirement_type"][
-                    "updated_at"
-                ],
-                "fields": list(reversed(configuration["fields"])),
-            },
-            format="json",
-        )
-        assert save_response.status_code == status.HTTP_200_OK
-        assert [item["name"] for item in save_response.data["fields"]] == [
-            "Second",
-            "First",
-        ]
-
-        submit_response = self.submit(api_client, requirement, reason="调整字段顺序")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-        assert submit_response.data["updated_count"] == 2
-
-        detail_response = api_client.get(
-            self.url(
-                "requirement-change-request-detail",
-                requirement_id=requirement.id,
-                pk=submit_response.data["id"],
-            )
-        )
-        schema_items = detail_response.data["schema_items"]
-        assert {item["target_id"] for item in schema_items} == {
-            str(first_field.id),
-            str(second_field.id),
-        }
-        assert {
-            (
-                item["before_snapshot"]["sort_order"],
-                item["proposed_snapshot"]["sort_order"],
-            )
-            for item in schema_items
-        } == {(1000, 2000), (2000, 1000)}
-        assert {
-            (
-                item["before_snapshot"]["position"],
-                item["proposed_snapshot"]["position"],
-            )
-            for item in schema_items
-        } == {(1, 2), (2, 1)}
-
-        assert (
-            self.approve(
-                api_client,
-                requirement,
-                submit_response.data["id"],
-                approver,
-            ).status_code
-            == status.HTTP_200_OK
-        )
-        assert [
-            item["name"]
-            for item in RequirementVersion.objects.get(
-                requirement=requirement, version=2
-            ).snapshot["fields"]
-        ] == ["Second", "First"]
-
-    def test_version_snapshot_details_are_paginated_and_rollback_needs_approval(
-        self, api_client
-    ):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        _, field, detail = self.seed_content(requirement, "v1")
-        self.publish(api_client, requirement, approver)
-
-        api_client.post(self.working_copy_url(requirement))
+    def test_rejecting_a_change_request_returns_the_baseline_to_draft(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id, ids, first, _ = self.publish_first_version(api_client)
+        api_client.post(f"{self.url('requirement-working-copy')}", format="json")
         api_client.patch(
-            self.url(
-                "requirement-detail-item",
-                requirement_id=requirement.id,
-                pk=detail.id,
-            ),
-            {"data": {str(field.id): "v2"}, "version": 1},
+            f"{self.requirements_url()}{first['id']}/",
+            {"data": {ids["title"]: "待驳回", ids["description"]: None}, "version": first["version"]},
             format="json",
         )
-        change_request_id = self.submit(api_client, requirement).data["id"]
-        self.approve(api_client, requirement, change_request_id, approver)
+        change_request = self.submit(api_client, reason="待驳回")
+
+        api_client.force_authenticate(user=self.approver)
+        response = api_client.post(
+            self.url("requirement-change-request-act", pk=change_request["id"]),
+            {"action": "rejected", "comment": "先不发"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert response.data["status"] == "rejected"
+        baseline = RequirementBaseline.objects.get(product=self.product)
+        assert baseline.status == "draft"
+        assert baseline.current_version == 1
+        # 驳回保留工作副本，正式表仍是已批准的内容
+        assert Requirement.objects.get(id=first["id"]).title == "短信验证码登录"
+
+    def test_discarding_a_draft_restores_the_published_content(self, api_client):
         api_client.force_authenticate(user=self.owner)
-
-        versions_response = api_client.get(
-            self.url("requirement-versions", requirement_id=requirement.id)
+        type_id, ids, first, _ = self.publish_first_version(api_client)
+        api_client.post(f"{self.url('requirement-working-copy')}", format="json")
+        api_client.patch(
+            f"{self.requirements_url()}{first['id']}/",
+            {"data": {ids["title"]: "临时改动", ids["description"]: None}, "version": first["version"]},
+            format="json",
         )
-        assert versions_response.status_code == status.HTTP_200_OK
-        assert [item["version"] for item in versions_response.data["results"]] == [2, 1]
 
-        snapshot_details = api_client.get(
-            self.url(
-                "requirement-version-details",
-                requirement_id=requirement.id,
-                version=1,
-            ),
-            {"per_page": 1},
-        )
-        assert snapshot_details.status_code == status.HTTP_200_OK
-        assert snapshot_details.data["total_count"] == 1
-        assert snapshot_details.data["results"][0]["data"] == {str(field.id): "v1"}
-        assert snapshot_details.data["next_page_results"] is False
+        response = api_client.delete(self.url("requirement-working-copy"))
 
-        rollback_response = api_client.post(
-            self.url(
-                "requirement-version-rollback",
-                requirement_id=requirement.id,
-                version=1,
-            )
-        )
-        assert rollback_response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert response.data["outcome"] == "reverted"
+        assert response.data["baseline"]["status"] == "published"
+        assert Requirement.objects.get(id=first["id"]).title == "短信验证码登录"
 
-        requirement.refresh_from_db()
-        detail.refresh_from_db()
-        # 回滚只灌工作副本，正式表要等审批通过
-        assert requirement.status == RequirementStatus.DRAFT
-        assert requirement.current_version == 2
-        assert detail.data == {str(field.id): "v2"}
-
-        draft = RequirementDraft.objects.get(requirement=requirement)
-        assert RequirementDraftDetail.objects.get(draft=draft, id=detail.id).data == {
-            str(field.id): "v1"
-        }
-
-        rollback_change_id = self.submit(api_client, requirement, reason="回滚").data[
-            "id"
-        ]
-        self.approve(api_client, requirement, rollback_change_id, approver)
-        detail.refresh_from_db()
-        requirement.refresh_from_db()
-        assert detail.data == {str(field.id): "v1"}
-        assert requirement.current_version == 3
-
-    def test_version_rollback_is_blocked_while_a_change_is_under_review(
+    def test_discarding_before_the_first_publish_clears_every_requirement(
         self, api_client
     ):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        _, field, detail = self.seed_content(requirement, "published")
-        self.publish(api_client, requirement, approver)
-
-        assert (
-            api_client.post(self.working_copy_url(requirement)).status_code
-            == status.HTTP_200_OK
-        )
-        draft = RequirementDraft.objects.get(requirement=requirement)
-        draft_detail = RequirementDraftDetail.objects.get(draft=draft, id=detail.id)
-        draft_detail.data = {str(field.id): "pending"}
-        draft_detail.save(update_fields=["data", "updated_at"])
-        submit_response = self.submit(api_client, requirement, reason="待审核变更")
-        assert submit_response.status_code == status.HTTP_201_CREATED
-
-        rollback_response = api_client.post(
-            self.url(
-                "requirement-version-rollback",
-                requirement_id=requirement.id,
-                version=1,
-            )
-        )
-
-        assert rollback_response.status_code == status.HTTP_409_CONFLICT
-        assert rollback_response.data == {
-            "error": (
-                "Withdraw or complete the current review before rolling back "
-                "this requirement."
-            ),
-            "code": "REQUIREMENT_IN_REVIEW",
-        }
-        requirement.refresh_from_db()
-        draft_detail.refresh_from_db()
-        assert requirement.status == RequirementStatus.IN_REVIEW
-        assert requirement.current_version == 1
-        assert draft_detail.data == {str(field.id): "pending"}
-        assert RequirementVersion.objects.filter(requirement=requirement).count() == 1
-
-    def test_version_compare_current_returns_all_diff_groups_and_paginated_details(
-        self, api_client
-    ):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        requirement_type = self.create_requirement_type()
-        field = self.add_field(requirement_type, sort_order=1000)
-        first_detail = self.create_detail(
-            requirement,
-            requirement_type=requirement_type,
-            data={str(field.id): "First"},
-            sort_order=1000,
-        )
-        second_detail = self.create_detail(
-            requirement,
-            requirement_type=requirement_type,
-            data={str(field.id): "Second"},
-            sort_order=2000,
-        )
-        self.publish(api_client, requirement, approver)
-
         api_client.force_authenticate(user=self.owner)
-        assert (
-            api_client.post(self.working_copy_url(requirement)).status_code
-            == status.HTTP_200_OK
-        )
-        assert (
-            api_client.patch(
-                self.url("requirement-detail", pk=requirement.id),
-                {"title": "Compared title"},
-                format="json",
-            ).status_code
-            == status.HTTP_200_OK
-        )
+        type_id = self.create_requirement_type(api_client)
+        ids = self.builtin_ids(api_client, type_id)
+        self.add_requirement(api_client, type_id, ids, "尚未发布")
 
-        # 字段改动走需求类型；产品需求的下一次变更单会把它显示成 schema 变更
-        configuration = api_client.get(self.type_configuration_url(requirement_type)).data
-        client_id = f"compare-field-{uuid4()}"
-        configuration_response = api_client.put(
-            self.type_configuration_url(requirement_type),
-            {
-                "expected_updated_at": configuration["requirement_type"][
-                    "updated_at"
-                ],
-                "fields": [
-                    {
-                        **configuration["fields"][0],
-                        "name": "Renamed summary",
-                    },
-                    {
-                        "client_id": client_id,
-                        "name": "Added field",
-                        "field_type": RequirementFieldType.TEXT,
-                        "is_required": False,
-                        "is_active": True,
-                        "config": {},
-                        "default_value": None,
-                        "children": [],
-                    },
-                ],
-            },
-            format="json",
-        )
-        assert configuration_response.status_code == status.HTTP_200_OK
-        added_field_id = configuration_response.data["created_field_ids"][client_id]
+        response = api_client.delete(self.url("requirement-working-copy"))
 
-        assert (
-            api_client.patch(
-                self.url(
-                    "requirement-detail-item",
-                    requirement_id=requirement.id,
-                    pk=first_detail.id,
-                ),
-                {
-                    "data": {
-                        str(field.id): "First updated",
-                        added_field_id: "Added value",
-                    },
-                    "version": 1,
-                },
-                format="json",
-            ).status_code
-            == status.HTTP_200_OK
-        )
-        assert (
-            api_client.delete(
-                self.url(
-                    "requirement-detail-item",
-                    requirement_id=requirement.id,
-                    pk=second_detail.id,
-                )
-            ).status_code
-            == status.HTTP_204_NO_CONTENT
-        )
-        created_detail_response = api_client.post(
-            self.details_url(requirement),
-            {
-                "requirement_type_id": str(requirement_type.id),
-                "data": {
-                    str(field.id): "Third",
-                    added_field_id: "Created value",
-                },
-            },
-            format="json",
-        )
-        assert created_detail_response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert response.data["outcome"] == "cleared"
+        assert not Requirement.objects.filter(product=self.product).exists()
 
-        change_request_id = self.submit(
-            api_client, requirement, reason="Compare every group"
-        ).data["id"]
-        assert (
-            self.approve(
-                api_client,
-                requirement,
-                change_request_id,
-                approver,
-            ).status_code
-            == status.HTTP_200_OK
-        )
+    def test_version_snapshot_rows_are_paginated_and_carry_merged_data(self, api_client):
         api_client.force_authenticate(user=self.owner)
-
-        compare_url = self.url(
-            "requirement-version-compare-current",
-            requirement_id=requirement.id,
-            version=1,
-        )
-        response = api_client.get(compare_url, {"per_page": 1})
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["from_version"] == 1
-        assert response.data["to_version"] == 2
-        assert response.data["detail_item_count"] == 3
-        assert response.data["total_count"] == 3
-        assert response.data["count"] == 1
-        assert response.data["next_page_results"] is True
-        assert response.data["results"][0]["base_version"] == 1
-        assert response.data["results"][0]["id"].startswith("detail_data:")
-
-        meta_items = response.data["requirement_items"]
-        assert [item["before_snapshot"]["field"] for item in meta_items] == [
-            "title"
-        ]
-        assert meta_items[0]["proposed_snapshot"]["value"] == "Compared title"
-
-        schema_items = response.data["schema_items"]
-        assert {item["change_type"] for item in schema_items} == {
-            RequirementChangeType.CREATE,
-            RequirementChangeType.UPDATE,
-        }
-        assert {item["target_id"] for item in schema_items} == {
-            str(field.id),
-            added_field_id,
-        }
-        assert [item["name"] for item in response.data["to_fields_snapshot"]] == [
-            "Renamed summary",
-            "Added field",
-        ]
-        assert set(response.data["changed_field_ids"]) == {
-            str(field.id),
-            added_field_id,
-        }
-
-        created_only = api_client.get(
-            compare_url,
-            {"change_type": RequirementChangeType.CREATE},
-        )
-        assert created_only.status_code == status.HTTP_200_OK
-        assert created_only.data["detail_item_count"] == 3
-        assert created_only.data["total_count"] == 1
-        assert [item["change_type"] for item in created_only.data["results"]] == [
-            RequirementChangeType.CREATE
-        ]
-
-        invalid_filter = api_client.get(compare_url, {"change_type": "move"})
-        assert invalid_filter.status_code == status.HTTP_400_BAD_REQUEST
-
-        outsider = UserFactory(username=f"version-outsider-{uuid4()}")
-        api_client.force_authenticate(user=outsider)
-        assert api_client.get(compare_url).status_code == status.HTTP_404_NOT_FOUND
-
-    def test_unpublished_requirement_cannot_compare_versions(self, api_client):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        api_client.force_authenticate(user=self.owner)
+        type_id, ids, _, _ = self.publish_first_version(api_client)
 
         response = api_client.get(
-            self.url(
-                "requirement-version-compare-current",
-                requirement_id=requirement.id,
-                version=1,
-            )
-        )
-        assert response.status_code == status.HTTP_409_CONFLICT
-        assert response.data["code"] == "REQUIREMENT_NOT_PUBLISHED"
-
-    def test_version_compare_supports_arbitrary_to_version(self, api_client):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        self.seed_content(requirement, "First")
-        self.publish(api_client, requirement, approver)
-
-        def bump_version(title):
-            api_client.force_authenticate(user=self.owner)
-            assert (
-                api_client.post(self.working_copy_url(requirement)).status_code
-                == status.HTTP_200_OK
-            )
-            assert (
-                api_client.patch(
-                    self.url("requirement-detail", pk=requirement.id),
-                    {"title": title},
-                    format="json",
-                ).status_code
-                == status.HTTP_200_OK
-            )
-            change_request_id = self.submit(api_client, requirement).data["id"]
-            assert (
-                self.approve(
-                    api_client, requirement, change_request_id, approver
-                ).status_code
-                == status.HTTP_200_OK
-            )
-            api_client.force_authenticate(user=self.owner)
-
-        bump_version("Second title")
-        bump_version("Third title")
-        requirement.refresh_from_db()
-        assert requirement.current_version == 3
-
-        compare_url = self.url(
-            "requirement-version-compare",
-            requirement_id=requirement.id,
-            version=1,
+            self.url("requirement-version-requirements", version=1), {"per_page": 1}
         )
 
-        # 缺省 to_version 时与当前已发布版本对比
-        default_response = api_client.get(compare_url)
-        assert default_response.status_code == status.HTTP_200_OK
-        assert default_response.data["from_version"] == 1
-        assert default_response.data["to_version"] == 3
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert response.data["total_count"] == 2
+        assert len(response.data["results"]) == 1
+        # 快照里的 data 是合并态，与网格读到的一行同形
+        assert ids["title"] in response.data["results"][0]["data"]
 
-        # 显式指定任意目标版本
-        explicit_response = api_client.get(compare_url, {"to_version": 2})
-        assert explicit_response.status_code == status.HTTP_200_OK
-        assert explicit_response.data["from_version"] == 1
-        assert explicit_response.data["to_version"] == 2
-        title_items = explicit_response.data["requirement_items"]
-        assert [item["before_snapshot"]["field"] for item in title_items] == [
-            "title"
-        ]
-        assert title_items[0]["proposed_snapshot"]["value"] == "Second title"
-
-        # 允许反向对比（v2 → v1）
-        reverse_response = api_client.get(
-            self.url(
-                "requirement-version-compare",
-                requirement_id=requirement.id,
-                version=2,
-            ),
-            {"to_version": 1},
-        )
-        assert reverse_response.status_code == status.HTTP_200_OK
-        assert reverse_response.data["from_version"] == 2
-        assert reverse_response.data["to_version"] == 1
-
-        # 同版本对比、非法与缺失的目标版本
-        assert (
-            api_client.get(compare_url, {"to_version": 1}).status_code
-            == status.HTTP_400_BAD_REQUEST
-        )
-        assert (
-            api_client.get(compare_url, {"to_version": "abc"}).status_code
-            == status.HTTP_400_BAD_REQUEST
-        )
-        assert (
-            api_client.get(compare_url, {"to_version": 99}).status_code
-            == status.HTTP_404_NOT_FOUND
-        )
-
-    def test_requirement_payload_exposes_approval_state(self, api_client):
-        approver = self.add_member()
-        requirement = self.create_requirement(approver)
-        self.seed_content(requirement)
+    def test_rollback_loads_the_snapshot_into_a_working_copy(self, api_client):
         api_client.force_authenticate(user=self.owner)
-        change_request_id = self.submit(api_client, requirement).data["id"]
-
-        list_url = reverse("requirements", kwargs={"slug": self.workspace.slug})
-        owner_view = api_client.get(list_url, {"product_id": str(self.product.id)})
-        payload = next(
-            item for item in owner_view.data if str(item["id"]) == str(requirement.id)
+        type_id, ids, first, _ = self.publish_first_version(api_client)
+        api_client.post(f"{self.url('requirement-working-copy')}", format="json")
+        api_client.patch(
+            f"{self.requirements_url()}{first['id']}/",
+            {"data": {ids["title"]: "v2 标题", ids["description"]: None}, "version": first["version"]},
+            format="json",
         )
-        assert payload["current_version"] is None
-        assert payload["pending_change_request_id"] == str(change_request_id)
-        assert payload["can_approve"] is False
+        self.approve(api_client, self.submit(api_client, reason="发 v2")["id"])
+        assert Requirement.objects.get(id=first["id"]).title == "v2 标题"
 
-        api_client.force_authenticate(user=approver)
-        approver_view = api_client.get(list_url, {"product_id": str(self.product.id)})
-        approver_payload = next(
-            item
-            for item in approver_view.data
-            if str(item["id"]) == str(requirement.id)
+        response = api_client.post(
+            self.url("requirement-version-rollback", version=1), format="json"
         )
-        assert approver_payload["can_approve"] is True
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert response.data["baseline"]["status"] == "draft"
+        # 回滚只灌工作副本，正式表要等下一次审批通过
+        assert Requirement.objects.get(id=first["id"]).title == "v2 标题"
+        rows = api_client.get(self.requirements_url()).data["results"]
+        assert {row["title"] for row in rows} == {"短信验证码登录", "扫码登录"}
+
+    def test_only_the_submitter_can_withdraw_a_change_request(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id, ids, first, _ = self.publish_first_version(api_client)
+        api_client.post(f"{self.url('requirement-working-copy')}", format="json")
+        api_client.patch(
+            f"{self.requirements_url()}{first['id']}/",
+            {"data": {ids["title"]: "待撤回", ids["description"]: None}, "version": first["version"]},
+            format="json",
+        )
+        change_request = self.submit(api_client, reason="待撤回")
+
+        api_client.force_authenticate(user=self.approver)
+        denied = api_client.post(
+            self.url("requirement-change-request-cancel", pk=change_request["id"]),
+            format="json",
+        )
+        assert denied.status_code == status.HTTP_403_FORBIDDEN, denied.data
+
+        api_client.force_authenticate(user=self.owner)
+        allowed = api_client.post(
+            self.url("requirement-change-request-cancel", pk=change_request["id"]),
+            format="json",
+        )
+        assert allowed.status_code == status.HTTP_200_OK, allowed.data
+        assert allowed.data["status"] == "cancelled"
+        assert RequirementBaseline.objects.get(product=self.product).status == "draft"

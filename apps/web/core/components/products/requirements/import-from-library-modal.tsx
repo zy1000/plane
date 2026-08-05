@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Library, Search, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TRequirementDetail, TRequirementDetailImportPayload } from "@plane/types";
+import type { TRequirement, TRequirementImportPayload } from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { LeafValue } from "@/components/requirements/requirement-grid-shared";
@@ -16,9 +16,9 @@ import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries
  *
  * 左侧常驻标准库列表，右侧是所选库的条目；勾选按条目 ID 存在一个 Map 里，切库时不清空，
  * 所以可以跨库攒一批再一次性导入。接口一次只收一个 library_id，跨库的部分由调用方按库
- * 分组后顺序调用（见 useRequirementDetails.importFromLibraries）。
+ * 分组后顺序调用（见 useProductRequirements.importFromLibraries）。
  *
- * 刻意不复用 RequirementDetailGrid：它的勾选是接删除的，还自带编辑工具栏与 bulk-save
+ * 刻意不复用 RequirementGrid：它的勾选是接删除的，还自带编辑工具栏与 bulk-save
  * 契约。这里只复用它的展示部件 LeafValue，让列的呈现和标准库页保持一致。
  */
 type TProps = {
@@ -32,7 +32,7 @@ type TProps = {
    */
   shouldPrefetch?: boolean;
   onClose: () => void;
-  onImport: (payloads: TRequirementDetailImportPayload[]) => Promise<unknown>;
+  onImport: (payloads: TRequirementImportPayload[]) => Promise<unknown>;
 };
 
 export const RequirementImportFromLibraryModal = ({
@@ -47,7 +47,7 @@ export const RequirementImportFromLibraryModal = ({
   const [libraryId, setLibraryId] = useState<string | null>(null);
   const [librarySearch, setLibrarySearch] = useState("");
   // 存整行而不只是 ID：跨库、跨分页之后还要按 library_id 分组提交
-  const [selected, setSelected] = useState<Map<string, TRequirementDetail>>(new Map());
+  const [selected, setSelected] = useState<Map<string, TRequirement>>(new Map());
   const [error, setError] = useState<string | null>(null);
 
   const { libraries, isLoading: isLibrariesLoading } = useRequirementLibraries(workspaceSlug);
@@ -95,10 +95,10 @@ export const RequirementImportFromLibraryModal = ({
   const activeLibrary = libraries.find((library) => library.id === libraryId);
   const fields = itemsStore.configuration?.fields ?? [];
   const visibleFields = useMemo(() => fields.filter((field) => field.is_active).slice(0, 3), [fields]);
-  const items = itemsStore.detailsPage.results;
+  const items = itemsStore.requirementsPage.results;
   const allOnPageSelected = items.length > 0 && items.every((item) => selected.has(item.id));
 
-  const toggleItem = (item: TRequirementDetail) =>
+  const toggleItem = (item: TRequirement) =>
     setSelected((current) => {
       const next = new Map(current);
       if (next.has(item.id)) next.delete(item.id);
@@ -282,7 +282,7 @@ export const RequirementImportFromLibraryModal = ({
               </div>
 
               <div className="min-h-0 flex-1 overflow-auto">
-                {itemsStore.isDetailsLoading && !items.length ? (
+                {itemsStore.isRequirementsLoading && !items.length ? (
                   <div className="p-4">
                     <Loader>
                       <Loader.Item height="160px" />

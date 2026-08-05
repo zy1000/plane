@@ -16,8 +16,8 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
 import { useRequirementLibrariesContext } from "./context";
-import { getRequirementTypePath } from "../navigation";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const SKELETON_COLUMNS = ["select", "name", "requirement_type", "description", "fields", "requirements", "updated", "actions"];
@@ -371,7 +371,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                         </td>
                         <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
                           <Link
-                            to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
+                            to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                             className="inline-block max-w-full truncate rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
                           >
                             {library.requirement_type_detail?.name}

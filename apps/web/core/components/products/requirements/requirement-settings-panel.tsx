@@ -6,9 +6,10 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { RequirementApprovalSettings } from "./requirement-approval-settings";
 import { RequirementSettingsCard, RequirementStatusSummary } from "./requirement-settings-layout";
 
+/**
+ * 基线配置的草稿。标题与描述不在这里 —— 它们是每条需求自己的字段，在网格里编辑。
+ */
 export type TRequirementSettingsDraft = {
-  title: string;
-  description_html: string | null;
   owner_id: string;
   status: TRequirementStatus;
   approver_ids: string[];
@@ -76,20 +77,6 @@ export function RequirementSettingsPanel({
               title={t("workspace_products.requirements.configuration.basic")}
             >
               <div className="grid gap-x-6 gap-y-5 lg:grid-cols-2">
-                <label className="block">
-                  <span className="mb-2 block text-12 font-medium text-primary">
-                    {t("workspace_products.requirements.fields.title")}
-                    <span className="ml-0.5 text-danger-primary">*</span>
-                  </span>
-                  <input
-                    value={draft.title}
-                    onChange={(event) => updateDraft({ title: event.target.value })}
-                    maxLength={255}
-                    className="h-10 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong focus:ring-2 focus:ring-accent-subtle"
-                    placeholder={t("workspace_products.requirements.fields.title_placeholder")}
-                  />
-                </label>
-
                 <div>
                   <span className="mb-2 block text-12 font-medium text-primary">
                     {t("workspace_products.requirements.fields.owner")}
@@ -110,20 +97,6 @@ export function RequirementSettingsPanel({
                     />
                   </div>
                 </div>
-
-                <label className="block lg:col-span-2">
-                  <span className="mb-2 block text-12 font-medium text-primary">
-                    {t("workspace_products.requirements.fields.description")}
-                  </span>
-                  <textarea
-                    value={draft.description_html ?? ""}
-                    onChange={(event) => updateDraft({ description_html: event.target.value })}
-                    rows={3}
-                    maxLength={1000}
-                    className="min-h-20 w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2.5 text-13 leading-5 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong focus:ring-2 focus:ring-accent-subtle"
-                    placeholder={t("workspace_products.requirements.fields.description_placeholder")}
-                  />
-                </label>
               </div>
             </RequirementSettingsCard>
 

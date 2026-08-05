@@ -9,12 +9,12 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { IUserLite, TRequirement } from "@plane/types";
+import type { IUserLite, TRequirementBaseline } from "@plane/types";
 import { AlertModalCore, CustomSelect, Loader } from "@plane/ui";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { useRequirementVersions } from "@/hooks/store/use-requirement-versions";
-import { MetaDiffTable, SchemaDiffList } from "./change-diff-groups";
-import { DetailDiffGrid } from "./detail-diff-grid";
+import { BaselineDiffTable, SchemaDiffList } from "./change-diff-groups";
+import { RequirementDiffGrid } from "./requirement-diff-grid";
 import { PILL_BASE } from "./styles";
 import { useChangeItemFilters } from "./use-change-item-filters";
 import { useScrollSpy } from "./use-scroll-spy";
@@ -31,12 +31,13 @@ type TComparisonSelection = {
 
 type TProps = {
   workspaceSlug: string;
-  requirement: TRequirement;
+  productId: string;
+  baseline: TRequirementBaseline;
   members: IUserLite[];
-  onRequirementUpdate: (requirement: TRequirement) => void;
+  onBaselineUpdate: (baseline: TRequirementBaseline) => void;
 };
 
-export function VersionHistory({ workspaceSlug, requirement, members, onRequirementUpdate }: TProps) {
+export function VersionHistory({ workspaceSlug, productId, baseline, members, onBaselineUpdate }: TProps) {
   const { t } = useTranslation();
   const {
     changeType,
@@ -48,11 +49,11 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   } = useChangeItemFilters();
   const store = useRequirementVersions({
     workspaceSlug,
-    requirementId: requirement.id,
-    currentVersion: requirement.current_version,
+    productId,
+    currentVersion: baseline.current_version,
     changeType,
     requirementTypeId: requestedRequirementTypeId,
-    onRequirementUpdate,
+    onBaselineUpdate,
   });
   const [pendingRollback, setPendingRollback] = useState<number | null>(null);
   const [comparisonSelection, setComparisonSelection] = useState<TComparisonSelection | null>(null);
@@ -67,9 +68,9 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   const selectedVersion = store.selectedVersion;
   const selectedVersionItem =
     store.versionDetail ?? versions.find((version) => version.version === selectedVersion) ?? null;
-  const isCurrentVersion = selectedVersion !== null && selectedVersion === requirement.current_version;
+  const isCurrentVersion = selectedVersion !== null && selectedVersion === baseline.current_version;
   const isComparing = store.compareVersion !== null;
-  const isRollbackBlocked = requirement.status === "in_review";
+  const isRollbackBlocked = baseline.status === "in_review";
   const snapshotFields = store.versionDetail?.fields_snapshot ?? [];
   const snapshotFieldCount = snapshotFields.reduce((count, field) => count + 1 + field.children.length, 0);
   const comparison = store.comparisonPage;
@@ -96,11 +97,11 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
   }, [activeRequirementTypeId, isRequirementTypeStatsReady, requestedRequirementTypeId, setRequirementTypeId]);
 
   const comparisonSectionCounts: Record<TComparisonSection, number> = {
-    basic: comparison?.requirement_items.length ?? 0,
+    basic: comparison?.baseline_items.length ?? 0,
     schema: comparison?.schema_items.length ?? 0,
-    detail: comparison?.detail_item_count ?? 0,
+    detail: comparison?.requirement_item_count ?? 0,
   };
-  const comparisonKey = `${selectedVersion ?? ""}:${comparison?.to_version ?? requirement.current_version ?? ""}`;
+  const comparisonKey = `${selectedVersion ?? ""}:${comparison?.to_version ?? baseline.current_version ?? ""}`;
   const defaultComparisonSection =
     COMPARISON_SECTIONS.find((section) => comparisonSectionCounts[section] > 0) ?? "basic";
   const activeComparisonSection =
@@ -211,7 +212,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
             <span aria-hidden className="bg-subtle absolute top-6 bottom-6 left-[1.4rem] w-px" />
             {versions.map((version) => {
               const isSelected = version.version === selectedVersion;
-              const isCurrent = version.version === requirement.current_version;
+              const isCurrent = version.version === baseline.current_version;
               return (
                 <li key={version.id} className="relative flex gap-3">
                   <span
@@ -232,7 +233,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                       store.selectVersion(version.version);
                       // 点中当前版本或对比目标时退出对比：前者保持「从历史版本发起对比」的
                       // 入口约束，后者避免 from == to 的无效请求
-                      if (version.version === requirement.current_version || version.version === store.compareVersion)
+                      if (version.version === baseline.current_version || version.version === store.compareVersion)
                         store.setCompareVersion(null);
                     }}
                     className={cn(
@@ -305,7 +306,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                   {isComparing
                     ? t("workspace_products.requirements.version.comparing", {
                         from: `v${selectedVersion ?? ""}`,
-                        to: `v${comparison?.to_version ?? store.compareVersion ?? requirement.current_version ?? ""}`,
+                        to: `v${comparison?.to_version ?? store.compareVersion ?? baseline.current_version ?? ""}`,
                       })
                     : t("workspace_products.requirements.version.read_only")}
                 </span>
@@ -334,10 +335,10 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                   <Button
                     variant={isComparing ? "primary" : "secondary"}
                     size="sm"
-                    disabled={isCurrentVersion || requirement.current_version === null}
+                    disabled={isCurrentVersion || baseline.current_version === null}
                     onClick={() => {
                       setComparisonSelection(null);
-                      store.setCompareVersion(isComparing ? null : requirement.current_version);
+                      store.setCompareVersion(isComparing ? null : baseline.current_version);
                     }}
                   >
                     <ArrowLeftRight className="size-3.5" />
@@ -368,7 +369,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                       <CustomSelect.Option key={version.id} value={version.version}>
                         <span className="flex items-center gap-1.5">
                           v{version.version}
-                          {version.version === requirement.current_version && (
+                          {version.version === baseline.current_version && (
                             <span className={cn(PILL_BASE, "bg-accent-subtle text-accent-primary")}>
                               {t("workspace_products.requirements.version.current")}
                             </span>
@@ -378,7 +379,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                     ))}
                 </CustomSelect>
               )}
-              {requirement.can_edit && (
+              {baseline.can_edit && (
                 <Tooltip
                   tooltipContent={t(
                     isRollbackBlocked
@@ -458,7 +459,7 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                 {
                   id: "version-details",
                   label: t("workspace_products.requirements.version.sections.details_with_count", {
-                    count: store.versionDetail?.detail_count ?? 0,
+                    count: store.versionDetail?.requirement_count ?? 0,
                   }),
                 },
               ].map((item) => (
@@ -512,14 +513,14 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
               ) : comparison ? (
                 activeComparisonSection === "basic" ? (
                   <div className="p-4 md:p-6">
-                    <MetaDiffTable items={comparison.requirement_items} members={members} />
+                    <BaselineDiffTable items={comparison.baseline_items} members={members} />
                   </div>
                 ) : activeComparisonSection === "schema" ? (
                   <div className="p-4 md:p-6">
                     <SchemaDiffList items={comparison.schema_items} requirementTypes={requirementTypeStats} />
                   </div>
                 ) : (
-                  <DetailDiffGrid
+                  <RequirementDiffGrid
                     workspaceSlug={workspaceSlug}
                     fields={comparisonFields}
                     changedFieldIds={comparison.changed_field_ids}
@@ -575,15 +576,15 @@ export function VersionHistory({ workspaceSlug, requirement, members, onRequirem
                 workspaceSlug={workspaceSlug}
                 versionDetail={store.versionDetail}
                 members={members}
-                rows={store.detailsPage.results}
-                totalCount={store.detailsPage.total_count ?? 0}
-                isLoading={store.isDetailsLoading}
-                error={store.detailsError}
+                rows={store.snapshotPage.results}
+                totalCount={store.snapshotPage.total_count ?? 0}
+                isLoading={store.isSnapshotLoading}
+                error={store.snapshotError}
                 perPage={store.detailsPerPage}
-                nextCursor={store.detailsPage.next_cursor}
-                prevCursor={store.detailsPage.prev_cursor}
-                nextPageResults={store.detailsPage.next_page_results}
-                prevPageResults={store.detailsPage.prev_page_results}
+                nextCursor={store.snapshotPage.next_cursor}
+                prevCursor={store.snapshotPage.prev_cursor}
+                nextPageResults={store.snapshotPage.next_page_results}
+                prevPageResults={store.snapshotPage.prev_page_results}
                 activeRequirementTypeId={activeRequirementTypeId}
                 onTemplateChange={setRequirementTypeId}
                 onPerPageChange={store.setDetailsPerPage}
