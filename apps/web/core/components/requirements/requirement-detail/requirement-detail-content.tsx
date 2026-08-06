@@ -20,16 +20,18 @@ import {
   BuiltinCellEditor,
   BuiltinCellValue,
   REQUIREMENT_BUILTIN_COLUMNS,
+  shouldShowRequirementStatus,
 } from "@/components/requirements/requirement-builtin-fields";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { RequirementChangeTrail } from "./requirement-change-trail";
 import { RequirementModifiedBanner } from "./requirement-modified-banner";
+import { RequirementPropertyBar } from "./requirement-property-bar";
 import { RequirementSubformSection } from "./requirement-subform-section";
 import { RequirementVersionHistory } from "./requirement-version-history";
 
-/** 标题与描述在主区自成一段，其余六个内置列走属性区（抽屉的横条 / 整页的右栏） */
+/** 标题与描述在主区自成一段，其余六个内置列走属性区（抽屉的属性条 / 整页的右栏） */
 const PROPERTY_COLUMN_KEYS: TRequirementBuiltinKey[] = [
   "status",
   "priority",
@@ -49,7 +51,7 @@ type TProps = {
   subRequirements: TRequirement[];
   trail: TRequirementTrailEntry[];
   readOnly: boolean;
-  /** drawer 把属性排成横条，page 把它交给右栏渲染 */
+  /** drawer 把属性排成属性条，page 把它交给右栏渲染 */
   layout: "drawer" | "page";
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
@@ -58,7 +60,7 @@ type TProps = {
   onRolledBack?: () => void;
 };
 
-/** 标签 + 值的两列排布，标准字段与数据字段共用 */
+/** 标签 + 值的两列排布，全部叶子字段（非 form）共用同一个网格，值列才有统一的 x 起点 */
 const FieldRows = ({
   fields,
   requirement,
@@ -131,29 +133,24 @@ const RequirementApprovalBadge = ({ requirement }: { requirement: TRequirement }
   );
 };
 
-const SectionHeading = ({ label, count }: { label: string; count?: number }) => (
-  <div className="flex items-center gap-2 text-13 font-medium text-primary">
-    <span>{label}</span>
-    {count !== undefined && <span className="text-12 font-normal text-tertiary tabular-nums">{count}</span>}
-  </div>
+const SectionHeading = ({ label }: { label: string }) => (
+  <div className="text-13 font-medium text-primary">{label}</div>
 );
 
 /** 一个区块：标题与内容贴紧，区块之间靠外层的 gap 拉开 */
-const Section = ({ label, count, children }: { label?: string; count?: number; children: React.ReactNode }) => (
+const Section = ({ label, children }: { label?: string; children: React.ReactNode }) => (
   <section className="flex flex-col gap-2.5">
-    {label && <SectionHeading label={label} count={count} />}
+    {label && <SectionHeading label={label} />}
     {children}
   </section>
 );
 
 /**
- * 内置属性的标签/值网格。抽屉与整页右栏共用同一套排布，只有列数不同 ——
- * 同一个字段在两个地方长得一样，用户不必学两遍。
+ * 内置属性的标签/值网格，只服务整页右栏（抽屉里是 RequirementPropertyBar 属性条）。
  */
 const PropertyGrid = ({
   requirement,
   readOnly,
-  columns,
   parentScope,
   resolveParentTitle,
   onPatch,
@@ -161,7 +158,6 @@ const PropertyGrid = ({
 }: {
   requirement: TRequirement;
   readOnly: boolean;
-  columns: 1 | 2;
   parentScope: { workspaceSlug: string; productId: string };
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
@@ -169,14 +165,7 @@ const PropertyGrid = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <div
-      className={cn(
-        "grid items-center gap-x-4 gap-y-2.5",
-        columns === 2
-          ? "grid-cols-[minmax(4rem,auto)_minmax(0,1fr)] md:grid-cols-[minmax(4rem,auto)_minmax(0,1fr)_minmax(4rem,auto)_minmax(0,1fr)] md:gap-x-6"
-          : "grid-cols-[minmax(4rem,auto)_minmax(0,1fr)]"
-      )}
-    >
+    <div className="grid grid-cols-[minmax(4rem,auto)_minmax(0,1fr)] items-center gap-x-4 gap-y-2.5">
       {leadingRow && (
         <>
           <span className="text-12 text-tertiary">{leadingRow.label}</span>
@@ -186,10 +175,7 @@ const PropertyGrid = ({
       {PROPERTY_COLUMN_KEYS.map((columnKey) => {
         const column = REQUIREMENT_BUILTIN_COLUMNS.find((item) => item.key === columnKey);
         if (!column) return null;
-        // draft/confirmed 与标题旁的审批胶囊说的是同一件事，两个「已确认」并排只会让人
-        // 分不清哪个才是评审结论。等 status 变成派生的研发阶段（未开始/研发中/已发布…）
-        // 之后，它就不再与审批轴重复，这个条件可以去掉。
-        if (columnKey === "status" && (requirement.status === "draft" || requirement.status === "confirmed")) {
+        if (columnKey === "status" && !shouldShowRequirementStatus(requirement.status)) {
           return null;
         }
         return (
@@ -217,7 +203,8 @@ const PropertyGrid = ({
 
 /**
  * 一条需求的详情主体。抽屉与整页共用，差别只在 layout：
- * 抽屉把六个内置属性排成横条压在标题下，整页把它们交给右栏（见 RequirementDetailProperties）。
+ * 抽屉把内置属性排成一行属性条压在标题下（见 RequirementPropertyBar），
+ * 整页把它们交给右栏（见 RequirementDetailProperties）。
  */
 export const RequirementDetailContent = (props: TProps) => {
   const {
@@ -258,14 +245,9 @@ export const RequirementDetailContent = (props: TProps) => {
     () => (requirementType?.fields ?? []).filter((field) => field.is_active),
     [requirementType]
   );
-  const standardFields = useMemo(
-    () => activeFields.filter((field) => field.field_type !== "form" && field.field_category !== "data"),
-    [activeFields]
-  );
-  const dataFields = useMemo(
-    () => activeFields.filter((field) => field.field_type !== "form" && field.field_category === "data"),
-    [activeFields]
-  );
+  // 叶子字段按模板顺序排成单一字段流。field_category（标准/数据）是模板编辑器的
+  // 管理概念，详情页按它分区只会让用户猜「这个字段为什么归在这一类」。
+  const leafFields = useMemo(() => activeFields.filter((field) => field.field_type !== "form"), [activeFields]);
   const formFields = useMemo(() => activeFields.filter((field) => field.field_type === "form"), [activeFields]);
 
   const parentScope = useMemo(() => ({ workspaceSlug, productId }), [productId, workspaceSlug]);
@@ -291,7 +273,7 @@ export const RequirementDetailContent = (props: TProps) => {
 
         {readOnly ? (
           <h1
-            className={cn("font-semibold text-balance text-primary", isDrawer ? "text-18 leading-snug" : "text-22 leading-tight")}
+            className={cn("font-semibold text-balance text-primary", isDrawer ? "text-20 leading-snug" : "text-22 leading-tight")}
           >
             {requirement.title || t("requirement_detail.untitled")}
           </h1>
@@ -308,7 +290,7 @@ export const RequirementDetailContent = (props: TProps) => {
             className={cn(
               "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-semibold text-primary",
               "outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1",
-              isDrawer ? "text-18 leading-snug" : "text-22 leading-tight"
+              isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
             )}
           />
         )}
@@ -328,6 +310,18 @@ export const RequirementDetailContent = (props: TProps) => {
           readOnly={readOnly}
           onDiscarded={onRolledBack}
         />
+
+        {/* 抽屉没有右栏，属性条压在标题下、描述之上 —— 与工作项 peek 的属性条同位；
+            整页交给右栏（见 RequirementDetailProperties） */}
+        {isDrawer && (
+          <RequirementPropertyBar
+            requirement={requirement}
+            requirementType={requirementType}
+            readOnly={readOnly}
+            parentScope={parentScope}
+            onPatch={onPatch}
+          />
+        )}
 
         {/* 描述紧跟标题，不给它单独的小标题 —— 位置已经说明了它是什么。
             限宽到 42rem：正文行长超过这个数就开始需要用手指指着读了 */}
@@ -360,63 +354,32 @@ export const RequirementDetailContent = (props: TProps) => {
         </div>
       </header>
 
-      {/* 抽屉没有右栏，属性排成两列压在标题下；整页交给右栏（见 RequirementDetailProperties） */}
-      {isDrawer && (
-        <div className="border-y border-subtle py-4">
-          <PropertyGrid
-            requirement={requirement}
-            readOnly={readOnly}
-            columns={2}
-            parentScope={parentScope}
-            resolveParentTitle={resolveParentTitle}
-            onPatch={onPatch}
-          />
-        </div>
-      )}
-
-      {standardFields.length > 0 && (
-        <Section label={t("requirement_detail.standard_fields")} count={standardFields.length}>
-          <FieldRows
-            fields={standardFields}
-            requirement={requirement}
-            workspaceSlug={workspaceSlug}
-            readOnly={readOnly}
-            onChange={commitData}
-            onUpload={uploadAsset}
-          />
-        </Section>
-      )}
-
-      {dataFields.length > 0 && (
-        <Section label={t("requirement_detail.data_fields")} count={dataFields.length}>
-          <FieldRows
-            fields={dataFields}
-            requirement={requirement}
-            workspaceSlug={workspaceSlug}
-            readOnly={readOnly}
-            onChange={commitData}
-            onUpload={uploadAsset}
-          />
-        </Section>
+      {leafFields.length > 0 && (
+        <FieldRows
+          fields={leafFields}
+          requirement={requirement}
+          workspaceSlug={workspaceSlug}
+          readOnly={readOnly}
+          onChange={commitData}
+          onUpload={uploadAsset}
+        />
       )}
 
       {formFields.length > 0 && (
-        <Section label={t("requirement_detail.subform.label")} count={formFields.length}>
-          <RequirementSubformSection
-            forms={formFields}
-            data={requirement.data}
-            workspaceSlug={workspaceSlug}
-            readOnly={readOnly}
-            defaultOpenCount={layout === "page" ? 2 : 1}
-            storageKey={`requirement:subforms:${requirement.requirement_type_id}`}
-            onChange={commitData}
-            onUpload={uploadAsset}
-          />
-        </Section>
+        <RequirementSubformSection
+          forms={formFields}
+          data={requirement.data}
+          workspaceSlug={workspaceSlug}
+          readOnly={readOnly}
+          defaultOpenCount={layout === "page" ? 2 : 1}
+          storageKey={`requirement:subforms:${requirement.requirement_type_id}`}
+          onChange={commitData}
+          onUpload={uploadAsset}
+        />
       )}
 
       {subRequirements.length > 0 && (
-        <Section label={t("requirement_detail.sub_requirements")} count={subRequirements.length}>
+        <Section label={t("requirement_detail.sub_requirements")}>
           {/* 一个外框 + 分隔线，而不是 N 张小卡片 */}
           <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
             {subRequirements.map((child) => (
@@ -491,7 +454,6 @@ export const RequirementDetailProperties = ({
       <PropertyGrid
         requirement={requirement}
         readOnly={readOnly}
-        columns={1}
         parentScope={parentScope}
         resolveParentTitle={resolveParentTitle}
         onPatch={onPatch}

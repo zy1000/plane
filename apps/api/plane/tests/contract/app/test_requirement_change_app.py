@@ -778,6 +778,42 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
         assert RequirementVersion.objects.filter(target_id=row["id"]).count() == 2
         assert self.fetch_requirement(api_client, row["id"])["approval_state"] == "modified"
 
+    def test_rollback_to_the_approved_version_returns_to_approved(self, api_client):
+        """「放弃改动」之后行必须回到已通过态。
+
+        挂在「已改动·待提交」上的话，点提交会被 REQUIREMENT_NO_CHANGES 打回 —— 提示说
+        回滚成功、状态说还有未提交的改动、提交又说没有改动，三句话互相打架。
+        """
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        self.configure_approver(api_client)
+        approved = self.approve_one(api_client, type_id, "第一版")
+        self.patch_requirement(api_client, approved, "改错了")
+
+        response = self.rollback(api_client, approved["id"], 1)
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        row = self.fetch_requirement(api_client, approved["id"])
+        assert row["title"] == "第一版"
+        assert row["approval_state"] == "approved"
+
+    def test_rollback_to_an_older_version_still_needs_review(self, api_client):
+        """回到的不是已通过那一版，内容就确实与已批准的不同 —— 仍要走评审。"""
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        self.configure_approver(api_client)
+        approved = self.approve_one(api_client, type_id, "第一版")
+        current = self.fetch_requirement(api_client, approved["id"])
+        self.patch_requirement(api_client, current, "第二版")
+        self.act(api_client, self.submit_ok(api_client, [approved["id"]])["id"])
+
+        self.rollback(api_client, approved["id"], 1)
+
+        row = self.fetch_requirement(api_client, approved["id"])
+        assert row["title"] == "第一版"
+        assert row["approval_state"] == "modified"
+        assert row["can_submit_review"] is True
+
     def test_rolled_back_content_can_be_resubmitted(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)

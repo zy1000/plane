@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Combobox } from "@headlessui/react";
 import { usePopper } from "react-popper";
+import type { LucideIcon } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, SearchIcon } from "@plane/propel/icons";
@@ -23,6 +24,10 @@ type Props = {
   /** 排除自身：一行不能做自己的父项 */
   excludeId?: string;
   buttonClassName?: string;
+  /** 按钮文字的字号/颜色。缺省 text-14 + primary/placeholder（网格单元格的形态） */
+  buttonTextClassName?: string;
+  /** 按钮前置图标。属性条里用它表意，网格单元格里没有位置给图标 */
+  icon?: LucideIcon;
   disabled?: boolean;
 };
 
@@ -42,6 +47,8 @@ export const RequirementParentDropdown = ({
   onChange,
   excludeId,
   buttonClassName,
+  buttonTextClassName,
+  icon: Icon,
   disabled = false,
 }: Props) => {
   const { t } = useTranslation();
@@ -117,7 +124,14 @@ export const RequirementParentDropdown = ({
         onClick={() => setIsOpen((previous) => !previous)}
         className={cn("flex w-full min-w-0 items-center rounded-md text-left", buttonClassName)}
       >
-        <span className={selectedRow ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
+        {Icon && <Icon className="size-3.5 shrink-0 text-tertiary" />}
+        <span
+          className={
+            buttonTextClassName
+              ? cn("truncate", buttonTextClassName)
+              : cn("truncate text-14", selectedRow ? "text-primary" : "text-placeholder")
+          }
+        >
           {selectedRow?.title || t("requirement_fields.builtin.select_parent")}
         </span>
       </button>

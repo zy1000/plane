@@ -51,7 +51,8 @@ export const RequirementModifiedBanner = ({
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
-        message: t("requirement_detail.versions.rollback_done", { version: approvedVersion }),
+        // 这里回到的就是已通过的那一版，没有什么要「重新提交」的
+        message: t("requirement_detail.modified_banner.discarded", { version: approvedVersion }),
       });
       setIsConfirmOpen(false);
       setIsDiffOpen(false);

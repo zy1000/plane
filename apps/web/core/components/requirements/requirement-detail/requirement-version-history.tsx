@@ -54,7 +54,13 @@ export const RequirementVersionHistory = ({
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
-        message: t("requirement_detail.versions.rollback_done", { version: versionToRollback }),
+        // 回到已通过的那一版就是「放弃改动」，没有什么要重新提交的；回到更早的版本才要
+        message: t(
+          versionToRollback === approvedVersion
+            ? "requirement_detail.modified_banner.discarded"
+            : "requirement_detail.versions.rollback_done",
+          { version: versionToRollback }
+        ),
       });
       onRolledBack?.();
     } catch (rollbackError) {

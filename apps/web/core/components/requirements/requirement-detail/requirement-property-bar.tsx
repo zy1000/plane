@@ -1,0 +1,146 @@
+"use client";
+
+import { CircleDot, GitBranch } from "lucide-react";
+import { useTranslation } from "@plane/i18n";
+import type {
+  TRequirement,
+  TRequirementBuiltinValues,
+  TRequirementPriority,
+  TRequirementTypeSchema,
+} from "@plane/types";
+import { cn, renderFormattedPayloadDate } from "@plane/utils";
+import { DateDropdown } from "@/components/dropdowns/date";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { PriorityDropdown } from "@/components/dropdowns/priority";
+import { RequirementParentDropdown } from "../requirement-parent-dropdown";
+import { shouldShowRequirementStatus } from "../requirement-builtin-fields";
+
+type TProps = {
+  requirement: TRequirement;
+  requirementType: TRequirementTypeSchema | null;
+  readOnly: boolean;
+  /** 父项选择器的检索范围 */
+  parentScope: { workspaceSlug: string; productId: string };
+  onPatch: (patch: { builtin?: Partial<TRequirementBuiltinValues> }) => Promise<unknown>;
+};
+
+/**
+ * 抽屉标题正下方的属性条：类型、状态、优先级、负责人、起止日期、父项排成一行。
+ *
+ * 词汇与工作项 peek 的 PeekOverviewCorePropertyBar 对齐 —— 透明下拉、竖分隔线、
+ * 图标表意（优先级图标 / 头像 / 日历），不写文字标签。同一个产品里同一类信息
+ * 不该有两种读法；标签-值栅格留给整页右栏（RequirementDetailProperties）。
+ */
+export const RequirementPropertyBar = (props: TProps) => {
+  const { requirement, requirementType, readOnly, parentScope, onPatch } = props;
+  const { t } = useTranslation();
+
+  const patch = (builtin: Partial<TRequirementBuiltinValues>) => void onPatch({ builtin });
+
+  // 与工作项属性条同款的分格：首格贴齐标题文本起点，其余格带竖分隔线
+  const fieldShell = (isFirst: boolean) =>
+    cn("flex min-h-7 min-w-0 flex-1 items-stretch", !isFirst && "border-l border-subtle pl-2.5");
+
+  return (
+    <div className="flex w-full min-w-0 flex-nowrap items-stretch text-body-xs-medium">
+      {/* 类型是这条需求的身份锚点（需求没有工作项那样的编号），恒占首格 */}
+      <div className={fieldShell(true)}>
+        <div className="flex h-7 min-w-0 items-center text-body-xs-medium leading-5 text-secondary">
+          <span className="truncate">{requirementType?.name ?? "—"}</span>
+        </div>
+      </div>
+
+      {shouldShowRequirementStatus(requirement.status) && (
+        <div className={fieldShell(false)}>
+          <div className="flex h-7 min-w-0 items-center gap-1.5 pl-1.5 text-body-xs-medium leading-5 text-secondary">
+            <CircleDot className="size-3.5 shrink-0 text-tertiary" />
+            <span className="truncate">{t(`requirement_fields.statuses.${requirement.status}`)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className={fieldShell(false)}>
+        <PriorityDropdown
+          value={requirement.priority}
+          onChange={(next) => patch({ priority: next as TRequirementPriority })}
+          disabled={readOnly}
+          buttonVariant="transparent-with-text"
+          buttonContainerClassName="h-7 w-full min-w-0 text-left"
+          buttonClassName={cn(
+            "w-full min-w-0 truncate text-body-xs-medium leading-5 [&_svg]:size-3.5",
+            !requirement.priority || requirement.priority === "none" ? "text-placeholder" : "text-secondary"
+          )}
+        />
+      </div>
+
+      <div className={fieldShell(false)}>
+        <MemberDropdown
+          multiple={false}
+          value={requirement.assignee_id}
+          onChange={(memberId) => patch({ assignee_id: memberId })}
+          disabled={readOnly}
+          buttonVariant="transparent-with-text"
+          placeholder={t("requirement_grid.data.select_member")}
+          showUserDetails
+          buttonContainerClassName="h-7 w-full min-w-0 text-left"
+          buttonClassName={cn(
+            "min-w-0 justify-start truncate text-body-xs-medium leading-5",
+            requirement.assignee_id ? "text-secondary" : "text-placeholder"
+          )}
+        />
+      </div>
+
+      <div className={fieldShell(false)}>
+        <DateDropdown
+          value={requirement.start_date}
+          onChange={(date) => patch({ start_date: renderFormattedPayloadDate(date) ?? null })}
+          maxDate={requirement.target_date ? new Date(requirement.target_date) : undefined}
+          placeholder={t("requirement_fields.builtin.start_date")}
+          buttonVariant="transparent-with-text"
+          disabled={readOnly}
+          className="group w-full min-w-0"
+          buttonContainerClassName="h-7 w-full min-w-0 text-left"
+          buttonClassName={cn(
+            "w-full min-w-0 truncate text-body-xs-medium leading-5",
+            requirement.start_date ? "text-secondary" : "text-placeholder"
+          )}
+          clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
+        />
+      </div>
+
+      <div className={fieldShell(false)}>
+        <DateDropdown
+          value={requirement.target_date}
+          onChange={(date) => patch({ target_date: renderFormattedPayloadDate(date) ?? null })}
+          minDate={requirement.start_date ? new Date(requirement.start_date) : undefined}
+          placeholder={t("requirement_fields.builtin.target_date")}
+          buttonVariant="transparent-with-text"
+          disabled={readOnly}
+          className="group w-full min-w-0"
+          buttonContainerClassName="h-7 w-full min-w-0 text-left"
+          buttonClassName={cn(
+            "w-full min-w-0 truncate text-body-xs-medium leading-5",
+            requirement.target_date ? "text-secondary" : "text-placeholder"
+          )}
+          clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
+        />
+      </div>
+
+      <div className={fieldShell(false)}>
+        <RequirementParentDropdown
+          value={requirement.parent_id}
+          onChange={(parentId) => patch({ parent_id: parentId })}
+          excludeId={requirement.id}
+          disabled={readOnly}
+          icon={GitBranch}
+          buttonClassName="h-7 gap-1.5 px-1.5"
+          buttonTextClassName={cn(
+            "text-body-xs-medium",
+            requirement.parent_id ? "text-secondary" : "text-placeholder"
+          )}
+          {...parentScope}
+        />
+      </div>
+    </div>
+  );
+};

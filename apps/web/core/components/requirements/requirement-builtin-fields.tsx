@@ -137,6 +137,14 @@ export const getBuiltinColumnsFor = (entityKind: "product" | "library") =>
     ? REQUIREMENT_BUILTIN_COLUMNS.filter((column) => column.showInLibrary)
     : REQUIREMENT_BUILTIN_COLUMNS;
 
+/**
+ * 详情页要不要单独展示 status。draft/confirmed 与标题旁的审批胶囊说的是同一件事，
+ * 两个「已确认」并排只会让人分不清哪个才是评审结论。等 status 变成派生的研发阶段
+ * （未开始/研发中/已发布…）之后，它就不再与审批轴重复，这个判断可以去掉。
+ */
+export const shouldShowRequirementStatus = (status: TRequirementItemStatus) =>
+  status !== "draft" && status !== "confirmed";
+
 /** 后端的列缺省值，新建行与「清空」都用它 */
 export const createEmptyBuiltinValues = (): TRequirementBuiltinValues => ({
   title: "",

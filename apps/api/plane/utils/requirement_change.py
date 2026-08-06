@@ -711,8 +711,12 @@ def rollback_requirement_to_version(*, requirement, version_number, actor):
     """把某个已通过版本的内容拷回活行。
 
     **不是撤销审批**：版本链一条不动，approved_version 也不变。回滚只是一次写在活行上
-    的普通编辑，做完这条需求处于 modified —— 要不要真的退回那一版，由随后的审批说了算。
-    这样回滚就不需要自己的一套权限与审计，它复用编辑那一套。
+    的普通编辑 —— 要不要真的退回某个旧版本，由随后的审批说了算。这样回滚就不需要自己的
+    一套权限与审计，它复用编辑那一套。
+
+    只有一个例外：**回到的正是已通过的那一版**（也就是「放弃改动」）。这时行上的内容与
+    已批准的内容重新一致了，它就该回到 approved，而不是挂在「已改动·待提交」上 —— 挂着
+    的话点提交会被 REQUIREMENT_NO_CHANGES 打回，是个走不出去的死胡同。
 
     恢复的 data 要按**当前**字段结构裁剪：字段结构立即生效且不走审批，vK 当年填的字段
     今天可能已经删了，原样写回去等于往行里塞一堆读不出来的孤儿键。
@@ -758,11 +762,17 @@ def rollback_requirement_to_version(*, requirement, version_number, actor):
     )
     requirement.version += 1
     requirement.updated_by = actor
+    # 回到已通过的那一版 = 放弃改动，内容与已批准的重新一致，行判回 approved。
+    # 用版本号判定而不是比对内容：回滚就是照着那一版写的，比一遍只会被「字段被删过所以
+    # 快照里多一个键」这类噪声干扰。
+    if requirement.approved_version == version_number:
+        requirement.approved_row_version = requirement.version
     requirement.save(
         update_fields=[
             *ROLLBACK_RESTORED_COLUMNS,
             "data",
             "version",
+            "approved_row_version",
             "updated_at",
             "updated_by",
         ]
