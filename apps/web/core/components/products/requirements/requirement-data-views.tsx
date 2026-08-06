@@ -9,10 +9,13 @@ import { cn } from "@plane/utils";
 /**
  * 一个产品下的需求可以分属多个需求类型（形状不同），数据页因此按类型分视图：
  * - 0 个类型 -> 空态，引导去导入或手动录入
- * - 1 个类型 -> 不出切换器，直接平铺该需求类型的全部字段（就是标准库页今天的样子）
- * - N 个类型 -> 默认视图（标题/描述/所属类型，只读）+ 每个类型一个视图
+ * - 有类型   -> 默认落在默认视图（只有公共字段，一屏能看全所有类型的需求），
+ *              要看某个类型自己的字段自行切过去
  *
- * 这不是被移除的「集合」概念 —— 审批的单位始终是整条基线，视图只是渲染分组。
+ * **不按类型数量分岔**：早先单类型时会直接跳进那个类型的字段视图，于是同一个页面在
+ * 「产品里加了第二个需求类型」的前后长得完全不一样，而用户并没有做任何切换动作。
+ *
+ * 视图只是渲染分组，与审批无关 —— 审批的单位是一条需求。
  */
 export type TRequirementDataView = { kind: "default" } | { kind: "requirementType"; requirementTypeId: string };
 
@@ -26,7 +29,6 @@ export const resolveRequirementDataView = (
   requirementTypes: TRequirementTypeSchema[],
   requestedKey: string | null
 ): TRequirementDataView => {
-  if (requirementTypes.length === 1) return { kind: "requirementType", requirementTypeId: requirementTypes[0].id };
   if (requestedKey && requestedKey !== DEFAULT_VIEW_KEY && requirementTypes.some((item) => item.id === requestedKey)) {
     return { kind: "requirementType", requirementTypeId: requestedKey };
   }
@@ -40,7 +42,7 @@ type TSwitcherProps = {
   onChange: (view: TRequirementDataView) => void;
 };
 
-/** 视图切换器。只在多类型时渲染 —— 单类型没有可切的东西。 */
+/** 视图切换器。只要有需求类型就渲染 —— 单类型也要能从默认视图切进它的字段视图。 */
 export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disabled, onChange }: TSwitcherProps) => {
   const { t } = useTranslation();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -64,7 +66,7 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
     [views.length]
   );
 
-  if (requirementTypes.length <= 1) return null;
+  if (!requirementTypes.length) return null;
 
   return (
     <div

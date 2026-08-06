@@ -20,19 +20,6 @@ class RequirementScope(models.TextChoices):
     PROJECT = "project", "项目"
 
 
-class RequirementStatus(models.TextChoices):
-    """基线状态描述「编辑状态」，不描述「内容可用性」。
-
-    一旦发布过 v1，正式表就一直持有最后一次批准通过的内容 —— 即使因为正在
-    编辑而回到 draft。判断「是否有已发布内容」要看 current_version，不能用
-    status != draft。
-    """
-
-    DRAFT = "draft", "草稿"
-    IN_REVIEW = "in_review", "评审中"
-    PUBLISHED = "published", "已发布"
-
-
 class RequirementFieldType(models.TextChoices):
     TEXT = "text", "文本"
     MEMBER = "member", "成员"
@@ -45,17 +32,38 @@ class RequirementFieldType(models.TextChoices):
 
 
 class RequirementItemStatus(models.TextChoices):
-    """需求条目自己的状态，与基线的 RequirementStatus 是两回事。
+    """需求条目的**交付进度**。不表达评审进度 —— 那是另一根轴，见
+    Requirement.approval_state。
 
-    基线的 status 描述「这份基线正处在编辑/评审/发布的哪一步」，是整份内容的
-    编辑态；这里的 status 描述「这一条需求走到了哪」，是内容本身的属性。
+    整列只由系统写，写序列化器根本不收它：新建时置 draft，首次审批通过后置
+    confirmed，此后再也回不到 draft（由 CheckConstraint
+    req_draft_status_iff_never_approved 钉住）。
+
+    它**不算内容**（见 utils/requirement.py 的 NON_CONTENT_BUILTIN_COLUMNS）：研发做
+    完了推进一格，不该触发一轮内容评审，也不该被内容回滚倒推回去。
+
+    implemented / obsolete 目前无人可写 —— 它们应当由关联任务派生出来（对齐禅道的
+    「研发阶段」），派生规则落地之前先空着，而不是留一个手选下拉假装它是内容。
     """
 
     DRAFT = "draft", "草稿"
-    IN_REVIEW = "in_review", "评审中"
     CONFIRMED = "confirmed", "已确认"
     IMPLEMENTED = "implemented", "已实现"
     OBSOLETE = "obsolete", "已废弃"
+
+
+class RequirementApprovalState(models.TextChoices):
+    """需求的审批态。**不落库** —— 由 approved_version / approved_row_version /
+    pending_change_item 三列派生。
+
+    存成字符串就会多出第四个可以和这三列对不上的事实来源；派生则不可能不一致。
+    """
+
+    DRAFT = "draft", "草稿（从未通过审批）"
+    IN_REVIEW = "in_review", "评审中"
+    PENDING_DELETION = "pending_deletion", "删除待审批"
+    APPROVED = "approved", "已通过（与批准内容一致）"
+    MODIFIED = "modified", "已通过后又修改（待提交）"
 
 
 class RequirementPriority(models.TextChoices):
@@ -96,33 +104,31 @@ class RequirementChangeStatus(models.TextChoices):
     CANCELLED = "cancelled", "已取消"
 
 
-class RequirementChangeTargetKind(models.TextChoices):
-    BASELINE = "baseline", "审批配置"
-    SCHEMA = "schema", "字段定义"
-    REQUIREMENT = "requirement", "需求条目"
-
-
 class RequirementChangeType(models.TextChoices):
     CREATE = "create", "新增"
     UPDATE = "update", "更新"
     DELETE = "delete", "删除"
 
 
-class RequirementChangeRequestKind(models.TextChoices):
-    """仅用于展示与统计，不参与状态流转判断。"""
-
-    INITIAL_PUBLISH = "initial_publish", "首次发布"
-    CHANGE = "change", "变更"
-
-
 # 说明：结构性规则（作用域组合、N_OF_M 的通过人数）由 DB CheckConstraint 兜底，
 # 是唯一硬保证；clean() 只保留 DB 表达不了的跨表/跨行规则，供 serializer 显式调用。
 # save() 不再执行 full_clean，仅在 workspace_id 缺失时最小反填作用域字段。
 #
-# 三层结构：
-#   RequirementBaseline —— 一个产品（或项目）唯一一条，持有审批配置、状态与版本链。
-#   Requirement         —— 需求条目本身，一行就是一条需求。
-#   RequirementLibrary  —— 需求标准库，库内的条目同样是 Requirement。
+# 审批的单位是**一条需求**，不是整个产品。
+#
+#   RequirementApprovalPolicy —— 一个产品（或项目）唯一一条，只回答「谁能批、
+#                                要几个人批」。不持有状态，也不持有版本。
+#   Requirement               —— 需求条目本身。它就是唯一的可变副本，人直接改它；
+#                                「最后一次批准的内容」在 RequirementVersion 里。
+#   RequirementVersion        —— 每条需求各自的版本链（v1, v2, ...）。
+#   RequirementBaseline       —— 一组 (需求, 版本) 的不可变命名快照，语义等同
+#                                git tag。不是变更单位，不参与审批。
+#   RequirementLibrary        —— 需求标准库，库内的条目同样是 Requirement，但
+#                                永不走审批。
+#
+# 没有影子表：审批不是「把工作副本物化回正式表」，而是「写一条版本行、改两个整数、
+# 清一个指针」。驳回与撤回在行上完全相同 —— 都只是清指针，内容原样不动，因为从来
+# 没有第二份副本。
 #
 # Requirement 一行要么属于某个产品，要么属于某个项目，要么属于某个标准库，三者
 # 必居其一；但无论哪种归属，requirement_type 都必填。
@@ -130,21 +136,21 @@ class RequirementChangeRequestKind(models.TextChoices):
 # 字段分三类：
 #   内置字段 —— 标题、描述、状态、优先级、负责人、开始日期、截止日期、父项。每个需求
 #              类型都默认包含，不可删除不可编辑。它们不是 RequirementField，而是
-#              Requirement / RequirementDraftRow 上的真实列。
+#              Requirement 上的真实列。
 #   标准字段 —— 用户自定义，产品需求与标准库都展示。
 #   数据字段 —— 用户自定义，只有产品需求展示，标准库不展示。
 # 后两类由 RequirementField.field_category 区分。
 #
-# 字段定义（RequirementField）只归需求类型所有。产品需求与需求标准库都不拷贝字段，
-# 而是通过条目上的 requirement_type 外键实时引用类型，因此类型改字段会立刻反映到
-# 所有实时引用它的地方（失效的值由 sync_requirement_type_fields 清理）。
+# 字段定义（RequirementField）只归需求类型所有，条目通过 requirement_type 外键
+# 实时引用。**字段结构变更立即生效、不走审批**，失效的值由
+# sync_requirement_type_fields 清理，同时写一条 RequirementTypeSchemaRevision ——
+# 那条修订既是变更轨迹里的「字段结构变更」条目，也是历史版本的渲染依据（否则一年后
+# 打开 v3 会拿今天的表头去渲染当年的值）。
 #
-# 一个产品下可以同时存在多个需求类型的条目，前端按类型分视图展示 —— 这是「同一批
-# 需求有不同形状」，不是容器。审批的单位是整条基线。
-#
-# 例外是「已发布」的基线：它按发版时冻结进 RequirementVersion.snapshot["fields"]
-# 的字段快照渲染，类型此后的改动要等下一次编辑并通过审批才会生效（见
-# plane.utils.requirement_change.build_change_snapshots）。
+# 「不追随删除」规则：任何需要活过需求删除的表，一律用裸 UUIDField 而不是外键。
+# 本仓库的 soft_delete_related_objects 会把 PROTECT 当 CASCADE 处理，外键会连带
+# 软删掉正要留档的历史。RequirementChangeItem.target_id、RequirementVersion.target_id
+# 与 RequirementBaselineEntry.requirement_id 都遵守这条。
 
 
 class RequirementType(BaseModel):
@@ -166,6 +172,12 @@ class RequirementType(BaseModel):
     )
     is_active = models.BooleanField(default=True, verbose_name="是否启用")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+    # 存整数而不是外键：类型 -> 修订 -> 类型 的循环外键可以避免，就避免。
+    # (requirement_type_id, current_schema_revision) 命中修订表的唯一索引。
+    current_schema_revision = models.PositiveIntegerField(
+        default=0,
+        verbose_name="当前字段结构修订号（0 表示尚未产生修订）",
+    )
 
     class Meta:
         db_table = "requirement_types"
@@ -182,23 +194,76 @@ class RequirementType(BaseModel):
         return self.name
 
 
-class RequirementBaseline(BaseModel):
-    """需求基线：一个产品（或项目）的全部需求作为一个整体的审批与版本单元。
+class RequirementTypeSchemaRevision(BaseModel):
+    """需求类型字段结构的一次不可变修订。
 
-    每个作用域只有一条，惰性创建 —— 第一次打开需求页或第一次写入时才落库。
-    条目本身不带状态：能不能写、当前是第几版，全看所属基线。
+    一份数据两个用途：
+
+    1) 变更轨迹里的「字段结构变更」条目。一次类型编辑写**一行**，而不是给这个类型
+       下成千上万条需求各写一行 —— 那会把刚从审批链路里拆掉的 O(N) 写入又请回来。
+       每条需求在**读**轨迹时把本类型的修订并进来。
+    2) 历史版本的渲染依据。字段结构立即生效、不走审批，所以 v3 的内容必须指得回 v3
+       当时的字段树。
+
+    append-only：只增不改不删。RequirementVersion 与 RequirementChangeItem 都以
+    PROTECT 引用它。字段树没有实质变化时**不写行** —— 否则每保存一次类型配置页
+    （哪怕只改了类型名）都会往上千条需求的轨迹里塞一条空变更。
+    """
+
+    requirement_type = models.ForeignKey(
+        RequirementType,
+        on_delete=models.CASCADE,
+        related_name="schema_revisions",
+        verbose_name="所属需求类型",
+    )
+    revision = models.PositiveIntegerField(verbose_name="类型内自增修订号")
+    fields = models.JSONField(verbose_name="本次修订之后的完整字段树")
+    # 相对上一修订的字段级差异，形状与原 diff_snapshots 的 SCHEMA 组一致：
+    # [{"change_type", "field_id", "parent_field_id", "name", "before", "after"}, ...]
+    diff = models.JSONField(default=list, blank=True, verbose_name="相对上一修订的差异")
+
+    class Meta:
+        db_table = "requirement_type_schema_revisions"
+        ordering = ("-revision",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement_type", "revision"],
+                condition=Q(deleted_at__isnull=True),
+                name="req_schema_revision_unique_type_revision",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["requirement_type", "created_at"],
+                name="req_schema_revision_type_time",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.requirement_type_id} r{self.revision}"
+
+
+class RequirementApprovalPolicy(BaseModel):
+    """一个产品（或项目）的需求审批配置。
+
+    它只回答「谁能批、要几个人批」，不再持有任何状态或版本 —— 状态与版本现在长在
+    每一条需求上。每个作用域只有一条，惰性创建。
+
+    改配置立即生效、不走审批。在途的变更单不受影响：提交那一刻规则与名单就已经快照
+    进变更单与 RequirementChangeApproval 行了。正因为配置不再受审批保护，能改它的人
+    必须比能提交的人更窄（见 can_manage_product），否则任何人都能把审批人改成自己。
     """
 
     workspace = models.ForeignKey(
         "db.WorkSpace",
         on_delete=models.CASCADE,
-        related_name="requirement_baselines",
+        related_name="requirement_approval_policies",
         verbose_name="所属工作区",
     )
     product = models.ForeignKey(
         "db.Product",
         on_delete=models.CASCADE,
-        related_name="requirement_baselines",
+        related_name="requirement_approval_policies",
         null=True,
         blank=True,
         verbose_name="所属产品",
@@ -206,7 +271,7 @@ class RequirementBaseline(BaseModel):
     project = models.ForeignKey(
         "db.Project",
         on_delete=models.CASCADE,
-        related_name="requirement_baselines",
+        related_name="requirement_approval_policies",
         null=True,
         blank=True,
         verbose_name="所属项目",
@@ -214,15 +279,8 @@ class RequirementBaseline(BaseModel):
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="owned_requirement_baselines",
+        related_name="owned_requirement_approval_policies",
         verbose_name="负责人",
-    )
-    status = models.CharField(
-        max_length=30,
-        choices=RequirementStatus.choices,
-        default=RequirementStatus.DRAFT,
-        db_index=True,
-        verbose_name="基线状态",
     )
     approval_type = models.CharField(
         max_length=10,
@@ -235,21 +293,16 @@ class RequirementBaseline(BaseModel):
         blank=True,
         verbose_name="最少通过人数（仅 N_OF_M 模式生效）",
     )
-    current_version = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="当前已发布版本号（null 表示从未发布）",
-    )
 
     class Meta:
-        db_table = "requirement_baselines"
+        db_table = "requirement_approval_policies"
         ordering = ("-updated_at",)
         constraints = [
             # 作用域：必须且只能归属一个产品或一个项目
             models.CheckConstraint(
                 check=Q(product__isnull=False, project__isnull=True)
                 | Q(product__isnull=True, project__isnull=False),
-                name="req_baseline_scope_exactly_one",
+                name="req_policy_scope_exactly_one",
             ),
             # 审批规则：N_OF_M 必须给 >=1 的通过人数，其余规则必须为空
             models.CheckConstraint(
@@ -261,23 +314,23 @@ class RequirementBaseline(BaseModel):
                     ~Q(approval_type=RequirementApprovalType.N_OF_M)
                     & Q(required_count__isnull=True)
                 ),
-                name="req_baseline_required_count_consistent",
+                name="req_policy_required_count_consistent",
             ),
-            # 每个作用域只允许一条有效基线
+            # 每个作用域只允许一条有效配置
             models.UniqueConstraint(
                 fields=["product"],
                 condition=Q(product__isnull=False, deleted_at__isnull=True),
-                name="req_baseline_unique_product_active",
+                name="req_policy_unique_product_active",
             ),
             models.UniqueConstraint(
                 fields=["project"],
                 condition=Q(project__isnull=False, deleted_at__isnull=True),
-                name="req_baseline_unique_project_active",
+                name="req_policy_unique_project_active",
             ),
         ]
 
     def __str__(self):
-        return f"baseline of {self.product_id or self.project_id}"
+        return f"approval policy of {self.product_id or self.project_id}"
 
     @property
     def scope(self):
@@ -300,7 +353,8 @@ class RequirementLibrary(BaseModel):
     字段是引用而非拷贝，所以同一个库里的条目永远保持同一套字段；类型改字段会立刻
     反映到库内所有条目上（失效的值由 sync_requirement_type_fields 清理）。
 
-    标准库不走审批 —— 库内条目创建即生效，没有基线、没有工作副本。
+    标准库不走审批 —— 库内条目创建即生效。这一点由 Requirement 上的
+    req_library_item_never_approved 约束硬保证，不只是约定。
     """
 
     workspace = models.ForeignKey(
@@ -515,11 +569,30 @@ class Requirement(BaseModel):
     )
     data = models.JSONField(default=dict, blank=True, verbose_name="自定义字段数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
-    version = models.PositiveIntegerField(default=1, verbose_name="当前版本")
-    last_changed_version = models.PositiveIntegerField(
+    version = models.PositiveIntegerField(default=1, verbose_name="乐观锁计数（每次写入 +1）")
+    approved_version = models.PositiveIntegerField(
         null=True,
         blank=True,
-        verbose_name="最后一次发生变更的基线版本号（null 表示尚未随基线发布过）",
+        verbose_name="最后一次通过审批的版本号（null 表示从未通过审批）",
+    )
+    # 「内容是否与已批准的那一版一致」不能靠比 JSON —— 千行网格每页都要这个标记。
+    # 把通过审批那一刻的 version 记下来，version != approved_row_version 就是
+    # 「批准后又改过」。
+    approved_row_version = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="通过审批那一刻的 version 值",
+    )
+    # 指向变更**项**而不是变更单：一列同时回答「在不在评审中」与「审的是不是删除」；
+    # 又因为它是单值外键，「一条需求同时最多一张待审变更单」这个不变量由结构本身保证，
+    # 既不需要额外唯一索引，也不需要在提交路径上做 EXISTS 查询。
+    pending_change_item = models.ForeignKey(
+        "db.RequirementChangeItem",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+        verbose_name="待审批的变更项（null 表示不在评审中）",
     )
 
     class Meta:
@@ -534,6 +607,11 @@ class Requirement(BaseModel):
                 fields=["product", "requirement_type", "sort_order"],
                 name="req_product_type_sort",
             ),
+            models.Index(
+                fields=["pending_change_item"],
+                condition=Q(pending_change_item__isnull=False),
+                name="req_pending_change_item",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -541,7 +619,35 @@ class Requirement(BaseModel):
                 | Q(product__isnull=True, project__isnull=False, library__isnull=True)
                 | Q(product__isnull=True, project__isnull=True, library__isnull=False),
                 name="requirement_owner_exactly_one",
-            )
+            ),
+            # 两个版本列要么同时为空，要么同时有值
+            models.CheckConstraint(
+                check=Q(approved_version__isnull=True, approved_row_version__isnull=True)
+                | Q(approved_version__isnull=False, approved_row_version__isnull=False),
+                name="req_approved_version_pair_consistent",
+            ),
+            # draft ⟺ 从未通过审批。把「已确认的需求被打回 draft」变成写不进去的事，
+            # 而不是靠代码自觉 —— 写入路径上有个默认值会悄悄干这件事，见
+            # RequirementBuiltinWriteSerializer.status。
+            models.CheckConstraint(
+                check=Q(approved_version__isnull=True, status=RequirementItemStatus.DRAFT)
+                | (
+                    Q(approved_version__isnull=False)
+                    & ~Q(status=RequirementItemStatus.DRAFT)
+                ),
+                name="req_draft_status_iff_never_approved",
+            ),
+            # 标准库条目永不走审批（见 RequirementLibrary 的文档字符串）
+            models.CheckConstraint(
+                check=Q(library__isnull=True)
+                | Q(
+                    library__isnull=False,
+                    approved_version__isnull=True,
+                    pending_change_item__isnull=True,
+                    status=RequirementItemStatus.DRAFT,
+                ),
+                name="req_library_item_never_approved",
+            ),
         ]
 
     def __str__(self):
@@ -554,6 +660,29 @@ class Requirement(BaseModel):
         if self.project_id:
             return RequirementScope.PROJECT
         return None
+
+    @property
+    def approval_state(self):
+        """审批态。列表入口应先 annotate(pending_change_type=...)，避免每行一次
+        取变更项 —— 那会把两份完整行快照拖进查询。"""
+        if self.pending_change_item_id:
+            change_type = getattr(self, "pending_change_type", None)
+            if change_type is None:
+                change_type = self.pending_change_item.change_type
+            if change_type == RequirementChangeType.DELETE:
+                return RequirementApprovalState.PENDING_DELETION
+            return RequirementApprovalState.IN_REVIEW
+        if self.approved_version is None:
+            return RequirementApprovalState.DRAFT
+        if self.version != self.approved_row_version:
+            return RequirementApprovalState.MODIFIED
+        return RequirementApprovalState.APPROVED
+
+    @property
+    def is_locked(self):
+        """在评审中的行内容只读。删除待审同样锁住 —— 否则批准删除时落库的内容
+        与审批人看到的已经不是同一份。"""
+        return self.pending_change_item_id is not None
 
     def clean(self):
         super().clean()
@@ -577,158 +706,18 @@ class Requirement(BaseModel):
         return super().save(*args, **kwargs)
 
 
-class RequirementDraft(BaseModel):
-    """基线的工作副本：承载未发布的编辑内容，正式表在审批通过前不受影响。
-
-    meta 与字段定义放在 snapshot（字段通常几十个以内，天然整体读写），需求条目
-    拆到 RequirementDraftRow —— 千行量级下 JSON blob 会让每次单元格保存都
-    重写整份文档，且无法用数据库分页/筛选，行级乐观锁也会退化。
-    """
-
-    workspace = models.ForeignKey(
-        "db.WorkSpace",
-        on_delete=models.CASCADE,
-        related_name="requirement_drafts",
-        verbose_name="所属工作区",
-    )
-    product = models.ForeignKey(
-        "db.Product",
-        on_delete=models.CASCADE,
-        related_name="requirement_drafts",
-        null=True,
-        blank=True,
-        verbose_name="所属产品",
-    )
-    project = models.ForeignKey(
-        "db.Project",
-        on_delete=models.CASCADE,
-        related_name="requirement_drafts",
-        null=True,
-        blank=True,
-        verbose_name="所属项目",
-    )
-    baseline = models.OneToOneField(
-        RequirementBaseline,
-        on_delete=models.CASCADE,
-        related_name="draft",
-        verbose_name="所属基线",
-    )
-    base_version = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="基准版本号（null 表示首次发布草稿）",
-    )
-    snapshot = models.JSONField(
-        default=dict, blank=True, verbose_name="草稿快照（meta + 字段定义）"
-    )
-
-    class Meta:
-        db_table = "requirement_drafts"
-        ordering = ("-updated_at",)
-
-    def __str__(self):
-        return f"draft of {self.baseline_id}"
-
-    def save(self, *args, **kwargs):
-        if not self.workspace_id and self.baseline_id:
-            source = self.baseline
-            self.workspace_id = source.workspace_id
-            self.product_id = source.product_id
-            self.project_id = source.project_id
-        return super().save(*args, **kwargs)
-
-
-class RequirementDraftRow(BaseModel):
-    """草稿里的需求条目。结构与 Requirement 一致，归属外键换成草稿。
-
-    物化时直接复用这里的 UUID 作为正式表主键，因此 data 里以字段 ID 为 key
-    的结构、以及 parent 指向的行 ID，都不需要任何 remap。
-    """
-
-    draft = models.ForeignKey(
-        RequirementDraft,
-        on_delete=models.CASCADE,
-        related_name="rows",
-        verbose_name="所属草稿",
-    )
-    requirement_type = models.ForeignKey(
-        RequirementType,
-        on_delete=models.PROTECT,
-        related_name="draft_rows",
-        verbose_name="所属需求类型",
-    )
-    title = models.CharField(max_length=255, blank=True, default="", verbose_name="需求标题")
-    description_html = models.TextField(
-        blank=True, null=True, verbose_name="需求描述 HTML"
-    )
-    status = models.CharField(
-        max_length=30,
-        choices=RequirementItemStatus.choices,
-        default=RequirementItemStatus.DRAFT,
-        db_index=True,
-        verbose_name="需求状态",
-    )
-    priority = models.CharField(
-        max_length=30,
-        choices=RequirementPriority.choices,
-        default=RequirementPriority.NONE,
-        db_index=True,
-        verbose_name="优先级",
-    )
-    assignee = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        related_name="assigned_requirement_draft_rows",
-        null=True,
-        blank=True,
-        verbose_name="负责人",
-    )
-    start_date = models.DateField(null=True, blank=True, verbose_name="开始日期")
-    target_date = models.DateField(null=True, blank=True, verbose_name="截止日期")
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        related_name="sub_draft_rows",
-        null=True,
-        blank=True,
-        verbose_name="父项",
-    )
-    data = models.JSONField(default=dict, blank=True, verbose_name="自定义字段数据")
-    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
-    version = models.PositiveIntegerField(default=1, verbose_name="当前版本")
-    last_changed_version = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="最后一次发生变更的基线版本号",
-    )
-
-    class Meta:
-        db_table = "requirement_draft_rows"
-        ordering = ("sort_order", "created_at", "id")
-        indexes = [
-            models.Index(fields=["draft", "sort_order"], name="req_draft_row_sort"),
-            models.Index(
-                fields=["draft", "requirement_type", "sort_order"],
-                name="req_draft_row_type_sort",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.draft_id} / {self.id}"
-
-
 class RequirementApprover(BaseModel):
-    """基线的审批人名单（谁可以审批），与审批规则（approval_type/required_count）配套。
+    """审批配置的审批人名单（谁可以审批），与审批规则（approval_type/required_count）配套。
 
-    随基线存在：发起变更请求时按此名单快照为 RequirementChangeApproval 记录。
-    当前仅支持指定成员。
+    随配置存在：发起变更请求时按此名单快照为 RequirementChangeApproval 记录，所以
+    在途的变更单不会因为名单被改而受影响。当前仅支持指定成员。
     """
 
-    baseline = models.ForeignKey(
-        RequirementBaseline,
+    policy = models.ForeignKey(
+        RequirementApprovalPolicy,
         on_delete=models.CASCADE,
         related_name="approvers",
-        verbose_name="所属基线",
+        verbose_name="所属审批配置",
     )
     approver = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -743,17 +732,29 @@ class RequirementApprover(BaseModel):
         ordering = ("sort_order", "created_at", "id")
         constraints = [
             models.UniqueConstraint(
-                fields=["baseline", "approver"],
+                fields=["policy", "approver"],
                 condition=Q(deleted_at__isnull=True),
-                name="req_approver_unique_baseline_approver_active",
+                name="req_approver_unique_policy_approver_active",
             )
         ]
 
     def __str__(self):
-        return f"{self.approver_id} @ {self.baseline_id}"
+        return f"{self.approver_id} @ {self.policy_id}"
 
 
 class RequirementChangeRequest(BaseModel):
+    """一次变更申请，覆盖 1..N 条需求（默认 1）。
+
+    审批单位是变更单而不是条目 —— 一张单里的 N 条需求同批通过、同批驳回。做单条部分
+    通过会让「一条需求最多在一张待审单里」这个不变量无从记账，也会把审批记录变成
+    逐项矩阵。
+
+    「一条需求同时最多只能在一张待审变更单里」由 Requirement.pending_change_item
+    这个单值外键保证，不需要额外的唯一索引。
+
+    序号按作用域（产品或项目）自增，不再按基线 —— 基线已经不是变更单位了。
+    """
+
     workspace = models.ForeignKey(
         "db.WorkSpace",
         on_delete=models.CASCADE,
@@ -776,30 +777,8 @@ class RequirementChangeRequest(BaseModel):
         blank=True,
         verbose_name="所属项目",
     )
-    baseline = models.ForeignKey(
-        RequirementBaseline,
-        on_delete=models.CASCADE,
-        related_name="change_requests",
-        verbose_name="目标基线",
-    )
-    target_kind = models.CharField(
-        max_length=20,
-        choices=RequirementChangeTargetKind.choices,
-        verbose_name="变更目标类型",
-    )
-    request_kind = models.CharField(
-        max_length=20,
-        choices=RequirementChangeRequestKind.choices,
-        default=RequirementChangeRequestKind.CHANGE,
-        verbose_name="变更单类型（仅用于展示与统计）",
-    )
     sequence_id = models.PositiveIntegerField(
-        default=1, verbose_name="基线内自增序号（用于展示 CR-001）"
-    )
-    base_version = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="基准版本号（null 表示首次发布）",
+        default=1, verbose_name="作用域内自增序号（用于展示 CR-001）"
     )
     created_count = models.PositiveIntegerField(default=0, verbose_name="新增项数")
     updated_count = models.PositiveIntegerField(default=0, verbose_name="修改项数")
@@ -808,13 +787,6 @@ class RequirementChangeRequest(BaseModel):
         default=list,
         blank=True,
         verbose_name="本次变更涉及的字段 ID（供「仅显示变化列」使用）",
-    )
-    # 字段现在实时取自需求类型，而类型不走审批、随时可改。不在提交时冻结的话，审批人
-    # 看到的字段结构与通过后真正落库的可能不是同一份。
-    proposed_fields = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name="提交时冻结的字段树",
     )
     approval_type = models.CharField(
         max_length=10,
@@ -840,15 +812,24 @@ class RequirementChangeRequest(BaseModel):
         ordering = ("-created_at",)
         indexes = [
             models.Index(
-                fields=["baseline", "-created_at"],
-                name="req_change_baseline_created",
-            )
+                fields=["product", "-created_at"],
+                name="req_change_product_created",
+            ),
+            models.Index(
+                fields=["project", "-created_at"],
+                name="req_change_project_created",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["baseline", "sequence_id"],
-                condition=Q(deleted_at__isnull=True),
-                name="req_change_unique_baseline_sequence_active",
+                fields=["product", "sequence_id"],
+                condition=Q(product__isnull=False, deleted_at__isnull=True),
+                name="req_change_unique_product_sequence_active",
+            ),
+            models.UniqueConstraint(
+                fields=["project", "sequence_id"],
+                condition=Q(project__isnull=False, deleted_at__isnull=True),
+                name="req_change_unique_project_sequence_active",
             ),
             models.CheckConstraint(
                 check=Q(product__isnull=False, project__isnull=True)
@@ -869,17 +850,10 @@ class RequirementChangeRequest(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.target_kind} / {self.id} [{self.status}]"
+        return f"CR-{self.sequence_id} [{self.status}]"
 
     def save(self, *args, **kwargs):
-        # 作用域优先由目标基线派生（product/project 未定时）；
-        # 调用方也可直接给定 product/project，此时仅在缺 workspace_id 时反填。
-        if not self.product_id and not self.project_id and self.baseline_id:
-            source = self.baseline
-            self.workspace_id = source.workspace_id
-            self.product_id = source.product_id
-            self.project_id = source.project_id
-        elif not self.workspace_id:
+        if not self.workspace_id:
             if self.product_id:
                 self.workspace_id = self.product.workspace_id
             elif self.project_id:
@@ -888,30 +862,47 @@ class RequirementChangeRequest(BaseModel):
 
 
 class RequirementChangeItem(BaseModel):
+    """变更单里的一条需求。一条需求在一张单里只出现一次。"""
+
     change_request = models.ForeignKey(
         RequirementChangeRequest,
         on_delete=models.CASCADE,
         related_name="items",
         verbose_name="所属变更请求",
     )
-    target_kind = models.CharField(
-        max_length=20,
-        choices=RequirementChangeTargetKind.choices,
-        default=RequirementChangeTargetKind.REQUIREMENT,
-        verbose_name="变更目标类型",
-    )
     change_type = models.CharField(
         max_length=10,
         choices=RequirementChangeType.choices,
         verbose_name="变更类型",
     )
-    target_id = models.UUIDField(null=True, blank=True, verbose_name="目标记录 ID")
+    # 刻意不是外键（见文件顶部的「不追随删除」规则）。恒不为空 —— 新增的行提交前就
+    # 已经在正式表里存在了（草稿态），不再有「尚未落库的提案行」。
+    target_id = models.UUIDField(db_index=True, verbose_name="目标需求 ID")
+    # 类型提上来当列：按需求类型分组不再需要在 JSON key 上做聚合
+    requirement_type = models.ForeignKey(
+        RequirementType,
+        on_delete=models.PROTECT,
+        related_name="change_items",
+        verbose_name="所属需求类型",
+    )
+    # 提交那一刻的字段结构。字段结构立即生效不走审批，不冻结的话审批人看到的表头与他
+    # 点「通过」时真正落库的可能已经不是同一份。用引用而不是内嵌：同一棵树内嵌会在每条
+    # 需求的每个版本里各复制一份。
+    schema_revision = models.ForeignKey(
+        RequirementTypeSchemaRevision,
+        on_delete=models.PROTECT,
+        related_name="change_items",
+        verbose_name="提交时的字段结构修订",
+    )
     before_snapshot = models.JSONField(null=True, blank=True, verbose_name="变更前快照")
     proposed_snapshot = models.JSONField(
         null=True, blank=True, verbose_name="拟变更快照"
     )
     base_version = models.PositiveIntegerField(
-        null=True, blank=True, verbose_name="基准版本"
+        null=True, blank=True, verbose_name="提交时的 approved_version（新增时为空）"
+    )
+    base_row_version = models.PositiveIntegerField(
+        verbose_name="提交时的 version 乐观锁值"
     )
     proposed_sort_order = models.FloatField(
         null=True, blank=True, verbose_name="拟排序值"
@@ -922,13 +913,22 @@ class RequirementChangeItem(BaseModel):
         ordering = ("proposed_sort_order", "created_at", "id")
         indexes = [
             models.Index(
-                fields=["change_request", "target_kind", "proposed_sort_order"],
-                name="req_change_item_request_kind",
-            )
+                fields=["change_request", "proposed_sort_order"],
+                name="req_change_item_request_sort",
+            ),
+            # 变更轨迹按 target_id 横切所有变更单
+            models.Index(
+                fields=["target_id", "-created_at"],
+                name="req_change_item_target_time",
+            ),
+            models.Index(
+                fields=["change_request", "requirement_type"],
+                name="req_change_item_request_type",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.target_kind} / {self.change_type} / {self.target_id or 'new'}"
+        return f"{self.change_type} / {self.target_id}"
 
 
 class RequirementChangeApproval(BaseModel):
@@ -970,6 +970,15 @@ class RequirementChangeApproval(BaseModel):
 
 
 class RequirementVersion(BaseModel):
+    """一条需求通过审批后的不可变存档。
+
+    版本按需求自增（v1, v2, ...），不再按基线。target_kind 没了 —— 版本只属于需求
+    条目；审批配置与字段结构都不走审批，各有自己的记录方式。
+
+    删除通过审批时也写一条（change_type=delete，snapshot 取 before），这样基线快照
+    引用的版本在需求被删之后依然解得开。
+    """
+
     workspace = models.ForeignKey(
         "db.WorkSpace",
         on_delete=models.CASCADE,
@@ -992,27 +1001,30 @@ class RequirementVersion(BaseModel):
         blank=True,
         verbose_name="所属项目",
     )
-    baseline = models.ForeignKey(
-        RequirementBaseline,
-        on_delete=models.SET_NULL,
+    # 刻意不是外键（见文件顶部的「不追随删除」规则）
+    target_id = models.UUIDField(db_index=True, verbose_name="需求 ID")
+    requirement_type = models.ForeignKey(
+        RequirementType,
+        on_delete=models.PROTECT,
         related_name="versions",
-        null=True,
-        blank=True,
-        verbose_name="所属基线",
+        verbose_name="所属需求类型",
     )
-    target_kind = models.CharField(
-        max_length=20,
-        choices=RequirementChangeTargetKind.choices,
-        verbose_name="版本目标类型",
+    # 「这一版当时长什么样」必须能在一年后原样渲染出来。字段结构立即生效、不走审批，
+    # 所以版本必须锁定当时的字段树 —— 用引用而不是内嵌：修订表 append-only、永不删除，
+    # PROTECT 保证引用一定解得开。
+    schema_revision = models.ForeignKey(
+        RequirementTypeSchemaRevision,
+        on_delete=models.PROTECT,
+        related_name="versions",
+        verbose_name="本版对应的字段结构修订",
     )
-    target_id = models.UUIDField(verbose_name="目标记录 ID")
     version = models.PositiveIntegerField(verbose_name="版本号")
     change_type = models.CharField(
         max_length=10,
         choices=RequirementChangeType.choices,
         verbose_name="变更类型",
     )
-    snapshot = models.JSONField(verbose_name="版本快照")
+    snapshot = models.JSONField(verbose_name="行内容快照")
     sort_order = models.FloatField(null=True, blank=True, verbose_name="排序值")
     change_request = models.ForeignKey(
         RequirementChangeRequest,
@@ -1037,6 +1049,9 @@ class RequirementVersion(BaseModel):
     class Meta:
         db_table = "requirement_versions"
         ordering = ("-version", "-created_at")
+        indexes = [
+            models.Index(fields=["target_id", "-version"], name="req_version_target_version")
+        ]
         constraints = [
             models.CheckConstraint(
                 check=Q(product__isnull=False, project__isnull=True)
@@ -1044,21 +1059,17 @@ class RequirementVersion(BaseModel):
                 name="req_version_scope_exactly_one",
             ),
             models.UniqueConstraint(
-                fields=["target_kind", "target_id", "version"],
+                fields=["target_id", "version"],
                 condition=Q(deleted_at__isnull=True),
                 name="req_version_unique_target_version_active",
             ),
         ]
 
     def __str__(self):
-        return f"{self.target_kind} / {self.target_id} / v{self.version}"
+        return f"{self.target_id} / v{self.version}"
 
     def clean(self):
         super().clean()
-        # 版本都归属具体基线（baseline 为 SET_NULL，故只能在写入时校验，
-        # 不能做成 DB 约束）
-        if not self.baseline_id:
-            raise ValidationError({"baseline": "需求版本必须关联所属基线。"})
         # 来源变更项必须属于来源变更请求
         if (
             self.change_request_id
@@ -1068,17 +1079,127 @@ class RequirementVersion(BaseModel):
             raise ValidationError({"change_item": "变更项必须属于当前来源变更请求。"})
 
     def save(self, *args, **kwargs):
-        # 作用域优先由所属基线/来源变更请求派生（product/project 未定时）；
+        # 作用域优先由来源变更请求派生（product/project 未定时）；
         # 调用方也可直接给定 product/project，此时仅在缺 workspace_id 时反填。
-        if not self.product_id and not self.project_id:
-            source = self.baseline or self.change_request
-            if source is not None:
-                self.workspace_id = source.workspace_id
-                self.product_id = source.product_id
-                self.project_id = source.project_id
+        if not self.product_id and not self.project_id and self.change_request_id:
+            source = self.change_request
+            self.workspace_id = source.workspace_id
+            self.product_id = source.product_id
+            self.project_id = source.project_id
         elif not self.workspace_id:
             if self.product_id:
                 self.workspace_id = self.product.workspace_id
             elif self.project_id:
                 self.workspace_id = self.project.workspace_id
         return super().save(*args, **kwargs)
+
+
+class RequirementBaseline(BaseModel):
+    """需求基线：一组 (需求, 版本) 的不可变命名快照，语义等同 git tag。
+
+    它**不是**变更单位 —— 没有状态、不参与审批、内容创建后不可改（只有名称与说明能改）。
+    它只回答「在某个时刻，这批需求各自停在第几版」，用于发版留痕、对外交付，以及两个
+    基线之间的差异对比。
+
+    只收录 approved_version 不为空的需求。评审中的需求按它**上一个已通过**的版本收录 ——
+    评审结果还不存在，不能进基线；从未通过审批的草稿则完全不收录。
+    """
+
+    workspace = models.ForeignKey(
+        "db.WorkSpace",
+        on_delete=models.CASCADE,
+        related_name="requirement_baselines",
+        verbose_name="所属工作区",
+    )
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="requirement_baselines",
+        null=True,
+        blank=True,
+        verbose_name="所属产品",
+    )
+    project = models.ForeignKey(
+        "db.Project",
+        on_delete=models.CASCADE,
+        related_name="requirement_baselines",
+        null=True,
+        blank=True,
+        verbose_name="所属项目",
+    )
+    name = models.CharField(max_length=255, verbose_name="基线名称")
+    description = models.TextField(blank=True, default="", verbose_name="基线说明")
+    entry_count = models.PositiveIntegerField(default=0, verbose_name="收录条目数")
+
+    class Meta:
+        db_table = "requirement_baselines"
+        ordering = ("-created_at",)
+        constraints = [
+            models.CheckConstraint(
+                check=Q(product__isnull=False, project__isnull=True)
+                | Q(product__isnull=True, project__isnull=False),
+                name="req_baseline_scope_exactly_one",
+            ),
+            models.UniqueConstraint(
+                fields=["product", "name"],
+                condition=Q(product__isnull=False, deleted_at__isnull=True),
+                name="req_baseline_unique_product_name_active",
+            ),
+            models.UniqueConstraint(
+                fields=["project", "name"],
+                condition=Q(project__isnull=False, deleted_at__isnull=True),
+                name="req_baseline_unique_project_name_active",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def scope(self):
+        if self.product_id:
+            return RequirementScope.PRODUCT
+        return RequirementScope.PROJECT
+
+    def save(self, *args, **kwargs):
+        if not self.workspace_id:
+            if self.product_id:
+                self.workspace_id = self.product.workspace_id
+            elif self.project_id:
+                self.workspace_id = self.project.workspace_id
+        return super().save(*args, **kwargs)
+
+
+class RequirementBaselineEntry(BaseModel):
+    """基线里的一条 (需求, 版本) 记录。"""
+
+    baseline = models.ForeignKey(
+        RequirementBaseline,
+        on_delete=models.CASCADE,
+        related_name="entries",
+        verbose_name="所属基线",
+    )
+    # 刻意不是外键（见文件顶部的「不追随删除」规则）：需求被删掉之后基线仍然要能渲染，
+    # 那正是打基线的意义所在。
+    requirement_id = models.UUIDField(db_index=True, verbose_name="需求 ID")
+    version = models.ForeignKey(
+        RequirementVersion,
+        on_delete=models.PROTECT,
+        related_name="baseline_entries",
+        verbose_name="收录的版本",
+    )
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+
+    class Meta:
+        db_table = "requirement_baseline_entries"
+        ordering = ("sort_order", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["baseline", "requirement_id"],
+                condition=Q(deleted_at__isnull=True),
+                name="req_baseline_entry_unique_baseline_requirement",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.requirement_id} @ {self.baseline_id}"

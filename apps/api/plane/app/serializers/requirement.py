@@ -8,20 +8,22 @@ from plane.db.models import (
     Product,
     Project,
     Requirement,
+    RequirementApprovalPolicy,
     RequirementApprovalType,
-    RequirementBaseline,
     RequirementChangeStatus,
-    RequirementDraftRow,
     RequirementFieldCategory,
     RequirementFieldType,
-    RequirementItemStatus,
+    RequirementChangeRequest,
+    RequirementLibrary,
     RequirementPriority,
     User,
 )
 from plane.utils.content_validator import validate_html_content
-from plane.utils.product import can_edit_product_requirements
+from plane.utils.product import can_edit_product_requirements, can_manage_product
 from plane.utils.requirement import (
+    BUILTIN_COLUMN_DEFAULTS,
     BUILTIN_COLUMNS,
+    LIBRARY_HIDDEN_BUILTIN_COLUMNS,
     TITLE_MAX_LENGTH,
     builtin_filter_specs,
     builtin_values_from_payload,
@@ -35,11 +37,11 @@ from plane.utils.requirement import (
 from .base import BaseSerializer
 
 
-class RequirementBaselineSerializer(BaseSerializer):
-    """需求基线：一个产品（或项目）全部需求的审批与版本单元。
+class RequirementApprovalPolicySerializer(BaseSerializer):
+    """需求审批配置：一个产品（或项目）的「谁能批、要几个人批」。
 
-    标题与描述不在这里 —— 它们是需求条目自己的字段。基线只持有状态、负责人与
-    审批配置。
+    它不持有状态也不持有版本 —— 那些现在长在每一条需求上。改配置立即生效、不走审批，
+    在途的变更单不受影响（提交那一刻规则与名单就已经快照进单里了）。
     """
 
     workspace_id = serializers.UUIDField(read_only=True)
@@ -69,18 +71,17 @@ class RequirementBaselineSerializer(BaseSerializer):
     approver_details = serializers.SerializerMethodField()
     scope = serializers.CharField(read_only=True)
     can_edit = serializers.SerializerMethodField()
-    pending_change_request_id = serializers.SerializerMethodField()
-    can_approve = serializers.SerializerMethodField()
+    can_manage = serializers.SerializerMethodField()
+    pending_change_request_count = serializers.SerializerMethodField()
 
     class Meta:
-        model = RequirementBaseline
+        model = RequirementApprovalPolicy
         fields = [
             "id",
             "workspace_id",
             "scope",
             "product_id",
             "project_id",
-            "status",
             "owner_id",
             "owner_detail",
             "approval_type",
@@ -88,9 +89,8 @@ class RequirementBaselineSerializer(BaseSerializer):
             "approver_ids",
             "approver_details",
             "can_edit",
-            "current_version",
-            "pending_change_request_id",
-            "can_approve",
+            "can_manage",
+            "pending_change_request_count",
             "created_at",
             "updated_at",
             "created_by",
@@ -103,9 +103,8 @@ class RequirementBaselineSerializer(BaseSerializer):
             "owner_detail",
             "approver_details",
             "can_edit",
-            "current_version",
-            "pending_change_request_id",
-            "can_approve",
+            "can_manage",
+            "pending_change_request_count",
             "created_at",
             "updated_at",
             "created_by",
@@ -124,32 +123,21 @@ class RequirementBaselineSerializer(BaseSerializer):
             return can_edit_product_requirements(request.user, obj.product)
         return True
 
-    def _pending_change_request(self, obj):
-        """走 to_attr="pending_change_requests" 的预取，列表页不产生 N+1。"""
-        prefetched = getattr(obj, "pending_change_requests", None)
-        if prefetched is not None:
-            return prefetched[0] if prefetched else None
-        return (
-            obj.change_requests.filter(status=RequirementChangeStatus.PENDING)
-            .order_by("-created_at")
-            .first()
-        )
-
-    def get_pending_change_request_id(self, obj):
-        change_request = self._pending_change_request(obj)
-        return str(change_request.id) if change_request else None
-
-    def get_can_approve(self, obj):
+    def get_can_manage(self, obj):
+        """改配置比改需求更窄 —— 见 mixins.can_manage_policy 的说明。"""
         request = self.context.get("request")
         if request is None or request.user.is_anonymous:
             return False
-        change_request = self._pending_change_request(obj)
-        if change_request is None:
-            return False
-        return any(
-            approval.approver_id == request.user.id and not approval.action
-            for approval in change_request.approvals.all()
-        )
+        if obj.product_id:
+            return can_manage_product(request.user, obj.product)
+        return True
+
+    def get_pending_change_request_count(self, obj):
+        """现在一个产品下可以同时有多张待审单（每条需求一张），所以给计数而不是单个 id。"""
+        return RequirementChangeRequest.objects.filter(
+            status=RequirementChangeStatus.PENDING,
+            **({"product_id": obj.product_id} if obj.product_id else {"project_id": obj.project_id}),
+        ).count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -184,7 +172,7 @@ class RequirementBaselineSerializer(BaseSerializer):
 
         if len([scope for scope in (product, project) if scope]) != 1:
             errors["scope"] = (
-                "A baseline must belong to exactly one product or project."
+                "An approval policy must belong to exactly one product or project."
             )
 
         if product is not None and product.workspace_id != workspace.id:
@@ -221,7 +209,7 @@ class RequirementBaselineSerializer(BaseSerializer):
                 raise serializers.ValidationError(
                     {
                         "approver_ids": (
-                            "Approvers must be valid members of the baseline target: "
+                            "Approvers must be valid members of the target scope: "
                             + ", ".join(str(item) for item in invalid_ids)
                         )
                     }
@@ -299,7 +287,7 @@ class RequirementBaselineSerializer(BaseSerializer):
         )
         if owner.id not in eligible_owner_ids:
             raise serializers.ValidationError(
-                {"owner_id": "Owner must be a valid member of the baseline target."}
+                {"owner_id": "Owner must be a valid member of the target scope."}
             )
 
         approver_ids = self._get_effective_approver_ids(
@@ -317,16 +305,16 @@ class RequirementBaselineSerializer(BaseSerializer):
         request = self.context.get("request")
         actor = getattr(request, "user", None)
 
-        baseline = RequirementBaseline(**validated_data)
-        baseline.full_clean(exclude=["created_by", "updated_by"])
-        baseline.save()
+        policy = RequirementApprovalPolicy(**validated_data)
+        policy.full_clean(exclude=["created_by", "updated_by"])
+        policy.save()
 
         replace_requirement_approvers(
-            baseline=baseline,
+            policy=policy,
             approver_ids=approver_ids,
             actor=actor,
         )
-        return baseline
+        return policy
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -340,7 +328,7 @@ class RequirementBaselineSerializer(BaseSerializer):
         if approver_ids is not serializers.empty:
             request = self.context.get("request")
             replace_requirement_approvers(
-                baseline=instance,
+                policy=instance,
                 approver_ids=approver_ids,
                 actor=getattr(request, "user", None),
             )
@@ -708,26 +696,29 @@ class RequirementBuiltinWriteSerializer(serializers.Serializer):
     链会不会成环）放在 validate_requirement_builtin_values。
     """
 
+    # 八个字段一律 required=False 且**不给 default**。
+    #
+    # 给了 default，DRF 会把没传的列也塞进 validated_data，于是「客户端真的提交了这一列」
+    # 与「DRF 补了个缺省值」再也分不开 —— 一个只改标题的 PATCH 会带着 status="draft" 到达
+    # 写入层，把已确认的行打回草稿。缺省值改由 builtin_values_from_payload（新增路径）
+    # 与 current_row 回填（更新路径）各自负责。
     title = serializers.CharField(
-        max_length=TITLE_MAX_LENGTH, allow_blank=True, required=False, default=""
+        max_length=TITLE_MAX_LENGTH, allow_blank=True, required=False
     )
     description_html = serializers.CharField(
-        allow_blank=True, allow_null=True, required=False, default=None
+        allow_blank=True, allow_null=True, required=False
     )
-    status = serializers.ChoiceField(
-        choices=RequirementItemStatus.choices,
-        required=False,
-        default=RequirementItemStatus.DRAFT,
-    )
+    # status 不在这里 —— 它是**交付进度轴**，由系统写，客户端说了不算。
+    # 网格的批量保存 payload 恒带全部八个内置列，所以这里选择静默忽略而不是报 400，
+    # 值一律由 validate_requirement_builtin_values 从当前行/缺省值回填。
     priority = serializers.ChoiceField(
         choices=RequirementPriority.choices,
         required=False,
-        default=RequirementPriority.NONE,
     )
-    assignee_id = serializers.UUIDField(required=False, allow_null=True, default=None)
-    start_date = serializers.DateField(required=False, allow_null=True, default=None)
-    target_date = serializers.DateField(required=False, allow_null=True, default=None)
-    parent_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    assignee_id = serializers.UUIDField(required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    target_date = serializers.DateField(required=False, allow_null=True)
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_description_html(self, value):
         if not value:
@@ -749,13 +740,35 @@ class RequirementBuiltinWriteSerializer(serializers.Serializer):
         return attrs
 
 
-def validate_requirement_builtin_values(*, owner, values, parent_queryset, row_id=None):
+def validate_requirement_builtin_values(
+    *, owner, values, parent_queryset, row_id=None, current_row=None
+):
     """校验内置列里那些 DRF 管不到的部分，返回可直接当模型 kwargs 的完整八列。
 
-    parent_queryset 是这一行所在的那一批行（正式表或草稿层，已按归属过滤）——
-    父项只能在这批里选，这样产品需求就不会指到标准库的条目上去。
+    parent_queryset 是这一行所在的那一批行（已按归属过滤）—— 父项只能在这批里选，
+    这样产品需求就不会指到标准库的条目上去。
+
+    current_row 是更新路径上的那一行。**必须传**：builtin_values_from_payload 恒返回全
+    八列，没有它，一个只改标题的 PATCH 会把其余列一起写成缺省值。有了 current_row，
+    未提交的列沿用行上的当前值。
+
+    status 永远走这条回填路径 —— 写序列化器根本不收它，所以「客户端提交的 status」这个
+    概念不存在，行上是什么就还是什么。唯一改写它的地方是审批通过（draft→confirmed）。
     """
     values = dict(values or {})
+    values.pop("status", None)
+    if current_row is not None:
+        submitted = set(values.keys())
+        for column in BUILTIN_COLUMNS:
+            if column not in submitted:
+                values[column] = field_attr(current_row, column)
+
+    # 标准库条目永不走审批，四个执行期列在库里既不展示也不该存在。这里是唯一的执行点：
+    # 不挡的话一个带 status=confirmed 的 PATCH 会撞上 req_library_item_never_approved
+    # 约束，变成 500 而不是 400。
+    if isinstance(owner, RequirementLibrary):
+        for column in LIBRARY_HIDDEN_BUILTIN_COLUMNS:
+            values[column] = BUILTIN_COLUMN_DEFAULTS[column]
 
     assignee_id = values.get("assignee_id")
     if assignee_id:
@@ -797,15 +810,15 @@ def validate_requirement_builtin_values(*, owner, values, parent_queryset, row_i
     return builtin_values_from_payload(values)
 
 
-class RequirementBaselineConfigurationWriteSerializer(serializers.Serializer):
-    """在乐观锁下更新基线的 meta。
+class RequirementApprovalPolicyWriteSerializer(serializers.Serializer):
+    """在乐观锁下更新审批配置。
 
-    基线本身没有字段，字段编辑走需求类型的配置接口，所以这里显式拒绝 fields
-    而不是默默忽略 —— 前端把字段树发到错误的端点时应该拿到明确的报错。
+    配置本身没有字段，字段编辑走需求类型的配置接口，所以这里显式拒绝 fields 而不是
+    默默忽略 —— 前端把字段树发到错误的端点时应该拿到明确的报错。
     """
 
     expected_updated_at = serializers.DateTimeField()
-    baseline = serializers.DictField()
+    policy = serializers.DictField()
 
     def validate(self, attrs):
         if "fields" in self.initial_data:
@@ -816,12 +829,10 @@ class RequirementBaselineConfigurationWriteSerializer(serializers.Serializer):
             )
         return attrs
 
-    def validate_baseline(self, value):
-        baseline = self.context["baseline"]
-        # 状态只能由审批流转推动，配置保存里带上的 status 一律忽略
-        value = {key: item for key, item in value.items() if key != "status"}
-        serializer = RequirementBaselineSerializer(
-            baseline,
+    def validate_policy(self, value):
+        policy = self.context["policy"]
+        serializer = RequirementApprovalPolicySerializer(
+            policy,
             data=value,
             partial=True,
             context={
@@ -830,44 +841,32 @@ class RequirementBaselineConfigurationWriteSerializer(serializers.Serializer):
             },
         )
         serializer.is_valid(raise_exception=True)
-        self._baseline_serializer = serializer
+        self._policy_serializer = serializer
         return value
 
     @transaction.atomic
     def save(self, **kwargs):
-        baseline = (
-            RequirementBaseline.objects.select_for_update()
+        policy = (
+            RequirementApprovalPolicy.objects.select_for_update()
             .filter(
-                id=self.context["baseline"].id,
+                id=self.context["policy"].id,
                 workspace=self.context["workspace"],
             )
             .first()
         )
-        if baseline is None:
-            raise serializers.ValidationError("Requirement baseline not found.")
-        if baseline.updated_at != self.validated_data["expected_updated_at"]:
+        if policy is None:
+            raise serializers.ValidationError("Requirement approval policy not found.")
+        if policy.updated_at != self.validated_data["expected_updated_at"]:
             raise RequirementConfigurationConflict
 
-        self._baseline_serializer.instance = baseline
-        baseline = self._baseline_serializer.save()
-        baseline.refresh_from_db()
-        return baseline
+        self._policy_serializer.instance = policy
+        policy = self._policy_serializer.save()
+        policy.refresh_from_db()
+        return policy
 
 
 class RequirementConfigurationConflict(Exception):
     pass
-
-
-class _RequirementRowSerializerMixin:
-    """行输出的共同部分。
-
-    八个内置字段是行上的平铺键，与 data 平级；data 只装自定义字段（key 是字段
-    UUID）。前端因此有两组列：固定的内置列 + 需求类型给的自定义列。
-    """
-
-    def get_change_kind(self, obj):
-        """相对上一个已发布版本的变更标记，由列表入口按需注解。"""
-        return getattr(obj, "change_kind", None)
 
 
 ROW_FIELDS = [
@@ -879,9 +878,16 @@ ROW_FIELDS = [
     *BUILTIN_COLUMNS,
     "data",
     "sort_order",
+    # 乐观锁计数器。与审批版本链（approved_version）是两个完全不同的数字，前端把它
+    # 叫 lock_version 以免混淆。
     "version",
-    "change_kind",
-    "last_changed_version",
+    "approval_state",
+    "approved_version",
+    "pending_change_request_id",
+    "pending_change_type",
+    "is_locked",
+    "can_submit_review",
+    "can_withdraw",
     "created_at",
     "updated_at",
     "created_by",
@@ -889,45 +895,53 @@ ROW_FIELDS = [
 ]
 
 
-class RequirementSerializer(_RequirementRowSerializerMixin, BaseSerializer):
-    """一条需求条目。"""
+class RequirementSerializer(BaseSerializer):
+    """一条需求条目。
 
-    change_kind = serializers.SerializerMethodField()
+    八个内置字段是行上的平铺键，与 data 平级；data 只装自定义字段（key 是字段 UUID）。
+    前端因此有两组列：固定的内置列 + 需求类型给的自定义列。
+
+    审批态的四个派生字段（approval_state / is_locked / can_*）一律由服务端算 —— 前端
+    从 pending_change_request_id 反推会漏掉权限这一维。
+    """
+
+    approval_state = serializers.CharField(read_only=True)
+    is_locked = serializers.BooleanField(read_only=True)
+    pending_change_request_id = serializers.SerializerMethodField()
+    pending_change_type = serializers.SerializerMethodField()
+    can_submit_review = serializers.SerializerMethodField()
+    can_withdraw = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
         fields = ROW_FIELDS
         read_only_fields = fields
 
+    def get_pending_change_request_id(self, obj):
+        value = getattr(obj, "pending_change_request_id", None)
+        return str(value) if value else None
 
-class RequirementDraftRowSerializer(_RequirementRowSerializerMixin, BaseSerializer):
-    """草稿里的需求条目，输出形状与正式行完全一致。
+    def get_pending_change_type(self, obj):
+        return getattr(obj, "pending_change_type", None)
 
-    前端的网格因此不需要为草稿态做任何分支 —— 它看到的始终是同一份契约。
-    """
+    def _can_write(self):
+        return bool(self.context.get("can_write"))
 
-    change_kind = serializers.SerializerMethodField()
-    product_id = serializers.SerializerMethodField()
-    project_id = serializers.SerializerMethodField()
-    library_id = serializers.SerializerMethodField()
+    def get_can_submit_review(self, obj):
+        # 标准库条目不走审批；在评审中的行也不能重复提交
+        if obj.library_id or obj.pending_change_item_id:
+            return False
+        return self._can_write() and obj.approval_state != "approved"
 
-    class Meta:
-        model = RequirementDraftRow
-        fields = ROW_FIELDS
-        read_only_fields = fields
-
-    def get_product_id(self, obj):
-        product_id = self.context.get("product_id")
-        return str(product_id) if product_id else None
-
-    def get_project_id(self, obj):
-        project_id = self.context.get("project_id")
-        return str(project_id) if project_id else None
-
-    def get_library_id(self, obj):
-        # 草稿只属于产品/项目作用域，永远不会挂在标准库上；这里恒为 None，只是为了
-        # 让草稿行与正式行的输出形状保持一致。
-        return None
+    def get_can_withdraw(self, obj):
+        if not obj.pending_change_item_id:
+            return False
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        submitter_id = getattr(obj, "pending_change_submitted_by", None)
+        if user is None or user.is_anonymous or submitter_id is None:
+            return False
+        return str(submitter_id) == str(user.id)
 
 
 class _RequirementBuiltinWriteMixin:
@@ -937,11 +951,12 @@ class _RequirementBuiltinWriteMixin:
     的那一批行），由视图从 RowLayer 传进来。
     """
 
-    def resolve_builtin(self, attrs, *, row_id=None):
+    def resolve_builtin(self, attrs, *, row_id=None, current_row=None):
         return validate_requirement_builtin_values(
             owner=self.context["owner"],
             values=attrs.get("builtin") or {},
             parent_queryset=self.context["parent_queryset"],
+            current_row=current_row,
             row_id=row_id,
         )
 
@@ -1007,7 +1022,11 @@ class RequirementUpdateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
         )
 
     def validate(self, attrs):
-        attrs["builtin"] = self.resolve_builtin(attrs, row_id=self.context["row_id"])
+        attrs["builtin"] = self.resolve_builtin(
+            attrs,
+            row_id=self.context["row_id"],
+            current_row=self.context.get("current_row"),
+        )
         return attrs
 
 
@@ -1042,7 +1061,11 @@ class RequirementBatchUpdateSerializer(
                 requirement_type_id
             ),
         )
-        attrs["builtin"] = self.resolve_builtin(attrs, row_id=attrs["id"])
+        attrs["builtin"] = self.resolve_builtin(
+            attrs,
+            row_id=attrs["id"],
+            current_row=(self.context.get("rows_by_id") or {}).get(attrs["id"]),
+        )
         return attrs
 
 
@@ -1074,8 +1097,20 @@ class RequirementImportSerializer(serializers.Serializer):
         return attrs
 
 
+class RequirementRollbackSerializer(serializers.Serializer):
+    """回滚到某个已通过版本。只收版本号 —— 内容一律由服务端从版本行里读。"""
+
+    version = serializers.IntegerField(min_value=1)
+
+
 class RequirementBatchSaveSerializer(serializers.Serializer):
-    expected_updated_at = serializers.DateTimeField()
+    """网格的批量保存。
+
+    没有 expected_updated_at：它原本是 max(基线, 各需求类型).updated_at，而字段结构
+    变更现在立即生效，任何一次类型编辑都会顶高这个 max，把所有打开着的网格的暂存编辑
+    全部打成 409 —— 哪怕改的类型跟他无关。真实冲突由逐行 version 覆盖。
+    """
+
     creates = RequirementBatchCreateSerializer(
         many=True, required=False, default=list
     )

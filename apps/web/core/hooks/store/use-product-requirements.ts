@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
-  TRequirementBaseline,
-  TRequirementBaselineConfiguration,
-  TRequirementBaselineConfigurationPayload,
+  TRequirementApprovalPolicy,
+  TRequirementConfiguration,
+  TRequirementConfigurationPayload,
   TRequirementBatchSavePayload,
+  TRequirementBuiltinValues,
   TRequirementData,
   TRequirementFilter,
   TRequirementImportPayload,
@@ -42,13 +43,13 @@ const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
 export const useProductRequirements = ({
   workspaceSlug,
   productId,
-  onBaselineUpdate,
+  onPolicyUpdate,
 }: {
   workspaceSlug: string | undefined;
   productId: string | undefined;
-  onBaselineUpdate?: (baseline: TRequirementBaseline) => void;
+  onPolicyUpdate?: (policy: TRequirementApprovalPolicy) => void;
 }) => {
-  const [configuration, setConfiguration] = useState<TRequirementBaselineConfiguration | null>(null);
+  const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TRequirementsResponse>(EMPTY_PAGE);
   const [isConfigurationLoading, setIsConfigurationLoading] = useState(Boolean(workspaceSlug && productId));
   const [isRequirementsLoading, setIsRequirementsLoading] = useState(Boolean(workspaceSlug && productId));
@@ -67,9 +68,9 @@ export const useProductRequirements = ({
     setIsConfigurationLoading(true);
     setConfigurationError(null);
     try {
-      const response = await requirementService.getBaseline(workspaceSlug, productId);
+      const response = await requirementService.getConfiguration(workspaceSlug, productId);
       setConfiguration(response);
-      onBaselineUpdate?.(response.baseline);
+      onPolicyUpdate?.(response.policy);
       return response;
     } catch (requestError) {
       setConfigurationError(getErrorMessage(requestError));
@@ -77,7 +78,7 @@ export const useProductRequirements = ({
     } finally {
       setIsConfigurationLoading(false);
     }
-  }, [onBaselineUpdate, productId, workspaceSlug]);
+  }, [onPolicyUpdate, productId, workspaceSlug]);
 
   const fetchRequirements = useCallback(async () => {
     if (!workspaceSlug || !productId) return EMPTY_PAGE;
@@ -113,19 +114,19 @@ export const useProductRequirements = ({
   }, [fetchRequirements]);
 
   const updateConfiguration = useCallback(
-    async (payload: TRequirementBaselineConfigurationPayload) => {
+    async (payload: TRequirementConfigurationPayload) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.updateBaseline(workspaceSlug, productId, payload);
+        const response = await requirementService.updateConfiguration(workspaceSlug, productId, payload);
         setConfiguration(response);
-        onBaselineUpdate?.(response.baseline);
+        onPolicyUpdate?.(response.policy);
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [onBaselineUpdate, productId, workspaceSlug]
+    [onPolicyUpdate, productId, workspaceSlug]
   );
 
   const createRequirement = useCallback(
@@ -178,15 +179,21 @@ export const useProductRequirements = ({
     [fetchConfiguration, fetchRequirements, productId, workspaceSlug]
   );
 
+  /** builtin 必须整组传：后端按缺省值补齐没传的列，漏传等于把它清空 */
   const updateRequirement = useCallback(
-    async (requirementId: string, data: TRequirementData, version: number) => {
+    async (
+      requirementId: string,
+      payload: { data: TRequirementData; builtin: TRequirementBuiltinValues; version: number }
+    ) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.updateRequirement(workspaceSlug, productId, requirementId, {
-          data,
-          version,
-        });
+        const response = await requirementService.updateRequirement(
+          workspaceSlug,
+          productId,
+          requirementId,
+          payload
+        );
         setRequirementsPage((current) => ({
           ...current,
           results: current.results.map((item) => (item.id === response.id ? response : item)),
@@ -255,7 +262,7 @@ export const useProductRequirements = ({
 
   return {
     configuration,
-    baseline: configuration?.baseline ?? null,
+    policy: configuration?.policy ?? null,
     requirementTypes: configuration?.requirement_types ?? EMPTY_REQUIREMENT_TYPES,
     requirementsPage,
     isConfigurationLoading,

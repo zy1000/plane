@@ -1,8 +1,12 @@
 """需求行读写的公共入口。
 
-产品需求与标准库的条目落在同一张 Requirement 表上，分页、过滤、插入锚点、批量
-冲突这些语义完全一致，区别只在三点：归属对象怎么解析、谁有权写、字段定义从哪来。
-所以把 6 个 handler 提到这里，子类只填这几个钩子。
+产品需求与标准库的条目落在同一张 Requirement 表上，分页、过滤、插入锚点、批量冲突
+这些语义完全一致，区别只在三点：归属对象怎么解析、谁有权写、字段定义从哪来。所以把
+这几个 handler 提到这里，子类只填这几个钩子。
+
+**只读是行级的**：一条需求能不能写只看它自己在不在评审中
+（Requirement.pending_change_item），不再有产品级的冻结闸门。这是「审批下沉到条目」
+最直接的表现 —— A 提交了需求 A 的评审，B 照样可以改需求 B。
 """
 
 import json
@@ -21,12 +25,35 @@ from plane.app.serializers.requirement import (
     RequirementUpdateSerializer,
 )
 from plane.app.views.base import BaseViewSet
-from plane.db.models import Requirement
+from plane.db.models import Requirement, RequirementItemStatus
 from plane.utils.requirement import (
     BUILTIN_COLUMNS,
     RequirementBatchConflict,
     filter_requirement_row_ids,
+    requirement_content_values,
+    resync_approved_row_version,
+    row_was_approved,
 )
+
+
+IN_REVIEW_MESSAGE = "This requirement is under review and is read-only."
+DELETE_NEEDS_APPROVAL_MESSAGE = (
+    "Deleting an approved requirement needs approval. Submit a delete review instead."
+)
+
+
+def annotate_pending(queryset):
+    """把待审变更项的两个标量拉平到行上。
+
+    不用 select_related —— 变更项上挂着两份完整行快照，join 进来会让每页多拖几百 KB。
+    """
+    from django.db.models import F
+
+    return queryset.annotate(
+        pending_change_type=F("pending_change_item__change_type"),
+        pending_change_request_id=F("pending_change_item__change_request_id"),
+        pending_change_submitted_by=F("pending_change_item__change_request__created_by"),
+    )
 
 
 class BaseRequirementRowViewSet(BaseViewSet):
@@ -36,14 +63,14 @@ class BaseRequirementRowViewSet(BaseViewSet):
     # --- 子类必须实现 ---------------------------------------------------
 
     def resolve_owner(self, *, for_update=False):
-        """返回这批需求行的归属对象（基线或标准库）；不存在或不可见时返回 None。"""
+        """返回这批需求行的归属对象（审批配置或标准库）；不存在或不可见时返回 None。"""
         raise NotImplementedError
 
     def can_write(self, owner):
         raise NotImplementedError
 
-    def resolve_layer(self, owner, *, for_write):
-        """返回 (RowLayer, error_response)；error_response 非 None 时直接返回它。"""
+    def resolve_layer(self, owner):
+        """返回 RowLayer。不再有只读分支 —— 闸门下沉到了每一行。"""
         raise NotImplementedError
 
     # --- 公共流程 -------------------------------------------------------
@@ -66,6 +93,35 @@ class BaseRequirementRowViewSet(BaseViewSet):
             )
         return owner, None
 
+    def _serializer_context(self, layer, owner):
+        return {
+            **layer.serializer_context,
+            "request": self.request,
+            "can_write": self.can_write(owner),
+        }
+
+    @staticmethod
+    def _locked_response(row_ids, *, change_request_id=None):
+        payload = {
+            "error": IN_REVIEW_MESSAGE,
+            "code": "REQUIREMENT_IN_REVIEW",
+            "requirement_ids": [str(row_id) for row_id in row_ids],
+        }
+        if change_request_id:
+            payload["pending_change_request_id"] = str(change_request_id)
+        return Response(payload, status=status.HTTP_409_CONFLICT)
+
+    @staticmethod
+    def _delete_needs_approval_response(row_ids):
+        return Response(
+            {
+                "error": DELETE_NEEDS_APPROVAL_MESSAGE,
+                "code": "REQUIREMENT_DELETE_NEEDS_APPROVAL",
+                "requirement_ids": [str(row_id) for row_id in row_ids],
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
     def list(self, request, *args, **kwargs):
         owner, error = self._owner_or_error(require_write=False)
         if error is not None:
@@ -85,9 +141,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        layer, error = self.resolve_layer(owner, for_write=False)
-        if error is not None:
-            return error
+        layer = self.resolve_layer(owner)
         filter_serializer = RequirementFilterSerializer(
             data=filter_payload,
             many=True,
@@ -109,9 +163,8 @@ class BaseRequirementRowViewSet(BaseViewSet):
         if requirement_type_id:
             queryset = queryset.filter(requirement_type_id=requirement_type_id)
 
-        # 按 id 直取：父项选择器要回显一个可能不在当前页、也不在搜索结果里的行。
-        # 走列表入口而不是单独的 retrieve —— 这样草稿态自动落到草稿层，作用域也
-        # 已经由 layer.queryset 框好了。
+        # 按 id 直取：父项选择器要回显一个可能不在当前页、也不在搜索结果里的行，
+        # 需求详情也走这条路（后端没有 retrieve 端点）。
         raw_ids = request.query_params.get("ids")
         if raw_ids:
             try:
@@ -132,26 +185,24 @@ class BaseRequirementRowViewSet(BaseViewSet):
                 fields_by_requirement_type=layer.fields_by_requirement_type,
             )
             queryset = queryset.filter(id__in=matching_ids)
+
+        context = self._serializer_context(layer, owner)
         return self.paginate(
             request=request,
-            queryset=queryset,
-            # 变更标记只对当前这一页算，成本不随总行数增长
-            on_results=lambda results: layer.serializer_class(
-                layer.annotate_change_kind(results),
-                many=True,
-                context=layer.serializer_context,
+            queryset=annotate_pending(queryset),
+            on_results=lambda results: RequirementSerializer(
+                results, many=True, context=context
             ).data,
             default_per_page=20,
             max_per_page=100,
         )
 
     def create(self, request, *args, **kwargs):
+        """新增永不设闸门 —— 新行恒为草稿态，没有已批准内容需要保护。"""
         owner, error = self._owner_or_error()
         if error is not None:
             return error
-        layer, error = self.resolve_layer(owner, for_write=True)
-        if error is not None:
-            return error
+        layer = self.resolve_layer(owner)
         serializer = RequirementCreateSerializer(
             data=request.data,
             context={
@@ -162,11 +213,14 @@ class BaseRequirementRowViewSet(BaseViewSet):
             },
         )
         serializer.is_valid(raise_exception=True)
+        builtin = dict(serializer.validated_data["builtin"])
+        # 新行一律从草稿开始，客户端传什么状态都不算数（DB 约束也这么要求）
+        builtin["status"] = RequirementItemStatus.DRAFT
         try:
             with transaction.atomic():
                 row = layer.insert(
                     data=serializer.validated_data["data"],
-                    builtin=serializer.validated_data["builtin"],
+                    builtin=builtin,
                     requirement_type_id=serializer.validated_data["requirement_type_id"],
                     actor=request.user,
                     before_id=serializer.validated_data.get("before_id"),
@@ -175,9 +229,8 @@ class BaseRequirementRowViewSet(BaseViewSet):
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
-            layer.serializer_class(
-                layer.annotate_change_kind([row])[0],
-                context=layer.serializer_context,
+            RequirementSerializer(
+                row, context=self._serializer_context(layer, owner)
             ).data,
             status=status.HTTP_201_CREATED,
         )
@@ -186,9 +239,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
         owner, error = self._owner_or_error()
         if error is not None:
             return error
-        layer, error = self.resolve_layer(owner, for_write=True)
-        if error is not None:
-            return error
+        layer = self.resolve_layer(owner)
         # 先取这一行绑定的需求类型 —— data 要按它自己的字段校验，而不是全部类型的并集
         row_requirement_type_id = (
             layer.queryset.filter(id=pk).values_list("requirement_type_id", flat=True).first()
@@ -199,16 +250,6 @@ class BaseRequirementRowViewSet(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
         specs = layer.requirement_type_resolver.specs(row_requirement_type_id)
-        serializer = RequirementUpdateSerializer(
-            data=request.data,
-            context={
-                "owner": owner,
-                "fields": specs,
-                "parent_queryset": layer.queryset,
-                "row_id": pk,
-            },
-        )
-        serializer.is_valid(raise_exception=True)
         with transaction.atomic():
             row = layer.queryset.select_for_update().filter(id=pk).first()
             if row is None:
@@ -216,6 +257,24 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     {"error": "Requirement not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+            # 闸门就放在已经锁住的这一行上，零额外查询
+            if row.pending_change_item_id:
+                return self._locked_response(
+                    [row.id],
+                    change_request_id=row.pending_change_item.change_request_id,
+                )
+
+            serializer = RequirementUpdateSerializer(
+                data=request.data,
+                context={
+                    "owner": owner,
+                    "fields": specs,
+                    "parent_queryset": layer.queryset,
+                    "row_id": pk,
+                    "current_row": row,
+                },
+            )
+            serializer.is_valid(raise_exception=True)
             if row.version != serializer.validated_data["version"]:
                 return Response(
                     {
@@ -225,51 +284,68 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
+            # 前快照与 was_approved 都要在改动之前抓，且用这个 select_for_update 到的实例
+            before = requirement_content_values(row)
+            was_approved = row_was_approved(row)
             for column, value in serializer.validated_data["builtin"].items():
                 setattr(row, column, value)
             row.data = serializer.validated_data["data"]
             row.version += 1
             row.updated_by = request.user
+            resync_approved_row_version(row, before=before, was_approved=was_approved)
             row.save(
                 update_fields=[
                     *BUILTIN_COLUMNS,
                     "data",
                     "version",
+                    "approved_row_version",
                     "updated_at",
                     "updated_by",
                 ]
             )
         return Response(
-            layer.serializer_class(
-                layer.annotate_change_kind([row])[0],
-                context=layer.serializer_context,
+            RequirementSerializer(
+                row, context=self._serializer_context(layer, owner)
             ).data,
             status=status.HTTP_200_OK,
         )
+
+    def _check_deletable(self, rows):
+        """返回 error_response 或 None。
+
+        草稿直接删，已通过审批的要走评审 —— 从未通过审批的行没有任何已批准内容需要
+        保护，为它拉一轮审批只会让人在录入阶段失去耐心。
+        """
+        locked = [row.id for row in rows if row.pending_change_item_id]
+        if locked:
+            return self._locked_response(locked)
+        approved = [row.id for row in rows if row.approved_version is not None]
+        if approved:
+            return self._delete_needs_approval_response(approved)
+        return None
 
     def destroy(self, request, *args, pk=None, **kwargs):
         owner, error = self._owner_or_error()
         if error is not None:
             return error
-        layer, error = self.resolve_layer(owner, for_write=True)
-        if error is not None:
-            return error
+        layer = self.resolve_layer(owner)
         row = layer.queryset.filter(id=pk).first()
         if row is None:
             return Response(
                 {"error": "Requirement not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        row.delete(soft=not layer.hard_delete)
+        error = self._check_deletable([row])
+        if error is not None:
+            return error
+        row.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_destroy(self, request, *args, **kwargs):
         owner, error = self._owner_or_error()
         if error is not None:
             return error
-        layer, error = self.resolve_layer(owner, for_write=True)
-        if error is not None:
-            return error
+        layer = self.resolve_layer(owner)
         ids_serializer = drf_serializers.ListField(
             child=drf_serializers.UUIDField(), allow_empty=False
         )
@@ -277,13 +353,17 @@ class BaseRequirementRowViewSet(BaseViewSet):
             row_ids = ids_serializer.run_validation(request.data.get("ids"))
         except drf_serializers.ValidationError as exc:
             return Response({"ids": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
-        queryset = layer.queryset.filter(id__in=row_ids)
-        if queryset.count() != len(set(row_ids)):
+        rows = list(layer.queryset.filter(id__in=row_ids))
+        if len(rows) != len(set(row_ids)):
             return Response(
                 {"ids": "One or more requirements were not found."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        queryset.delete(soft=not layer.hard_delete)
+        # 全有或全无：批量端点的部分成功是前端不可恢复状态的来源
+        error = self._check_deletable(rows)
+        if error is not None:
+            return error
+        layer.queryset.filter(id__in=row_ids).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_save(self, request, *args, **kwargs):
@@ -291,10 +371,9 @@ class BaseRequirementRowViewSet(BaseViewSet):
             owner, error = self._owner_or_error(for_update=True)
             if error is not None:
                 return error
-            layer, error = self.resolve_layer(owner, for_write=True)
-            if error is not None:
-                return error
+            layer = self.resolve_layer(owner)
 
+            rows_by_id = {row.id: row for row in layer.queryset}
             serializer = RequirementBatchSaveSerializer(
                 data=request.data,
                 context={
@@ -303,27 +382,52 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     "requirement_type_resolver": layer.requirement_type_resolver,
                     "default_requirement_type_id": layer.default_requirement_type_id,
                     # 每行按自己绑定的需求类型校验
-                    "row_requirement_types": dict(
-                        layer.queryset.values_list("id", "requirement_type_id")
-                    ),
+                    "row_requirement_types": {
+                        row_id: row.requirement_type_id
+                        for row_id, row in rows_by_id.items()
+                    },
+                    # 未提交的内置列沿用行上的当前值，见 validate_requirement_builtin_values
+                    "rows_by_id": rows_by_id,
                 },
             )
             serializer.is_valid(raise_exception=True)
-            if layer.expected_updated_at != serializer.validated_data[
-                "expected_updated_at"
-            ]:
+
+            # 锁定与「已确认不能直接删」折进现成的 conflicts 形状，前端不必学新的错误结构
+            conflicts = []
+            for update in serializer.validated_data["updates"]:
+                row = rows_by_id.get(update["id"])
+                if row is not None and row.pending_change_item_id:
+                    conflicts.append({"id": str(row.id), "reason": "in_review"})
+            for delete in serializer.validated_data["deletes"]:
+                row = rows_by_id.get(delete["id"])
+                if row is None:
+                    continue
+                if row.pending_change_item_id:
+                    conflicts.append({"id": str(row.id), "reason": "in_review"})
+                elif row.approved_version is not None:
+                    conflicts.append({"id": str(row.id), "reason": "needs_approval"})
+            if conflicts:
                 return Response(
                     {
-                        "error": "The requirements changed before the batch was saved.",
-                        "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
-                        "current_updated_at": layer.expected_updated_at,
+                        "error": "One or more requirements cannot be saved right now.",
+                        "code": "REQUIREMENT_BATCH_CONFLICT",
+                        "conflicts": conflicts,
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
 
+            creates = []
+            for payload in serializer.validated_data["creates"]:
+                payload = dict(payload)
+                payload["builtin"] = {
+                    **payload["builtin"],
+                    "status": RequirementItemStatus.DRAFT,
+                }
+                creates.append(payload)
+
             try:
                 created, updated, deleted_ids = layer.save_batch(
-                    creates=serializer.validated_data["creates"],
+                    creates=creates,
                     updates=serializer.validated_data["updates"],
                     deletes=serializer.validated_data["deletes"],
                     actor=request.user,
@@ -338,20 +442,18 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-        layer.annotate_change_kind([row for _, row in created] + list(updated))
+        context = self._serializer_context(layer, owner)
         return Response(
             {
                 "created": [
                     {
                         "client_id": str(client_id),
-                        "requirement": layer.serializer_class(
-                            row, context=layer.serializer_context
-                        ).data,
+                        "requirement": RequirementSerializer(row, context=context).data,
                     }
                     for client_id, row in created
                 ],
-                "updated": layer.serializer_class(
-                    updated, many=True, context=layer.serializer_context
+                "updated": RequirementSerializer(
+                    updated, many=True, context=context
                 ).data,
                 "deleted_ids": [str(row_id) for row_id in deleted_ids],
             },
@@ -359,18 +461,12 @@ class BaseRequirementRowViewSet(BaseViewSet):
         )
 
     def import_from_library(self, request, *args, **kwargs):
-        """把标准库里的条目导入成本作用域的需求行。
-
-        走的是和其它写入完全一样的分派：需要时自动开工作副本，排序与锁复用
-        save_batch 那一套，所以这里不需要任何特殊处理。
-        """
+        """把标准库里的条目导入成本作用域的需求行。只有新增，不设闸门。"""
         with transaction.atomic():
             owner, error = self._owner_or_error(for_update=True)
             if error is not None:
                 return error
-            layer, error = self.resolve_layer(owner, for_write=True)
-            if error is not None:
-                return error
+            layer = self.resolve_layer(owner)
 
             serializer = RequirementImportSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -395,15 +491,13 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
                 )
 
-        layer.annotate_change_kind([row for _, row in created])
+        context = self._serializer_context(layer, owner)
         return Response(
             {
                 "created": [
                     {
                         "client_id": str(client_id),
-                        "requirement": layer.serializer_class(
-                            row, context=layer.serializer_context
-                        ).data,
+                        "requirement": RequirementSerializer(row, context=context).data,
                     }
                     for client_id, row in created
                 ],
@@ -417,4 +511,4 @@ class BaseRequirementRowViewSet(BaseViewSet):
 
     def resolve_library(self, library_id):
         """导入源标准库；只有产品需求的入口支持导入。"""
-        raise NotImplementedError
+        return None

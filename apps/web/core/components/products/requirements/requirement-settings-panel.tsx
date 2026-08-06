@@ -1,17 +1,19 @@
 import { useMemo } from "react";
 import { FileText, ShieldCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirementApprovalType, TRequirementStatus, IUserLite } from "@plane/types";
+import type { TRequirementApprovalType, IUserLite } from "@plane/types";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { RequirementApprovalSettings } from "./requirement-approval-settings";
-import { RequirementSettingsCard, RequirementStatusSummary } from "./requirement-settings-layout";
+import { RequirementSettingsCard } from "./requirement-settings-layout";
 
 /**
- * 基线配置的草稿。标题与描述不在这里 —— 它们是每条需求自己的字段，在网格里编辑。
+ * 审批配置的草稿。
+ *
+ * 没有 status 也没有 current_version —— 状态与版本现在长在每一条需求上，这里只回答
+ * 「谁能批、要几个人批」。
  */
 export type TRequirementSettingsDraft = {
   owner_id: string;
-  status: TRequirementStatus;
   approver_ids: string[];
   approval_type: TRequirementApprovalType;
   required_count: number | null;
@@ -19,21 +21,25 @@ export type TRequirementSettingsDraft = {
 
 type TRequirementSettingsPanelProps = {
   draft: TRequirementSettingsDraft;
-  currentVersion: number | null;
+  /** 改配置比改需求更窄：没权限时整页只读 */
+  readOnly?: boolean;
   memberOptions: IUserLite[];
   onChange: (draft: TRequirementSettingsDraft) => void;
 };
 
 export function RequirementSettingsPanel({
   draft,
-  currentVersion,
+  readOnly = false,
   memberOptions,
   onChange,
 }: TRequirementSettingsPanelProps) {
   const { t } = useTranslation();
   const memberIds = useMemo(() => memberOptions.map((member) => member.id), [memberOptions]);
 
-  const updateDraft = (patch: Partial<TRequirementSettingsDraft>) => onChange({ ...draft, ...patch });
+  const updateDraft = (patch: Partial<TRequirementSettingsDraft>) => {
+    if (readOnly) return;
+    onChange({ ...draft, ...patch });
+  };
 
   const handleApproverIdsChange = (nextApproverIds: string[]) => {
     if (draft.approval_type !== "n_of_m") {
@@ -100,7 +106,6 @@ export function RequirementSettingsPanel({
               </div>
             </RequirementSettingsCard>
 
-            <RequirementStatusSummary status={draft.status} currentVersion={currentVersion} />
           </div>
 
           <RequirementSettingsCard
@@ -109,6 +114,7 @@ export function RequirementSettingsPanel({
             title={t("workspace_products.requirements.configuration.approval")}
           >
             <RequirementApprovalSettings
+              readOnly={readOnly}
               layout="cards"
               radioGroupName="product-requirement-inline-approval-type"
               memberOptions={memberOptions}

@@ -1,12 +1,14 @@
 from .base import (
-    RequirementBaselineConfigurationAPIView,
+    RequirementConfigurationAPIView,
     RequirementViewSet,
 )
 from .change import (
+    RequirementApprovalInboxAPIView,
+    RequirementBaselineViewSet,
     RequirementChangeItemViewSet,
     RequirementChangeRequestViewSet,
+    RequirementChangeTrailViewSet,
     RequirementVersionViewSet,
-    RequirementWorkingCopyAPIView,
 )
 from .library import RequirementLibraryViewSet
 from .library_item import (
@@ -19,9 +21,12 @@ from .type import (
 )
 
 __all__ = [
-    "RequirementBaselineConfigurationAPIView",
+    "RequirementApprovalInboxAPIView",
+    "RequirementBaselineViewSet",
     "RequirementChangeItemViewSet",
     "RequirementChangeRequestViewSet",
+    "RequirementChangeTrailViewSet",
+    "RequirementConfigurationAPIView",
     "RequirementLibraryConfigurationAPIView",
     "RequirementLibraryItemViewSet",
     "RequirementLibraryViewSet",
@@ -29,5 +34,4 @@ __all__ = [
     "RequirementTypeViewSet",
     "RequirementVersionViewSet",
     "RequirementViewSet",
-    "RequirementWorkingCopyAPIView",
 ]

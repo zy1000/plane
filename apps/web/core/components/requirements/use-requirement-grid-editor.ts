@@ -33,6 +33,13 @@ export type TRequirementDraftRow = {
   requirementTypeId?: string;
   isDeleted: boolean;
   isCopy?: boolean;
+  /**
+   * 这一行正在评审中，内容不可改。**服务端权威**（requirement.is_locked）—— 前端从
+   * pending_change_request_id 反推会漏掉权限这一维。
+   */
+  isLocked?: boolean;
+  pendingChangeType?: TRequirement["pending_change_type"];
+  pendingChangeRequestId?: string | null;
 };
 
 type TBatchSaveError = {
@@ -86,6 +93,9 @@ const createDraftRows = (requirements: TRequirement[]): TRequirementDraftRow[] =
     originalData: cloneDeep(requirement.data),
     originalBuiltin: pickBuiltinValues(requirement),
     isDeleted: false,
+    isLocked: requirement.is_locked,
+    pendingChangeType: requirement.pending_change_type,
+    pendingChangeRequestId: requirement.pending_change_request_id,
   }));
 
 const collectAssetIds = (value: unknown): string[] => {
@@ -104,7 +114,6 @@ export const useRequirementGridEditor = ({
   requirements,
   fields,
   workspaceSlug,
-  expectedUpdatedAt,
   createRequirementTypeId,
   discardMessage,
   onSave,
@@ -113,7 +122,6 @@ export const useRequirementGridEditor = ({
   requirements: TRequirement[];
   fields: TRequirementField[];
   workspaceSlug: string;
-  expectedUpdatedAt?: string;
   /** 新增行绑定到的类型 —— 就是当前视图的类型 */
   createRequirementTypeId?: string;
   discardMessage: string;
@@ -215,6 +223,9 @@ export const useRequirementGridEditor = ({
 
   const updateRowData = useCallback(
     (rowKey: string, updater: (data: TRequirementData) => TRequirementData) => {
+      // 评审中的行不可改。渲染层也已经降级成只读，这里是最后一道 —— 键盘操作、
+      // 粘贴、撤销都会绕过渲染层。
+      if (draftRowsRef.current.find((row) => row.key === rowKey)?.isLocked) return;
       commitDraftRows(
         draftRowsRef.current.map((row) => (row.key === rowKey ? { ...row, data: updater(row.data) } : row))
       );
@@ -226,6 +237,7 @@ export const useRequirementGridEditor = ({
 
   const updateRowBuiltin = useCallback(
     (rowKey: string, patch: Partial<TRequirementBuiltinValues>) => {
+      if (draftRowsRef.current.find((row) => row.key === rowKey)?.isLocked) return;
       commitDraftRows(
         draftRowsRef.current.map((row) =>
           row.key === rowKey ? { ...row, builtin: { ...row.builtin, ...patch } } : row
@@ -240,7 +252,11 @@ export const useRequirementGridEditor = ({
   const stageDelete = useCallback(
     (rowKeys: string[]) => {
       const currentRows = isEditing ? draftRowsRef.current : createDraftRows(requirements);
-      const keySet = new Set(rowKeys);
+      // 锁定行不能进删除队列 —— 它已经在别的变更单里了
+      const keySet = new Set(
+        rowKeys.filter((rowKey) => !currentRows.find((row) => row.key === rowKey)?.isLocked)
+      );
+      if (!keySet.size) return;
       const removedCreateRows = currentRows.filter((row) => keySet.has(row.key) && row.mode === "create");
       const pendingIdsToDelete = removedCreateRows
         .flatMap((row) => getDraftAssetIds(row.data))
@@ -283,10 +299,11 @@ export const useRequirementGridEditor = ({
     () =>
       draftRows.filter(
         (row) =>
-          row.mode === "create" ||
+          !row.isLocked &&
+          (row.mode === "create" ||
           row.isDeleted ||
           (row.originalData !== undefined &&
-            (!isEqual(row.data, row.originalData) || !isEqual(row.builtin, row.originalBuiltin)))
+            (!isEqual(row.data, row.originalData) || !isEqual(row.builtin, row.originalBuiltin))))
       ),
     [draftRows]
   );
@@ -303,7 +320,7 @@ export const useRequirementGridEditor = ({
   );
 
   const saveChanges = useCallback(async () => {
-    if (!expectedUpdatedAt || !dirtyRows.length) return null;
+    if (!dirtyRows.length) return null;
     const activeRows = draftRowsRef.current.filter((row) => !row.isDeleted);
     const creates = activeRows
       .map((row, index) => {
@@ -334,6 +351,7 @@ export const useRequirementGridEditor = ({
         (row) =>
           row.mode === "update" &&
           !row.isDeleted &&
+          !row.isLocked &&
           row.requirementId &&
           row.version &&
           row.originalData !== undefined &&
@@ -346,7 +364,7 @@ export const useRequirementGridEditor = ({
         builtin: row.builtin,
       }));
     const deletes = draftRowsRef.current
-      .filter((row) => row.mode === "update" && row.isDeleted && row.requirementId && row.version)
+      .filter((row) => row.mode === "update" && row.isDeleted && !row.isLocked && row.requirementId && row.version)
       .map((row) => ({
         id: row.requirementId as string,
         version: row.version as number,
@@ -355,12 +373,7 @@ export const useRequirementGridEditor = ({
     setSaveError(null);
     setConflictIds([]);
     try {
-      const response = await onSave({
-        expected_updated_at: expectedUpdatedAt,
-        creates,
-        updates,
-        deletes,
-      });
+      const response = await onSave({ creates, updates, deletes });
       commitPendingAssetIds([]);
       resetEditor();
       return response;
@@ -370,7 +383,7 @@ export const useRequirementGridEditor = ({
       setConflictIds(payload?.conflicts?.map((conflict) => conflict.id) ?? []);
       throw error;
     }
-  }, [commitPendingAssetIds, dirtyRows.length, expectedUpdatedAt, onSave, resetEditor]);
+  }, [commitPendingAssetIds, dirtyRows.length, onSave, resetEditor]);
 
   useEffect(() => {
     onEditingChange?.(isEditing);
@@ -397,6 +410,15 @@ export const useRequirementGridEditor = ({
     }
   }, [blocker, cleanupPendingAssets, discardMessage, resetEditor]);
 
+  /** 服务端说这一行被别的单锁住了（409 REQUIREMENT_BATCH_CONFLICT / reason=in_review） */
+  const lockedIds = useMemo(
+    () =>
+      draftRows
+        .filter((row) => row.isLocked && row.requirementId)
+        .map((row) => row.requirementId as string),
+    [draftRows]
+  );
+
   return {
     isEditing,
     isDirty,
@@ -404,6 +426,7 @@ export const useRequirementGridEditor = ({
     draftRows,
     saveError,
     conflictIds,
+    lockedIds,
     pendingAssetIds,
     startEditing,
     stageCreate,

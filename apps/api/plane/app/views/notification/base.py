@@ -29,6 +29,11 @@ from plane.app.permissions import allow_permission, ROLE
 from ..base import BaseAPIView, BaseViewSet
 
 
+# 会出现在通知中心的实体。加新实体时同时要确认前端卡片能渲染它 ——
+# notification-card/item.tsx 以 data.issue_activity.field 作为渲染开关。
+NOTIFIABLE_ENTITY_NAMES = ["issue", "requirement_change_request"]
+
+
 class NotificationViewSet(BaseViewSet, BasePaginator):
     model = Notification
     serializer_class = NotificationSerializer
@@ -62,7 +67,10 @@ class NotificationViewSet(BaseViewSet, BasePaginator):
 
         notifications = (
             Notification.objects.filter(workspace__slug=slug, receiver_id=request.user.id)
-            .filter(entity_name="issue")
+            # 不再只认工作项：需求审批的通知挂在变更单上（需求归产品，没有 project）。
+            # 下面 type=subscribed/assigned/created 那三个过滤是工作项特有的概念，
+            # 显式请求它们时非工作项通知本来就该落选，默认的 type=all 不受影响。
+            .filter(entity_name__in=NOTIFIABLE_ENTITY_NAMES)
             .annotate(is_inbox_issue=Exists(intake_issue))
             .annotate(is_intake_issue=Exists(intake_issue))
             .annotate(

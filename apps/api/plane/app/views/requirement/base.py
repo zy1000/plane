@@ -1,62 +1,51 @@
-"""产品需求：基线配置 + 需求条目。
+"""产品需求：审批配置 + 需求条目。
 
-需求条目本身没有状态，能不能写完全看所属基线；基线是惰性创建的，产品第一次打开
-需求页时才落库。
+审批配置只回答「谁能批、要几个人批」；能不能写一条需求由那一行自己决定（在不在评审
+中），不再有产品级的冻结闸门。配置是惰性创建的，产品第一次打开需求页时才落库。
 """
 
+from django.db import transaction
 from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.serializers.requirement import (
-    RequirementBaselineConfigurationWriteSerializer,
-    RequirementBaselineSerializer,
+    RequirementApprovalPolicySerializer,
+    RequirementApprovalPolicyWriteSerializer,
     RequirementConfigurationConflict,
+    RequirementRollbackSerializer,
+    RequirementSerializer,
 )
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.library_item import get_scoped_library
 from plane.app.views.requirement.mixins import (
-    RequirementDraftDispatchMixin,
-    can_write_baseline,
-    get_scoped_baseline,
-    resolve_requirement_fields,
+    can_manage_policy,
+    can_write_requirements,
+    get_scoped_policy,
     resolve_row_layer,
 )
 from plane.app.views.requirement.row_base import BaseRequirementRowViewSet
 from plane.db.models import (
     Requirement,
+    RequirementApprovalPolicy,
     RequirementApprover,
-    RequirementBaseline,
-    RequirementChangeApproval,
-    RequirementChangeRequest,
-    RequirementChangeStatus,
+)
+from plane.utils.requirement_change import (
+    RequirementChangeError,
+    rollback_requirement_to_version,
 )
 from plane.utils.requirement import (
+    field_specs_for_requirement_types,
     field_tree_from_specs,
-    requirement_grid_expected_updated_at,
+    get_referenced_requirement_type_ids,
     requirement_types_field_payload_from_specs,
+    scope_row_filter,
 )
 
 
-def pending_change_requests():
-    """待审批的变更单（含审批记录），供基线序列化器判断「待我审批」。"""
+def policy_with_relations(policy_id):
     return (
-        RequirementChangeRequest.objects.filter(status=RequirementChangeStatus.PENDING)
-        .order_by("-created_at")
-        .prefetch_related(
-            Prefetch(
-                "approvals",
-                queryset=RequirementChangeApproval.objects.order_by(
-                    "created_at", "id"
-                ),
-            )
-        )
-    )
-
-
-def baseline_with_relations(baseline_id):
-    return (
-        RequirementBaseline.objects.filter(id=baseline_id)
+        RequirementApprovalPolicy.objects.filter(id=policy_id)
         .select_related("workspace", "product", "project", "owner")
         .prefetch_related(
             Prefetch(
@@ -65,54 +54,46 @@ def baseline_with_relations(baseline_id):
                     "approver"
                 ).order_by("sort_order", "created_at", "id"),
             ),
-            Prefetch(
-                "change_requests",
-                queryset=pending_change_requests(),
-                to_attr="pending_change_requests",
-            ),
         )
         .get()
     )
 
 
-class RequirementBaselineConfigurationAPIView(
-    RequirementDraftDispatchMixin, BaseAPIView
-):
-    """基线配置：状态、负责人、审批规则，以及网格要用的字段与需求类型视图。"""
+class RequirementConfigurationAPIView(BaseAPIView):
+    """需求配置：审批规则 + 网格要用的字段与需求类型视图。
 
-    def _response_payload(self, baseline):
-        baseline = baseline_with_relations(baseline.id)
-        draft = self.draft_for_read(baseline)
+    字段一律实时取自被引用的需求类型 —— 没有 is_frozen 这个态了，字段结构变更立即
+    生效，历史版本的渲染依据由 RequirementTypeSchemaRevision 保住。
+    """
+
+    def _response_payload(self, policy):
+        policy = policy_with_relations(policy.id)
         payload = {
-            "baseline": RequirementBaselineSerializer(
-                baseline,
+            "policy": RequirementApprovalPolicySerializer(
+                policy,
                 context={
                     "request": self.request,
-                    "workspace": baseline.workspace,
+                    "workspace": policy.workspace,
                 },
             ).data,
         }
 
         # 一个产品下的需求可能分属多个类型：requirement_types 供数据页分视图，
-        # fields 保留成扁平并集，让变更记录与版本对比这两个 tab 完全不用改。
-        (
-            requirement_type_ids,
-            specs,
-            by_requirement_type,
-            is_frozen,
-        ) = resolve_requirement_fields(baseline=baseline, draft=draft)
+        # fields 保留成扁平并集，让变更记录那个 tab 完全不用改。
+        requirement_type_ids = get_referenced_requirement_type_ids(
+            model=Requirement, scope=scope_row_filter(policy)
+        )
+        specs, by_requirement_type = field_specs_for_requirement_types(
+            requirement_type_ids
+        )
         payload["requirement_types"] = requirement_types_field_payload_from_specs(
             requirement_type_ids, by_requirement_type
         )
         payload["fields"] = field_tree_from_specs(specs)
-        payload["is_frozen"] = is_frozen
-        payload["expected_updated_at"] = requirement_grid_expected_updated_at(
-            owner=baseline, requirement_type_ids=requirement_type_ids
-        )
         return payload
 
     def get(self, request, slug, product_id):
-        product, baseline = get_scoped_baseline(
+        product, policy = get_scoped_policy(
             request.user, slug=slug, product_id=product_id, create=True
         )
         if product is None:
@@ -120,10 +101,10 @@ class RequirementBaselineConfigurationAPIView(
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        return Response(self._response_payload(baseline), status=status.HTTP_200_OK)
+        return Response(self._response_payload(policy), status=status.HTTP_200_OK)
 
     def put(self, request, slug, product_id):
-        product, baseline = get_scoped_baseline(
+        product, policy = get_scoped_policy(
             request.user, slug=slug, product_id=product_id, create=True
         )
         if product is None:
@@ -131,52 +112,52 @@ class RequirementBaselineConfigurationAPIView(
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not can_write_baseline(request.user, product):
+        # 比「能改需求」更窄：配置不再受审批保护，两者相同的话任何能提交的人都可以先把
+        # 审批人改成自己再批自己的单。
+        if not can_manage_policy(request.user, product):
             return Response(
                 {
                     "error": (
-                        "You do not have permission to maintain product requirements."
+                        "You do not have permission to manage the requirement "
+                        "approval policy."
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        read_only = self.read_only_response(baseline)
-        if read_only is not None:
-            return read_only
-        serializer = RequirementBaselineConfigurationWriteSerializer(
+        serializer = RequirementApprovalPolicyWriteSerializer(
             data=request.data,
             context={
                 "request": request,
-                "workspace": baseline.workspace,
-                "baseline": baseline,
+                "workspace": policy.workspace,
+                "policy": policy,
             },
         )
         serializer.is_valid(raise_exception=True)
         try:
-            baseline = serializer.save()
+            policy = serializer.save()
         except RequirementConfigurationConflict:
             return Response(
                 {
-                    "error": "The baseline was updated by another request.",
+                    "error": "The approval policy was updated by another request.",
                     "code": "REQUIREMENT_CONFIGURATION_CONFLICT",
                 },
                 status=status.HTTP_409_CONFLICT,
             )
         return Response(
-            self._response_payload(baseline),
+            self._response_payload(policy),
             status=status.HTTP_200_OK,
         )
 
 
-class RequirementViewSet(RequirementDraftDispatchMixin, BaseRequirementRowViewSet):
-    """产品下的需求条目，按需分派到正式表或工作副本。"""
+class RequirementViewSet(BaseRequirementRowViewSet):
+    """产品下的需求条目。"""
 
     NOT_FOUND = "Product not found."
     FORBIDDEN = "You do not have permission to maintain product requirements."
 
     def resolve_owner(self, *, for_update=False):
-        """归属对象是基线 —— 写入路径要保证它存在，读路径也一样（空态才有字段可渲染）。"""
-        product, baseline = get_scoped_baseline(
+        """归属对象是审批配置 —— 它同时携带作用域，读写两条路径都要它存在。"""
+        product, policy = get_scoped_policy(
             self.request.user,
             slug=self.workspace_slug,
             product_id=self.kwargs.get("product_id"),
@@ -186,31 +167,14 @@ class RequirementViewSet(RequirementDraftDispatchMixin, BaseRequirementRowViewSe
         if product is None:
             return None
         # can_write 只拿得到 owner，把产品挂上去省一次查询
-        baseline.product = product
-        return baseline
+        policy.product = product
+        return policy
 
     def can_write(self, owner):
-        return can_write_baseline(self.request.user, owner.product)
+        return can_write_requirements(self.request.user, owner.product)
 
-    def resolve_layer(self, owner, *, for_write):
-        if not for_write:
-            return (
-                resolve_row_layer(
-                    baseline=owner,
-                    draft=self.draft_for_read(owner),
-                ),
-                None,
-            )
-        read_only = self.read_only_response(owner)
-        if read_only is not None:
-            return None, read_only
-        return (
-            resolve_row_layer(
-                baseline=owner,
-                draft=self.draft_for_write(owner, self.request.user),
-            ),
-            None,
-        )
+    def resolve_layer(self, owner):
+        return resolve_row_layer(owner)
 
     def resolve_library(self, library_id):
         return get_scoped_library(
@@ -226,4 +190,40 @@ class RequirementViewSet(RequirementDraftDispatchMixin, BaseRequirementRowViewSe
             )
             .select_related("product")
             .order_by("sort_order", "created_at", "id")
+        )
+
+    def rollback(self, request, *args, pk=None, **kwargs):
+        """把某个已通过版本的内容拷回这一行。
+
+        回滚**不撤销审批**：写完这条需求是 modified，要不要真的退回那一版由随后的评审
+        决定。所以这里走的是普通的写权限，与 PATCH 一致。
+        """
+        serializer = RequirementRollbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        owner, error = self._owner_or_error()
+        if error is not None:
+            return error
+        layer = self.resolve_layer(owner)
+        with transaction.atomic():
+            row = layer.queryset.select_for_update().filter(id=pk).first()
+            if row is None:
+                return Response(
+                    {"error": "Requirement not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            try:
+                rollback_requirement_to_version(
+                    requirement=row,
+                    version_number=serializer.validated_data["version"],
+                    actor=request.user,
+                )
+            except RequirementChangeError as exc:
+                payload = {"error": str(exc), "code": exc.code}
+                payload.update(exc.detail or {})
+                return Response(payload, status=status.HTTP_409_CONFLICT)
+        return Response(
+            RequirementSerializer(
+                row, context=self._serializer_context(layer, owner)
+            ).data,
+            status=status.HTTP_200_OK,
         )

@@ -2,10 +2,8 @@ import { useMemo } from "react";
 import { isEqual } from "lodash-es";
 import { useTranslation } from "@plane/i18n";
 import type {
-  IUserLite,
   TRequirementChangeItem,
   TRequirementField,
-  TRequirementBaselineChangeSnapshot,
   TRequirementSchemaChangeSnapshot,
 } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -25,133 +23,6 @@ const SCHEMA_COMPARE_KEYS = [
 type TSchemaCompareKey = (typeof SCHEMA_COMPARE_KEYS)[number];
 
 const isEmptyValue = (value: unknown) => value === null || value === undefined || value === "";
-
-function useMetaValueFormatter(members: IUserLite[]) {
-  const { t } = useTranslation();
-  const membersById = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
-
-  return (fieldKey: string, value: unknown): string => {
-    if (isEmptyValue(value)) return t("workspace_products.requirements.change.empty_value");
-
-    if (fieldKey === "owner_id" && typeof value === "string") {
-      return membersById.get(value)?.display_name ?? value;
-    }
-
-    if (fieldKey === "approver_ids" && Array.isArray(value)) {
-      if (!value.length) return t("workspace_products.requirements.change.empty_value");
-      return value.map((id) => membersById.get(String(id))?.display_name ?? String(id)).join(", ");
-    }
-
-    if (fieldKey === "approval_type" && typeof value === "string") {
-      return t(`workspace_products.requirements.approval.${value}`);
-    }
-
-    if (typeof value === "boolean") {
-      return t(value ? "workspace_products.requirements.change.yes" : "workspace_products.requirements.change.no");
-    }
-
-    if (Array.isArray(value)) {
-      return value.length
-        ? value.map((item) => (typeof item === "object" ? JSON.stringify(item) : String(item))).join(", ")
-        : t("workspace_products.requirements.change.empty_value");
-    }
-
-    if (typeof value === "object") return JSON.stringify(value);
-    return String(value);
-  };
-}
-
-type TMetaDiffTableProps = {
-  items: TRequirementChangeItem[];
-  members: IUserLite[];
-};
-
-/** 概览：以清晰的并列视图展示需求基本信息的前后差异。 */
-export function BaselineDiffTable({ items, members }: TMetaDiffTableProps) {
-  const { t } = useTranslation();
-  const formatValue = useMetaValueFormatter(members);
-
-  const rows = items.map((item) => {
-    const before = item.before_snapshot as TRequirementBaselineChangeSnapshot | null;
-    const after = item.proposed_snapshot as TRequirementBaselineChangeSnapshot | null;
-    const fieldKey = after?.field ?? before?.field ?? "";
-    return {
-      id: item.id,
-      label: t(`workspace_products.requirements.change.meta_fields.${fieldKey}`),
-      before: formatValue(fieldKey, before?.value),
-      after: formatValue(fieldKey, after?.value),
-    };
-  });
-
-  return (
-    <section aria-labelledby="change-overview-title" className="min-w-0">
-      <h2 id="change-overview-title" className="sr-only">
-        {t("workspace_products.requirements.change.overview.title")}
-      </h2>
-
-      {rows.length > 0 ? (
-        <>
-          <div className="hidden overflow-hidden rounded-md border border-subtle md:block">
-            <table className="w-full table-fixed border-collapse text-left">
-              <thead className="bg-layer-1 text-12 font-medium text-secondary">
-                <tr className="border-b border-subtle">
-                  <th className="w-1/4 px-4 py-2.5">
-                    {t("workspace_products.requirements.change.meta_columns.field")}
-                  </th>
-                  <th className="w-[37.5%] px-4 py-2.5">
-                    {t("workspace_products.requirements.change.meta_columns.before")}
-                  </th>
-                  <th className="w-[37.5%] px-4 py-2.5">
-                    {t("workspace_products.requirements.change.meta_columns.after")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-subtle last:border-b-0">
-                    <th className="px-4 py-3 text-13 font-medium text-primary">{row.label}</th>
-                    <td className="bg-danger-subtle/40 px-4 py-3 text-13 leading-5 text-danger-primary">
-                      {row.before}
-                    </td>
-                    <td className="bg-success-subtle/40 px-4 py-3 text-13 leading-5 text-success-primary">
-                      {row.after}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle md:hidden">
-            {rows.map((row) => (
-              <div key={row.id} className="px-3 py-3">
-                <p className="text-13 font-medium text-primary">{row.label}</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div className="rounded bg-danger-subtle/40 p-2">
-                    <p className="text-12 text-danger-secondary">
-                      {t("workspace_products.requirements.change.meta_columns.before")}
-                    </p>
-                    <p className="mt-1 text-13 leading-5 text-danger-primary">{row.before}</p>
-                  </div>
-                  <div className="rounded bg-success-subtle/40 p-2">
-                    <p className="text-12 text-success-secondary">
-                      {t("workspace_products.requirements.change.meta_columns.after")}
-                    </p>
-                    <p className="mt-1 text-13 leading-5 text-success-primary">{row.after}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <p className="rounded-md border border-subtle px-4 py-10 text-center text-13 text-tertiary">
-          {t("workspace_products.requirements.change.overview.empty")}
-        </p>
-      )}
-    </section>
-  );
-}
 
 const getConfigSummary = (
   config: TRequirementField["config"],

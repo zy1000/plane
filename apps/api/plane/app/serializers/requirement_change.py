@@ -3,15 +3,16 @@ from rest_framework import serializers
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
     RequirementApprovalAction,
+    RequirementBaseline,
+    RequirementBaselineEntry,
     RequirementChangeApproval,
     RequirementChangeItem,
     RequirementChangeRequest,
     RequirementChangeStatus,
-    RequirementChangeTargetKind,
     RequirementChangeType,
+    RequirementTypeSchemaRevision,
     RequirementVersion,
 )
-from plane.utils.requirement_change import snapshot_requirement_type_stats
 
 from .base import BaseSerializer
 
@@ -33,17 +34,55 @@ class RequirementChangeApprovalSerializer(BaseSerializer):
 
 
 class RequirementChangeItemSerializer(BaseSerializer):
+    """变更单里的一条需求。"""
+
+    requirement_type_name = serializers.CharField(
+        source="requirement_type.name", read_only=True
+    )
+    title = serializers.SerializerMethodField()
+
     class Meta:
         model = RequirementChangeItem
         fields = [
             "id",
-            "target_kind",
             "change_type",
             "target_id",
+            "requirement_type_id",
+            "requirement_type_name",
+            "schema_revision_id",
+            "title",
             "before_snapshot",
             "proposed_snapshot",
             "base_version",
+            "base_row_version",
             "proposed_sort_order",
+        ]
+        read_only_fields = fields
+
+    def get_title(self, obj):
+        """删除项没有 proposed_snapshot，标题要回落到变更前那份。"""
+        snapshot = obj.proposed_snapshot or obj.before_snapshot or {}
+        return snapshot.get("title") or ""
+
+
+class RequirementSchemaRevisionSerializer(BaseSerializer):
+    """需求类型的一次字段结构修订。"""
+
+    requirement_type_name = serializers.CharField(
+        source="requirement_type.name", read_only=True
+    )
+    actor_detail = UserLiteSerializer(source="created_by", read_only=True)
+
+    class Meta:
+        model = RequirementTypeSchemaRevision
+        fields = [
+            "id",
+            "requirement_type_id",
+            "requirement_type_name",
+            "revision",
+            "diff",
+            "actor_detail",
+            "created_at",
         ]
         read_only_fields = fields
 
@@ -51,8 +90,8 @@ class RequirementChangeItemSerializer(BaseSerializer):
 class RequirementChangeRequestSerializer(BaseSerializer):
     """变更单列表项。
 
-    审批进度直接由 approvals 渲染（审批人数量天然很小），三个计数读 CR 上的
-    冗余字段，避免每次 COUNT 上千条变更项。
+    审批进度直接由 approvals 渲染（审批人数量天然很小），三个计数读 CR 上的冗余字段，
+    避免每次 COUNT 变更项。
     """
 
     created_by_detail = UserLiteSerializer(source="created_by", read_only=True)
@@ -60,7 +99,8 @@ class RequirementChangeRequestSerializer(BaseSerializer):
     total_count = serializers.SerializerMethodField()
     approved_count = serializers.SerializerMethodField()
     rejected_count = serializers.SerializerMethodField()
-    item_count = serializers.SerializerMethodField()
+    requirement_count = serializers.SerializerMethodField()
+    requirement_previews = serializers.SerializerMethodField()
     can_approve = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
 
@@ -68,18 +108,18 @@ class RequirementChangeRequestSerializer(BaseSerializer):
         model = RequirementChangeRequest
         fields = [
             "id",
-            "baseline_id",
+            "product_id",
+            "project_id",
             "sequence_id",
-            "request_kind",
             "status",
             "reason",
-            "base_version",
             "approval_type",
             "required_count",
             "created_count",
             "updated_count",
             "deleted_count",
-            "item_count",
+            "requirement_count",
+            "requirement_previews",
             "changed_field_ids",
             "approvals",
             "total_count",
@@ -111,8 +151,22 @@ class RequirementChangeRequestSerializer(BaseSerializer):
             if approval.action == RequirementApprovalAction.REJECTED
         )
 
-    def get_item_count(self, obj):
+    def get_requirement_count(self, obj):
         return obj.created_count + obj.updated_count + obj.deleted_count
+
+    def get_requirement_previews(self, obj):
+        """列表里给前 3 条需求的标题，够画一行摘要而不必展开整张单。"""
+        previews = []
+        for item in list(obj.items.all())[:3]:
+            snapshot = item.proposed_snapshot or item.before_snapshot or {}
+            previews.append(
+                {
+                    "id": str(item.target_id),
+                    "title": snapshot.get("title") or "",
+                    "change_type": item.change_type,
+                }
+            )
+        return previews
 
     def _current_user(self):
         request = self.context.get("request")
@@ -143,57 +197,95 @@ class RequirementChangeRequestSerializer(BaseSerializer):
 class RequirementChangeRequestDetailSerializer(RequirementChangeRequestSerializer):
     """变更单详情。
 
-    针对千行需求专门设计：只内联「审批配置」与「字段定义」两组变更项（这两组天然
-    很小），需求条目组只给计数，实际内容由独立的分页端点按需拉取。
+    N 通常是个位数，所以条目直接内联；只有大批量提交（整个类型视图一次提交）才会
+    多到需要分页，那时走 items 端点。
     """
 
-    baseline_items = serializers.SerializerMethodField()
-    schema_items = serializers.SerializerMethodField()
-    requirement_item_count = serializers.SerializerMethodField()
+    INLINE_ITEM_LIMIT = 50
+
+    requirement_items = serializers.SerializerMethodField()
     requirement_type_stats = serializers.SerializerMethodField()
 
     class Meta(RequirementChangeRequestSerializer.Meta):
         fields = RequirementChangeRequestSerializer.Meta.fields + [
-            "baseline_items",
-            "schema_items",
-            "requirement_item_count",
+            "requirement_items",
             "requirement_type_stats",
         ]
         read_only_fields = fields
 
-    def _grouped_items(self, obj, target_kind):
-        return [
-            item
-            for item in obj.items.all()
-            if item.target_kind == target_kind
-        ]
-
-    def get_baseline_items(self, obj):
-        return RequirementChangeItemSerializer(
-            self._grouped_items(obj, RequirementChangeTargetKind.BASELINE),
-            many=True,
-        ).data
-
-    def get_schema_items(self, obj):
-        return RequirementChangeItemSerializer(
-            self._grouped_items(obj, RequirementChangeTargetKind.SCHEMA),
-            many=True,
-        ).data
-
-    def get_requirement_item_count(self, obj):
-        return self.context.get("requirement_item_count", 0)
+    def get_requirement_items(self, obj):
+        items = list(obj.items.all())
+        if len(items) > self.INLINE_ITEM_LIMIT:
+            return None
+        return RequirementChangeItemSerializer(items, many=True).data
 
     def get_requirement_type_stats(self, obj):
         return self.context.get("requirement_type_stats") or []
 
 
+class RequirementApprovalInboxSerializer(RequirementChangeRequestSerializer):
+    """收件箱里的一张单。
+
+    比列表项多一个产品名 —— 收件箱是跨产品的，只给 CR-3 这样的编号，人分不出这是哪个
+    产品的单。
+    """
+
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    my_action = serializers.SerializerMethodField()
+
+    class Meta(RequirementChangeRequestSerializer.Meta):
+        fields = RequirementChangeRequestSerializer.Meta.fields + [
+            "product_name",
+            "my_action",
+        ]
+        read_only_fields = fields
+
+    def get_my_action(self, obj):
+        """我在这张单上表过什么态。已办页要靠它区分「我批了」和「我驳了」。"""
+        user = self._current_user()
+        if user is None:
+            return None
+        for approval in obj.approvals.all():
+            if approval.approver_id == user.id:
+                return approval.action
+        return None
+
+
+class RequirementChangeSubmitItemSerializer(serializers.Serializer):
+    requirement_id = serializers.UUIDField()
+    change_type = serializers.ChoiceField(
+        choices=RequirementChangeType.choices,
+        required=False,
+        default=RequirementChangeType.UPDATE,
+    )
+
+
 class RequirementChangeSubmitSerializer(serializers.Serializer):
+    """提交 1..N 条需求进入评审。
+
+    只收指针不收快照 —— 服务端自己读当前行内容，否则一个陈旧的网格可以用旧内容开出
+    一张新单。change_type 里只有 delete 是真的意图，新增与修改由服务端按
+    approved_version 判定。
+    """
+
     reason = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=2000
     )
+    items = RequirementChangeSubmitItemSerializer(many=True, allow_empty=False)
 
     def validate_reason(self, value):
         return (value or "").strip()
+
+    def validate_items(self, value):
+        seen = set()
+        for item in value:
+            key = str(item["requirement_id"])
+            if key in seen:
+                raise serializers.ValidationError(
+                    "A requirement can only appear once in a change request."
+                )
+            seen.add(key)
+        return value
 
 
 class RequirementChangeActionSerializer(serializers.Serializer):
@@ -201,13 +293,21 @@ class RequirementChangeActionSerializer(serializers.Serializer):
     comment = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=2000
     )
+    # 驳回时顺带把内容退回上一个已通过版本（禅道的「撤销变更」）。默认关：多数驳回是
+    # 「改一改再提」，直接丢掉提交人的改动太重。
+    revert = serializers.BooleanField(required=False, default=False)
 
     def validate_comment(self, value):
         return (value or "").strip()
 
 
 class RequirementVersionSerializer(BaseSerializer):
-    """版本列表项，不带 snapshot —— 快照可能是几 MB。"""
+    """一条需求的一个已通过版本。
+
+    snapshot 直接内联 —— 现在一个版本只装一条需求，不再是整个产品的几 MB 快照。
+    fields_snapshot 从 schema_revision 取：字段结构立即生效不走审批，没有它就没法把
+    旧版本按当年的表头渲染出来。
+    """
 
     created_by_detail = UserLiteSerializer(source="created_by", read_only=True)
     change_request_sequence_id = serializers.IntegerField(
@@ -216,14 +316,18 @@ class RequirementVersionSerializer(BaseSerializer):
     change_request_reason = serializers.CharField(
         source="change_request.reason", read_only=True, allow_null=True
     )
+    fields_snapshot = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementVersion
         fields = [
             "id",
-            "baseline_id",
+            "target_id",
+            "requirement_type_id",
             "version",
             "change_type",
+            "snapshot",
+            "fields_snapshot",
             "approved_by",
             "change_request_id",
             "change_request_sequence_id",
@@ -234,60 +338,101 @@ class RequirementVersionSerializer(BaseSerializer):
         ]
         read_only_fields = fields
 
+    def get_fields_snapshot(self, obj):
+        return (obj.schema_revision.fields if obj.schema_revision_id else []) or []
 
-class RequirementVersionDetailSerializer(RequirementVersionSerializer):
-    """版本详情：带 meta 与字段定义，需求条目走独立分页端点。"""
 
-    baseline_snapshot = serializers.SerializerMethodField()
-    fields_snapshot = serializers.SerializerMethodField()
-    requirement_count = serializers.SerializerMethodField()
+class RequirementBaselineSerializer(BaseSerializer):
+    """基线快照列表项 / 详情。
+
+    内容不可改 —— 只有名称与说明能改。收录了哪些需求的哪一版在创建那一刻就定死了。
+    """
+
+    created_by_detail = UserLiteSerializer(source="created_by", read_only=True)
     requirement_type_stats = serializers.SerializerMethodField()
 
-    class Meta(RequirementVersionSerializer.Meta):
-        fields = RequirementVersionSerializer.Meta.fields + [
-            "baseline_snapshot",
-            "fields_snapshot",
-            "requirement_count",
+    class Meta:
+        model = RequirementBaseline
+        fields = [
+            "id",
+            "product_id",
+            "project_id",
+            "name",
+            "description",
+            "entry_count",
             "requirement_type_stats",
+            "created_by",
+            "created_by_detail",
+            "created_at",
+        ]
+        read_only_fields = [field for field in fields if field not in ("name", "description")]
+
+    def get_requirement_type_stats(self, obj):
+        return self.context.get("requirement_type_stats") or []
+
+
+class RequirementBaselineWriteSerializer(serializers.Serializer):
+    """打基线。
+
+    scope 决定收录范围：all = 作用域内全部，by_type = 指定几个需求类型，
+    by_requirement = 指定几条需求。preview=true 时只算不写。
+    """
+
+    name = serializers.CharField(
+        max_length=255, trim_whitespace=True, required=False, allow_blank=True, default=""
+    )
+    description = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=2000
+    )
+    scope = serializers.ChoiceField(
+        choices=["all", "by_type", "by_requirement"], required=False, default="all"
+    )
+    requirement_type_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
+    requirement_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
+
+    def validate(self, attrs):
+        # 预览只是「按这个范围算一遍」，名字是保存时才需要的东西 —— 强制先起名会逼着
+        # 用户在还不知道会纳入多少条之前就命名。
+        if not self.context.get("preview") and not attrs.get("name"):
+            raise serializers.ValidationError({"name": "This field is required."})
+        if attrs["scope"] == "by_type" and not attrs.get("requirement_type_ids"):
+            raise serializers.ValidationError(
+                {"requirement_type_ids": "Select at least one requirement type."}
+            )
+        if attrs["scope"] == "by_requirement" and not attrs.get("requirement_ids"):
+            raise serializers.ValidationError(
+                {"requirement_ids": "Select at least one requirement."}
+            )
+        return attrs
+
+
+class RequirementBaselineEntrySerializer(BaseSerializer):
+    """基线里的一条：内容与字段结构都取自被收录的那一版，不跟随需求现状。"""
+
+    snapshot = serializers.JSONField(source="version.snapshot", read_only=True)
+    version_number = serializers.IntegerField(source="version.version", read_only=True)
+    requirement_type_id = serializers.UUIDField(
+        source="version.requirement_type_id", read_only=True
+    )
+    fields_snapshot = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RequirementBaselineEntry
+        fields = [
+            "id",
+            "requirement_id",
+            "requirement_type_id",
+            "version_id",
+            "version_number",
+            "snapshot",
+            "fields_snapshot",
+            "sort_order",
         ]
         read_only_fields = fields
 
-    def get_baseline_snapshot(self, obj):
-        return (obj.snapshot or {}).get("baseline") or {}
-
     def get_fields_snapshot(self, obj):
-        return (obj.snapshot or {}).get("fields") or []
-
-    def get_requirement_count(self, obj):
-        return len((obj.snapshot or {}).get("requirements") or [])
-
-    def get_requirement_type_stats(self, obj):
-        return snapshot_requirement_type_stats(obj.snapshot or {})
-
-
-class RequirementVersionComparisonItemSerializer(serializers.Serializer):
-    """版本比较产生的瞬时变更项，与已落库的变更项保持同一前端契约。"""
-
-    id = serializers.CharField()
-    target_kind = serializers.ChoiceField(
-        choices=RequirementChangeTargetKind.choices
-    )
-    change_type = serializers.ChoiceField(choices=RequirementChangeType.choices)
-    target_id = serializers.UUIDField(allow_null=True)
-    before_snapshot = serializers.JSONField(allow_null=True)
-    proposed_snapshot = serializers.JSONField(allow_null=True)
-    base_version = serializers.IntegerField(allow_null=True)
-    proposed_sort_order = serializers.FloatField(allow_null=True)
-
-
-class RequirementVersionComparisonSerializer(serializers.Serializer):
-    """版本比较的非分页部分；需求条目结果由通用分页响应的 results 承载。"""
-
-    from_version = serializers.IntegerField()
-    to_version = serializers.IntegerField()
-    baseline_items = RequirementVersionComparisonItemSerializer(many=True)
-    schema_items = RequirementVersionComparisonItemSerializer(many=True)
-    requirement_item_count = serializers.IntegerField()
-    changed_field_ids = serializers.ListField(child=serializers.CharField())
-    to_fields_snapshot = serializers.JSONField()
-    requirement_type_stats = serializers.JSONField()
+        return (obj.version.schema_revision.fields if obj.version.schema_revision_id else []) or []

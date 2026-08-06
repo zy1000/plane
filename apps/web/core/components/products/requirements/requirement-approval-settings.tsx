@@ -22,6 +22,8 @@ type TRequirementApprovalSettingsProps = {
   className?: string;
   radioGroupName?: string;
   layout?: "stacked" | "cards";
+  /** 没有配置权限时整块只读 —— 配置不再受审批保护，能改的人必须更窄 */
+  readOnly?: boolean;
 };
 
 function UserOption({ user }: { user: IUserLite }) {
@@ -44,6 +46,7 @@ export function RequirementApprovalSettings({
   className,
   radioGroupName = "product-requirement-approval-type",
   layout = "stacked",
+  readOnly = false,
 }: TRequirementApprovalSettingsProps) {
   const { t } = useTranslation();
   const isCardLayout = layout === "cards";
@@ -57,6 +60,7 @@ export function RequirementApprovalSettings({
         <MultiSelectDropdown
           value={approverIds}
           onChange={onApproverIdsChange}
+          disabled={readOnly}
           options={memberOptions.map((member) => ({ value: member.id, data: member }))}
           keyExtractor={(option) => option.value}
           queryArray={["display_name", "email"]}
@@ -110,7 +114,10 @@ export function RequirementApprovalSettings({
           }}
         />
       </div>
-      <fieldset disabled={!approverIds.length} className={cn(!approverIds.length && "opacity-60")}>
+      <fieldset
+        disabled={readOnly || !approverIds.length}
+        className={cn((readOnly || !approverIds.length) && "opacity-60")}
+      >
         <legend className={cn("mb-3 block text-12 font-medium", isCardLayout ? "text-primary" : "text-secondary")}>
           {t("workspace_products.requirements.fields.approval_rule")}
         </legend>

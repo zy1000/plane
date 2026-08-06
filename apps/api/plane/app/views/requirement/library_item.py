@@ -1,13 +1,14 @@
 """标准库的条目：库直接持有的一批需求。
 
-与产品需求相比少了三件事 —— 没有工作副本、没有只读态、没有产品级权限；
-字段来自库所选的需求类型，只能在需求类型页改。
+与产品需求相比少了两件事 —— 不走审批、没有产品级权限；字段来自库所选的需求类型，
+只能在需求类型页改。「库条目永不走审批」由 Requirement 上的
+req_library_item_never_approved 约束硬保证，所以这里的写入路径不能给 status 等四个
+执行期列留口子（见 LIBRARY_HIDDEN_BUILTIN_COLUMNS）。
 """
 
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.serializers.requirement import RequirementSerializer
 from plane.app.serializers.requirement_library import RequirementLibrarySerializer
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.mixins import (
@@ -22,13 +23,6 @@ from plane.utils.requirement import (
     save_library_item_batch,
     serialize_library_field_tree,
 )
-
-
-def _no_change_kind(rows):
-    rows = list(rows)
-    for row in rows:
-        row.change_kind = None
-    return rows
 
 
 def get_scoped_library(*, slug, library_id, for_update=False):
@@ -84,39 +78,28 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
         # 库是工作区级资源，口径与需求类型一致：工作区成员即可维护
         return True
 
-    def resolve_layer(self, owner, *, for_write):
+    def resolve_layer(self, owner):
         fields = get_library_field_specs(owner)
         fields_by_requirement_type = {str(owner.requirement_type_id): fields}
-        return (
-            RowLayer(
-                queryset=Requirement.objects.filter(library=owner).order_by(
-                    "sort_order", "created_at", "id"
-                ),
-                serializer_class=RequirementSerializer,
-                serializer_context={},
-                requirement_type_ids=[owner.requirement_type_id],
-                fields=fields,
-                fields_by_requirement_type=fields_by_requirement_type,
-                requirement_type_resolver=RequirementTypeResolver(
-                    workspace_id=owner.workspace_id,
-                    allowed_requirement_type_id=owner.requirement_type_id,
-                ),
-                # 库固定一个需求类型，条目不需要（也不允许）自己指定
-                default_requirement_type_id=owner.requirement_type_id,
-                # 乐观锁基准取需求类型而不是库：改字段动的是类型行，库行的 updated_at
-                # 不会变，用库的值会让「字段被人改了」这种冲突漏过去。
-                expected_updated_at=owner.requirement_type.updated_at,
-                is_frozen=False,
-                insert=lambda **kwargs: insert_library_item(library=owner, **kwargs),
-                save_batch=lambda **kwargs: save_library_item_batch(
-                    library=owner, **kwargs
-                ),
-                import_items=None,
-                hard_delete=False,
-                # 库不走审批，没有「相对上一版」这回事
-                annotate_change_kind=_no_change_kind,
+        return RowLayer(
+            queryset=Requirement.objects.filter(library=owner).order_by(
+                "sort_order", "created_at", "id"
             ),
-            None,
+            serializer_context={},
+            requirement_type_ids=[owner.requirement_type_id],
+            fields=fields,
+            fields_by_requirement_type=fields_by_requirement_type,
+            requirement_type_resolver=RequirementTypeResolver(
+                workspace_id=owner.workspace_id,
+                allowed_requirement_type_id=owner.requirement_type_id,
+            ),
+            # 库固定一个需求类型，条目不需要（也不允许）自己指定
+            default_requirement_type_id=owner.requirement_type_id,
+            insert=lambda **kwargs: insert_library_item(library=owner, **kwargs),
+            save_batch=lambda **kwargs: save_library_item_batch(
+                library=owner, **kwargs
+            ),
+            import_items=None,
         )
 
     def get_queryset(self):

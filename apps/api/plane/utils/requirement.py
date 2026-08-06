@@ -14,16 +14,14 @@ from plane.db.models import (
     ProjectMember,
     Requirement,
     RequirementApprover,
-    RequirementBaseline,
-    RequirementChangeTargetKind,
-    RequirementDraftRow,
+    RequirementChangeItem,
+    RequirementChangeStatus,
     RequirementField,
     RequirementFieldCategory,
     RequirementFieldType,
     RequirementItemStatus,
     RequirementPriority,
     RequirementType,
-    RequirementVersion,
     User,
     Workspace,
     WorkspaceMember,
@@ -49,6 +47,19 @@ BUILTIN_COLUMN_DEFAULTS = {
 }
 
 BUILTIN_COLUMNS = tuple(BUILTIN_COLUMN_DEFAULTS)
+
+# 不算「内容」的内置列。
+#
+# status 是**交付进度轴**（这条需求做到哪了），不是被批准的内容。把它算进内容 diff 会
+# 让「标一次已实现」把行推进「已改动·待提交」，还要审批人为研发进度签字。
+#
+# 与下面的 LIBRARY_HIDDEN_BUILTIN_COLUMNS 是两个独立常量，含义不同：那个说的是「模板里
+# 不该有」，这个说的是「不算内容」。合并会让以后调整任一侧都出错。
+NON_CONTENT_BUILTIN_COLUMNS = ("status",)
+
+CONTENT_BUILTIN_COLUMNS = tuple(
+    column for column in BUILTIN_COLUMNS if column not in NON_CONTENT_BUILTIN_COLUMNS
+)
 
 # 父项在批量拷贝（导入、物化）时需要重映射，单独拎出来
 BUILTIN_PARENT_COLUMN = "parent_id"
@@ -209,6 +220,42 @@ def serialize_builtin_values(row):
     return values
 
 
+def requirement_content_values(row):
+    """行 -> 参与「内容变了没有」判定的值。与提交评审时的内容 diff 用同一套列。"""
+    values = serialize_builtin_values(row)
+    return (
+        tuple(values[column] for column in CONTENT_BUILTIN_COLUMNS),
+        deepcopy(row.data or {}),
+    )
+
+
+def resync_approved_row_version(row, *, before, was_approved):
+    """本次写入没动内容，就把行判回「已通过」。
+
+    `approval_state` 的 modified 判定是 `version != approved_row_version`，而 version 是
+    乐观锁，**任何**一次保存都会 +1 —— 包括一次什么都没改的保存。不处理的话行会挂在
+    「已改动·待提交」上，点提交又被 REQUIREMENT_NO_CHANGES 打回，是个死胡同。
+
+    `was_approved` 必须在 version 自增**之前**、在已上锁的那个实例上算出来。少了它就是
+    审批绕过：「先改标题（→modified）、再做一次空保存」会把未审的标题判成已通过，而
+    can_submit_review 对 approved 的行返回 False，那份内容再也提交不上去。
+    """
+    if not was_approved:
+        return False
+    if requirement_content_values(row) != before:
+        return False
+    row.approved_row_version = row.version
+    return True
+
+
+def row_was_approved(row):
+    """写入前这一行是不是「内容与已批准版本一致」。配合 resync_approved_row_version 用。"""
+    return (
+        row.approved_version is not None
+        and row.version == row.approved_row_version
+    )
+
+
 def builtin_values_from_payload(payload):
     """请求/快照 dict -> 补齐缺省值的完整内置列 dict。
 
@@ -357,43 +404,24 @@ def get_requirement_eligible_user_ids(
 
 
 def rows_affected_by_fields(requirement_type):
-    """字段变更会波及的需求行，按模型分组返回 [(model, queryset), ...]。
+    """字段变更会波及的需求行 —— 现在就是引用这个类型的全部行。
 
-    只包含**实时引用**该需求类型的行 —— 标准库条目、所属基线还没发布过的正式行、
-    以及所有工作副本的行。已发布基线下的正式行不在内：它们渲染的是版本里冻结
-    的字段，值不能因为类型改动就被抹掉（类型的改动要走下一次编辑 + 变更审批）。
+    「已发布基线下的正式行不在内」那条豁免删掉了：字段结构变更现在立即生效，正式表里
+    再没有任何东西是冻结的。历史版本靠 RequirementTypeSchemaRevision 保住渲染依据，
+    不再靠让活行不动。
+
+    因此 affected_row_count 现在也包含已通过审批的行，确认弹窗的文案要跟着改口径。
     """
-    # 用「已发布的作用域 id 集合」反查，而不是 join 到 baseline：还没建过基线的
-    # 产品同样属于「从未发布」，join 会把这些行整批漏掉。
-    published = RequirementBaseline.objects.filter(current_version__isnull=False)
-    published_product_ids = list(
-        published.exclude(product__isnull=True).values_list("product_id", flat=True)
-    )
-    published_project_ids = list(
-        published.exclude(project__isnull=True).values_list("project_id", flat=True)
-    )
-    return [
-        (
-            Requirement,
-            Requirement.objects.filter(requirement_type=requirement_type).exclude(
-                Q(product_id__in=published_product_ids)
-                | Q(project_id__in=published_project_ids)
-            ),
-        ),
-        (
-            RequirementDraftRow,
-            RequirementDraftRow.objects.filter(requirement_type=requirement_type),
-        ),
-    ]
+    return Requirement.objects.filter(requirement_type=requirement_type)
 
 
-def replace_requirement_approvers(*, baseline, approver_ids, actor=None):
+def replace_requirement_approvers(*, policy, approver_ids, actor=None):
     """Replace the active approver list while preserving the submitted order."""
-    RequirementApprover.objects.filter(baseline=baseline).delete()
+    RequirementApprover.objects.filter(policy=policy).delete()
     RequirementApprover.objects.bulk_create(
         [
             RequirementApprover(
-                baseline=baseline,
+                policy=policy,
                 approver_id=approver_id,
                 sort_order=index,
                 created_by=actor,
@@ -401,8 +429,8 @@ def replace_requirement_approvers(*, baseline, approver_ids, actor=None):
             for index, approver_id in enumerate(approver_ids)
         ]
     )
-    if hasattr(baseline, "_prefetched_objects_cache"):
-        baseline._prefetched_objects_cache.pop("approvers", None)
+    if hasattr(policy, "_prefetched_objects_cache"):
+        policy._prefetched_objects_cache.pop("approvers", None)
 
 
 def _field_specs_of(owner):
@@ -517,43 +545,6 @@ def requirement_types_field_payload_from_specs(requirement_type_ids, specs_by_ty
             }
         )
     return payload
-
-
-def get_published_field_tree(baseline):
-    """已发布内容的字段树 —— 取当前版本里冻结的那份。
-
-    需求类型随时可改且不走审批，所以已发布的基线不能实时跟随类型，否则已批准
-    的内容会被悄悄改掉。返回 [] 表示从未发布过。
-    """
-    if baseline is None or baseline.current_version is None:
-        return []
-    snapshot = (
-        RequirementVersion.objects.filter(
-            baseline=baseline,
-            target_kind=RequirementChangeTargetKind.BASELINE,
-            version=baseline.current_version,
-        )
-        .values_list("snapshot", flat=True)
-        .first()
-    ) or {}
-    return deepcopy(snapshot.get("fields") or [])
-
-
-def requirement_grid_expected_updated_at(*, owner, requirement_type_ids):
-    """需求网格的乐观锁基准。owner 是基线（产品/项目作用域）或标准库。
-
-    必须把需求类型的 updated_at 算进来：列定义住在类型里，改类型字段不会动需求行，
-    只看 owner.updated_at 会让「字段被人改了」这类冲突整个漏过去。标准库的条目
-    入口早就是这么做的（见 library_item.py 的注释）。
-    """
-    stamps = [owner.updated_at]
-    if requirement_type_ids:
-        stamps.extend(
-            RequirementType.objects.filter(
-                id__in=list(requirement_type_ids)
-            ).values_list("updated_at", flat=True)
-        )
-    return max(stamp for stamp in stamps if stamp is not None)
 
 
 def _clean_requirement_data_for_fields(data, removed_fields):
@@ -755,37 +746,170 @@ def sync_requirement_type_fields(
     }
     cleanup_fields = list(cleanup_fields_by_id.values())
 
-    changed_by_model = []
-    total_changed = 0
+    changed_rows = []
     if cleanup_fields or reset_select_fields:
-        for model, queryset in rows_affected_by_fields(requirement_type):
-            changed = apply_field_change_cleanup(
-                # of=("self",) 只锁需求行本身 —— 这些 queryset 都要 join 到产品或
-                # 标准库，不该把那些行一起锁住。
-                rows=queryset.select_for_update(of=("self",)),
-                removed_fields=cleanup_fields,
-                reset_select_fields=list(reset_select_fields.values()),
-                actor=actor,
-            )
-            changed_by_model.append((model, changed))
-            total_changed += len(changed)
+        changed_rows = apply_field_change_cleanup(
+            # of=("self",) 只锁需求行本身 —— queryset 会 join 到产品或标准库，
+            # 不该把那些行一起锁住。
+            rows=rows_affected_by_fields(requirement_type).select_for_update(of=("self",)),
+            removed_fields=cleanup_fields,
+            reset_select_fields=list(reset_select_fields.values()),
+            actor=actor,
+        )
 
-    if total_changed and not confirm_data_loss:
-        raise RequirementDataLossError(total_changed)
+    if changed_rows and not confirm_data_loss:
+        raise RequirementDataLossError(len(changed_rows))
 
     if deleted_fields:
         RequirementField.objects.filter(
             id__in=[field.id for field in deleted_fields]
         ).delete()
-    for model, changed in changed_by_model:
-        if changed:
-            model.objects.bulk_update(
-                changed, ["data", "version", "updated_at", "updated_by"]
-            )
+    if changed_rows:
+        Requirement.objects.bulk_update(
+            changed_rows, ["data", "version", "updated_at", "updated_by"]
+        )
 
     requirement_type.updated_by = actor
     requirement_type.save(update_fields=["updated_at", "updated_by"])
+
+    # 字段树真的变了才写修订 —— 只改类型名也走到这里，无条件写会往这个类型下每条
+    # 需求的变更轨迹里塞一条空变更。
+    # 延迟导入：requirement_schema 依赖本模块的字段树 helper，模块级互相 import 会成环。
+    from plane.utils.requirement_schema import write_schema_revision
+
+    revision = write_schema_revision(requirement_type, actor=actor)
+    if cleanup_fields or reset_select_fields:
+        _reprune_pending_change_items(
+            requirement_type=requirement_type,
+            removed_fields=cleanup_fields,
+            reset_select_fields=list(reset_select_fields.values()),
+            revision=revision,
+        )
     return created_field_ids
+
+
+def _reprune_pending_change_items(
+    *, requirement_type, removed_fields, reset_select_fields, revision
+):
+    """把待审变更项里的快照按新字段结构重裁一遍。
+
+    活行刚被 apply_field_change_cleanup 清过，但待审变更项里的 proposed_snapshot 是
+    提交那一刻冻结的。不同步裁剪的话，两边会脱节，而且审批通过时冻结的快照会把一个
+    已经不存在的字段的值"复活"回来。
+
+    范围是这个类型下**正在评审中**的需求，比全表小几个数量级。
+    """
+    if not removed_fields and not reset_select_fields:
+        return
+
+    pending_items = list(
+        RequirementChangeItem.objects.select_for_update()
+        .filter(
+            requirement_type=requirement_type,
+            change_request__status=RequirementChangeStatus.PENDING,
+        )
+    )
+    if not pending_items:
+        return
+
+    touched = []
+    for item in pending_items:
+        changed = False
+        for attribute in ("before_snapshot", "proposed_snapshot"):
+            snapshot = getattr(item, attribute)
+            if not isinstance(snapshot, dict):
+                continue
+            cleaned_data, data_changed = _clean_requirement_data_for_fields(
+                snapshot.get("data") or {}, removed_fields
+            )
+            for field, empty_value in reset_select_fields:
+                cleaned_data, select_changed = _clear_requirement_value_for_field(
+                    cleaned_data, field, empty_value
+                )
+                data_changed = data_changed or select_changed
+            if data_changed:
+                snapshot["data"] = cleaned_data
+                setattr(item, attribute, snapshot)
+                changed = True
+        if item.schema_revision_id != revision.id:
+            item.schema_revision = revision
+            changed = True
+        if changed:
+            touched.append(item)
+
+    if touched:
+        RequirementChangeItem.objects.bulk_update(
+            touched, ["before_snapshot", "proposed_snapshot", "schema_revision"]
+        )
+
+
+# 相邻两行 sort_order 之间的最小间隙。低于它就说明浮点精度快用尽了，需要局部重排。
+SORT_ORDER_MIN_GAP = 1e-6
+
+
+def _sort_order_for_insert(*, model, scope, before_id=None, after_id=None):
+    """算出插入位置的 sort_order —— 取相邻两行的中值，只读两行、只写一行。
+
+    以前这里把作用域内**全部**行 select_for_update 进内存再整表 bulk_update 一遍，
+    即使是追加到末尾也照做。那是这个模块里最后一个 O(N) 写入：几千行需求时每点一次
+    「新增」就是一次全表行锁 + 全表 UPDATE，还会去动正在评审中的行的 updated_at。
+
+    留空隙是特性不是缺陷：删除之后不回填，下一次插入照样能在间隙里落脚。
+    """
+    ordered = model.objects.filter(**scope).order_by("sort_order", "created_at", "id")
+
+    if before_id:
+        anchor = ordered.filter(id=before_id).values_list("sort_order", flat=True).first()
+        if anchor is None:
+            raise ValueError("The insertion anchor was not found.")
+        previous = (
+            ordered.filter(sort_order__lt=anchor)
+            .values_list("sort_order", flat=True)
+            .last()
+        )
+        lower, upper = previous, anchor
+    elif after_id:
+        anchor = ordered.filter(id=after_id).values_list("sort_order", flat=True).first()
+        if anchor is None:
+            raise ValueError("The insertion anchor was not found.")
+        following = (
+            ordered.filter(sort_order__gt=anchor)
+            .values_list("sort_order", flat=True)
+            .first()
+        )
+        lower, upper = anchor, following
+    else:
+        last = ordered.values_list("sort_order", flat=True).last()
+        lower, upper = last, None
+
+    if lower is None and upper is None:
+        return SORT_ORDER_STEP
+    if lower is None:
+        return upper - SORT_ORDER_STEP
+    if upper is None:
+        return lower + SORT_ORDER_STEP
+    if upper - lower < SORT_ORDER_MIN_GAP:
+        # 精度耗尽：把这批行整体重排一次，再取中值。实践中几乎不会走到。
+        _rebalance_sort_orders(model=model, scope=scope)
+        return _sort_order_for_insert(
+            model=model, scope=scope, before_id=before_id, after_id=after_id
+        )
+    return (lower + upper) / 2
+
+
+def _rebalance_sort_orders(*, model, scope):
+    """把作用域内的 sort_order 按当前顺序重新拉开间距。只在精度耗尽时调用。"""
+    rows = list(
+        model.objects.select_for_update()
+        .filter(**scope)
+        .order_by("sort_order", "created_at", "id")
+    )
+    now = timezone.now()
+    for index, row in enumerate(rows):
+        row.sort_order = (index + 1) * SORT_ORDER_STEP
+        row.updated_at = now
+    if rows:
+        model.objects.bulk_update(rows, ["sort_order", "updated_at"])
 
 
 def insert_requirement_row(
@@ -800,46 +924,26 @@ def insert_requirement_row(
     before_id=None,
     after_id=None,
 ):
-    """在指定位置插入一行需求并重排整列 sort_order。
+    """在指定位置插入一行需求。
 
-    model / scope / new_row 三个参数让正式表与草稿表共用同一套插入与重排语义。
+    model / scope / new_row 三个参数让不同归属的表共用同一套插入语义。
     data 只装自定义字段，builtin 是八个内置列的完整 dict。
     """
     if before_id and after_id:
         raise ValueError("Only one insertion anchor can be provided.")
 
-    existing = list(
-        model.objects.select_for_update()
-        .filter(**scope)
-        .order_by("sort_order", "created_at", "id")
+    sort_order = _sort_order_for_insert(
+        model=model, scope=scope, before_id=before_id, after_id=after_id
     )
-    ids = [row.id for row in existing]
-    if before_id:
-        try:
-            insert_at = ids.index(before_id)
-        except ValueError as exc:
-            raise ValueError("The insertion anchor was not found.") from exc
-    elif after_id:
-        try:
-            insert_at = ids.index(after_id) + 1
-        except ValueError as exc:
-            raise ValueError("The insertion anchor was not found.") from exc
-    else:
-        insert_at = len(existing)
 
     row = new_row(
         data=deepcopy(data or {}),
         columns=builtin_values_from_payload(builtin),
-        sort_order=(insert_at + 1) * SORT_ORDER_STEP,
+        sort_order=sort_order,
         actor=actor,
         requirement_type_id=requirement_type_id,
     )
     row.save()
-    existing.insert(insert_at, row)
-    for index, item in enumerate(existing):
-        item.sort_order = (index + 1) * SORT_ORDER_STEP
-        item.updated_at = timezone.now()
-    model.objects.bulk_update(existing, ["sort_order", "updated_at"])
     return row
 
 
@@ -873,16 +977,16 @@ def _new_library_item(library):
     return factory
 
 
-def baseline_row_scope(baseline):
-    """基线管辖的正式行的过滤条件。标准库的行永远不在其中。"""
-    if baseline.product_id:
-        return {"product_id": baseline.product_id}
-    return {"project_id": baseline.project_id}
+def scope_row_filter(policy):
+    """一个产品/项目作用域下的需求行的过滤条件。标准库的行永远不在其中。"""
+    if policy.product_id:
+        return {"product_id": policy.product_id}
+    return {"project_id": policy.project_id}
 
 
 def insert_baseline_requirement(
     *,
-    baseline,
+    policy,
     data,
     builtin,
     requirement_type_id,
@@ -892,9 +996,9 @@ def insert_baseline_requirement(
 ):
     return insert_requirement_row(
         model=Requirement,
-        scope=baseline_row_scope(baseline),
+        scope=scope_row_filter(policy),
         new_row=_new_scoped_requirement(
-            product=baseline.product, project=baseline.project
+            product=policy.product, project=policy.project
         ),
         data=data,
         builtin=builtin,
@@ -1000,12 +1104,16 @@ def save_requirement_row_batch(
     updated_rows = []
     for item in updates:
         row = rows_by_id[item["id"]]
+        # 前快照与 was_approved 都必须在改动之前抓，且要用这里上了锁的行
+        before = requirement_content_values(row)
+        was_approved = row_was_approved(row)
         for column, value in builtin_values_from_payload(item.get("builtin")).items():
             setattr(row, column, value)
         row.data = deepcopy(item["data"] or {})
         row.version += 1
         row.updated_at = now
         row.updated_by = actor
+        resync_approved_row_version(row, before=before, was_approved=was_approved)
         updated_rows.append(row)
     if updated_rows:
         model.objects.bulk_update(
@@ -1014,6 +1122,7 @@ def save_requirement_row_batch(
                 *BUILTIN_COLUMNS,
                 "data",
                 "version",
+                "approved_row_version",
                 "updated_at",
                 "updated_by",
             ],
@@ -1035,10 +1144,22 @@ def save_requirement_row_batch(
         else:
             insert_at = len(ordered_rows)
 
+        # 取相邻两行的中值，而不是「下标 × 步长」—— 后者要求整批重排才自洽
+        lower = ordered_rows[insert_at - 1].sort_order if insert_at > 0 else None
+        upper = ordered_rows[insert_at].sort_order if insert_at < len(ordered_rows) else None
+        if lower is None and upper is None:
+            sort_order = SORT_ORDER_STEP
+        elif lower is None:
+            sort_order = upper - SORT_ORDER_STEP
+        elif upper is None:
+            sort_order = lower + SORT_ORDER_STEP
+        else:
+            sort_order = (lower + upper) / 2
+
         row = new_row(
             data=deepcopy(item["data"] or {}),
             columns=builtin_values_from_payload(item.get("builtin")),
-            sort_order=(insert_at + 1) * SORT_ORDER_STEP,
+            sort_order=sort_order,
             actor=actor,
             requirement_type_id=item.get("requirement_type_id"),
         )
@@ -1053,21 +1174,14 @@ def save_requirement_row_batch(
         else:
             doomed.delete()
 
-    if creates or deletes:
-        for index, row in enumerate(ordered_rows):
-            row.sort_order = (index + 1) * SORT_ORDER_STEP
-            row.updated_at = now
-        model.objects.bulk_update(
-            ordered_rows,
-            ["sort_order", "updated_at"],
-        )
-
+    # 不再全量重排 sort_order。新增行在 ordered_rows 里插进位置时已经拿到了中值，
+    # 删除留下的空隙是特性 —— 见 _sort_order_for_insert 的说明。
     return created_rows, updated_rows, list(delete_ids)
 
 
 def save_baseline_requirement_batch(
     *,
-    baseline,
+    policy,
     creates,
     updates,
     deletes,
@@ -1075,9 +1189,9 @@ def save_baseline_requirement_batch(
 ):
     return save_requirement_row_batch(
         model=Requirement,
-        scope=baseline_row_scope(baseline),
+        scope=scope_row_filter(policy),
         new_row=_new_scoped_requirement(
-            product=baseline.product, project=baseline.project
+            product=policy.product, project=policy.project
         ),
         creates=creates,
         updates=updates,
@@ -1154,9 +1268,9 @@ def remap_imported_parents(*, model, created_rows, parent_by_client_id):
 
 
 def import_library_items(
-    *, baseline, library, item_ids, actor=None, before_id=None, after_id=None
+    *, policy, library, item_ids, actor=None, before_id=None, after_id=None
 ):
-    """把标准库条目导入基线管辖的正式表。"""
+    """把标准库条目导入这个作用域的需求表。"""
     creates, parent_by_client_id = build_library_import_creates(
         library=library,
         item_ids=item_ids,
@@ -1164,7 +1278,7 @@ def import_library_items(
         after_id=after_id,
     )
     created_rows, updated_rows, deleted_ids = save_baseline_requirement_batch(
-        baseline=baseline,
+        policy=policy,
         creates=creates,
         updates=[],
         deletes=[],

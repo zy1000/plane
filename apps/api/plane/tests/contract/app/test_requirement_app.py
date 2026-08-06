@@ -1,9 +1,10 @@
-"""需求条目与需求基线的契约测试。
+"""需求条目与需求配置的契约测试。
 
-覆盖重构后的核心事实：
+覆盖的核心事实：
 - Requirement 就是需求条目本身，产品需求与标准库条目落在同一张表上
-- 标题与描述存在列上，但**接口契约里它们仍然以内置字段 UUID 出现在 data 里**
-- 审批的单位是基线（一个产品的全部需求），基线由后端惰性创建
+- 八个内置字段是行上的**真实列**，走 builtin 传，不再以字段 UUID 出现在 data 里
+- 需求配置（谁能批、要几个人批）由后端惰性创建，不再持有状态与版本
+- 只读是**行级**的：一条在评审中不影响同产品的其它行
 """
 
 from uuid import uuid4
@@ -16,7 +17,7 @@ from plane.db.models import (
     Product,
     ProductMember,
     Requirement,
-    RequirementBaseline,
+    RequirementApprovalPolicy,
     RequirementLibrary,
     RequirementType,
     WorkspaceMember,
@@ -30,9 +31,9 @@ FIELD_PAYLOAD_KEYS = (
     "field_type",
     "is_required",
     "is_active",
+    "field_category",
     "config",
     "default_value",
-    "builtin_key",
 )
 
 
@@ -49,34 +50,31 @@ def writable_fields(fields):
     return result
 
 
-def builtin_field_ids(fields):
-    return {
-        field["builtin_key"]: field["id"] for field in fields if field.get("builtin_key")
-    }
-
-
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestRequirementApp:
     def setup_method(self):
         self.owner = UserFactory(username=f"requirement-owner-{uuid4()}")
+        self.approver = UserFactory(username=f"requirement-approver-{uuid4()}")
         self.workspace = WorkspaceFactory(owner=self.owner)
-        WorkspaceMember.objects.create(
-            workspace=self.workspace, member=self.owner, role=20
-        )
+        for member in (self.owner, self.approver):
+            WorkspaceMember.objects.create(
+                workspace=self.workspace, member=member, role=20
+            )
         self.product = Product.objects.create(
             name=f"Requirement product {uuid4()}",
             workspace=self.workspace,
             owner=self.owner,
         )
+        ProductMember.objects.create(product=self.product, member=self.approver)
 
     # --- helpers -------------------------------------------------------
 
     def url(self, name, **kwargs):
         return reverse(name, kwargs={"slug": self.workspace.slug, **kwargs})
 
-    def baseline_url(self):
-        return self.url("requirement-baseline", product_id=self.product.id)
+    def configuration_url(self):
+        return self.url("requirement-configuration", product_id=self.product.id)
 
     def requirements_url(self):
         return self.url("product-requirements", product_id=self.product.id)
@@ -89,7 +87,6 @@ class TestRequirementApp:
         return user
 
     def create_requirement_type(self, api_client, name=None):
-        """走创建接口 —— 只有它会补齐标题/描述两个内置字段。"""
         response = api_client.post(
             self.url("requirement-types"),
             {"name": name or f"Requirement type {uuid4()}"},
@@ -114,9 +111,9 @@ class TestRequirementApp:
                 "field_type": "text",
                 "is_required": False,
                 "is_active": True,
+                "field_category": "standard",
                 "config": {},
                 "default_value": None,
-                "builtin_key": None,
                 "children": [],
             }
         )
@@ -133,71 +130,95 @@ class TestRequirementApp:
         assert response.status_code == status.HTTP_200_OK, response.data
         return self.type_fields(api_client, requirement_type_id)
 
-    def make_data(self, fields, title, description=None, **custom):
-        ids = builtin_field_ids(fields)
-        data = {ids["title"]: title, ids["description"]: description}
-        by_name = {field["name"]: field["id"] for field in fields}
-        for name, value in custom.items():
-            data[by_name[name]] = value
-        return data
+    def make_payload(self, type_id, title, description=None, fields=None, **custom):
+        """内置列走 builtin，自定义字段走 data。"""
+        data = {}
+        if custom:
+            by_name = {field["name"]: field["id"] for field in fields or []}
+            for name, value in custom.items():
+                data[by_name[name]] = value
+        return {
+            "requirement_type_id": type_id,
+            "data": data,
+            "builtin": {"title": title, "description_html": description},
+        }
+
+    def add_requirement(self, api_client, type_id, title, **kwargs):
+        response = api_client.post(
+            self.requirements_url(),
+            self.make_payload(type_id, title, **kwargs),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        return response.data
+
+    def configure_approver(self, api_client):
+        policy = api_client.get(self.configuration_url()).data["policy"]
+        response = api_client.put(
+            self.configuration_url(),
+            {
+                "expected_updated_at": policy["updated_at"],
+                "policy": {
+                    "owner_id": str(self.owner.id),
+                    "approver_ids": [str(self.approver.id)],
+                    "approval_type": "any",
+                    "required_count": None,
+                },
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
 
     # --- tests ---------------------------------------------------------
 
-    def test_baseline_is_created_lazily_and_starts_empty(self, api_client):
+    def test_configuration_is_created_lazily_and_starts_empty(self, api_client):
         api_client.force_authenticate(user=self.owner)
-        assert not RequirementBaseline.objects.filter(product=self.product).exists()
+        assert not RequirementApprovalPolicy.objects.filter(
+            product=self.product
+        ).exists()
 
-        response = api_client.get(self.baseline_url())
+        response = api_client.get(self.configuration_url())
 
         assert response.status_code == status.HTTP_200_OK, response.data
-        assert response.data["baseline"]["status"] == "draft"
-        assert response.data["baseline"]["current_version"] is None
+        # 配置不再持有状态与版本 —— 那些长在每一条需求上
+        assert "status" not in response.data["policy"]
+        assert response.data["policy"]["pending_change_request_count"] == 0
         assert response.data["requirement_types"] == []
-        assert response.data["is_frozen"] is False
-        assert RequirementBaseline.objects.filter(product=self.product).count() == 1
+        assert (
+            RequirementApprovalPolicy.objects.filter(product=self.product).count() == 1
+        )
 
-    def test_title_and_description_round_trip_through_data(self, api_client):
-        """存储上是列，契约上仍是 data 里的两个字段 UUID。"""
+    def test_builtin_values_live_on_columns_not_in_data(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
         fields = self.add_custom_field(api_client, type_id)
 
         response = api_client.post(
             self.requirements_url(),
-            {
-                "requirement_type_id": type_id,
-                "data": self.make_data(fields, "登录页支持短信验证码", "<p>细则</p>", 优先级="高"),
-            },
+            self.make_payload(
+                type_id, "登录页支持短信验证码", "细则", fields=fields, 优先级="高"
+            ),
             format="json",
         )
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
-        ids = builtin_field_ids(fields)
         assert response.data["title"] == "登录页支持短信验证码"
-        assert response.data["description_html"] == "<p>细则</p>"
-        # 契约：内置值仍以字段 UUID 出现在 data 里
-        assert response.data["data"][ids["title"]] == "登录页支持短信验证码"
-        assert response.data["data"][ids["description"]] == "<p>细则</p>"
+        assert response.data["description_html"] == "细则"
+        assert response.data["approval_state"] == "draft"
 
-        # 存储：列上有值，data 里只剩自定义字段
         row = Requirement.objects.get(id=response.data["id"])
         assert row.title == "登录页支持短信验证码"
-        assert row.description_html == "<p>细则</p>"
-        assert ids["title"] not in row.data
-        assert ids["description"] not in row.data
+        assert row.description_html == "细则"
+        # data 只装自定义字段
+        assert list(row.data.values()) == ["高"]
         assert row.product_id == self.product.id
         assert row.library_id is None
 
     def test_search_matches_builtin_title_stored_on_the_column(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        fields = self.type_fields(api_client, type_id)
         for title in ("短信验证码登录", "扫码登录"):
-            api_client.post(
-                self.requirements_url(),
-                {"requirement_type_id": type_id, "data": self.make_data(fields, title)},
-                format="json",
-            )
+            self.add_requirement(api_client, type_id, title)
 
         response = api_client.get(self.requirements_url(), {"search": "扫码"})
 
@@ -213,13 +234,17 @@ class TestRequirementApp:
             requirement_type_id=type_id,
             name=f"Library {uuid4()}",
         )
+        by_name = {field["name"]: field["id"] for field in fields}
 
         created = api_client.post(
             reverse(
                 "requirement-library-items",
                 kwargs={"slug": self.workspace.slug, "library_id": library.id},
             ),
-            {"data": self.make_data(fields, "标准条目", "<p>库描述</p>", 优先级="中")},
+            {
+                "data": {by_name["优先级"]: "中"},
+                "builtin": {"title": "标准条目", "description_html": "库描述"},
+            },
             format="json",
         )
         assert created.status_code == status.HTTP_201_CREATED, created.data
@@ -227,6 +252,9 @@ class TestRequirementApp:
         assert item.library_id == library.id
         assert item.product_id is None
         assert item.title == "标准条目"
+        # 标准库条目永不走审批 —— 由 req_library_item_never_approved 约束硬保证
+        assert item.approved_version is None
+        assert item.status == "draft"
 
         imported = api_client.post(
             f"{self.requirements_url()}import/",
@@ -238,8 +266,7 @@ class TestRequirementApp:
         assert imported.data["requirement_type_id"] == str(type_id)
         copy = Requirement.objects.get(product=self.product)
         assert copy.title == "标准条目"
-        assert copy.description_html == "<p>库描述</p>"
-        # 同一个需求类型，字段 UUID 一致，自定义值直接拷贝
+        assert copy.description_html == "库描述"
         assert list(copy.data.values()) == ["中"]
 
     def test_requirement_type_cannot_be_deleted_while_requirements_reference_it(
@@ -247,17 +274,34 @@ class TestRequirementApp:
     ):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        fields = self.type_fields(api_client, type_id)
-        api_client.post(
-            self.requirements_url(),
-            {"requirement_type_id": type_id, "data": self.make_data(fields, "占用中")},
-            format="json",
-        )
+        self.add_requirement(api_client, type_id, "占用中")
 
         response = api_client.delete(self.url("requirement-type-detail", pk=type_id))
 
         assert response.status_code == status.HTTP_409_CONFLICT, response.data
         assert response.data["code"] == "REQUIREMENT_TYPE_IN_USE"
+
+    def test_requirement_type_configuration_requires_workspace_membership(
+        self, api_client
+    ):
+        """类型字段结构会立刻影响所有产品的所有需求，不能任由非成员改。"""
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        outsider = UserFactory(username=f"requirement-outsider-{uuid4()}")
+
+        api_client.force_authenticate(user=outsider)
+        response = api_client.put(
+            self.url("requirement-type-configuration", pk=type_id),
+            {
+                "expected_updated_at": RequirementType.objects.get(
+                    id=type_id
+                ).updated_at.isoformat(),
+                "fields": [],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN, response.data
 
     def test_non_member_cannot_reach_product_requirements(self, api_client):
         outsider = self.add_workspace_member()
@@ -265,7 +309,10 @@ class TestRequirementApp:
         self.product.save(update_fields=["network"])
         api_client.force_authenticate(user=outsider)
 
-        assert api_client.get(self.baseline_url()).status_code == status.HTTP_404_NOT_FOUND
+        assert (
+            api_client.get(self.configuration_url()).status_code
+            == status.HTTP_404_NOT_FOUND
+        )
         assert (
             api_client.get(self.requirements_url()).status_code
             == status.HTTP_404_NOT_FOUND
@@ -278,28 +325,26 @@ class TestRequirementApp:
         self.product.save(update_fields=["network"])
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        fields = self.type_fields(api_client, type_id)
 
         api_client.force_authenticate(user=viewer)
         assert api_client.get(self.requirements_url()).status_code == status.HTTP_200_OK
         response = api_client.post(
             self.requirements_url(),
-            {"requirement_type_id": type_id, "data": self.make_data(fields, "无权限")},
+            self.make_payload(type_id, "无权限"),
             format="json",
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN, response.data
 
-        # 加入产品后即可维护
         ProductMember.objects.create(product=self.product, member=viewer)
         allowed = api_client.post(
             self.requirements_url(),
-            {"requirement_type_id": type_id, "data": self.make_data(fields, "有权限")},
+            self.make_payload(type_id, "有权限"),
             format="json",
         )
         assert allowed.status_code == status.HTTP_201_CREATED, allowed.data
 
     def test_authentication_is_enforced(self, api_client):
-        assert api_client.get(self.baseline_url()).status_code in (
+        assert api_client.get(self.configuration_url()).status_code in (
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         )
@@ -307,37 +352,27 @@ class TestRequirementApp:
     def test_bulk_save_applies_mixed_operations(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        fields = self.type_fields(api_client, type_id)
-        first = api_client.post(
-            self.requirements_url(),
-            {"requirement_type_id": type_id, "data": self.make_data(fields, "第一条")},
-            format="json",
-        ).data
-        second = api_client.post(
-            self.requirements_url(),
-            {"requirement_type_id": type_id, "data": self.make_data(fields, "第二条")},
-            format="json",
-        ).data
-        expected_updated_at = api_client.get(self.baseline_url()).data[
-            "expected_updated_at"
-        ]
+        first = self.add_requirement(api_client, type_id, "第一条")
+        second = self.add_requirement(api_client, type_id, "第二条")
 
+        # 没有 expected_updated_at —— 真实冲突由逐行 version 覆盖
         response = api_client.post(
             f"{self.requirements_url()}bulk-save/",
             {
-                "expected_updated_at": expected_updated_at,
                 "creates": [
                     {
                         "client_id": str(uuid4()),
                         "requirement_type_id": type_id,
-                        "data": self.make_data(fields, "第三条"),
+                        "data": {},
+                        "builtin": {"title": "第三条"},
                     }
                 ],
                 "updates": [
                     {
                         "id": first["id"],
                         "version": first["version"],
-                        "data": self.make_data(fields, "第一条（改）"),
+                        "data": {},
+                        "builtin": {"title": "第一条（改）"},
                     }
                 ],
                 "deletes": [{"id": second["id"], "version": second["version"]}],
@@ -356,28 +391,40 @@ class TestRequirementApp:
             )
         ) == ["第一条（改）", "第三条"]
 
-    def test_bulk_save_rejects_stale_grid_token(self, api_client):
+    def test_bulk_save_rejects_rows_that_are_under_review(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        fields = self.type_fields(api_client, type_id)
+        self.configure_approver(api_client)
+        locked = self.add_requirement(api_client, type_id, "评审中")
+        submitted = api_client.post(
+            self.url(
+                "requirement-change-requests", product_id=self.product.id
+            ),
+            {"reason": "提交", "items": [{"requirement_id": locked["id"]}]},
+            format="json",
+        )
+        assert submitted.status_code == status.HTTP_201_CREATED, submitted.data
 
         response = api_client.post(
             f"{self.requirements_url()}bulk-save/",
             {
-                "expected_updated_at": "2020-01-01T00:00:00Z",
-                "creates": [
+                "creates": [],
+                "updates": [
                     {
-                        "client_id": str(uuid4()),
-                        "requirement_type_id": type_id,
-                        "data": self.make_data(fields, "过期令牌"),
+                        "id": locked["id"],
+                        "version": locked["version"],
+                        "data": {},
+                        "builtin": {"title": "偷偷改"},
                     }
                 ],
-                "updates": [],
                 "deletes": [],
             },
             format="json",
         )
 
         assert response.status_code == status.HTTP_409_CONFLICT, response.data
-        assert response.data["code"] == "REQUIREMENT_CONFIGURATION_CONFLICT"
-        assert not Requirement.objects.filter(product=self.product).exists()
+        assert response.data["code"] == "REQUIREMENT_BATCH_CONFLICT"
+        assert response.data["conflicts"] == [
+            {"id": str(locked["id"]), "reason": "in_review"}
+        ]
+        assert Requirement.objects.get(id=locked["id"]).title == "评审中"

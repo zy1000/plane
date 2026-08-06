@@ -5,14 +5,15 @@ import { observer } from "mobx-react";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
-  Check,
   Columns3,
   Copy,
+  Maximize2,
+  History,
   MoreHorizontal,
-  Paperclip,
   Pencil,
   Plus,
   Save,
+  Send,
   Trash2,
   Undo2,
 } from "lucide-react";
@@ -25,7 +26,6 @@ import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, FilterAppliedIcon, FilterIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
-  TRequirementAssetRef,
   TRequirement,
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
@@ -37,9 +37,8 @@ import type {
   TRequirementFormRow,
 } from "@plane/types";
 import { EFileAssetType } from "@plane/types";
-import { CustomMenu, CustomSelect, Loader, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
-import type { TDropdownOption } from "@plane/ui";
-import { cn, getEditorAssetSrc } from "@plane/utils";
+import { CustomMenu, Loader } from "@plane/ui";
+import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import {
@@ -57,6 +56,7 @@ import {
   getFormRows,
   getMaxFormRows,
   isEmptyRequirementValue,
+  LeafEditor,
   LeafValue,
   MenuRowLabel,
   RequirementGridHeader,
@@ -68,45 +68,8 @@ import {
   useRequirementGridEditor,
 } from "./use-requirement-grid-editor";
 import { useRequirementTitles } from "./use-requirement-titles";
+import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
-
-const CHANGE_KIND_PILL: Record<"created" | "updated", string> = {
-  created: "bg-success-subtle text-success-primary",
-  updated: "bg-warning-subtle text-warning-primary",
-};
-
-/**
- * 「变更」列：相对上一个已发布版本这一行发生了什么。
- *
- * 编辑态下未保存的改动还没进后端的 change_kind，所以草稿行自己的状态优先 ——
- * 否则刚敲完一个单元格，这一列还显示「未变更」。
- */
-const ChangeKindBadge = ({
-  requirement,
-  draft,
-}: {
-  requirement: TRequirement | null;
-  draft: TRequirementDraftRow | null;
-}) => {
-  const { t } = useTranslation();
-  const kind =
-    draft?.mode === "create"
-      ? "created"
-      : draft && draft.originalData !== undefined && !isEqual(draft.data, draft.originalData)
-        ? "updated"
-        : (requirement?.change_kind ?? null);
-  if (!kind) return <span className="text-12 text-tertiary">—</span>;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 text-10 font-medium",
-        CHANGE_KIND_PILL[kind]
-      )}
-    >
-      {t(`requirement_grid.data.change_kind.${kind}`)}
-    </span>
-  );
-};
 
 type TProps = {
   workspaceSlug: string;
@@ -118,9 +81,13 @@ type TProps = {
    * 是否显示「变更 / 最后变更于」两列。只有受基线管辖的产品需求有这个概念，
    * 标准库条目创建即生效，没有「相对上一版」可言。
    */
-  showChangeColumns?: boolean;
+  showApprovalColumn?: boolean;
+  /** 打开这一行所在的变更单 */
+  onOpenChangeRequest?: (changeRequestId: string) => void;
+  /** 提交这几条需求进入评审；不传则不渲染提交入口（标准库不走审批） */
+  onSubmitReview?: (requirementIds: string[]) => void;
+  onWithdrawReview?: (changeRequestId: string) => void;
   readOnly?: boolean;
-  expectedUpdatedAt?: string;
   /**
    * 新增行绑定到的需求类型。产品需求传当前视图的类型，标准库传 library.requirement_type_id。
    * 表格下方的「新增数据」因此永远挂在类型上，不会挂到标准库上。
@@ -151,219 +118,23 @@ type TProps = {
   onRefresh: () => Promise<unknown>;
   onBulkSave: (payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
   onEditingChange?: (isEditing: boolean) => void;
+  /** 打开这一行的详情。不传则不渲染详情入口（标准库没有详情页） */
+  onOpenDetail?: (requirementId: string) => void;
   /** When set, search/filter/display/edit (and bulk-edit actions) render into this host instead of the grid toolbar. */
   toolbarPortalEl?: HTMLElement | null;
 };
 
-const LeafEditor = ({
-  field,
-  value,
-  workspaceSlug,
-  onChange,
-  onUpload,
-  onRemoveAsset,
-}: {
-  field: TRequirementField;
-  value: TRequirementValue | undefined;
-  workspaceSlug: string;
-  onChange: (value: TRequirementValue) => void;
-  onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
-  onRemoveAsset?: (assetId: string) => void;
-}) => {
-  const { t } = useTranslation();
-  if (field.field_type === "boolean") {
-    return <ToggleSwitch value={Boolean(value)} onChange={() => onChange(!value)} size="sm" />;
-  }
-  if (field.field_type === "select") {
-    const options = getRequirementSelectOptions(field);
-    const placeholder = field.config.placeholder ?? t("requirement_grid.data.select_option");
-    if (getRequirementSelectMode(field) === "multiple") {
-      const currentValue = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-      const dropdownOptions: TDropdownOption[] = options.map((option) => ({
-        value: option.id,
-        data: option,
-      }));
-      return (
-        <MultiSelectDropdown
-          containerClassName="w-full min-w-0"
-          value={currentValue}
-          onChange={(nextValue) => onChange(nextValue)}
-          options={dropdownOptions}
-          keyExtractor={(option) => option.value}
-          renderItem={({ value: optionId, selected }) => (
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="truncate text-14">
-                {options.find((option) => option.id === optionId)?.label ?? optionId}
-              </span>
-              {selected && <Check className="size-3.5 shrink-0 text-accent-primary" />}
-            </div>
-          )}
-          buttonContent={(_isOpen, selectedValue) => {
-            const selectedIds = (selectedValue as string[] | undefined) ?? [];
-            const labels = selectedIds
-              .map((optionId) => options.find((option) => option.id === optionId)?.label)
-              .filter(Boolean);
-            return (
-              <span className={labels.length ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
-                {labels.length ? labels.join(", ") : placeholder}
-              </span>
-            );
-          }}
-          buttonContainerClassName="h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
-          optionsContainerClassName="w-60"
-          disableSearch={options.length <= 8}
-          disableSorting
-        />
-      );
-    }
-
-    const selectedId = typeof value === "string" ? value : null;
-    const selectedOption = options.find((option) => option.id === selectedId);
-    return (
-      <CustomSelect
-        value={selectedId}
-        onChange={(nextValue: string | null) => onChange(nextValue)}
-        label={
-          <span className={selectedOption ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
-            {selectedOption?.label ?? placeholder}
-          </span>
-        }
-        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
-        optionsClassName="w-60"
-        input
-      >
-        {!field.is_required && (
-          <CustomSelect.Option value={null}>
-            <span className="text-14 text-secondary">{t("requirement_grid.data.clear_selection")}</span>
-          </CustomSelect.Option>
-        )}
-        {options.map((option) => (
-          <CustomSelect.Option key={option.id} value={option.id}>
-            <span className="truncate text-14">{option.label}</span>
-          </CustomSelect.Option>
-        ))}
-      </CustomSelect>
-    );
-  }
-  if (field.field_type === "member") {
-    return (
-      <MemberDropdown
-        multiple={false}
-        value={typeof value === "string" ? value : null}
-        onChange={(memberId) => onChange(memberId)}
-        buttonVariant="border-with-text"
-        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 text-14 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
-        buttonContainerClassName="w-full min-w-0"
-        placeholder={field.config.placeholder ?? t("requirement_grid.data.select_member")}
-        showUserDetails
-      />
-    );
-  }
-  if (field.field_type === "attachment" || field.field_type === "image") {
-    const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
-    const removeAsset = (assetId: string) => {
-      onRemoveAsset?.(assetId);
-      onChange(assets.filter((item) => item.asset_id !== assetId));
-    };
-    return (
-      <div className="flex w-full min-w-0 flex-col gap-1">
-        {field.field_type === "image" ? (
-          <div className="flex flex-wrap gap-1">
-            {assets.map((asset) => {
-              const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
-              return (
-                <span
-                  key={asset.asset_id}
-                  title={asset.name}
-                  className="relative size-9 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2"
-                >
-                  <img src={src} alt={asset.name} className="size-full object-cover" loading="lazy" />
-                  <button
-                    type="button"
-                    className="absolute top-0.5 right-0.5 grid size-3.5 place-items-center rounded-full bg-surface-1/90 text-10 leading-none text-secondary shadow-sm hover:bg-danger-subtle hover:text-danger-primary"
-                    onClick={() => removeAsset(asset.asset_id)}
-                    aria-label={t("delete")}
-                  >
-                    ×
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-        ) : (
-          assets.map((asset) => (
-            <span
-              key={asset.asset_id}
-              className="flex min-w-0 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-0.5 text-12"
-            >
-              <Paperclip className="size-3 shrink-0" />
-              <span className="min-w-0 flex-1 truncate" title={asset.name}>
-                {asset.name}
-              </span>
-              <button
-                type="button"
-                className="shrink-0 text-secondary hover:text-danger-primary"
-                onClick={() => removeAsset(asset.asset_id)}
-                aria-label={t("delete")}
-              >
-                ×
-              </button>
-            </span>
-          ))
-        )}
-        <label className="inline-flex h-7 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-12 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
-          <Paperclip className="size-3 shrink-0" />
-          <span className="truncate">
-            {t(
-              field.field_type === "image"
-                ? "requirement_grid.data.upload_image"
-                : "requirement_grid.data.upload_file"
-            )}
-          </span>
-          <input
-            type="file"
-            className="sr-only"
-            accept={field.field_type === "image" ? "image/*" : undefined}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              void onUpload(file, field.field_type === "image").then((asset) => onChange([...assets, asset]));
-              event.target.value = "";
-            }}
-          />
-        </label>
-      </div>
-    );
-  }
-  if (field.field_type === "rich_text") {
-    return (
-      <textarea
-        value={typeof value === "string" ? value : ""}
-        onChange={(event) => onChange(event.target.value)}
-        rows={1}
-        className="focus:border-accent-primary focus:ring-accent-primary/10 max-h-24 min-h-8 w-full min-w-0 resize-y rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-14 leading-5 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
-        placeholder={field.config.placeholder}
-      />
-    );
-  }
-  return (
-    <input
-      value={typeof value === "string" ? value : ""}
-      onChange={(event) => onChange(event.target.value)}
-      className="focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
-      placeholder={field.config.placeholder}
-    />
-  );
-};
 
 export const RequirementGrid = observer(function RequirementGrid(props: TProps) {
   const {
     workspaceSlug,
     entityId,
     entityKind,
-    showChangeColumns = false,
+    showApprovalColumn = false,
+    onOpenChangeRequest,
+    onSubmitReview,
+    onWithdrawReview,
     readOnly = false,
-    expectedUpdatedAt,
     createRequirementTypeId,
     columnStorageId,
     fields,
@@ -386,6 +157,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
     onRefresh,
     onBulkSave,
     onEditingChange,
+    onOpenDetail,
     toolbarPortalEl,
   } = props;
   const { t } = useTranslation();
@@ -433,7 +205,6 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
     requirements,
     fields: activeFields,
     workspaceSlug,
-    expectedUpdatedAt,
     createRequirementTypeId,
     discardMessage: t("requirement_grid.data.discard_all_confirm"),
     onSave: onBulkSave,
@@ -518,9 +289,9 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
           sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter) : 1),
         0
       ) +
-      (showChangeColumns ? 2 : 0) + // 变更 / 最后变更于
+      (showApprovalColumn ? 1 : 0) + // 审批态
       1, // trailing actions column
-    [showActionGutter, showChangeColumns, visibleRootFields]
+    [showActionGutter, showApprovalColumn, visibleRootFields]
   );
   const filterableFields = useMemo(
     () =>
@@ -653,7 +424,11 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
       afterKey?: string;
       copyData: TRequirementData;
     },
-    deleteTarget: string
+    deleteTarget: string,
+    /** 已落库的行才有详情可开；暂存的新行还没有 id */
+    detailTargetId?: string,
+    /** 已落库的行本身，用来判定审批相关的入口 */
+    detailRow?: TRequirement | null
   ) => (
     <div className="flex justify-center">
       <CustomMenu ellipsis placement="bottom-end" buttonClassName="text-tertiary hover:text-primary">
@@ -682,9 +457,52 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
         >
           <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
         </CustomMenu.MenuItem>
-        <CustomMenu.MenuItem onClick={() => handleDelete([deleteTarget])}>
-          <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
-        </CustomMenu.MenuItem>
+        {detailTargetId && onOpenDetail && (
+          <CustomMenu.MenuItem onClick={() => onOpenDetail(detailTargetId)}>
+            <MenuRowLabel icon={Maximize2} label={t("requirement_detail.open")} />
+          </CustomMenu.MenuItem>
+        )}
+        {detailRow?.can_submit_review && onSubmitReview && (
+          <CustomMenu.MenuItem onClick={() => onSubmitReview([detailRow.id])}>
+            <MenuRowLabel icon={Send} label={t("requirement_approval.submit_review")} />
+          </CustomMenu.MenuItem>
+        )}
+        {detailRow?.can_withdraw && detailRow.pending_change_request_id && onWithdrawReview && (
+          <CustomMenu.MenuItem
+            onClick={() => onWithdrawReview(detailRow.pending_change_request_id as string)}
+          >
+            <MenuRowLabel icon={Undo2} label={t("requirement_approval.withdraw_review")} />
+          </CustomMenu.MenuItem>
+        )}
+        {detailRow?.pending_change_request_id && onOpenChangeRequest && (
+          <CustomMenu.MenuItem
+            onClick={() => onOpenChangeRequest(detailRow.pending_change_request_id as string)}
+          >
+            <MenuRowLabel icon={History} label={t("requirement_approval.view_change_request")} />
+          </CustomMenu.MenuItem>
+        )}
+        {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」 */}
+        {!detailRow?.is_locked && (
+          <CustomMenu.MenuItem
+            onClick={() => {
+              if (detailRow && detailRow.approved_version !== null && onSubmitReview) {
+                onSubmitReview([detailRow.id]);
+                return;
+              }
+              handleDelete([deleteTarget]);
+            }}
+          >
+            <MenuRowLabel
+              icon={Trash2}
+              label={
+                detailRow && detailRow.approved_version !== null
+                  ? t("requirement_approval.request_delete")
+                  : t("delete")
+              }
+              tone="danger"
+            />
+          </CustomMenu.MenuItem>
+        )}
       </CustomMenu>
     </div>
   );
@@ -707,20 +525,27 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
           (!isEqual(requirementDraft.data, requirementDraft.originalData) ||
             !isEqual(requirementDraft.builtin, requirementDraft.originalBuiltin))))
     );
-    const canAddChild = isEditing && !isDeleted && formFields.some((form) => form.children.length > 0);
+    // 评审中的行落回只读渲染器，零新增渲染路径
+    const isRowEditable = isEditing && !isDeleted && !requirementDraft?.isLocked;
+    const canAddChild = isRowEditable && formFields.some((form) => form.children.length > 0);
     const rawRowCount = getMaxFormRows(data, formFields);
     // In edit mode the "add child" affordance lives on its own trailing row, so an empty group needs no filler row.
     const dataRowCount = canAddChild ? rawRowCount : Math.max(1, rawRowCount);
     const totalRows = dataRowCount + (canAddChild ? 1 : 0);
     const rowStateClass = isDeleted
       ? "bg-danger-subtle/40"
-      : isConflicted
-        ? "bg-danger-subtle/25"
-        : isChanged
-          ? "bg-accent-subtle/30"
-          : isEditing
-            ? "bg-surface-1"
-            : "bg-surface-1 group-hover/requirement:bg-accent-subtle/30";
+      : requirementDraft?.isLocked
+        ? // 评审中的行：删除待审用危险色，其余用警示色，都压低透明度表示「不可动」
+          requirementDraft.pendingChangeType === "delete"
+          ? "bg-danger-subtle/25 opacity-70"
+          : "bg-warning-subtle/20 opacity-80"
+        : isConflicted
+          ? "bg-danger-subtle/25"
+          : isChanged
+            ? "bg-accent-subtle/30"
+            : isEditing
+              ? "bg-surface-1"
+              : "bg-surface-1 group-hover/requirement:bg-accent-subtle/30";
     const groupCellClass = "border-b border-b-subtle transition-colors duration-150 motion-reduce:transition-none";
     const isRootFieldChanged = (fieldId: string) => {
       if (!requirementDraft || isDeleted) return false;
@@ -778,6 +603,18 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                   ) : null}
                 </td>
               )}
+              {isFirstRow && showApprovalColumn && (
+                <td
+                  rowSpan={totalRows}
+                  className={cn("w-24 border-r border-subtle px-2 py-2 text-center align-middle", groupCellClass)}
+                >
+                  <RequirementApprovalCell
+                    requirement={requirement}
+                    isStagedCreate={requirementDraft?.mode === "create"}
+                    onOpenChangeRequest={onOpenChangeRequest}
+                  />
+                </td>
+              )}
               {/* 内置列恒排在自定义字段之前，且永远是单列，跟着整组行 rowSpan */}
               {isFirstRow &&
                 builtinColumns.map((column) => (
@@ -790,7 +627,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                       isBuiltinChanged(column.key) && "relative"
                     )}
                   >
-                    {isEditing && !isDeleted ? (
+                    {isRowEditable ? (
                       <BuiltinCellEditor
                         columnKey={column.key}
                         values={builtin}
@@ -798,6 +635,21 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                         parentScope={parentScope}
                         rowId={requirementDraft?.requirementId}
                       />
+                    ) : column.key === "title" && requirement && onOpenDetail ? (
+                      // 详情入口只挂在标题格上，且不劫持整行点击 —— 整行归内联编辑
+                      <span className="flex min-w-0 items-center gap-1">
+                        <span className="min-w-0 flex-1 truncate">
+                          <BuiltinCellValue columnKey={column.key} values={builtin} />
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetail(requirement.id)}
+                          title={t("requirement_detail.open")}
+                          className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-layer-transparent-hover hover:text-primary"
+                        >
+                          <Maximize2 className="size-3.5" />
+                        </button>
+                      </span>
                     ) : (
                       <BuiltinCellValue
                         columnKey={column.key}
@@ -821,7 +673,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                         isRootFieldChanged(field.id) && "relative"
                       )}
                     >
-                      {isEditing && !isDeleted ? (
+                      {isRowEditable ? (
                         <LeafEditor
                           field={field}
                           value={data[field.id]}
@@ -894,7 +746,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                       )}
                     >
                       {row ? (
-                        isEditing && !isDeleted ? (
+                        isRowEditable ? (
                           <LeafEditor
                             field={child}
                             value={currentValue}
@@ -950,28 +802,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                 );
                 return [...childCells, gutterCell];
               })}
-              {isFirstRow && showChangeColumns && (
-                <>
-                  <td
-                    rowSpan={totalRows}
-                    className={cn(
-                      "w-24 border-r border-subtle px-3 py-2 text-center align-middle",
-                      groupCellClass
-                    )}
-                  >
-                    <ChangeKindBadge requirement={requirement} draft={requirementDraft} />
-                  </td>
-                  <td
-                    rowSpan={totalRows}
-                    className={cn(
-                      "w-28 border-r border-subtle px-3 py-2 text-center align-middle text-12 text-secondary",
-                      groupCellClass
-                    )}
-                  >
-                    {requirement?.last_changed_version ? `v${requirement.last_changed_version}` : "—"}
-                  </td>
-                </>
-              )}
+
               {isFirstRow && (
                 <td rowSpan={totalRows} className={cn("w-16 px-2 py-2 text-center align-middle", groupCellClass)}>
                   {isEditing && isDeleted ? (
@@ -984,7 +815,9 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                   ) : requirement ? (
                     renderRowActionMenu(
                       { beforeId: requirement.id, afterId: requirement.id, copyData: requirement.data },
-                      requirement.id
+                      requirement.id,
+                      requirement.id,
+                      requirement
                     )
                   ) : null}
                 </td>
@@ -1019,6 +852,21 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
   const pageItemCount = editor.isEditing ? editor.draftRows.length : requirements.length;
   const showSelectionActions = !readOnly && !editor.isEditing && selectedIds.length > 0;
+  /** 可提交的选中行。撤回不做批量 —— 撤回作用在变更单上，一个选区可能跨多张单 */
+  const submittableSelectedIds = useMemo(
+    () =>
+      selectedIds.filter((id) => requirements.find((item) => item.id === id)?.can_submit_review),
+    [requirements, selectedIds]
+  );
+  /** 只有从未通过审批的草稿能直接删；已确认的走「申请删除」评审 */
+  const deletableSelectedIds = useMemo(
+    () =>
+      selectedIds.filter((id) => {
+        const row = requirements.find((item) => item.id === id);
+        return row ? !row.is_locked && row.approved_version === null : false;
+      }),
+    [requirements, selectedIds]
+  );
   const useExternalToolbar = Boolean(toolbarPortalEl);
 
   const toolbarActions: ReactNode = editor.isEditing ? (
@@ -1061,7 +909,23 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
       <Button variant="ghost" size="lg" onClick={() => setSelectedIds([])}>
         {t("requirement_grid.data.clear_selection")}
       </Button>
-      <Button variant="error-outline" size="lg" onClick={() => handleDelete(selectedIds)} disabled={isMutating}>
+      {onSubmitReview && submittableSelectedIds.length > 0 && (
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={() => onSubmitReview(submittableSelectedIds)}
+          disabled={isMutating}
+        >
+          <Send className="size-3.5" />
+          {t("requirement_approval.submit_review_count", { count: submittableSelectedIds.length })}
+        </Button>
+      )}
+      <Button
+        variant="error-outline"
+        size="lg"
+        onClick={() => handleDelete(deletableSelectedIds)}
+        disabled={isMutating || deletableSelectedIds.length === 0}
+      >
         <Trash2 className="size-3.5" />
         {t("delete")}
       </Button>
@@ -1434,27 +1298,23 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                   />
                 ),
               }}
-              builtinHeaders={builtinColumns.map((column) => ({
-                key: column.key,
-                className: column.width,
-                content: t(column.labelKey),
-              }))}
-              extraHeaders={
-                showChangeColumns
+              builtinHeaders={[
+                // 审批态排在最前 —— 每行都要扫一眼，不能放到要横滚才看得见的地方
+                ...(showApprovalColumn
                   ? [
                       {
-                        key: "change-kind",
-                        className: "w-24 border-r border-subtle px-3 py-2.5 text-center text-primary",
-                        content: t("requirement_grid.data.change_kind.label"),
-                      },
-                      {
-                        key: "last-changed-version",
-                        className: "w-28 border-r border-subtle px-3 py-2.5 text-center text-primary",
-                        content: t("requirement_grid.data.last_changed_version"),
+                        key: "approval-state",
+                        className: "w-24 text-center",
+                        content: t("requirement_approval.column"),
                       },
                     ]
-                  : undefined
-              }
+                  : []),
+                ...builtinColumns.map((column) => ({
+                  key: column.key,
+                  className: column.width,
+                  content: t(column.labelKey),
+                })),
+              ]}
               trailingHeader={{
                 className: "w-16 px-2 py-2.5 text-center text-primary",
                 content: t("requirement_fields.fields.actions"),

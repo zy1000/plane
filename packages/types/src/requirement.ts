@@ -1,7 +1,6 @@
 import type { TPaginatedResponse } from "./pagination";
 import type { IUserLite } from "./users";
 
-export type TRequirementStatus = "draft" | "in_review" | "published";
 export type TRequirementApprovalType = "any" | "all" | "n_of_m";
 export type TRequirementFieldType =
   | "text"
@@ -15,8 +14,25 @@ export type TRequirementFieldType =
 export type TRequirementSelectMode = "single" | "multiple";
 /** 自定义字段的分类：标准字段进标准库，数据字段只在产品需求里出现。没有默认值，建字段时必须选 */
 export type TRequirementFieldCategory = "standard" | "data";
-/** 需求条目自己的状态，与基线的 TRequirementStatus（编辑态）是两回事 */
-export type TRequirementItemStatus = "draft" | "in_review" | "confirmed" | "implemented" | "obsolete";
+/**
+ * 需求的**内容**状态。不表达评审进度 —— 那是另一根轴，见 TRequirementApprovalState。
+ *
+ * draft 只由系统写：新建时置入，首次通过审批后置 confirmed，此后再也回不到 draft。
+ */
+export type TRequirementItemStatus = "draft" | "confirmed" | "implemented" | "obsolete";
+
+/**
+ * 需求的**审批**态。服务端由三列派生后下发，前端不要自己从 pending_change_request_id
+ * 反推 —— 那样会漏掉权限这一维。
+ *
+ * modified = 已通过审批但之后又改过，还没提交。
+ */
+export type TRequirementApprovalState =
+  | "draft"
+  | "in_review"
+  | "pending_deletion"
+  | "approved"
+  | "modified";
 /** 与工作项优先级取值一致，可直接复用工作项的优先级下拉 */
 export type TRequirementPriority = "urgent" | "high" | "medium" | "low" | "none";
 
@@ -68,9 +84,6 @@ export type TRequirementBuiltinValues = {
 
 export type TRequirementBuiltinKey = keyof TRequirementBuiltinValues;
 
-/** 相对上一个已发布版本的变更标记；null 表示这一行没变 */
-export type TRequirementChangeKind = "created" | "updated";
-
 /**
  * 一条需求。product_id / project_id / library_id 恒有且仅有一个非空。
  *
@@ -86,10 +99,20 @@ export type TRequirement = TRequirementBuiltinValues & {
   requirement_type_id: string;
   data: TRequirementData;
   sort_order: number;
+  /**
+   * 乐观锁计数器，每次写入 +1。**不是**审批版本号 —— 那是 approved_version，两者
+   * 是完全不同的两个数字。
+   */
   version: number;
-  change_kind: TRequirementChangeKind | null;
-  /** 最后一次发生变更的基线版本号；null = 尚未随基线发布过 */
-  last_changed_version: number | null;
+  approval_state: TRequirementApprovalState;
+  /** 最后一次通过审批的版本号；null = 从未通过审批 */
+  approved_version: number | null;
+  pending_change_request_id: string | null;
+  pending_change_type: TRequirementChangeType | null;
+  /** 服务端权威。行在评审中就锁住，不要从 pending_change_request_id 自己推 */
+  is_locked: boolean;
+  can_submit_review: boolean;
+  can_withdraw: boolean;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -97,28 +120,29 @@ export type TRequirement = TRequirementBuiltinValues & {
 };
 
 /**
- * 需求基线：一个产品（或项目）的全部需求作为一个整体的审批与版本单元。
+ * 需求审批配置：一个产品（或项目）的「谁能批、要几个人批」。
  *
- * 每个作用域唯一一条，由后端惰性创建，所以前端不需要「创建基线」这个动作。
+ * 它不持有状态也不持有版本 —— 那些现在长在每一条需求上。每个作用域唯一一条，由后端
+ * 惰性创建，所以前端不需要「创建配置」这个动作。
  */
-export type TRequirementBaseline = {
+export type TRequirementApprovalPolicy = {
   id: string;
   workspace_id: string;
   scope: "product" | "project";
   product_id: string | null;
   project_id: string | null;
-  status: TRequirementStatus;
   owner_id: string;
   owner_detail: IUserLite;
   approval_type: TRequirementApprovalType;
   required_count: number | null;
   approver_ids: string[];
   approver_details: IUserLite[];
+  /** 能不能录入/修改需求条目 */
   can_edit: boolean;
-  /** null = 从未发布，前端靠它区分「撤回草稿」的两种语义 */
-  current_version: number | null;
-  pending_change_request_id: string | null;
-  can_approve: boolean;
+  /** 能不能改审批配置本身。必然比 can_edit 窄 —— 否则谁都能把审批人改成自己 */
+  can_manage: boolean;
+  /** 现在一个产品下可以同时有多张待审单，所以给计数而不是单个 id */
+  pending_change_request_count: number;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -166,16 +190,12 @@ export type TRequirementTypeSchema = {
   fields: TRequirementField[];
 };
 
-export type TRequirementBaselineConfiguration = {
-  baseline: TRequirementBaseline;
+export type TRequirementConfiguration = {
+  policy: TRequirementApprovalPolicy;
   /** 所有引用到的需求类型字段的扁平并集 */
   fields: TRequirementField[];
-  /** 基线下的需求引用到的需求类型，数据页据此分视图 */
+  /** 这个作用域下的需求引用到的需求类型，数据页据此分视图 */
   requirement_types: TRequirementTypeSchema[];
-  /** true = 字段取自发版时冻结的快照（已发布只读态） */
-  is_frozen: boolean;
-  /** 网格的乐观锁基准，与 baseline.updated_at 是两个不同的值 */
-  expected_updated_at?: string;
 };
 
 export type TRequirementBatchCreate = {
@@ -199,8 +219,14 @@ export type TRequirementBatchDelete = {
   version: number;
 };
 
+/**
+ * 网格批量保存。
+ *
+ * 没有 expected_updated_at：它原本是 max(基线, 各需求类型).updated_at，而字段结构变更
+ * 现在立即生效，任何一次类型编辑都会顶高这个 max，把所有打开着的网格的暂存编辑全部打成
+ * 409 —— 哪怕改的类型跟他无关。真实冲突由逐行 version 覆盖。
+ */
 export type TRequirementBatchSavePayload = {
-  expected_updated_at: string;
   creates: TRequirementBatchCreate[];
   updates: TRequirementBatchUpdate[];
   deletes: TRequirementBatchDelete[];
@@ -263,10 +289,10 @@ export type TRequirementLibraryConfiguration = {
   expected_updated_at: string;
 };
 
-export type TRequirementBaselineConfigurationPayload = {
+export type TRequirementConfigurationPayload = {
   expected_updated_at: string;
-  baseline: Partial<
-    Pick<TRequirementBaseline, "owner_id" | "approval_type" | "required_count" | "approver_ids">
+  policy: Partial<
+    Pick<TRequirementApprovalPolicy, "owner_id" | "approval_type" | "required_count" | "approver_ids">
   >;
 };
 
@@ -295,10 +321,7 @@ export type TRequirementImportResponse = {
 /* --- 变更审批与版本 ------------------------------------------------------ */
 
 export type TRequirementChangeStatus = "pending" | "approved" | "rejected" | "cancelled";
-export type TRequirementChangeRequestKind = "initial_publish" | "change";
 export type TRequirementChangeType = "create" | "update" | "delete";
-/** 变更项分为三组：审批配置 / 字段定义 / 需求条目 */
-export type TRequirementChangeTargetKind = "baseline" | "schema" | "requirement";
 export type TRequirementApprovalAction = "approved" | "rejected";
 
 export type TRequirementChangeApproval = {
@@ -310,13 +333,7 @@ export type TRequirementChangeApproval = {
   acted_at: string | null;
 };
 
-/** 审批配置组的变更项快照形状 */
-export type TRequirementBaselineChangeSnapshot = {
-  field: string;
-  value: unknown;
-};
-
-/** 字段定义组的变更项快照形状 */
+/** 字段结构修订里的单个字段快照 */
 export type TRequirementSchemaChangeSnapshot = {
   id: string;
   parent_field_id: string | null;
@@ -333,7 +350,7 @@ export type TRequirementSchemaChangeSnapshot = {
   default_value: TRequirementValue;
 };
 
-/** 需求条目组的变更项快照形状：内置列平铺 + data 装自定义字段，与网格读到的一行同形 */
+/** 变更项/版本里的行快照：内置列平铺 + data 装自定义字段，与网格读到的一行同形 */
 export type TRequirementChangeSnapshot = TRequirementBuiltinValues & {
   id: string;
   requirement_type_id: string;
@@ -341,31 +358,109 @@ export type TRequirementChangeSnapshot = TRequirementBuiltinValues & {
   sort_order: number;
 };
 
-export type TRequirementChangeItem = {
+/**
+ * 一条需求的前后差异。
+ *
+ * 变更单条目与基线对比结果共用这一个形状，两个 diff 渲染器（竖排两栏 / 明细网格）
+ * 只读这几个字段 —— 所以它们同时服务于「这张单改了什么」和「这两份基线差在哪」。
+ */
+export type TRequirementDiffItem = {
   id: string;
-  target_kind: TRequirementChangeTargetKind;
   change_type: TRequirementChangeType;
-  target_id: string | null;
-  before_snapshot: unknown;
-  proposed_snapshot: unknown;
+  /** 目标需求 ID。恒不为空 —— 新增的行提交前就已经在表里了（草稿态） */
+  target_id: string;
+  requirement_type_id: string;
+  requirement_type_name: string;
+  /** 拟变更后的标题；删除项回落到变更前那份 */
+  title: string;
+  before_snapshot: TRequirementChangeSnapshot | null;
+  proposed_snapshot: TRequirementChangeSnapshot | null;
+  /** 变更单里是提交时的 approved_version；基线对比里是前一份基线收录的版本号 */
   base_version: number | null;
   proposed_sort_order: number | null;
 };
 
+export type TRequirementChangeItem = TRequirementDiffItem & {
+  schema_revision_id: string;
+  /** 提交时的乐观锁值 */
+  base_row_version: number;
+};
+
+/** 需求类型字段结构的一次修订 */
+export type TRequirementSchemaRevision = {
+  id: string;
+  requirement_type_id: string;
+  requirement_type_name: string;
+  revision: number;
+  diff: {
+    change_type: TRequirementChangeType;
+    field_id: string;
+    parent_field_id: string | null;
+    name: string;
+    before: TRequirementSchemaChangeSnapshot | null;
+    after: TRequirementSchemaChangeSnapshot | null;
+  }[];
+  actor_detail: IUserLite | null;
+  created_at: string;
+};
+
+/**
+ * 变更轨迹的一条：内容变更与字段结构变更并成的一条时间线，用 kind 判别。
+ *
+ * schema 条目在该类型下**每条需求**里都会一模一样地出现 —— 渲染时必须让它视觉后退，
+ * 并点明「需求类型级变更，影响该类型全部需求」，否则读起来像是有人改了这一行。
+ */
+export type TRequirementContentTrailEntry = TRequirementChangeItem & {
+  kind: "content";
+  occurred_at: string;
+  change_request_id: string;
+  /** 变更单在作用域内的自增序号，展示成 CR-001 */
+  sequence_id: number;
+  change_status: TRequirementChangeStatus;
+  reason: string;
+  actor_detail: IUserLite | null;
+  /** 通过后落在这条需求的第几版；未通过为 null */
+  version: number | null;
+};
+
+export type TRequirementSchemaTrailEntry = TRequirementSchemaRevision & {
+  kind: "schema";
+  occurred_at: string;
+};
+
+export type TRequirementTrailEntry = TRequirementContentTrailEntry | TRequirementSchemaTrailEntry;
+
+/** 提交评审：只发指针不发快照，服务端自己读当前行内容 */
+export type TRequirementSubmitReviewPayload = {
+  reason?: string;
+  items: {
+    requirement_id: string;
+    /** 只有 delete 是真的意图；新增与修改由服务端按 approved_version 判定 */
+    change_type?: TRequirementChangeType;
+  }[];
+};
+
 export type TRequirementChangeRequest = {
   id: string;
-  baseline_id: string;
+  product_id: string | null;
+  project_id: string | null;
+  /** 作用域内的自增序号，展示成 CR-001 */
   sequence_id: number;
-  request_kind: TRequirementChangeRequestKind;
   status: TRequirementChangeStatus;
   reason: string;
-  base_version: number | null;
   approval_type: TRequirementApprovalType;
   required_count: number | null;
   created_count: number;
   updated_count: number;
   deleted_count: number;
-  item_count: number;
+  /** 这张单覆盖几条需求 */
+  requirement_count: number;
+  /** 列表里画一行摘要用，最多前 3 条 */
+  requirement_previews: {
+    id: string;
+    title: string;
+    change_type: TRequirementChangeType;
+  }[];
   /** 本次变更涉及的根字段 ID，供「仅显示变化列」使用 */
   changed_field_ids: string[];
   approvals: TRequirementChangeApproval[];
@@ -388,22 +483,30 @@ export type TRequirementTypeChangeStat = {
   created_count: number;
   updated_count: number;
   deleted_count: number;
-  schema_item_count: number;
 };
 
-/** 变更单详情只内联审批配置与字段定义两组，需求条目组走 items 分页端点 */
+/**
+ * 变更单详情。
+ *
+ * requirement_items 在条目不多时直接内联（N 通常是个位数）；超过阈值时为 null，
+ * 走 items 分页端点。
+ */
 export type TRequirementChangeRequestDetail = TRequirementChangeRequest & {
-  baseline_items: TRequirementChangeItem[];
-  schema_items: TRequirementChangeItem[];
-  requirement_item_count: number;
+  requirement_items: TRequirementChangeItem[] | null;
   requirement_type_stats: TRequirementTypeChangeStat[];
 };
 
+/** 一条需求的一个已通过版本 */
 export type TRequirementVersion = {
   id: string;
-  baseline_id: string;
+  target_id: string;
+  requirement_type_id: string;
   version: number;
   change_type: TRequirementChangeType;
+  /** 这一版当时的内容 */
+  snapshot: TRequirementChangeSnapshot;
+  /** 这一版当时的字段结构。字段结构立即生效不走审批，没有它旧版本会拿今天的表头渲染 */
+  fields_snapshot: TRequirementField[];
   approved_by: string[];
   change_request_id: string | null;
   change_request_sequence_id: number | null;
@@ -413,45 +516,121 @@ export type TRequirementVersion = {
   created_at: string;
 };
 
-/** 版本快照涉及的一个需求类型：快照没有「变更」概念，计数是字段数与条目数 */
-export type TRequirementTypeVersionStat = {
+/**
+ * 基线快照 —— 一组 (需求, 版本) 的不可变命名快照，语义等同 git tag。
+ *
+ * 内容创建后不可改，能改的只有名字和说明。想「更新基线」就再打一份新的。
+ */
+export type TRequirementBaseline = {
   id: string;
-  /** 需求类型已被删除时为空串 */
+  product_id: string;
+  project_id: string | null;
   name: string;
-  field_count: number;
+  description: string;
+  /** 收录了多少条需求。创建那一刻定死 */
+  entry_count: number;
+  requirement_type_stats: TRequirementBaselineTypeStat[];
+  created_by: string | null;
+  created_by_detail: IUserLite | null;
+  created_at: string;
+};
+
+export type TRequirementBaselineTypeStat = {
+  id: string;
+  name: string;
   requirement_count: number;
 };
 
-export type TRequirementVersionDetail = TRequirementVersion & {
-  baseline_snapshot: Record<string, unknown>;
+/** 没能纳入基线的需求：只有通过过审批的需求才进基线 */
+export type TRequirementBaselineSkipped = {
+  requirement_id: string;
+  title: string;
+  reason: "no_approved_version";
+};
+
+/**
+ * 纳入了，但纳入的不是行上此刻的内容。
+ *
+ * in_review = 正在评审中，按上一个已通过版本收录；modified = 已通过后又改过。
+ * 这件事必须在打基线**之前**就说清楚，所以创建接口支持 dry-run。
+ */
+export type TRequirementBaselineStale = {
+  requirement_id: string;
+  title: string;
+  version: number;
+  reason: "in_review" | "modified";
+};
+
+/** 打基线的范围 */
+export type TRequirementBaselineScope = "all" | "by_type" | "by_requirement";
+
+export type TRequirementBaselinePayload = {
+  name?: string;
+  description?: string;
+  scope?: TRequirementBaselineScope;
+  requirement_type_ids?: string[];
+  requirement_ids?: string[];
+};
+
+/** dry-run 的结果：只算不写 */
+export type TRequirementBaselinePreview = {
+  preview: true;
+  entry_count: number;
+  skipped: TRequirementBaselineSkipped[];
+  stale: TRequirementBaselineStale[];
+};
+
+/**
+ * 创建结果。skipped / stale 只在创建时返回一次 —— 它们描述的是「打这一份时的现场」，
+ * 不是基线本身的属性。
+ */
+export type TRequirementBaselineCreated = TRequirementBaseline & {
+  skipped: TRequirementBaselineSkipped[];
+  stale: TRequirementBaselineStale[];
+};
+
+/** 基线里的一条：内容与字段结构都取自被收录的那一版，不跟随需求现状 */
+export type TRequirementBaselineEntry = {
+  id: string;
+  requirement_id: string;
+  requirement_type_id: string;
+  version_id: string;
+  version_number: number;
+  snapshot: TRequirementChangeSnapshot;
   fields_snapshot: TRequirementField[];
-  requirement_count: number;
-  requirement_type_stats: TRequirementTypeVersionStat[];
+  sort_order: number;
 };
 
-export type TRequirementVersionComparisonResponse = TPaginatedResponse<TRequirementChangeItem[]> & {
-  from_version: number;
-  to_version: number;
-  baseline_items: TRequirementChangeItem[];
-  schema_items: TRequirementChangeItem[];
-  requirement_item_count: number;
-  changed_field_ids: string[];
-  to_fields_snapshot: TRequirementField[];
-  /** 与变更单详情同形；不含无变更的需求类型 */
-  requirement_type_stats: TRequirementTypeChangeStat[];
+export type TRequirementBaselineCompareResponse = TPaginatedResponse<TRequirementDiffItem[]> & {
+  from_baseline: { id: string; name: string };
+  to_baseline: { id: string; name: string };
 };
 
-export type TRequirementWorkingCopyResponse = {
-  baseline: TRequirementBaseline;
+/**
+ * 收件箱里的一张单：比列表项多一个产品名和「我表过什么态」。
+ *
+ * 收件箱是跨产品的，只给 CR-3 这样的编号人分不出这是哪个产品的单。
+ */
+export type TRequirementApprovalInboxItem = Omit<TRequirementChangeRequest, "product_id"> & {
+  /**
+   * 收件箱恒为产品级：端点按 `product__workspace__slug` 过滤，这个 join 天然排除了
+   * 没有产品的单。就地审批要拿它拼审批端点的地址，所以这里不能是可空的。
+   */
+  product_id: string;
+  product_name: string;
+  /** 我在这张单上的表态；待办页恒为 null，已办页用它区分「我批了」和「我驳了」 */
+  my_action: TRequirementApprovalAction | null;
 };
 
-export type TRequirementDiscardDraftResponse = {
-  /** cleared = 从未发布过，条目被清空；reverted = 丢弃工作副本回到已发布态 */
-  outcome: "cleared" | "reverted";
-  baseline: TRequirementBaseline;
+/** 信封与工作项的 my-approvals 一致，画角标的逻辑不必写两遍 */
+export type TRequirementApprovalInboxResponse = {
+  results: TRequirementApprovalInboxItem[];
+  pending_count: number;
 };
 
 export type TRequirementChangeRequestsResponse = TPaginatedResponse<TRequirementChangeRequest[]>;
 export type TRequirementChangeItemsResponse = TPaginatedResponse<TRequirementChangeItem[]>;
+export type TRequirementTrailResponse = TPaginatedResponse<TRequirementTrailEntry[]>;
 export type TRequirementVersionsResponse = TPaginatedResponse<TRequirementVersion[]>;
-export type TRequirementVersionRequirementsResponse = TPaginatedResponse<TRequirementChangeSnapshot[]>;
+export type TRequirementBaselinesResponse = TPaginatedResponse<TRequirementBaseline[]>;
+export type TRequirementBaselineEntriesResponse = TPaginatedResponse<TRequirementBaselineEntry[]>;

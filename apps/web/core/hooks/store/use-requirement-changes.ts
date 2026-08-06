@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   TRequirementApprovalAction,
-  TRequirementBaseline,
+  TRequirementApprovalInboxResponse,
   TRequirementChangeItemsResponse,
   TRequirementChangeRequest,
   TRequirementChangeRequestDetail,
   TRequirementChangeRequestsResponse,
+  TRequirementChangeStatus,
   TRequirementChangeType,
+  TRequirementSubmitReviewPayload,
 } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
 
@@ -36,15 +38,13 @@ const EMPTY_ITEMS: TRequirementChangeItemsResponse = {
   count: 0,
 };
 
-/** 变更记录 Tab：变更单列表 + 工作副本与审批动作 */
+/** 变更记录 Tab：变更单列表 + 提交/撤回。一个产品下可以同时有多张待审单 */
 export const useRequirementChangeRequests = ({
   workspaceSlug,
   productId,
-  onBaselineUpdate,
 }: {
   workspaceSlug: string | undefined;
   productId: string | undefined;
-  onBaselineUpdate?: (baseline: TRequirementBaseline) => void;
 }) => {
   const [changeRequestsPage, setChangeRequestsPage] = useState<TRequirementChangeRequestsResponse>(EMPTY_REQUESTS);
   const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && productId));
@@ -52,13 +52,20 @@ export const useRequirementChangeRequests = ({
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
+  const [scope, setScope] = useState<"all" | "mine" | "to_review">("all");
+  const [statusFilter, setStatusFilter] = useState<TRequirementChangeStatus | undefined>();
 
   const fetchChangeRequests = useCallback(async () => {
     if (!workspaceSlug || !productId) return EMPTY_REQUESTS;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await requirementService.listChangeRequests(workspaceSlug, productId, { cursor, perPage });
+      const response = await requirementService.listChangeRequests(workspaceSlug, productId, {
+        cursor,
+        perPage,
+        scope,
+        status: statusFilter,
+      });
       setChangeRequestsPage(response);
       return response;
     } catch (requestError) {
@@ -67,43 +74,24 @@ export const useRequirementChangeRequests = ({
     } finally {
       setIsLoading(false);
     }
-  }, [cursor, perPage, productId, workspaceSlug]);
+  }, [cursor, perPage, productId, scope, statusFilter, workspaceSlug]);
 
   useEffect(() => {
     void fetchChangeRequests().catch(() => undefined);
   }, [fetchChangeRequests]);
 
-  const startEditing = useCallback(async () => {
-    if (!workspaceSlug || !productId) throw new Error("Product is required.");
-    setIsMutating(true);
-    try {
-      const response = await requirementService.startEditing(workspaceSlug, productId);
-      onBaselineUpdate?.(response.baseline);
-      return response.baseline;
-    } finally {
-      setIsMutating(false);
-    }
-  }, [onBaselineUpdate, productId, workspaceSlug]);
-
-  /** 返回 outcome：cleared = 从未发布过、条目已清空；reverted = 回到上一个已发布版本 */
-  const discardDraft = useCallback(async () => {
-    if (!workspaceSlug || !productId) throw new Error("Product is required.");
-    setIsMutating(true);
-    try {
-      const response = await requirementService.discardDraft(workspaceSlug, productId);
-      onBaselineUpdate?.(response.baseline);
-      return response;
-    } finally {
-      setIsMutating(false);
-    }
-  }, [onBaselineUpdate, productId, workspaceSlug]);
-
-  const submitChangeRequest = useCallback(
-    async (reason: string) => {
+  /**
+   * 提交 1..N 条需求进入评审。
+   *
+   * 没有单条的提交入口 —— 单条提交就是 items.length === 1，走同一条路径，单条与批量
+   * 不会走偏。
+   */
+  const submitReview = useCallback(
+    async (payload: TRequirementSubmitReviewPayload) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
       try {
-        const response = await requirementService.submitChangeRequest(workspaceSlug, productId, { reason });
+        const response = await requirementService.submitReview(workspaceSlug, productId, payload);
         await fetchChangeRequests().catch(() => undefined);
         return response;
       } finally {
@@ -151,12 +139,73 @@ export const useRequirementChangeRequests = ({
     setCursor,
     setPerPage: updatePerPage,
     fetchChangeRequests,
-    startEditing,
-    discardDraft,
-    submitChangeRequest,
+    scope,
+    setScope,
+    statusFilter,
+    setStatusFilter,
+    submitReview,
     cancelChangeRequest,
     upsertChangeRequest,
   };
+};
+
+const EMPTY_INBOX: TRequirementApprovalInboxResponse = { results: [], pending_count: 0 };
+
+/**
+ * 待我审批。
+ *
+ * 跨产品聚合：审批人面对的是分散在多个产品里的 N 张小单，不聚合就只能挨个产品去翻。
+ * `productId` 只是收窄，不是作用域 —— 产品页头部的入口默认收窄到当前产品。
+ */
+export const useRequirementApprovalInbox = ({
+  workspaceSlug,
+  productId,
+}: {
+  workspaceSlug: string | undefined;
+  productId?: string;
+}) => {
+  const [inbox, setInbox] = useState<TRequirementApprovalInboxResponse>(EMPTY_INBOX);
+  const [tab, setTab] = useState<"pending" | "processed">("pending");
+  const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug));
+  const [isMutating, setIsMutating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchInbox = useCallback(async () => {
+    if (!workspaceSlug) return EMPTY_INBOX;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await requirementService.listMyApprovals(workspaceSlug, { tab, productId });
+      setInbox(response);
+      return response;
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "Unable to load your approvals."));
+      throw requestError;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [productId, tab, workspaceSlug]);
+
+  useEffect(() => {
+    void fetchInbox().catch(() => undefined);
+  }, [fetchInbox]);
+
+  /** 就地审批：单子上带着自己的 product_id，不必先跳进那个产品 */
+  const act = useCallback(
+    async (item: { id: string; product_id: string }, action: TRequirementApprovalAction, comment?: string) => {
+      if (!workspaceSlug) throw new Error("Workspace is required.");
+      setIsMutating(true);
+      try {
+        await requirementService.actOnChangeRequest(workspaceSlug, item.product_id, item.id, { action, comment });
+        await fetchInbox().catch(() => undefined);
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [fetchInbox, workspaceSlug]
+  );
+
+  return { inbox, tab, setTab, isLoading, isMutating, error, fetchInbox, act };
 };
 
 /**
@@ -231,20 +280,29 @@ export const useRequirementChangeRequestDetail = ({
     void fetchChangeRequest().catch(() => undefined);
   }, [fetchChangeRequest]);
 
+  /**
+   * 条目已经随详情内联下来时不再单独拉一遍。
+   *
+   * requirement_items 为 null 才说明超过了内联阈值，那时才需要分页端点 —— 这是常见
+   * 情况下（一张单一两条需求）省掉的一次整轮请求。
+   */
+  const needsPagedItems = changeRequest !== null && changeRequest.requirement_items === null;
   useEffect(() => {
+    if (!needsPagedItems) return;
     void fetchItems().catch(() => undefined);
-  }, [fetchItems]);
+  }, [fetchItems, needsPagedItems]);
 
   useEffect(() => setCursor(undefined), [changeType, requirementTypeId]);
 
   const actOnChangeRequest = useCallback(
-    async (action: TRequirementApprovalAction, comment?: string) => {
+    async (action: TRequirementApprovalAction, comment?: string, revert = false) => {
       if (!workspaceSlug || !productId || !changeRequestId) throw new Error("Change request is required.");
       setIsMutating(true);
       try {
         const response = await requirementService.actOnChangeRequest(workspaceSlug, productId, changeRequestId, {
           action,
           comment,
+          revert,
         });
         await fetchChangeRequest().catch(() => undefined);
         return response;

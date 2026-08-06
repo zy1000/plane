@@ -156,7 +156,8 @@ export function NotificationContent({
   notification: TNotification;
   workspaceId: string;
   workspaceSlug: string;
-  projectId: string;
+  /** 需求审批通知没有 project；只有 comment 那一支真的用得到它 */
+  projectId?: string;
   renderCommentBox?: boolean;
 }) {
   const { data, triggered_by_details: triggeredBy } = notification;
@@ -219,7 +220,7 @@ export function NotificationContent({
                 initialValue={newValue ?? ""}
                 workspaceId={workspaceId}
                 workspaceSlug={workspaceSlug}
-                projectId={projectId}
+                projectId={projectId ?? ""}
                 displayConfig={{
                   fontSize: "small-font",
                 }}

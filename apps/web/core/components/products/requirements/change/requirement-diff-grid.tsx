@@ -26,7 +26,7 @@ import { CustomSelect, Loader, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
 import {
   BuiltinCellValue,
-  REQUIREMENT_BUILTIN_COLUMNS,
+  REQUIREMENT_CONTENT_BUILTIN_COLUMNS,
 } from "@/components/requirements/requirement-builtin-fields";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import {
@@ -296,8 +296,9 @@ export function RequirementDiffGrid(props: TProps) {
   const resolveParentTitle = useCallback((parentId: string) => parentTitles[parentId], [parentTitles]);
   // 内置列的 field_id 就是列名，与自定义字段共用 changedFieldIds 这一个维度
   const visibleBuiltinColumns = useMemo(() => {
-    if (!changedColumnsOnly || !changedFieldIds.length) return REQUIREMENT_BUILTIN_COLUMNS;
-    return REQUIREMENT_BUILTIN_COLUMNS.filter((column) => changedFieldIds.includes(column.key));
+    // 只列内容列：status 是交付进度，不该在变更单里被当成一处需要签字的改动
+    if (!changedColumnsOnly || !changedFieldIds.length) return REQUIREMENT_CONTENT_BUILTIN_COLUMNS;
+    return REQUIREMENT_CONTENT_BUILTIN_COLUMNS.filter((column) => changedFieldIds.includes(column.key));
   }, [changedColumnsOnly, changedFieldIds]);
 
   const currentPage = Number(prevCursor?.split(":")[1] ?? -1) + 2;

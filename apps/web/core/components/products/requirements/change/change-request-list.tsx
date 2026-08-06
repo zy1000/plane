@@ -124,7 +124,6 @@ export function ChangeRequestList(props: TProps) {
               <th className="min-w-64 px-4 py-2.5">
                 {t("workspace_products.requirements.change.columns.change_request")}
               </th>
-              <th className="w-24 px-3 py-2.5">{t("workspace_products.requirements.change.columns.kind")}</th>
               <th className="w-40 px-3 py-2.5">{t("workspace_products.requirements.change.columns.submitter")}</th>
               <th className="w-24 px-3 py-2.5">{t("workspace_products.requirements.change.columns.items")}</th>
               <th className="w-44 px-3 py-2.5">{t("workspace_products.requirements.change.columns.progress")}</th>
@@ -158,17 +157,6 @@ export function ChangeRequestList(props: TProps) {
                   </span>
                 </td>
                 <td className="px-3 py-3">
-                  {changeRequest.request_kind === "initial_publish" ? (
-                    <span className={cn(PILL_BASE, "bg-accent-subtle text-accent-primary")}>
-                      {t("workspace_products.requirements.change.kind.initial_publish")}
-                    </span>
-                  ) : (
-                    <span className="text-secondary">
-                      {t("workspace_products.requirements.change.kind.change")}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-3">
                   <span className="flex min-w-0 items-center gap-2">
                     <Avatar
                       size="sm"
@@ -179,7 +167,7 @@ export function ChangeRequestList(props: TProps) {
                   </span>
                 </td>
                 <td className="px-3 py-3 text-secondary tabular-nums">
-                  {t("workspace_products.requirements.change.item_count", { count: changeRequest.item_count })}
+                  {t("workspace_products.requirements.change.requirement_count", { count: changeRequest.requirement_count })}
                 </td>
                 <td className="px-3 py-3">
                   <ApprovalProgress changeRequest={changeRequest} />

@@ -1,9 +1,12 @@
 from django.urls import path
 
 from plane.app.views.requirement import (
-    RequirementBaselineConfigurationAPIView,
+    RequirementApprovalInboxAPIView,
+    RequirementBaselineViewSet,
+    RequirementConfigurationAPIView,
     RequirementChangeItemViewSet,
     RequirementChangeRequestViewSet,
+    RequirementChangeTrailViewSet,
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
@@ -11,7 +14,6 @@ from plane.app.views.requirement import (
     RequirementTypeViewSet,
     RequirementVersionViewSet,
     RequirementViewSet,
-    RequirementWorkingCopyAPIView,
 )
 
 
@@ -37,6 +39,11 @@ urlpatterns = [
         "workspaces/<str:slug>/requirement-types/<uuid:pk>/configuration/",
         RequirementTypeConfigurationAPIView.as_view(),
         name="requirement-type-configuration",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-approvals/",
+        RequirementApprovalInboxAPIView.as_view(),
+        name="requirement-approval-inbox",
     ),
     path(
         "workspaces/<str:slug>/requirement-libraries/",
@@ -110,75 +117,73 @@ urlpatterns = [
         ),
         name="product-requirement-item",
     ),
-    # --- 产品需求：基线（审批配置 / 工作副本 / 变更单 / 版本）-------------
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/",
-        RequirementBaselineConfigurationAPIView.as_view(),
-        name="requirement-baseline",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/rollback/",
+        RequirementViewSet.as_view({"post": "rollback"}),
+        name="product-requirement-rollback",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/working-copy/",
-        RequirementWorkingCopyAPIView.as_view(),
-        name="requirement-working-copy",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/trail/",
+        RequirementChangeTrailViewSet.as_view({"get": "list"}),
+        name="product-requirement-trail",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/",
-        RequirementChangeRequestViewSet.as_view({"get": "list"}),
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/versions/",
+        RequirementVersionViewSet.as_view({"get": "list"}),
+        name="product-requirement-versions",
+    ),
+    # --- 产品需求：审批配置与变更单 -------------------------------------
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-configuration/",
+        RequirementConfigurationAPIView.as_view(),
+        name="requirement-configuration",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-change-requests/",
+        RequirementChangeRequestViewSet.as_view({"get": "list", "post": "create"}),
         name="requirement-change-requests",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/submit/",
-        RequirementChangeRequestViewSet.as_view({"post": "submit"}),
-        name="requirement-change-request-submit",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-change-requests/<uuid:pk>/",
         RequirementChangeRequestViewSet.as_view({"get": "retrieve"}),
         name="requirement-change-request-detail",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/items/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-change-requests/<uuid:pk>/items/",
         RequirementChangeItemViewSet.as_view({"get": "list"}),
         name="requirement-change-request-items",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/act/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-change-requests/<uuid:pk>/act/",
         RequirementChangeRequestViewSet.as_view({"post": "act"}),
         name="requirement-change-request-act",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/change-requests/<uuid:pk>/cancel/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-change-requests/<uuid:pk>/cancel/",
         RequirementChangeRequestViewSet.as_view({"post": "cancel"}),
         name="requirement-change-request-cancel",
     ),
+    # --- 产品需求：基线快照 ---------------------------------------------
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/",
-        RequirementVersionViewSet.as_view({"get": "list"}),
-        name="requirement-versions",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baselines/",
+        RequirementBaselineViewSet.as_view({"get": "list", "post": "create"}),
+        name="requirement-baselines",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/",
-        RequirementVersionViewSet.as_view({"get": "retrieve"}),
-        name="requirement-version-detail",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baselines/<uuid:pk>/",
+        RequirementBaselineViewSet.as_view(
+            {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+        ),
+        name="requirement-baseline-detail",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/requirements/",
-        RequirementVersionViewSet.as_view({"get": "requirements"}),
-        name="requirement-version-requirements",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baselines/<uuid:pk>/requirements/",
+        RequirementBaselineViewSet.as_view({"get": "requirements"}),
+        name="requirement-baseline-requirements",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/compare/",
-        RequirementVersionViewSet.as_view({"get": "compare"}),
-        name="requirement-version-compare",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/compare-current/",
-        RequirementVersionViewSet.as_view({"get": "compare_current"}),
-        name="requirement-version-compare-current",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baseline/versions/<int:version>/rollback/",
-        RequirementVersionViewSet.as_view({"post": "rollback"}),
-        name="requirement-version-rollback",
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-baselines/<uuid:pk>/compare/",
+        RequirementBaselineViewSet.as_view({"get": "compare"}),
+        name="requirement-baseline-compare",
     ),
 ]

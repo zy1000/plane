@@ -1,9 +1,12 @@
 /**
- * 变更对比页：整宽三视图审阅 + 底部审批条。
+ * 变更单评审页。
  *
- * 概览与字段定义直接消费详情响应中的内联快照，明细数据继续走独立分页端点。
+ * 一张单覆盖 1..N 条需求，N 通常是个位数，所以详情接口把条目直接内联下来：
+ * - N == 1：整宽渲染那一条的前后对比，不加任何导航层
+ * - 1 < N <= 阈值：左栏列出这几条，右侧渲染选中那条的对比
+ * - N 超过阈值（requirement_items 为 null）：回落到分页的网格 diff，那是它擅长的场景
  */
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -14,17 +17,11 @@ import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane
 import { useRequirementChangeRequestDetail } from "@/hooks/store/use-requirement-changes";
 import { ChangeApprovalBar } from "./change-approval-bar";
 import { ChangeApprovalProgress } from "./change-approval-progress";
-import { BaselineDiffTable, SchemaDiffList } from "./change-diff-groups";
-import { RequirementDiffGrid } from "./requirement-diff-grid";
-import { approvalRuleLabel } from "./styles";
-import { useChangeItemFilters } from "./use-change-item-filters";
 
-const REVIEW_SECTIONS = ["overview", "schema", "detail"] as const;
-type TReviewSection = (typeof REVIEW_SECTIONS)[number];
-type TSectionSelection = {
-  changeRequestId: string;
-  section: TReviewSection;
-};
+import { ChangeRequestRequirementDiff } from "./change-request-requirement-diff";
+import { RequirementDiffGrid } from "./requirement-diff-grid";
+import { approvalRuleLabel, CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL } from "./styles";
+import { useChangeItemFilters } from "./use-change-item-filters";
 
 type TProps = {
   workspaceSlug: string;
@@ -57,7 +54,8 @@ export function ChangeRequestDetail(props: TProps) {
     requirementTypeId: requestedRequirementTypeId,
   });
   const { changeRequest } = store;
-  const [sectionSelection, setSectionSelection] = useState<TSectionSelection | null>(null);
+  /** 左栏选中的需求；null = 用第一条 */
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // 单类型需求（含需求类型自身）不分视图，行为与今天完全一致
@@ -72,6 +70,25 @@ export function ChangeRequestDetail(props: TProps) {
     [activeRequirementTypeId, fields]
   );
 
+  /**
+   * 内联条目；requirement_items 为 null 说明超过阈值，走分页网格。
+   *
+   * 这三行必须待在**所有早退之前** —— 详情没回来那一轮会在下面 return 掉，
+   * 把 useMemo 写在早退之后，两轮渲染的 hooks 数量就对不上了。
+   */
+  const inlineItems = changeRequest?.requirement_items ?? null;
+  const activeItem = inlineItems?.find((item) => item.id === activeItemId) ?? inlineItems?.[0] ?? null;
+  /** 单条需求的对比只取它自己那个类型的字段，用并集会多出一堆空洞行 */
+  const activeItemFields = useMemo(
+    () =>
+      activeItem
+        ? fields.filter(
+            (field) => !field.requirement_type_id || field.requirement_type_id === activeItem.requirement_type_id
+          )
+        : [],
+    [activeItem, fields]
+  );
+
   // 把收敛后的类型写回 URL：明细分页在服务端按 requirement_type_id 过滤，两边必须是同一个值。
   // 详情没回来之前不能动 URL，否则会把分享链接上的 tpl 抹掉。
   useEffect(() => {
@@ -81,9 +98,9 @@ export function ChangeRequestDetail(props: TProps) {
     } else if (requestedRequirementTypeId) setRequirementTypeId(undefined);
   }, [activeRequirementTypeId, changeRequest, requestedRequirementTypeId, setRequirementTypeId]);
 
-  const act = async (action: TRequirementApprovalAction, comment: string) => {
+  const act = async (action: TRequirementApprovalAction, comment: string, revert = false) => {
     try {
-      await store.actOnChangeRequest(action, comment);
+      await store.actOnChangeRequest(action, comment, revert);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
@@ -154,38 +171,6 @@ export function ChangeRequestDetail(props: TProps) {
     total: changeRequest.total_count,
     approved: changeRequest.approved_count,
   });
-  const sectionCounts: Record<TReviewSection, number> = {
-    overview: changeRequest.baseline_items.length,
-    schema: changeRequest.schema_items.length,
-    detail: changeRequest.requirement_item_count,
-  };
-  const defaultSection = REVIEW_SECTIONS.find((section) => sectionCounts[section] > 0) ?? "overview";
-  const activeSection =
-    sectionSelection?.changeRequestId === changeRequest.id ? sectionSelection.section : defaultSection;
-  const selectSection = (section: TReviewSection) =>
-    setSectionSelection({
-      changeRequestId: changeRequest.id,
-      section,
-    });
-  const handleSectionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, section: TReviewSection) => {
-    const currentIndex = REVIEW_SECTIONS.indexOf(section);
-    const nextIndex =
-      event.key === "ArrowRight"
-        ? (currentIndex + 1) % REVIEW_SECTIONS.length
-        : event.key === "ArrowLeft"
-          ? (currentIndex - 1 + REVIEW_SECTIONS.length) % REVIEW_SECTIONS.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? REVIEW_SECTIONS.length - 1
-              : null;
-    if (nextIndex === null) return;
-    event.preventDefault();
-    const nextSection = REVIEW_SECTIONS[nextIndex];
-    selectSection(nextSection);
-    document.getElementById(`change-review-tab-${nextSection}`)?.focus();
-  };
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -223,16 +208,6 @@ export function ChangeRequestDetail(props: TProps) {
               <span className="tabular-nums">
                 {`${renderFormattedDate(changeRequest.created_at, "MM-dd")} ${renderFormattedTime(changeRequest.created_at)}`}
               </span>
-              {changeRequest.base_version !== null && (
-                <>
-                  <span aria-hidden>·</span>
-                  <span>
-                    {t("workspace_products.requirements.change.meta_base_version", {
-                      version: changeRequest.base_version,
-                    })}
-                  </span>
-                </>
-              )}
             </div>
             <div className="ml-auto">
               <ChangeApprovalProgress
@@ -243,92 +218,99 @@ export function ChangeRequestDetail(props: TProps) {
             </div>
           </div>
 
-          <div className="min-w-0 overflow-x-auto border-b border-subtle px-4 md:px-6">
-            <div
-              role="tablist"
-              aria-label={t("workspace_products.requirements.change.views.label")}
-              className="flex min-w-max"
-            >
-              {REVIEW_SECTIONS.map((section) => {
-                const isActive = activeSection === section;
-                return (
-                  <button
-                    key={section}
-                    id={`change-review-tab-${section}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls="change-review-panel"
-                    tabIndex={isActive ? 0 : -1}
-                    onClick={() => selectSection(section)}
-                    onKeyDown={(event) => handleSectionKeyDown(event, section)}
-                    className={cn(
-                      "flex h-11 items-center gap-1.5 border-b-2 px-3 text-13 transition-colors focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none focus-visible:ring-inset",
-                      isActive
-                        ? "border-accent-strong font-medium text-accent-primary"
-                        : "border-transparent text-secondary hover:text-primary"
-                    )}
-                  >
-                    {t(`workspace_products.requirements.change.views.${section}`)}
-                    <span
-                      className={cn(
-                        "grid min-w-4 place-items-center rounded bg-layer-2 px-1 text-10 tabular-nums",
-                        isActive ? "text-accent-primary" : "text-tertiary"
-                      )}
-                    >
-                      {sectionCounts[section]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </header>
 
-        <div
-          id="change-review-panel"
-          role="tabpanel"
-          aria-labelledby={`change-review-tab-${activeSection}`}
-          className={cn(activeSection !== "detail" && "px-4 py-4 md:px-6")}
-        >
-          {activeSection === "overview" ? (
-            <BaselineDiffTable items={changeRequest.baseline_items} members={members} />
-          ) : activeSection === "schema" ? (
-            <SchemaDiffList items={changeRequest.schema_items} requirementTypes={requirementTypeStats} />
+        {inlineItems ? (
+          inlineItems.length === 1 ? (
+            // 单条：不加任何导航层，整宽直接给对比
+            <div className="px-4 py-4 md:px-6">
+              <ChangeRequestRequirementDiff
+                item={inlineItems[0]}
+                fields={activeItemFields}
+                workspaceSlug={workspaceSlug}
+              />
+            </div>
           ) : (
-            <RequirementDiffGrid
-              workspaceSlug={workspaceSlug}
-              fields={requirementTypeFields}
-              changedFieldIds={changeRequest.changed_field_ids}
-              requirementTypes={requirementTypeStats}
-              activeRequirementTypeId={activeRequirementTypeId}
-              onTemplateChange={setRequirementTypeId}
-              items={store.itemsPage.results}
-              totalCount={store.itemsPage.total_count ?? 0}
-              isLoading={store.isItemsLoading}
-              error={store.itemsError}
-              perPage={store.perPage}
-              nextCursor={store.itemsPage.next_cursor}
-              prevCursor={store.itemsPage.prev_cursor}
-              nextPageResults={store.itemsPage.next_page_results}
-              prevPageResults={store.itemsPage.prev_page_results}
-              changeType={changeType}
-              changedColumnsOnly={changedColumnsOnly}
-              onChangeTypeChange={setChangeType}
-              onChangedColumnsOnlyChange={setChangedColumnsOnly}
-              onPerPageChange={store.setPerPage}
-              onCursorChange={store.setCursor}
-              density="comfortable"
-            />
-          )}
-        </div>
+            <div className="flex min-h-0 flex-col md:flex-row">
+              {/* 左栏：这张单覆盖的几条需求。N 是个位数，用列表而不是树 */}
+              <nav
+                aria-label={t("workspace_products.requirements.change.requirements_in_request")}
+                className="shrink-0 border-b border-subtle md:w-64 md:border-r md:border-b-0"
+              >
+                {inlineItems.map((item) => {
+                  const isActive = item.id === activeItem?.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveItemId(item.id)}
+                      className={cn(
+                        "flex w-full items-start gap-2 border-b border-subtle px-3 py-2 text-left last:border-b-0",
+                        isActive ? "bg-accent-subtle/40" : "hover:bg-layer-1"
+                      )}
+                    >
+                      <span
+                        className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type], "mt-0.5 shrink-0")}
+                      >
+                        {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-12 text-primary">
+                          {item.title || t("requirement_detail.untitled")}
+                        </span>
+                        <span className="block truncate text-10 text-tertiary">
+                          {item.requirement_type_name}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+              <div className="min-w-0 flex-1 px-4 py-4 md:px-6">
+                {activeItem && (
+                  <ChangeRequestRequirementDiff
+                    item={activeItem}
+                    fields={activeItemFields}
+                    workspaceSlug={workspaceSlug}
+                  />
+                )}
+              </div>
+            </div>
+          )
+        ) : (
+          // 条目多到内联不下（整个类型视图一次提交），回落到分页网格
+          <RequirementDiffGrid
+            workspaceSlug={workspaceSlug}
+            fields={requirementTypeFields}
+            changedFieldIds={changeRequest.changed_field_ids}
+            requirementTypes={requirementTypeStats}
+            activeRequirementTypeId={activeRequirementTypeId}
+            onTemplateChange={setRequirementTypeId}
+            items={store.itemsPage.results}
+            totalCount={store.itemsPage.total_count ?? 0}
+            isLoading={store.isItemsLoading}
+            error={store.itemsError}
+            perPage={store.perPage}
+            nextCursor={store.itemsPage.next_cursor}
+            prevCursor={store.itemsPage.prev_cursor}
+            nextPageResults={store.itemsPage.next_page_results}
+            prevPageResults={store.itemsPage.prev_page_results}
+            changeType={changeType}
+            changedColumnsOnly={changedColumnsOnly}
+            onChangeTypeChange={setChangeType}
+            onChangedColumnsOnlyChange={setChangedColumnsOnly}
+            onPerPageChange={store.setPerPage}
+            onCursorChange={store.setCursor}
+            density="comfortable"
+          />
+        )}
       </div>
 
       <ChangeApprovalBar
         changeRequest={changeRequest}
         isMutating={store.isMutating}
         onApprove={(comment) => void act("approved", comment)}
-        onReject={(comment) => void act("rejected", comment)}
+        onReject={(comment, revert) => void act("rejected", comment, revert)}
         onWithdraw={() => setIsWithdrawing(true)}
       />
 

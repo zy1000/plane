@@ -6,7 +6,7 @@
  */
 import { Fragment, useState } from "react";
 import { observer } from "mobx-react";
-import { Download, File } from "lucide-react";
+import { Check, Download, File, Paperclip } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Modal, Typography } from "antd";
 import { useTranslation } from "@plane/i18n";
@@ -17,10 +17,12 @@ import type {
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
-import { Avatar } from "@plane/ui";
+import { Avatar, CustomSelect, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
+import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useMember } from "@/hooks/store/use-member";
-import { getRequirementSelectLabel } from "./requirement-select";
+import { getRequirementSelectLabel, getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 
 export const getFormRows = (data: TRequirementData, fieldId: string): TRequirementFormRow[] => {
   const value = data[fieldId];
@@ -406,5 +408,212 @@ export const RequirementGridHeader = ({
         </tr>
       )}
     </thead>
+  );
+};
+
+/**
+ * 单个自定义字段的编辑器。与内置列的 BuiltinCellEditor 并列，调用方按列来源二选一。
+ *
+ * 网格与需求详情共用同一份控件，改一次两处同时生效 —— 两边对同一个字段类型给出
+ * 不同的输入方式，是这类表单最容易积累的不一致。
+ */
+export const LeafEditor = ({
+  field,
+  value,
+  workspaceSlug,
+  onChange,
+  onUpload,
+  onRemoveAsset,
+}: {
+  field: TRequirementField;
+  value: TRequirementValue | undefined;
+  workspaceSlug: string;
+  onChange: (value: TRequirementValue) => void;
+  onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
+  onRemoveAsset?: (assetId: string) => void;
+}) => {
+  const { t } = useTranslation();
+  if (field.field_type === "boolean") {
+    return <ToggleSwitch value={Boolean(value)} onChange={() => onChange(!value)} size="sm" />;
+  }
+  if (field.field_type === "select") {
+    const options = getRequirementSelectOptions(field);
+    const placeholder = field.config.placeholder ?? t("requirement_grid.data.select_option");
+    if (getRequirementSelectMode(field) === "multiple") {
+      const currentValue = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+      const dropdownOptions: TDropdownOption[] = options.map((option) => ({
+        value: option.id,
+        data: option,
+      }));
+      return (
+        <MultiSelectDropdown
+          containerClassName="w-full min-w-0"
+          value={currentValue}
+          onChange={(nextValue) => onChange(nextValue)}
+          options={dropdownOptions}
+          keyExtractor={(option) => option.value}
+          renderItem={({ value: optionId, selected }) => (
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="truncate text-14">
+                {options.find((option) => option.id === optionId)?.label ?? optionId}
+              </span>
+              {selected && <Check className="size-3.5 shrink-0 text-accent-primary" />}
+            </div>
+          )}
+          buttonContent={(_isOpen, selectedValue) => {
+            const selectedIds = (selectedValue as string[] | undefined) ?? [];
+            const labels = selectedIds
+              .map((optionId) => options.find((option) => option.id === optionId)?.label)
+              .filter(Boolean);
+            return (
+              <span className={labels.length ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
+                {labels.length ? labels.join(", ") : placeholder}
+              </span>
+            );
+          }}
+          buttonContainerClassName="h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+          optionsContainerClassName="w-60"
+          disableSearch={options.length <= 8}
+          disableSorting
+        />
+      );
+    }
+
+    const selectedId = typeof value === "string" ? value : null;
+    const selectedOption = options.find((option) => option.id === selectedId);
+    return (
+      <CustomSelect
+        value={selectedId}
+        onChange={(nextValue: string | null) => onChange(nextValue)}
+        label={
+          <span className={selectedOption ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
+            {selectedOption?.label ?? placeholder}
+          </span>
+        }
+        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        optionsClassName="w-60"
+        input
+      >
+        {!field.is_required && (
+          <CustomSelect.Option value={null}>
+            <span className="text-14 text-secondary">{t("requirement_grid.data.clear_selection")}</span>
+          </CustomSelect.Option>
+        )}
+        {options.map((option) => (
+          <CustomSelect.Option key={option.id} value={option.id}>
+            <span className="truncate text-14">{option.label}</span>
+          </CustomSelect.Option>
+        ))}
+      </CustomSelect>
+    );
+  }
+  if (field.field_type === "member") {
+    return (
+      <MemberDropdown
+        multiple={false}
+        value={typeof value === "string" ? value : null}
+        onChange={(memberId) => onChange(memberId)}
+        buttonVariant="border-with-text"
+        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 text-14 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        buttonContainerClassName="w-full min-w-0"
+        placeholder={field.config.placeholder ?? t("requirement_grid.data.select_member")}
+        showUserDetails
+      />
+    );
+  }
+  if (field.field_type === "attachment" || field.field_type === "image") {
+    const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
+    const removeAsset = (assetId: string) => {
+      onRemoveAsset?.(assetId);
+      onChange(assets.filter((item) => item.asset_id !== assetId));
+    };
+    return (
+      <div className="flex w-full min-w-0 flex-col gap-1">
+        {field.field_type === "image" ? (
+          <div className="flex flex-wrap gap-1">
+            {assets.map((asset) => {
+              const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
+              return (
+                <span
+                  key={asset.asset_id}
+                  title={asset.name}
+                  className="relative size-9 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2"
+                >
+                  <img src={src} alt={asset.name} className="size-full object-cover" loading="lazy" />
+                  <button
+                    type="button"
+                    className="absolute top-0.5 right-0.5 grid size-3.5 place-items-center rounded-full bg-surface-1/90 text-10 leading-none text-secondary shadow-sm hover:bg-danger-subtle hover:text-danger-primary"
+                    onClick={() => removeAsset(asset.asset_id)}
+                    aria-label={t("delete")}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          assets.map((asset) => (
+            <span
+              key={asset.asset_id}
+              className="flex min-w-0 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-0.5 text-12"
+            >
+              <Paperclip className="size-3 shrink-0" />
+              <span className="min-w-0 flex-1 truncate" title={asset.name}>
+                {asset.name}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 text-secondary hover:text-danger-primary"
+                onClick={() => removeAsset(asset.asset_id)}
+                aria-label={t("delete")}
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+        <label className="inline-flex h-7 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-12 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
+          <Paperclip className="size-3 shrink-0" />
+          <span className="truncate">
+            {t(
+              field.field_type === "image"
+                ? "requirement_grid.data.upload_image"
+                : "requirement_grid.data.upload_file"
+            )}
+          </span>
+          <input
+            type="file"
+            className="sr-only"
+            accept={field.field_type === "image" ? "image/*" : undefined}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void onUpload(file, field.field_type === "image").then((asset) => onChange([...assets, asset]));
+              event.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+    );
+  }
+  if (field.field_type === "rich_text") {
+    return (
+      <textarea
+        value={typeof value === "string" ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+        rows={1}
+        className="focus:border-accent-primary focus:ring-accent-primary/10 max-h-24 min-h-8 w-full min-w-0 resize-y rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-14 leading-5 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
+        placeholder={field.config.placeholder}
+      />
+    );
+  }
+  return (
+    <input
+      value={typeof value === "string" ? value : ""}
+      onChange={(event) => onChange(event.target.value)}
+      className="focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
+      placeholder={field.config.placeholder}
+    />
   );
 };

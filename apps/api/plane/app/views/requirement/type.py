@@ -10,15 +10,28 @@ from plane.app.serializers.requirement_type import (
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import (
     Requirement,
-    RequirementDraftRow,
     RequirementLibrary,
     RequirementType,
     Workspace,
+    WorkspaceMember,
 )
 from plane.utils.requirement import (
     RequirementDataLossError,
     serialize_requirement_type_field_tree,
 )
+
+
+def is_workspace_member(user, slug):
+    """需求类型是工作区级的字段定义源，改它会立刻影响这个工作区所有产品的所有需求。
+
+    这里必须自己校验：视图只继承 IsAuthenticated，queryset 也只按 slug 过滤，
+    不校验的话任何已登录用户都能改任意工作区的字段结构。
+    """
+    if user is None or user.is_anonymous:
+        return False
+    return WorkspaceMember.objects.filter(
+        workspace__slug=slug, member=user, is_active=True
+    ).exists()
 
 
 def _requirement_type_queryset(slug):
@@ -78,7 +91,15 @@ class RequirementTypeViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
+    def _forbidden(self):
+        return Response(
+            {"error": "You do not have permission to maintain requirement types."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     def create(self, request, slug):
+        if not is_workspace_member(request.user, slug):
+            return self._forbidden()
         workspace = self.get_serializer_context().get("workspace")
         if workspace is None:
             return Response(
@@ -94,6 +115,8 @@ class RequirementTypeViewSet(BaseViewSet):
         )
 
     def _update(self, request, pk, partial):
+        if not is_workspace_member(request.user, self.workspace_slug):
+            return self._forbidden()
         requirement_type = self._get_requirement_type(pk)
         if requirement_type is None:
             return Response(
@@ -119,6 +142,8 @@ class RequirementTypeViewSet(BaseViewSet):
         return self._update(request, pk, partial=True)
 
     def destroy(self, request, slug, pk):
+        if not is_workspace_member(request.user, slug):
+            return self._forbidden()
         requirement_type = self._get_requirement_type(pk)
         if requirement_type is None:
             return Response(
@@ -133,9 +158,6 @@ class RequirementTypeViewSet(BaseViewSet):
         if (
             RequirementLibrary.objects.filter(requirement_type=requirement_type).exists()
             or Requirement.objects.filter(
-                requirement_type=requirement_type
-            ).exists()
-            or RequirementDraftRow.objects.filter(
                 requirement_type=requirement_type
             ).exists()
         ):
@@ -183,6 +205,11 @@ class RequirementTypeConfigurationAPIView(BaseAPIView):
         )
 
     def put(self, request, slug, pk):
+        if not is_workspace_member(request.user, slug):
+            return Response(
+                {"error": "You do not have permission to maintain requirement types."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         requirement_type = self._get_requirement_type(slug, pk)
         if requirement_type is None:
             return Response(

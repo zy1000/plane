@@ -3,29 +3,35 @@ import type {
   TCreateRequirementLibraryPayload,
   TRequirement,
   TRequirementApprovalAction,
-  TRequirementBaselineConfiguration,
-  TRequirementBaselineConfigurationPayload,
+  TRequirementApprovalInboxResponse,
+  TRequirementBaseline,
+  TRequirementBaselineCompareResponse,
+  TRequirementBaselineCreated,
+  TRequirementBaselineEntriesResponse,
+  TRequirementBaselinePayload,
+  TRequirementBaselinePreview,
+  TRequirementBaselinesResponse,
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
+  TRequirementBuiltinValues,
   TRequirementChangeItemsResponse,
   TRequirementChangeRequest,
   TRequirementChangeRequestDetail,
   TRequirementChangeRequestsResponse,
   TRequirementChangeStatus,
   TRequirementChangeType,
+  TRequirementConfiguration,
+  TRequirementConfigurationPayload,
   TRequirementData,
-  TRequirementDiscardDraftResponse,
   TRequirementFilter,
   TRequirementImportPayload,
   TRequirementImportResponse,
   TRequirementLibrary,
   TRequirementLibraryConfiguration,
   TRequirementsResponse,
-  TRequirementVersionComparisonResponse,
-  TRequirementVersionDetail,
-  TRequirementVersionRequirementsResponse,
+  TRequirementSubmitReviewPayload,
+  TRequirementTrailResponse,
   TRequirementVersionsResponse,
-  TRequirementWorkingCopyResponse,
   TUpdateRequirementLibraryPayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
@@ -40,9 +46,14 @@ export class RequirementService extends APIService {
     return `/api/workspaces/${workspaceSlug}/products/${productId}/requirements`;
   }
 
-  /** 基线（审批配置 / 工作副本 / 变更单 / 版本）的作用域前缀 */
-  private baselineRoot(workspaceSlug: string, productId: string) {
-    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-baseline`;
+  /** 变更单的作用域前缀 */
+  private changeRequestsRoot(workspaceSlug: string, productId: string) {
+    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-change-requests`;
+  }
+
+  /** 基线快照的作用域前缀 */
+  private baselinesRoot(workspaceSlug: string, productId: string) {
+    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-baselines`;
   }
 
   /* --- 需求标准库 ------------------------------------------------------- */
@@ -194,23 +205,27 @@ export class RequirementService extends APIService {
       });
   }
 
-  /* --- 基线配置 --------------------------------------------------------- */
+  /* --- 需求配置（审批规则 + 字段/需求类型） -------------------------------- */
 
-  /** 基线由后端惰性创建，所以 GET 一定拿得到一份（哪怕是空态） */
-  async getBaseline(workspaceSlug: string, productId: string): Promise<TRequirementBaselineConfiguration> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/`)
+  private configurationRoot(workspaceSlug: string, productId: string) {
+    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-configuration`;
+  }
+
+  /** 配置由后端惰性创建，所以 GET 一定拿得到一份（哪怕是空态） */
+  async getConfiguration(workspaceSlug: string, productId: string): Promise<TRequirementConfiguration> {
+    return this.get(`${this.configurationRoot(workspaceSlug, productId)}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async updateBaseline(
+  async updateConfiguration(
     workspaceSlug: string,
     productId: string,
-    payload: TRequirementBaselineConfigurationPayload
-  ): Promise<TRequirementBaselineConfiguration> {
-    return this.put(`${this.baselineRoot(workspaceSlug, productId)}/`, payload)
+    payload: TRequirementConfigurationPayload
+  ): Promise<TRequirementConfiguration> {
+    return this.put(`${this.configurationRoot(workspaceSlug, productId)}/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -280,13 +295,43 @@ export class RequirementService extends APIService {
       });
   }
 
+  /**
+   * 更新一条需求。
+   *
+   * builtin 必须整组传：后端按缺省值补齐没传的列，漏传等于把它清空。
+   */
   async updateRequirement(
     workspaceSlug: string,
     productId: string,
     requirementId: string,
-    payload: { data: TRequirementData; version: number }
+    payload: { data: TRequirementData; builtin: TRequirementBuiltinValues; version: number }
   ): Promise<TRequirement> {
     return this.patch(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 一条需求的变更轨迹：内容变更与字段结构变更并成一条时间线。
+   *
+   * 字段结构那一半来自需求类型的修订链，一次类型编辑只写一行，这里在读的时候并进来 ——
+   * 所以同一条 schema 记录会在该类型下每条需求里都出现，渲染时必须让它视觉后退。
+   */
+  async listRequirementTrail(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    params: { cursor?: string; perPage?: number; kind?: "content" | "schema" } = {}
+  ): Promise<TRequirementTrailResponse> {
+    return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/trail/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.kind ? { kind: params.kind } : {}),
+      },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -326,39 +371,28 @@ export class RequirementService extends APIService {
         throw error?.response?.data;
       });
   }
-
-  /* --- 工作副本 --------------------------------------------------------- */
-
-  /** 对应「编辑」按钮：已发布内容克隆出工作副本，基线状态置为草稿 */
-  async startEditing(workspaceSlug: string, productId: string): Promise<TRequirementWorkingCopyResponse> {
-    return this.post(`${this.baselineRoot(workspaceSlug, productId)}/working-copy/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /** 对应「撤回草稿」：从未发布则清空条目，否则恢复到上一个已发布版本 */
-  async discardDraft(workspaceSlug: string, productId: string): Promise<TRequirementDiscardDraftResponse> {
-    return this.delete(`${this.baselineRoot(workspaceSlug, productId)}/working-copy/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
   /* --- 变更单 ----------------------------------------------------------- */
 
   async listChangeRequests(
     workspaceSlug: string,
     productId: string,
-    params: { cursor?: string; perPage?: number; status?: TRequirementChangeStatus } = {}
+    params: {
+      cursor?: string;
+      perPage?: number;
+      status?: TRequirementChangeStatus;
+      /** all = 全部，mine = 我提交的，to_review = 等我审批的 */
+      scope?: "all" | "mine" | "to_review";
+      /** 「这条需求被哪些单改过」 */
+      requirementId?: string;
+    } = {}
   ): Promise<TRequirementChangeRequestsResponse> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/change-requests/`, {
+    return this.get(`${this.changeRequestsRoot(workspaceSlug, productId)}/`, {
       params: {
         ...(params.cursor ? { cursor: params.cursor } : {}),
         ...(params.perPage ? { per_page: params.perPage } : {}),
         ...(params.status ? { status: params.status } : {}),
+        ...(params.scope && params.scope !== "all" ? { scope: params.scope } : {}),
+        ...(params.requirementId ? { requirement_id: params.requirementId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -372,14 +406,14 @@ export class RequirementService extends APIService {
     productId: string,
     changeRequestId: string
   ): Promise<TRequirementChangeRequestDetail> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/change-requests/${changeRequestId}/`)
+    return this.get(`${this.changeRequestsRoot(workspaceSlug, productId)}/${changeRequestId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  /** 需求条目组的变更项：千行量级下必须分页 */
+  /** 条目多到详情内联不下时才走这里；N 通常是个位数 */
   async listChangeItems(
     workspaceSlug: string,
     productId: string,
@@ -391,132 +425,8 @@ export class RequirementService extends APIService {
       requirementTypeId?: string;
     } = {}
   ): Promise<TRequirementChangeItemsResponse> {
-    return this.get(
-      `${this.baselineRoot(workspaceSlug, productId)}/change-requests/${changeRequestId}/items/`,
-      {
-        params: {
-          ...(params.cursor ? { cursor: params.cursor } : {}),
-          ...(params.perPage ? { per_page: params.perPage } : {}),
-          ...(params.changeType ? { change_type: params.changeType } : {}),
-          ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
-        },
-      }
-    )
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async submitChangeRequest(
-    workspaceSlug: string,
-    productId: string,
-    payload: { reason: string }
-  ): Promise<TRequirementChangeRequest> {
-    return this.post(`${this.baselineRoot(workspaceSlug, productId)}/change-requests/submit/`, payload)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async actOnChangeRequest(
-    workspaceSlug: string,
-    productId: string,
-    changeRequestId: string,
-    payload: { action: TRequirementApprovalAction; comment?: string }
-  ): Promise<TRequirementChangeRequest> {
-    return this.post(
-      `${this.baselineRoot(workspaceSlug, productId)}/change-requests/${changeRequestId}/act/`,
-      payload
-    )
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async cancelChangeRequest(
-    workspaceSlug: string,
-    productId: string,
-    changeRequestId: string
-  ): Promise<TRequirementChangeRequest> {
-    return this.post(
-      `${this.baselineRoot(workspaceSlug, productId)}/change-requests/${changeRequestId}/cancel/`
-    )
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /* --- 版本 ------------------------------------------------------------- */
-
-  async listVersions(
-    workspaceSlug: string,
-    productId: string,
-    params: { cursor?: string; perPage?: number } = {}
-  ): Promise<TRequirementVersionsResponse> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/versions/`, {
+    return this.get(`${this.changeRequestsRoot(workspaceSlug, productId)}/${changeRequestId}/items/`, {
       params: {
-        ...(params.cursor ? { cursor: params.cursor } : {}),
-        ...(params.perPage ? { per_page: params.perPage } : {}),
-      },
-    })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async getVersion(
-    workspaceSlug: string,
-    productId: string,
-    version: number
-  ): Promise<TRequirementVersionDetail> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/versions/${version}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /** 版本快照的 requirements 数组在服务端切片，避免整份返回 */
-  async listVersionRequirements(
-    workspaceSlug: string,
-    productId: string,
-    version: number,
-    params: { cursor?: string; perPage?: number; requirementTypeId?: string } = {}
-  ): Promise<TRequirementVersionRequirementsResponse> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/versions/${version}/requirements/`, {
-      params: {
-        ...(params.cursor ? { cursor: params.cursor } : {}),
-        ...(params.perPage ? { per_page: params.perPage } : {}),
-        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
-      },
-    })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /** 任意两版对比：toVersion 缺省时由服务端回退为当前已发布版本 */
-  async compareVersions(
-    workspaceSlug: string,
-    productId: string,
-    version: number,
-    params: {
-      toVersion?: number;
-      cursor?: string;
-      perPage?: number;
-      changeType?: TRequirementChangeType;
-      requirementTypeId?: string;
-    } = {}
-  ): Promise<TRequirementVersionComparisonResponse> {
-    return this.get(`${this.baselineRoot(workspaceSlug, productId)}/versions/${version}/compare/`, {
-      params: {
-        ...(params.toVersion ? { to_version: params.toVersion } : {}),
         ...(params.cursor ? { cursor: params.cursor } : {}),
         ...(params.perPage ? { per_page: params.perPage } : {}),
         ...(params.changeType ? { change_type: params.changeType } : {}),
@@ -529,13 +439,225 @@ export class RequirementService extends APIService {
       });
   }
 
-  /** 回滚只是把历史快照灌入工作副本，仍需提交审批才会生效 */
-  async rollbackToVersion(
+  /**
+   * 提交 1..N 条需求进入评审。
+   *
+   * 没有单条的提交端点：行上带 pending_change_request_id，单条提交就是 items.length === 1，
+   * 单条撤回就是对那个 id 调 cancel。一条代码路径，单条与批量不会走偏。
+   */
+  async submitReview(
     workspaceSlug: string,
     productId: string,
+    payload: TRequirementSubmitReviewPayload
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(`${this.changeRequestsRoot(workspaceSlug, productId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async actOnChangeRequest(
+    workspaceSlug: string,
+    productId: string,
+    changeRequestId: string,
+    payload: { action: TRequirementApprovalAction; comment?: string; revert?: boolean }
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(`${this.changeRequestsRoot(workspaceSlug, productId)}/${changeRequestId}/act/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async cancelChangeRequest(
+    workspaceSlug: string,
+    productId: string,
+    changeRequestId: string
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(`${this.changeRequestsRoot(workspaceSlug, productId)}/${changeRequestId}/cancel/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 单条需求的版本 ---------------------------------------------------- */
+
+  async listRequirementVersions(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TRequirementVersionsResponse> {
+    return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/versions/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 回滚到某个已通过版本。
+   *
+   * 不撤销审批：版本链一条不动，回滚完这条需求是 modified，要不要真的退回那一版由随后
+   * 的评审说了算。所以它返回的是普通的行，调用方按更新行处理即可。
+   */
+  async rollbackRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
     version: number
-  ): Promise<TRequirementWorkingCopyResponse> {
-    return this.post(`${this.baselineRoot(workspaceSlug, productId)}/versions/${version}/rollback/`)
+  ): Promise<TRequirement> {
+    return this.post(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/rollback/`, {
+      version,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 待我审批 --------------------------------------------------------- */
+
+  /**
+   * 跨产品聚合当前用户名下的变更单。
+   *
+   * 作用域是工作区而不是产品 —— 一个人可能是三个产品的审批人，产品级的入口等于让他
+   * 记住自己要去哪三个地方看。产品页头部的入口用 productId 收窄到当前产品。
+   */
+  async listMyApprovals(
+    workspaceSlug: string,
+    params: { tab?: "pending" | "processed"; productId?: string } = {}
+  ): Promise<TRequirementApprovalInboxResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-approvals/`, {
+      params: {
+        ...(params.tab ? { tab: params.tab } : {}),
+        ...(params.productId ? { product_id: params.productId } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 基线快照 --------------------------------------------------------- */
+
+  async listBaselines(
+    workspaceSlug: string,
+    productId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TRequirementBaselinesResponse> {
+    return this.get(`${this.baselinesRoot(workspaceSlug, productId)}/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 打基线前先算一遍：会纳入多少条、哪些没纳入、哪些纳入的不是当前内容。
+   *
+   * 与真正落库共用服务端同一份判定，所以预览说的数字就是最后会写进去的数字。
+   */
+  async previewBaseline(
+    workspaceSlug: string,
+    productId: string,
+    payload: TRequirementBaselinePayload = {}
+  ): Promise<TRequirementBaselinePreview> {
+    return this.post(`${this.baselinesRoot(workspaceSlug, productId)}/?preview=1`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createBaseline(
+    workspaceSlug: string,
+    productId: string,
+    payload: TRequirementBaselinePayload
+  ): Promise<TRequirementBaselineCreated> {
+    return this.post(`${this.baselinesRoot(workspaceSlug, productId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getBaseline(workspaceSlug: string, productId: string, baselineId: string): Promise<TRequirementBaseline> {
+    return this.get(`${this.baselinesRoot(workspaceSlug, productId)}/${baselineId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 基线内容不可改，能改的只有名字和说明 */
+  async updateBaseline(
+    workspaceSlug: string,
+    productId: string,
+    baselineId: string,
+    payload: { name?: string; description?: string }
+  ): Promise<TRequirementBaseline> {
+    return this.patch(`${this.baselinesRoot(workspaceSlug, productId)}/${baselineId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteBaseline(workspaceSlug: string, productId: string, baselineId: string): Promise<void> {
+    return this.delete(`${this.baselinesRoot(workspaceSlug, productId)}/${baselineId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listBaselineRequirements(
+    workspaceSlug: string,
+    productId: string,
+    baselineId: string,
+    params: { cursor?: string; perPage?: number; requirementTypeId?: string } = {}
+  ): Promise<TRequirementBaselineEntriesResponse> {
+    return this.get(`${this.baselinesRoot(workspaceSlug, productId)}/${baselineId}/requirements/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async compareBaselines(
+    workspaceSlug: string,
+    productId: string,
+    baselineId: string,
+    toBaselineId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TRequirementBaselineCompareResponse> {
+    return this.get(`${this.baselinesRoot(workspaceSlug, productId)}/${baselineId}/compare/`, {
+      params: {
+        to: toBaselineId,
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

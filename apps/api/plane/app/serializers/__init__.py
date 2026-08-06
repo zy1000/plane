@@ -175,11 +175,10 @@ from .qa import (
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
 from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer
 from .requirement import (
-    RequirementBaselineConfigurationWriteSerializer,
-    RequirementBaselineSerializer,
+    RequirementApprovalPolicySerializer,
+    RequirementApprovalPolicyWriteSerializer,
     RequirementBatchSaveSerializer,
     RequirementCreateSerializer,
-    RequirementDraftRowSerializer,
     RequirementFilterSerializer,
     RequirementImportSerializer,
     RequirementSerializer,
@@ -191,14 +190,16 @@ from .requirement_type import (
     RequirementTypeSerializer,
 )
 from .requirement_change import (
+    RequirementBaselineEntrySerializer,
+    RequirementBaselineSerializer,
+    RequirementBaselineWriteSerializer,
+    RequirementApprovalInboxSerializer,
     RequirementChangeActionSerializer,
     RequirementChangeApprovalSerializer,
     RequirementChangeItemSerializer,
     RequirementChangeRequestDetailSerializer,
     RequirementChangeRequestSerializer,
     RequirementChangeSubmitSerializer,
-    RequirementVersionComparisonItemSerializer,
-    RequirementVersionComparisonSerializer,
-    RequirementVersionDetailSerializer,
+    RequirementSchemaRevisionSerializer,
     RequirementVersionSerializer,
 )

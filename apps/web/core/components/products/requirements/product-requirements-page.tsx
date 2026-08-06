@@ -1,28 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams, useSearchParams } from "react-router";
-import { Database, GitBranch, History, Save, Settings2 } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import { Database, History, Inbox, Layers, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirementBaseline, IUserLite } from "@plane/types";
-import { AlertModalCore, Header, Loader } from "@plane/ui";
+import type { TRequirementApprovalPolicy, IUserLite } from "@plane/types";
+import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
-import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
+import { useRequirementBaselines } from "@/hooks/store/use-requirement-baselines";
+import { useRequirementApprovalInbox, useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { useUser } from "@/hooks/store/user";
+import { RequirementBaselinesTab } from "./baseline/requirement-baselines-tab";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
-import { RequirementStatusActions, RequirementStatusMeta } from "./change/requirement-status-actions";
-import { SubmitChangeModal } from "./change/submit-change-modal";
-import { useRequirementStateActions } from "./change/use-requirement-state-actions";
-import { VersionHistory } from "./change/version-history";
+import { ApprovalInboxModal } from "./approval/approval-inbox-modal";
+import { SubmitReviewModal } from "./approval/submit-review-modal";
+import { useRequirementApprovalActions } from "./approval/use-requirement-approval-actions";
 import { RequirementImportFromLibraryModal } from "./import-from-library-modal";
-import { ReadOnlyRequirementSettings } from "./requirement-read-only-configuration";
 import {
   DEFAULT_VIEW_KEY,
   getViewKey,
@@ -30,20 +29,20 @@ import {
   resolveRequirementDataView,
   type TRequirementDataView,
 } from "./requirement-data-views";
+import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 import { RequirementSettingsPanel, type TRequirementSettingsDraft } from "./requirement-settings-panel";
 import { RequirementTypePickerModal } from "./requirement-type-picker-modal";
 
-const TABS = ["data", "configuration", "changes", "versions"] as const;
+const TABS = ["data", "configuration", "changes", "baselines"] as const;
 
 type TProductRequirementsTab = (typeof TABS)[number];
 
-const toSettingsDraft = (baseline: TRequirementBaseline): TRequirementSettingsDraft => ({
-  owner_id: baseline.owner_id,
-  status: baseline.status,
-  approver_ids: baseline.approver_ids,
-  approval_type: baseline.approval_type,
-  required_count: baseline.required_count,
+const toSettingsDraft = (policy: TRequirementApprovalPolicy): TRequirementSettingsDraft => ({
+  owner_id: policy.owner_id,
+  approver_ids: policy.approver_ids,
+  approval_type: policy.approval_type,
+  required_count: policy.required_count,
 });
 
 const serializeSettings = (settings: TRequirementSettingsDraft) => JSON.stringify(settings);
@@ -51,14 +50,14 @@ const serializeSettings = (settings: TRequirementSettingsDraft) => JSON.stringif
 /**
  * 产品需求页。
  *
- * 这里就是需求条目本身的落脚点 —— 没有中间的「需求集合」层了。审批的单位是整条
- * 基线（本产品的全部需求），所以状态、审批配置、变更记录与版本都挂在页面级，
- * 数据页则是按需求类型分视图的网格。
+ * 审批的单位是**一条需求**，所以页面级只剩「谁能批」这份配置；状态与版本都长在每一行
+ * 上。整个产品不再有只读闸门 —— A 提交了需求 A 的评审，B 照样可以改需求 B。
  */
 export const ProductRequirementsPage = observer(function ProductRequirementsPage() {
   const { t } = useTranslation();
   const { workspaceSlug, productId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { members } = useProductMembers(workspaceSlug, productId);
   const { data: currentUser } = useUser();
   const [isDataEditing, setIsDataEditing] = useState(false);
@@ -67,38 +66,41 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   /** 鼠标移到「导入」上就开始预热条目，点开时基本无等待 */
   const [shouldPrefetchImport, setShouldPrefetchImport] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
+  const [isCreateBaselineOpen, setIsCreateBaselineOpen] = useState(false);
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<TRequirementSettingsDraft | null>(null);
   const [settingsBaseline, setSettingsBaseline] = useState("");
 
   const store = useProductRequirements({ workspaceSlug, productId });
-  const baseline = store.baseline;
+  const policy = store.policy;
   const requestedTab = searchParams.get("tab") as TProductRequirementsTab | null;
   const activeTab: TProductRequirementsTab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "data";
   const openedChangeRequestId = searchParams.get("cr");
-  const canEdit = Boolean(baseline?.can_edit);
-  /**
-   * 只有草稿态可写，与后端 READ_ONLY_REASONS 一致：已发布内容要先点「编辑」生成工作
-   * 副本，审批期草稿已被冻结成变更单快照。否则用户能进编辑态但保存拿到 409。
-   */
-  const isEditable = canEdit && baseline?.status === "draft";
-  const configurationReadOnlyHint = t(
-    !canEdit
-      ? "workspace_products.requirements.configuration.read_only"
-      : baseline?.status === "in_review"
-        ? "workspace_products.requirements.configuration.read_only_in_review"
-        : "workspace_products.requirements.configuration.read_only_published"
-  );
+  /** 打开的基线；两个都在时进对比视图 */
+  const openedBaselineId = searchParams.get("bl");
+  const compareBaselineId = searchParams.get("cmp");
+  /** 详情抽屉开在哪一条。走 URL 而不是内存态：需求经常要贴链接给别人 */
+  const peekRequirementId = searchParams.get("peek");
+  /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
+  const canEdit = Boolean(policy?.can_edit);
+  /** 能不能改审批配置本身 —— 必然比 canEdit 窄 */
+  const canManagePolicy = Boolean(policy?.can_manage);
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
-  const pendingChangeRequest = changesStore.changeRequestsPage.results.find((item) => item.status === "pending");
-  const pendingCount = changesStore.changeRequestsPage.results.filter((item) => item.status === "pending").length;
+  const baselinesStore = useRequirementBaselines({ workspaceSlug, productId });
+  /**
+   * 待我审批。端点是工作区级的，这里默认收窄到当前产品 —— 站在这个产品的页面上，先关心
+   * 这个产品的待办；跨产品的全量在弹窗里翻页看。
+   */
+  const approvalInbox = useRequirementApprovalInbox({ workspaceSlug, productId });
+  const pendingCount = policy?.pending_change_request_count ?? 0;
   const memberOptions = useMemo(() => {
     const byId = new Map<string, IUserLite>();
     members.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    if (baseline?.owner_detail) byId.set(baseline.owner_id, baseline.owner_detail);
-    baseline?.approver_details.forEach((member) => byId.set(member.id, member));
+    if (policy?.owner_detail) byId.set(policy.owner_id, policy.owner_detail);
+    policy?.approver_details.forEach((member) => byId.set(member.id, member));
     if (currentUser) byId.set(currentUser.id, currentUser);
     return Array.from(byId.values());
-  }, [currentUser, members, baseline]);
+  }, [currentUser, members, policy]);
   const isDirty = useMemo(
     () => Boolean(settingsBaseline && settingsDraft && serializeSettings(settingsDraft) !== settingsBaseline),
     [settingsBaseline, settingsDraft]
@@ -116,7 +118,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
 
   useEffect(() => {
     if (!store.configuration) return;
-    const nextSettings = toSettingsDraft(store.configuration.baseline);
+    const nextSettings = toSettingsDraft(store.configuration.policy);
     setSettingsDraft(nextSettings);
     setSettingsBaseline(serializeSettings(nextSettings));
   }, [store.configuration]);
@@ -136,6 +138,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
     next.delete("cr");
+    next.delete("bl");
+    next.delete("cmp");
     setSearchParams(next, { replace: true });
   };
 
@@ -147,6 +151,13 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     setSearchParams(next, { replace: true });
   };
 
+  const setPeekRequirement = (requirementId: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (requirementId) next.set("peek", requirementId);
+    else next.delete("peek");
+    setSearchParams(next, { replace: true });
+  };
+
   const openChangeRequest = (changeRequestId: string | null) => {
     const next = new URLSearchParams(searchParams);
     next.set("tab", "changes");
@@ -155,16 +166,24 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     setSearchParams(next, { replace: true });
   };
 
+  const openBaseline = (baselineId: string | null, compareToId?: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", "baselines");
+    if (baselineId) next.set("bl", baselineId);
+    else next.delete("bl");
+    if (compareToId) next.set("cmp", compareToId);
+    else next.delete("cmp");
+    setSearchParams(next, { replace: true });
+  };
+
   const refreshLayer = () => {
     void store.fetchConfiguration().catch(() => undefined);
     void store.fetchRequirements().catch(() => undefined);
   };
 
-  const stateActions = useRequirementStateActions({
-    baseline,
+  const approvalActions = useRequirementApprovalActions({
     changesStore,
-    pendingChangeRequestId: pendingChangeRequest?.id ?? null,
-    onLayerChanged: refreshLayer,
+    onSettled: refreshLayer,
     onSubmitted: () => setTab("changes"),
   });
 
@@ -195,8 +214,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     }
     try {
       const response = await store.updateConfiguration({
-        expected_updated_at: store.configuration.baseline.updated_at,
-        baseline: {
+        expected_updated_at: store.configuration.policy.updated_at,
+        policy: {
           owner_id: settingsDraft.owner_id,
           approver_ids: settingsDraft.approver_ids,
           approval_type: settingsDraft.approver_ids.length ? settingsDraft.approval_type : "any",
@@ -206,7 +225,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               : null,
         },
       });
-      const nextSettings = toSettingsDraft(response.baseline);
+      const nextSettings = toSettingsDraft(response.policy);
       setSettingsDraft(nextSettings);
       setSettingsBaseline(serializeSettings(nextSettings));
       setToast({
@@ -227,55 +246,11 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     }
   };
 
-  const isLoading = store.isConfigurationLoading || !baseline;
+  const isLoading = store.isConfigurationLoading || !policy;
 
   return (
     <>
       <PageHead title={t("workspace_products.navigation.requirements")} />
-      <AppHeader
-        rowClassName="h-[52px]"
-        header={
-          <Header className="min-w-0">
-            <Header.LeftItem className="max-w-none min-w-0 flex-nowrap">
-              <h1 className="truncate text-13 font-medium text-primary">
-                {t("workspace_products.navigation.requirements")}
-              </h1>
-              {baseline && (
-                <RequirementStatusMeta
-                  baseline={baseline}
-                  className="hidden sm:flex"
-                  onViewDetail={() => setTab("configuration")}
-                />
-              )}
-            </Header.LeftItem>
-            <Header.RightItem className="shrink-0 gap-2">
-              {activeTab === "configuration" && isEditable && (
-                <Button
-                  variant="primary"
-                  disabled={!isDirty}
-                  loading={store.isMutating}
-                  onClick={() => void saveConfiguration()}
-                >
-                  <Save className="size-3.5" />
-                  {t("workspace_products.requirements.configuration.save")}
-                </Button>
-              )}
-              {baseline && (
-                <RequirementStatusActions
-                  baseline={baseline}
-                  isSubmitter={Boolean(pendingChangeRequest?.can_cancel)}
-                  isMutating={changesStore.isMutating}
-                  onEdit={() => void stateActions.startEditing()}
-                  onSubmitReview={stateActions.openSubmitModal}
-                  onDiscardDraft={stateActions.openDiscardModal}
-                  onWithdrawReview={stateActions.openWithdrawModal}
-                  onGoApprove={() => openChangeRequest(pendingChangeRequest?.id ?? null)}
-                />
-              )}
-            </Header.RightItem>
-          </Header>
-        }
-      />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
         <nav className="flex h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-subtle px-4 md:px-6">
           <div className="min-w-0 flex-1 self-stretch overflow-x-auto">
@@ -289,9 +264,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
                 { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
                 {
-                  key: "versions" as const,
-                  icon: GitBranch,
-                  label: t("workspace_products.requirements.tabs.versions"),
+                  key: "baselines" as const,
+                  icon: Layers,
+                  label: t("workspace_products.requirements.tabs.baselines"),
                 },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -320,38 +295,65 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               })}
             </div>
           </div>
-          {activeTab === "data" && (
-            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 pl-2">
-              {/* 网格工具栏（搜索等）在前；导入/录入放在 host 外，避免被编辑态内容整体替换 */}
-              <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
-              {isEditable && !isDataEditing && (
-                <>
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    onMouseEnter={() => setShouldPrefetchImport(true)}
-                    onFocus={() => setShouldPrefetchImport(true)}
-                    onClick={() => setIsImportOpen(true)}
-                  >
-                    {t("workspace_products.requirements.data.import_from_library")}
-                  </Button>
-                  <Button variant="primary" size="lg" onClick={() => setIsTypePickerOpen(true)}>
-                    {t("workspace_products.requirements.data.manual_entry")}
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
+          <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 pl-2">
+            {(approvalInbox.inbox.pending_count > 0 || isInboxOpen) && (
+              <Button variant="secondary" size="lg" onClick={() => setIsInboxOpen(true)}>
+                <Inbox className="size-3.5" />
+                {t("workspace_products.requirements.inbox.entry")}
+                {approvalInbox.inbox.pending_count > 0 && (
+                  <span className="ml-1 grid size-4 place-items-center rounded-full bg-warning-primary text-10 text-on-color">
+                    {approvalInbox.inbox.pending_count}
+                  </span>
+                )}
+              </Button>
+            )}
+            {activeTab === "data" && canEdit && !isDataEditing && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onMouseEnter={() => setShouldPrefetchImport(true)}
+                  onFocus={() => setShouldPrefetchImport(true)}
+                  onClick={() => setIsImportOpen(true)}
+                >
+                  {t("workspace_products.requirements.data.import_from_library")}
+                </Button>
+                <Button variant="primary" size="lg" onClick={() => setIsTypePickerOpen(true)}>
+                  {t("workspace_products.requirements.data.manual_entry")}
+                </Button>
+              </>
+            )}
+            {activeTab === "baselines" && !openedBaselineId && canEdit && (
+              <Button variant="primary" size="lg" onClick={() => setIsCreateBaselineOpen(true)}>
+                <Layers className="size-3.5" />
+                {t("workspace_products.requirements.baseline.create")}
+              </Button>
+            )}
+            {activeTab === "configuration" && canManagePolicy && (
+              <Button
+                variant="primary"
+                size="lg"
+                disabled={!isDirty}
+                loading={store.isMutating}
+                onClick={() => void saveConfiguration()}
+              >
+                <Save className="size-3.5" />
+                {t("workspace_products.requirements.configuration.save")}
+              </Button>
+            )}
+          </div>
         </nav>
 
-        {activeTab === "data" && requirementTypes.length > 1 && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-subtle px-4 py-1.5 md:px-6">
+        {/* 视图控制自成一行：左边选看哪一类，右边是网格自己的工具栏（搜索、编辑态的保存/取消） */}
+        {activeTab === "data" && requirementTypes.length > 0 && (
+          <div className="flex shrink-0 items-center gap-3 border-b border-subtle px-4 py-1.5 md:px-6">
             <RequirementDataViewSwitcher
               requirementTypes={requirementTypes}
               activeKey={getViewKey(activeView)}
               disabled={isDataEditing}
               onChange={changeView}
             />
+            <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 items-center" />
           </div>
         )}
 
@@ -369,6 +371,20 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               </Button>
             </div>
           </div>
+        ) : activeTab === "baselines" ? (
+          <RequirementBaselinesTab
+            workspaceSlug={workspaceSlug ?? ""}
+            productId={productId ?? ""}
+            fields={store.configuration?.fields ?? []}
+            requirementTypes={requirementTypes}
+            canManage={canEdit}
+            store={baselinesStore}
+            isCreateOpen={isCreateBaselineOpen}
+            onCreateOpenChange={setIsCreateBaselineOpen}
+            openedBaselineId={openedBaselineId}
+            compareToId={compareBaselineId}
+            onOpenBaseline={openBaseline}
+          />
         ) : activeTab === "changes" ? (
           <RequirementChangesTab
             workspaceSlug={workspaceSlug ?? ""}
@@ -383,22 +399,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               void changesStore.fetchChangeRequests().catch(() => undefined);
             }}
           />
-        ) : activeTab === "versions" ? (
-          baseline ? (
-            <VersionHistory
-              workspaceSlug={workspaceSlug ?? ""}
-              productId={productId ?? ""}
-              baseline={baseline}
-              members={memberOptions}
-              onBaselineUpdate={() => refreshLayer()}
-            />
-          ) : (
-            <div className="p-6">
-              <Loader>
-                <Loader.Item height="420px" />
-              </Loader>
-            </div>
-          )
         ) : activeTab === "data" ? (
           requirementTypes.length === 0 ? (
             <div className="grid flex-1 place-items-center p-6 text-center">
@@ -409,7 +409,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 <p className="mt-1 text-12 text-secondary">
                   {t("workspace_products.requirements.data.empty.description")}
                 </p>
-                {isEditable && (
+                {canEdit && (
                   <div className="mt-4 flex items-center justify-center gap-2">
                     <Button
                       variant="primary"
@@ -428,6 +428,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             </div>
           ) : activeView.kind === "default" ? (
             <RequirementDefaultViewGrid
+              workspaceSlug={workspaceSlug ?? ""}
+              productId={productId ?? ""}
               requirementTypes={requirementTypes}
               requirements={store.requirementsPage.results}
               totalCount={store.requirementsPage.total_count ?? 0}
@@ -439,7 +441,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               isLoading={isLoading || store.isRequirementsLoading}
               isMutating={store.isMutating}
               error={store.requirementsError}
-              readOnly={!isEditable}
+              readOnly={!canEdit}
               search={store.search}
               onSearchChange={store.setSearch}
               onCursorChange={store.setCursor}
@@ -451,6 +453,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onOpenRequirementTypeView={(requirementTypeId) =>
                 changeView({ kind: "requirementType", requirementTypeId })
               }
+              onOpenDetail={setPeekRequirement}
+              onOpenChangeRequest={openChangeRequest}
+              onSubmitReview={approvalActions.openSubmitModal}
+              onWithdrawReview={approvalActions.withdraw}
               toolbarPortalEl={dataToolbarHost}
             />
           ) : (
@@ -460,9 +466,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               workspaceSlug={workspaceSlug ?? ""}
               entityId={productId ?? ""}
               entityKind="product"
-              showChangeColumns
-              readOnly={!isEditable}
-              expectedUpdatedAt={store.configuration?.expected_updated_at}
+              showApprovalColumn
+              readOnly={!canEdit}
               createRequirementTypeId={activeView.requirementTypeId}
               columnStorageId={activeView.requirementTypeId}
               fields={activeType?.fields ?? []}
@@ -486,6 +491,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onRefresh={store.fetchRequirements}
               onBulkSave={store.saveRequirementBatch}
               onEditingChange={setIsDataEditing}
+              onOpenDetail={setPeekRequirement}
+              onSubmitReview={approvalActions.openSubmitModal}
+              onWithdrawReview={approvalActions.withdraw}
+              onOpenChangeRequest={openChangeRequest}
               toolbarPortalEl={dataToolbarHost}
             />
           )
@@ -502,12 +511,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               {t("workspace_products.requirements.configuration.fields_moved_hint")}
             </div>
             <div className="flex min-h-0 flex-1">
-              {!isEditable && baseline ? (
-                <ReadOnlyRequirementSettings baseline={baseline} hint={configurationReadOnlyHint} />
-              ) : settingsDraft ? (
+              {settingsDraft ? (
                 <RequirementSettingsPanel
                   draft={settingsDraft}
-                  currentVersion={baseline?.current_version ?? null}
+                  readOnly={!canManagePolicy}
                   memberOptions={memberOptions}
                   onChange={setSettingsDraft}
                 />
@@ -522,6 +529,20 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           </div>
         )}
       </ContentWrapper>
+
+      <RequirementPeekOverview
+        workspaceSlug={workspaceSlug ?? ""}
+        productId={productId ?? ""}
+        requirementId={peekRequirementId}
+        requirementTypes={requirementTypes}
+        rows={store.requirementsPage.results}
+        canEdit={canEdit}
+        onClose={() => setPeekRequirement(null)}
+        onOpenRequirement={setPeekRequirement}
+        onRequirementUpdated={() => void store.fetchRequirements()}
+        onSubmitReview={(requirementId) => approvalActions.openSubmitModal([requirementId])}
+        onWithdrawReview={approvalActions.withdraw}
+      />
 
       {/*
         常驻挂载（不加 isImportOpen && 门槛）：内部的 hook 会在挂载时把标准库列表拉好，
@@ -562,37 +583,29 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         />
       )}
 
-      <SubmitChangeModal
-        isOpen={stateActions.isSubmitModalOpen}
+      <SubmitReviewModal
+        isOpen={approvalActions.isSubmitModalOpen}
         isSubmitting={changesStore.isMutating}
-        onClose={stateActions.closeSubmitModal}
-        onSubmit={(reason) => void stateActions.submitReview(reason)}
-      />
-      <AlertModalCore
-        isOpen={stateActions.isDiscardModalOpen}
-        isSubmitting={changesStore.isMutating}
-        handleClose={stateActions.closeDiscardModal}
-        handleSubmit={() => void stateActions.discardDraft()}
-        title={t(
-          stateActions.hasPublishedVersion
-            ? "workspace_products.requirements.state.discard_draft_title"
-            : "workspace_products.requirements.state.clear_requirements_title"
+        requirements={approvalActions.pendingSelection.map(
+          (id) => store.requirementsPage.results.find((row) => row.id === id) ?? null
         )}
-        content={
-          stateActions.hasPublishedVersion
-            ? t("workspace_products.requirements.state.discard_draft_description", {
-                version: baseline?.current_version ?? "",
-              })
-            : t("workspace_products.requirements.state.clear_requirements_description")
-        }
+        onClose={approvalActions.closeSubmitModal}
+        onSubmit={(reason) => void approvalActions.submit(reason)}
       />
-      <AlertModalCore
-        isOpen={stateActions.isWithdrawModalOpen}
-        isSubmitting={changesStore.isMutating}
-        handleClose={stateActions.closeWithdrawModal}
-        handleSubmit={() => void stateActions.withdrawReview()}
-        title={t("workspace_products.requirements.state.withdraw_review_title")}
-        content={t("workspace_products.requirements.state.withdraw_review_description")}
+
+      <ApprovalInboxModal
+        isOpen={isInboxOpen}
+        inbox={approvalInbox}
+        onClose={() => setIsInboxOpen(false)}
+        onOpenChangeRequest={(item) => {
+          setIsInboxOpen(false);
+          // 收件箱是跨产品的：别的产品的单要整页跳过去，不能只改当前页的 query
+          if (item.product_id === productId) openChangeRequest(item.id);
+          else
+            navigate(
+              `/${workspaceSlug}/products/${item.product_id}/requirements?tab=changes&cr=${item.id}`
+            );
+        }}
       />
     </>
   );

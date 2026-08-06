@@ -9,6 +9,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { ISSUE_PRIORITIES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirementBuiltinKey,
@@ -16,7 +17,7 @@ import type {
   TRequirementItemStatus,
   TRequirementPriority,
 } from "@plane/types";
-import { CustomSelect } from "@plane/ui";
+import { PriorityIcon } from "@plane/propel/icons";
 import { renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -38,6 +39,7 @@ import { RequirementParentDropdown } from "./requirement-parent-dropdown";
 export const REQUIREMENT_BUILTIN_COLUMNS = [
   {
     key: "title",
+    isContent: true,
     showInLibrary: true,
     labelKey: "requirement_fields.builtin.title",
     typeLabelKey: "requirement_fields.field_types.text",
@@ -46,6 +48,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "description_html",
+    isContent: true,
     showInLibrary: true,
     labelKey: "requirement_fields.builtin.description",
     typeLabelKey: "requirement_fields.field_types.rich_text",
@@ -54,6 +57,8 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "status",
+    // 交付进度轴，不是被批准的内容 —— 不参与评审比对，也由系统写而非用户手选
+    isContent: false,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.status",
     typeLabelKey: "requirement_fields.field_types.select",
@@ -62,6 +67,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "priority",
+    isContent: true,
     showInLibrary: true,
     labelKey: "requirement_fields.builtin.priority",
     typeLabelKey: "requirement_fields.field_types.select",
@@ -70,6 +76,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "assignee_id",
+    isContent: true,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.assignee",
     typeLabelKey: "requirement_fields.field_types.member",
@@ -78,6 +85,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "start_date",
+    isContent: true,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.start_date",
     typeLabelKey: "requirement_fields.builtin.types.date",
@@ -86,6 +94,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "target_date",
+    isContent: true,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.target_date",
     typeLabelKey: "requirement_fields.builtin.types.date",
@@ -94,6 +103,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "parent_id",
+    isContent: true,
     showInLibrary: true,
     labelKey: "requirement_fields.builtin.parent",
     typeLabelKey: "requirement_fields.builtin.types.parent",
@@ -102,6 +112,8 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
 ] as const satisfies readonly {
   key: TRequirementBuiltinKey;
+  /** 算不算「内容」。false 的列不进 diff、不触发评审、不被内容回滚倒推 */
+  isContent: boolean;
   showInLibrary: boolean;
   labelKey: string;
   typeLabelKey: string;
@@ -109,19 +121,21 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   width: string;
 }[];
 
+/**
+ * 参与「内容变了没有」比对的内置列。
+ *
+ * 服务端的 changed_field_ids 管不到前端自己用 isEqual 算 diff 的那几处，所以那些地方要
+ * 显式切到这个子集，否则「标了已实现」会在变更单里渲染成一行需要审批人签字的改动。
+ */
+export const REQUIREMENT_CONTENT_BUILTIN_COLUMNS = REQUIREMENT_BUILTIN_COLUMNS.filter(
+  (column) => column.isContent
+);
+
 /** 这批需求行该显示哪些内置列。标准库藏掉执行期四列，产品需求八列全出 */
 export const getBuiltinColumnsFor = (entityKind: "product" | "library") =>
   entityKind === "library"
     ? REQUIREMENT_BUILTIN_COLUMNS.filter((column) => column.showInLibrary)
     : REQUIREMENT_BUILTIN_COLUMNS;
-
-export const REQUIREMENT_ITEM_STATUSES: TRequirementItemStatus[] = [
-  "draft",
-  "in_review",
-  "confirmed",
-  "implemented",
-  "obsolete",
-];
 
 /** 后端的列缺省值，新建行与「清空」都用它 */
 export const createEmptyBuiltinValues = (): TRequirementBuiltinValues => ({
@@ -186,21 +200,12 @@ export const BuiltinCellEditor = ({ columnKey, values, onChange, parentScope, ro
   }
 
   if (columnKey === "status") {
+    // 交付进度由系统写，编辑态也只读 —— 服务端同样会忽略客户端传来的 status。
+    // 撑到和其它编辑器一样的行高，免得进出编辑态时整行跳一下。
     return (
-      <CustomSelect
-        value={values.status}
-        onChange={(next: TRequirementItemStatus) => onChange({ status: next })}
-        label={<span className="truncate text-14 text-primary">{t(`requirement_fields.statuses.${values.status}`)}</span>}
-        buttonClassName={DROPDOWN_BUTTON_CLASS}
-        optionsClassName="w-44"
-        input
-      >
-        {REQUIREMENT_ITEM_STATUSES.map((status) => (
-          <CustomSelect.Option key={status} value={status}>
-            <span className="truncate text-14">{t(`requirement_fields.statuses.${status}`)}</span>
-          </CustomSelect.Option>
-        ))}
-      </CustomSelect>
+      <div className="flex h-8 min-w-0 items-center px-2">
+        <BuiltinCellValue columnKey="status" values={values} />
+      </div>
     );
   }
 
@@ -282,7 +287,15 @@ export const BuiltinCellValue = ({ columnKey, values, resolveParentTitle }: TBui
     return <span className="truncate text-14">{t(`requirement_fields.statuses.${value as TRequirementItemStatus}`)}</span>;
   }
   if (columnKey === "priority") {
-    return <span className="truncate text-14">{t(`requirement_fields.priorities.${value as TRequirementPriority}`)}</span>;
+    // 与编辑态的 PriorityDropdown 用同一份词汇（ISSUE_PRIORITIES 的原值），不另做一套翻译 ——
+    // 否则同一个字段读的时候是「高」、改的时候是「High」，是两套语言。
+    const priority = value as TRequirementPriority;
+    return (
+      <span className="flex min-w-0 items-center gap-1.5 text-14">
+        <PriorityIcon priority={priority} size={12} className="shrink-0" />
+        <span className="truncate">{ISSUE_PRIORITIES.find((item) => item.key === priority)?.title ?? priority}</span>
+      </span>
+    );
   }
   if (columnKey === "start_date" || columnKey === "target_date") {
     return <span className="truncate text-14">{renderFormattedDate(value as string)}</span>;

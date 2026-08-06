@@ -7,14 +7,8 @@ import type {
   TRequirementApprovalType,
   TRequirementChangeStatus,
   TRequirementChangeType,
-  TRequirementStatus,
 } from "@plane/types";
 
-export const REQUIREMENT_STATUS_PILL: Record<TRequirementStatus, string> = {
-  draft: "bg-accent-subtle text-accent-primary",
-  in_review: "bg-warning-subtle text-warning-primary",
-  published: "bg-success-subtle text-success-primary",
-};
 
 export const CHANGE_STATUS_PILL: Record<TRequirementChangeStatus, string> = {
   pending: "bg-warning-subtle text-warning-primary",

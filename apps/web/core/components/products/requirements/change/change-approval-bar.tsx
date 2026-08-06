@@ -23,13 +23,15 @@ type TProps = {
   changeRequest: TRequirementChangeRequestDetail;
   isMutating: boolean;
   onApprove: (comment: string) => void;
-  onReject: (comment: string) => void;
+  onReject: (comment: string, revert: boolean) => void;
   onWithdraw: () => void;
 };
 
 export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReject, onWithdraw }: TProps) {
   const { t } = useTranslation();
   const [comment, setComment] = useState("");
+  /** 驳回时顺带把内容退回上一版（禅道的「撤销变更」）。默认关：多数驳回是「改一改再提」 */
+  const [revert, setRevert] = useState(false);
 
   if (changeRequest.status !== "pending") return null;
 
@@ -78,7 +80,16 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
             placeholder={t("workspace_products.requirements.change.bar.comment_placeholder")}
             className="focus:border-accent-primary focus:ring-accent-primary/10 h-9 max-w-md min-w-0 flex-1 rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder focus:ring-2"
           />
-          <Button variant="error-outline" disabled={isMutating} onClick={() => onReject(comment)}>
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-11 text-secondary">
+            <input
+              type="checkbox"
+              checked={revert}
+              onChange={(event) => setRevert(event.target.checked)}
+              className="size-3.5 cursor-pointer accent-accent-primary"
+            />
+            {t("workspace_products.requirements.change.bar.revert")}
+          </label>
+          <Button variant="error-outline" disabled={isMutating} onClick={() => onReject(comment, revert)}>
             {t("workspace_products.requirements.change.bar.reject")}
           </Button>
           <Button
