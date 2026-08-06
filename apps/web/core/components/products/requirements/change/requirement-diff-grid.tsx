@@ -8,11 +8,13 @@
  * 三层 diff 的呈现：行级用首列 pill + 整行着色，行内字段级用「旧值红删除线 / 新值绿」
  * 上下堆叠 + 右上角角标，子表单行级按 row id 并集对齐后用 gutter 列打 + / − / ~ 标记。
  */
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { isEqual } from "lodash-es";
+import { useParams } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
+  TRequirementBuiltinKey,
   TRequirementChangeItem,
   TRequirementChangeType,
   TRequirementChangeSnapshot,
@@ -22,6 +24,11 @@ import type {
 } from "@plane/types";
 import { CustomSelect, Loader, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
+import {
+  BuiltinCellValue,
+  REQUIREMENT_BUILTIN_COLUMNS,
+} from "@/components/requirements/requirement-builtin-fields";
+import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import {
   ChangedFieldCorner,
   getFormRows,
@@ -166,6 +173,41 @@ function DiffCell({
   );
 }
 
+/** 内置列的 diff：与 DiffCell 同样的三态，只是渲染器换成 BuiltinCellValue */
+function BuiltinDiffCell({
+  columnKey,
+  changeType,
+  before,
+  after,
+  resolveParentTitle,
+}: {
+  columnKey: TRequirementBuiltinKey;
+  changeType: TRequirementChangeType;
+  before: TRequirementChangeSnapshot | null;
+  after: TRequirementChangeSnapshot | null;
+  resolveParentTitle: (parentId: string) => string | undefined;
+}) {
+  if (changeType === "create") {
+    return <BuiltinCellValue columnKey={columnKey} values={{ ...after }} resolveParentTitle={resolveParentTitle} />;
+  }
+  if (changeType === "delete") {
+    return <BuiltinCellValue columnKey={columnKey} values={{ ...before }} resolveParentTitle={resolveParentTitle} />;
+  }
+  if (isEqual(before?.[columnKey], after?.[columnKey])) {
+    return <BuiltinCellValue columnKey={columnKey} values={{ ...before }} resolveParentTitle={resolveParentTitle} />;
+  }
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className={DIFF_OLD_VALUE}>
+        <BuiltinCellValue columnKey={columnKey} values={{ ...before }} resolveParentTitle={resolveParentTitle} />
+      </span>
+      <span className={DIFF_NEW_VALUE}>
+        <BuiltinCellValue columnKey={columnKey} values={{ ...after }} resolveParentTitle={resolveParentTitle} />
+      </span>
+    </span>
+  );
+}
+
 type TProps = {
   workspaceSlug: string;
   fields: TRequirementField[];
@@ -233,6 +275,31 @@ export function RequirementDiffGrid(props: TProps) {
   }, [changedColumnsOnly, changedFieldIds, fields]);
   const formFields = useMemo(() => rootFields.filter((field) => field.field_type === "form"), [rootFields]);
 
+  // 父项列存的是 UUID：先用本页变更项自带的快照凑标题，剩下的批量取一次
+  const { productId } = useParams();
+  const snapshots = useMemo(
+    () =>
+      items.flatMap((item) =>
+        [item.before_snapshot, item.proposed_snapshot].filter(
+          (snapshot): snapshot is TRequirementChangeSnapshot => Boolean(snapshot)
+        )
+      ),
+    [items]
+  );
+  const parentTitles = useRequirementTitles({
+    workspaceSlug,
+    entityKind: "product",
+    entityId: productId ?? "",
+    knownRows: snapshots,
+    parentIds: useMemo(() => snapshots.map((snapshot) => snapshot.parent_id), [snapshots]),
+  });
+  const resolveParentTitle = useCallback((parentId: string) => parentTitles[parentId], [parentTitles]);
+  // 内置列的 field_id 就是列名，与自定义字段共用 changedFieldIds 这一个维度
+  const visibleBuiltinColumns = useMemo(() => {
+    if (!changedColumnsOnly || !changedFieldIds.length) return REQUIREMENT_BUILTIN_COLUMNS;
+    return REQUIREMENT_BUILTIN_COLUMNS.filter((column) => changedFieldIds.includes(column.key));
+  }, [changedColumnsOnly, changedFieldIds]);
+
   const currentPage = Number(prevCursor?.split(":")[1] ?? -1) + 2;
   const pageStart = (Math.max(currentPage, 1) - 1) * perPage + 1;
 
@@ -268,6 +335,32 @@ export function RequirementDiffGrid(props: TProps) {
                   </span>
                 </td>
               )}
+              {isFirstRow &&
+                visibleBuiltinColumns.map((column) => {
+                  const hasChanged =
+                    item.change_type === "update" && !isEqual(before?.[column.key], after?.[column.key]);
+                  return (
+                    <td
+                      key={column.key}
+                      rowSpan={totalRows}
+                      className={cn(
+                        "min-w-32 border-r border-subtle px-3 align-middle",
+                        cellPaddingClass,
+                        groupCellClass,
+                        hasChanged && "relative bg-danger-subtle/40"
+                      )}
+                    >
+                      <BuiltinDiffCell
+                        columnKey={column.key}
+                        changeType={item.change_type}
+                        before={before}
+                        after={after}
+                        resolveParentTitle={resolveParentTitle}
+                      />
+                      {hasChanged && <ChangedFieldCorner />}
+                    </td>
+                  );
+                })}
               {rootFields.flatMap((field) => {
                 if (field.field_type !== "form") {
                   if (!isFirstRow) return [];
@@ -476,6 +569,11 @@ export function RequirementDiffGrid(props: TProps) {
                 ),
                 content: t("workspace_products.requirements.change.grid.change"),
               }}
+              builtinHeaders={visibleBuiltinColumns.map((column) => ({
+                key: column.key,
+                className: column.width,
+                content: t(column.labelKey),
+              }))}
             />
             {items.map(renderChangeItem)}
           </table>

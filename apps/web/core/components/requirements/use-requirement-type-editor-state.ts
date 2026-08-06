@@ -20,8 +20,7 @@ const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   field_type: field.field_type,
   is_required: field.is_required,
   is_active: field.is_active,
-  // 必须原样带回：后端把 builtin_key 的任何变化都当成「改内置标识」而拒绝
-  builtin_key: field.builtin_key ?? null,
+  field_category: field.field_category,
   config: { ...field.config },
   default_value: field.default_value,
   children: field.children.map(toDraftField),
@@ -148,6 +147,15 @@ export const useRequirementTypeEditorState = ({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
           message: t("requirement_fields.validation.field_name"),
+        });
+        return false;
+      }
+      // 分类没有默认值，未选就保存会被后端拒掉，在这里先拦一次给出可读的提示
+      if (fields.some((field) => !field.field_category)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message: t("requirement_fields.field_categories.required"),
         });
         return false;
       }

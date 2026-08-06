@@ -23,10 +23,9 @@ from plane.app.serializers.requirement import (
 from plane.app.views.base import BaseViewSet
 from plane.db.models import Requirement
 from plane.utils.requirement import (
+    BUILTIN_COLUMNS,
     RequirementBatchConflict,
-    builtin_ids_from_specs,
     filter_requirement_row_ids,
-    split_builtin_values,
 )
 
 
@@ -110,6 +109,19 @@ class BaseRequirementRowViewSet(BaseViewSet):
         if requirement_type_id:
             queryset = queryset.filter(requirement_type_id=requirement_type_id)
 
+        # 按 id 直取：父项选择器要回显一个可能不在当前页、也不在搜索结果里的行。
+        # 走列表入口而不是单独的 retrieve —— 这样草稿态自动落到草稿层，作用域也
+        # 已经由 layer.queryset 框好了。
+        raw_ids = request.query_params.get("ids")
+        if raw_ids:
+            try:
+                row_ids = drf_serializers.ListField(
+                    child=drf_serializers.UUIDField()
+                ).run_validation([item for item in raw_ids.split(",") if item])
+            except drf_serializers.ValidationError as exc:
+                return Response({"ids": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(id__in=row_ids)
+
         search = request.query_params.get("search", "")
         if search.strip() or normalized_filters:
             matching_ids = filter_requirement_row_ids(
@@ -144,6 +156,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
             data=request.data,
             context={
                 "owner": owner,
+                "parent_queryset": layer.queryset,
                 "requirement_type_resolver": layer.requirement_type_resolver,
                 "default_requirement_type_id": layer.default_requirement_type_id,
             },
@@ -153,6 +166,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
             with transaction.atomic():
                 row = layer.insert(
                     data=serializer.validated_data["data"],
+                    builtin=serializer.validated_data["builtin"],
                     requirement_type_id=serializer.validated_data["requirement_type_id"],
                     actor=request.user,
                     before_id=serializer.validated_data.get("before_id"),
@@ -187,7 +201,12 @@ class BaseRequirementRowViewSet(BaseViewSet):
         specs = layer.requirement_type_resolver.specs(row_requirement_type_id)
         serializer = RequirementUpdateSerializer(
             data=request.data,
-            context={"owner": owner, "fields": specs},
+            context={
+                "owner": owner,
+                "fields": specs,
+                "parent_queryset": layer.queryset,
+                "row_id": pk,
+            },
         )
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -206,18 +225,14 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
-            columns, custom_data = split_builtin_values(
-                serializer.validated_data["data"], builtin_ids_from_specs(specs)
-            )
-            row.title = columns["title"]
-            row.description_html = columns["description_html"]
-            row.data = custom_data
+            for column, value in serializer.validated_data["builtin"].items():
+                setattr(row, column, value)
+            row.data = serializer.validated_data["data"]
             row.version += 1
             row.updated_by = request.user
             row.save(
                 update_fields=[
-                    "title",
-                    "description_html",
+                    *BUILTIN_COLUMNS,
                     "data",
                     "version",
                     "updated_at",
@@ -284,6 +299,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
                 data=request.data,
                 context={
                     "owner": owner,
+                    "parent_queryset": layer.queryset,
                     "requirement_type_resolver": layer.requirement_type_resolver,
                     "default_requirement_type_id": layer.default_requirement_type_id,
                     # 每行按自己绑定的需求类型校验

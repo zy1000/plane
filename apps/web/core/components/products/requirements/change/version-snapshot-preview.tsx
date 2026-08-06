@@ -4,11 +4,18 @@
  * 复用明细网格的二级表头与值渲染，但去掉勾选框列和操作列（快照不可编辑），
  * 分页口径与明细网格一致（20 / 50 / 100），行数据由服务端对快照 JSON 切片而来。
  */
+import { useCallback, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementChangeSnapshot, TRequirementField } from "@plane/types";
 import { CustomSelect, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
+import {
+  BuiltinCellValue,
+  REQUIREMENT_BUILTIN_COLUMNS,
+} from "@/components/requirements/requirement-builtin-fields";
+import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import {
   getFormRows,
   getMaxFormRows,
@@ -56,6 +63,16 @@ export function VersionSnapshotPreview(props: TProps) {
   const currentPage = Number(prevCursor?.split(":")[1] ?? -1) + 2;
   const pageStart = (Math.max(currentPage, 1) - 1) * perPage + 1;
   const groupCellClass = "border-b border-b-subtle";
+  // 快照里的父项同样只有 UUID，本页快照凑不齐的批量取一次
+  const { productId } = useParams();
+  const parentTitles = useRequirementTitles({
+    workspaceSlug,
+    entityKind: "product",
+    entityId: productId ?? "",
+    knownRows: rows,
+    parentIds: useMemo(() => rows.map((row) => row.parent_id), [rows]),
+  });
+  const resolveParentTitle = useCallback((parentId: string) => parentTitles[parentId], [parentTitles]);
 
   return (
     <div className="flex min-w-0 flex-col">
@@ -76,13 +93,35 @@ export function VersionSnapshotPreview(props: TProps) {
       ) : (
         <div className="overflow-auto">
           <table className="w-max min-w-full border-collapse text-left">
-            <RequirementGridHeader rootFields={rootFields} showActionGutter={false} />
+            <RequirementGridHeader
+              rootFields={rootFields}
+              showActionGutter={false}
+              builtinHeaders={REQUIREMENT_BUILTIN_COLUMNS.map((column) => ({
+                key: column.key,
+                className: column.width,
+                content: t(column.labelKey),
+              }))}
+            />
             {rows.map((row) => {
               const totalRows = Math.max(1, getMaxFormRows(row.data, formFields));
               return (
                 <tbody key={row.id}>
                   {Array.from({ length: totalRows }, (_, rowIndex) => (
                     <tr key={`${row.id}-${rowIndex}`} className="bg-surface-1">
+                      {rowIndex === 0 &&
+                        REQUIREMENT_BUILTIN_COLUMNS.map((column) => (
+                          <td
+                            key={column.key}
+                            rowSpan={totalRows}
+                            className={cn("min-w-32 border-r border-subtle px-3 py-2 align-middle", groupCellClass)}
+                          >
+                            <BuiltinCellValue
+                              columnKey={column.key}
+                              values={row}
+                              resolveParentTitle={resolveParentTitle}
+                            />
+                          </td>
+                        ))}
                       {rootFields.flatMap((field) => {
                         if (field.field_type !== "form") {
                           if (rowIndex !== 0) return [];

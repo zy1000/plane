@@ -6,20 +6,26 @@ import type {
   TRequirement,
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
+  TRequirementBuiltinValues,
   TRequirementData,
   TRequirementValue,
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
 import { FileService } from "@/services/file.service";
+import { createEmptyBuiltinValues, pickBuiltinValues } from "./requirement-builtin-fields";
 
 const fileService = new FileService();
 
 export type TRequirementDraftRow = {
   key: string;
   mode: "create" | "update";
+  /** 自定义字段值 */
   data: TRequirementData;
+  /** 八个内置列的值，与 data 平级 */
+  builtin: TRequirementBuiltinValues;
   originalData?: TRequirementData;
+  originalBuiltin?: TRequirementBuiltinValues;
   requirementId?: string;
   clientId?: string;
   version?: number;
@@ -76,7 +82,9 @@ const createDraftRows = (requirements: TRequirement[]): TRequirementDraftRow[] =
     version: requirement.version,
     requirementTypeId: requirement.requirement_type_id,
     data: cloneDeep(requirement.data),
+    builtin: pickBuiltinValues(requirement),
     originalData: cloneDeep(requirement.data),
+    originalBuiltin: pickBuiltinValues(requirement),
     isDeleted: false,
   }));
 
@@ -157,6 +165,7 @@ export const useRequirementGridEditor = ({
   const stageCreate = useCallback(
     ({
       data,
+      builtin,
       beforeId,
       afterId,
       beforeKey,
@@ -165,6 +174,7 @@ export const useRequirementGridEditor = ({
       requirementTypeId,
     }: {
       data?: TRequirementData;
+      builtin?: TRequirementBuiltinValues;
       beforeId?: string;
       afterId?: string;
       beforeKey?: string;
@@ -180,6 +190,9 @@ export const useRequirementGridEditor = ({
         clientId: uuidv4(),
         requirementTypeId: requirementTypeId ?? createRequirementTypeId,
         data: data ? copyRequirementData(data, fields) : createEmptyRequirementData(fields),
+        // 复制行时父项不跟着拷贝：两行互为兄弟，让副本继承同一个父项没问题，但
+        // 复制的是标题与内容，父子关系由用户自己再指
+        builtin: builtin ? { ...builtin } : createEmptyBuiltinValues(),
         isDeleted: false,
         isCopy,
       };
@@ -204,6 +217,19 @@ export const useRequirementGridEditor = ({
     (rowKey: string, updater: (data: TRequirementData) => TRequirementData) => {
       commitDraftRows(
         draftRowsRef.current.map((row) => (row.key === rowKey ? { ...row, data: updater(row.data) } : row))
+      );
+      setSaveError(null);
+      setConflictIds((current) => current.filter((id) => id !== rowKey));
+    },
+    [commitDraftRows]
+  );
+
+  const updateRowBuiltin = useCallback(
+    (rowKey: string, patch: Partial<TRequirementBuiltinValues>) => {
+      commitDraftRows(
+        draftRowsRef.current.map((row) =>
+          row.key === rowKey ? { ...row, builtin: { ...row.builtin, ...patch } } : row
+        )
       );
       setSaveError(null);
       setConflictIds((current) => current.filter((id) => id !== rowKey));
@@ -259,7 +285,8 @@ export const useRequirementGridEditor = ({
         (row) =>
           row.mode === "create" ||
           row.isDeleted ||
-          (row.originalData !== undefined && !isEqual(row.data, row.originalData))
+          (row.originalData !== undefined &&
+            (!isEqual(row.data, row.originalData) || !isEqual(row.builtin, row.originalBuiltin)))
       ),
     [draftRows]
   );
@@ -293,6 +320,7 @@ export const useRequirementGridEditor = ({
         const create = {
           client_id: row.clientId,
           data: row.data,
+          builtin: row.builtin,
           // 标准库不用传（库本身固定了需求类型），产品需求必须传当前视图的类型
           ...(row.requirementTypeId ? { requirement_type_id: row.requirementTypeId } : {}),
         };
@@ -309,12 +337,13 @@ export const useRequirementGridEditor = ({
           row.requirementId &&
           row.version &&
           row.originalData !== undefined &&
-          !isEqual(row.data, row.originalData)
+          (!isEqual(row.data, row.originalData) || !isEqual(row.builtin, row.originalBuiltin))
       )
       .map((row) => ({
         id: row.requirementId as string,
         version: row.version as number,
         data: row.data,
+        builtin: row.builtin,
       }));
     const deletes = draftRowsRef.current
       .filter((row) => row.mode === "update" && row.isDeleted && row.requirementId && row.version)
@@ -379,6 +408,7 @@ export const useRequirementGridEditor = ({
     startEditing,
     stageCreate,
     updateRowData,
+    updateRowBuiltin,
     stageDelete,
     undoDelete,
     registerPendingAsset,

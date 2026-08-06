@@ -15,11 +15,13 @@ from plane.db.models import (
     Requirement,
     RequirementApprover,
     RequirementBaseline,
-    RequirementBuiltinFieldKey,
     RequirementChangeTargetKind,
     RequirementDraftRow,
     RequirementField,
+    RequirementFieldCategory,
     RequirementFieldType,
+    RequirementItemStatus,
+    RequirementPriority,
     RequirementType,
     RequirementVersion,
     User,
@@ -30,26 +32,33 @@ from plane.db.models import (
 
 SORT_ORDER_STEP = 1000
 
-# 每个需求类型必有的两个字段：(builtin_key, 名称, 字段类型, 是否必填)
-BUILTIN_FIELD_DEFS = (
-    (RequirementBuiltinFieldKey.TITLE, "标题", RequirementFieldType.TEXT, True),
-    (
-        RequirementBuiltinFieldKey.DESCRIPTION,
-        "描述",
-        RequirementFieldType.RICH_TEXT,
-        False,
-    ),
-)
-
-# 内置字段的值住在 Requirement 的真实列上，不在 data 里 —— 列表排序、关键字搜索、
-# 面包屑与附件路径都要直接拿标题，塞在 JSON 里会让这些路径全部退化成 JSONB 取值。
-BUILTIN_COLUMN_BY_KEY = {
-    RequirementBuiltinFieldKey.TITLE: "title",
-    RequirementBuiltinFieldKey.DESCRIPTION: "description_html",
+# 八个内置字段。它们不是 RequirementField，而是条目表上的真实列 —— 要排序、筛选、
+# 建索引，负责人与父项还要靠外键防悬挂，塞进 data 会让这些能力全部退化成 JSONB 取值。
+#
+# 这里的名字直接是模型属性名（外键用 *_id），因此这份 dict 可以原样当模型 kwargs，
+# 也可以原样作为接口里的平铺键。data 从此只装自定义字段。
+BUILTIN_COLUMN_DEFAULTS = {
+    "title": "",
+    "description_html": None,
+    "status": RequirementItemStatus.DRAFT.value,
+    "priority": RequirementPriority.NONE.value,
+    "assignee_id": None,
+    "start_date": None,
+    "target_date": None,
+    "parent_id": None,
 }
 
-# 列缺省值：split 一定返回完整的两列，调用方可以直接当模型 kwargs 用
-BUILTIN_COLUMN_DEFAULTS = {"title": "", "description_html": None}
+BUILTIN_COLUMNS = tuple(BUILTIN_COLUMN_DEFAULTS)
+
+# 父项在批量拷贝（导入、物化）时需要重映射，单独拎出来
+BUILTIN_PARENT_COLUMN = "parent_id"
+
+# 标准库不展示、导入也不带过去的四列。
+#
+# 标准库是模板：模板不可能知道某个产品里谁负责、什么时候做，「已实现」这种状态放在
+# 模板上更是自相矛盾。真正的麻烦在导入 —— 一旦库条目上留了负责人或截止日期，每一个
+# 从这个库导入的产品需求都会带着它落地，然后要人工一条条清掉。
+LIBRARY_HIDDEN_BUILTIN_COLUMNS = ("status", "assignee_id", "start_date", "target_date")
 
 TITLE_MAX_LENGTH = 255
 
@@ -83,7 +92,7 @@ class RequirementFieldSpec:
     sort_order: float
     config: dict
     default_value: Any = None
-    builtin_key: Optional[str] = None
+    field_category: Optional[str] = None
     requirement_type_id: Optional[str] = None
 
 
@@ -101,7 +110,7 @@ def field_specs_from_models(fields):
             sort_order=field.sort_order,
             config=deepcopy(field.config) or {},
             default_value=deepcopy(field.default_value),
-            builtin_key=field.builtin_key,
+            field_category=field.field_category,
             requirement_type_id=str(field.requirement_type_id),
         )
         for field in fields
@@ -125,7 +134,7 @@ def field_specs_from_tree(tree, *, parent_id=None, requirement_type_id=None):
                 sort_order=node.get("sort_order", (index + 1) * SORT_ORDER_STEP),
                 config=deepcopy(node.get("config") or {}),
                 default_value=deepcopy(node.get("default_value")),
-                builtin_key=node.get("builtin_key"),
+                field_category=node.get("field_category"),
                 requirement_type_id=str(node_type_id) if node_type_id else None,
             )
         )
@@ -157,7 +166,7 @@ def field_tree_from_specs(specs):
             "sort_order": spec.sort_order,
             "config": deepcopy(spec.config),
             "default_value": deepcopy(spec.default_value),
-            "builtin_key": spec.builtin_key,
+            "field_category": spec.field_category,
             "requirement_type_id": spec.requirement_type_id,
             "children": [],
         }
@@ -171,84 +180,98 @@ def field_tree_from_specs(specs):
     return roots
 
 
-# --- 内置字段 <-> 列 -----------------------------------------------------
+# --- 内置字段（条目表上的列） --------------------------------------------
 #
-# 存储上标题与描述是 Requirement 的列，但**接口契约里它们仍然是 data 里的两个
-# 字段 UUID**。拆分只发生在存储边界：写入前 split，读出后 merge。网格、字段校验、
-# 筛选、搜索、变更 diff 因此完全不需要为内置字段分支。
+# 接口契约里内置字段是行上的平铺键，与 data 平级；data 只装自定义字段。
 
 
-def builtin_ids_from_specs(specs):
-    """{builtin_key: field_id}。specs 可以是模型行、spec 或快照 dict。"""
-    ids = {}
-    for spec in specs or []:
-        builtin_key = field_attr(spec, "builtin_key")
-        if builtin_key:
-            ids[builtin_key] = str(field_attr(spec, "id"))
-    return ids
+def builtin_values_from_row(row):
+    """行 -> 内置列 dict，可直接当模型 kwargs（拷贝行时用）。"""
+    return {column: field_attr(row, column) for column in BUILTIN_COLUMNS}
 
 
-def builtin_field_index(requirement_type_ids):
-    """{requirement_type_id: {builtin_key: field_id}}，一次查库。
+def serialize_builtin_values(row):
+    """行 -> JSON 安全的内置列 dict（快照、diff 用）。
 
-    批量写入时每行的需求类型可能不同，逐行查库会退化成 N+1。
+    UUID 与 date 直接塞进 JSONField 会在写入时炸，且两侧类型不一致会让 diff
+    把「没变」判成「变了」，所以统一在这里落成字符串。
     """
-    index = {}
-    requirement_type_ids = [item for item in requirement_type_ids if item]
-    if not requirement_type_ids:
-        return index
-    rows = RequirementField.objects.filter(
-        requirement_type_id__in=requirement_type_ids,
-        builtin_key__isnull=False,
-    ).values_list("requirement_type_id", "builtin_key", "id")
-    for requirement_type_id, builtin_key, field_id in rows:
-        index.setdefault(str(requirement_type_id), {})[builtin_key] = str(field_id)
-    return index
-
-
-def split_builtin_values(data, builtin_ids):
-    """data -> (列值, 剩余的自定义字段 data)。
-
-    列值一定包含全部两列（用缺省值补齐），可以直接展开成模型 kwargs。
-    """
-    payload = deepcopy(data or {})
-    columns = dict(BUILTIN_COLUMN_DEFAULTS)
-    for builtin_key, column in BUILTIN_COLUMN_BY_KEY.items():
-        field_id = (builtin_ids or {}).get(builtin_key)
-        if field_id is None or field_id not in payload:
-            continue
-        value = payload.pop(field_id)
-        if column == "title":
-            columns[column] = "" if value is None else str(value)
+    values = {}
+    for column, value in builtin_values_from_row(row).items():
+        if value is None:
+            values[column] = None
+        elif column in ("start_date", "target_date"):
+            values[column] = value.isoformat() if hasattr(value, "isoformat") else value
+        elif column in ("assignee_id", "parent_id"):
+            values[column] = str(value)
         else:
-            columns[column] = value
-    return columns, payload
+            values[column] = value
+    return values
 
 
-def merge_builtin_values(row, builtin_ids):
-    """列值 -> 按字段 UUID 塞回 data。序列化与快照都走这里。"""
-    merged = deepcopy(field_attr(row, "data") or {})
-    for builtin_key, column in BUILTIN_COLUMN_BY_KEY.items():
-        field_id = (builtin_ids or {}).get(builtin_key)
-        if field_id is not None:
-            merged[field_id] = field_attr(row, column)
-    return merged
+def builtin_values_from_payload(payload):
+    """请求/快照 dict -> 补齐缺省值的完整内置列 dict。
+
+    一定返回全部八列，调用方可以直接展开成模型 kwargs，不用逐列判断有没有传。
+    """
+    payload = payload or {}
+    return {
+        column: payload.get(column, default)
+        for column, default in BUILTIN_COLUMN_DEFAULTS.items()
+    }
+
+
+def _choice_options(choices):
+    return [{"id": value, "label": label} for value, label in choices]
+
+
+def builtin_filter_specs():
+    """把内置列包装成字段形状，喂给搜索与筛选。
+
+    id 用列名而不是 UUID：自定义字段的 key 一定是 UUID，两者不可能撞上，于是
+    筛选条件可以用同一个 field_id 维度同时表达内置列与自定义字段。
+    """
+    common = {"parent_field_id": None, "is_required": False, "is_active": True}
+    return [
+        {"id": "title", "name": "标题", "field_type": RequirementFieldType.TEXT, "config": {}, **common},
+        {
+            "id": "description_html",
+            "name": "描述",
+            "field_type": RequirementFieldType.RICH_TEXT,
+            "config": {},
+            **common,
+        },
+        {
+            "id": "status",
+            "name": "状态",
+            "field_type": RequirementFieldType.SELECT,
+            "config": {"options": _choice_options(RequirementItemStatus.choices)},
+            **common,
+        },
+        {
+            "id": "priority",
+            "name": "优先级",
+            "field_type": RequirementFieldType.SELECT,
+            "config": {"options": _choice_options(RequirementPriority.choices)},
+            **common,
+        },
+        {
+            "id": "assignee_id",
+            "name": "负责人",
+            "field_type": RequirementFieldType.MEMBER,
+            "config": {},
+            **common,
+        },
+        {"id": "start_date", "name": "开始日期", "field_type": RequirementFieldType.TEXT, "config": {}, **common},
+        {"id": "target_date", "name": "截止日期", "field_type": RequirementFieldType.TEXT, "config": {}, **common},
+        {"id": "parent_id", "name": "父项", "field_type": RequirementFieldType.TEXT, "config": {}, **common},
+    ]
 
 
 class RequirementDataLossError(Exception):
     def __init__(self, affected_row_count):
         self.affected_row_count = affected_row_count
         super().__init__("Saving this field structure will remove existing requirement values.")
-
-
-class RequirementBuiltinFieldError(ValueError):
-    """试图删除内置字段，或改它的类型 / 启用状态 / 内置标识。
-
-    单独成类是为了让接口能回一个稳定的 code —— 前端如果是从筛选过的字段列表拼出
-    载荷，很容易漏掉内置字段，那在后端看来就是「删除」，光给一句中文很难排查。
-    """
-
-    code = "REQUIREMENT_BUILTIN_FIELD_LOCKED"
 
 
 class RequirementBatchConflict(Exception):
@@ -400,8 +423,17 @@ def serialize_requirement_type_field_tree(requirement_type):
 
 
 def get_library_field_specs(library):
-    """标准库的字段实时引用所选需求类型，不拷贝。"""
-    return get_requirement_type_field_specs(library.requirement_type)
+    """标准库的字段实时引用所选需求类型，不拷贝。
+
+    只取标准字段 —— 数据字段是产品需求录入/导入时才填的东西，标准库不展示它，
+    这里是这条规则的唯一执行点（网格表头与写入校验都走 specs）。八个内置字段
+    不受影响，标准库照样有。
+    """
+    return [
+        spec
+        for spec in get_requirement_type_field_specs(library.requirement_type)
+        if spec.field_category == RequirementFieldCategory.STANDARD
+    ]
 
 
 def serialize_library_field_tree(library):
@@ -482,10 +514,6 @@ def requirement_types_field_payload_from_specs(requirement_type_ids, specs_by_ty
                 "id": requirement_type_id,
                 "name": names.get(requirement_type_id, ""),
                 "fields": field_tree_from_specs(specs),
-                # 默认视图要跨类型对齐标题/描述两列，而各类型的字段 UUID 不同
-                "builtin_field_ids": {
-                    spec.builtin_key: spec.id for spec in specs if spec.builtin_key
-                },
             }
         )
     return payload
@@ -526,52 +554,6 @@ def requirement_grid_expected_updated_at(*, owner, requirement_type_ids):
             ).values_list("updated_at", flat=True)
         )
     return max(stamp for stamp in stamps if stamp is not None)
-
-
-def ensure_builtin_fields(*, requirement_type, actor=None):
-    """保证需求类型拥有标题与描述两个内置字段。幂等，类型创建时调用。"""
-    existing = set(
-        RequirementField.objects.filter(
-            requirement_type=requirement_type, builtin_key__isnull=False
-        ).values_list("builtin_key", flat=True)
-    )
-    missing = [item for item in BUILTIN_FIELD_DEFS if item[0] not in existing]
-    if not missing:
-        return
-
-    offset = len(missing) * SORT_ORDER_STEP
-    shifted = []
-    for index, field in enumerate(
-        RequirementField.objects.filter(
-            requirement_type=requirement_type,
-            parent_field__isnull=True,
-            builtin_key__isnull=True,
-        ).order_by("sort_order", "created_at", "id")
-    ):
-        field.sort_order = offset + (index + 1) * SORT_ORDER_STEP
-        shifted.append(field)
-    if shifted:
-        RequirementField.objects.bulk_update(shifted, ["sort_order"])
-
-    RequirementField.objects.bulk_create(
-        [
-            RequirementField(
-                requirement_type=requirement_type,
-                name=name,
-                field_type=field_type,
-                is_required=is_required,
-                is_active=True,
-                sort_order=(index + 1) * SORT_ORDER_STEP,
-                config={},
-                default_value=None,
-                builtin_key=builtin_key,
-                created_by=actor,
-            )
-            for index, (builtin_key, name, field_type, is_required) in enumerate(
-                missing
-            )
-        ]
-    )
 
 
 def _clean_requirement_data_for_fields(data, removed_fields):
@@ -724,14 +706,6 @@ def sync_requirement_type_fields(
             expected_parent_id = parent.id if parent else None
             if field.parent_field_id != expected_parent_id:
                 raise ValueError("Existing fields cannot be moved between field levels.")
-            # 内置字段（标题/描述）是每个需求类型的硬性组成，只允许改名称与说明
-            if field.builtin_key:
-                if field.field_type != payload["field_type"]:
-                    raise RequirementBuiltinFieldError("内置字段不能修改类型。")
-                if not payload["is_active"]:
-                    raise RequirementBuiltinFieldError("内置字段不能停用。")
-            if (payload.get("builtin_key") or None) != (field.builtin_key or None):
-                raise RequirementBuiltinFieldError("内置字段标识不可修改。")
             if field.field_type != payload["field_type"]:
                 data_loss_fields.append(deepcopy(field))
             elif select_config_removes_values(field, payload):
@@ -741,8 +715,6 @@ def sync_requirement_type_fields(
                 )
             submitted_ids.add(field.id)
         else:
-            if payload.get("builtin_key"):
-                raise RequirementBuiltinFieldError("内置字段由系统创建，不能手动新增。")
             field = RequirementField(
                 requirement_type=requirement_type, parent_field=parent
             )
@@ -754,6 +726,10 @@ def sync_requirement_type_fields(
         field.sort_order = (index + 1) * SORT_ORDER_STEP
         field.config = deepcopy(payload.get("config") or {})
         field.default_value = deepcopy(payload.get("default_value"))
+        # 子字段跟着所属表单走，分类不单独提交
+        field.field_category = (
+            parent.field_category if parent else payload["field_category"]
+        )
         field.full_clean(exclude=["created_by", "updated_by"])
         if field._state.adding and actor is not None:
             field.created_by = actor
@@ -773,8 +749,6 @@ def sync_requirement_type_fields(
     deleted_fields = [
         field for field_id, field in existing_fields.items() if field_id not in submitted_ids
     ]
-    if any(field.builtin_key for field in deleted_fields):
-        raise RequirementBuiltinFieldError("内置字段不能删除。")
 
     cleanup_fields_by_id = {
         field.id: field for field in [*deleted_fields, *data_loss_fields]
@@ -820,6 +794,7 @@ def insert_requirement_row(
     scope,
     new_row,
     data,
+    builtin,
     requirement_type_id,
     actor=None,
     before_id=None,
@@ -828,7 +803,7 @@ def insert_requirement_row(
     """在指定位置插入一行需求并重排整列 sort_order。
 
     model / scope / new_row 三个参数让正式表与草稿表共用同一套插入与重排语义。
-    传入的 data 是**合并态**（含内置字段 UUID），落库前在这里拆成列。
+    data 只装自定义字段，builtin 是八个内置列的完整 dict。
     """
     if before_id and after_id:
         raise ValueError("Only one insertion anchor can be provided.")
@@ -852,13 +827,9 @@ def insert_requirement_row(
     else:
         insert_at = len(existing)
 
-    builtin_ids = builtin_field_index([requirement_type_id]).get(
-        str(requirement_type_id), {}
-    )
-    columns, custom_data = split_builtin_values(data, builtin_ids)
     row = new_row(
-        data=custom_data,
-        columns=columns,
+        data=deepcopy(data or {}),
+        columns=builtin_values_from_payload(builtin),
         sort_order=(insert_at + 1) * SORT_ORDER_STEP,
         actor=actor,
         requirement_type_id=requirement_type_id,
@@ -913,6 +884,7 @@ def insert_baseline_requirement(
     *,
     baseline,
     data,
+    builtin,
     requirement_type_id,
     actor=None,
     before_id=None,
@@ -925,6 +897,7 @@ def insert_baseline_requirement(
             product=baseline.product, project=baseline.project
         ),
         data=data,
+        builtin=builtin,
         requirement_type_id=requirement_type_id,
         actor=actor,
         before_id=before_id,
@@ -936,6 +909,7 @@ def insert_library_item(
     *,
     library,
     data,
+    builtin,
     requirement_type_id=None,
     actor=None,
     before_id=None,
@@ -946,6 +920,7 @@ def insert_library_item(
         scope={"library": library},
         new_row=_new_library_item(library),
         data=data,
+        builtin=builtin,
         requirement_type_id=library.requirement_type_id,
         actor=actor,
         before_id=before_id,
@@ -967,7 +942,7 @@ def save_requirement_row_batch(
     """批量保存需求行的新增/修改/删除，并保持 sort_order 连续。
 
     正式表与草稿表共用这份实现，因此两条路径的响应形状完全一致，前端的网格无需
-    为草稿态做任何分支。creates/updates 里的 data 都是**合并态**，落库前统一拆列。
+    为草稿态做任何分支。creates/updates 里 data 只装自定义字段，内置列在 builtin。
 
     hard_delete 供草稿层使用：草稿行的 UUID 会在物化时复用为正式表主键，也会
     在重新「编辑」时被再次克隆，所以软删除留下的行会撞上 id 的唯一约束。
@@ -1021,25 +996,13 @@ def save_requirement_row_batch(
     if conflicts:
         raise RequirementBatchConflict(conflicts)
 
-    # 更新行沿用行上已绑定的类型（绑定后不可变），新增行用载荷里给的类型
-    builtin_index = builtin_field_index(
-        {rows_by_id[item["id"]].requirement_type_id for item in updates}
-        | {item.get("requirement_type_id") for item in creates}
-    )
-
-    def split_for(requirement_type_id, data):
-        return split_builtin_values(
-            data, builtin_index.get(str(requirement_type_id), {})
-        )
-
     now = timezone.now()
     updated_rows = []
     for item in updates:
         row = rows_by_id[item["id"]]
-        columns, custom_data = split_for(row.requirement_type_id, item["data"])
-        row.title = columns["title"]
-        row.description_html = columns["description_html"]
-        row.data = custom_data
+        for column, value in builtin_values_from_payload(item.get("builtin")).items():
+            setattr(row, column, value)
+        row.data = deepcopy(item["data"] or {})
         row.version += 1
         row.updated_at = now
         row.updated_by = actor
@@ -1048,8 +1011,7 @@ def save_requirement_row_batch(
         model.objects.bulk_update(
             updated_rows,
             [
-                "title",
-                "description_html",
+                *BUILTIN_COLUMNS,
                 "data",
                 "version",
                 "updated_at",
@@ -1073,12 +1035,9 @@ def save_requirement_row_batch(
         else:
             insert_at = len(ordered_rows)
 
-        columns, custom_data = split_for(
-            item.get("requirement_type_id"), item["data"]
-        )
         row = new_row(
-            data=custom_data,
-            columns=columns,
+            data=deepcopy(item["data"] or {}),
+            columns=builtin_values_from_payload(item.get("builtin")),
             sort_order=(insert_at + 1) * SORT_ORDER_STEP,
             actor=actor,
             requirement_type_id=item.get("requirement_type_id"),
@@ -1128,12 +1087,16 @@ def save_baseline_requirement_batch(
 
 
 def build_library_import_creates(*, library, item_ids, before_id=None, after_id=None):
-    """把选中的库条目整理成 save_requirement_row_batch 认识的 creates 列表。
+    """把选中的库条目整理成 (creates, 源父项映射)。
 
-    data 走合并态深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全
-    一致，不做任何重映射；标题与描述也就顺着内置字段 UUID 一起带过去了。只顺手
-    裁掉不属于当前字段集的残留 key（字段后来被删过）。
+    data 直接深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全一致，
+    不做任何重映射；只顺手裁掉不属于当前字段集的残留 key（字段后来被删过）。
+    内置列里只带标题、描述、优先级 —— 执行期四列（状态/负责人/起止日期）拍回缺省
+    值，标准库根本不展示它们，历史数据里若有残留也不该跟着漏进产品需求。父项先置空，
+    等新行落库后再按 client_id 重映射。
     这里**不重跑必填校验**：库条目本来就允许留空，导入不该因此失败。
+
+    client_id 直接用库条目自己的 id —— 导入结束后要靠它把父项接回同批的新行。
     """
     items_by_id = {
         item.id: item
@@ -1146,37 +1109,73 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
         raise ValueError("One or more library items were not found.")
 
     specs = get_library_field_specs(library)
-    builtin_ids = builtin_ids_from_specs(specs)
-    return [
-        {
-            "client_id": uuid4(),
-            "data": prune_requirement_data_to_fields(
-                merge_builtin_values(items_by_id[item_id], builtin_ids), specs
-            ),
-            "requirement_type_id": library.requirement_type_id,
-            **({"before_id": before_id} if before_id else {}),
-            **({"after_id": after_id} if after_id else {}),
-        }
-        for item_id in item_ids
-    ]
+    creates = []
+    parent_by_client_id = {}
+    for item_id in item_ids:
+        item = items_by_id[item_id]
+        builtin = builtin_values_from_row(item)
+        parent_by_client_id[item_id] = builtin[BUILTIN_PARENT_COLUMN]
+        builtin[BUILTIN_PARENT_COLUMN] = None
+        for column in LIBRARY_HIDDEN_BUILTIN_COLUMNS:
+            builtin[column] = BUILTIN_COLUMN_DEFAULTS[column]
+        creates.append(
+            {
+                "client_id": item_id,
+                "data": prune_requirement_data_to_fields(deepcopy(item.data), specs),
+                "builtin": builtin,
+                "requirement_type_id": library.requirement_type_id,
+                **({"before_id": before_id} if before_id else {}),
+                **({"after_id": after_id} if after_id else {}),
+            }
+        )
+    return creates, parent_by_client_id
+
+
+def remap_imported_parents(*, model, created_rows, parent_by_client_id):
+    """把导入进来的行的父项接到同一批的新行上。
+
+    只在本批内部重映射：源条目的父项没被一起选中时保持为空 —— 让产品需求的行指回
+    标准库的行会把两个作用域串到一起，父项链上溯就跨出了自己的归属。
+    """
+    new_id_by_client_id = {client_id: row.id for client_id, row in created_rows}
+    changed = []
+    for client_id, row in created_rows:
+        source_parent_id = parent_by_client_id.get(client_id)
+        if source_parent_id is None:
+            continue
+        new_parent_id = new_id_by_client_id.get(source_parent_id)
+        if new_parent_id is None:
+            continue
+        row.parent_id = new_parent_id
+        changed.append(row)
+    if changed:
+        model.objects.bulk_update(changed, ["parent_id"])
+    return changed
 
 
 def import_library_items(
     *, baseline, library, item_ids, actor=None, before_id=None, after_id=None
 ):
     """把标准库条目导入基线管辖的正式表。"""
-    return save_baseline_requirement_batch(
+    creates, parent_by_client_id = build_library_import_creates(
+        library=library,
+        item_ids=item_ids,
+        before_id=before_id,
+        after_id=after_id,
+    )
+    created_rows, updated_rows, deleted_ids = save_baseline_requirement_batch(
         baseline=baseline,
-        creates=build_library_import_creates(
-            library=library,
-            item_ids=item_ids,
-            before_id=before_id,
-            after_id=after_id,
-        ),
+        creates=creates,
         updates=[],
         deletes=[],
         actor=actor,
     )
+    remap_imported_parents(
+        model=Requirement,
+        created_rows=created_rows,
+        parent_by_client_id=parent_by_client_id,
+    )
+    return created_rows, updated_rows, deleted_ids
 
 
 def save_library_item_batch(
@@ -1302,28 +1301,28 @@ def filter_requirement_row_ids(
     fields 接受任意字段来源（模型行 / spec / dict），rows 接受任意需求行序列，
     因此正式表与草稿表共用同一套搜索与筛选语义。
 
-    行数据一律先合并回内置字段 UUID 再比对，标题与描述因此和自定义字段走完全
-    相同的搜索与筛选路径，不需要任何特例分支。
+    内置列在这里被包装成一组「伪字段」（id 就是列名，不是 UUID，与自定义字段的
+    key 天然不撞），行数据也按同样的 key 摊平，于是标题、状态、负责人这些和自定义
+    字段走完全相同的搜索与筛选路径，不需要任何特例分支。
     """
     filters = filters or []
     fields = list(fields)
     rows = list(rows)
-    fields_by_id = {str(field_attr(field, "id")): field for field in fields}
+    builtin_specs = builtin_filter_specs()
+    fields_by_id = {spec["id"]: spec for spec in builtin_specs}
+    fields_by_id.update({str(field_attr(field, "id")): field for field in fields})
 
     def row_fields(row):
         if fields_by_requirement_type is None:
-            return fields
-        return fields_by_requirement_type.get(str(row.requirement_type_id), [])
+            own = fields
+        else:
+            own = fields_by_requirement_type.get(str(row.requirement_type_id), [])
+        # 内置列每一行都有，与需求类型无关
+        return [*builtin_specs, *own]
 
-    builtin_ids_cache = {}
-
-    def merged_data(row):
-        key = str(row.requirement_type_id)
-        if key not in builtin_ids_cache:
-            builtin_ids_cache[key] = builtin_ids_from_specs(row_fields(row))
-        return merge_builtin_values(row, builtin_ids_cache[key])
-
-    data_by_row = {row.id: merged_data(row) for row in rows}
+    data_by_row = {
+        row.id: {**serialize_builtin_values(row), **(row.data or {})} for row in rows
+    }
 
     member_ids = set()
     for row in rows:

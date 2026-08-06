@@ -92,7 +92,8 @@ export const ChangedFieldCorner = () => (
   />
 );
 
-const RequirementMemberValue = observer(function RequirementMemberValue({ value }: { value: unknown }) {
+/** 成员 ID -> 头像 + 昵称。自定义的 member 字段与内置的负责人列共用 */
+export const RequirementMemberValue = observer(function RequirementMemberValue({ value }: { value: unknown }) {
   const { getUserDetails } = useMember();
   if (typeof value !== "string") return null;
   const member = getUserDetails(value);
@@ -302,12 +303,18 @@ export const RequirementGridHeader = ({
   rootFields,
   showActionGutter,
   leadingHeader,
+  builtinHeaders,
   extraHeaders,
   trailingHeader,
 }: {
   rootFields: TRequirementField[];
   showActionGutter: boolean;
   leadingHeader?: { className: string; content: React.ReactNode };
+  /**
+   * 内置列的表头，恒排在自定义字段列之前。内置列永远是单列，不参与表单字段的
+   * 二级表头跨列逻辑，所以只跟着 spanRows 走。
+   */
+  builtinHeaders?: { key: string; className?: string; content: React.ReactNode }[];
   /** 字段列之后、操作列之前的附加列（产品需求的「变更 / 最后变更于」） */
   extraHeaders?: { key: string; className: string; content: React.ReactNode }[];
   trailingHeader?: { className: string; content: React.ReactNode };
@@ -325,6 +332,15 @@ export const RequirementGridHeader = ({
             {leadingHeader.content}
           </th>
         )}
+        {builtinHeaders?.map((header) => (
+          <th
+            key={header.key}
+            rowSpan={spanRows}
+            className={cn("min-w-32 border-r border-subtle px-3 py-2.5 align-middle text-primary", header.className)}
+          >
+            {header.content}
+          </th>
+        ))}
         {rootFields.map((field) =>
           field.field_type === "form" ? (
             <th

@@ -13,7 +13,6 @@ from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.mixins import (
     RequirementTypeResolver,
     RowLayer,
-    builtin_ids_by_type,
 )
 from plane.app.views.requirement.row_base import BaseRequirementRowViewSet
 from plane.db.models import Requirement, RequirementLibrary
@@ -94,11 +93,7 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
                     "sort_order", "created_at", "id"
                 ),
                 serializer_class=RequirementSerializer,
-                serializer_context={
-                    "builtin_field_ids_by_type": builtin_ids_by_type(
-                        fields_by_requirement_type
-                    ),
-                },
+                serializer_context={},
                 requirement_type_ids=[owner.requirement_type_id],
                 fields=fields,
                 fields_by_requirement_type=fields_by_requirement_type,

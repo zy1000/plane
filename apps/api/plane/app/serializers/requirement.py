@@ -10,22 +10,25 @@ from plane.db.models import (
     Requirement,
     RequirementApprovalType,
     RequirementBaseline,
-    RequirementBuiltinFieldKey,
     RequirementChangeStatus,
     RequirementDraftRow,
+    RequirementFieldCategory,
     RequirementFieldType,
+    RequirementItemStatus,
+    RequirementPriority,
     User,
 )
 from plane.utils.content_validator import validate_html_content
 from plane.utils.product import can_edit_product_requirements
 from plane.utils.requirement import (
+    BUILTIN_COLUMNS,
     TITLE_MAX_LENGTH,
-    builtin_field_index,
+    builtin_filter_specs,
+    builtin_values_from_payload,
     field_attr,
     get_requirement_eligible_user_ids,
     get_requirement_select_mode,
     get_requirement_select_options,
-    merge_builtin_values,
     replace_requirement_approvers,
 )
 
@@ -353,9 +356,11 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(required=False, default=True)
     config = serializers.DictField(required=False, default=dict)
     default_value = serializers.JSONField(required=False, allow_null=True)
-    # 让前端能原样回传字段树；sync_requirement_type_fields 只做一致性校验，从不写它
-    builtin_key = serializers.ChoiceField(
-        choices=RequirementBuiltinFieldKey.choices,
+    # 分类没有默认值：根字段必须明确它进不进标准库，由 RequirementFieldNodeWriteSerializer
+    # 校验。表单子字段跟着父字段走，保存时强制继承，所以这里必须收得下 null ——
+    # 前端的字段树是整棵回传的，新建的子字段在草稿里就是 null。
+    field_category = serializers.ChoiceField(
+        choices=RequirementFieldCategory.choices,
         required=False,
         allow_null=True,
         default=None,
@@ -444,6 +449,10 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if not attrs.get("field_category"):
+            raise serializers.ValidationError(
+                {"field_category": "Pick whether this field is a standard or data field."}
+            )
         field_type = attrs["field_type"]
         children = attrs.get("children") or []
         if field_type != RequirementFieldType.FORM and children:
@@ -625,27 +634,12 @@ def validate_requirement_data(*, owner, data, fields):
         field_key = str(field.id)
         raw_value = data.get(field_key, field.default_value)
         if field.field_type != RequirementFieldType.FORM:
-            value = validate_requirement_leaf_value(
+            canonical[field_key] = validate_requirement_leaf_value(
                 owner=owner,
                 field=field,
                 value=raw_value,
                 enforce_required=field.is_active,
             )
-            # 标题落在 CharField(255) 列上，超长要在这里拦下来 —— 批量保存路径不走
-            # full_clean，漏过去就是数据库层面的 DataError
-            if (
-                field.builtin_key == RequirementBuiltinFieldKey.TITLE
-                and isinstance(value, str)
-                and len(value) > TITLE_MAX_LENGTH
-            ):
-                raise serializers.ValidationError(
-                    {
-                        field_key: (
-                            f"The title cannot exceed {TITLE_MAX_LENGTH} characters."
-                        )
-                    }
-                )
-            canonical[field_key] = value
             continue
 
         rows = raw_value if raw_value is not None else []
@@ -704,6 +698,103 @@ def validate_requirement_data(*, owner, data, fields):
             canonical_rows.append({"id": row_id, "values": canonical_values})
         canonical[field_key] = canonical_rows
     return canonical
+
+
+class RequirementBuiltinWriteSerializer(serializers.Serializer):
+    """一行需求的八个内置字段。
+
+    与 data 平级：data 只装自定义字段，这里只装内置列。字段级的取值合法性交给
+    DRF，跨行/跨表的规则（负责人是不是本工作区的人、父项在不在同一归属下、父项
+    链会不会成环）放在 validate_requirement_builtin_values。
+    """
+
+    title = serializers.CharField(
+        max_length=TITLE_MAX_LENGTH, allow_blank=True, required=False, default=""
+    )
+    description_html = serializers.CharField(
+        allow_blank=True, allow_null=True, required=False, default=None
+    )
+    status = serializers.ChoiceField(
+        choices=RequirementItemStatus.choices,
+        required=False,
+        default=RequirementItemStatus.DRAFT,
+    )
+    priority = serializers.ChoiceField(
+        choices=RequirementPriority.choices,
+        required=False,
+        default=RequirementPriority.NONE,
+    )
+    assignee_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    start_date = serializers.DateField(required=False, allow_null=True, default=None)
+    target_date = serializers.DateField(required=False, allow_null=True, default=None)
+    parent_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+    def validate_description_html(self, value):
+        if not value:
+            return value
+        is_valid, error_message, sanitized_html = validate_html_content(value)
+        if not is_valid:
+            raise serializers.ValidationError(
+                error_message or "HTML content is not valid."
+            )
+        return sanitized_html if sanitized_html is not None else value
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date")
+        target_date = attrs.get("target_date")
+        if start_date and target_date and start_date > target_date:
+            raise serializers.ValidationError(
+                {"target_date": "The due date cannot be earlier than the start date."}
+            )
+        return attrs
+
+
+def validate_requirement_builtin_values(*, owner, values, parent_queryset, row_id=None):
+    """校验内置列里那些 DRF 管不到的部分，返回可直接当模型 kwargs 的完整八列。
+
+    parent_queryset 是这一行所在的那一批行（正式表或草稿层，已按归属过滤）——
+    父项只能在这批里选，这样产品需求就不会指到标准库的条目上去。
+    """
+    values = dict(values or {})
+
+    assignee_id = values.get("assignee_id")
+    if assignee_id:
+        eligible_ids = get_requirement_eligible_user_ids(
+            workspace_id=owner.workspace_id,
+            user_ids=[assignee_id],
+        )
+        if assignee_id not in eligible_ids:
+            raise serializers.ValidationError(
+                {"assignee_id": "The selected member is not active in this workspace."}
+            )
+
+    parent_id = values.get("parent_id")
+    if parent_id:
+        if row_id and str(parent_id) == str(row_id):
+            raise serializers.ValidationError(
+                {"parent_id": "A requirement cannot be its own parent."}
+            )
+        # 一次取全这批行的父指针，逐级 get 会在深层级上退化成 N 次查询
+        parent_by_id = {
+            str(item_id): str(item_parent_id) if item_parent_id else None
+            for item_id, item_parent_id in parent_queryset.values_list("id", "parent_id")
+        }
+        if str(parent_id) not in parent_by_id:
+            raise serializers.ValidationError(
+                {"parent_id": "The parent requirement was not found in this scope."}
+            )
+        if row_id:
+            seen = set()
+            cursor = str(parent_id)
+            while cursor is not None and cursor not in seen:
+                if cursor == str(row_id):
+                    raise serializers.ValidationError(
+                        {"parent_id": "This parent would create a cycle."}
+                    )
+                seen.add(cursor)
+                cursor = parent_by_id.get(cursor)
+
+    return builtin_values_from_payload(values)
 
 
 class RequirementBaselineConfigurationWriteSerializer(serializers.Serializer):
@@ -768,27 +859,11 @@ class RequirementConfigurationConflict(Exception):
 
 
 class _RequirementRowSerializerMixin:
-    """把列上的标题与描述合并回 data，让接口契约与存储解耦。
+    """行输出的共同部分。
 
-    前端网格拿到的永远是「data 里以字段 UUID 为 key 的完整一行」，不知道标题与描述
-    其实住在列上。context["builtin_field_ids_by_type"] 给定时直接用（列表页由
-    RowLayer 一次算好），否则按遇到的类型惰性补一次查询。
+    八个内置字段是行上的平铺键，与 data 平级；data 只装自定义字段（key 是字段
+    UUID）。前端因此有两组列：固定的内置列 + 需求类型给的自定义列。
     """
-
-    def _builtin_ids(self, requirement_type_id):
-        key = str(requirement_type_id)
-        cache = self.context.get("builtin_field_ids_by_type")
-        if cache is None:
-            cache = getattr(self, "_builtin_cache", None)
-            if cache is None:
-                cache = self._builtin_cache = {}
-        if key not in cache:
-            cache.update(builtin_field_index([requirement_type_id]))
-            cache.setdefault(key, {})
-        return cache[key]
-
-    def get_data(self, obj):
-        return merge_builtin_values(obj, self._builtin_ids(obj.requirement_type_id))
 
     def get_change_kind(self, obj):
         """相对上一个已发布版本的变更标记，由列表入口按需注解。"""
@@ -801,8 +876,7 @@ ROW_FIELDS = [
     "project_id",
     "library_id",
     "requirement_type_id",
-    "title",
-    "description_html",
+    *BUILTIN_COLUMNS,
     "data",
     "sort_order",
     "version",
@@ -818,7 +892,6 @@ ROW_FIELDS = [
 class RequirementSerializer(_RequirementRowSerializerMixin, BaseSerializer):
     """一条需求条目。"""
 
-    data = serializers.SerializerMethodField()
     change_kind = serializers.SerializerMethodField()
 
     class Meta:
@@ -833,7 +906,6 @@ class RequirementDraftRowSerializer(_RequirementRowSerializerMixin, BaseSerializ
     前端的网格因此不需要为草稿态做任何分支 —— 它看到的始终是同一份契约。
     """
 
-    data = serializers.SerializerMethodField()
     change_kind = serializers.SerializerMethodField()
     product_id = serializers.SerializerMethodField()
     project_id = serializers.SerializerMethodField()
@@ -858,7 +930,23 @@ class RequirementDraftRowSerializer(_RequirementRowSerializerMixin, BaseSerializ
         return None
 
 
-class RequirementCreateSerializer(serializers.Serializer):
+class _RequirementBuiltinWriteMixin:
+    """写入路径共用的内置字段校验。
+
+    context 里要有 owner 与 parent_queryset —— 后者划定父项的可选范围（这一行所在
+    的那一批行），由视图从 RowLayer 传进来。
+    """
+
+    def resolve_builtin(self, attrs, *, row_id=None):
+        return validate_requirement_builtin_values(
+            owner=self.context["owner"],
+            values=attrs.get("builtin") or {},
+            parent_queryset=self.context["parent_queryset"],
+            row_id=row_id,
+        )
+
+
+class RequirementCreateSerializer(_RequirementBuiltinWriteMixin, serializers.Serializer):
     """新增一条需求。
 
     必须指明这行绑定哪个需求类型 —— 字段由类型提供，data 也按该类型的字段校验。
@@ -866,6 +954,7 @@ class RequirementCreateSerializer(serializers.Serializer):
     """
 
     data = serializers.DictField()
+    builtin = RequirementBuiltinWriteSerializer(required=False, default=dict)
     requirement_type_id = serializers.UUIDField(required=False)
     before_id = serializers.UUIDField(required=False, allow_null=True)
     after_id = serializers.UUIDField(required=False, allow_null=True)
@@ -895,10 +984,11 @@ class RequirementCreateSerializer(serializers.Serializer):
             data=attrs["data"],
             fields=resolver.specs(requirement_type_id),
         )
+        attrs["builtin"] = self.resolve_builtin(attrs)
         return attrs
 
 
-class RequirementUpdateSerializer(serializers.Serializer):
+class RequirementUpdateSerializer(_RequirementBuiltinWriteMixin, serializers.Serializer):
     """更新一条需求。
 
     不接受 requirement_type_id —— 行与需求类型的绑定创建后不可变，调用方按行上
@@ -906,6 +996,7 @@ class RequirementUpdateSerializer(serializers.Serializer):
     """
 
     data = serializers.DictField()
+    builtin = RequirementBuiltinWriteSerializer(required=False, default=dict)
     version = serializers.IntegerField(min_value=1)
 
     def validate_data(self, value):
@@ -915,12 +1006,18 @@ class RequirementUpdateSerializer(serializers.Serializer):
             fields=self.context["fields"],
         )
 
+    def validate(self, attrs):
+        attrs["builtin"] = self.resolve_builtin(attrs, row_id=self.context["row_id"])
+        return attrs
+
 
 class RequirementBatchCreateSerializer(RequirementCreateSerializer):
     client_id = serializers.UUIDField()
 
 
-class RequirementBatchUpdateSerializer(serializers.Serializer):
+class RequirementBatchUpdateSerializer(
+    _RequirementBuiltinWriteMixin, serializers.Serializer
+):
     """批量更新的一项：按行自己的需求类型校验 data。
 
     validate_data 看不到同级的 id，所以校验整体放在 validate 里做。
@@ -928,6 +1025,7 @@ class RequirementBatchUpdateSerializer(serializers.Serializer):
 
     id = serializers.UUIDField()
     data = serializers.DictField()
+    builtin = RequirementBuiltinWriteSerializer(required=False, default=dict)
     version = serializers.IntegerField(min_value=1)
 
     def validate(self, attrs):
@@ -944,6 +1042,7 @@ class RequirementBatchUpdateSerializer(serializers.Serializer):
                 requirement_type_id
             ),
         )
+        attrs["builtin"] = self.resolve_builtin(attrs, row_id=attrs["id"])
         return attrs
 
 
@@ -1021,20 +1120,22 @@ class RequirementBatchSaveSerializer(serializers.Serializer):
 
 
 class RequirementFilterSerializer(serializers.Serializer):
-    field_id = serializers.UUIDField()
+    # 不是 UUIDField：内置列用列名当 field_id（"title"、"status"…），与自定义
+    # 字段的 UUID 在同一个维度上表达
+    field_id = serializers.CharField(max_length=64)
     operator = serializers.ChoiceField(
         choices=["contains", "equals", "is_empty", "is_not_empty"]
     )
     value = serializers.JSONField(required=False, allow_null=True)
 
     def _resolve_field(self, field_id):
-        """字段可能是正式表的模型对象，也可能是草稿快照解析出的 spec，用
-        field_attr 一视同仁。调用方（需求列表入口）总是从 RowLayer 取好字段传
-        进来，所以这里只认 context["fields"]。"""
+        """字段可能是正式表的模型对象、草稿快照解析出的 spec，或内置列的伪字段，
+        用 field_attr 一视同仁。调用方（需求列表入口）总是从 RowLayer 取好字段传
+        进来，所以自定义字段这边只认 context["fields"]。"""
         return next(
             (
                 field
-                for field in self.context["fields"]
+                for field in [*builtin_filter_specs(), *self.context["fields"]]
                 if str(field_attr(field, "id")) == str(field_id)
                 and field_attr(field, "field_type") != RequirementFieldType.FORM
             ),
@@ -1047,15 +1148,16 @@ class RequirementFilterSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"field_id": "The filter field was not found."}
             )
+        field_type = field_attr(field, "field_type")
         operator = attrs["operator"]
         if operator in ("contains", "equals") and "value" not in attrs:
             raise serializers.ValidationError({"value": "This field is required."})
         if (
             operator == "contains"
-            and field.field_type
+            and field_type
             not in (RequirementFieldType.TEXT, RequirementFieldType.RICH_TEXT)
             and not (
-                field.field_type == RequirementFieldType.SELECT
+                field_type == RequirementFieldType.SELECT
                 and get_requirement_select_mode(field) == "multiple"
             )
         ):
@@ -1067,7 +1169,7 @@ class RequirementFilterSerializer(serializers.Serializer):
                     )
                 }
             )
-        if field.field_type == RequirementFieldType.SELECT and operator in (
+        if field_type == RequirementFieldType.SELECT and operator in (
             "contains",
             "equals",
         ):

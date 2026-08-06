@@ -29,15 +29,19 @@ from plane.db.models import (
     RequirementStatus,
 )
 from plane.utils.requirement import (
+    BUILTIN_COLUMNS,
+    BUILTIN_PARENT_COLUMN,
     SORT_ORDER_STEP,
     baseline_row_scope,
     build_library_import_creates,
-    field_specs_from_tree,
+    builtin_values_from_payload,
+    builtin_values_from_row,
     get_published_field_tree,
     insert_requirement_row,
+    remap_imported_parents,
     replace_requirement_approvers,
     save_requirement_row_batch,
-    split_builtin_values,
+    serialize_builtin_values,
 )
 
 
@@ -144,13 +148,13 @@ def start_editing(*, baseline, actor=None):
                     id=row.id,
                     draft=draft,
                     requirement_type_id=row.requirement_type_id,
-                    title=row.title,
-                    description_html=row.description_html,
                     data=deepcopy(row.data),
                     sort_order=row.sort_order,
                     version=row.version,
                     last_changed_version=row.last_changed_version,
                     created_by=actor,
+                    # 草稿行复用正式行的 UUID，所以 parent_id 也能原样搬
+                    **builtin_values_from_row(row),
                 )
             )
             if len(pending) >= ROW_BATCH_SIZE:
@@ -255,23 +259,34 @@ def import_draft_library_items(
     *, draft, library, item_ids, actor=None, before_id=None, after_id=None
 ):
     """草稿版的标准库导入，与正式表版共用同一份条目整理逻辑。"""
-    return save_draft_row_batch(
+    creates, parent_by_client_id = build_library_import_creates(
+        library=library,
+        item_ids=item_ids,
+        before_id=before_id,
+        after_id=after_id,
+    )
+    created_rows, updated_rows, deleted_ids = save_draft_row_batch(
         draft=draft,
-        creates=build_library_import_creates(
-            library=library,
-            item_ids=item_ids,
-            before_id=before_id,
-            after_id=after_id,
-        ),
+        creates=creates,
         updates=[],
         deletes=[],
         actor=actor,
     )
+    remap_imported_parents(
+        model=RequirementDraftRow,
+        created_rows=created_rows,
+        parent_by_client_id=parent_by_client_id,
+    )
+    return created_rows, updated_rows, deleted_ids
 
 
-def _row_content(title, description_html, data):
-    """判断「这一行相对上一版有没有变」时比较的内容。"""
-    return (title or "", description_html or "", data or {})
+def _row_content(row):
+    """判断「这一行相对上一版有没有变」时比较的内容。
+
+    内置列走 serialize_builtin_values 而不是直接读属性：正式行给的是 date/UUID
+    对象，比对两边必须落在同一种表示上，否则每次物化都会把没变的行判成变了。
+    """
+    return (serialize_builtin_values(row), row.data or {})
 
 
 def materialize_draft(*, baseline, draft, version_number, actor=None):
@@ -289,12 +304,9 @@ def materialize_draft(*, baseline, draft, version_number, actor=None):
     """
     scope = baseline_row_scope(baseline)
     previous = {
-        row.id: (
-            _row_content(row.title, row.description_html, row.data),
-            row.last_changed_version,
-        )
+        row.id: (_row_content(row), row.last_changed_version)
         for row in Requirement.objects.filter(**scope).only(
-            "id", "title", "description_html", "data", "last_changed_version"
+            "id", *BUILTIN_COLUMNS, "data", "last_changed_version"
         )
     }
     Requirement.all_objects.filter(**scope).delete()
@@ -304,7 +316,7 @@ def materialize_draft(*, baseline, draft, version_number, actor=None):
         "sort_order", "created_at", "id"
     )
     for index, row in enumerate(draft_rows.iterator(chunk_size=ROW_BATCH_SIZE)):
-        content = _row_content(row.title, row.description_html, row.data)
+        content = _row_content(row)
         previous_content, previous_version = previous.get(row.id, (None, None))
         pending.append(
             Requirement(
@@ -313,8 +325,8 @@ def materialize_draft(*, baseline, draft, version_number, actor=None):
                 project_id=baseline.project_id,
                 workspace_id=baseline.workspace_id,
                 requirement_type_id=row.requirement_type_id,
-                title=row.title,
-                description_html=row.description_html,
+                # 草稿行与正式行共用 UUID，parent_id 直接搬过来仍然指向对的那一行
+                **builtin_values_from_row(row),
                 data=deepcopy(row.data),
                 sort_order=(index + 1) * SORT_ORDER_STEP,
                 version=row.version,
@@ -343,20 +355,6 @@ def stamp_initial_versions(*, baseline, version_number):
     )
 
 
-def snapshot_builtin_ids_by_type(snapshot):
-    """从快照冻结的字段树里取出各需求类型的 {builtin_key: field_id}。
-
-    刻意不去实时查类型：快照要能自解释，回滚与版本渲染都只依赖快照自身。
-    """
-    builtin_by_type = {}
-    for spec in field_specs_from_tree((snapshot or {}).get("fields") or []):
-        if spec.builtin_key and spec.requirement_type_id:
-            builtin_by_type.setdefault(spec.requirement_type_id, {})[
-                spec.builtin_key
-            ] = spec.id
-    return builtin_by_type
-
-
 def load_snapshot_into_draft(*, draft, snapshot, actor=None):
     """用给定快照的需求行整体覆盖工作副本（回滚到历史版本时使用）。
 
@@ -364,29 +362,33 @@ def load_snapshot_into_draft(*, draft, snapshot, actor=None):
     回滚不该改写它们，否则 diff 的「变更前」就不再是已发布的内容。
 
     回滚只搬需求行；行上的 requirement_type_id 从快照里取回，字段结构随之自动恢复。
-    快照里的 data 是合并态，这里按快照自己的字段树拆回列。
+    快照里内置列与 data 是平级的，直接取用。
     """
     RequirementDraftRow.all_objects.filter(draft=draft).delete()
-    builtin_by_type = snapshot_builtin_ids_by_type(snapshot)
+    rows = [
+        row
+        for row in ((snapshot or {}).get("requirements") or [])
+        # 快照里没有需求类型就无法确定字段来源，只能跳过
+        if row.get("requirement_type_id")
+    ]
+    # 父项只在快照内部有意义：指向被跳过（或本就不在快照里）的行时置空，
+    # 否则 bulk_create 会撞上外键
+    restorable_ids = {str(row.get("id")) for row in rows if row.get("id")}
     pending = []
-    for index, row in enumerate((snapshot or {}).get("requirements") or []):
-        requirement_type_id = row.get("requirement_type_id")
-        if not requirement_type_id:
-            # 快照里没有这个字段就无法确定字段来源，只能跳过
-            continue
-        columns, custom_data = split_builtin_values(
-            row.get("data"), builtin_by_type.get(str(requirement_type_id), {})
-        )
+    for index, row in enumerate(rows):
+        builtin = builtin_values_from_payload(row)
+        if str(builtin[BUILTIN_PARENT_COLUMN]) not in restorable_ids:
+            builtin[BUILTIN_PARENT_COLUMN] = None
         pending.append(
             RequirementDraftRow(
                 id=row.get("id") or uuid4(),
                 draft=draft,
-                requirement_type_id=requirement_type_id,
-                data=custom_data,
+                requirement_type_id=row["requirement_type_id"],
+                data=deepcopy(row.get("data") or {}),
                 sort_order=(index + 1) * SORT_ORDER_STEP,
                 last_changed_version=row.get("last_changed_version"),
                 created_by=actor,
-                **columns,
+                **builtin,
             )
         )
         if len(pending) >= ROW_BATCH_SIZE:

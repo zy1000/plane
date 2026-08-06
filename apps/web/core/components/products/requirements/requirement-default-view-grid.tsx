@@ -9,29 +9,20 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
-import type {
-  TRequirement,
-  TRequirementData,
-  TRequirementField,
-  TRequirementTypeSchema,
-} from "@plane/types";
+import type { TRequirement, TRequirementData, TRequirementTypeSchema } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
-import {
-  getCurrentPageOffset,
-  LeafValue,
-  MenuRowLabel,
-} from "@/components/requirements/requirement-grid-shared";
+import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
+import { getCurrentPageOffset, MenuRowLabel } from "@/components/requirements/requirement-grid-shared";
 import { copyRequirementData } from "@/components/requirements/use-requirement-grid-editor";
 
 /**
  * 多类型时的默认视图：跨全部需求类型的总览。
  *
- * 只展示每个类型都必有的标题与描述，外加一列「所属类型」。刻意做成只读 —— 在只有
+ * 只展示每行都有的内置标题与描述，外加一列「所属类型」。刻意做成只读 —— 在只有
  * 两列的视图里新增一行，其余必填字段无处可填；要录入就点进对应的类型视图。
  */
 type TProps = {
-  workspaceSlug: string;
   requirementTypes: TRequirementTypeSchema[];
   requirements: TRequirement[];
   totalCount: number;
@@ -56,20 +47,8 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
 };
 
-/** 借标题/描述字段的定义来渲染值，这样富文本、附件等类型的呈现与类型视图完全一致。 */
-const findBuiltinField = (
-  requirementTypes: TRequirementTypeSchema[],
-  requirement: TRequirement,
-  key: "title" | "description"
-): TRequirementField | undefined => {
-  const requirementType = requirementTypes.find((item) => item.id === requirement.requirement_type_id);
-  const fieldId = requirementType?.builtin_field_ids?.[key];
-  return requirementType?.fields.find((field) => field.id === fieldId);
-};
-
 export const RequirementDefaultViewGrid = (props: TProps) => {
   const {
-    workspaceSlug,
     requirementTypes,
     requirements,
     totalCount,
@@ -308,8 +287,6 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
           </thead>
           <tbody>
             {requirements.map((requirement) => {
-              const titleField = findBuiltinField(requirementTypes, requirement, "title");
-              const descriptionField = findBuiltinField(requirementTypes, requirement, "description");
               return (
                 <tr key={requirement.id} className="group/requirement border-b border-subtle hover:bg-layer-1">
                   <td className="border-r border-subtle px-3 py-2 align-middle">
@@ -324,22 +301,10 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   </td>
                   {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
                   <td className="truncate border-r border-subtle px-3 py-2 align-middle">
-                    {titleField ? (
-                      <LeafValue
-                        field={titleField}
-                        value={requirement.title || undefined}
-                        workspaceSlug={workspaceSlug}
-                      />
-                    ) : null}
+                    <BuiltinCellValue columnKey="title" values={requirement} />
                   </td>
                   <td className="truncate border-r border-subtle px-3 py-2 align-middle text-secondary">
-                    {descriptionField ? (
-                      <LeafValue
-                        field={descriptionField}
-                        value={requirement.description_html ?? undefined}
-                        workspaceSlug={workspaceSlug}
-                      />
-                    ) : null}
+                    <BuiltinCellValue columnKey="description_html" values={requirement} />
                   </td>
                   <td className={cn("px-3 py-2 align-middle", !readOnly && "border-r border-subtle")}>
                     <button

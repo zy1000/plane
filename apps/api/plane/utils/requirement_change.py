@@ -44,13 +44,14 @@ from plane.db.models import (
     RequirementVersion,
 )
 from plane.utils.requirement import (
+    BUILTIN_COLUMNS,
     baseline_row_scope,
     field_specs_for_requirement_types,
     field_specs_from_tree,
     field_tree_from_specs,
     get_referenced_requirement_type_ids,
-    merge_builtin_values,
     replace_requirement_approvers,
+    serialize_builtin_values,
 )
 from plane.utils.requirement_draft import (
     baseline_meta_snapshot,
@@ -60,7 +61,6 @@ from plane.utils.requirement_draft import (
     get_draft_baseline_meta,
     load_snapshot_into_draft,
     materialize_draft,
-    snapshot_builtin_ids_by_type,
     stamp_initial_versions,
     start_editing,
 )
@@ -79,6 +79,7 @@ META_KEYS = (
 FIELD_COMPARE_KEYS = (
     "name",
     "field_type",
+    "field_category",
     "is_required",
     "is_active",
     "position",
@@ -95,13 +96,13 @@ class RequirementChangeError(Exception):
         super().__init__(message)
 
 
-def _requirement_row(row, builtin_by_type):
-    """行快照。data 走合并态 —— 标题与描述在这里回到它们的字段 UUID 下。"""
-    builtin_ids = builtin_by_type.get(str(row.requirement_type_id), {})
+def _requirement_row(row):
+    """行快照：八个内置列平铺在顶层，data 只装自定义字段。"""
     return {
         "id": str(row.id),
         "requirement_type_id": str(row.requirement_type_id),
-        "data": merge_builtin_values(row, builtin_ids),
+        **serialize_builtin_values(row),
+        "data": deepcopy(row.data or {}),
         "sort_order": row.sort_order,
     }
 
@@ -118,15 +119,10 @@ def _live_field_tree(*, model, scope):
     return field_tree_from_specs(specs)
 
 
-def _rows_snapshot(queryset, fields):
-    """把一批需求行读成快照列表。分块读，避免千行一次性驻留。
-
-    合并用的内置字段 ID 取自这份 fields —— 已发布态传进来的是冻结字段树，实时查
-    类型会把冻结语义绕过去。
-    """
-    builtin_by_type = snapshot_builtin_ids_by_type({"fields": fields})
+def _rows_snapshot(queryset):
+    """把一批需求行读成快照列表。分块读，避免千行一次性驻留。"""
     return [
-        _requirement_row(row, builtin_by_type)
+        _requirement_row(row)
         for row in queryset.order_by("sort_order", "created_at", "id").iterator(
             chunk_size=ROW_CHUNK_SIZE
         )
@@ -148,9 +144,7 @@ def build_snapshot(baseline, *, fields=None):
     return {
         "baseline": baseline_meta_snapshot(baseline),
         "fields": resolved_fields,
-        "requirements": _rows_snapshot(
-            Requirement.objects.filter(**scope), resolved_fields
-        ),
+        "requirements": _rows_snapshot(Requirement.objects.filter(**scope)),
     }
 
 
@@ -164,9 +158,7 @@ def build_draft_full_snapshot(*, baseline, draft):
     return {
         "baseline": baseline_meta_snapshot(baseline),
         "fields": fields,
-        "requirements": _rows_snapshot(
-            RequirementDraftRow.objects.filter(draft=draft), fields
-        ),
+        "requirements": _rows_snapshot(RequirementDraftRow.objects.filter(draft=draft)),
     }
 
 
@@ -200,7 +192,7 @@ def _flatten_fields(tree):
             "id": spec.id,
             "parent_field_id": spec.parent_field_id,
             "requirement_type_id": spec.requirement_type_id,
-            "builtin_key": spec.builtin_key,
+            "field_category": spec.field_category,
             "name": spec.name,
             "field_type": spec.field_type,
             "is_required": spec.is_required,
@@ -231,19 +223,34 @@ def _root_field_changed(before_value, after_value, field_type):
     return before_value != after_value
 
 
-def _changed_root_field_ids(before_data, after_data, fields_by_id):
-    """行内字段级 + 子表单行级比较，得出这一行里哪些根字段发生了变化。"""
+def _row_compare_values(row):
+    """行快照 -> 参与比较的 {key: value}。
+
+    内置列用列名当 key，自定义字段用字段 UUID —— 两者不可能撞上，于是内置列和
+    自定义字段走同一套字段级 diff，前端的「仅显示变化列」也能覆盖内置列。
+    """
+    row = row or {}
+    return {
+        **{column: row.get(column) for column in BUILTIN_COLUMNS},
+        **(row.get("data") or {}),
+    }
+
+
+def _changed_root_field_ids(before_row, after_row, fields_by_id):
+    """行内字段级 + 子表单行级比较，得出这一行里哪些根字段（含内置列）发生了变化。"""
+    before_values = _row_compare_values(before_row)
+    after_values = _row_compare_values(after_row)
     changed = []
     root_ids = {
         field_id
         for field_id, payload in fields_by_id.items()
         if payload["parent_field_id"] is None
     }
-    for field_id in root_ids.union(set(before_data) | set(after_data)):
+    for field_id in root_ids | set(before_values) | set(after_values):
         field = fields_by_id.get(field_id)
         field_type = field["field_type"] if field else None
         if _root_field_changed(
-            before_data.get(field_id), after_data.get(field_id), field_type
+            before_values.get(field_id), after_values.get(field_id), field_type
         ):
             changed.append(field_id)
     return changed
@@ -334,9 +341,7 @@ def diff_snapshots(before, after):
                 }
             )
             continue
-        changed_roots = _changed_root_field_ids(
-            previous.get("data") or {}, row.get("data") or {}, after_fields
-        )
+        changed_roots = _changed_root_field_ids(previous, row, after_fields)
         if changed_roots:
             changed_field_ids.update(changed_roots)
             items.append(

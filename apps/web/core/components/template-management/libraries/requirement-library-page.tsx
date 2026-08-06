@@ -113,6 +113,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
             <RequirementGrid
               workspaceSlug={workspaceSlug}
               entityId={libraryId ?? ""}
+              entityKind="library"
               expectedUpdatedAt={store.configuration?.expected_updated_at}
               createRequirementTypeId={store.requirementTypeId ?? undefined}
               fields={store.configuration?.fields ?? []}

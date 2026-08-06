@@ -4,7 +4,6 @@ from rest_framework import serializers
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import RequirementField, RequirementFieldType, RequirementType, User
 from plane.utils.requirement import (
-    ensure_builtin_fields,
     get_requirement_eligible_user_ids,
     sync_requirement_type_fields,
 )
@@ -111,15 +110,11 @@ class RequirementTypeSerializer(BaseSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        request = self.context.get("request")
-        actor = getattr(request, "user", None)
-
+        # 新类型的自定义字段为空是正常状态 —— 八个内置字段是条目表上的列，
+        # 每个类型天然就有，不需要在这里生成任何字段行
         requirement_type = RequirementType(**validated_data)
         requirement_type.full_clean(exclude=["created_by", "updated_by"])
         requirement_type.save()
-
-        # 标题与描述是每个需求类型的硬性组成，建类型的同时就补上
-        ensure_builtin_fields(requirement_type=requirement_type, actor=actor)
         return requirement_type
 
     def update(self, instance, validated_data):

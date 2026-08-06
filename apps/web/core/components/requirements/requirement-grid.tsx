@@ -29,6 +29,7 @@ import type {
   TRequirement,
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
+  TRequirementBuiltinKey,
   TRequirementData,
   TRequirementFilter,
   TRequirementValue,
@@ -41,6 +42,13 @@ import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetSrc } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
+import {
+  BuiltinCellEditor,
+  BuiltinCellValue,
+  createEmptyBuiltinValues,
+  getBuiltinColumnsFor,
+  pickBuiltinValues,
+} from "./requirement-builtin-fields";
 import {
   ChangedFieldCorner,
   getCurrentPageOffset,
@@ -59,6 +67,7 @@ import {
   type TRequirementDraftRow,
   useRequirementGridEditor,
 } from "./use-requirement-grid-editor";
+import { useRequirementTitles } from "./use-requirement-titles";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
 
 const CHANGE_KIND_PILL: Record<"created" | "updated", string> = {
@@ -103,6 +112,8 @@ type TProps = {
   workspaceSlug: string;
   /** 这批需求的归属：产品需求传 productId，标准库条目传 libraryId。附件也挂在它上面 */
   entityId: string;
+  /** entityId 指的是哪种归属 —— 父项选择器要按它决定去哪个作用域检索候选行 */
+  entityKind: "product" | "library";
   /**
    * 是否显示「变更 / 最后变更于」两列。只有受基线管辖的产品需求有这个概念，
    * 标准库条目创建即生效，没有「相对上一版」可言。
@@ -349,6 +360,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
   const {
     workspaceSlug,
     entityId,
+    entityKind,
     showChangeColumns = false,
     readOnly = false,
     expectedUpdatedAt,
@@ -387,6 +399,25 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
   const [filterOperator, setFilterOperator] = useState<TRequirementFilter["operator"]>("contains");
   const [filterValue, setFilterValue] = useState("");
   const storageKey = `requirement:columns:${workspaceSlug}:${entityId}${columnStorageId ? `:${columnStorageId}` : ""}`;
+  // 标准库藏掉状态/负责人/起止日期四列 —— 模板里填了没意义，导入时也会被重置
+  const builtinColumns = useMemo(() => getBuiltinColumnsFor(entityKind), [entityKind]);
+  // 父项列存的是 UUID，只读态要换成标题；页内命中不发请求，跨页父项攒成一次批量取
+  const parentTitles = useRequirementTitles({
+    workspaceSlug,
+    entityKind,
+    entityId,
+    knownRows: requirements,
+    parentIds: useMemo(() => requirements.map((item) => item.parent_id), [requirements]),
+  });
+  const resolveParentTitle = useCallback((parentId: string) => parentTitles[parentId], [parentTitles]);
+  // 父项只能在同一归属内选：产品需求找同产品的行，标准库条目找同库的条目
+  const parentScope = useMemo(
+    () =>
+      entityKind === "product"
+        ? { workspaceSlug, productId: entityId }
+        : { workspaceSlug, libraryId: entityId },
+    [entityKind, workspaceSlug, entityId]
+  );
   const [hiddenFieldIds, setHiddenFieldIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -664,6 +695,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
     key: string
   ) => {
     const data = requirementDraft?.data ?? requirement?.data ?? {};
+    const builtin = requirementDraft?.builtin ?? (requirement ? pickBuiltinValues(requirement) : createEmptyBuiltinValues());
     const isEditing = Boolean(requirementDraft);
     const isDeleted = Boolean(requirementDraft?.isDeleted);
     const isConflicted = Boolean(requirementDraft?.requirementId && editor.conflictIds.includes(requirementDraft.requirementId));
@@ -671,7 +703,9 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
       requirementDraft &&
       (requirementDraft.mode === "create" ||
         requirementDraft.isDeleted ||
-        (requirementDraft.originalData !== undefined && !isEqual(requirementDraft.data, requirementDraft.originalData)))
+        (requirementDraft.originalData !== undefined &&
+          (!isEqual(requirementDraft.data, requirementDraft.originalData) ||
+            !isEqual(requirementDraft.builtin, requirementDraft.originalBuiltin))))
     );
     const canAddChild = isEditing && !isDeleted && formFields.some((form) => form.children.length > 0);
     const rawRowCount = getMaxFormRows(data, formFields);
@@ -693,6 +727,15 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
       const currentValue = requirementDraft.data[fieldId];
       if (requirementDraft.mode === "create") return !isEmptyRequirementValue(currentValue);
       return requirementDraft.originalData !== undefined && !isEqual(currentValue, requirementDraft.originalData[fieldId]);
+    };
+    const isBuiltinChanged = (columnKey: TRequirementBuiltinKey) => {
+      if (!requirementDraft || isDeleted) return false;
+      const currentValue = requirementDraft.builtin[columnKey];
+      if (requirementDraft.mode === "create") return !isEmptyRequirementValue(currentValue as TRequirementValue);
+      return (
+        requirementDraft.originalBuiltin !== undefined &&
+        !isEqual(currentValue, requirementDraft.originalBuiltin[columnKey])
+      );
     };
 
     return (
@@ -735,6 +778,36 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                   ) : null}
                 </td>
               )}
+              {/* 内置列恒排在自定义字段之前，且永远是单列，跟着整组行 rowSpan */}
+              {isFirstRow &&
+                builtinColumns.map((column) => (
+                  <td
+                    key={column.key}
+                    rowSpan={totalRows}
+                    className={cn(
+                      "min-w-32 border-r border-subtle px-3 py-2 align-middle",
+                      groupCellClass,
+                      isBuiltinChanged(column.key) && "relative"
+                    )}
+                  >
+                    {isEditing && !isDeleted ? (
+                      <BuiltinCellEditor
+                        columnKey={column.key}
+                        values={builtin}
+                        onChange={(patch) => editor.updateRowBuiltin(key, patch)}
+                        parentScope={parentScope}
+                        rowId={requirementDraft?.requirementId}
+                      />
+                    ) : (
+                      <BuiltinCellValue
+                        columnKey={column.key}
+                        values={builtin}
+                        resolveParentTitle={resolveParentTitle}
+                      />
+                    )}
+                    {isBuiltinChanged(column.key) && <ChangedFieldCorner />}
+                  </td>
+                ))}
               {visibleRootFields.flatMap((field) => {
                 if (field.field_type !== "form") {
                   if (!isFirstRow) return [];
@@ -1361,6 +1434,11 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                   />
                 ),
               }}
+              builtinHeaders={builtinColumns.map((column) => ({
+                key: column.key,
+                className: column.width,
+                content: t(column.labelKey),
+              }))}
               extraHeaders={
                 showChangeColumns
                   ? [

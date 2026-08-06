@@ -240,7 +240,13 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               <h1 className="truncate text-13 font-medium text-primary">
                 {t("workspace_products.navigation.requirements")}
               </h1>
-              {baseline && <RequirementStatusMeta baseline={baseline} className="hidden sm:flex" />}
+              {baseline && (
+                <RequirementStatusMeta
+                  baseline={baseline}
+                  className="hidden sm:flex"
+                  onViewDetail={() => setTab("configuration")}
+                />
+              )}
             </Header.LeftItem>
             <Header.RightItem className="shrink-0 gap-2">
               {activeTab === "configuration" && isEditable && (
@@ -275,12 +281,12 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           <div className="min-w-0 flex-1 self-stretch overflow-x-auto">
             <div className="flex h-full min-w-max items-end gap-1">
               {[
-                { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
                 {
                   key: "configuration" as const,
                   icon: Settings2,
                   label: t("workspace_products.requirements.tabs.configuration"),
                 },
+                { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
                 { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
                 {
                   key: "versions" as const,
@@ -422,7 +428,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             </div>
           ) : activeView.kind === "default" ? (
             <RequirementDefaultViewGrid
-              workspaceSlug={workspaceSlug ?? ""}
               requirementTypes={requirementTypes}
               requirements={store.requirementsPage.results}
               totalCount={store.requirementsPage.total_count ?? 0}
@@ -454,6 +459,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               key={activeView.requirementTypeId}
               workspaceSlug={workspaceSlug ?? ""}
               entityId={productId ?? ""}
+              entityKind="product"
               showChangeColumns
               readOnly={!isEditable}
               expectedUpdatedAt={store.configuration?.expected_updated_at}

@@ -30,8 +30,8 @@ from plane.db.models import (
 )
 from plane.utils.product import can_edit_product_requirements, can_view_product
 from plane.utils.requirement import (
+    BUILTIN_COLUMNS,
     baseline_row_scope,
-    builtin_ids_from_specs,
     field_specs_for_requirement_types,
     field_specs_from_tree,
     get_published_field_tree,
@@ -41,6 +41,7 @@ from plane.utils.requirement import (
     insert_baseline_requirement,
     requirement_grid_expected_updated_at,
     save_baseline_requirement_batch,
+    serialize_builtin_values,
 )
 from plane.utils.requirement_draft import (
     get_draft,
@@ -129,14 +130,6 @@ class RowLayer(NamedTuple):
     annotate_change_kind: object
 
 
-def builtin_ids_by_type(fields_by_requirement_type):
-    """{requirement_type_id: {builtin_key: field_id}}，供序列化时合并列值。"""
-    return {
-        str(requirement_type_id): builtin_ids_from_specs(specs)
-        for requirement_type_id, specs in (fields_by_requirement_type or {}).items()
-    }
-
-
 def resolve_requirement_fields(*, baseline, draft):
     """返回 (requirement_type_ids, 扁平 specs, 按类型分组的 specs, is_frozen)。
 
@@ -170,7 +163,7 @@ def resolve_requirement_fields(*, baseline, draft):
 
 
 def _row_content(row):
-    return (row.title or "", row.description_html or "", row.data or {})
+    return (serialize_builtin_values(row), row.data or {})
 
 
 def _draft_change_kind_annotator(baseline):
@@ -187,7 +180,7 @@ def _draft_change_kind_annotator(baseline):
             row.id: _row_content(row)
             for row in Requirement.objects.filter(
                 id__in=[row.id for row in rows], **baseline_row_scope(baseline)
-            ).only("id", "title", "description_html", "data")
+            ).only("id", *BUILTIN_COLUMNS, "data")
         }
         for row in rows:
             previous = published.get(row.id)
@@ -227,7 +220,6 @@ def resolve_row_layer(*, baseline, draft):
         owner=baseline, requirement_type_ids=requirement_type_ids
     )
     serializer_context = {
-        "builtin_field_ids_by_type": builtin_ids_by_type(fields_by_requirement_type),
         "product_id": baseline.product_id,
         "project_id": baseline.project_id,
     }

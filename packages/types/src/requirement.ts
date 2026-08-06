@@ -13,8 +13,12 @@ export type TRequirementFieldType =
   | "image"
   | "boolean";
 export type TRequirementSelectMode = "single" | "multiple";
-/** 每个需求类型必有的两个字段，前后端都不可删除 */
-export type TRequirementBuiltinFieldKey = "title" | "description";
+/** 自定义字段的分类：标准字段进标准库，数据字段只在产品需求里出现。没有默认值，建字段时必须选 */
+export type TRequirementFieldCategory = "standard" | "data";
+/** 需求条目自己的状态，与基线的 TRequirementStatus（编辑态）是两回事 */
+export type TRequirementItemStatus = "draft" | "in_review" | "confirmed" | "implemented" | "obsolete";
+/** 与工作项优先级取值一致，可直接复用工作项的优先级下拉 */
+export type TRequirementPriority = "urgent" | "high" | "medium" | "low" | "none";
 
 export type TRequirementSelectOption = {
   id: string;
@@ -41,8 +45,28 @@ export type TRequirementValue =
   | TRequirementAssetRef[]
   | TRequirementFormRow[];
 
-/** 一行需求的字段值，key 是字段 UUID */
+/** 一行需求的自定义字段值，key 是字段 UUID。内置字段不在这里，它们平铺在行上 */
 export type TRequirementData = Record<string, TRequirementValue>;
+
+/**
+ * 八个内置字段。每个需求类型都默认包含，不可删除不可编辑；它们是需求行上的独立
+ * 列，不是 RequirementField，所以网格要用两组列渲染：内置列 + 需求类型给的自定义列。
+ */
+export type TRequirementBuiltinValues = {
+  title: string;
+  description_html: string | null;
+  status: TRequirementItemStatus;
+  priority: TRequirementPriority;
+  assignee_id: string | null;
+  /** YYYY-MM-DD */
+  start_date: string | null;
+  /** YYYY-MM-DD */
+  target_date: string | null;
+  /** 同一归属（同产品 / 同标准库）内另一条需求的 id */
+  parent_id: string | null;
+};
+
+export type TRequirementBuiltinKey = keyof TRequirementBuiltinValues;
 
 /** 相对上一个已发布版本的变更标记；null 表示这一行没变 */
 export type TRequirementChangeKind = "created" | "updated";
@@ -50,19 +74,16 @@ export type TRequirementChangeKind = "created" | "updated";
 /**
  * 一条需求。product_id / project_id / library_id 恒有且仅有一个非空。
  *
- * data 是**完整的一行**：内置的标题与描述同样以各自的字段 UUID 为 key 出现在里面
- * （后端存储上它们是独立的列，接口层已经合并好），所以网格不需要为内置字段分支。
- * title / description_html 另外平铺出来，供列表排序与跨类型的默认视图直接取用。
+ * 八个内置字段平铺在行上，data 只装自定义字段（key 是字段 UUID）。两组值在接口层
+ * 是平级的，网格分别用内置列渲染器与自定义列渲染器展示。
  */
-export type TRequirement = {
+export type TRequirement = TRequirementBuiltinValues & {
   id: string;
   product_id: string | null;
   project_id: string | null;
   library_id: string | null;
   /** 定义本行字段的需求类型 */
   requirement_type_id: string;
-  title: string;
-  description_html: string | null;
   data: TRequirementData;
   sort_order: number;
   version: number;
@@ -112,8 +133,8 @@ export type TRequirementField = {
   is_required: boolean;
   is_active: boolean;
   sort_order: number;
-  /** 非 null 时为内置字段：不可删除、类型与启用状态不可更改 */
-  builtin_key: TRequirementBuiltinFieldKey | null;
+  /** 决定这个字段进不进标准库。表单子字段跟随所属表单，后端保存时强制继承 */
+  field_category: TRequirementFieldCategory;
   /** 定义该字段的需求类型 */
   requirement_type_id?: string | null;
   config: {
@@ -126,10 +147,15 @@ export type TRequirementField = {
   children: TRequirementField[];
 };
 
-export type TRequirementFieldDraft = Omit<TRequirementField, "id" | "sort_order" | "children"> & {
+export type TRequirementFieldDraft = Omit<
+  TRequirementField,
+  "id" | "sort_order" | "children" | "field_category"
+> & {
   id?: string;
   client_id?: string;
   sort_order?: number;
+  /** 草稿态允许未选，保存前拦截 —— 分类没有默认值 */
+  field_category: TRequirementFieldCategory | null;
   children: TRequirementFieldDraft[];
 };
 
@@ -138,8 +164,6 @@ export type TRequirementTypeSchema = {
   id: string;
   name: string;
   fields: TRequirementField[];
-  /** 默认视图要跨类型对齐标题/描述两列，而各类型的字段 UUID 不同 */
-  builtin_field_ids: Partial<Record<TRequirementBuiltinFieldKey, string>>;
 };
 
 export type TRequirementBaselineConfiguration = {
@@ -157,6 +181,7 @@ export type TRequirementBaselineConfiguration = {
 export type TRequirementBatchCreate = {
   client_id: string;
   data: TRequirementData;
+  builtin: TRequirementBuiltinValues;
   requirement_type_id?: string;
   before_id?: string;
   after_id?: string;
@@ -165,6 +190,7 @@ export type TRequirementBatchCreate = {
 export type TRequirementBatchUpdate = {
   id: string;
   data: TRequirementData;
+  builtin: TRequirementBuiltinValues;
   version: number;
 };
 
@@ -296,7 +322,7 @@ export type TRequirementSchemaChangeSnapshot = {
   parent_field_id: string | null;
   parent_name: string | null;
   requirement_type_id: string | null;
-  builtin_key: TRequirementBuiltinFieldKey | null;
+  field_category: TRequirementFieldCategory | null;
   name: string;
   field_type: TRequirementFieldType;
   is_required: boolean;
@@ -307,8 +333,8 @@ export type TRequirementSchemaChangeSnapshot = {
   default_value: TRequirementValue;
 };
 
-/** 需求条目组的变更项快照形状；data 是合并态，与网格读到的一行同形 */
-export type TRequirementChangeSnapshot = {
+/** 需求条目组的变更项快照形状：内置列平铺 + data 装自定义字段，与网格读到的一行同形 */
+export type TRequirementChangeSnapshot = TRequirementBuiltinValues & {
   id: string;
   requirement_type_id: string;
   data: TRequirementData;

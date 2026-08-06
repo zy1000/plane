@@ -44,16 +44,38 @@ class RequirementFieldType(models.TextChoices):
     BOOLEAN = "boolean", "布尔值"
 
 
-class RequirementBuiltinFieldKey(models.TextChoices):
-    """每个需求类型都必有的两个字段，不可删除、不可改类型。
+class RequirementItemStatus(models.TextChoices):
+    """需求条目自己的状态，与基线的 RequirementStatus 是两回事。
 
-    它们的**值**不在 Requirement.data 里，而是落在 title / description_html 两个
-    真实列上（见 plane.utils.requirement 的 split/merge 一对函数）。字段行本身仍然
-    存在，网格靠它渲染列头与列序。
+    基线的 status 描述「这份基线正处在编辑/评审/发布的哪一步」，是整份内容的
+    编辑态；这里的 status 描述「这一条需求走到了哪」，是内容本身的属性。
     """
 
-    TITLE = "title", "标题"
-    DESCRIPTION = "description", "描述"
+    DRAFT = "draft", "草稿"
+    IN_REVIEW = "in_review", "评审中"
+    CONFIRMED = "confirmed", "已确认"
+    IMPLEMENTED = "implemented", "已实现"
+    OBSOLETE = "obsolete", "已废弃"
+
+
+class RequirementPriority(models.TextChoices):
+    """取值与 Issue.PRIORITY_CHOICES 对齐，前端可以直接复用工作项的优先级下拉。"""
+
+    URGENT = "urgent", "紧急"
+    HIGH = "high", "高"
+    MEDIUM = "medium", "中"
+    LOW = "low", "低"
+    NONE = "none", "无"
+
+
+class RequirementFieldCategory(models.TextChoices):
+    """自定义字段的分类，决定它在标准库里露不露面。
+
+    内置字段不参与这个分类 —— 它们根本不是 RequirementField，而是条目表上的列。
+    """
+
+    STANDARD = "standard", "标准字段"
+    DATA = "data", "数据字段"
 
 
 class RequirementApprovalType(models.TextChoices):
@@ -104,6 +126,14 @@ class RequirementChangeRequestKind(models.TextChoices):
 #
 # Requirement 一行要么属于某个产品，要么属于某个项目，要么属于某个标准库，三者
 # 必居其一；但无论哪种归属，requirement_type 都必填。
+#
+# 字段分三类：
+#   内置字段 —— 标题、描述、状态、优先级、负责人、开始日期、截止日期、父项。每个需求
+#              类型都默认包含，不可删除不可编辑。它们不是 RequirementField，而是
+#              Requirement / RequirementDraftRow 上的真实列。
+#   标准字段 —— 用户自定义，产品需求与标准库都展示。
+#   数据字段 —— 用户自定义，只有产品需求展示，标准库不展示。
+# 后两类由 RequirementField.field_category 区分。
 #
 # 字段定义（RequirementField）只归需求类型所有。产品需求与需求标准库都不拷贝字段，
 # 而是通过条目上的 requirement_type 外键实时引用类型，因此类型改字段会立刻反映到
@@ -348,30 +378,15 @@ class RequirementField(BaseModel):
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     config = models.JSONField(default=dict, blank=True, verbose_name="字段配置")
     default_value = models.JSONField(null=True, blank=True, verbose_name="默认值")
-    builtin_key = models.CharField(
+    field_category = models.CharField(
         max_length=20,
-        choices=RequirementBuiltinFieldKey.choices,
-        null=True,
-        blank=True,
-        verbose_name="内置字段标识（null 表示普通自定义字段）",
+        choices=RequirementFieldCategory.choices,
+        verbose_name="字段分类（标准字段 / 数据字段）",
     )
 
     class Meta:
         db_table = "requirement_fields"
         ordering = ("sort_order", "created_at", "id")
-        constraints = [
-            # 每个需求类型对每个内置标识只能有一行
-            models.UniqueConstraint(
-                fields=["requirement_type", "builtin_key"],
-                condition=Q(builtin_key__isnull=False, deleted_at__isnull=True),
-                name="req_field_unique_type_builtin_key",
-            ),
-            # 内置字段只能是根字段
-            models.CheckConstraint(
-                check=Q(builtin_key__isnull=True) | Q(parent_field__isnull=True),
-                name="req_field_builtin_must_be_root",
-            ),
-        ]
 
     def __str__(self):
         return f"{self.name} <{self.requirement_type_id}>"
@@ -395,6 +410,11 @@ class RequirementField(BaseModel):
                 raise ValidationError(
                     {"field_type": "表单子字段不能继续使用表单类型。"}
                 )
+            # 子字段跟着所属表单走，不单独分类 —— 保存路径会强制继承，这里兜底
+            if self.field_category != parent_field.field_category:
+                raise ValidationError(
+                    {"field_category": "表单子字段的分类必须与所属表单一致。"}
+                )
 
         if (
             not self._state.adding
@@ -409,14 +429,15 @@ class RequirementField(BaseModel):
 class Requirement(BaseModel):
     """一条需求。要么归属产品/项目（受该作用域的基线管辖），要么归属某个标准库。
 
-    三种归属共用同一张表，因为行结构与读写语义完全一致（title / description_html /
-    data / sort_order / version）。字段定义都来自 requirement_type —— 标准库的条目恒等于
+    三种归属共用同一张表，因为行结构与读写语义完全一致（内置列 / data / sort_order /
+    version）。字段定义都来自 requirement_type —— 标准库的条目恒等于
     library.requirement_type，产品需求则每行各自绑定，从而让一个产品下可以容纳多个需求
     类型的条目。
 
-    data 以字段 UUID 为 key，而字段 UUID 属于需求类型；所以只要两行引用同一个类型，
-    data 就可以直接互相拷贝（标准库条目导入产品需求正是靠这一点，无需重映射）。
-    内置的标题与描述不在 data 里，它们有各自的列。
+    data 只装自定义字段，以字段 UUID 为 key，而字段 UUID 属于需求类型；所以只要两行
+    引用同一个类型，data 就可以直接互相拷贝（标准库条目导入产品需求正是靠这一点，无需
+    重映射）。八个内置字段各有自己的列，不进 data —— 它们要排序、筛选、建索引，还要
+    靠外键保证负责人与父项不悬挂。
     """
 
     workspace = models.ForeignKey(
@@ -458,6 +479,39 @@ class Requirement(BaseModel):
     title = models.CharField(max_length=255, blank=True, default="", verbose_name="需求标题")
     description_html = models.TextField(
         blank=True, null=True, verbose_name="需求描述 HTML"
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=RequirementItemStatus.choices,
+        default=RequirementItemStatus.DRAFT,
+        db_index=True,
+        verbose_name="需求状态",
+    )
+    priority = models.CharField(
+        max_length=30,
+        choices=RequirementPriority.choices,
+        default=RequirementPriority.NONE,
+        db_index=True,
+        verbose_name="优先级",
+    )
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="assigned_requirements",
+        null=True,
+        blank=True,
+        verbose_name="负责人",
+    )
+    start_date = models.DateField(null=True, blank=True, verbose_name="开始日期")
+    target_date = models.DateField(null=True, blank=True, verbose_name="截止日期")
+    # SET_NULL 而不是 CASCADE：删掉父需求不该把子需求一并带走，只是解除层级
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="sub_requirements",
+        null=True,
+        blank=True,
+        verbose_name="父项",
     )
     data = models.JSONField(default=dict, blank=True, verbose_name="自定义字段数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
@@ -588,7 +642,7 @@ class RequirementDraftRow(BaseModel):
     """草稿里的需求条目。结构与 Requirement 一致，归属外键换成草稿。
 
     物化时直接复用这里的 UUID 作为正式表主键，因此 data 里以字段 ID 为 key
-    的结构不需要任何 remap。
+    的结构、以及 parent 指向的行 ID，都不需要任何 remap。
     """
 
     draft = models.ForeignKey(
@@ -606,6 +660,38 @@ class RequirementDraftRow(BaseModel):
     title = models.CharField(max_length=255, blank=True, default="", verbose_name="需求标题")
     description_html = models.TextField(
         blank=True, null=True, verbose_name="需求描述 HTML"
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=RequirementItemStatus.choices,
+        default=RequirementItemStatus.DRAFT,
+        db_index=True,
+        verbose_name="需求状态",
+    )
+    priority = models.CharField(
+        max_length=30,
+        choices=RequirementPriority.choices,
+        default=RequirementPriority.NONE,
+        db_index=True,
+        verbose_name="优先级",
+    )
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="assigned_requirement_draft_rows",
+        null=True,
+        blank=True,
+        verbose_name="负责人",
+    )
+    start_date = models.DateField(null=True, blank=True, verbose_name="开始日期")
+    target_date = models.DateField(null=True, blank=True, verbose_name="截止日期")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="sub_draft_rows",
+        null=True,
+        blank=True,
+        verbose_name="父项",
     )
     data = models.JSONField(default=dict, blank=True, verbose_name="自定义字段数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")

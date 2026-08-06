@@ -9,7 +9,6 @@ import {
   FormInput,
   GripVertical,
   ListChecks,
-  Lock,
   MoreHorizontal,
   PanelRightOpen,
   Paperclip,
@@ -27,9 +26,15 @@ import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirementFieldDraft, TRequirementFieldType, TRequirementSelectOption } from "@plane/types";
+import type {
+  TRequirementFieldCategory,
+  TRequirementFieldDraft,
+  TRequirementFieldType,
+  TRequirementSelectOption,
+} from "@plane/types";
 import { CustomMenu, Sortable, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { RequirementBuiltinFieldSection } from "@/components/requirements/requirement-builtin-field-section";
 import {
   getRequirementSelectMode,
   getRequirementSelectOptions,
@@ -164,7 +169,8 @@ const createField = (
   field_type: type,
   is_required: false,
   is_active: true,
-  builtin_key: null,
+  // 分类没有默认值：必须在字段设置里选完才能保存
+  field_category: null,
   config:
     type === "select"
       ? {
@@ -175,9 +181,6 @@ const createField = (
   default_value: null,
   children: [],
 });
-
-/** 内置字段（标题/描述）不可删除、类型与启用状态不可更改。 */
-export const isBuiltinRequirementField = (field: TRequirementFieldDraft) => Boolean(field.builtin_key);
 
 const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequirementFieldDraft => {
   const config =
@@ -191,8 +194,6 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
     ...field,
     id: undefined,
     client_id: uuidv4(),
-    // 复制出来的是普通字段：内置标识全需求类型唯一，不能跟着复制
-    builtin_key: null,
     name: `${field.name}${suffix}`,
     config,
     default_value: field.field_type === "select" ? (getRequirementSelectMode(field) === "multiple" ? [] : null) : null,
@@ -301,20 +302,30 @@ function FieldLibrary(props: TFieldLibraryProps) {
   );
 }
 
-function FieldStateBadges({ field, isSelected }: { field: TRequirementFieldDraft; isSelected: boolean }) {
+function FieldStateBadges({
+  field,
+  isSelected,
+  isChild = false,
+}: {
+  field: TRequirementFieldDraft;
+  isSelected: boolean;
+  isChild?: boolean;
+}) {
   const { t } = useTranslation();
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      {isBuiltinRequirementField(field) && (
-        <span
-          className="inline-flex items-center gap-1 rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary"
-          title={t("requirement_fields.builder.builtin_locked_hint")}
-        >
-          <Lock className="size-2.5" />
-          {t("requirement_fields.builder.builtin_badge")}
-        </span>
-      )}
+      {/* 子字段跟随所属表单，不单独标分类 */}
+      {!isChild &&
+        (field.field_category ? (
+          <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
+            {t(`requirement_fields.field_categories.${field.field_category}`)}
+          </span>
+        ) : (
+          <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-10 font-medium text-warning-primary">
+            {t("requirement_fields.field_categories.label")}
+          </span>
+        ))}
       {field.is_required && (
         <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-10 font-medium text-danger-primary">
           {t("requirement_fields.fields.required")}
@@ -359,7 +370,6 @@ function RequirementFieldRow(props: TFieldRowProps) {
   const { t } = useTranslation();
   const Icon = FIELD_ICONS[field.field_type];
   const isForm = field.field_type === "form" && !isChild;
-  const isBuiltin = isBuiltinRequirementField(field);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const fieldTypeDescription =
     field.field_type === "select"
@@ -449,7 +459,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
             {!compact && <span className="mt-0.5 block truncate text-11 text-secondary">{fieldTypeDescription}</span>}
           </span>
         </button>
-        {!compact && <FieldStateBadges field={field} isSelected={isSelected} />}
+        {!compact && <FieldStateBadges field={field} isSelected={isSelected} isChild={isChild} />}
         {compact && isForm && (
           <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
             {t("requirement_fields.field_types.form")}
@@ -488,7 +498,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
             <CustomMenu.MenuItem onClick={onDuplicate}>
               <MenuRowLabel icon={Copy} label={t("requirement_fields.builder.duplicate_field")} />
             </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={onRemove} disabled={isBuiltin}>
+            <CustomMenu.MenuItem onClick={onRemove}>
               <MenuRowLabel
                 icon={Trash2}
                 label={t("requirement_fields.builder.delete_field")}
@@ -503,10 +513,77 @@ function RequirementFieldRow(props: TFieldRowProps) {
   );
 }
 
+const FIELD_CATEGORIES: TRequirementFieldCategory[] = ["standard", "data"];
+
+/**
+ * 字段分类：决定这个字段进不进标准库。没有默认值 —— 建字段时必须明确选一个，
+ * 否则保存会被拦下（后端同样要求）。
+ *
+ * 表单子字段不单独设置，跟着所属表单走，这里只展示继承来源。
+ */
+function FieldCategoryPicker({
+  field,
+  isChild,
+  onChange,
+}: {
+  field: TRequirementFieldDraft;
+  isChild: boolean;
+  onChange: (next: TRequirementFieldDraft) => void;
+}) {
+  const { t } = useTranslation();
+
+  if (isChild) {
+    return (
+      <div className="rounded-md border border-subtle bg-layer-1 px-3 py-2">
+        <span className="block text-12 font-medium text-secondary">
+          {t("requirement_fields.field_categories.label")}
+        </span>
+        <span className="mt-1 block text-11 text-tertiary">
+          {t("requirement_fields.field_categories.inherited")}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <span className="mb-1.5 block text-12 font-medium text-secondary">
+        {t("requirement_fields.field_categories.label")}
+      </span>
+      <div className="space-y-1.5">
+        {FIELD_CATEGORIES.map((category) => (
+          <button
+            key={category}
+            type="button"
+            onClick={() => onChange({ ...field, field_category: category })}
+            className={cn(
+              "block w-full rounded-md border px-3 py-2 text-left transition-colors duration-150",
+              field.field_category === category
+                ? "border-accent-strong bg-accent-subtle/20"
+                : "border-subtle bg-surface-1 hover:border-strong"
+            )}
+          >
+            <span className="block text-12 font-medium text-primary">
+              {t(`requirement_fields.field_categories.${category}`)}
+            </span>
+            <span className="mt-0.5 block text-11 leading-4 text-secondary">
+              {t(`requirement_fields.field_categories.${category}_hint`)}
+            </span>
+          </button>
+        ))}
+      </div>
+      {!field.field_category && (
+        <span className="mt-1.5 block text-11 text-warning-primary">
+          {t("requirement_fields.field_categories.required")}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function FieldInspector(props: TFieldInspectorProps) {
   const { field, isChild, showClose = false, onClose, onChange, onDuplicate, onRemove } = props;
   const { t } = useTranslation();
-  const isBuiltin = Boolean(field && isBuiltinRequirementField(field));
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
   const selectOptions = field?.field_type === "select" ? getRequirementSelectOptions(field) : [];
   const hasValidSelectOptions = field?.field_type !== "select" || hasValidRequirementSelectOptions(field);
@@ -615,9 +692,8 @@ function FieldInspector(props: TFieldInspectorProps) {
               </span>
               <select
                 value={field.field_type}
-                disabled={isBuiltin}
                 onChange={(event) => updateType(event.target.value as TRequirementFieldType)}
-                className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
+                className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none"
               >
                 {availableTypes.map((type) => (
                   <option key={type} value={type}>
@@ -626,12 +702,8 @@ function FieldInspector(props: TFieldInspectorProps) {
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
-              {isBuiltin && (
-                <span className="mt-1.5 block text-11 text-tertiary">
-                  {t("requirement_fields.builder.builtin_type_locked")}
-                </span>
-              )}
             </label>
+            <FieldCategoryPicker field={field} isChild={isChild} onChange={onChange} />
             {field.field_type === "select" && (
               <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
                 <div className="border-b border-subtle px-3 py-3">
@@ -794,18 +866,11 @@ function FieldInspector(props: TFieldInspectorProps) {
                 </div>
                 <ToggleSwitch
                   value={field.is_active}
-                  // 停用内置字段会让它从所有网格里消失，包括靠它定义列的默认视图
-                  disabled={isBuiltin}
                   onChange={(value) => onChange({ ...field, is_active: value })}
                   size="sm"
                   label={t("requirement_fields.builder.enabled_title")}
                 />
               </div>
-              {isBuiltin && (
-                <p className="px-4 pb-3 text-10 leading-4 text-tertiary">
-                  {t("requirement_fields.builder.builtin_locked_hint")}
-                </p>
-              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center justify-between gap-2 border-t border-subtle px-4 py-3">
@@ -813,16 +878,14 @@ function FieldInspector(props: TFieldInspectorProps) {
               <Copy className="size-3.5" />
               {t("requirement_fields.builder.duplicate_field")}
             </Button>
-            {!isBuiltin && (
-              <button
-                type="button"
-                onClick={onRemove}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-12 font-medium text-danger-primary hover:bg-danger-subtle"
-              >
-                <Trash2 className="size-3.5" />
-                {t("requirement_fields.builder.delete_field")}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onRemove}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-12 font-medium text-danger-primary hover:bg-danger-subtle"
+            >
+              <Trash2 className="size-3.5" />
+              {t("requirement_fields.builder.delete_field")}
+            </button>
           </div>
         </>
       )}
@@ -960,8 +1023,6 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const rootIndex = fields.findIndex((field) => fieldKey(field) === targetSelection.rootKey);
     if (rootIndex === -1) return;
     const root = fields[rootIndex];
-    // 内置字段是需求类型的硬性组成，删掉就没法在默认视图里对齐标题/描述两列了
-    if (!targetSelection.childKey && isBuiltinRequirementField(root)) return;
     if (targetSelection.childKey) {
       const nextChildren = root.children.filter((field) => fieldKey(field) !== targetSelection.childKey);
       onChange(
@@ -1186,6 +1247,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           }}
         >
           <div className={cn("mx-auto w-full", compactLayout ? "max-w-3xl" : "max-w-4xl")}>
+            {/* 内置列排在自定义字段之前，与网格的列序一致 */}
+            <RequirementBuiltinFieldSection />
             {fields.length === 0 ? (
               <div
                 className={cn(

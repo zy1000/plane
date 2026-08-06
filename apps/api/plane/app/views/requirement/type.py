@@ -16,7 +16,6 @@ from plane.db.models import (
     Workspace,
 )
 from plane.utils.requirement import (
-    RequirementBuiltinFieldError,
     RequirementDataLossError,
     serialize_requirement_type_field_tree,
 )
@@ -217,11 +216,6 @@ class RequirementTypeConfigurationAPIView(BaseAPIView):
                     "affected_requirement_count": exc.affected_row_count,
                 },
                 status=status.HTTP_409_CONFLICT,
-            )
-        except RequirementBuiltinFieldError as exc:
-            return Response(
-                {"error": str(exc), "code": exc.code},
-                status=status.HTTP_400_BAD_REQUEST,
             )
         except ValueError as exc:
             return Response(

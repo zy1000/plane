@@ -7,6 +7,7 @@ import { Button } from "@plane/propel/button";
 import type { TRequirement, TRequirementImportPayload } from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
 import { LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
@@ -19,8 +20,18 @@ import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries
  * 分组后顺序调用（见 useProductRequirements.importFromLibraries）。
  *
  * 刻意不复用 RequirementGrid：它的勾选是接删除的，还自带编辑工具栏与 bulk-save
- * 契约。这里只复用它的展示部件 LeafValue，让列的呈现和标准库页保持一致。
+ * 契约。这里只复用它的展示部件（内置列 BuiltinCellValue + 自定义列 LeafValue），
+ * 让列的呈现和标准库页保持一致。
  */
+
+/**
+ * 预览只出最能认人的两列内置字段，其余靠自定义字段补 —— 弹窗宽度有限。
+ * 取值范围限定在库里真实存在的那几列（状态/负责人/起止日期在库里根本不展示）。
+ */
+const PREVIEW_BUILTIN_COLUMNS = getBuiltinColumnsFor("library").filter(
+  (column) => column.key === "title" || column.key === "priority"
+);
+
 type TProps = {
   isOpen: boolean;
   workspaceSlug: string;
@@ -94,7 +105,8 @@ export const RequirementImportFromLibraryModal = ({
 
   const activeLibrary = libraries.find((library) => library.id === libraryId);
   const fields = itemsStore.configuration?.fields ?? [];
-  const visibleFields = useMemo(() => fields.filter((field) => field.is_active).slice(0, 3), [fields]);
+  // 标题现在是行上的内置列，不在 data 里 —— 预览必须单独出这一列，否则认不出是哪条需求
+  const visibleFields = useMemo(() => fields.filter((field) => field.is_active).slice(0, 2), [fields]);
   const items = itemsStore.requirementsPage.results;
   const allOnPageSelected = items.length > 0 && items.every((item) => selected.has(item.id));
 
@@ -305,6 +317,11 @@ export const RequirementImportFromLibraryModal = ({
                             aria-label={t("workspace_products.requirements.import_modal.select_all_page")}
                           />
                         </th>
+                        {PREVIEW_BUILTIN_COLUMNS.map((column) => (
+                          <th key={column.key} className="min-w-[130px] px-3 py-2">
+                            <span className="truncate">{t(column.labelKey)}</span>
+                          </th>
+                        ))}
                         {visibleFields.map((field) => (
                           <th key={field.id} className="min-w-[130px] px-3 py-2">
                             <span className="truncate">{field.name}</span>
@@ -333,6 +350,11 @@ export const RequirementImportFromLibraryModal = ({
                                 onClick={(event) => event.stopPropagation()}
                               />
                             </td>
+                            {PREVIEW_BUILTIN_COLUMNS.map((column) => (
+                              <td key={column.key} className="px-3 py-2 align-top">
+                                <BuiltinCellValue columnKey={column.key} values={item} />
+                              </td>
+                            ))}
                             {visibleFields.map((field) => (
                               <td key={field.id} className="px-3 py-2 align-top">
                                 <LeafValue field={field} value={item.data[field.id]} workspaceSlug={workspaceSlug} />

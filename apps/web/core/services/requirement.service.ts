@@ -110,6 +110,8 @@ export class RequirementService extends APIService {
       perPage?: number;
       search?: string;
       filters?: TRequirementFilter[];
+      /** 按 id 直取，供父项选择器回显不在当前页的行 */
+      ids?: string[];
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/`, {
@@ -118,6 +120,7 @@ export class RequirementService extends APIService {
         ...(params.perPage ? { per_page: params.perPage } : {}),
         ...(params.search ? { search: params.search } : {}),
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
+        ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
       },
     })
       .then((response) => response?.data)
@@ -226,6 +229,8 @@ export class RequirementService extends APIService {
       filters?: TRequirementFilter[];
       /** 按需求类型切视图必须走服务端过滤 —— 条目是游标分页的 */
       requirementTypeId?: string;
+      /** 按 id 直取，供父项选择器回显不在当前页的行 */
+      ids?: string[];
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/`, {
@@ -235,6 +240,7 @@ export class RequirementService extends APIService {
         ...(params.search ? { search: params.search } : {}),
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
         ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
+        ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
       },
     })
       .then((response) => response?.data)
