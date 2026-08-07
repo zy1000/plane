@@ -204,6 +204,7 @@ export const RequirementSubformSection = (props: TProps) => {
                                 entityId={entityId}
                                 onChange={(value) => setCell(form, row.id, child.id, value)}
                                 onUpload={onUpload}
+                                deferTextCommit
                               />
                             )}
                           </td>

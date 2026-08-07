@@ -22,6 +22,7 @@ import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useMember } from "@/hooks/store/use-member";
+import { DraftInput } from "./draft-input";
 import {
   RequirementRichTextCell,
   RequirementRichTextEditor,
@@ -475,6 +476,7 @@ export const LeafEditor = ({
   onRemoveAsset,
   onAssetUpload,
   variant = "grid",
+  deferTextCommit,
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
@@ -488,6 +490,12 @@ export const LeafEditor = ({
   onAssetUpload?: (assetId: string) => void;
   /** detail 直接内联完整编辑器；grid 只有 160px 列宽，走摘要 + 弹窗 */
   variant?: "grid" | "detail";
+  /**
+   * 文本字段是否延后到失焦再提交。默认跟随 variant，但两者不是一回事：
+   * 网格的 onChange 只写 draftRows（逐字符是对的，isDirty 要靠它），详情页与
+   * 详情页里的子表单则是 onChange 即一次整行 PATCH，必须先落草稿。
+   */
+  deferTextCommit?: boolean;
 }) => {
   const { t } = useTranslation();
   if (field.field_type === "boolean") {
@@ -673,9 +681,17 @@ export const LeafEditor = ({
       <RequirementRichTextCell {...richTextProps} label={field.name} />
     );
   }
-  return (
+  const text = typeof value === "string" ? value : "";
+  return (deferTextCommit ?? variant === "detail") ? (
+    <DraftInput
+      value={text}
+      onCommit={onChange}
+      className={FIELD_INPUT_CLASS[variant]}
+      placeholder={field.config.placeholder}
+    />
+  ) : (
     <input
-      value={typeof value === "string" ? value : ""}
+      value={text}
       onChange={(event) => onChange(event.target.value)}
       className={FIELD_INPUT_CLASS[variant]}
       placeholder={field.config.placeholder}
