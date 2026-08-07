@@ -22,6 +22,11 @@ import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useMember } from "@/hooks/store/use-member";
+import {
+  RequirementRichTextCell,
+  RequirementRichTextEditor,
+  RequirementRichTextValue,
+} from "./requirement-rich-text";
 import { getRequirementSelectLabel, getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 
 export const getFormRows = (data: TRequirementData, fieldId: string): TRequirementFormRow[] => {
@@ -210,12 +215,18 @@ export const LeafValue = ({
   value,
   workspaceSlug,
   className,
+  variant = "grid",
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
   /** diff 网格用它给旧值套删除线、给新值套绿色 */
   className?: string;
+  /**
+   * detail 才把富文本渲染成真实排版：网格、diff、基线快照要的是密度与着色，
+   * 富文本容器会同时毁掉这两样。
+   */
+  variant?: "grid" | "detail";
 }) => {
   const { t } = useTranslation();
   if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
@@ -288,6 +299,16 @@ export const LeafValue = ({
           </a>
         ))}
       </span>
+    );
+  }
+  if (field.field_type === "rich_text" && variant === "detail") {
+    return (
+      <RequirementRichTextValue
+        workspaceSlug={workspaceSlug}
+        editorId={`requirement-field-${field.id}`}
+        value={String(value)}
+        containerClassName={cn("!pl-0 border-none text-13", className)}
+      />
     );
   }
   return (
@@ -421,16 +442,25 @@ export const LeafEditor = ({
   field,
   value,
   workspaceSlug,
+  entityId,
   onChange,
   onUpload,
   onRemoveAsset,
+  onAssetUpload,
+  variant = "grid",
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
+  /** 富文本内联资源的归属实体：网格传产品/标准库 id，详情页传需求 id */
+  entityId: string;
   onChange: (value: TRequirementValue) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
   onRemoveAsset?: (assetId: string) => void;
+  /** 网格草稿把富文本里上传的资源登记为待提交，取消编辑时统一清理 */
+  onAssetUpload?: (assetId: string) => void;
+  /** detail 直接内联完整编辑器；grid 只有 160px 列宽，走摘要 + 弹窗 */
+  variant?: "grid" | "detail";
 }) => {
   const { t } = useTranslation();
   if (field.field_type === "boolean") {
@@ -598,14 +628,22 @@ export const LeafEditor = ({
     );
   }
   if (field.field_type === "rich_text") {
-    return (
-      <textarea
-        value={typeof value === "string" ? value : ""}
-        onChange={(event) => onChange(event.target.value)}
-        rows={1}
-        className="focus:border-accent-primary focus:ring-accent-primary/10 max-h-24 min-h-8 w-full min-w-0 resize-y rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-14 leading-5 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
-        placeholder={field.config.placeholder}
+    const richTextProps = {
+      workspaceSlug,
+      entityId,
+      editorId: `requirement-field-${field.id}`,
+      value: typeof value === "string" ? value : "",
+      onChange,
+      placeholder: field.config.placeholder,
+      onAssetUpload,
+    };
+    return variant === "detail" ? (
+      <RequirementRichTextEditor
+        {...richTextProps}
+        containerClassName="min-h-20 rounded-md border border-subtle bg-surface-1 pt-2 pr-2 text-13"
       />
+    ) : (
+      <RequirementRichTextCell {...richTextProps} label={field.name} />
     );
   }
   return (

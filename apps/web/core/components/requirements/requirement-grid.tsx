@@ -634,6 +634,7 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                         onChange={(patch) => editor.updateRowBuiltin(key, patch)}
                         parentScope={parentScope}
                         rowId={requirementDraft?.requirementId}
+                        onAssetUpload={editor.registerPendingAsset}
                       />
                     ) : column.key === "title" && requirement && onOpenDetail ? (
                       // 详情入口只挂在标题格上，且不劫持整行点击 —— 整行归内联编辑
@@ -678,9 +679,11 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                           field={field}
                           value={data[field.id]}
                           workspaceSlug={workspaceSlug}
+                          entityId={entityId}
                           onChange={(value) => setRootValue(key, field.id, value)}
                           onUpload={uploadAsset}
                           onRemoveAsset={editor.discardPendingAsset}
+                          onAssetUpload={editor.registerPendingAsset}
                         />
                       ) : (
                         <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
@@ -751,9 +754,11 @@ export const RequirementGrid = observer(function RequirementGrid(props: TProps) 
                             field={child}
                             value={currentValue}
                             workspaceSlug={workspaceSlug}
+                            entityId={entityId}
                             onChange={(value) => setChildValue(key, form.id, row.id, child.id, value)}
                             onUpload={uploadAsset}
                             onRemoveAsset={editor.discardPendingAsset}
+                            onAssetUpload={editor.registerPendingAsset}
                           />
                         ) : (
                           <LeafValue field={child} value={currentValue} workspaceSlug={workspaceSlug} />

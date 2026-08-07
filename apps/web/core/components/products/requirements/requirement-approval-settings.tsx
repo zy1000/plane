@@ -1,15 +1,10 @@
-import { Check, ChevronDown, Info, ListChecks, UserCheck, Users, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementApprovalType, IUserLite } from "@plane/types";
 import { Avatar, MultiSelectDropdown } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 
 const approvalTypes: TRequirementApprovalType[] = ["any", "all", "n_of_m"];
-const approvalTypeIcons: Record<TRequirementApprovalType, LucideIcon> = {
-  any: UserCheck,
-  all: Users,
-  n_of_m: ListChecks,
-};
 
 type TRequirementApprovalSettingsProps = {
   memberOptions: IUserLite[];
@@ -21,7 +16,6 @@ type TRequirementApprovalSettingsProps = {
   onRequiredCountChange: (count: number) => void;
   className?: string;
   radioGroupName?: string;
-  layout?: "stacked" | "cards";
   /** 没有配置权限时整块只读 —— 配置不再受审批保护，能改的人必须更窄 */
   readOnly?: boolean;
 };
@@ -35,6 +29,39 @@ function UserOption({ user }: { user: IUserLite }) {
   );
 }
 
+/** 一行标签 + 控件 + 常显说明。表单里所有字段共用这一种排布 */
+export function SettingsField({
+  label,
+  required,
+  help,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  help?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-x-4 gap-y-1.5 border-t border-subtle py-4 sm:grid-cols-[8.25rem_minmax(0,1fr)]">
+      <span className="pt-1.5 text-12 font-medium text-primary">
+        {label}
+        {required && <span className="ml-0.5 text-danger-primary">*</span>}
+      </span>
+      <div className="min-w-0">
+        {children}
+        {/* 说明常显而不是塞进占位符：占位符一旦选了值就消失，而这些话恰恰是选完才需要 */}
+        {help && <p className="mt-1.5 text-11 leading-5 text-tertiary">{help}</p>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 审批人 + 通过规则。
+ *
+ * 规则用三行单选而不是三张卡：卡片里嵌下拉会让选中项当场撑高，三行也比三张卡更容易一眼
+ * 比完。「指定人数」的计数控件常驻在它自己那一行右端，选中与否都不改变行高。
+ */
 export function RequirementApprovalSettings({
   memberOptions,
   approverIds,
@@ -45,18 +72,17 @@ export function RequirementApprovalSettings({
   onRequiredCountChange,
   className,
   radioGroupName = "product-requirement-approval-type",
-  layout = "stacked",
   readOnly = false,
 }: TRequirementApprovalSettingsProps) {
   const { t } = useTranslation();
-  const isCardLayout = layout === "cards";
+  const isRuleDisabled = readOnly || !approverIds.length;
 
   return (
-    <div className={cn("space-y-5", className)}>
-      <div className={cn(isCardLayout && "max-w-lg")}>
-        <span className={cn("mb-2 block text-12 font-medium", isCardLayout ? "text-primary" : "text-secondary")}>
-          {t("workspace_products.requirements.fields.approvers")}
-        </span>
+    <div className={className}>
+      <SettingsField
+        label={t("workspace_products.requirements.fields.approvers")}
+        help={t("workspace_products.requirements.configuration.approvers_help")}
+      >
         <MultiSelectDropdown
           value={approverIds}
           onChange={onApproverIdsChange}
@@ -73,10 +99,10 @@ export function RequirementApprovalSettings({
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 {selectedMembers.length ? (
                   <>
-                    {selectedMembers.slice(0, 3).map((member) => (
+                    {selectedMembers.slice(0, 4).map((member) => (
                       <span
                         key={member.id}
-                        className="flex h-7 min-w-0 items-center gap-1.5 rounded bg-layer-2 px-1.5 text-11 text-primary"
+                        className="flex h-6 min-w-0 items-center gap-1.5 rounded bg-layer-2 px-1.5 text-11 text-primary"
                       >
                         <Avatar
                           name={member.display_name}
@@ -87,20 +113,20 @@ export function RequirementApprovalSettings({
                         <span className="max-w-20 truncate">{member.display_name}</span>
                       </span>
                     ))}
-                    {selectedMembers.length > 3 && (
-                      <span className="text-11 text-secondary">+{selectedMembers.length - 3}</span>
+                    {selectedMembers.length > 4 && (
+                      <span className="text-11 text-secondary">+{selectedMembers.length - 4}</span>
                     )}
                   </>
                 ) : (
                   <span className="truncate text-11 text-placeholder">
-                    {t("workspace_products.requirements.approval.unconfigured")}
+                    {t("workspace_products.requirements.fields.select_approvers")}
                   </span>
                 )}
                 <ChevronDown className="ml-auto size-3.5 shrink-0 text-placeholder" />
               </div>
             );
           }}
-          buttonContainerClassName="min-h-10 w-full rounded-md border border-subtle bg-surface-1 px-2 py-1.5"
+          buttonContainerClassName="min-h-8.5 w-full rounded-md border border-subtle bg-surface-1 px-2 py-1"
           optionsContainerClassName="w-[min(20rem,calc(100vw-2rem))]"
           renderItem={({ value, selected }) => {
             const member = memberOptions.find((option) => option.id === value);
@@ -113,86 +139,61 @@ export function RequirementApprovalSettings({
             );
           }}
         />
-      </div>
-      <fieldset
-        disabled={readOnly || !approverIds.length}
-        className={cn((readOnly || !approverIds.length) && "opacity-60")}
-      >
-        <legend className={cn("mb-3 block text-12 font-medium", isCardLayout ? "text-primary" : "text-secondary")}>
-          {t("workspace_products.requirements.fields.approval_rule")}
-        </legend>
-        <div className={cn(isCardLayout ? "grid gap-3 lg:grid-cols-3" : "space-y-3")}>
-          {approvalTypes.map((value) => {
-            const Icon = approvalTypeIcons[value];
-            const isSelected = approvalType === value;
-            return (
-              <label
-                key={value}
-                className={cn(
-                  "flex items-start gap-2.5 text-12 text-primary",
-                  approverIds.length ? "cursor-pointer" : "cursor-not-allowed",
-                  isCardLayout &&
-                    "min-h-20 rounded-lg border border-subtle bg-surface-1 px-3 py-3 transition-colors focus-within:ring-2 focus-within:ring-accent-subtle hover:border-strong hover:bg-layer-1",
-                  isCardLayout && isSelected && "border-accent-strong bg-accent-subtle"
-                )}
-              >
-                <input
-                  type="radio"
-                  name={radioGroupName}
-                  value={value}
-                  checked={isSelected}
-                  onChange={() => onApprovalTypeChange(value)}
-                  className="accent-accent-primary mt-0.5 size-4 shrink-0"
-                />
-                {isCardLayout && (
-                  <Icon
-                    className={cn("mt-0.5 size-4 shrink-0", isSelected ? "text-accent-primary" : "text-secondary")}
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className={cn("block", isCardLayout && "text-13 font-medium")}>
-                    {t(`workspace_products.requirements.approval.${value}`)}
-                  </span>
-                  {isCardLayout && (
-                    <span className="mt-1 block text-11 leading-4 text-secondary">
-                      {t(`workspace_products.requirements.approval.${value}_description`)}
-                    </span>
+      </SettingsField>
+
+      <SettingsField label={t("workspace_products.requirements.fields.approval_rule")}>
+        <fieldset disabled={isRuleDisabled} className={cn(isRuleDisabled && "opacity-60")}>
+          <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
+            {approvalTypes.map((value) => {
+              const isSelected = approvalType === value;
+              return (
+                <label
+                  key={value}
+                  className={cn(
+                    "flex min-h-9 items-center gap-2.5 px-3 py-1.5 text-12 text-primary transition-colors",
+                    approverIds.length && !readOnly ? "cursor-pointer hover:bg-layer-1" : "cursor-not-allowed",
+                    isSelected && "bg-accent-subtle"
                   )}
-                  {value === "n_of_m" && isSelected && approverIds.length > 0 && (
-                    <span className="mt-2 flex flex-wrap items-center gap-2 text-11 text-secondary">
+                >
+                  <input
+                    type="radio"
+                    name={radioGroupName}
+                    value={value}
+                    checked={isSelected}
+                    onChange={() => onApprovalTypeChange(value)}
+                    className="accent-accent-primary size-3.5 shrink-0"
+                  />
+                  <span className="font-medium">{t(`workspace_products.requirements.approval.${value}`)}</span>
+                  {value === "n_of_m" ? (
+                    /* 计数常驻这一行，不随选中长出来 —— 长出来就会把整块撑高 */
+                    <span className="ml-auto flex items-center gap-1.5 text-11 text-secondary">
                       <select
                         value={requiredCount ?? 1}
+                        disabled={isRuleDisabled || !isSelected}
                         onChange={(event) => onRequiredCountChange(Number(event.target.value))}
-                        className="focus:border-accent-primary h-8 w-16 rounded-md border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
+                        className="focus:border-accent-primary h-7 rounded border border-subtle bg-surface-1 px-1.5 text-12 text-primary tabular-nums outline-none disabled:opacity-50"
                       >
-                        {Array.from({ length: approverIds.length }, (_, index) => index + 1).map((count) => (
-                          <option key={count} value={count}>
-                            {count}
-                          </option>
-                        ))}
+                        {Array.from({ length: Math.max(approverIds.length, 1) }, (_, index) => index + 1).map(
+                          (count) => (
+                            <option key={count} value={count}>
+                              {count}
+                            </option>
+                          )
+                        )}
                       </select>
-                      {t("workspace_products.requirements.approval.n_summary", {
-                        required: requiredCount ?? 1,
-                        total: approverIds.length,
-                      })}
+                      <span className="tabular-nums">/ {approverIds.length}</span>
+                    </span>
+                  ) : (
+                    <span className="ml-auto text-11 text-tertiary">
+                      {t(`workspace_products.requirements.configuration.rule_tone.${value}`)}
                     </span>
                   )}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
-      <p
-        className={cn(
-          "flex items-start gap-2 text-11 leading-5 text-secondary",
-          isCardLayout && "rounded-lg border border-accent-subtle bg-accent-subtle px-3 py-2.5 text-12"
-        )}
-      >
-        <Info className="mt-0.5 size-3.5 shrink-0 text-accent-primary" />
-        {t("workspace_products.requirements.approval.configuration_only")}
-      </p>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      </SettingsField>
     </div>
   );
 }

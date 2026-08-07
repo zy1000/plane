@@ -27,6 +27,8 @@ type TProps = {
   forms: TRequirementField[];
   data: TRequirementData;
   workspaceSlug: string;
+  /** 富文本内联资源的归属实体 */
+  entityId: string;
   readOnly: boolean;
   /** 默认展开几块：抽屉 1、整页 2 —— 版面宽窄不同，能一眼看到的量也不同 */
   defaultOpenCount: number;
@@ -37,7 +39,7 @@ type TProps = {
 };
 
 export const RequirementSubformSection = (props: TProps) => {
-  const { forms, data, workspaceSlug, readOnly, defaultOpenCount, storageKey, onChange, onUpload } = props;
+  const { forms, data, workspaceSlug, entityId, readOnly, defaultOpenCount, storageKey, onChange, onUpload } = props;
   const { t } = useTranslation();
   const { storedValue: openIds, setValue: setOpenIds } = useLocalStorage<string[] | null>(storageKey, null);
   /** 点索引胶囊后要滚过去，滚动容器由调用方决定，所以只记 id 让 ref 回调去做 */
@@ -199,6 +201,7 @@ export const RequirementSubformSection = (props: TProps) => {
                                 field={child}
                                 value={row.values?.[child.id]}
                                 workspaceSlug={workspaceSlug}
+                                entityId={entityId}
                                 onChange={(value) => setCell(form, row.id, child.id, value)}
                                 onUpload={onUpload}
                               />

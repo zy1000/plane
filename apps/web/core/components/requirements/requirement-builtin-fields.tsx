@@ -18,12 +18,13 @@ import type {
   TRequirementPriority,
 } from "@plane/types";
 import { PriorityIcon } from "@plane/propel/icons";
-import { renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
+import { renderFormattedDate, renderFormattedPayloadDate, stripAndTruncateHTML } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { RequirementMemberValue } from "./requirement-grid-shared";
 import { RequirementParentDropdown } from "./requirement-parent-dropdown";
+import { RequirementRichTextCell } from "./requirement-rich-text";
 
 /**
  * 八个内置字段。它们不是 RequirementField，而是需求行上的列，所以网格、diff、
@@ -179,10 +180,19 @@ type TBuiltinEditorProps = {
   parentScope: { workspaceSlug: string; productId?: string; libraryId?: string };
   /** 编辑中的行，父项选项里要排除它自己 */
   rowId?: string;
+  /** 网格草稿把描述富文本里上传的资源登记为待提交，取消编辑时统一清理 */
+  onAssetUpload?: (assetId: string) => void;
 };
 
 /** 单个内置列的编辑器。与自定义字段的 LeafEditor 并列，网格按列来源二选一 */
-export const BuiltinCellEditor = ({ columnKey, values, onChange, parentScope, rowId }: TBuiltinEditorProps) => {
+export const BuiltinCellEditor = ({
+  columnKey,
+  values,
+  onChange,
+  parentScope,
+  rowId,
+  onAssetUpload,
+}: TBuiltinEditorProps) => {
   const { t } = useTranslation();
 
   if (columnKey === "title") {
@@ -197,12 +207,16 @@ export const BuiltinCellEditor = ({ columnKey, values, onChange, parentScope, ro
   }
 
   if (columnKey === "description_html") {
+    // 描述与自定义 rich_text 字段是同一个类型，网格里就得是同一个控件
     return (
-      <textarea
+      <RequirementRichTextCell
+        workspaceSlug={parentScope.workspaceSlug}
+        entityId={parentScope.productId ?? parentScope.libraryId ?? ""}
+        editorId={`requirement-description-${rowId ?? "new"}`}
+        label={t("requirement_fields.builtin.description")}
         value={values.description_html ?? ""}
-        onChange={(event) => onChange({ description_html: event.target.value })}
-        rows={1}
-        className="focus:border-accent-primary focus:ring-accent-primary/10 max-h-24 min-h-8 w-full min-w-0 resize-y rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-14 leading-5 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
+        onChange={(html) => onChange({ description_html: html })}
+        onAssetUpload={onAssetUpload}
       />
     );
   }
@@ -319,6 +333,10 @@ export const BuiltinCellValue = ({ columnKey, values, resolveParentTitle }: TBui
     ) : (
       <span className="truncate text-14 text-placeholder">{t("requirement_fields.builtin.parent_unresolved")}</span>
     );
+  }
+  if (columnKey === "description_html") {
+    // 存的是 HTML，直接吐出来用户看到的会是一串标签
+    return <span className="truncate text-14">{stripAndTruncateHTML(value as string, 180)}</span>;
   }
   return <span className="truncate text-14">{value as string}</span>;
 };

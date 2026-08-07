@@ -23,6 +23,10 @@ import {
   shouldShowRequirementStatus,
 } from "@/components/requirements/requirement-builtin-fields";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import {
+  RequirementRichTextEditor,
+  RequirementRichTextValue,
+} from "@/components/requirements/requirement-rich-text";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { RequirementChangeTrail } from "./requirement-change-trail";
@@ -76,6 +80,7 @@ const FieldRows = ({
   onChange: (data: TRequirementData) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
 }) => (
+  // 版面够宽，富文本字段直接内联完整编辑器、只读时也渲染真实排版（variant="detail"）
   <div className="grid grid-cols-[minmax(6rem,11rem)_minmax(0,1fr)] items-start gap-x-4 gap-y-2.5">
     {fields.map((field) => (
       <div key={field.id} className="contents">
@@ -86,15 +91,22 @@ const FieldRows = ({
         <div className="min-w-0">
           {readOnly ? (
             <div className="pt-1.5">
-              <LeafValue field={field} value={requirement.data[field.id]} workspaceSlug={workspaceSlug} />
+              <LeafValue
+                field={field}
+                value={requirement.data[field.id]}
+                workspaceSlug={workspaceSlug}
+                variant="detail"
+              />
             </div>
           ) : (
             <LeafEditor
               field={field}
               value={requirement.data[field.id]}
               workspaceSlug={workspaceSlug}
+              entityId={requirement.id}
               onChange={(value) => onChange({ ...requirement.data, [field.id]: value })}
               onUpload={onUpload}
+              variant="detail"
             />
           )}
         </div>
@@ -223,9 +235,9 @@ export const RequirementDetailContent = (props: TProps) => {
   } = props;
   const { t } = useTranslation();
   const { uploadEditorAsset } = useEditorAsset();
-  // 文本类先落本地、失焦再提交：每敲一个字打一次 PATCH 既慢又会把 version 打乱
+  // 文本类先落本地、失焦再提交：每敲一个字打一次 PATCH 既慢又会把 version 打乱。
+  // 描述与富文本字段把这套约定收进了 RequirementRichTextEditor 内部。
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
-  const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null);
 
   const uploadAsset = useCallback(
     async (file: globalThis.File, imageOnly: boolean) => {
@@ -328,27 +340,24 @@ export const RequirementDetailContent = (props: TProps) => {
         <div className="max-w-[42rem]">
           {readOnly ? (
             requirement.description_html ? (
-              <p className="text-13 leading-6 whitespace-pre-wrap text-secondary">{requirement.description_html}</p>
+              <RequirementRichTextValue
+                workspaceSlug={workspaceSlug}
+                editorId={`requirement-description-${requirement.id}`}
+                value={requirement.description_html}
+                containerClassName="-ml-3 border-none text-13"
+              />
             ) : (
               <p className="text-13 text-placeholder">{t("requirement_detail.no_description")}</p>
             )
           ) : (
-            <textarea
-              value={descriptionDraft ?? requirement.description_html ?? ""}
-              onChange={(event) => setDescriptionDraft(event.target.value)}
-              onBlur={() => {
-                if (descriptionDraft !== null && descriptionDraft !== (requirement.description_html ?? "")) {
-                  void onPatch({ builtin: { description_html: descriptionDraft } });
-                }
-                setDescriptionDraft(null);
-              }}
-              rows={3}
+            <RequirementRichTextEditor
+              workspaceSlug={workspaceSlug}
+              entityId={requirement.id}
+              editorId={`requirement-description-${requirement.id}`}
+              value={requirement.description_html ?? ""}
+              onChange={(html) => void onPatch({ builtin: { description_html: html } })}
               placeholder={t("requirement_detail.no_description")}
-              className={cn(
-                "-mx-2 min-h-20 w-[calc(100%+1rem)] resize-y rounded-md border border-transparent bg-transparent px-2 py-1.5",
-                "text-13 leading-6 text-primary outline-none placeholder:text-placeholder",
-                "hover:border-subtle focus:border-accent-primary focus:bg-surface-1"
-              )}
+              containerClassName="-ml-3 min-h-20 border-none text-13"
             />
           )}
         </div>
@@ -370,6 +379,7 @@ export const RequirementDetailContent = (props: TProps) => {
           forms={formFields}
           data={requirement.data}
           workspaceSlug={workspaceSlug}
+          entityId={requirement.id}
           readOnly={readOnly}
           defaultOpenCount={layout === "page" ? 2 : 1}
           storageKey={`requirement:subforms:${requirement.requirement_type_id}`}
