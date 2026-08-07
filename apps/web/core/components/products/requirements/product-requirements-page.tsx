@@ -540,8 +540,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
         onRequirementUpdated={() => void store.fetchRequirements()}
-        onSubmitReview={(requirementId) => approvalActions.openSubmitModal([requirementId])}
-        onWithdrawReview={approvalActions.withdraw}
       />
 
       {/*

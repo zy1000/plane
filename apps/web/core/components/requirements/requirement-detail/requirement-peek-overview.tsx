@@ -13,7 +13,6 @@ import { cn, copyUrlToClipboard } from "@plane/utils";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
-import { RequirementApprovalPanel } from "./requirement-approval-panel";
 import { RequirementDetailContent } from "./requirement-detail-content";
 import { useRequirementDetail } from "./use-requirement-detail";
 
@@ -29,8 +28,6 @@ type TProps = {
   canEdit: boolean;
   onClose: () => void;
   onOpenRequirement: (requirementId: string) => void;
-  onSubmitReview?: (requirementId: string) => void;
-  onWithdrawReview?: (changeRequestId: string) => void;
   /** 抽屉里改完，上层网格要跟着更新，否则关掉抽屉看到的还是旧值 */
   onRequirementUpdated?: (requirement: TRequirement) => void;
 };
@@ -52,8 +49,6 @@ export const RequirementPeekOverview = (props: TProps) => {
     onClose,
     onOpenRequirement,
     onRequirementUpdated,
-    onSubmitReview,
-    onWithdrawReview,
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
@@ -176,13 +171,6 @@ export const RequirementPeekOverview = (props: TProps) => {
                   {detail.error ?? t("requirement_detail.not_found")}
                 </p>
               ) : (
-                <>
-                <RequirementApprovalPanel
-                  requirement={requirement}
-                  onSubmitReview={onSubmitReview}
-                  onWithdrawReview={onWithdrawReview}
-                  className="mb-6"
-                />
                 <RequirementDetailContent
                   workspaceSlug={workspaceSlug}
                   productId={productId}
@@ -197,7 +185,6 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void detail.refresh()}
                 />
-                </>
               )}
             </div>
           </div>

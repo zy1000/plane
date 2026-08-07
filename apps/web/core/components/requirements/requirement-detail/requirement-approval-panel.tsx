@@ -1,8 +1,8 @@
 /**
- * 详情里的审批区：状态胶囊 + 提交/撤回 + 审批进度。
+ * 整页右栏的审批区：状态胶囊 + 提交/撤回 + 审批进度。
  *
- * 抽屉里放在标题下方，整页放在右栏。它是用户在详情视图里唯一能推动评审的地方 ——
- * 网格里的行菜单是同一套动作的另一个入口。
+ * 抽屉里不渲染这一块 —— 标题下的 RequirementApprovalBadge 已经说清审批态，
+ * 提交/撤回走网格行菜单。整页右栏才是详情视图里推动评审的入口。
  */
 import { Lock, Send, Trash2, Undo2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
