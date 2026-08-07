@@ -239,6 +239,12 @@ export const RequirementDetailContent = (props: TProps) => {
   // 文本类先落本地、失焦再提交：每敲一个字打一次 PATCH 既慢又会把 version 打乱。
   // 描述与富文本字段把这套约定收进了 RequirementRichTextEditor 内部。
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  // 轨迹里点版本徽章 -> 让下面的版本历史展开并滚过去。token 保证同一版重复点也能再触发一次
+  const [versionFocus, setVersionFocus] = useState<{ version: number; token: number } | null>(null);
+  const focusVersion = useCallback(
+    (version: number) => setVersionFocus((prev) => ({ version, token: (prev?.token ?? 0) + 1 })),
+    []
+  );
 
   const uploadAsset = useCallback(
     async (file: globalThis.File, imageOnly: boolean) => {
@@ -421,15 +427,21 @@ export const RequirementDetailContent = (props: TProps) => {
       */}
       <div className="flex flex-col gap-6 border-t border-subtle pt-6">
         <Section label={t("requirement_detail.change_trail")}>
-          <RequirementChangeTrail entries={trail} requirementType={requirementType} />
+          <RequirementChangeTrail
+            entries={trail}
+            requirementType={requirementType}
+            onFocusVersion={focusVersion}
+          />
         </Section>
 
         <RequirementVersionHistory
           workspaceSlug={workspaceSlug}
           productId={productId}
           requirementId={requirement.id}
+          requirementType={requirementType}
           approvedVersion={requirement.approved_version}
           canRollback={!readOnly}
+          focusRequest={versionFocus}
           onRolledBack={onRolledBack}
         />
       </div>

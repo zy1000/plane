@@ -172,8 +172,10 @@ export function RequirementSettingsPanel({
         approvalType === "n_of_m" ? Math.min(Math.max(draft.required_count ?? 1, 1), draft.approver_ids.length) : null,
     });
 
+  // 父级（product-requirements-page.tsx:513）是行向 flex，缺 min-w-0 时下拉的固有宽度会把这里
+  // 撑破，再被祖先的 overflow-hidden 裁掉而不是滚动。同位置的 loader 分支就带着它。
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-surface-1 px-5 py-8 md:px-8 md:py-10">
+    <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-surface-1 px-5 py-8 md:px-8 md:py-10">
       {/*
         40rem ≈ 640px 且水平居中。
         限宽是为了让「标签列 + 控件」在一眼之内读完，不必左右横扫；居中是因为一块窄内容

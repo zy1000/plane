@@ -1596,6 +1596,13 @@ export default {
       modified: "已改动·待提交",
     },
   },
+  /** 相对时间。date-fns 的 calculateTimeAgo 不接 locale，中文界面下会吐英文，所以走 i18n */
+  relative_time: {
+    just_now: "刚刚",
+    minutes_ago: "{count} 分钟前",
+    hours_ago: "{count} 小时前",
+    yesterday: "昨天",
+  },
   requirement_detail: {
     open: "打开详情",
     open_full_page: "在整页中打开",
@@ -1629,7 +1636,16 @@ export default {
     },
     versions: {
       label: "版本历史",
+      current: "当前 v{version}",
+      /** 不能复用 trail.action —— 那几句是设计成后面接字段名的，单独用会变成悬空动词 */
+      action: {
+        create: "创建了本条需求",
+        update: "提交的「{fields}」通过审批",
+        update_generic: "提交的改动通过审批",
+        delete: "删除了本条需求",
+      },
       empty: "还没有通过审批的版本",
+      empty_description: "这条需求通过一次评审后，就会在这里留下第一个可回滚的版本。",
       rollback: "回滚到这一版",
       rollback_title: "回滚到 v{version}？",
       rollback_description: "会用 v{version} 的内容覆盖当前内容，当前未提交的改动将丢失。回滚不撤销审批 —— 覆盖后这条需求需要重新提交评审才会生效。",
@@ -1642,6 +1658,8 @@ export default {
       schema_changed: "调整了需求类型「{name}」的字段结构",
       schema_scope: "需求类型级变更，影响该类型全部需求",
       empty: "还没有变更记录",
+      empty_description: "这条需求提交评审后，每次通过或驳回都会记在这里。",
+      jump_to_version: "跳到 v{version}",
       version: "v{version}",
       status: {
         pending: "审批中",

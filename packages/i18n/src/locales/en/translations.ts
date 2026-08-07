@@ -1431,6 +1431,13 @@ export default {
       modified: "Changed · not submitted",
     },
   },
+  /** 相对时间。date-fns 的 calculateTimeAgo 不接 locale，中文界面下会吐英文，所以走 i18n */
+  relative_time: {
+    just_now: "Just now",
+    minutes_ago: "{count}m ago",
+    hours_ago: "{count}h ago",
+    yesterday: "Yesterday",
+  },
   requirement_detail: {
     open: "Open detail",
     open_full_page: "Open in full page",
@@ -1464,7 +1471,16 @@ export default {
     },
     versions: {
       label: "Version history",
+      current: "Current v{version}",
+      /** 不能复用 trail.action —— 那几句是设计成后面接字段名的，单独用会变成悬空动词 */
+      action: {
+        create: "created this requirement",
+        update: "had {fields} approved",
+        update_generic: "had these edits approved",
+        delete: "deleted this requirement",
+      },
       empty: "No approved version yet",
+      empty_description: "Once this requirement passes a review, the first roll-back point will appear here.",
       rollback: "Roll back to this version",
       rollback_title: "Roll back to v{version}?",
       rollback_description: "The content of v{version} will overwrite what is there now, and any unsubmitted edits will be lost. A rollback does not undo an approval — submit the requirement for review again to make it take effect.",
@@ -1477,6 +1493,8 @@ export default {
       schema_changed: "changed the field structure of requirement type {name}",
       schema_scope: "Type-level change, affects every requirement of this type",
       empty: "No changes recorded yet",
+      empty_description: "Once this requirement is submitted for review, every approval and rejection lands here.",
+      jump_to_version: "Jump to v{version}",
       version: "v{version}",
       status: {
         pending: "In review",
