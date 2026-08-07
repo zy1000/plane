@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import { Layers, Table2 } from "lucide-react";
+import { Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementTypeSchema } from "@plane/types";
 import { cn } from "@plane/utils";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 
 /**
  * 一个产品下的需求可以分属多个需求类型（形状不同），数据页因此按类型分视图：
@@ -49,8 +50,15 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
 
   const views = useMemo(
     () => [
-      { key: DEFAULT_VIEW_KEY, label: t("workspace_products.requirements.data.views.default"), icon: Layers },
-      ...requirementTypes.map((requirementType) => ({ key: requirementType.id, label: requirementType.name, icon: Table2 })),
+      { key: DEFAULT_VIEW_KEY, label: t("workspace_products.requirements.data.views.default"), icon: Layers, iconProps: undefined },
+      // 每个类型用自己的图标，而不是所有类型共用一个 Table2 —— tab 里的图标本来
+      // 就该是用来区分它们的
+      ...requirementTypes.map((requirementType) => ({
+        key: requirementType.id,
+        label: requirementType.name,
+        icon: undefined,
+        iconProps: requirementType.logo_props?.icon,
+      })),
     ],
     [t, requirementTypes]
   );
@@ -98,7 +106,11 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
               disabled && "cursor-not-allowed opacity-60"
             )}
           >
-            <Icon className="size-3.5 shrink-0" />
+            {Icon ? (
+              <Icon className="size-3.5 shrink-0" />
+            ) : (
+              <TypeIcon iconProps={view.iconProps} className="size-3.5" iconClassName="size-3.5" />
+            )}
             <span className="max-w-[160px] truncate">{view.label}</span>
           </button>
         );

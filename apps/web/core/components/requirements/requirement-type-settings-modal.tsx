@@ -5,8 +5,10 @@ import { Button } from "@plane/propel/button";
 import type { TRequirementType } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { renderFormattedDateTime } from "@plane/utils";
+import { getTypeIconOption, TypeIconPicker, toTypeIconProps } from "@/components/common/type-icon-picker";
+import type { TTypeIconOption } from "@/components/common/type-icon-picker";
 
-type TMetadataDraft = Pick<TRequirementType, "name" | "description" | "is_active">;
+type TMetadataDraft = Pick<TRequirementType, "name" | "description" | "is_active" | "logo_props">;
 
 type Props = {
   isOpen: boolean;
@@ -33,14 +35,20 @@ export function RequirementTypeSettingsModal(props: Props) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<TMetadataDraft>(metadata);
   const [error, setError] = useState<string | null>(null);
+  const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
+  const iconOption = getTypeIconOption(draft.logo_props?.icon);
 
   useEffect(() => {
     if (!isOpen) return;
     setDraft(metadata);
     setError(null);
+    setIsIconPickerOpen(false);
     // metadata 只在开启时取一次快照，故意不进依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  const handleIconChange = (next: TTypeIconOption) =>
+    setDraft((current) => ({ ...current, logo_props: { ...current.logo_props, icon: toTypeIconProps(next) } }));
 
   const handleApply = async () => {
     if (!draft.name.trim()) {
@@ -75,23 +83,33 @@ export function RequirementTypeSettingsModal(props: Props) {
       </div>
 
       <div className="max-h-[60vh] space-y-5 overflow-y-auto px-5 py-5" data-modal-wheel-scroll>
-        <label className="block">
+        <div className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">
             {t("workspace_templates.requirement_types.fields.name")}
             <span className="ml-0.5 text-danger-primary">*</span>
           </span>
-          <input
-            value={draft.name}
-            onChange={(event) => {
-              setDraft({ ...draft, name: event.target.value });
-              setError(null);
-            }}
-            maxLength={255}
-            className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t("workspace_templates.requirement_types.fields.name_placeholder")}
-          />
+          {/* 图标与名称同属「这个类型是什么」，排在一行 —— 与工作项类型的创建弹窗同构 */}
+          <div className="relative flex items-center gap-2">
+            <TypeIconPicker
+              value={iconOption}
+              isOpen={isIconPickerOpen}
+              onChange={handleIconChange}
+              onToggle={setIsIconPickerOpen}
+              buttonClassName="border border-subtle bg-surface-1"
+            />
+            <input
+              value={draft.name}
+              onChange={(event) => {
+                setDraft({ ...draft, name: event.target.value });
+                setError(null);
+              }}
+              maxLength={255}
+              className="focus:border-accent-primary h-9 min-w-0 flex-1 rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder"
+              placeholder={t("workspace_templates.requirement_types.fields.name_placeholder")}
+            />
+          </div>
           {error && <p className="mt-1.5 text-11 text-danger-primary">{error}</p>}
-        </label>
+        </div>
 
         <label className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">

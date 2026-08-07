@@ -42,6 +42,7 @@ class RequirementTypeSerializer(BaseSerializer):
             "library_count",
             "is_active",
             "sort_order",
+            "logo_props",
             "created_at",
             "updated_at",
             "created_by",

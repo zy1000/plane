@@ -1,3 +1,4 @@
+import type { TLogoProps } from "./common";
 import type { TPaginatedResponse } from "./pagination";
 import type { IUserLite } from "./users";
 
@@ -183,10 +184,12 @@ export type TRequirementFieldDraft = Omit<
   children: TRequirementFieldDraft[];
 };
 
-/** 基线引用到的一个需求类型：id/name + 该类型的字段树 */
+/** 基线引用到的一个需求类型：id/name/图标 + 该类型的字段树 */
 export type TRequirementTypeSchema = {
   id: string;
   name: string;
+  /** 图标配置，与工作项类型同形状；字段结构会随版本冻结，图标不会 */
+  logo_props?: Partial<TLogoProps>;
   fields: TRequirementField[];
 };
 
@@ -258,6 +261,7 @@ export type TRequirementLibrary = {
   requirement_type_detail: {
     id: string;
     name: string;
+    logo_props?: Partial<TLogoProps>;
   };
   name: string;
   description: string;
@@ -480,6 +484,7 @@ export type TRequirementTypeChangeStat = {
   id: string;
   /** 需求类型已被删除时为空串 */
   name: string;
+  logo_props?: Partial<TLogoProps>;
   created_count: number;
   updated_count: number;
   deleted_count: number;
@@ -538,6 +543,7 @@ export type TRequirementBaseline = {
 export type TRequirementBaselineTypeStat = {
   id: string;
   name: string;
+  logo_props?: Partial<TLogoProps>;
   requirement_count: number;
 };
 

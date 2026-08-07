@@ -10,14 +10,16 @@
  * 变更/对比视图给三态计数，版本快照没有「变更」概念，改用 total 显示行数。
  */
 import { useCallback, useRef } from "react";
-import { Table2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import type { TLogoProps } from "@plane/types";
 import { cn } from "@plane/utils";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 
 export type TChangeRequirementTypeTab = {
   id: string;
   /** 需求类型已被删除时为空串 */
   name: string;
+  logo_props?: Partial<TLogoProps>;
   created_count?: number;
   updated_count?: number;
   deleted_count?: number;
@@ -79,7 +81,7 @@ export function ChangeRequirementTypeTabs({ requirementTypes, activeRequirementT
               isActive ? "bg-layer-2 text-primary" : "text-secondary hover:bg-layer-1 hover:text-primary"
             )}
           >
-            <Table2 className="size-3.5 shrink-0" />
+            <TypeIcon iconProps={requirementType.logo_props?.icon} className="size-3.5" iconClassName="size-3.5" />
             <span className="max-w-[160px] truncate">
               {requirementType.name || t("workspace_products.requirements.change.requirement_types.untitled")}
             </span>

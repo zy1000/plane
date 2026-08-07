@@ -11,7 +11,10 @@ import { useRequirementTypeDetails } from "@/hooks/store/use-requirement-type-de
 import { countRequirementColumns } from "./requirement-fields-preview";
 import { hasValidRequirementSelectOptions } from "./requirement-select";
 
-export type TRequirementTypeMetadataDraft = Pick<TRequirementType, "name" | "description" | "is_active">;
+export type TRequirementTypeMetadataDraft = Pick<
+  TRequirementType,
+  "name" | "description" | "is_active" | "logo_props"
+>;
 
 const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   id: field.id,
@@ -91,6 +94,7 @@ export const useRequirementTypeEditorState = ({
       name: configuration.requirement_type.name,
       description: configuration.requirement_type.description,
       is_active: configuration.requirement_type.is_active,
+      logo_props: configuration.requirement_type.logo_props ?? {},
     };
     const nextFields = configuration.fields.map(toDraftField);
     setMetadata(nextMetadata);
@@ -183,6 +187,7 @@ export const useRequirementTypeEditorState = ({
           name: response.requirement_type.name,
           description: response.requirement_type.description,
           is_active: response.requirement_type.is_active,
+          logo_props: response.requirement_type.logo_props ?? {},
         };
         const nextFields = response.fields.map(toDraftField);
         setMetadata(nextMetadata);

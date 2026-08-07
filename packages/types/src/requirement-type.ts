@@ -1,3 +1,4 @@
+import type { TLogoProps } from "./common";
 import type { IUserLite } from "./users";
 import type { TRequirementField, TRequirementFieldDraft } from "./requirement";
 
@@ -19,6 +20,8 @@ export type TRequirementType = {
   library_count: number;
   is_active: boolean;
   sort_order: number;
+  /** 图标配置，与工作项类型同形状：{ icon: { name, color, background_color } } */
+  logo_props: Partial<TLogoProps>;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -30,10 +33,11 @@ export type TCreateRequirementTypePayload = {
   description?: string;
   owner_id?: string;
   is_active?: boolean;
+  logo_props?: Partial<TLogoProps>;
 };
 
 export type TUpdateRequirementTypePayload = Partial<
-  Pick<TRequirementType, "name" | "description" | "is_active" | "owner_id" | "sort_order">
+  Pick<TRequirementType, "name" | "description" | "is_active" | "owner_id" | "sort_order" | "logo_props">
 >;
 
 export type TRequirementTypeConfiguration = {
@@ -46,8 +50,8 @@ export type TRequirementTypeConfiguration = {
 export type TRequirementTypeConfigurationPayload = {
   /** 乐观锁基准 = requirement_type.updated_at */
   expected_updated_at: string;
-  /** 名称与描述跟字段在同一次请求里保存，共用同一把锁 */
-  requirement_type?: Partial<Pick<TRequirementType, "name" | "description" | "is_active">>;
+  /** 名称、描述与图标跟字段在同一次请求里保存，共用同一把锁 */
+  requirement_type?: Partial<Pick<TRequirementType, "name" | "description" | "is_active" | "logo_props">>;
   fields: TRequirementFieldDraft[];
   /** 删字段会清掉引用该类型的明细行里的数据，需二次确认 */
   confirm_data_loss?: boolean;

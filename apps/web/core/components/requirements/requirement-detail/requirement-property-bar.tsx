@@ -9,6 +9,7 @@ import type {
   TRequirementTypeSchema,
 } from "@plane/types";
 import { cn, renderFormattedPayloadDate } from "@plane/utils";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
@@ -45,7 +46,14 @@ export const RequirementPropertyBar = (props: TProps) => {
     <div className="flex w-full min-w-0 flex-nowrap items-stretch text-body-xs-medium">
       {/* 类型是这条需求的身份锚点（需求没有工作项那样的编号），恒占首格 */}
       <div className={fieldShell(true)}>
-        <div className="flex h-7 min-w-0 items-center text-body-xs-medium leading-5 text-secondary">
+        <div className="flex h-7 min-w-0 items-center gap-1.5 text-body-xs-medium leading-5 text-secondary">
+          {requirementType && (
+            <TypeIcon
+              iconProps={requirementType.logo_props?.icon}
+              className="size-3.5"
+              iconClassName="size-3.5"
+            />
+          )}
           <span className="truncate">{requirementType?.name ?? "—"}</span>
         </div>
       </div>

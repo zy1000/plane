@@ -1537,6 +1537,7 @@ export default {
       field_structure_description: "拖拽调整顺序，选择字段后在右侧配置。",
       field_settings: "字段设置",
       enabled_badge: "已启用",
+      done_editing: "完成",
       configuring: "正在配置",
       no_field_selected: "请选择字段",
       no_field_selected_description: "在字段结构中选择一个字段后，可在此编辑属性。",

@@ -172,6 +172,9 @@ class RequirementType(BaseModel):
     )
     is_active = models.BooleanField(default=True, verbose_name="是否启用")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+    # 与 IssueType.logo_props 同形状：{"icon": {"name", "color", "background_color"}}。
+    # 沿用同一份结构，前端的选择器与渲染器两边可以共用。
+    logo_props = models.JSONField(default=dict, verbose_name="图标配置")
     # 存整数而不是外键：类型 -> 修订 -> 类型 的循环外键可以避免，就避免。
     # (requirement_type_id, current_schema_revision) 命中修订表的唯一索引。
     current_schema_revision = models.PositiveIntegerField(

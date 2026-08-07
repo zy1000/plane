@@ -51,6 +51,7 @@ class RequirementLibrarySerializer(BaseSerializer):
         return {
             "id": str(obj.requirement_type_id),
             "name": obj.requirement_type.name,
+            "logo_props": obj.requirement_type.logo_props or {},
         }
 
     def get_field_count(self, obj):

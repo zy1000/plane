@@ -673,15 +673,17 @@ def build_change_requirement_type_stats(change_request_id):
         )
     )
     rows = list(rows)
-    names = dict(
-        RequirementType.objects.filter(
+    identities = {
+        key: (name, logo_props)
+        for key, name, logo_props in RequirementType.objects.filter(
             id__in=[row["requirement_type_id"] for row in rows]
-        ).values_list("id", "name")
-    )
+        ).values_list("id", "name", "logo_props")
+    }
     return [
         {
             "id": str(row["requirement_type_id"]),
-            "name": names.get(row["requirement_type_id"], ""),
+            "name": identities.get(row["requirement_type_id"], ("", {}))[0],
+            "logo_props": identities.get(row["requirement_type_id"], ("", {}))[1] or {},
             "created_count": row["created_count"],
             "updated_count": row["updated_count"],
             "deleted_count": row["deleted_count"],

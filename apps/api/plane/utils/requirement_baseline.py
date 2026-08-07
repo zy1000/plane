@@ -154,13 +154,18 @@ def baseline_type_stats(baseline):
         RequirementBaselineEntry.objects.filter(baseline=baseline)
         # 清掉 Meta.ordering，否则它会混进 GROUP BY
         .order_by()
-        .values("version__requirement_type_id", "version__requirement_type__name")
+        .values(
+            "version__requirement_type_id",
+            "version__requirement_type__name",
+            "version__requirement_type__logo_props",
+        )
         .annotate(requirement_count=Count("id"))
     )
     return [
         {
             "id": str(row["version__requirement_type_id"]),
             "name": row["version__requirement_type__name"] or "",
+            "logo_props": row["version__requirement_type__logo_props"] or {},
             "requirement_count": row["requirement_count"],
         }
         for row in rows

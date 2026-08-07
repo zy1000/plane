@@ -7,6 +7,7 @@ import { Button } from "@plane/propel/button";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Breadcrumbs, Header, Loader } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 import { PageHead } from "@/components/core/page-title";
 import { RequirementFieldBuilder } from "@/components/requirements/requirement-field-builder";
 import { RequirementTypeSettingsModal } from "@/components/requirements/requirement-type-settings-modal";
@@ -94,6 +95,12 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
                 <Breadcrumbs.Item
                   component={
                     <div className="flex min-w-0 items-center gap-2">
+                      {/* 当前类型的图标：改了设置弹窗里的图标后，这里立刻反映草稿值 */}
+                      <TypeIcon
+                        iconProps={metadata.logo_props?.icon}
+                        className="size-5 rounded"
+                        iconClassName="size-3.5"
+                      />
                       <label className="relative min-w-0">
                         <select
                           value={requirementTypeId ?? ""}

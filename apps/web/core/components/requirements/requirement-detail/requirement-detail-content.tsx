@@ -203,6 +203,7 @@ const PropertyGrid = ({
                   onChange={(patch) => void onPatch({ builtin: patch })}
                   parentScope={parentScope}
                   rowId={requirement.id}
+                  variant="detail"
                 />
               )}
             </div>

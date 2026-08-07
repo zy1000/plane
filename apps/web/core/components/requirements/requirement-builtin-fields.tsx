@@ -22,7 +22,7 @@ import { renderFormattedDate, renderFormattedPayloadDate, stripAndTruncateHTML }
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
-import { RequirementMemberValue } from "./requirement-grid-shared";
+import { FIELD_DROPDOWN_CLASS, FIELD_INPUT_CLASS, RequirementMemberValue } from "./requirement-grid-shared";
 import { RequirementParentDropdown } from "./requirement-parent-dropdown";
 import { RequirementRichTextCell } from "./requirement-rich-text";
 
@@ -166,12 +166,6 @@ export const pickBuiltinValues = (row: Partial<TRequirementBuiltinValues>): TReq
   ) as TRequirementBuiltinValues;
 };
 
-const INPUT_CLASS =
-  "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none";
-
-const DROPDOWN_BUTTON_CLASS =
-  "h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none";
-
 type TBuiltinEditorProps = {
   columnKey: TRequirementBuiltinKey;
   values: TRequirementBuiltinValues;
@@ -182,6 +176,8 @@ type TBuiltinEditorProps = {
   rowId?: string;
   /** 网格草稿把描述富文本里上传的资源登记为待提交，取消编辑时统一清理 */
   onAssetUpload?: (assetId: string) => void;
+  /** 与 LeafEditor 同名同义：grid 有底色暗示可编辑，detail 无底色（见 FIELD_INPUT_CLASS） */
+  variant?: "grid" | "detail";
 };
 
 /** 单个内置列的编辑器。与自定义字段的 LeafEditor 并列，网格按列来源二选一 */
@@ -192,8 +188,11 @@ export const BuiltinCellEditor = ({
   parentScope,
   rowId,
   onAssetUpload,
+  variant = "grid",
 }: TBuiltinEditorProps) => {
   const { t } = useTranslation();
+  // 详情页跟着工作项侧栏走透明下拉；网格保留边框按钮，否则单元格看不出能点
+  const dropdownVariant = variant === "detail" ? "transparent-with-text" : "border-with-text";
 
   if (columnKey === "title") {
     return (
@@ -201,7 +200,7 @@ export const BuiltinCellEditor = ({
         value={values.title}
         onChange={(event) => onChange({ title: event.target.value })}
         maxLength={255}
-        className={INPUT_CLASS}
+        className={FIELD_INPUT_CLASS[variant]}
       />
     );
   }
@@ -236,8 +235,8 @@ export const BuiltinCellEditor = ({
       <PriorityDropdown
         value={values.priority}
         onChange={(next) => onChange({ priority: next as TRequirementPriority })}
-        buttonVariant="border-with-text"
-        buttonClassName={DROPDOWN_BUTTON_CLASS}
+        buttonVariant={dropdownVariant}
+        buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
         buttonContainerClassName="w-full min-w-0"
       />
     );
@@ -249,8 +248,8 @@ export const BuiltinCellEditor = ({
         multiple={false}
         value={values.assignee_id}
         onChange={(memberId) => onChange({ assignee_id: memberId })}
-        buttonVariant="border-with-text"
-        buttonClassName={`${DROPDOWN_BUTTON_CLASS} text-14`}
+        buttonVariant={dropdownVariant}
+        buttonClassName={`${FIELD_DROPDOWN_CLASS[variant]} text-14`}
         buttonContainerClassName="w-full min-w-0"
         placeholder={t("requirement_grid.data.select_member")}
         showUserDetails
@@ -268,8 +267,8 @@ export const BuiltinCellEditor = ({
         minDate={!isStart && values.start_date ? new Date(values.start_date) : undefined}
         maxDate={isStart && values.target_date ? new Date(values.target_date) : undefined}
         placeholder={t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)}
-        buttonVariant="border-with-text"
-        buttonClassName={DROPDOWN_BUTTON_CLASS}
+        buttonVariant={dropdownVariant}
+        buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
         buttonContainerClassName="w-full min-w-0"
       />
     );
@@ -280,7 +279,7 @@ export const BuiltinCellEditor = ({
       value={values.parent_id}
       onChange={(parentId) => onChange({ parent_id: parentId })}
       excludeId={rowId}
-      buttonClassName={DROPDOWN_BUTTON_CLASS}
+      buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
       {...parentScope}
     />
   );

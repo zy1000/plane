@@ -1372,6 +1372,7 @@ export default {
       field_structure_description: "Drag to reorder. Select a field to configure it on the right.",
       field_settings: "Field settings",
       enabled_badge: "Enabled",
+      done_editing: "Done",
       configuring: "Configuring",
       no_field_selected: "Select a field",
       no_field_selected_description: "Choose a field in the structure to edit its properties.",

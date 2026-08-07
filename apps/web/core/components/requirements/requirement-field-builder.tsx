@@ -10,7 +10,6 @@ import {
   GripVertical,
   ListChecks,
   MoreHorizontal,
-  PanelRightOpen,
   Paperclip,
   Plus,
   Search,
@@ -19,20 +18,18 @@ import {
   Trash2,
   Type,
   UserRound,
-  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Tooltip } from "@plane/propel/tooltip";
 import type {
   TRequirementFieldCategory,
   TRequirementFieldDraft,
   TRequirementFieldType,
   TRequirementSelectOption,
 } from "@plane/types";
-import { CustomMenu, Sortable, ToggleSwitch } from "@plane/ui";
+import { CustomMenu, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { RequirementBuiltinFieldSection } from "@/components/requirements/requirement-builtin-field-section";
 import {
@@ -87,9 +84,10 @@ type TFieldLibraryProps = {
 
 type TFieldRowProps = {
   field: TRequirementFieldDraft;
-  isSelected: boolean;
+  /** 正在编辑：整行原地换成 editor 里的内联表单 */
+  isEditing: boolean;
+  editor?: React.ReactNode;
   isChild?: boolean;
-  compact?: boolean;
   hasSelectedChild?: boolean;
   isDropTarget?: boolean;
   isInvalidDropTarget?: boolean;
@@ -100,14 +98,14 @@ type TFieldRowProps = {
   children?: React.ReactNode;
 };
 
-type TFieldInspectorProps = {
-  field: TRequirementFieldDraft | undefined;
+type TFieldInlineFormProps = {
+  field: TRequirementFieldDraft;
   isChild: boolean;
-  showClose?: boolean;
-  onClose?: () => void;
   onChange: (field: TRequirementFieldDraft) => void;
-  onDuplicate: () => void;
-  onRemove: () => void;
+  /** 还原成展开时的样子 */
+  onCancel: () => void;
+  /** 收起，改动已经在草稿里了 */
+  onDone: () => void;
 };
 
 const ROOT_FIELD_TYPES: TRequirementFieldType[] = [
@@ -302,62 +300,31 @@ function FieldLibrary(props: TFieldLibraryProps) {
   );
 }
 
-function FieldStateBadges({
-  field,
-  isSelected,
-  isChild = false,
+/** 与工作项属性行同款的状态胶囊 */
+const StatusBadge = ({
+  children,
+  tone = "neutral",
 }: {
-  field: TRequirementFieldDraft;
-  isSelected: boolean;
-  isChild?: boolean;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {/* 子字段跟随所属表单，不单独标分类 */}
-      {!isChild &&
-        (field.field_category ? (
-          <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
-            {t(`requirement_fields.field_categories.${field.field_category}`)}
-          </span>
-        ) : (
-          <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-10 font-medium text-warning-primary">
-            {t("requirement_fields.field_categories.label")}
-          </span>
-        ))}
-      {field.is_required && (
-        <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-10 font-medium text-danger-primary">
-          {t("requirement_fields.fields.required")}
-        </span>
-      )}
-      <span
-        className={cn(
-          "hidden rounded px-1.5 py-0.5 text-10 font-medium sm:inline",
-          field.is_active ? "bg-success-subtle text-success-primary" : "bg-layer-2 text-secondary"
-        )}
-      >
-        {t(
-          field.is_active
-            ? "requirement_fields.builder.enabled_badge"
-            : "requirement_fields.inactive"
-        )}
-      </span>
-      {isSelected && (
-        <span className="hidden rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary 2xl:inline">
-          {t("requirement_fields.builder.configuring")}
-        </span>
-      )}
-    </div>
-  );
-}
+  children: React.ReactNode;
+  tone?: "neutral" | "success" | "warning";
+}) => (
+  <span
+    className={cn("inline-flex shrink-0 items-center rounded px-2 py-0.5 text-11 font-medium", {
+      "border border-subtle bg-surface-2 text-secondary": tone === "neutral",
+      "bg-success-subtle/35 text-success-primary": tone === "success",
+      "bg-warning-subtle/60 text-warning-primary": tone === "warning",
+    })}
+  >
+    {children}
+  </span>
+);
 
 function RequirementFieldRow(props: TFieldRowProps) {
   const {
     field,
-    isSelected,
+    isEditing,
+    editor,
     isChild = false,
-    compact = false,
     hasSelectedChild = false,
     isDropTarget = false,
     isInvalidDropTarget = false,
@@ -368,7 +335,6 @@ function RequirementFieldRow(props: TFieldRowProps) {
     children,
   } = props;
   const { t } = useTranslation();
-  const Icon = FIELD_ICONS[field.field_type];
   const isForm = field.field_type === "form" && !isChild;
   const [isCollapsed, setIsCollapsed] = useState(false);
   const fieldTypeDescription =
@@ -390,105 +356,89 @@ function RequirementFieldRow(props: TFieldRowProps) {
   return (
     <div
       className={cn(
-        "overflow-hidden border bg-surface-1 transition-colors duration-150",
-        compact ? "rounded-md" : "rounded-lg",
+        "overflow-hidden rounded-md border bg-surface-1 transition",
         isInvalidDropTarget
           ? "border-danger-strong bg-danger-subtle/20"
           : isDropTarget
             ? "border-accent-strong bg-accent-subtle/30"
-            : isSelected
-              ? "border-accent-strong bg-accent-subtle/20"
+            : isEditing
+              ? "border-accent-strong"
               : hasSelectedChild
                 ? "border-accent-subtle"
-                : "border-subtle hover:border-strong"
+                : "border-strong hover:border-accent-primary/40"
       )}
     >
-      <div
-        className={cn(
-          "group/field-row flex items-center gap-2",
-          compact ? "min-h-11 px-2.5" : "min-h-14 px-3",
-          isChild && (compact ? "min-h-10 rounded-md" : "min-h-12 rounded-md")
-        )}
-      >
-        <span
-          data-sortable-drag-handle
-          className="grid size-6 shrink-0 cursor-grab place-items-center text-placeholder active:cursor-grabbing"
-        >
-          <GripVertical className="size-4 pointer-events-none" />
-        </span>
-        {isForm && (
-          <button
-            type="button"
-            onClick={() => setIsCollapsed((value) => !value)}
-            className="grid size-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-2 hover:text-primary"
-            aria-expanded={!isCollapsed}
-            aria-label={t(
-              isCollapsed
-                ? "requirement_fields.builder.expand_form"
-                : "requirement_fields.builder.collapse_form"
-            )}
-          >
-            <ChevronDown
-              className={cn("size-4 transition-transform duration-150", isCollapsed && "-rotate-90")}
-            />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onSelect}
-          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
+      {/* 编辑态：整行原地换成两栏表单，与工作项属性的内联表单同构 */}
+      {isEditing ? (
+        <>
+          {/* Draggable 找不到拖拽把手时会把整个元素变成可拖拽的（sortable/draggable.tsx:44），
+              编辑态里那会让在输入框里拖选文字变成拖动字段。留一个不可见的把手把它钉住。 */}
+          <span data-sortable-drag-handle className="hidden" aria-hidden />
+          {editor}
+        </>
+      ) : (
+        <div
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 text-sm transition hover:bg-layer-1-hover",
+            isChild && "py-2"
+          )}
         >
           <span
-            className={cn(
-              "grid shrink-0 place-items-center rounded-md border border-subtle bg-layer-1 text-secondary",
-              compact ? "size-6 border-0 bg-transparent" : "size-8",
-              { "border-accent-subtle bg-surface-1 text-accent-primary": isSelected }
-            )}
+            data-sortable-drag-handle
+            className="grid size-5 shrink-0 cursor-grab place-items-center text-tertiary active:cursor-grabbing"
           >
-            <Icon className={compact ? "size-3.5" : "size-4"} />
+            <GripVertical className="size-4 pointer-events-none" />
           </span>
-          <span className="min-w-0">
-            <span className={cn("block truncate font-medium text-primary", compact ? "text-12" : "text-13")}>
-              {field.name || t("requirement_fields.fields.untitled")}
-              {compact && field.is_required && (
-                <span className="ml-1 font-normal text-secondary">
-                  ({t("requirement_fields.fields.required")})
-                </span>
-              )}
-            </span>
-            {!compact && <span className="mt-0.5 block truncate text-11 text-secondary">{fieldTypeDescription}</span>}
-          </span>
-        </button>
-        {!compact && <FieldStateBadges field={field} isSelected={isSelected} isChild={isChild} />}
-        {compact && isForm && (
-          <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-10 font-medium text-accent-primary">
-            {t("requirement_fields.field_types.form")}
-          </span>
-        )}
-        <div className="flex shrink-0 items-center gap-0.5">
-          <Tooltip tooltipContent={t("requirement_fields.builder.duplicate_field")}>
+          {isForm && (
             <button
               type="button"
-              onClick={onDuplicate}
-              className="grid size-7 place-items-center rounded-md text-tertiary opacity-0 transition-all group-hover/field-row:opacity-100 hover:bg-layer-2 hover:text-primary focus:opacity-100"
-              aria-label={t("requirement_fields.builder.duplicate_field")}
+              onClick={() => setIsCollapsed((value) => !value)}
+              className="grid size-6 shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-2 hover:text-primary"
+              aria-expanded={!isCollapsed}
+              aria-label={t(
+                isCollapsed
+                  ? "requirement_fields.builder.expand_form"
+                  : "requirement_fields.builder.collapse_form"
+              )}
             >
-              <Copy className="size-3.5" />
+              <ChevronDown
+                className={cn("size-4 transition-transform duration-150", isCollapsed && "-rotate-90")}
+              />
             </button>
-          </Tooltip>
+          )}
+          <button
+            type="button"
+            onClick={onSelect}
+            className="min-w-0 flex-1 truncate text-left font-medium text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
+          >
+            {field.name || t("requirement_fields.fields.untitled")}
+            {field.is_required && (
+              <span className="ml-1 font-normal text-secondary">({t("requirement_fields.fields.required")})</span>
+            )}
+          </button>
+          <span className="shrink-0 text-xs text-secondary">{fieldTypeDescription}</span>
+          {/* 分类没选完保存会被拦下，所以只有这一个未完成态值得占一格 */}
+          {!isChild && !field.field_category && (
+            <StatusBadge tone="warning">{t("requirement_fields.field_categories.label")}</StatusBadge>
+          )}
+          <StatusBadge tone={field.is_active ? "success" : "neutral"}>
+            {t(field.is_active ? "requirement_fields.builder.enabled_badge" : "requirement_fields.inactive")}
+          </StatusBadge>
           <CustomMenu
             customButton={
-              <button
-                type="button"
-                className="grid size-7 place-items-center rounded-md text-secondary hover:bg-layer-2 hover:text-primary"
+              <span
+                className="grid size-7 place-items-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary"
                 aria-label={t("requirement_fields.fields.actions")}
               >
                 <MoreHorizontal className="size-4" />
-              </button>
+              </span>
             }
             placement="bottom-end"
             portalElement={getMenuPortalElement()}
           >
+            <CustomMenu.MenuItem onClick={onSelect}>
+              <MenuRowLabel icon={Settings2} label={t("edit")} />
+            </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={() => onInsert("above")}>
               <MenuRowLabel icon={ArrowUpToLine} label={t("requirement_fields.fields.insert_above")} />
             </CustomMenu.MenuItem>
@@ -507,7 +457,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
             </CustomMenu.MenuItem>
           </CustomMenu>
         </div>
-      </div>
+      )}
       {isForm && !isCollapsed && children}
     </div>
   );
@@ -581,12 +531,19 @@ function FieldCategoryPicker({
   );
 }
 
-function FieldInspector(props: TFieldInspectorProps) {
-  const { field, isChild, showClose = false, onClose, onChange, onDuplicate, onRemove } = props;
+/**
+ * 字段的内联编辑表单：左栏是「这个字段是什么」（名称/说明/必填/启用），
+ * 右栏是「怎么填」（类型、分类、选项、占位符）。与工作项属性的内联表单同构。
+ *
+ * 改动直接写进草稿 —— 整页由顶部的「保存配置」统一提交，所以这里没有「更新」。
+ * 「取消」还原到展开时的样子，「完成」只是收起。
+ */
+function FieldInlineForm(props: TFieldInlineFormProps) {
+  const { field, isChild, onChange, onCancel, onDone } = props;
   const { t } = useTranslation();
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
-  const selectOptions = field?.field_type === "select" ? getRequirementSelectOptions(field) : [];
-  const hasValidSelectOptions = field?.field_type !== "select" || hasValidRequirementSelectOptions(field);
+  const selectOptions = field.field_type === "select" ? getRequirementSelectOptions(field) : [];
+  const hasValidSelectOptions = field.field_type !== "select" || hasValidRequirementSelectOptions(field);
 
   const defaultSelectOptionLabels = [
     t("requirement_fields.builder.default_option", { index: 1 }),
@@ -594,7 +551,6 @@ function FieldInspector(props: TFieldInspectorProps) {
   ];
 
   const updateType = (fieldType: TRequirementFieldType) => {
-    if (!field) return;
     const commonConfig = {
       ...(field.config.description ? { description: field.config.description } : {}),
       ...(field.config.placeholder ? { placeholder: field.config.placeholder } : {}),
@@ -616,7 +572,7 @@ function FieldInspector(props: TFieldInspectorProps) {
   };
 
   const updateSelectOptions = (options: TRequirementSelectOption[]) => {
-    if (!field || field.field_type !== "select") return;
+    if (field.field_type !== "select") return;
     onChange({
       ...field,
       config: {
@@ -627,7 +583,7 @@ function FieldInspector(props: TFieldInspectorProps) {
   };
 
   const addSelectOption = () => {
-    if (!field || field.field_type !== "select") return;
+    if (field.field_type !== "select") return;
     const existingLabels = new Set(selectOptions.map((option) => option.label.trim().toLocaleLowerCase()));
     let index = selectOptions.length + 1;
     let label = t("requirement_fields.builder.default_option", { index });
@@ -639,256 +595,195 @@ function FieldInspector(props: TFieldInspectorProps) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface-1">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-subtle px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <Settings2 className="size-4 shrink-0 text-secondary" />
-          <h2 className="truncate text-14 font-semibold text-primary">
-            {t("requirement_fields.builder.field_settings")}
-          </h2>
+    <div className="grid grid-cols-1 divide-y divide-subtle md:grid-cols-[1fr_360px] md:divide-x md:divide-y-0">
+      {/* 左栏：这个字段是什么 */}
+      <div className="flex min-h-32 flex-col p-4">
+        <input
+          value={field.name}
+          autoFocus
+          onChange={(event) => onChange({ ...field, name: event.target.value })}
+          className="w-full bg-transparent text-16 font-normal text-secondary outline-none placeholder:text-placeholder"
+          placeholder={t("requirement_fields.fields.field_name_placeholder")}
+        />
+        <textarea
+          value={String(field.config.description ?? "")}
+          onChange={(event) => onChange({ ...field, config: { ...field.config, description: event.target.value } })}
+          className="mt-1 min-h-16 w-full resize-none bg-transparent text-13 leading-5 text-secondary outline-none placeholder:text-placeholder"
+          placeholder={t("requirement_fields.builder.description_example")}
+        />
+        <div className="mt-auto flex items-center gap-4 border-t border-subtle pt-3 text-12 text-secondary">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={field.is_required}
+              onChange={(event) => onChange({ ...field, is_required: event.target.checked })}
+              className="size-3.5 rounded border border-subtle accent-accent-primary"
+            />
+            {t("requirement_fields.builder.required_title")}
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={field.is_active}
+              onChange={(event) => onChange({ ...field, is_active: event.target.checked })}
+              className="size-3.5 rounded border border-subtle accent-accent-primary"
+            />
+            {t("requirement_fields.builder.enabled_title")}
+          </label>
         </div>
-        {showClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid size-8 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-            aria-label={t("close")}
-          >
-            <X className="size-4" />
-          </button>
-        )}
       </div>
-      {!field ? (
-        <div className="flex flex-1 items-center justify-center px-6 text-center">
-          <div>
-            <span className="mx-auto grid size-10 place-items-center rounded-lg border border-subtle bg-layer-1 text-secondary">
-              <Settings2 className="size-4" />
+
+      {/* 右栏：怎么填 */}
+      <div className="flex min-h-0 flex-col gap-4 p-4">
+        <div className="flex flex-col gap-3">
+          <label className="relative block">
+            <span className="mb-1.5 block text-12 font-medium text-secondary">
+              {t("requirement_fields.builder.field_type")}
             </span>
-            <p className="mt-3 text-13 font-medium text-primary">
-              {t("requirement_fields.builder.no_field_selected")}
-            </p>
-            <p className="mt-1 text-11 leading-4 text-secondary">
-              {t("requirement_fields.builder.no_field_selected_description")}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-            <label className="block">
-              <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("requirement_fields.builder.field_name")}
-              </span>
-              <input
-                value={field.name}
-                onChange={(event) => onChange({ ...field, name: event.target.value })}
-                className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none"
-                placeholder={t("requirement_fields.fields.field_name_placeholder")}
-              />
-            </label>
-            <label className="relative block">
-              <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("requirement_fields.builder.field_type")}
-              </span>
-              <select
-                value={field.field_type}
-                onChange={(event) => updateType(event.target.value as TRequirementFieldType)}
-                className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none"
-              >
-                {availableTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {t(`requirement_fields.field_types.${type}`)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
-            </label>
-            <FieldCategoryPicker field={field} isChild={isChild} onChange={onChange} />
-            {field.field_type === "select" && (
-              <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
-                <div className="border-b border-subtle px-3 py-3">
-                  <p className="text-12 font-medium text-primary">
-                    {t("requirement_fields.builder.selection_mode")}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 rounded-md border border-subtle bg-surface-1 p-0.5">
-                    {(["single", "multiple"] as const).map((mode) => {
-                      const isActive = getRequirementSelectMode(field) === mode;
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() =>
-                            onChange({
-                              ...field,
-                              config: { ...field.config, selection_mode: mode },
-                              default_value: mode === "multiple" ? [] : null,
-                            })
-                          }
-                          className={cn(
-                            "h-7 rounded text-11 font-medium transition-colors",
-                            isActive
-                              ? "bg-layer-2 text-primary shadow-sm"
-                              : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-                          )}
-                        >
-                          {t(
-                            `requirement_fields.builder.${
-                              mode === "multiple" ? "multiple_select" : "single_select"
-                            }`
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="px-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-12 font-medium text-primary">
-                        {t("requirement_fields.builder.selector_options")}
-                      </p>
-                      <p className="mt-0.5 text-10 text-secondary">
-                        {t("requirement_fields.builder.selector_options_description")}
-                      </p>
-                    </div>
-                    <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
-                      {selectOptions.length}
-                    </span>
-                  </div>
-                  <Sortable
-                    id={`requirement-selector-options-${fieldKey(field)}`}
-                    data={selectOptions}
-                    keyExtractor={(option) => option.id}
-                    containerClassName="mt-2"
-                    onChange={updateSelectOptions}
-                    render={(option, index) => (
-                      <div className="group mb-1.5 flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 p-1.5 last:mb-0 focus-within:border-accent-strong">
-                        <GripVertical className="size-3.5 shrink-0 cursor-grab text-placeholder active:cursor-grabbing" />
-                        <span className="grid size-5 shrink-0 place-items-center rounded bg-layer-2 text-10 font-medium text-secondary">
-                          {index + 1}
-                        </span>
-                        <input
-                          value={option.label}
-                          maxLength={255}
-                          onChange={(event) =>
-                            updateSelectOptions(
-                              selectOptions.map((item) =>
-                                item.id === option.id ? { ...item, label: event.target.value } : item
-                              )
-                            )
-                          }
-                          className="h-7 min-w-0 flex-1 bg-transparent px-1 text-12 text-primary outline-none"
-                          aria-label={t("requirement_fields.builder.option_label", {
-                            index: index + 1,
-                          })}
-                        />
-                        <button
-                          type="button"
-                          disabled={selectOptions.length <= 1}
-                          onClick={() => updateSelectOptions(selectOptions.filter((item) => item.id !== option.id))}
-                          className="grid size-7 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-20"
-                          aria-label={t("requirement_fields.builder.delete_option")}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  />
-                  {!hasValidSelectOptions && (
-                    <p className="mt-2 text-10 leading-4 text-danger-primary">
-                      {t("requirement_fields.validation.selector_options")}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={addSelectOption}
-                    className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary transition-colors hover:border-accent-subtle hover:bg-accent-subtle"
-                  >
-                    <Plus className="size-3.5" />
-                    {t("requirement_fields.builder.add_option")}
-                  </button>
-                </div>
-              </section>
-            )}
-            <label className="block">
-              <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("requirement_fields.fields.placeholder")}
-              </span>
-              <input
-                value={String(field.config.placeholder ?? "")}
-                onChange={(event) =>
-                  onChange({ ...field, config: { ...field.config, placeholder: event.target.value } })
-                }
-                disabled={field.field_type === "form"}
-                className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
-                placeholder={t("requirement_fields.builder.placeholder_example")}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-12 font-medium text-secondary">
-                {t("workspace_templates.requirement_types.fields.description")}
-              </span>
-              <textarea
-                value={String(field.config.description ?? "")}
-                onChange={(event) =>
-                  onChange({ ...field, config: { ...field.config, description: event.target.value } })
-                }
-                rows={4}
-                className="focus:border-accent-primary w-full resize-y rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none"
-                placeholder={t("requirement_fields.builder.description_example")}
-              />
-            </label>
-            <div className="divide-y divide-subtle rounded-lg border border-subtle">
-              <div className="flex items-center justify-between gap-4 px-3 py-3">
-                <div>
-                  <p className="text-12 font-medium text-primary">
-                    {t("requirement_fields.builder.required_title")}
-                  </p>
-                  <p className="mt-0.5 text-10 leading-4 text-secondary">
-                    {t("requirement_fields.builder.required_description")}
-                  </p>
-                </div>
-                <ToggleSwitch
-                  value={field.is_required}
-                  onChange={(value) => onChange({ ...field, is_required: value })}
-                  size="sm"
-                  label={t("requirement_fields.builder.required_title")}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4 px-3 py-3">
-                <div>
-                  <p className="text-12 font-medium text-primary">
-                    {t("requirement_fields.builder.enabled_title")}
-                  </p>
-                  <p className="mt-0.5 text-10 leading-4 text-secondary">
-                    {t("requirement_fields.builder.enabled_description")}
-                  </p>
-                </div>
-                <ToggleSwitch
-                  value={field.is_active}
-                  onChange={(value) => onChange({ ...field, is_active: value })}
-                  size="sm"
-                  label={t("requirement_fields.builder.enabled_title")}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-subtle px-4 py-3">
-            <Button variant="secondary" onClick={onDuplicate}>
-              <Copy className="size-3.5" />
-              {t("requirement_fields.builder.duplicate_field")}
-            </Button>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-12 font-medium text-danger-primary hover:bg-danger-subtle"
+            <select
+              value={field.field_type}
+              onChange={(event) => updateType(event.target.value as TRequirementFieldType)}
+              className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none"
             >
-              <Trash2 className="size-3.5" />
-              {t("requirement_fields.builder.delete_field")}
-            </button>
-          </div>
-        </>
-      )}
+              {availableTypes.map((type) => (
+                <option key={type} value={type}>
+                  {t(`requirement_fields.field_types.${type}`)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
+          </label>
+          <FieldCategoryPicker field={field} isChild={isChild} onChange={onChange} />
+          {field.field_type === "select" && (
+            <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
+              <div className="border-b border-subtle px-3 py-3">
+                <p className="text-12 font-medium text-primary">
+                  {t("requirement_fields.builder.selection_mode")}
+                </p>
+                <div className="mt-2 grid grid-cols-2 rounded-md border border-subtle bg-surface-1 p-0.5">
+                  {(["single", "multiple"] as const).map((mode) => {
+                    const isActive = getRequirementSelectMode(field) === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...field,
+                            config: { ...field.config, selection_mode: mode },
+                            default_value: mode === "multiple" ? [] : null,
+                          })
+                        }
+                        className={cn(
+                          "h-7 rounded text-11 font-medium transition-colors",
+                          isActive
+                            ? "bg-layer-2 text-primary shadow-sm"
+                            : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                        )}
+                      >
+                        {t(
+                          `requirement_fields.builder.${
+                            mode === "multiple" ? "multiple_select" : "single_select"
+                          }`
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-12 font-medium text-primary">
+                      {t("requirement_fields.builder.selector_options")}
+                    </p>
+                    <p className="mt-0.5 text-10 text-secondary">
+                      {t("requirement_fields.builder.selector_options_description")}
+                    </p>
+                  </div>
+                  <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
+                    {selectOptions.length}
+                  </span>
+                </div>
+                <Sortable
+                  id={`requirement-selector-options-${fieldKey(field)}`}
+                  data={selectOptions}
+                  keyExtractor={(option) => option.id}
+                  containerClassName="mt-2"
+                  onChange={updateSelectOptions}
+                  render={(option, index) => (
+                    <div className="group mb-1.5 flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 p-1.5 last:mb-0 focus-within:border-accent-strong">
+                      <GripVertical className="size-3.5 shrink-0 cursor-grab text-placeholder active:cursor-grabbing" />
+                      <span className="grid size-5 shrink-0 place-items-center rounded bg-layer-2 text-10 font-medium text-secondary">
+                        {index + 1}
+                      </span>
+                      <input
+                        value={option.label}
+                        maxLength={255}
+                        onChange={(event) =>
+                          updateSelectOptions(
+                            selectOptions.map((item) =>
+                              item.id === option.id ? { ...item, label: event.target.value } : item
+                            )
+                          )
+                        }
+                        className="h-7 min-w-0 flex-1 bg-transparent px-1 text-12 text-primary outline-none"
+                        aria-label={t("requirement_fields.builder.option_label", {
+                          index: index + 1,
+                        })}
+                      />
+                      <button
+                        type="button"
+                        disabled={selectOptions.length <= 1}
+                        onClick={() => updateSelectOptions(selectOptions.filter((item) => item.id !== option.id))}
+                        className="grid size-7 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-20"
+                        aria-label={t("requirement_fields.builder.delete_option")}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+                />
+                {!hasValidSelectOptions && (
+                  <p className="mt-2 text-10 leading-4 text-danger-primary">
+                    {t("requirement_fields.validation.selector_options")}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={addSelectOption}
+                  className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary transition-colors hover:border-accent-subtle hover:bg-accent-subtle"
+                >
+                  <Plus className="size-3.5" />
+                  {t("requirement_fields.builder.add_option")}
+                </button>
+              </div>
+            </section>
+          )}
+          <label className="block">
+            <span className="mb-1.5 block text-12 font-medium text-secondary">
+              {t("requirement_fields.fields.placeholder")}
+            </span>
+            <input
+              value={String(field.config.placeholder ?? "")}
+              onChange={(event) =>
+                onChange({ ...field, config: { ...field.config, placeholder: event.target.value } })
+              }
+              disabled={field.field_type === "form"}
+              className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
+              placeholder={t("requirement_fields.builder.placeholder_example")}
+            />
+          </label>
+        </div>
+        <div className="mt-auto flex justify-end gap-2 border-t border-subtle pt-3">
+          <Button variant="neutral-primary" size="sm" onClick={onCancel}>
+            {t("cancel")}
+          </Button>
+          <Button variant="primary" size="sm" onClick={onDone}>
+            {t("requirement_fields.builder.done_editing")}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -896,8 +791,10 @@ function FieldInspector(props: TFieldInspectorProps) {
 export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   const { fields, onChange, sidebarHeader, compactLayout = false, title, description } = props;
   const { t } = useTranslation();
+  // selection = 当前原地展开成表单的那个字段，同时只能有一个
   const [selection, setSelection] = useState<TFieldSelection | null>(null);
-  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  // 展开那一刻的字段快照，「取消」还原用；isNew 的字段直接撤销掉这次新增
+  const [editSnapshot, setEditSnapshot] = useState<{ field: TRequirementFieldDraft; isNew: boolean } | null>(null);
   const [draggedLibraryFieldType, setDraggedLibraryFieldType] = useState<TRequirementFieldType | null>(null);
   const [dropTarget, setDropTarget] = useState<TFieldDropTarget | null>(null);
 
@@ -911,27 +808,60 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     t("requirement_fields.builder.default_option", { index: 2 }),
   ];
 
+  // 被展开的字段没了（删除、切类型丢子字段）就收起，别让表单挂在空对象上
   useEffect(() => {
-    if (fields.length === 0) {
+    if (selection && !selectedField) {
       setSelection(null);
-      return;
+      setEditSnapshot(null);
     }
-    if (!selectedField) setSelection({ rootKey: fieldKey(fields[0]) });
-  }, [fields, selectedField]);
+  }, [selection, selectedField]);
 
-  const updateSelectedField = (nextField: TRequirementFieldDraft) => {
-    if (!selection) return;
+  const openEditor = (next: TFieldSelection, field: TRequirementFieldDraft, isNew = false) => {
+    setSelection(next);
+    setEditSnapshot({ field, isNew });
+  };
+
+  const closeEditor = () => {
+    setSelection(null);
+    setEditSnapshot(null);
+  };
+
+  const writeField = (target: TFieldSelection, nextField: TRequirementFieldDraft) => {
     onChange(
       fields.map((field) => {
-        if (fieldKey(field) !== selection.rootKey) return field;
-        if (!selection.childKey) return nextField;
+        if (fieldKey(field) !== target.rootKey) return field;
+        if (!target.childKey) return nextField;
         return {
           ...field,
-          children: field.children.map((child) => (fieldKey(child) === selection.childKey ? nextField : child)),
+          children: field.children.map((child) => (fieldKey(child) === target.childKey ? nextField : child)),
         };
       })
     );
   };
+
+  const updateSelectedField = (nextField: TRequirementFieldDraft) => {
+    if (!selection) return;
+    writeField(selection, nextField);
+  };
+
+  /** 刚加的字段整个撤销，已有字段还原到展开时的样子 */
+  const cancelEditing = () => {
+    if (selection && editSnapshot) {
+      if (editSnapshot.isNew) removeSelection(selection);
+      else writeField(selection, editSnapshot.field);
+    }
+    closeEditor();
+  };
+
+  const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => (
+    <FieldInlineForm
+      field={field}
+      isChild={Boolean(target.childKey)}
+      onChange={updateSelectedField}
+      onCancel={cancelEditing}
+      onDone={closeEditor}
+    />
+  );
 
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(
@@ -942,7 +872,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const nextFields = [...fields];
     nextFields.splice(index, 0, nextField);
     onChange(nextFields);
-    setSelection({ rootKey: fieldKey(nextField) });
+    openEditor({ rootKey: fieldKey(nextField) }, nextField, true);
   };
 
   const insertChildField = (rootKey: string, index: number, type: TRequirementFieldType) => {
@@ -959,7 +889,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         return { ...field, children };
       })
     );
-    setSelection({ rootKey, childKey: fieldKey(nextField) });
+    openEditor({ rootKey, childKey: fieldKey(nextField) }, nextField, true);
   };
 
   const resetLibraryDrag = () => {
@@ -999,7 +929,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       const nextFields = [...fields];
       nextFields.splice(rootIndex + 1, 0, duplicate);
       onChange(nextFields);
-      setSelection({ rootKey: fieldKey(duplicate) });
+      openEditor({ rootKey: fieldKey(duplicate) }, duplicate, true);
       return;
     }
     const childIndex = root.children.findIndex((field) => fieldKey(field) === targetSelection.childKey);
@@ -1015,7 +945,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         fieldKey(field) === targetSelection.rootKey ? { ...field, children: nextChildren } : field
       )
     );
-    setSelection({ rootKey: targetSelection.rootKey, childKey: fieldKey(duplicate) });
+    openEditor({ rootKey: targetSelection.rootKey, childKey: fieldKey(duplicate) }, duplicate, true);
   };
 
   const removeSelection = (targetSelection = selection) => {
@@ -1030,18 +960,16 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           fieldKey(field) === targetSelection.rootKey ? { ...field, children: nextChildren } : field
         )
       );
-      setSelection({ rootKey: targetSelection.rootKey });
+      closeEditor();
       return;
     }
-    const nextFields = fields.filter((field) => fieldKey(field) !== targetSelection.rootKey);
-    onChange(nextFields);
-    const nextSelectedField = nextFields[Math.min(rootIndex, Math.max(nextFields.length - 1, 0))];
-    setSelection(nextSelectedField ? { rootKey: fieldKey(nextSelectedField) } : null);
+    onChange(fields.filter((field) => fieldKey(field) !== targetSelection.rootKey));
+    closeEditor();
   };
 
   const renderRootField = (field: TRequirementFieldDraft, rootIndex: number) => {
     const rootKey = fieldKey(field);
-    const isSelected = selection?.rootKey === rootKey && !selection.childKey;
+    const isEditing = selection?.rootKey === rootKey && !selection.childKey;
     const hasSelectedChild = selection?.rootKey === rootKey && Boolean(selection.childKey);
     const isChildDropTarget = dropTarget?.kind === "child" && dropTarget.rootKey === rootKey;
     const isInvalidChildDropTarget = dropTarget?.kind === "invalid-child" && dropTarget.rootKey === rootKey;
@@ -1056,15 +984,12 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       >
         <RequirementFieldRow
           field={field}
-          isSelected={isSelected}
-          compact={compactLayout}
+          isEditing={isEditing}
+          editor={isEditing ? renderFieldEditor({ rootKey }, field) : undefined}
           hasSelectedChild={hasSelectedChild}
           isDropTarget={isChildDropTarget}
           isInvalidDropTarget={isInvalidChildDropTarget}
-          onSelect={() => {
-            setSelection({ rootKey });
-            setIsInspectorOpen(true);
-          }}
+          onSelect={() => openEditor({ rootKey }, field)}
           onInsert={(position) => insertRootField(rootIndex + (position === "below" ? 1 : 0), "text")}
           onDuplicate={() => duplicateSelection({ rootKey })}
           onRemove={() => removeSelection({ rootKey })}
@@ -1088,16 +1013,14 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 }
                 render={(child, childIndex) => {
                   const childKey = fieldKey(child);
+                  const isChildEditing = selection?.rootKey === rootKey && selection.childKey === childKey;
                   return (
                     <RequirementFieldRow
                       field={child}
                       isChild
-                      compact={compactLayout}
-                      isSelected={selection?.rootKey === rootKey && selection.childKey === childKey}
-                      onSelect={() => {
-                        setSelection({ rootKey, childKey });
-                        setIsInspectorOpen(true);
-                      }}
+                      isEditing={isChildEditing}
+                      editor={isChildEditing ? renderFieldEditor({ rootKey, childKey }, child) : undefined}
+                      onSelect={() => openEditor({ rootKey, childKey }, child)}
                       onInsert={(position) =>
                         insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")
                       }
@@ -1216,15 +1139,6 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div className="xl:hidden">{libraryMenu}</div>
-            <Button
-              variant="secondary"
-              className="lg:hidden"
-              onClick={() => setIsInspectorOpen(true)}
-              disabled={!selectedField}
-            >
-              <PanelRightOpen className="size-3.5" />
-              {t("requirement_fields.builder.field_settings")}
-            </Button>
           </div>
         </div>
         <div
@@ -1294,44 +1208,6 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           </div>
         </div>
       </main>
-      <aside
-        className={cn(
-          "hidden shrink-0 border-l border-subtle bg-surface-1 lg:block",
-          compactLayout ? "w-80 2xl:w-[420px]" : "w-80 2xl:w-[340px]"
-        )}
-      >
-        <FieldInspector
-          field={selectedField}
-          isChild={Boolean(selection?.childKey)}
-          onChange={updateSelectedField}
-          onDuplicate={() => duplicateSelection()}
-          onRemove={() => removeSelection()}
-        />
-      </aside>
-      {isInspectorOpen && (
-        <div className="fixed inset-0 z-30 lg:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-backdrop"
-            onClick={() => setIsInspectorOpen(false)}
-            aria-label={t("close")}
-          />
-          <aside className="absolute inset-y-0 right-0 w-full max-w-sm border-l border-subtle bg-surface-1 shadow-raised-300">
-            <FieldInspector
-              field={selectedField}
-              isChild={Boolean(selection?.childKey)}
-              showClose
-              onClose={() => setIsInspectorOpen(false)}
-              onChange={updateSelectedField}
-              onDuplicate={() => duplicateSelection()}
-              onRemove={() => {
-                removeSelection();
-                setIsInspectorOpen(false);
-              }}
-            />
-          </aside>
-        </div>
-      )}
     </div>
   );
 }

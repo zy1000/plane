@@ -519,28 +519,30 @@ def field_specs_for_requirement_types(requirement_type_ids):
 
 
 def requirement_types_field_payload_from_specs(requirement_type_ids, specs_by_type):
-    """产品需求配置接口里的 requirement_types[]：每个类型一份 id/name/字段树。
+    """产品需求配置接口里的 requirement_types[]：每个类型一份 id/name/图标/字段树。
 
     字段取调用方给的 specs 而不是自己去查库 —— 已发布的需求传进来的是版本里冻结
-    的那份，自己查库会把冻结语义直接绕过去。
+    的那份，自己查库会把冻结语义直接绕过去。图标不属于冻结内容，跟着类型走。
     """
     requirement_type_ids = [str(item) for item in requirement_type_ids]
     if not requirement_type_ids:
         return []
 
-    names = {
-        str(key): value
-        for key, value in RequirementType.objects.filter(
+    identities = {
+        str(key): (name, logo_props)
+        for key, name, logo_props in RequirementType.objects.filter(
             id__in=requirement_type_ids
-        ).values_list("id", "name")
+        ).values_list("id", "name", "logo_props")
     }
     payload = []
     for requirement_type_id in requirement_type_ids:
         specs = specs_by_type.get(requirement_type_id, [])
+        name, logo_props = identities.get(requirement_type_id, ("", {}))
         payload.append(
             {
                 "id": requirement_type_id,
-                "name": names.get(requirement_type_id, ""),
+                "name": name,
+                "logo_props": logo_props or {},
                 "fields": field_tree_from_specs(specs),
             }
         )

@@ -4,6 +4,8 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TCreateRequirementTypePayload, TRequirementType } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { getRandomTypeIconOption, TypeIconPicker, toTypeIconProps } from "@/components/common/type-icon-picker";
+import type { TTypeIconOption } from "@/components/common/type-icon-picker";
 
 type Props = {
   isOpen: boolean;
@@ -19,11 +21,16 @@ export function RequirementTypeCreateModal(props: Props) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // 先随机给一套，比让所有新类型长得一模一样好认
+  const [iconOption, setIconOption] = useState<TTypeIconOption>(getRandomTypeIconOption);
+  const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setName("");
     setError(null);
+    setIconOption(getRandomTypeIconOption());
+    setIsIconPickerOpen(false);
   }, [isOpen]);
 
   const handleCreate = async () => {
@@ -34,7 +41,7 @@ export function RequirementTypeCreateModal(props: Props) {
     }
     setError(null);
     try {
-      onCreated(await onCreate({ name: normalizedName }));
+      onCreated(await onCreate({ name: normalizedName, logo_props: { icon: toTypeIconProps(iconOption) } }));
     } catch (requestError) {
       const payload = requestError as { name?: string[]; error?: string };
       setError(payload?.name?.[0] ?? payload?.error ?? t("workspace_templates.requirement_types.toast.failed"));
@@ -63,18 +70,28 @@ export function RequirementTypeCreateModal(props: Props) {
         </button>
       </div>
       <div className="space-y-4 px-5 py-5">
-        <label className="block">
+        <div className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">
             {t("workspace_templates.requirement_types.fields.name")}
           </span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={255}
-            className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t("workspace_templates.requirement_types.fields.name_placeholder")}
-          />
-        </label>
+          {/* 图标与名称同属「这个类型是什么」，排在一行 —— 与工作项类型的创建弹窗同构 */}
+          <div className="relative flex items-center gap-2">
+            <TypeIconPicker
+              value={iconOption}
+              isOpen={isIconPickerOpen}
+              onChange={setIconOption}
+              onToggle={setIsIconPickerOpen}
+              buttonClassName="border border-subtle bg-surface-1"
+            />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={255}
+              className="focus:border-accent-primary h-9 min-w-0 flex-1 rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder"
+              placeholder={t("workspace_templates.requirement_types.fields.name_placeholder")}
+            />
+          </div>
+        </div>
         {error && <p className="text-11 text-danger-primary">{error}</p>}
       </div>
       <div className="flex justify-end gap-2 border-t border-subtle px-5 py-3">

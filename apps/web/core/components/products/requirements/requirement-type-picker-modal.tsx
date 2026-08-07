@@ -6,6 +6,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 
 /**
@@ -95,7 +96,14 @@ export const RequirementTypePickerModal = ({ isOpen, workspaceSlug, onClose, onC
                       : "border-subtle hover:border-accent-primary hover:bg-layer-1"
                   )}
                 >
-                  <span className="truncate text-13 font-medium text-primary">{requirementType.name}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <TypeIcon
+                      iconProps={requirementType.logo_props?.icon}
+                      className="size-5 rounded"
+                      iconClassName="size-3.5"
+                    />
+                    <span className="truncate text-13 font-medium text-primary">{requirementType.name}</span>
+                  </span>
                   <span className="shrink-0 text-11 text-tertiary">
                     {t("workspace_products.requirements.requirement_type_picker.field_count", {
                       count: requirementType.field_count,

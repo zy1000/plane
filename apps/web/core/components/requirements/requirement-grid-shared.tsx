@@ -433,6 +433,33 @@ export const RequirementGridHeader = ({
 };
 
 /**
+ * 字段控件的两套底色配方。内置字段（BuiltinCellEditor）也从这里取，免得两边漂移。
+ *
+ * grid：单元格之间没有标签，得靠「幽灵输入框」的底色告诉用户这一格可以点。
+ * detail：标签已经把可编辑性说清楚了，再铺一层底色就是噪音 —— 与工作项详情侧栏
+ * 对齐（见 issues/issue-detail/sidebar.tsx，全部 transparent-with-text，静息无底色）。
+ */
+export const FIELD_INPUT_CLASS = {
+  grid: "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none",
+  detail:
+    "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+} as const;
+
+/** 下拉按钮版：要用 ! 盖掉 @plane/ui 自带的边框 */
+export const FIELD_DROPDOWN_CLASS = {
+  grid: "h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  detail:
+    "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+} as const;
+
+/** MultiSelectDropdown 走 buttonContainerClassName，没有 ! 之争 */
+const MULTI_SELECT_CLASS = {
+  grid: "h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  detail:
+    "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+} as const;
+
+/**
  * 单个自定义字段的编辑器。与内置列的 BuiltinCellEditor 并列，调用方按列来源二选一。
  *
  * 网格与需求详情共用同一份控件，改一次两处同时生效 —— 两边对同一个字段类型给出
@@ -501,7 +528,7 @@ export const LeafEditor = ({
               </span>
             );
           }}
-          buttonContainerClassName="h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+          buttonContainerClassName={MULTI_SELECT_CLASS[variant]}
           optionsContainerClassName="w-60"
           disableSearch={options.length <= 8}
           disableSorting
@@ -520,7 +547,7 @@ export const LeafEditor = ({
             {selectedOption?.label ?? placeholder}
           </span>
         }
-        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
         optionsClassName="w-60"
         input
       >
@@ -543,8 +570,8 @@ export const LeafEditor = ({
         multiple={false}
         value={typeof value === "string" ? value : null}
         onChange={(memberId) => onChange(memberId)}
-        buttonVariant="border-with-text"
-        buttonClassName="h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 text-14 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none"
+        buttonVariant={variant === "detail" ? "transparent-with-text" : "border-with-text"}
+        buttonClassName={cn(FIELD_DROPDOWN_CLASS[variant], "text-14")}
         buttonContainerClassName="w-full min-w-0"
         placeholder={field.config.placeholder ?? t("requirement_grid.data.select_member")}
         showUserDetails
@@ -650,7 +677,7 @@ export const LeafEditor = ({
     <input
       value={typeof value === "string" ? value : ""}
       onChange={(event) => onChange(event.target.value)}
-      className="focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none"
+      className={FIELD_INPUT_CLASS[variant]}
       placeholder={field.config.placeholder}
     />
   );

@@ -7,6 +7,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TCreateRequirementTypePayload, TRequirementType, TUpdateRequirementTypePayload } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader, ToggleSwitch } from "@plane/ui";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 import { RequirementTypeSettingsModal } from "@/components/requirements/requirement-type-settings-modal";
 import { SettingsHeading } from "@/components/settings/heading";
 import { getSettingsRequirementTypePath } from "./navigation";
@@ -112,7 +113,9 @@ export function RequirementTypesList(props: Props) {
     }
   };
 
-  const handleApplySettings = async (next: Pick<TRequirementType, "name" | "description" | "is_active">) => {
+  const handleApplySettings = async (
+    next: Pick<TRequirementType, "name" | "description" | "is_active" | "logo_props">
+  ) => {
     if (!pendingEdit) return;
     try {
       await updateRequirementType(pendingEdit.id, next);
@@ -213,9 +216,7 @@ export function RequirementTypesList(props: Props) {
                 <div className="flex items-center justify-between gap-4 py-3">
                   {/* 只在左半边挂 Link：整行 onClick 会让右侧的启停开关顺带跳页 */}
                   <Link to={detailPath} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                    <span className="text-accent-primary flex size-8 shrink-0 items-center justify-center rounded-lg bg-layer-2">
-                      <ListChecks className="size-4" />
-                    </span>
+                    <TypeIcon iconProps={requirementType.logo_props?.icon} className="bg-layer-2" />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-primary">{requirementType.name}</span>
                       <span className="block truncate text-xs text-secondary">
@@ -320,6 +321,7 @@ export function RequirementTypesList(props: Props) {
           name: pendingEdit?.name ?? "",
           description: pendingEdit?.description ?? "",
           is_active: pendingEdit?.is_active ?? true,
+          logo_props: pendingEdit?.logo_props ?? {},
         }}
         onApply={handleApplySettings}
         requirementType={pendingEdit ?? undefined}
