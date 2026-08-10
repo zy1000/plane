@@ -4,7 +4,7 @@
  * 编辑态网格（requirement-grid.tsx）、变更 diff 网格和版本只读快照共用同一套
  * 二级表头结构、值渲染和行内子表单排布逻辑，所以这些纯 helper 与展示组件抽在这里。
  */
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Check, Download, File, Paperclip } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -113,7 +113,7 @@ export const RequirementMemberValue = observer(function RequirementMemberValue({
         src={getFileURL(member?.avatar_url ?? "")}
         showTooltip={false}
       />
-      <span className="max-w-28 truncate text-14 text-primary">{member?.display_name ?? value}</span>
+      <span className="max-w-28 truncate text-primary">{member?.display_name ?? value}</span>
     </span>
   );
 });
@@ -227,7 +227,7 @@ export const LeafValue = ({
    * detail 才把富文本渲染成真实排版：网格、diff、基线快照要的是密度与着色，
    * 富文本容器会同时毁掉这两样。
    */
-  variant?: "grid" | "detail";
+  variant?: "grid" | "detail" | "modal";
 }) => {
   const { t } = useTranslation();
   if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
@@ -313,10 +313,172 @@ export const LeafValue = ({
     );
   }
   return (
-    <span className={cn("block max-w-64 text-14 leading-5 whitespace-pre-wrap text-primary", className)}>
+    <span className={cn("block max-w-64 text-13 leading-5 whitespace-pre-wrap text-primary", className)}>
       {field.field_type === "rich_text" ? stripAndTruncateHTML(String(value), 180) : String(value)}
     </span>
   );
+};
+
+/* ---------------------------------------------------------------------------
+ * 表格外壳：与工作项电子表格（issues/issue-layouts/spreadsheet）同一套量化。
+ *
+ * 三个需求网格（默认视图 / 类型视图 / 变更 diff）此前各写一套表头与单元格样式，
+ * 攒出来的问题是：每格都画竖线（Excel 观感）、表头与正文同色只靠边框分隔、行高被
+ * 审批列的两行布局单独撑高，以及列宽写死后总和超出容器，最右边的列开箱就在屏幕外。
+ *
+ * 这里照抄工作项那套的量化，三处共用：
+ * - 属性列一律 144px，标题列吃掉剩余宽度 —— 表格恒好铺满容器，右侧不留死白
+ * - 标题列 sticky 左固定，横滚时始终知道自己在看哪一行
+ * - 行高 44px（h-11），表头等高
+ * - 只留竖线；横线由单元格自己的 border-b 给
+ * - 表头 = 图标 + 列名，text-13 text-secondary（正文是 text-primary，拉开层级）
+ * --------------------------------------------------------------------------- */
+
+/** 属性列宽。与 spreadsheet-table.tsx 的 PROPERTY_COLUMN_WIDTH 对齐 */
+export const REQUIREMENT_GRID_COLUMN_WIDTH = 144;
+
+/**
+ * 描述列例外地宽一档。它装的是富文本摘要，144px 下基本只能看到前几个字；
+ * 工作项表格没有这一列，所以这里没有可抄的量。
+ */
+export const REQUIREMENT_GRID_DESCRIPTION_COLUMN_WIDTH = 216;
+
+/** 标题列的下限。窄容器下宁可整表横滚，也不要把标题压到读不出来 */
+export const REQUIREMENT_GRID_TITLE_MIN_WIDTH = 280;
+
+/**
+ * 子表单每组末尾那道操作沟槽：末行装「+ 新增子行」与「…」菜单，其余行只装「…」。
+ * 56px 刚好并排放下两个 size-6 按钮 —— 「新增子行」原先独占一整行，那条按钮行
+ * 让每条需求恒定多出 44px 高，用 20px 的横向宽度换掉它是划算的。
+ */
+export const FORM_GUTTER_COLUMN_WIDTH = 56;
+
+/** border-collapse 下最右侧单元格的外边框会多撑出约 1px，自动填充时要预留 */
+const COLLAPSED_BORDER_WIDTH = 1;
+
+export const getRequirementColumnWidth = (columnKey: string) =>
+  columnKey === "description_html" ? REQUIREMENT_GRID_DESCRIPTION_COLUMN_WIDTH : REQUIREMENT_GRID_COLUMN_WIDTH;
+
+/**
+ * 标题列宽 = max(下限, 容器宽 - 其余列宽之和)。
+ *
+ * 这是工作项表格「不留右侧空白」的全部机关：其余列都是定宽，唯独第一列弹性，
+ * 于是表格总宽恒 >= 容器宽，既不会短一截露出背景，也不会因为定宽相加超出而
+ * 把每列压扁。
+ */
+export const resolveRequirementTitleColumnWidth = (containerWidth: number, otherColumnsWidth: number) =>
+  Math.max(REQUIREMENT_GRID_TITLE_MIN_WIDTH, Math.floor(containerWidth - otherColumnsWidth - COLLAPSED_BORDER_WIDTH));
+
+/**
+ * 表头单元格。不画上下边框 —— 底线由 thead 统一给一条，免得和行分隔线叠成双线。
+ * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
+ */
+const HEADER_CELL_BASE = "h-11 border-r border-subtle bg-layer-1 text-left align-middle text-13 font-medium";
+export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
+export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
+
+/**
+ * 正文单元格。横线走 border-b，竖线走 border-r，与工作项一致。
+ *
+ * 三档：
+ * - BORDER：只有边框与字号，不定高也不带内边距。diff 网格用它 —— 那里的单元格是
+ *   新旧值上下并排，钉死 44px 会把下半截切掉，且它自己有疏密切换。
+ * - FLUSH：定高不带内边距，留给要自己铺满整格底色的单元格（左固定的标题列）。
+ * - 默认：定高 + 内边距，绝大多数格子用这个。
+ */
+const CELL_BORDER_BASE = "border-r border-b border-subtle align-middle text-13 text-primary";
+export const REQUIREMENT_GRID_CELL_BORDER_CLASS = CELL_BORDER_BASE;
+export const REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS = `${CELL_BORDER_BASE} h-11`;
+export const REQUIREMENT_GRID_BODY_CELL_CLASS = `${CELL_BORDER_BASE} h-11 px-page-x`;
+
+/** 左固定列。z 值要压过普通单元格，否则横滚时被盖住 */
+export const REQUIREMENT_GRID_STICKY_HEADER_CLASS = "left-0 z-[15] md:sticky";
+export const REQUIREMENT_GRID_STICKY_BODY_CLASS = "left-0 z-10 bg-surface-1 md:sticky";
+
+/** 行底色。选中 / 悬停都不能撞上表头的 bg-layer-1，否则 sticky 表头会和行糊在一起 */
+export const REQUIREMENT_GRID_ROW_CLASS =
+  "bg-surface-1 transition-colors duration-150 hover:bg-layer-transparent-hover motion-reduce:transition-none";
+export const REQUIREMENT_GRID_ROW_SELECTED_CLASS = "bg-accent-primary/5 hover:bg-accent-primary/10";
+
+/**
+ * 表头里的「图标 + 列名」。
+ *
+ * 内置列的图标本来就定义在 REQUIREMENT_BUILTIN_COLUMNS 上（Type / AlignLeft /
+ * CircleDot …），只是一直没被表头用上；自定义字段没有图标，留空即可。
+ */
+export const RequirementGridHeaderLabel = ({
+  icon: Icon,
+  label,
+  isRequired,
+}: {
+  icon?: LucideIcon;
+  label: string;
+  isRequired?: boolean;
+}) => (
+  <span className="flex w-full min-w-0 items-center gap-1.5 text-13 font-medium text-secondary">
+    {Icon && <Icon className="size-4 shrink-0 text-placeholder" />}
+    <span className="truncate">{label}</span>
+    {isRequired && <span className="shrink-0 text-danger-primary">*</span>}
+  </span>
+);
+
+/**
+ * 表格滚动容器的挂钩：给出一个 ref 回调，外加容器宽度与左固定列的滚动投影。
+ *
+ * 用「回调 ref 存进 state」而不是 useRef —— 三个网格都会在加载态提前 return，
+ * 滚动容器要等数据回来才挂载。ref 对象在那之前一直是 null，而依赖它的 effect
+ * 又不会因为 ref.current 变了重跑，监听器就永远接不上。state 才会触发重跑。
+ */
+export const useRequirementGridScrollContainer = () => {
+  const [scrollContainer, setScrollContainer] = useState<HTMLElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const isScrolled = useRef(false);
+
+  // 容器宽度：标题列要吃掉剩余宽度，就得知道容器有多宽。
+  // 与 spreadsheet-table.tsx 同款 ResizeObserver + resize 兜底。
+  useEffect(() => {
+    if (!scrollContainer) return;
+
+    const updateWidth = () => setContainerWidth(scrollContainer.clientWidth);
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(scrollContainer);
+    return () => observer.disconnect();
+  }, [scrollContainer]);
+
+  /**
+   * 横滚时给左固定列打一道投影，暗示右边还有内容被压在下面。
+   *
+   * 直接改 DOM style 而不是走 state —— 与工作项同理：滚动一像素就重渲染整张表
+   * 的代价太大，而这里要改的只是若干个单元格的 box-shadow。
+   */
+  useEffect(() => {
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const hasScrolled = scrollContainer.scrollLeft > 0;
+      if (hasScrolled === isScrolled.current) return;
+      isScrolled.current = hasScrolled;
+
+      scrollContainer.querySelectorAll<HTMLElement>("[data-requirement-sticky-cell]").forEach((cell) => {
+        cell.style.boxShadow = hasScrolled
+          ? cell.tagName === "TH"
+            ? "8px -22px 22px 10px rgba(0, 0, 0, 0.05)"
+            : "8px 22px 22px 10px rgba(0, 0, 0, 0.05)"
+          : "none";
+      });
+    };
+
+    scrollContainer.addEventListener("scroll", handleScroll);
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
+  }, [scrollContainer]);
+
+  return { setScrollContainer, containerWidth };
 };
 
 /**
@@ -333,7 +495,13 @@ export const RequirementGridHeader = ({
 }: {
   rootFields: TRequirementField[];
   showActionGutter: boolean;
-  leadingHeader?: { className: string; content: React.ReactNode };
+  /** 首列。stickyCell 让它参与左固定列的滚动投影（见 useRequirementGridScrollContainer） */
+  leadingHeader?: {
+    className: string;
+    content: React.ReactNode;
+    style?: React.CSSProperties;
+    stickyCell?: boolean;
+  };
   /**
    * 内置列的表头，恒排在自定义字段列之前。内置列永远是单列，不参与表单字段的
    * 二级表头跨列逻辑，所以只跟着 spanRows 走。
@@ -349,10 +517,15 @@ export const RequirementGridHeader = ({
   const spanRows = hasFormFields ? 2 : 1;
 
   return (
-    <thead className="sticky top-0 z-10 bg-layer-1 text-13 font-medium text-secondary">
-      <tr className="border-b border-subtle">
+    <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
+      <tr>
         {leadingHeader && (
-          <th rowSpan={spanRows} className={leadingHeader.className}>
+          <th
+            rowSpan={spanRows}
+            className={leadingHeader.className}
+            style={leadingHeader.style}
+            data-requirement-sticky-cell={leadingHeader.stickyCell ? "" : undefined}
+          >
             {leadingHeader.content}
           </th>
         )}
@@ -360,30 +533,30 @@ export const RequirementGridHeader = ({
           <th
             key={header.key}
             rowSpan={spanRows}
-            className={cn("min-w-32 border-r border-subtle px-3 py-2.5 align-middle text-primary", header.className)}
+            className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, header.className)}
           >
             {header.content}
           </th>
         ))}
         {rootFields.map((field) =>
           field.field_type === "form" ? (
+            /*
+             * 分组表头比其它表头深一档（bg-layer-1-active），子表头则与普通表头同色。
+             * 原先这里是 bg-accent-subtle/30、子表头 bg-accent-subtle/15：cn 是 twMerge，
+             * 后写的 bg-* 会把 HEADER_CELL_BASE 里的 bg-layer-1 整个顶掉，而 accent-subtle
+             * 在浅色主题下比 layer-1 还浅、深色主题下又比它深，任何透明度都够不到表头灰。
+             * 结果就是表头右半边整块发白，像缺了一角。分组感交给深一档的色阶。
+             */
             <th
               key={field.id}
               colSpan={getFormColumnCount(field, showActionGutter)}
-              className="border-r border-subtle bg-accent-subtle/30 px-3 py-2.5 text-center text-primary"
+              className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "bg-layer-1-active text-center")}
             >
-              {field.name}
+              <span className="truncate text-13 font-medium text-secondary">{field.name}</span>
             </th>
           ) : (
-            <th
-              key={field.id}
-              rowSpan={spanRows}
-              className="min-w-40 border-r border-subtle px-3 py-2.5 align-middle text-primary"
-            >
-              <span className="inline-flex items-center gap-0.5">
-                {field.name}
-                {field.is_required && <span className="text-danger-primary">*</span>}
-              </span>
+            <th key={field.id} rowSpan={spanRows} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+              <RequirementGridHeaderLabel label={field.name} isRequired={field.is_required} />
             </th>
           )
         )}
@@ -399,29 +572,26 @@ export const RequirementGridHeader = ({
         )}
       </tr>
       {hasFormFields && (
-        <tr className="border-b border-subtle">
+        <tr>
           {formFields.map((field) =>
             field.children.length ? (
               <Fragment key={field.id}>
                 {field.children.map((child) => (
                   <th
                     key={child.id}
-                    className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-secondary"
+                    className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "font-normal")}
                   >
-                    <span className="inline-flex items-center gap-0.5">
-                      {child.name}
-                      {child.is_required && <span className="text-danger-primary">*</span>}
-                    </span>
+                    <RequirementGridHeaderLabel label={child.name} isRequired={child.is_required} />
                   </th>
                 ))}
                 {showActionGutter && (
-                  <th aria-hidden className="w-9 border-r border-subtle bg-accent-subtle/15 px-0.5 py-2" />
+                  <th aria-hidden className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "px-0.5")} />
                 )}
               </Fragment>
             ) : (
               <th
                 key={`${field.id}-empty`}
-                className="min-w-40 border-r border-subtle bg-accent-subtle/15 px-3 py-2 font-normal text-placeholder"
+                className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "font-normal text-placeholder")}
               >
                 {t("requirement_fields.fields.no_children")}
               </th>
@@ -436,28 +606,41 @@ export const RequirementGridHeader = ({
 /**
  * 字段控件的两套底色配方。内置字段（BuiltinCellEditor）也从这里取，免得两边漂移。
  *
- * grid：单元格之间没有标签，得靠「幽灵输入框」的底色告诉用户这一格可以点。
+ * 两套现在都是静息无底色，只在 hover / focus 时显形。
+ *
+ * grid 原先常驻一层 bg-layer-1/60 来暗示「这一格可以点」，实际效果是反的：控件
+ * h-8 装在 h-11、左右各留 21.6px（px-page-x）的格子里，灰块永远浮在白格子中间够不着
+ * 边，格线与灰块两套矩形互相打架；而 60% 的灰（≈#F8F9F9）又比表头的实心 bg-layer-1
+ * （#F4F5F5）还浅，层级整个倒过来。可编辑性交给 hover:bg-layer-1 + focus 的边框与
+ * ring 表达就够了 —— 与工作项电子表格同一套（见 issue-layouts/spreadsheet 的
+ * issue-column.tsx：单元格自身不带底色，只有 hover 才上 bg-layer-1）。
  * detail：标签已经把可编辑性说清楚了，再铺一层底色就是噪音 —— 与工作项详情侧栏
  * 对齐（见 issues/issue-detail/sidebar.tsx，全部 transparent-with-text，静息无底色）。
  */
 export const FIELD_INPUT_CLASS = {
-  grid: "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none",
+  grid: "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none",
   detail:
     "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  modal:
+    "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-14 text-primary transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-placeholder hover:border-strong focus:ring-2 motion-reduce:transition-none",
 } as const;
 
 /** 下拉按钮版：要用 ! 盖掉 @plane/ui 自带的边框 */
 export const FIELD_DROPDOWN_CLASS = {
-  grid: "h-8 w-full min-w-0 border !border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  grid: "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
     "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  modal:
+    "h-8 w-full min-w-0 border !border-subtle bg-surface-1 px-2 transition-colors duration-150 hover:!border-strong focus:!border-accent-primary motion-reduce:transition-none",
 } as const;
 
 /** MultiSelectDropdown 走 buttonContainerClassName，没有 ! 之争 */
 const MULTI_SELECT_CLASS = {
-  grid: "h-8 w-full min-w-0 rounded-md border border-transparent bg-layer-1/60 px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  grid: "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
     "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  modal:
+    "h-8 w-full min-w-0 rounded-md border border-subtle bg-surface-1 px-2 transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
 } as const;
 
 /**
@@ -489,7 +672,7 @@ export const LeafEditor = ({
   /** 网格草稿把富文本里上传的资源登记为待提交，取消编辑时统一清理 */
   onAssetUpload?: (assetId: string) => void;
   /** detail 直接内联完整编辑器；grid 只有 160px 列宽，走摘要 + 弹窗 */
-  variant?: "grid" | "detail";
+  variant?: "grid" | "detail" | "modal";
   /**
    * 文本字段是否延后到失焦再提交。默认跟随 variant，但两者不是一回事：
    * 网格的 onChange 只写 draftRows（逐字符是对的，isDirty 要靠它），详情页与
@@ -499,7 +682,12 @@ export const LeafEditor = ({
 }) => {
   const { t } = useTranslation();
   if (field.field_type === "boolean") {
-    return <ToggleSwitch value={Boolean(value)} onChange={() => onChange(!value)} size="sm" />;
+    // 撑到和其它编辑器一样的 h-8：裸开关只有 16px 高，夹在一排 32px 控件里会矮一截
+    return (
+      <div className="flex h-8 min-w-0 items-center">
+        <ToggleSwitch value={Boolean(value)} onChange={() => onChange(!value)} size="sm" />
+      </div>
+    );
   }
   if (field.field_type === "select") {
     const options = getRequirementSelectOptions(field);
@@ -638,7 +826,7 @@ export const LeafEditor = ({
             </span>
           ))
         )}
-        <label className="inline-flex h-7 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-12 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
+        <label className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-12 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
           <Paperclip className="size-3 shrink-0" />
           <span className="truncate">
             {t(

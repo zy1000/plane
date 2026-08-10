@@ -1382,6 +1382,8 @@ export default {
       description_example: "Help people understand what to enter",
       required_title: "Required field",
       required_description: "People must complete this field before submitting.",
+      required_data_field_hint:
+        "Data fields cannot be required: the standard library never stores them, so requirements imported from a library would be missing this value and could no longer be saved.",
       enabled_title: "Available for use",
       enabled_description: "Disabled fields are retained but hidden from data entry.",
       duplicate_field: "Duplicate field",
@@ -1428,7 +1430,7 @@ export default {
       in_review: "In review",
       pending_deletion: "Deletion pending",
       approved: "Approved",
-      modified: "Changed · not submitted",
+      modified: "Changed",
     },
   },
   /** 相对时间。date-fns 的 calculateTimeAgo 不接 locale，中文界面下会吐英文，所以走 i18n */

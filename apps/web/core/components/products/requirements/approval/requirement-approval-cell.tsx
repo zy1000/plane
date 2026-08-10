@@ -38,24 +38,38 @@ export const RequirementApprovalCell = ({ requirement, isStagedCreate, onOpenCha
   }
 
   const state = requirement.approval_state;
+  /**
+   * 胶囊恒单行：列宽定死 144px，减去两侧 page-x 内边距只剩 100px 上下，
+   * 换行的那一行会把整格顶成两行、行高被这一列一个人决定。装不下就省略号，不折行。
+   */
   const pill = (
     <span
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded px-1.5 text-10 font-medium",
+        "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-10 font-medium",
         REQUIREMENT_APPROVAL_PILL[state]
       )}
     >
-      {state === "pending_deletion" && <Trash2 className="size-2.5" />}
-      {state === "in_review" && <Lock className="size-2.5" />}
-      {t(`requirement_approval.state.${state}`)}
+      {state === "pending_deletion" && <Trash2 className="size-2.5 shrink-0" />}
+      {state === "in_review" && <Lock className="size-2.5 shrink-0" />}
+      <span className="truncate">{t(`requirement_approval.state.${state}`)}</span>
     </span>
   );
 
+  /**
+   * 胶囊与版本号并排成一行，不再上下堆叠。
+   *
+   * 堆两行会把整行撑到 54px，而其余九列都只有一行内容 —— 于是这一列凭空比别人「重」，
+   * 整张表的行高也跟着被它一个人决定。表格统一 44px 行高（见 requirement-grid-shared）。
+   *
+   * 靠左，不居中：一行的总宽随「有没有版本号 / 有没有圆点」而变，居中会让每行胶囊的
+   * 左边缘各错开几像素，竖着扫一列时像没对齐。其余列也都是左对齐的。
+   */
   return (
-    <div className="flex flex-col items-center gap-0.5">
+    <div className="flex min-w-0 items-center gap-1">
       {requirement.pending_change_request_id && onOpenChangeRequest ? (
         <button
           type="button"
+          className="flex min-w-0 items-center"
           onClick={() => onOpenChangeRequest(requirement.pending_change_request_id as string)}
           title={t("requirement_approval.open_change_request")}
         >
@@ -64,7 +78,7 @@ export const RequirementApprovalCell = ({ requirement, isStagedCreate, onOpenCha
       ) : (
         pill
       )}
-      <span className="flex items-center gap-1 text-10 text-tertiary tabular-nums">
+      <span className="flex shrink-0 items-center gap-1 text-10 text-tertiary tabular-nums">
         {requirement.approved_version !== null && `v${requirement.approved_version}`}
         {state === "modified" && (
           <Tooltip tooltipContent={t("requirement_approval.has_unsubmitted_changes")}>

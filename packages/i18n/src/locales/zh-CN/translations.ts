@@ -1547,6 +1547,7 @@ export default {
       description_example: "帮助填写人理解该字段",
       required_title: "设为必填",
       required_description: "提交前必须完成该字段。",
+      required_data_field_hint: "数据字段不能设为必填：标准库不收录数据字段，从库里导入的需求会因为缺这一项而无法再保存。",
       enabled_title: "允许使用",
       enabled_description: "停用后保留字段，但不再显示于数据录入。",
       duplicate_field: "复制字段",
@@ -1593,7 +1594,8 @@ export default {
       in_review: "评审中",
       pending_deletion: "删除待审",
       approved: "已通过",
-      modified: "已改动·待提交",
+      /** 「待提交」的意思由旁边那个圆点的 tooltip（has_unsubmitted_changes）补，胶囊只留三个字才塞得进 144px 的审批列 */
+      modified: "已改动",
     },
   },
   /** 相对时间。date-fns 的 calculateTimeAgo 不接 locale，中文界面下会吐英文，所以走 i18n */

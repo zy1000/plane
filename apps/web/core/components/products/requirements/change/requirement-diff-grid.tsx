@@ -33,7 +33,10 @@ import {
   ChangedFieldCorner,
   getFormRows,
   LeafValue,
+  REQUIREMENT_GRID_CELL_BORDER_CLASS,
+  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
   RequirementGridHeader,
+  RequirementGridHeaderLabel,
 } from "@/components/requirements/requirement-grid-shared";
 import { ChangeRequirementTypeTabs, type TChangeRequirementTypeTab } from "./change-requirement-type-tabs";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
@@ -326,7 +329,8 @@ export function RequirementDiffGrid(props: TProps) {
                 <td
                   rowSpan={totalRows}
                   className={cn(
-                    "w-20 border-r border-subtle px-2 text-center align-middle",
+                    REQUIREMENT_GRID_CELL_BORDER_CLASS,
+                    "px-2 text-center",
                     cellPaddingClass,
                     groupCellClass
                   )}
@@ -345,7 +349,8 @@ export function RequirementDiffGrid(props: TProps) {
                       key={column.key}
                       rowSpan={totalRows}
                       className={cn(
-                        "min-w-32 border-r border-subtle px-3 align-middle",
+                        REQUIREMENT_GRID_CELL_BORDER_CLASS,
+                        "px-page-x",
                         cellPaddingClass,
                         groupCellClass,
                         hasChanged && "relative bg-danger-subtle/40"
@@ -372,7 +377,8 @@ export function RequirementDiffGrid(props: TProps) {
                       key={field.id}
                       rowSpan={totalRows}
                       className={cn(
-                        "min-w-40 border-r border-subtle px-3 align-middle",
+                        REQUIREMENT_GRID_CELL_BORDER_CLASS,
+                        "px-page-x",
                         cellPaddingClass,
                         groupCellClass,
                         hasChanged && "relative bg-danger-subtle/40"
@@ -397,7 +403,8 @@ export function RequirementDiffGrid(props: TProps) {
                     <td
                       key={`${form.id}-empty`}
                       className={cn(
-                        "min-w-40 border-r border-subtle px-3 align-middle text-placeholder",
+                        REQUIREMENT_GRID_CELL_BORDER_CLASS,
+                        "px-page-x text-placeholder",
                         cellPaddingClass,
                         isComfortable ? "text-14" : "text-13",
                         groupCellClass
@@ -427,7 +434,8 @@ export function RequirementDiffGrid(props: TProps) {
                     <td
                       key={`${form.id}-${child.id}`}
                       className={cn(
-                        "min-w-40 border-r border-subtle px-3 align-middle",
+                        REQUIREMENT_GRID_CELL_BORDER_CLASS,
+                        "px-page-x",
                         cellPaddingClass,
                         groupCellClass,
                         subToneClass,
@@ -453,7 +461,8 @@ export function RequirementDiffGrid(props: TProps) {
                   <td
                     key={`${form.id}-gutter`}
                     className={cn(
-                      "w-9 border-r border-subtle px-0.5 text-center align-middle font-medium",
+                      REQUIREMENT_GRID_CELL_BORDER_CLASS,
+                      "px-0.5 text-center font-medium",
                       cellPaddingClass,
                       isComfortable ? "text-14" : "text-13",
                       groupCellClass,
@@ -564,16 +573,17 @@ export function RequirementDiffGrid(props: TProps) {
               rootFields={rootFields}
               showActionGutter
               leadingHeader={{
-                className: cn(
-                  "w-20 border-r border-subtle px-2 text-center text-primary",
-                  isComfortable ? "py-3" : "py-2.5"
+                className: cn(REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS, "w-20 px-2 text-center"),
+                content: (
+                  <span className="text-13 font-medium text-secondary">
+                    {t("workspace_products.requirements.change.grid.change")}
+                  </span>
                 ),
-                content: t("workspace_products.requirements.change.grid.change"),
               }}
               builtinHeaders={visibleBuiltinColumns.map((column) => ({
                 key: column.key,
                 className: column.width,
-                content: t(column.labelKey),
+                content: <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />,
               }))}
             />
             {items.map(renderChangeItem)}

@@ -443,6 +443,32 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
             )
         field_type = attrs["field_type"]
         children = attrs.get("children") or []
+
+        # 数据字段不能设为必填。
+        #
+        # 标准库只按标准字段校验（utils/requirement.py 的 get_library_field_specs），
+        # 数据字段压根不在库条目的契约里；而导入到产品需求时是按类型的**全集**校验的。
+        # 一旦某个数据字段被标成必填，库条目天生就缺它，导入只能跳过必填校验
+        # （build_library_import_creates），落进来的行随后每一次单元格保存又会被
+        # 同一条必填规则打回 —— 那一行从此存不进任何改动。
+        # 子字段的分类强制继承所属表单（utils/requirement.py 的 save_field），
+        # 所以这里用根字段的分类一并管住子字段。
+        if attrs["field_category"] == RequirementFieldCategory.DATA:
+            offenders = [
+                node["name"]
+                for node in [attrs, *children]
+                if node.get("is_required")
+            ]
+            if offenders:
+                raise serializers.ValidationError(
+                    {
+                        "is_required": (
+                            "A data field cannot be required, because standard library "
+                            "items never carry data fields: "
+                            f"{', '.join(offenders)}"
+                        )
+                    }
+                )
         if field_type != RequirementFieldType.FORM and children:
             raise serializers.ValidationError(
                 {"children": "Only form fields can contain child fields."}

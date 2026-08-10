@@ -22,6 +22,8 @@ type TProps = {
   disabled?: boolean;
   /** 段落型文本要能换行，就把回车提交关掉 */
   commitOnEnter?: boolean;
+  /** 挂载时抢焦点。网格里内联新增一行后，让光标直接落在新行的标题上 */
+  autoFocus?: boolean;
 };
 
 export const DraftInput = ({
@@ -32,7 +34,9 @@ export const DraftInput = ({
   maxLength,
   disabled,
   commitOnEnter = true,
+  autoFocus = false,
 }: TProps) => {
+  const inputRef = useRef<HTMLInputElement>(null);
   // null = 没有草稿，直接显示服务端值
   const [draft, setDraft] = useState<string | null>(null);
   const draftRef = useRef<string | null>(null);
@@ -62,6 +66,16 @@ export const DraftInput = ({
   // 敲完直接关抽屉 / 切换需求时不能把没提交的字丢掉
   useEffect(() => () => commitRef.current(), []);
 
+  /*
+   * 用 effect 而不是 input 的 autoFocus 属性：新增的行是异步落库后才出现的，
+   * 挂载时机跟着接口回话走，原生 autoFocus 在这种场景下不稳。顺带把行滚进视野。
+   */
+  useEffect(() => {
+    if (!autoFocus) return;
+    inputRef.current?.focus();
+    inputRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [autoFocus]);
+
   useEffect(() => {
     // 提交后又接着敲了新内容，这次回话不该把它盖掉
     if (committedRef.current === null || draftRef.current !== committedRef.current) return;
@@ -70,6 +84,7 @@ export const DraftInput = ({
 
   return (
     <input
+      ref={inputRef}
       value={draft ?? value}
       onChange={(event) => {
         draftRef.current = event.target.value;

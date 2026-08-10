@@ -101,6 +101,8 @@ type TFieldRowProps = {
 type TFieldInlineFormProps = {
   field: TRequirementFieldDraft;
   isChild: boolean;
+  /** 这个字段实际归哪一类：子字段跟着所属表单。数据字段不允许设必填 */
+  effectiveCategory: TRequirementFieldCategory | null;
   onChange: (field: TRequirementFieldDraft) => void;
   /** 还原成展开时的样子 */
   onCancel: () => void;
@@ -505,7 +507,19 @@ function FieldCategoryPicker({
           <button
             key={category}
             type="button"
-            onClick={() => onChange({ ...field, field_category: category })}
+            onClick={() =>
+              onChange({
+                ...field,
+                field_category: category,
+                // 转成数据字段就把必填一并摘掉，连同子字段 —— 子字段的分类跟着表单走
+                ...(category === "data"
+                  ? {
+                      is_required: false,
+                      children: field.children.map((child) => ({ ...child, is_required: false })),
+                    }
+                  : {}),
+              })
+            }
             className={cn(
               "block w-full rounded-md border px-3 py-2 text-left transition-colors duration-150",
               field.field_category === category
@@ -539,9 +553,15 @@ function FieldCategoryPicker({
  * 「取消」还原到展开时的样子，「完成」只是收起。
  */
 function FieldInlineForm(props: TFieldInlineFormProps) {
-  const { field, isChild, onChange, onCancel, onDone } = props;
+  const { field, isChild, effectiveCategory, onChange, onCancel, onDone } = props;
   const { t } = useTranslation();
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
+  /*
+   * 数据字段不能设必填 —— 标准库只按标准字段校验，库条目天生不带数据字段，
+   * 导入进来的行会卡在必填上再也存不动。后端在
+   * RequirementFieldNodeWriteSerializer 里也拦一道，这里只是提前给出反馈。
+   */
+  const canBeRequired = effectiveCategory !== "data";
   const selectOptions = field.field_type === "select" ? getRequirementSelectOptions(field) : [];
   const hasValidSelectOptions = field.field_type !== "select" || hasValidRequirementSelectOptions(field);
 
@@ -611,16 +631,22 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
           className="mt-1 min-h-16 w-full resize-none bg-transparent text-13 leading-5 text-secondary outline-none placeholder:text-placeholder"
           placeholder={t("requirement_fields.builder.description_example")}
         />
-        <div className="mt-auto flex items-center gap-4 border-t border-subtle pt-3 text-12 text-secondary">
-          <label className="flex items-center gap-2">
+        <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-subtle pt-3 text-12 text-secondary">
+          <label className={cn("flex items-center gap-2", !canBeRequired && "cursor-not-allowed text-disabled")}>
             <input
               type="checkbox"
-              checked={field.is_required}
+              checked={field.is_required && canBeRequired}
+              disabled={!canBeRequired}
               onChange={(event) => onChange({ ...field, is_required: event.target.checked })}
-              className="size-3.5 rounded border border-subtle accent-accent-primary"
+              className="size-3.5 rounded border border-subtle accent-accent-primary disabled:cursor-not-allowed"
             />
             {t("requirement_fields.builder.required_title")}
           </label>
+          {!canBeRequired && (
+            <span className="basis-full text-11 leading-4 text-tertiary">
+              {t("requirement_fields.builder.required_data_field_hint")}
+            </span>
+          )}
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -853,15 +879,21 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     closeEditor();
   };
 
-  const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => (
-    <FieldInlineForm
-      field={field}
-      isChild={Boolean(target.childKey)}
-      onChange={updateSelectedField}
-      onCancel={cancelEditing}
-      onDone={closeEditor}
-    />
-  );
+  const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => {
+    // 子字段的分类跟着所属表单走，「能不能设必填」也就得看根字段的分类
+    const root = fields.find((item) => fieldKey(item) === target.rootKey);
+    const effectiveCategory = target.childKey ? (root?.field_category ?? null) : field.field_category;
+    return (
+      <FieldInlineForm
+        field={field}
+        isChild={Boolean(target.childKey)}
+        effectiveCategory={effectiveCategory}
+        onChange={updateSelectedField}
+        onCancel={cancelEditing}
+        onDone={closeEditor}
+      />
+    );
+  };
 
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(

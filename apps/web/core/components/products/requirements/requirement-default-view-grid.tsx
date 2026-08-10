@@ -3,19 +3,46 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pagination } from "antd";
-import { Copy, History, Loader as LoaderIcon, Maximize2, Send, Trash2, Undo2 } from "lucide-react";
+import {
+  Copy,
+  History,
+  Layers,
+  Loader as LoaderIcon,
+  Maximize2,
+  Send,
+  ShieldCheck,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement, TRequirementData, TRequirementTypeSchema } from "@plane/types";
-import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
+import { AlertModalCore, Checkbox, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
 import { RequirementApprovalCell } from "./approval/requirement-approval-cell";
-import { getCurrentPageOffset, MenuRowLabel } from "@/components/requirements/requirement-grid-shared";
-import { copyRequirementData } from "@/components/requirements/use-requirement-grid-editor";
+import {
+  getCurrentPageOffset,
+  getRequirementColumnWidth,
+  MenuRowLabel,
+  REQUIREMENT_GRID_BODY_CELL_CLASS,
+  REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+  REQUIREMENT_GRID_COLUMN_WIDTH,
+  REQUIREMENT_GRID_HEADER_CELL_CLASS,
+  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+  REQUIREMENT_GRID_ROW_CLASS,
+  REQUIREMENT_GRID_ROW_SELECTED_CLASS,
+  REQUIREMENT_GRID_STICKY_BODY_CLASS,
+  REQUIREMENT_GRID_STICKY_HEADER_CLASS,
+  RequirementGridHeaderLabel,
+  resolveRequirementTitleColumnWidth,
+  useRequirementGridScrollContainer,
+} from "@/components/requirements/requirement-grid-shared";
+import { copyRequirementData } from "@/components/requirements/requirement-row-data";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 
 /**
@@ -24,6 +51,10 @@ import { useRequirementTitles } from "@/components/requirements/use-requirement-
  * 只展示每行都有的八个内置字段，外加一列「所属类型」—— 自定义字段随类型而异，跨类型
  * 摆在一张表里对不上列。刻意做成只读：总览里新增一行，对应类型的必填字段无处可填；
  * 要录入或改值就点进对应的类型视图。
+ *
+ * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：标题列左固定
+ * 并吃掉容器剩余宽度、其余列定宽 144px、行高 44px、勾选框与行操作都折进标题格里悬停
+ * 才显形。量化与样式常量都在 requirement-grid-shared.tsx，三个需求网格共用。
  */
 type TProps = {
   /** 父项列要把 UUID 换成标题，跨页的父项得回头查接口 */
@@ -152,6 +183,23 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   );
   // 与类型视图同一份内置列定义：列头、列序、列宽都不该在两个视图里各写一遍
   const builtinColumns = getBuiltinColumnsFor("product");
+  /**
+   * 标题列单拎出来做左固定列（见下方 colgroup）：它是唯一能认出「这是哪一行」的列，
+   * 横滚时必须留在视野里。其余内置列跟着定宽的属性列走。
+   */
+  const titleColumn = builtinColumns.find((column) => column.key === "title");
+  const propertyBuiltinColumns = builtinColumns.filter((column) => column.key !== "title");
+
+  const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
+
+  /** 标题列之外的所有列宽，用来反推标题列该吃掉多少 */
+  const propertyColumnsWidth =
+    // 审批列 + 内置属性列 + 所属类型列
+    REQUIREMENT_GRID_COLUMN_WIDTH +
+    propertyBuiltinColumns.reduce((total, column) => total + getRequirementColumnWidth(column.key), 0) +
+    REQUIREMENT_GRID_COLUMN_WIDTH;
+  const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, propertyColumnsWidth);
+  const tableWidth = titleColumnWidth + propertyColumnsWidth;
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
   const parentTitles = useRequirementTitles({
     workspaceSlug,
@@ -283,134 +331,146 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     <div className="flex flex-1 flex-col overflow-hidden">
       {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="px-4 py-2">{toolbar}</div>}
 
-      <div className="flex-1 overflow-auto">
+      <div ref={setScrollContainer} className="flex-1 overflow-auto">
         {/*
-          table-fixed + colgroup 定列宽：任由浏览器按内容分配，标题会被撑到几百像素而
-          状态、优先级这些短列挤成一团。列宽直接取内置列定义里的那份，与类型视图对齐；
-          加起来放不下时整表横向滚动，而不是把每列压扁。
-          表头/竖线/字号/行高一律对齐 RequirementGridHeader，切换视图时不该换一副样子。
+          列宽全部显式给定（table-fixed + colgroup），且照工作项电子表格的排法：
+          标题列左固定并吃掉容器剩余宽度，其余列一律定宽。这样表格恒好铺满容器
+          —— 既不会短一截露出背景，也不会因为定宽相加超出而把最右边的列（「所属
+          类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，标题列留在原地。
         */}
-        <table className="w-full table-fixed border-collapse text-left text-13">
+        <table
+          className="table-fixed border-collapse bg-surface-1 text-left text-13"
+          style={{ width: tableWidth }}
+        >
           <colgroup>
-            <col className="w-10" />
-            <col className="w-24" />
-            {builtinColumns.map((column) => (
-              <col key={column.key} className={column.width} />
+            <col style={{ width: titleColumnWidth }} />
+            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+            {propertyBuiltinColumns.map((column) => (
+              <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
             ))}
-            <col className="w-40" />
-            {!readOnly && <col className="w-16" />}
+            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-layer-1 text-13 font-medium text-secondary">
-            <tr className="border-b border-subtle">
-              <th className="border-r border-subtle px-3 py-2.5 align-middle">
-                {!readOnly && (
-                  <input
-                    type="checkbox"
-                    className="size-3.5 cursor-pointer"
-                    checked={allSelected}
-                    disabled={!visibleIds.length}
-                    onChange={toggleAll}
-                  />
+          <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
+            <tr>
+              {/* 标题列：勾选框折进来，与工作项一样不单独占一列 */}
+              <th
+                data-requirement-sticky-cell
+                className={cn(
+                  "group/header relative",
+                  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                  REQUIREMENT_GRID_STICKY_HEADER_CLASS
                 )}
+                style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+              >
+                <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                  {/*
+                    勾选框常驻占位、只在悬停（或已有选中）时显形 —— 与工作项一致。
+                    用 opacity 而不是条件渲染，标题才不会在鼠标进出时左右跳。
+                  */}
+                  {!readOnly && (
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={!allSelected && selectedIds.length > 0}
+                      disabled={!visibleIds.length}
+                      onChange={toggleAll}
+                      aria-label={t("requirement_grid.data.select_row")}
+                      containerClassName={cn(
+                        "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
+                        selectedIds.length > 0 && "pointer-events-auto opacity-100"
+                      )}
+                    />
+                  )}
+                  <RequirementGridHeaderLabel
+                    icon={titleColumn?.icon}
+                    label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
+                  />
+                </div>
               </th>
-              {/* 审批态紧跟勾选框：这是每行都要扫一眼的信息，放到最后要横滚才看得见 */}
-              <th className="border-r border-subtle px-3 py-2.5 text-center align-middle text-primary">
-                {t("requirement_approval.column")}
+              {/* 审批态紧跟标题：这是每行都要扫一眼的信息，放到最后要横滚才看得见 */}
+              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
               </th>
-              {builtinColumns.map((column) => (
-                <th key={column.key} className="border-r border-subtle px-3 py-2.5 align-middle text-primary">
-                  {t(column.labelKey)}
+              {propertyBuiltinColumns.map((column) => (
+                <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                  <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />
                 </th>
               ))}
-              <th
-                className={cn(
-                  "px-3 py-2.5 align-middle text-primary",
-                  !readOnly && "border-r border-subtle"
-                )}
-              >
-                {t("workspace_products.requirements.data.views.requirement_type_column")}
+              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                <RequirementGridHeaderLabel
+                  icon={Layers}
+                  label={t("workspace_products.requirements.data.views.requirement_type_column")}
+                />
               </th>
-              {!readOnly && (
-                <th className="px-2 py-2.5 text-center align-middle text-primary">
-                  {t("requirement_fields.fields.actions")}
-                </th>
-              )}
             </tr>
           </thead>
           <tbody>
             {requirements.map((requirement) => {
+              const isSelected = selectedIds.includes(requirement.id);
               return (
-                <tr key={requirement.id} className="group/requirement border-b border-subtle hover:bg-layer-1">
-                  <td className="border-r border-subtle px-3 py-2 align-middle">
-                    {!readOnly && (
-                      <input
-                        type="checkbox"
-                        className="size-3.5 cursor-pointer"
-                        checked={selectedIds.includes(requirement.id)}
-                        onChange={() => toggleOne(requirement.id)}
-                      />
+                <tr
+                  key={requirement.id}
+                  className={cn(
+                    "group/requirement",
+                    REQUIREMENT_GRID_ROW_CLASS,
+                    isSelected && REQUIREMENT_GRID_ROW_SELECTED_CLASS
+                  )}
+                >
+                  {/*
+                    标题格：勾选框 + 标题 + 详情入口 + 行操作菜单。除标题外都是悬停
+                    才显形，静息状态下这一格只有标题，和工作项一致。
+
+                    左固定列的底色必须不透明（否则横滚时下面的内容会透上来），所以
+                    选中/悬停的着色交给内层 div 铺，而不是像其余单元格那样挂在 <tr> 上。
+                  */}
+                  <td
+                    data-requirement-sticky-cell
+                    className={cn(
+                      "relative",
+                      REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                      REQUIREMENT_GRID_STICKY_BODY_CLASS
                     )}
-                  </td>
-                  <td className="border-r border-subtle px-2 py-2 align-middle">
-                    <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
-                  </td>
-                  {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
-                  {builtinColumns.map((column) => (
-                    <td
-                      key={column.key}
+                    style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+                  >
+                    <div
                       className={cn(
-                        "truncate border-r border-subtle px-3 py-2 align-middle",
-                        column.key === "description_html" && "text-secondary"
+                        "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                        isSelected
+                          ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                          : "group-hover/requirement:bg-layer-transparent-hover"
                       )}
                     >
-                      {column.key === "title" ? (
-                        // 详情入口只挂在标题格上：这张表整行没有点击语义，加在这里最不打架
-                        <span className="flex min-w-0 items-center gap-1">
-                          <span className="min-w-0 flex-1 truncate">
-                            <BuiltinCellValue columnKey={column.key} values={requirement} />
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => onOpenDetail(requirement.id)}
-                            title={t("requirement_detail.open")}
-                            className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-visible:opacity-100 hover:bg-layer-transparent-hover hover:text-primary"
-                          >
-                            <Maximize2 className="size-3.5" />
-                          </button>
-                        </span>
-                      ) : (
-                        <BuiltinCellValue
-                          columnKey={column.key}
-                          values={requirement}
-                          resolveParentTitle={resolveParentTitle}
+                      {!readOnly && (
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={() => toggleOne(requirement.id)}
+                          aria-label={t("requirement_grid.data.select_row")}
+                          containerClassName={cn(
+                            "pointer-events-none opacity-0 transition-opacity group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
+                            isSelected && "pointer-events-auto opacity-100"
+                          )}
                         />
                       )}
-                    </td>
-                  ))}
-                  <td className={cn("px-3 py-2 align-middle", !readOnly && "border-r border-subtle")}>
-                    <button
-                      type="button"
-                      onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
-                      title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
-                        name: requirementTypeNames[requirement.requirement_type_id] ?? "",
-                      })}
-                      className={cn(
-                        "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
-                        "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
-                      )}
-                    >
-                      <span className="truncate">{requirementTypeNames[requirement.requirement_type_id] ?? "—"}</span>
-                    </button>
-                  </td>
-                  {!readOnly && (
-                    <td className="px-2 py-2 text-center align-middle">
-                      {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
-                      <div className="flex justify-center">
-                        <CustomMenu
-                          ellipsis
-                          placement="bottom-end"
-                          buttonClassName="text-tertiary hover:text-primary"
-                        >
+                      <Tooltip tooltipContent={requirement.title}>
+                        <span className="min-w-0 flex-1 truncate">
+                          <BuiltinCellValue columnKey="title" values={requirement} />
+                        </span>
+                      </Tooltip>
+                      <button
+                        type="button"
+                        onClick={() => onOpenDetail(requirement.id)}
+                        title={t("requirement_detail.open")}
+                        className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-visible:opacity-100 hover:bg-layer-transparent-hover hover:text-primary"
+                      >
+                        <Maximize2 className="size-3.5" />
+                      </button>
+                      {!readOnly && (
+                        <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
+                          {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
+                          <CustomMenu
+                            ellipsis
+                            placement="bottom-end"
+                            buttonClassName="text-tertiary hover:text-primary"
+                          >
                           <CustomMenu.MenuItem
                             onClick={() => void handleDuplicate(requirement)}
                             disabled={isMutating}
@@ -459,10 +519,46 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                               />
                             </CustomMenu.MenuItem>
                           )}
-                        </CustomMenu>
-                      </div>
+                          </CustomMenu>
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
+                    <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
+                  </td>
+                  {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
+                  {propertyBuiltinColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={cn(
+                        "truncate",
+                        REQUIREMENT_GRID_BODY_CELL_CLASS,
+                        column.key === "description_html" && "text-secondary"
+                      )}
+                    >
+                      <BuiltinCellValue
+                        columnKey={column.key}
+                        values={requirement}
+                        resolveParentTitle={resolveParentTitle}
+                      />
                     </td>
-                  )}
+                  ))}
+                  <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
+                      title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
+                        name: requirementTypeNames[requirement.requirement_type_id] ?? "",
+                      })}
+                      className={cn(
+                        "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
+                        "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
+                      )}
+                    >
+                      <span className="truncate">{requirementTypeNames[requirement.requirement_type_id] ?? "—"}</span>
+                    </button>
+                  </td>
                 </tr>
               );
             })}

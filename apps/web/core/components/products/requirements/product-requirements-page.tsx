@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Database, History, Inbox, Layers, Save, Settings2 } from "lucide-react";
@@ -10,7 +10,9 @@ import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { RequirementGrid } from "@/components/requirements/requirement-grid";
+import { RequirementCreateModal } from "@/components/requirements/requirement-create-modal";
+import { RequirementGrid, type TRequirementGridHandle } from "@/components/requirements/requirement-grid";
+import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementBaselines } from "@/hooks/store/use-requirement-baselines";
@@ -60,12 +62,14 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const navigate = useNavigate();
   const { members } = useProductMembers(workspaceSlug, productId);
   const { data: currentUser } = useUser();
-  const [isDataEditing, setIsDataEditing] = useState(false);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   /** 鼠标移到「导入」上就开始预热条目，点开时基本无等待 */
   const [shouldPrefetchImport, setShouldPrefetchImport] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
+  /** 默认视图里「录入」选完类型后要开的建行弹窗；类型视图不走这条路 */
+  const [createTypeId, setCreateTypeId] = useState<string | null>(null);
+  const gridRef = useRef<TRequirementGridHandle | null>(null);
   const [isCreateBaselineOpen, setIsCreateBaselineOpen] = useState(false);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<TRequirementSettingsDraft | null>(null);
@@ -116,6 +120,21 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
       ? requirementTypes.find((item) => item.id === activeView.requirementTypeId)
       : undefined;
 
+  /** 默认视图里建行用的字段集：取选中类型的启用字段，与类型视图给网格的那份一致 */
+  const createTypeFields = useMemo(
+    () =>
+      createTypeId
+        ? (requirementTypes.find((item) => item.id === createTypeId)?.fields ?? []).filter(
+            (field) => field.is_active
+          )
+        : [],
+    [createTypeId, requirementTypes]
+  );
+  const uploadAsset = useRequirementAssetUpload({
+    workspaceSlug: workspaceSlug ?? "",
+    entityId: productId ?? "",
+  });
+
   useEffect(() => {
     if (!store.configuration) return;
     const nextSettings = toSettingsDraft(store.configuration.policy);
@@ -134,7 +153,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   }, [activeView, setRequirementTypeFilter, requirementTypeFilter]);
 
   const setTab = (tab: TProductRequirementsTab) => {
-    if (isDataEditing || (activeTab === "configuration" && isDirty)) return;
+    if (activeTab === "configuration" && isDirty) return;
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
     next.delete("cr");
@@ -144,7 +163,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   };
 
   const changeView = (view: TRequirementDataView) => {
-    if (isDataEditing) return;
     const next = new URLSearchParams(searchParams);
     if (getViewKey(view) === DEFAULT_VIEW_KEY) next.delete("view");
     else next.set("view", getViewKey(view));
@@ -274,7 +292,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   <button
                     key={tab.key}
                     type="button"
-                    disabled={isDataEditing || (activeTab === "configuration" && isDirty)}
+                    disabled={activeTab === "configuration" && isDirty}
                     onClick={() => setTab(tab.key)}
                     className={cn(
                       "relative flex h-11 items-center gap-1.5 px-3 text-12 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
@@ -307,7 +325,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 )}
               </Button>
             )}
-            {activeTab === "data" && canEdit && !isDataEditing && (
+            {activeTab === "data" && canEdit && (
               <>
                 <Button
                   variant="secondary"
@@ -318,7 +336,20 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 >
                   {t("workspace_products.requirements.data.import_from_library")}
                 </Button>
-                <Button variant="primary" size="lg" onClick={() => setIsTypePickerOpen(true)}>
+                {/*
+                  录入的落点按视图分：类型视图里类型已知，直接在表格里内联加一行；
+                  默认视图是跨类型总览，得先选类型，再用弹窗把那个类型的字段填齐
+                  —— 总览的表格只有内置列，自定义字段在那儿根本没有格子可填。
+                */}
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() =>
+                    activeView.kind === "requirementType"
+                      ? gridRef.current?.addRow()
+                      : setIsTypePickerOpen(true)
+                  }
+                >
                   {t("workspace_products.requirements.data.manual_entry")}
                 </Button>
               </>
@@ -350,7 +381,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             <RequirementDataViewSwitcher
               requirementTypes={requirementTypes}
               activeKey={getViewKey(activeView)}
-              disabled={isDataEditing}
               onChange={changeView}
             />
             <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 items-center" />
@@ -461,6 +491,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             />
           ) : (
             <RequirementGrid
+              ref={gridRef}
               // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
               key={activeView.requirementTypeId}
               workspaceSlug={workspaceSlug ?? ""}
@@ -471,7 +502,14 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               createRequirementTypeId={activeView.requirementTypeId}
               columnStorageId={activeView.requirementTypeId}
               fields={activeType?.fields ?? []}
-              requirements={store.requirementsPage.results}
+              /*
+               * 列已经换成新类型了，行还得等 requirementTypeFilter 同步过去（那是个
+               * effect，比这次渲染晚一拍）。这一拍里先按空列表渲染，让网格照常走骨架屏 ——
+               * 否则会闪出「新类型的列配上一个视图的行」。
+               */
+              requirements={
+                store.requirementTypeFilter === activeView.requirementTypeId ? store.requirementsPage.results : []
+              }
               totalCount={store.requirementsPage.total_count ?? 0}
               totalPages={store.requirementsPage.total_pages ?? 0}
               nextCursor={store.requirementsPage.next_cursor}
@@ -490,7 +528,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onCursorChange={store.setCursor}
               onRefresh={store.fetchRequirements}
               onBulkSave={store.saveRequirementBatch}
-              onEditingChange={setIsDataEditing}
               onOpenDetail={setPeekRequirement}
               onSubmitReview={approvalActions.openSubmitModal}
               onWithdrawReview={approvalActions.withdraw}
@@ -539,7 +576,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         canEdit={canEdit}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
-        onRequirementUpdated={() => void store.fetchRequirements()}
+        // 抽屉已经把改完的整行交回来了，直接合并进当前页；重拉会让后面的网格整张闪一下
+        onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
       />
 
       {/*
@@ -575,9 +613,24 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           onClose={() => setIsTypePickerOpen(false)}
           onConfirm={(requirementTypeId) => {
             setIsTypePickerOpen(false);
-            // 切到该需求类型的视图，用户在那里用表格下方的「新增数据」录入
-            changeView({ kind: "requirementType", requirementTypeId });
+            // 就地开建行弹窗，不再把人甩去类型视图 —— 建完的行在总览里照样看得见
+            setCreateTypeId(requirementTypeId);
           }}
+        />
+      )}
+
+      {/* 默认视图专用：类型选完了在这儿把字段填齐，一次落库，人不用离开总览 */}
+      {createTypeId && (
+        <RequirementCreateModal
+          isOpen
+          workspaceSlug={workspaceSlug ?? ""}
+          entityId={productId ?? ""}
+          entityKind="product"
+          requirementTypeId={createTypeId}
+          fields={createTypeFields}
+          onClose={() => setCreateTypeId(null)}
+          onSave={store.saveRequirementBatch}
+          onUpload={uploadAsset}
         />
       )}
 

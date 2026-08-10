@@ -7,5 +7,5 @@ export * from "./requirement-fields-preview";
 export * from "./requirement-grid-shared";
 export * from "./requirement-select";
 export * from "./requirement-type-settings-modal";
-export * from "./use-requirement-grid-editor";
+export * from "./requirement-row-data";
 export * from "./use-requirement-type-editor-state";

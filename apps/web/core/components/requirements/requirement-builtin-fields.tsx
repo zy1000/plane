@@ -20,6 +20,7 @@ import type {
 import { PriorityIcon } from "@plane/propel/icons";
 import { renderFormattedDate, renderFormattedPayloadDate, stripAndTruncateHTML } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
+import { DraftInput } from "./draft-input";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { FIELD_DROPDOWN_CLASS, FIELD_INPUT_CLASS, RequirementMemberValue } from "./requirement-grid-shared";
@@ -176,8 +177,16 @@ type TBuiltinEditorProps = {
   rowId?: string;
   /** 网格草稿把描述富文本里上传的资源登记为待提交，取消编辑时统一清理 */
   onAssetUpload?: (assetId: string) => void;
-  /** 与 LeafEditor 同名同义：grid 有底色暗示可编辑，detail 无底色（见 FIELD_INPUT_CLASS） */
-  variant?: "grid" | "detail";
+  /** 与 LeafEditor 同名同义：grid/detail 静息无底色，modal 走实边框（见 FIELD_INPUT_CLASS） */
+  variant?: "grid" | "detail" | "modal";
+  /**
+   * 标题是否延后到失焦再提交。网格里必须开 —— 那里的 onChange 会直接打接口保存这一行，
+   * 逐字符提交等于每敲一个字发一次请求。建行弹窗里 onChange 只写本地 state，不用开
+   * （开了反而会让「标题为空则禁用确定」的判断慢一拍）。
+   */
+  deferTextCommit?: boolean;
+  /** 标题挂载时抢焦点。网格内联新增一行后用它把光标送到新行上 */
+  autoFocus?: boolean;
 };
 
 /** 单个内置列的编辑器。与自定义字段的 LeafEditor 并列，网格按列来源二选一 */
@@ -189,18 +198,29 @@ export const BuiltinCellEditor = ({
   rowId,
   onAssetUpload,
   variant = "grid",
+  deferTextCommit = false,
+  autoFocus = false,
 }: TBuiltinEditorProps) => {
   const { t } = useTranslation();
   // 详情页跟着工作项侧栏走透明下拉；网格保留边框按钮，否则单元格看不出能点
   const dropdownVariant = variant === "detail" ? "transparent-with-text" : "border-with-text";
 
   if (columnKey === "title") {
-    return (
+    return deferTextCommit ? (
+      <DraftInput
+        value={values.title}
+        onCommit={(next) => onChange({ title: next })}
+        maxLength={255}
+        className={FIELD_INPUT_CLASS[variant]}
+        autoFocus={autoFocus}
+      />
+    ) : (
       <input
         value={values.title}
         onChange={(event) => onChange({ title: event.target.value })}
         maxLength={255}
         className={FIELD_INPUT_CLASS[variant]}
+        autoFocus={autoFocus}
       />
     );
   }
@@ -216,6 +236,7 @@ export const BuiltinCellEditor = ({
         value={values.description_html ?? ""}
         onChange={(html) => onChange({ description_html: html })}
         onAssetUpload={onAssetUpload}
+        variant={variant}
       />
     );
   }
@@ -300,26 +321,28 @@ export const BuiltinCellValue = ({ columnKey, values, resolveParentTitle }: TBui
   const { t } = useTranslation();
   const value = values[columnKey];
 
+  // 字号一律继承单元格（网格是 text-13，详情页自己定）—— 之前这里写死 text-14，
+  // 于是表格里正文比表头还大一号，层级是反的
   if (value === null || value === undefined || value === "") {
-    return <span className="text-14 text-placeholder">—</span>;
+    return <span className="text-placeholder">—</span>;
   }
 
   if (columnKey === "status") {
-    return <span className="truncate text-14">{t(`requirement_fields.statuses.${value as TRequirementItemStatus}`)}</span>;
+    return <span className="truncate">{t(`requirement_fields.statuses.${value as TRequirementItemStatus}`)}</span>;
   }
   if (columnKey === "priority") {
     // 与编辑态的 PriorityDropdown 用同一份词汇（ISSUE_PRIORITIES 的原值），不另做一套翻译 ——
     // 否则同一个字段读的时候是「高」、改的时候是「High」，是两套语言。
     const priority = value as TRequirementPriority;
     return (
-      <span className="flex min-w-0 items-center gap-1.5 text-14">
+      <span className="flex min-w-0 items-center gap-1.5">
         <PriorityIcon priority={priority} size={12} className="shrink-0" />
         <span className="truncate">{ISSUE_PRIORITIES.find((item) => item.key === priority)?.title ?? priority}</span>
       </span>
     );
   }
   if (columnKey === "start_date" || columnKey === "target_date") {
-    return <span className="truncate text-14">{renderFormattedDate(value as string)}</span>;
+    return <span className="truncate">{renderFormattedDate(value as string)}</span>;
   }
   if (columnKey === "assignee_id") {
     return <RequirementMemberValue value={value} />;
@@ -328,14 +351,14 @@ export const BuiltinCellValue = ({ columnKey, values, resolveParentTitle }: TBui
     const title = resolveParentTitle?.(value as string);
     // 解析不出来也绝不把 UUID 甩给用户 —— 那既看不懂也没法用
     return title ? (
-      <span className="truncate text-14">{title}</span>
+      <span className="truncate">{title}</span>
     ) : (
-      <span className="truncate text-14 text-placeholder">{t("requirement_fields.builtin.parent_unresolved")}</span>
+      <span className="truncate text-placeholder">{t("requirement_fields.builtin.parent_unresolved")}</span>
     );
   }
   if (columnKey === "description_html") {
     // 存的是 HTML，直接吐出来用户看到的会是一串标签
-    return <span className="truncate text-14">{stripAndTruncateHTML(value as string, 180)}</span>;
+    return <span className="truncate">{stripAndTruncateHTML(value as string, 180)}</span>;
   }
-  return <span className="truncate text-14">{value as string}</span>;
+  return <span className="truncate">{value as string}</span>;
 };

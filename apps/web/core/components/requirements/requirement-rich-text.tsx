@@ -229,8 +229,13 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
   onChange,
   placeholder,
   editorId,
+  variant = "grid",
   ...rest
-}: TFieldProps & { /** 弹窗标题里的字段名 */ label: string }) {
+}: TFieldProps & {
+  /** 弹窗标题里的字段名 */ label: string;
+  /** 静息底色的配方，与 FIELD_INPUT_CLASS 同名同义 */
+  variant?: "grid" | "detail" | "modal";
+}) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<string | null>(null);
   // 同一个字段在网格里有几十行，editorId 得再加一层实例后缀才唯一。
@@ -244,7 +249,13 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
         type="button"
         onClick={() => setDraft(value ?? "")}
         title={t("requirement_grid.data.expand_rich_text")}
-        className="focus-visible:border-accent-primary group flex min-h-8 w-full min-w-0 items-start gap-1 rounded-md border border-transparent bg-layer-1/60 px-2 py-1.5 text-left transition-colors duration-150 outline-none hover:border-subtle hover:bg-layer-1 motion-reduce:transition-none"
+        className={cn(
+          "focus-visible:border-accent-primary group flex min-h-8 w-full min-w-0 items-start gap-1 rounded-md border px-2 py-1.5 text-left transition-colors duration-150 outline-none motion-reduce:transition-none",
+          // 弹窗里字段密集且没有相邻单元格衬托，静息就得看得出是个可点的输入框
+          variant === "modal"
+            ? "border-subtle bg-surface-1 hover:border-strong"
+            : "border-transparent bg-transparent hover:border-subtle hover:bg-layer-1 focus-visible:bg-surface-1"
+        )}
       >
         <span
           className={cn(

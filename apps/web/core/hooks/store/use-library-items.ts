@@ -164,9 +164,22 @@ export const useLibraryItems = ({
       setIsMutating(true);
       try {
         const response = await requirementService.bulkSaveLibraryItems(workspaceSlug, libraryId, payload);
-        await fetchRequirements();
-        // 条目数变了，库信息里的 item_count 要跟着更新
-        await fetchConfiguration().catch(() => undefined);
+        /*
+         * 与 use-product-requirements 的 saveRequirementBatch 同理：网格是「改一格存一格」，
+         * 纯更新只回填这几行，重拉会让骨架屏顶掉表格、横向滚动跳回最左。
+         * 只有新增/删除才改变本页构成与 item_count，那时候才重拉并刷新库信息。
+         */
+        if (payload.creates.length || payload.deletes.length) {
+          await fetchRequirements();
+          // 条目数变了，库信息里的 item_count 要跟着更新
+          await fetchConfiguration().catch(() => undefined);
+        } else if (response.updated.length) {
+          const updatedById = new Map(response.updated.map((item) => [item.id, item]));
+          setRequirementsPage((current) => ({
+            ...current,
+            results: current.results.map((item) => updatedById.get(item.id) ?? item),
+          }));
+        }
         return response;
       } finally {
         setIsMutating(false);

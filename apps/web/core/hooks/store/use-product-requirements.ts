@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  TRequirement,
   TRequirementApprovalPolicy,
   TRequirementConfiguration,
   TRequirementConfigurationPayload,
@@ -206,6 +207,23 @@ export const useProductRequirements = ({
     [productId, workspaceSlug]
   );
 
+  /**
+   * 把服务端返回的整行合并回当前页，不重拉列表。
+   *
+   * 更新类操作（网格改一格存一格、详情抽屉的 PATCH）返回的就是列表在用的那份序列化
+   * 结果，行数与排序都不变，重拉买不到任何东西，反而会把 isRequirementsLoading 打开、
+   * 让骨架屏顶掉表格 —— 骨架比表格窄得多，浏览器会顺手把横向滚动位置夹到 0 且不还原。
+   * 只有新增与删除会改变本页构成，那时候才必须走 fetchRequirements。
+   */
+  const syncRequirements = useCallback((rows: TRequirement[]) => {
+    if (!rows.length) return;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    setRequirementsPage((current) => ({
+      ...current,
+      results: current.results.map((item) => byId.get(item.id) ?? item),
+    }));
+  }, []);
+
   const deleteRequirements = useCallback(
     async (requirementIds: string[]) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
@@ -231,13 +249,18 @@ export const useProductRequirements = ({
       setIsMutating(true);
       try {
         const response = await requirementService.bulkSaveRequirements(workspaceSlug, productId, payload);
-        await fetchRequirements();
+        // 网格是「改一格存一格」，纯更新一律走本地回填；见 syncRequirements
+        if (payload.creates.length || payload.deletes.length) {
+          await fetchRequirements();
+        } else {
+          syncRequirements(response.updated);
+        }
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchRequirements, productId, workspaceSlug]
+    [fetchRequirements, productId, syncRequirements, workspaceSlug]
   );
 
   const updateSearch = useCallback((value: string) => {
@@ -257,6 +280,12 @@ export const useProductRequirements = ({
     setCursor(undefined);
     setSearch("");
     setFilters([]);
+    /*
+     * 行也要一并清掉。列随类型走，行却是上一个类型的 —— 网格已经不再用骨架屏遮住
+     * 加载中的这一帧（见 requirement-grid.tsx 的 isLoading && !requirements.length），
+     * 留着旧行就会闪出「新类型的列配旧类型的行」。
+     */
+    setRequirementsPage(EMPTY_PAGE);
     setRequirementTypeFilter(value);
   }, []);
 
@@ -287,6 +316,7 @@ export const useProductRequirements = ({
     updateRequirement,
     deleteRequirements,
     saveRequirementBatch,
+    syncRequirements,
     importFromLibraries,
   };
 };
