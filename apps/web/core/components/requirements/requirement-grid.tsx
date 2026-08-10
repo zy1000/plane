@@ -14,8 +14,10 @@ import { observer } from "mobx-react";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  BookMarked,
   Columns3,
   Copy,
+  Hash,
   Maximize2,
   History,
   MoreHorizontal,
@@ -377,8 +379,13 @@ export const RequirementGrid = observer(
   );
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
 
+  /** 产品需求才有来源标准库编号；标准库条目本身只有自己的编号 */
+  const showSourceColumn = entityKind === "product";
+
   const nonTitleColumnsWidth = useMemo(
     () =>
+      REQUIREMENT_GRID_COLUMN_WIDTH + // 编号
+      (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
       (showApprovalColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
       propertyBuiltinColumns.reduce((sum, column) => sum + getRequirementColumnWidth(column.key), 0) +
       visibleRootFields.reduce((sum, field) => {
@@ -389,7 +396,7 @@ export const RequirementGrid = observer(
           (showActionGutter ? FORM_GUTTER_COLUMN_WIDTH : 0)
         );
       }, 0),
-    [propertyBuiltinColumns, showActionGutter, showApprovalColumn, visibleRootFields]
+    [propertyBuiltinColumns, showActionGutter, showApprovalColumn, showSourceColumn, visibleRootFields]
   );
   const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, nonTitleColumnsWidth);
   const tableWidth = titleColumnWidth + nonTitleColumnsWidth;
@@ -398,6 +405,8 @@ export const RequirementGrid = observer(
   const totalColumnCount = useMemo(
     () =>
       1 + // 标题列（左固定，勾选框与行操作都在里面）
+      1 + // 编号
+      (showSourceColumn ? 1 : 0) + // 标准库编号
       (showApprovalColumn ? 1 : 0) + // 审批态
       propertyBuiltinColumns.length +
       visibleRootFields.reduce(
@@ -405,7 +414,7 @@ export const RequirementGrid = observer(
           sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter) : 1),
         0
       ),
-    [propertyBuiltinColumns.length, showActionGutter, showApprovalColumn, visibleRootFields]
+    [propertyBuiltinColumns.length, showActionGutter, showApprovalColumn, showSourceColumn, visibleRootFields]
   );
   const filterableFields = useMemo(
     () =>
@@ -675,13 +684,6 @@ export const RequirementGrid = observer(
                       />
                     )}
 
-                    {/* 编号放在 sticky 标题格里而不是单独一列：不占列宽、不参与横滚，
-                        与工作项在列表里的做法一致 */}
-                    <RequirementIdentifier
-                      displayId={requirement.display_id}
-                      sourceDisplayId={requirement.source_display_id}
-                    />
-
                     <span className="min-w-0 flex-1">
                       {isRowEditable ? (
                         <BuiltinCellEditor
@@ -736,6 +738,31 @@ export const RequirementGrid = observer(
                       </span>
                     )}
                   </div>
+                </td>
+              )}
+              {/* 编号 / 标准库编号：紧跟标题，单独成列，跟着整组行 rowSpan */}
+              {isFirstRow && (
+                <td
+                  rowSpan={totalRows}
+                  className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                >
+                  {requirement.display_id ? (
+                    <RequirementIdentifier displayId={requirement.display_id} />
+                  ) : (
+                    <span className="text-placeholder">—</span>
+                  )}
+                </td>
+              )}
+              {isFirstRow && showSourceColumn && (
+                <td
+                  rowSpan={totalRows}
+                  className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                >
+                  {requirement.source_display_id ? (
+                    <RequirementIdentifier displayId={requirement.source_display_id} />
+                  ) : (
+                    <span className="text-placeholder">—</span>
+                  )}
                 </td>
               )}
               {/* 内置列恒排在自定义字段之前，且永远是单列，跟着整组行 rowSpan */}
@@ -1322,6 +1349,8 @@ export const RequirementGrid = observer(
           >
             <colgroup>
               <col style={{ width: titleColumnWidth }} />
+              <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+              {showSourceColumn && <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />}
               {descriptionColumn && (
                 <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
               )}
@@ -1386,6 +1415,25 @@ export const RequirementGrid = observer(
                 ),
               }}
               builtinHeaders={[
+                {
+                  key: "display-id",
+                  content: (
+                    <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+                  ),
+                },
+                ...(showSourceColumn
+                  ? [
+                      {
+                        key: "source-display-id",
+                        content: (
+                          <RequirementGridHeaderLabel
+                            icon={BookMarked}
+                            label={t("requirements.identifier.source_column")}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
                 ...(descriptionColumn
                   ? [
                       {

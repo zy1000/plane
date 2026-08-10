@@ -4,7 +4,9 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { createPortal } from "react-dom";
 import { Pagination } from "antd";
 import {
+  BookMarked,
   Copy,
+  Hash,
   History,
   Layers,
   Loader as LoaderIcon,
@@ -202,7 +204,9 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
 
   /** 标题列之外的所有列宽，用来反推标题列该吃掉多少 */
   const propertyColumnsWidth =
-    // 审批列 + 内置属性列 + 所属类型列
+    // 编号 + 标准库编号 + 审批列 + 内置属性列 + 所属类型列
+    REQUIREMENT_GRID_COLUMN_WIDTH +
+    REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     propertyBuiltinColumns.reduce((total, column) => total + getRequirementColumnWidth(column.key), 0) +
     REQUIREMENT_GRID_COLUMN_WIDTH;
@@ -353,6 +357,8 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
         >
           <colgroup>
             <col style={{ width: titleColumnWidth }} />
+            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
             {descriptionColumn && (
               <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
             )}
@@ -397,6 +403,15 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                   />
                 </div>
+              </th>
+              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+              </th>
+              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                <RequirementGridHeaderLabel
+                  icon={BookMarked}
+                  label={t("requirements.identifier.source_column")}
+                />
               </th>
               {descriptionColumn && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
@@ -467,10 +482,6 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                           )}
                         />
                       )}
-                      <RequirementIdentifier
-                        displayId={requirement.display_id}
-                        sourceDisplayId={requirement.source_display_id}
-                      />
                       <Tooltip tooltipContent={requirement.title}>
                         <button
                           type="button"
@@ -541,6 +552,20 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
+                    {requirement.display_id ? (
+                      <RequirementIdentifier displayId={requirement.display_id} />
+                    ) : (
+                      <span className="text-placeholder">—</span>
+                    )}
+                  </td>
+                  <td className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
+                    {requirement.source_display_id ? (
+                      <RequirementIdentifier displayId={requirement.source_display_id} />
+                    ) : (
+                      <span className="text-placeholder">—</span>
+                    )}
                   </td>
                   {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
                   {descriptionColumn && (

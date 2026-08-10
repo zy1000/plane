@@ -1303,6 +1303,7 @@ export default {
       copied: "Requirement ID copied to clipboard",
       source_tooltip: "Original ID from the standard library",
       column: "ID",
+      source_column: "Library ID",
     },
   },
   requirement_fields: {

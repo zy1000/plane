@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { AlertTriangle, Globe2, LockKeyhole, PackageOpen, Pencil, UserRound, X } from "lucide-react";
+import { AlertTriangle, Globe2, LockKeyhole, PackageOpen, Pencil, X } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { InfoIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import { EUserWorkspaceRoles } from "@plane/types";
 import type { TProduct, TProductNetwork } from "@plane/types";
-import { Avatar, AvatarGroup, CustomSelect, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
-import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
+import { Avatar, AvatarGroup, CustomSelect, EModalPosition, EModalWidth, Input, Loader, ModalCore } from "@plane/ui";
+import { cn, getFileURL } from "@plane/utils";
+import {
+  IDENTIFIER_MAX_LENGTH,
+  isValidIdentifier,
+  sanitizeIdentifier,
+} from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
 
@@ -60,6 +67,7 @@ export const ProductModal = observer(function ProductModal() {
     handleUpload,
     resetAssets,
   } = useProductEditorAssets({ entityId: editorEntityId, workspaceSlug });
+  const { isMobile } = usePlatformOS();
   const hasWorkspaceAdminAccess =
     workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug);
   const canManageProduct = Boolean(product && (product.owner === currentUser?.id || hasWorkspaceAdminAccess));
@@ -201,15 +209,14 @@ export const ProductModal = observer(function ProductModal() {
     <ModalCore
       isOpen={isOpen}
       handleClose={() => void handleClose()}
-      position={EModalPosition.CENTER}
-      width={EModalWidth.VIXL}
-      className="h-[calc(100dvh-2rem)] overflow-hidden sm:h-auto sm:max-h-[min(88vh,880px)]"
+      position={EModalPosition.TOP}
+      width={EModalWidth.XXXXL}
     >
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-subtle px-4 sm:px-6">
+        <div className="flex items-center justify-between px-3 pt-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-md bg-layer-2 text-secondary">
-              <PackageOpen className="size-4" />
+            <span className="grid size-11 shrink-0 place-items-center rounded-md border border-subtle bg-layer-2 text-secondary">
+              <PackageOpen className="size-5" />
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-16 font-medium text-primary">{title}</h2>
@@ -222,65 +229,84 @@ export const ProductModal = observer(function ProductModal() {
             className="grid size-8 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover hover:text-primary"
             aria-label={t("close")}
           >
-            <X className="size-4" />
+            <X className="size-5" />
           </button>
         </div>
 
         {isDetailLoading && product ? (
-          <div className="p-6">
+          <div className="p-3">
             <Loader>
-              <Loader.Item height="40px" />
-              <Loader.Item height="260px" />
+              <Loader.Item height="38px" />
+              <Loader.Item height="96px" />
             </Loader>
           </div>
         ) : (
-          <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-              <div className="min-w-0 space-y-5">
-                <div>
-                  <label htmlFor="product-name" className="mb-1.5 block text-12 font-medium text-secondary">
-                    {t("workspace_products.fields.name")}
-                  </label>
+          <div data-modal-wheel-scroll className="px-3">
+            <div className="mt-6 space-y-6 pb-5">
+              <div className="grid grid-cols-1 gap-x-2 gap-y-3 md:grid-cols-4">
+                <div className="md:col-span-3">
                   {editable ? (
-                    <input
+                    <Input
                       id="product-name"
+                      name="name"
+                      type="text"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                       maxLength={255}
                       autoFocus={mode === "create"}
-                      className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-placeholder"
+                      hasError={Boolean(formError)}
                       placeholder={t("workspace_products.fields.name")}
+                      className="focus:border-blue-400 h-[38px] min-h-[38px] w-full !py-0 text-13 leading-5"
                     />
                   ) : (
                     <p className="text-18 font-semibold text-primary">{name}</p>
                   )}
-                  {formError && <p className="mt-1.5 text-11 text-danger-primary">{formError}</p>}
+                  {formError && <span className="text-11 text-danger-primary">{formError}</span>}
                 </div>
 
-                <IdentifierInput
-                  id="product-identifier"
-                  value={identifier}
-                  onChange={(value) => {
-                    setIdentifier(value);
-                    setIdentifierError(null);
-                  }}
-                  editable={editable}
-                  error={identifierError}
-                  label={t("workspace_products.fields.identifier")}
-                  hint={t("workspace_products.fields.identifier_hint")}
-                />
+                <div className="md:col-span-1">
+                  <div className="relative">
+                    {editable ? (
+                      <Input
+                        id="product-identifier"
+                        name="identifier"
+                        type="text"
+                        value={identifier}
+                        onChange={(event) => {
+                          setIdentifier(sanitizeIdentifier(event.target.value));
+                          setIdentifierError(null);
+                        }}
+                        maxLength={IDENTIFIER_MAX_LENGTH}
+                        hasError={Boolean(identifierError)}
+                        placeholder={t("workspace_products.fields.identifier")}
+                        className={cn(
+                          "focus:border-blue-400 h-[38px] min-h-[38px] w-full !py-0 pr-7 text-13 leading-5",
+                          { uppercase: identifier }
+                        )}
+                      />
+                    ) : (
+                      <p className="flex h-[38px] items-center text-13 text-primary">{identifier || "—"}</p>
+                    )}
+                    <Tooltip
+                      isMobile={isMobile}
+                      tooltipContent={t("workspace_products.fields.identifier_hint")}
+                      className="text-13"
+                      position="right-start"
+                    >
+                      <InfoIcon className="absolute top-1/2 right-2 h-3 w-3 -translate-y-1/2 text-placeholder" />
+                    </Tooltip>
+                  </div>
+                  {identifierError && <span className="text-11 text-danger-primary">{identifierError}</span>}
+                </div>
 
-                <div>
-                  <p className="mb-1.5 text-12 font-medium text-secondary">
-                    {t("workspace_products.fields.description")}
-                  </p>
+                <div className="md:col-span-4">
                   {!workspaceId ? (
                     <Loader>
-                      <Loader.Item height="260px" />
+                      <Loader.Item height="96px" />
                     </Loader>
                   ) : (
-                    <div className="min-h-[260px] overflow-hidden rounded-md border border-subtle bg-surface-1">
-                      <div className="vertical-scrollbar scrollbar-sm max-h-[52vh] min-h-[260px] overflow-y-auto">
+                    <div className="overflow-hidden rounded-md border border-subtle bg-surface-1">
+                      <div className="vertical-scrollbar scrollbar-sm max-h-[40vh] min-h-24 overflow-y-auto">
                         {editable ? (
                           <RichTextEditor
                             key={`product-editor-${editorEntityId}-${editorVersion}`}
@@ -298,7 +324,7 @@ export const ProductModal = observer(function ProductModal() {
                             searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
                             uploadFile={handleUpload}
                             duplicateFile={handleDuplicate}
-                            containerClassName="min-h-[260px] pr-3 pt-3 text-13"
+                            containerClassName="min-h-24 pr-3 pt-3 text-13"
                           />
                         ) : (
                           <RichTextEditor
@@ -310,7 +336,7 @@ export const ProductModal = observer(function ProductModal() {
                             workspaceSlug={workspaceSlug}
                             workspaceId={workspaceId}
                             dragDropEnabled={false}
-                            containerClassName="min-h-[260px] pr-3 pt-3 text-13"
+                            containerClassName="min-h-24 pr-3 pt-3 text-13"
                           />
                         )}
                       </div>
@@ -319,92 +345,18 @@ export const ProductModal = observer(function ProductModal() {
                 </div>
               </div>
 
-              <aside className="space-y-4 lg:border-l lg:border-subtle lg:pl-6">
-                <div>
-                  <p className="mb-1.5 flex items-center gap-1.5 text-11 font-medium text-secondary">
-                    <UserRound className="size-3.5" /> {t("workspace_products.fields.owner")}
-                  </p>
-                  {editable ? (
-                    <div className="h-8">
-                      <MemberDropdown
-                        multiple={false}
-                        value={ownerId}
-                        onChange={(value) => {
-                          setOwnerId(value);
-                          setOwnerError(null);
-                        }}
-                        buttonVariant="border-with-text"
-                        buttonClassName="h-8 w-full border !border-subtle bg-surface-1"
-                        buttonContainerClassName="w-full"
-                        placeholder={t("workspace_products.validation.owner_required")}
-                        showUserDetails
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex h-8 items-center gap-2 text-12 text-primary">
-                      <Avatar
-                        size="sm"
-                        name={product?.owner_detail?.display_name ?? currentUser?.display_name ?? ""}
-                        src={getFileURL(product?.owner_detail?.avatar_url ?? currentUser?.avatar_url ?? "")}
-                        showTooltip={false}
-                      />
-                      <span className="truncate">
-                        {product?.owner_detail?.display_name ?? currentUser?.display_name ?? "-"}
-                      </span>
-                    </div>
-                  )}
-                  {ownerError && <p className="mt-1.5 text-11 text-danger-primary">{ownerError}</p>}
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-11 font-medium text-secondary">
-                    {t("workspace_products.fields.reviewers")}
-                  </p>
-                  {editable ? (
-                    <div className="h-8">
-                      <MemberDropdown
-                        multiple
-                        value={reviewerIds}
-                        onChange={setReviewerIds}
-                        buttonVariant="border-with-text"
-                        buttonClassName="h-8 w-full border !border-subtle bg-surface-1"
-                        buttonContainerClassName="w-full"
-                        placeholder={t("workspace_products.fields.reviewers")}
-                        showUserDetails
-                      />
-                    </div>
-                  ) : product?.reviewer_details?.length ? (
-                    <div className="flex items-center gap-2">
-                      <AvatarGroup showTooltip>
-                        {product.reviewer_details.map((reviewer) => (
-                          <Avatar
-                            key={reviewer.id}
-                            size="sm"
-                            name={reviewer.display_name}
-                            src={getFileURL(reviewer.avatar_url ?? "")}
-                          />
-                        ))}
-                      </AvatarGroup>
-                      <span className="text-11 text-secondary">{product.reviewer_details.length}</span>
-                    </div>
-                  ) : (
-                    <span className="text-12 text-placeholder">-</span>
-                  )}
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-11 font-medium text-secondary">
-                    {t("workspace_products.fields.visibility")}
-                  </p>
-                  {editable ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {editable ? (
+                  <div className="h-7 flex-shrink-0">
                     <CustomSelect
                       value={network}
                       onChange={(value: TProductNetwork) => setNetwork(value)}
-                      className="w-full"
-                      buttonClassName="h-8 !border-subtle bg-surface-1"
+                      className="h-full"
+                      buttonClassName="h-full"
                       optionsClassName="w-[min(20rem,calc(100vw-2rem))]"
+                      noChevron
                       label={
-                        <span className="flex min-w-0 items-center gap-1.5 text-11 font-medium text-primary">
+                        <div className="flex h-full items-center gap-1">
                           {isPrivateProduct ? (
                             <LockKeyhole className="size-3.5 shrink-0" />
                           ) : (
@@ -415,81 +367,144 @@ export const ProductModal = observer(function ProductModal() {
                               ? "workspace_products.visibility.private"
                               : "workspace_products.visibility.public"
                           )}
-                        </span>
+                        </div>
                       }
                     >
                       <CustomSelect.Option value={2}>
-                        <div className="flex min-w-0 items-start gap-2 py-0.5">
+                        <div className="flex items-start gap-2">
                           <Globe2 className="mt-0.5 size-3.5 shrink-0" />
-                          <div className="min-w-0 whitespace-normal">
-                            <p className="text-11 font-medium text-primary">
-                              {t("workspace_products.visibility.public")}
-                            </p>
-                            <p className="mt-0.5 text-11 leading-4 text-secondary">
+                          <div className="-mt-1">
+                            <p>{t("workspace_products.visibility.public")}</p>
+                            <p className="text-11 text-placeholder">
                               {t("workspace_products.visibility.public_description")}
                             </p>
                           </div>
                         </div>
                       </CustomSelect.Option>
                       <CustomSelect.Option value={0}>
-                        <div className="flex min-w-0 items-start gap-2 py-0.5">
+                        <div className="flex items-start gap-2">
                           <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
-                          <div className="min-w-0 whitespace-normal">
-                            <p className="text-11 font-medium text-primary">
-                              {t("workspace_products.visibility.private")}
-                            </p>
-                            <p className="mt-0.5 text-11 leading-4 text-secondary">
+                          <div className="-mt-1">
+                            <p>{t("workspace_products.visibility.private")}</p>
+                            <p className="text-11 text-placeholder">
                               {t("workspace_products.visibility.private_description")}
                             </p>
                           </div>
                         </div>
                       </CustomSelect.Option>
                     </CustomSelect>
-                  ) : (
-                    <span className="inline-flex h-7 items-center gap-1.5 rounded-md bg-layer-2 px-2 text-11 font-medium text-secondary">
-                      {isPrivateProduct ? <LockKeyhole className="size-3.5" /> : <Globe2 className="size-3.5" />}
-                      {t(
-                        isPrivateProduct
-                          ? "workspace_products.visibility.private"
-                          : "workspace_products.visibility.public"
-                      )}
-                    </span>
-                  )}
-                  {willLosePrivateAccess && (
-                    <p className="mt-2 flex items-start gap-1.5 text-11 leading-4 text-warning-primary">
-                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                      {t("workspace_products.visibility.private_access_warning")}
-                    </p>
-                  )}
-                </div>
-              </aside>
-            </div>
+                  </div>
+                ) : (
+                  <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-subtle px-2 text-11 font-medium text-secondary">
+                    {isPrivateProduct ? <LockKeyhole className="size-3.5" /> : <Globe2 className="size-3.5" />}
+                    {t(
+                      isPrivateProduct
+                        ? "workspace_products.visibility.private"
+                        : "workspace_products.visibility.public"
+                    )}
+                  </span>
+                )}
 
-            {attachmentWarning && (
-              <div className="mx-4 mb-4 flex gap-3 rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2.5 sm:mx-6 sm:mb-6">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-primary" />
-                <div>
-                  <p className="text-12 font-medium text-primary">{t("workspace_products.error.attachment_title")}</p>
-                  <p className="mt-0.5 text-11 text-secondary">
-                    {t("workspace_products.error.attachment_description")}
+                {editable ? (
+                  <div className="relative h-7 flex-shrink-0">
+                    <MemberDropdown
+                      multiple={false}
+                      value={ownerId}
+                      onChange={(value) => {
+                        setOwnerId(value);
+                        setOwnerError(null);
+                      }}
+                      buttonVariant="border-with-text"
+                      buttonClassName={cn("text-11", ownerError && "border-danger-strong")}
+                      placeholder={t("workspace_products.fields.owner")}
+                      showUserDetails
+                    />
+                    {ownerError && (
+                      <span className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap text-caption-sm-medium text-danger-primary">
+                        {ownerError}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex h-7 items-center gap-1.5 rounded-md border border-subtle px-2 text-11 text-primary">
+                    <Avatar
+                      size="sm"
+                      name={product?.owner_detail?.display_name ?? currentUser?.display_name ?? ""}
+                      src={getFileURL(product?.owner_detail?.avatar_url ?? currentUser?.avatar_url ?? "")}
+                      showTooltip={false}
+                    />
+                    <span className="truncate">
+                      {product?.owner_detail?.display_name ?? currentUser?.display_name ?? "-"}
+                    </span>
+                  </div>
+                )}
+
+                {editable ? (
+                  <div className="h-7 flex-shrink-0">
+                    <MemberDropdown
+                      multiple
+                      value={reviewerIds}
+                      onChange={setReviewerIds}
+                      buttonVariant="border-with-text"
+                      buttonClassName="text-11"
+                      placeholder={t("workspace_products.fields.reviewers")}
+                      showUserDetails
+                    />
+                  </div>
+                ) : product?.reviewer_details?.length ? (
+                  <div className="flex h-7 items-center gap-1.5 rounded-md border border-subtle px-2">
+                    <AvatarGroup showTooltip>
+                      {product.reviewer_details.map((reviewer) => (
+                        <Avatar
+                          key={reviewer.id}
+                          size="sm"
+                          name={reviewer.display_name}
+                          src={getFileURL(reviewer.avatar_url ?? "")}
+                        />
+                      ))}
+                    </AvatarGroup>
+                    <span className="text-11 text-secondary">{product.reviewer_details.length}</span>
+                  </div>
+                ) : null}
+
+                {willLosePrivateAccess && (
+                  <p className="flex w-full items-start gap-1.5 text-11 leading-4 text-warning-primary">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    {t("workspace_products.visibility.private_access_warning")}
                   </p>
-                </div>
+                )}
               </div>
-            )}
+
+              {attachmentWarning && (
+                <div className="flex gap-3 rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2.5">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-primary" />
+                  <div>
+                    <p className="text-12 font-medium text-primary">{t("workspace_products.error.attachment_title")}</p>
+                    <p className="mt-0.5 text-11 text-secondary">
+                      {t("workspace_products.error.attachment_description")}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-subtle px-4 py-3 sm:px-6">
-          <Button variant="secondary" onClick={() => void handleClose()} disabled={isSaving}>
+        <div className="flex justify-end gap-2 border-t border-subtle px-3 py-4">
+          <Button variant="secondary" size="lg" onClick={() => void handleClose()} disabled={isSaving}>
             {mode === "view" ? t("close") : t("cancel")}
           </Button>
           {mode === "view" && product && canManageProduct ? (
-            <Button variant="primary" onClick={() => openProductModal("edit", product)}>
+            <Button variant="primary" size="lg" onClick={() => openProductModal("edit", product)}>
               <Pencil className="size-3.5" /> {t("workspace_products.actions.edit")}
             </Button>
           ) : mode !== "view" ? (
-            <Button variant="primary" onClick={() => void handleSave()} loading={isSaving}>
-              {persistedProductId && attachmentWarning ? t("retry") : t("save_changes")}
+            <Button variant="primary" size="lg" onClick={() => void handleSave()} loading={isSaving}>
+              {persistedProductId && attachmentWarning
+                ? t("retry")
+                : mode === "create"
+                  ? t("workspace_products.create_product")
+                  : t("save_changes")}
             </Button>
           ) : null}
         </div>

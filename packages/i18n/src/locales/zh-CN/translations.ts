@@ -1468,6 +1468,7 @@ export default {
       copied: "需求编号已复制",
       source_tooltip: "来自标准库的原始编号",
       column: "编号",
+      source_column: "标准库编号",
     },
   },
   requirement_fields: {

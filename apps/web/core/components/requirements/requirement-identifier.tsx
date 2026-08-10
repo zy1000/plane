@@ -6,10 +6,11 @@ import type { TIdentifierTextVariant, TIssueIdentifierSize } from "@plane/types"
 import { IdentifierText } from "@/components/issues/issue-detail/identifier-text";
 
 /**
- * 一条需求的展示编号，以及（如果是从标准库导入的）它的来源编号。
+ * 一条需求编号的展示单元。
  *
- * 两个编号都是**服务端拼好**的（display_id / source_display_id）—— 前缀取自所属
- * 产品/库的 identifier，前端不参与拼装，所以库改名后来源编号会自动跟随。
+ * 编号由服务端拼好（display_id / source_display_id）—— 前缀取自所属产品/库的
+ * identifier，前端不参与拼装。表格里「编号」与「标准库编号」各占一列，各自传入
+ * 对应字段；详情头等紧凑场景仍可把 sourceDisplayId 叠在同一单元里作溯源提示。
  *
  * 复用工作项的 IdentifierText（纯展示、零 store 依赖），只把复制 toast 的文案换成
  * 需求语义 —— 那个组件的默认文案是硬编码的 "Work item ID copied to clipboard"。
