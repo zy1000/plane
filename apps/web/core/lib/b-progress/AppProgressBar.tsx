@@ -41,7 +41,11 @@ const PROGRESS_CONFIG: Readonly<ProgressConfig> = {
   trickleSpeed: 800,
   easing: "ease",
   trickle: true,
-  delay: 0,
+  // Only surface the bar for navigations slower than this. Search-param-only
+  // navigations (opening/closing a side panel, switching a tab) settle within a
+  // tick, and React Router still flips navigation.state to "loading" for them —
+  // flashing the bar there reads as a full page reload.
+  delay: 200,
 } as const;
 
 /**

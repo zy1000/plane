@@ -34,7 +34,6 @@ import {
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 import { RequirementSettingsPanel, type TRequirementSettingsDraft } from "./requirement-settings-panel";
-import { RequirementTypePickerModal } from "./requirement-type-picker-modal";
 
 const TABS = ["data", "configuration", "changes", "baselines"] as const;
 
@@ -66,9 +65,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [isImportOpen, setIsImportOpen] = useState(false);
   /** 鼠标移到「导入」上就开始预热条目，点开时基本无等待 */
   const [shouldPrefetchImport, setShouldPrefetchImport] = useState(false);
-  const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
-  /** 默认视图里「录入」选完类型后要开的建行弹窗；类型视图不走这条路 */
-  const [createTypeId, setCreateTypeId] = useState<string | null>(null);
+  /** 总览视图的建行弹窗。类型在弹窗里选，不再有「先选类型」那一步；类型视图不走这条路 */
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const gridRef = useRef<TRequirementGridHandle | null>(null);
   const [isCreateBaselineOpen, setIsCreateBaselineOpen] = useState(false);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
@@ -120,16 +118,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
       ? requirementTypes.find((item) => item.id === activeView.requirementTypeId)
       : undefined;
 
-  /** 默认视图里建行用的字段集：取选中类型的启用字段，与类型视图给网格的那份一致 */
-  const createTypeFields = useMemo(
-    () =>
-      createTypeId
-        ? (requirementTypes.find((item) => item.id === createTypeId)?.fields ?? []).filter(
-            (field) => field.is_active
-          )
-        : [],
-    [createTypeId, requirementTypes]
-  );
   const uploadAsset = useRequirementAssetUpload({
     workspaceSlug: workspaceSlug ?? "",
     entityId: productId ?? "",
@@ -337,17 +325,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   {t("workspace_products.requirements.data.import_from_library")}
                 </Button>
                 {/*
-                  录入的落点按视图分：类型视图里类型已知，直接在表格里内联加一行；
-                  默认视图是跨类型总览，得先选类型，再用弹窗把那个类型的字段填齐
-                  —— 总览的表格只有内置列，自定义字段在那儿根本没有格子可填。
+                  录入的落点按视图分：类型视图里类型已知，直接走表格自己的建行弹窗；
+                  默认视图是跨类型总览，开弹窗在里面选类型 —— 总览的表格只有内置列，
+                  自定义字段在那儿根本没有格子可填。
                 */}
                 <Button
                   variant="primary"
                   size="lg"
                   onClick={() =>
-                    activeView.kind === "requirementType"
-                      ? gridRef.current?.addRow()
-                      : setIsTypePickerOpen(true)
+                    activeView.kind === "requirementType" ? gridRef.current?.addRow() : setIsCreateOpen(true)
                   }
                 >
                   {t("workspace_products.requirements.data.manual_entry")}
@@ -449,7 +435,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                     >
                       {t("workspace_products.requirements.data.import_from_library")}
                     </Button>
-                    <Button variant="secondary" onClick={() => setIsTypePickerOpen(true)}>
+                    <Button variant="secondary" onClick={() => setIsCreateOpen(true)}>
                       {t("workspace_products.requirements.data.manual_entry")}
                     </Button>
                   </div>
@@ -606,29 +592,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           return responses;
         }}
       />
-      {isTypePickerOpen && (
-        <RequirementTypePickerModal
-          isOpen={isTypePickerOpen}
-          workspaceSlug={workspaceSlug ?? ""}
-          onClose={() => setIsTypePickerOpen(false)}
-          onConfirm={(requirementTypeId) => {
-            setIsTypePickerOpen(false);
-            // 就地开建行弹窗，不再把人甩去类型视图 —— 建完的行在总览里照样看得见
-            setCreateTypeId(requirementTypeId);
-          }}
-        />
-      )}
-
-      {/* 默认视图专用：类型选完了在这儿把字段填齐，一次落库，人不用离开总览 */}
-      {createTypeId && (
+      {/* 总览视图专用：类型在弹窗里选，字段跟着切，一次落库，人不用离开总览 */}
+      {isCreateOpen && (
         <RequirementCreateModal
           isOpen
           workspaceSlug={workspaceSlug ?? ""}
           entityId={productId ?? ""}
           entityKind="product"
-          requirementTypeId={createTypeId}
-          fields={createTypeFields}
-          onClose={() => setCreateTypeId(null)}
+          allowTypeSelection
+          onClose={() => setIsCreateOpen(false)}
           onSave={store.saveRequirementBatch}
           onUpload={uploadAsset}
         />

@@ -17,7 +17,7 @@ import type {
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
-import { Avatar, CustomSelect, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
+import { Avatar, CustomSelect, Input, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -312,9 +312,18 @@ export const LeafValue = ({
       />
     );
   }
+  const text = field.field_type === "rich_text" ? stripAndTruncateHTML(String(value), 180) : String(value);
+  // 网格列宽只有 144px：必须截断。detail 才允许折行看全。
   return (
-    <span className={cn("block max-w-64 text-13 leading-5 whitespace-pre-wrap text-primary", className)}>
-      {field.field_type === "rich_text" ? stripAndTruncateHTML(String(value), 180) : String(value)}
+    <span
+      title={variant === "detail" ? undefined : text}
+      className={cn(
+        "block text-13 leading-5 text-primary",
+        variant === "detail" ? "max-w-full whitespace-pre-wrap" : "w-full min-w-0 truncate",
+        className
+      )}
+    >
+      {text}
     </span>
   );
 };
@@ -386,7 +395,8 @@ export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x
  * - FLUSH：定高不带内边距，留给要自己铺满整格底色的单元格（左固定的标题列）。
  * - 默认：定高 + 内边距，绝大多数格子用这个。
  */
-const CELL_BORDER_BASE = "border-r border-b border-subtle align-middle text-13 text-primary";
+// overflow-hidden：定宽列（table-fixed + 144px）里长串文本不能溢出盖到下一列
+const CELL_BORDER_BASE = "overflow-hidden border-r border-b border-subtle align-middle text-13 text-primary";
 export const REQUIREMENT_GRID_CELL_BORDER_CLASS = CELL_BORDER_BASE;
 export const REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS = `${CELL_BORDER_BASE} h-11`;
 export const REQUIREMENT_GRID_BODY_CELL_CLASS = `${CELL_BORDER_BASE} h-11 px-page-x`;
@@ -621,9 +631,18 @@ export const FIELD_INPUT_CLASS = {
   grid: "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none",
   detail:
     "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  // 建行弹窗：与工作项 ExtraFieldControl（compact=false）同皮 —— Input/下拉都是
+  // border-subtle-1 + bg-layer-2，不要再铺一层更硬的 border-subtle / surface-1。
   modal:
-    "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-14 text-primary transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-placeholder hover:border-strong focus:ring-2 motion-reduce:transition-none",
+    "h-[38px] w-full min-w-0 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 py-2 text-13 text-primary outline-none placeholder:text-tertiary focus:border-accent-primary motion-reduce:transition-none",
 } as const;
+
+/**
+ * 建行弹窗曾用过的无边框大标题样式。标题已改用 @plane/ui Input（与工作项一致），
+ * 仍导出以免其它入口误用旧常量时报找不到。
+ */
+export const FIELD_HEADLINE_INPUT_CLASS =
+  "h-auto w-full min-w-0 border-none bg-transparent p-0 text-18 leading-7 font-medium text-primary outline-none placeholder:font-normal placeholder:text-placeholder";
 
 /** 下拉按钮版：要用 ! 盖掉 @plane/ui 自带的边框 */
 export const FIELD_DROPDOWN_CLASS = {
@@ -631,7 +650,7 @@ export const FIELD_DROPDOWN_CLASS = {
   detail:
     "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
-    "h-8 w-full min-w-0 border !border-subtle bg-surface-1 px-2 transition-colors duration-150 hover:!border-strong focus:!border-accent-primary motion-reduce:transition-none",
+    "h-[38px] w-full min-w-0 border-[0.5px] !border-subtle-1 bg-layer-2 px-3 transition-colors duration-150 hover:!border-strong focus:!border-accent-primary motion-reduce:transition-none",
 } as const;
 
 /** MultiSelectDropdown 走 buttonContainerClassName，没有 ! 之争 */
@@ -640,7 +659,7 @@ const MULTI_SELECT_CLASS = {
   detail:
     "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
-    "h-8 w-full min-w-0 rounded-md border border-subtle bg-surface-1 px-2 transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
+    "h-[38px] w-full min-w-0 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
 } as const;
 
 /**
@@ -692,6 +711,8 @@ export const LeafEditor = ({
   if (field.field_type === "select") {
     const options = getRequirementSelectOptions(field);
     const placeholder = field.config.placeholder ?? t("requirement_grid.data.select_option");
+    // 建行弹窗跟工作项 ExtraFieldControl（compact=false）走同一套下拉皮
+    const isModal = variant === "modal";
     if (getRequirementSelectMode(field) === "multiple") {
       const currentValue = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
       const dropdownOptions: TDropdownOption[] = options.map((option) => ({
@@ -707,7 +728,7 @@ export const LeafEditor = ({
           keyExtractor={(option) => option.value}
           renderItem={({ value: optionId, selected }) => (
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="truncate text-14">
+              <span className="truncate text-13">
                 {options.find((option) => option.id === optionId)?.label ?? optionId}
               </span>
               {selected && <Check className="size-3.5 shrink-0 text-accent-primary" />}
@@ -718,13 +739,23 @@ export const LeafEditor = ({
             const labels = selectedIds
               .map((optionId) => options.find((option) => option.id === optionId)?.label)
               .filter(Boolean);
+            const empty = labels.length === 0;
             return (
-              <span className={labels.length ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
-                {labels.length ? labels.join(", ") : placeholder}
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-13",
+                  empty ? (isModal ? "text-tertiary" : "text-placeholder") : "text-primary"
+                )}
+              >
+                {empty ? placeholder : labels.join(", ")}
               </span>
             );
           }}
-          buttonContainerClassName={MULTI_SELECT_CLASS[variant]}
+          buttonContainerClassName={
+            isModal
+              ? "w-full rounded border-[0.5px] border-strong px-3 py-2 text-left"
+              : MULTI_SELECT_CLASS[variant]
+          }
           optionsContainerClassName="w-60"
           disableSearch={options.length <= 8}
           disableSorting
@@ -739,22 +770,28 @@ export const LeafEditor = ({
         value={selectedId}
         onChange={(nextValue: string | null) => onChange(nextValue)}
         label={
-          <span className={selectedOption ? "truncate text-14 text-primary" : "truncate text-14 text-placeholder"}>
+          <span
+            className={cn(
+              "min-w-0 truncate text-13",
+              selectedOption ? "text-primary" : isModal ? "text-tertiary" : "text-placeholder"
+            )}
+          >
             {selectedOption?.label ?? placeholder}
           </span>
         }
-        buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
+        // modal 不盖自定义边框，沿用 CustomSelect input 默认皮（与 ExtraFieldControl 一致）
+        buttonClassName={isModal ? "w-full" : FIELD_DROPDOWN_CLASS[variant]}
         optionsClassName="w-60"
         input
       >
         {!field.is_required && (
           <CustomSelect.Option value={null}>
-            <span className="text-14 text-secondary">{t("requirement_grid.data.clear_selection")}</span>
+            <span className="text-13 text-secondary">{t("requirement_grid.data.clear_selection")}</span>
           </CustomSelect.Option>
         )}
         {options.map((option) => (
           <CustomSelect.Option key={option.id} value={option.id}>
-            <span className="truncate text-14">{option.label}</span>
+            <span className="truncate text-13">{option.label}</span>
           </CustomSelect.Option>
         ))}
       </CustomSelect>
@@ -767,7 +804,12 @@ export const LeafEditor = ({
         value={typeof value === "string" ? value : null}
         onChange={(memberId) => onChange(memberId)}
         buttonVariant={variant === "detail" ? "transparent-with-text" : "border-with-text"}
-        buttonClassName={cn(FIELD_DROPDOWN_CLASS[variant], "text-14")}
+        // modal 高度/内边距与 ExtraFieldControl（compact=false）的 user 字段一致
+        buttonClassName={
+          variant === "modal"
+            ? "!h-[38px] !w-full !rounded !px-3 !py-2 !text-13"
+            : cn(FIELD_DROPDOWN_CLASS[variant], "text-14")
+        }
         buttonContainerClassName="w-full min-w-0"
         placeholder={field.config.placeholder ?? t("requirement_grid.data.select_member")}
         showUserDetails
@@ -870,19 +912,33 @@ export const LeafEditor = ({
     );
   }
   const text = typeof value === "string" ? value : "";
+  const textPlaceholder = field.config.placeholder ?? field.name;
+  // 建行弹窗文本框直接用 @plane/ui Input，与工作项 ExtraFieldControl 同皮
+  if (variant === "modal") {
+    return (
+      <Input
+        type="text"
+        value={text}
+        onChange={(event) => onChange(event.target.value)}
+        // 显式 text-13，避免父级字号把 Input 默认 13 顶掉（与 ExtraFieldControl 一致）
+        className="w-full text-13"
+        placeholder={textPlaceholder}
+      />
+    );
+  }
   return (deferTextCommit ?? variant === "detail") ? (
     <DraftInput
       value={text}
       onCommit={onChange}
       className={FIELD_INPUT_CLASS[variant]}
-      placeholder={field.config.placeholder}
+      placeholder={textPlaceholder}
     />
   ) : (
     <input
       value={text}
       onChange={(event) => onChange(event.target.value)}
       className={FIELD_INPUT_CLASS[variant]}
-      placeholder={field.config.placeholder}
+      placeholder={textPlaceholder}
     />
   );
 };

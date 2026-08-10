@@ -103,8 +103,11 @@ type TFieldProps = {
 /**
  * 受控的富文本输入。onChange 逐次变更就抛出，调用方自己决定什么时候落库。
  * 拿到 workspaceId 之前不渲染 —— 包装组件把它当必填项。
+ *
+ * 建行弹窗直接用它（不用失焦提交的 RequirementRichTextEditor）：那里 onChange 只写
+ * 本地 state，而「填完描述直接点新增」时失焦与提交同一帧，晚一步就把内容丢了。
  */
-const RequirementRichTextField = observer(function RequirementRichTextField(props: TFieldProps) {
+export const RequirementRichTextField = observer(function RequirementRichTextField(props: TFieldProps) {
   const {
     workspaceSlug,
     entityId,

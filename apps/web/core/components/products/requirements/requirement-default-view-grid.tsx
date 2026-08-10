@@ -8,7 +8,6 @@ import {
   History,
   Layers,
   Loader as LoaderIcon,
-  Maximize2,
   Send,
   ShieldCheck,
   Trash2,
@@ -128,6 +127,11 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   const [isSearchOpen, setIsSearchOpen] = useState(() => search.trim().length > 0);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  /**
+   * 行菜单要 portal 出滚动容器：标题列 sticky 会自建层叠上下文，菜单若留在格内会被
+   * 下面几行的 sticky 格盖住（和工作项电子表格同一套修法）。
+   */
+  const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
 
   // 与主网格一致的 300ms 防抖，避免每敲一个字就打一次接口
   const scheduleSearch = (value: string) => {
@@ -189,6 +193,9 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
    */
   const titleColumn = builtinColumns.find((column) => column.key === "title");
   const propertyBuiltinColumns = builtinColumns.filter((column) => column.key !== "title");
+  /** 描述紧跟标题；审批插在描述之后，其余内置列跟在审批后面 */
+  const descriptionColumn = propertyBuiltinColumns.find((column) => column.key === "description_html");
+  const remainingBuiltinColumns = propertyBuiltinColumns.filter((column) => column.key !== "description_html");
 
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
 
@@ -328,7 +335,8 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   );
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex flex-1 flex-col overflow-hidden">
+      <div ref={setMenuPortalEl} className="requirement-grid-menu-portal" />
       {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="px-4 py-2">{toolbar}</div>}
 
       <div ref={setScrollContainer} className="flex-1 overflow-auto">
@@ -344,8 +352,11 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
         >
           <colgroup>
             <col style={{ width: titleColumnWidth }} />
+            {descriptionColumn && (
+              <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
+            )}
             <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
-            {propertyBuiltinColumns.map((column) => (
+            {remainingBuiltinColumns.map((column) => (
               <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
             ))}
             <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
@@ -386,11 +397,16 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   />
                 </div>
               </th>
-              {/* 审批态紧跟标题：这是每行都要扫一眼的信息，放到最后要横滚才看得见 */}
+              {descriptionColumn && (
+                <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                  <RequirementGridHeaderLabel icon={descriptionColumn.icon} label={t(descriptionColumn.labelKey)} />
+                </th>
+              )}
+              {/* 审批紧跟描述：每行都要扫一眼，不能放到要横滚才看得见的地方 */}
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
               </th>
-              {propertyBuiltinColumns.map((column) => (
+              {remainingBuiltinColumns.map((column) => (
                 <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />
                 </th>
@@ -451,18 +467,14 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                         />
                       )}
                       <Tooltip tooltipContent={requirement.title}>
-                        <span className="min-w-0 flex-1 truncate">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetail(requirement.id)}
+                          className="min-w-0 flex-1 truncate text-left hover:text-accent-primary"
+                        >
                           <BuiltinCellValue columnKey="title" values={requirement} />
-                        </span>
+                        </button>
                       </Tooltip>
-                      <button
-                        type="button"
-                        onClick={() => onOpenDetail(requirement.id)}
-                        title={t("requirement_detail.open")}
-                        className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-visible:opacity-100 hover:bg-layer-transparent-hover hover:text-primary"
-                      >
-                        <Maximize2 className="size-3.5" />
-                      </button>
                       {!readOnly && (
                         <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
                           {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
@@ -470,6 +482,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                             ellipsis
                             placement="bottom-end"
                             buttonClassName="text-tertiary hover:text-primary"
+                            portalElement={menuPortalEl}
                           >
                           <CustomMenu.MenuItem
                             onClick={() => void handleDuplicate(requirement)}
@@ -524,19 +537,21 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                       )}
                     </div>
                   </td>
+                  {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
+                  {descriptionColumn && (
+                    <td className={cn("truncate text-secondary", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
+                      <BuiltinCellValue
+                        columnKey={descriptionColumn.key}
+                        values={requirement}
+                        resolveParentTitle={resolveParentTitle}
+                      />
+                    </td>
+                  )}
                   <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
                     <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
                   </td>
-                  {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
-                  {propertyBuiltinColumns.map((column) => (
-                    <td
-                      key={column.key}
-                      className={cn(
-                        "truncate",
-                        REQUIREMENT_GRID_BODY_CELL_CLASS,
-                        column.key === "description_html" && "text-secondary"
-                      )}
-                    >
+                  {remainingBuiltinColumns.map((column) => (
+                    <td key={column.key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
                       <BuiltinCellValue
                         columnKey={column.key}
                         values={requirement}

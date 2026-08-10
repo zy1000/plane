@@ -213,6 +213,8 @@ export const RequirementGrid = observer(
   });
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  /** 行 / 子表单菜单 portal 宿主，避免 sticky 标题列把菜单盖住 */
+  const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
   const activeFields = useMemo(() => fields.filter((field) => field.is_active), [fields]);
   /**
    * 已有行「改一格存一格」。原先是「点编辑 -> 攒草稿 -> 点保存更改」，整套暂存
@@ -366,6 +368,12 @@ export const RequirementGrid = observer(
     () => builtinColumns.filter((column) => column.key !== "title"),
     [builtinColumns]
   );
+  /** 描述紧跟标题；审批插在描述之后，其余内置列跟在审批后面 */
+  const descriptionColumn = propertyBuiltinColumns.find((column) => column.key === "description_html");
+  const remainingBuiltinColumns = useMemo(
+    () => propertyBuiltinColumns.filter((column) => column.key !== "description_html"),
+    [propertyBuiltinColumns]
+  );
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
 
   const nonTitleColumnsWidth = useMemo(
@@ -503,10 +511,17 @@ export const RequirementGrid = observer(
   /**
    * 行操作菜单。「插入 / 复制」不再往表格里插一行草稿，而是带着锚点打开建行弹窗
    * —— 后端建行强制校验必填字段，空草稿行在服务端落不了地（见 RequirementCreateModal）。
+   *
+   * portal 出滚动容器：标题列 sticky 会自建层叠上下文，菜单留在格内会被下面几行盖住。
    */
   const renderRowActionMenu = (requirement: TRequirement) => (
     <div className="flex justify-center">
-      <CustomMenu ellipsis placement="bottom-end" buttonClassName="text-tertiary hover:text-primary">
+      <CustomMenu
+        ellipsis
+        placement="bottom-end"
+        buttonClassName="text-tertiary hover:text-primary"
+        portalElement={menuPortalEl}
+      >
         <CustomMenu.MenuItem onClick={() => void addRow({ beforeId: requirement.id })}>
           <MenuRowLabel icon={ArrowUpToLine} label={t("requirement_grid.data.insert_above")} />
         </CustomMenu.MenuItem>
@@ -671,6 +686,15 @@ export const RequirementGrid = observer(
                           // 刚内联建出来的行：光标直接落在标题上，接着就能敲
                           autoFocus={key === focusRowId}
                         />
+                      ) : onOpenDetail ? (
+                        // 只读行点标题开详情；可编辑行标题留给内联改字，详情走右侧小图标
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetail(requirement.id)}
+                          className="block w-full truncate text-left hover:text-accent-primary"
+                        >
+                          <BuiltinCellValue columnKey="title" values={builtin} />
+                        </button>
                       ) : (
                         <span className="block truncate">
                           <BuiltinCellValue columnKey="title" values={builtin} />
@@ -678,7 +702,7 @@ export const RequirementGrid = observer(
                       )}
                     </span>
 
-                    {/* 详情入口不劫持整行点击 —— 整行归内联编辑 */}
+                    {/* 可编辑时详情入口不劫持标题点击 —— 标题归内联编辑 */}
                     {onOpenDetail && (
                       <button
                         type="button"
@@ -706,6 +730,31 @@ export const RequirementGrid = observer(
                   </div>
                 </td>
               )}
+              {/* 内置列恒排在自定义字段之前，且永远是单列，跟着整组行 rowSpan */}
+              {isFirstRow && descriptionColumn && (
+                <td
+                  key={descriptionColumn.key}
+                  rowSpan={totalRows}
+                  className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                >
+                  {isRowEditable ? (
+                    <BuiltinCellEditor
+                      columnKey={descriptionColumn.key}
+                      values={builtin}
+                      onChange={(patch) => autosave.updateBuiltin(key, patch)}
+                      parentScope={parentScope}
+                      rowId={key}
+                      deferTextCommit
+                    />
+                  ) : (
+                    <BuiltinCellValue
+                      columnKey={descriptionColumn.key}
+                      values={builtin}
+                      resolveParentTitle={resolveParentTitle}
+                    />
+                  )}
+                </td>
+              )}
               {isFirstRow && showApprovalColumn && (
                 <td
                   rowSpan={totalRows}
@@ -714,9 +763,8 @@ export const RequirementGrid = observer(
                   <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
                 </td>
               )}
-              {/* 内置列恒排在自定义字段之前，且永远是单列，跟着整组行 rowSpan */}
               {isFirstRow &&
-                propertyBuiltinColumns.map((column) => (
+                remainingBuiltinColumns.map((column) => (
                   <td
                     key={column.key}
                     rowSpan={totalRows}
@@ -844,6 +892,7 @@ export const RequirementGrid = observer(
                               </span>
                             }
                             placement="bottom-end"
+                            portalElement={menuPortalEl}
                           >
                             <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, rowIndex)}>
                               <MenuRowLabel
@@ -1173,7 +1222,8 @@ export const RequirementGrid = observer(
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+    <div className="relative flex min-h-0 flex-1 flex-col bg-surface-1">
+      <div ref={setMenuPortalEl} className="requirement-grid-menu-portal" />
       {useExternalToolbar &&
         toolbarPortalEl &&
         createPortal(<div className="flex min-w-0 items-center gap-2">{toolbarActions}</div>, toolbarPortalEl)}
@@ -1264,8 +1314,11 @@ export const RequirementGrid = observer(
           >
             <colgroup>
               <col style={{ width: titleColumnWidth }} />
+              {descriptionColumn && (
+                <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
+              )}
               {showApprovalColumn && <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />}
-              {propertyBuiltinColumns.map((column) => (
+              {remainingBuiltinColumns.map((column) => (
                 <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
               ))}
               {visibleRootFields.flatMap((field) =>
@@ -1325,7 +1378,20 @@ export const RequirementGrid = observer(
                 ),
               }}
               builtinHeaders={[
-                // 审批态排在标题之后 —— 每行都要扫一眼，不能放到要横滚才看得见的地方
+                ...(descriptionColumn
+                  ? [
+                      {
+                        key: descriptionColumn.key,
+                        content: (
+                          <RequirementGridHeaderLabel
+                            icon={descriptionColumn.icon}
+                            label={t(descriptionColumn.labelKey)}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+                // 审批紧跟描述 —— 每行都要扫一眼，不能放到要横滚才看得见的地方
                 ...(showApprovalColumn
                   ? [
                       {
@@ -1340,7 +1406,7 @@ export const RequirementGrid = observer(
                       },
                     ]
                   : []),
-                ...propertyBuiltinColumns.map((column) => ({
+                ...remainingBuiltinColumns.map((column) => ({
                   key: column.key,
                   content: <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />,
                 })),

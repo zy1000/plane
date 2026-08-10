@@ -18,12 +18,17 @@ import type {
   TRequirementPriority,
 } from "@plane/types";
 import { PriorityIcon } from "@plane/propel/icons";
-import { renderFormattedDate, renderFormattedPayloadDate, stripAndTruncateHTML } from "@plane/utils";
+import { cn, renderFormattedDate, renderFormattedPayloadDate, stripAndTruncateHTML } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DraftInput } from "./draft-input";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
-import { FIELD_DROPDOWN_CLASS, FIELD_INPUT_CLASS, RequirementMemberValue } from "./requirement-grid-shared";
+import {
+  FIELD_DROPDOWN_CLASS,
+  FIELD_HEADLINE_INPUT_CLASS,
+  FIELD_INPUT_CLASS,
+  RequirementMemberValue,
+} from "./requirement-grid-shared";
 import { RequirementParentDropdown } from "./requirement-parent-dropdown";
 import { RequirementRichTextCell } from "./requirement-rich-text";
 
@@ -177,8 +182,12 @@ type TBuiltinEditorProps = {
   rowId?: string;
   /** 网格草稿把描述富文本里上传的资源登记为待提交，取消编辑时统一清理 */
   onAssetUpload?: (assetId: string) => void;
-  /** 与 LeafEditor 同名同义：grid/detail 静息无底色，modal 走实边框（见 FIELD_INPUT_CLASS） */
-  variant?: "grid" | "detail" | "modal";
+  /**
+   * 控件所处的语境，决定静息长什么样：grid/detail 无底色，modal 走实边框
+   * （见 FIELD_INPUT_CLASS）。headline 与 chip 是建行弹窗里的两个特写位 ——
+   * 标题行和底部属性条，底子仍是 modal 那套。
+   */
+  variant?: "grid" | "detail" | "modal" | "headline" | "chip";
   /**
    * 标题是否延后到失焦再提交。网格里必须开 —— 那里的 onChange 会直接打接口保存这一行，
    * 逐字符提交等于每敲一个字发一次请求。建行弹窗里 onChange 只写本地 state，不用开
@@ -187,6 +196,8 @@ type TBuiltinEditorProps = {
   deferTextCommit?: boolean;
   /** 标题挂载时抢焦点。网格内联新增一行后用它把光标送到新行上 */
   autoFocus?: boolean;
+  /** 标题的占位文案。网格里标题旁边就是列头，不需要；弹窗里没有列头，得靠它 */
+  placeholder?: string;
 };
 
 /** 单个内置列的编辑器。与自定义字段的 LeafEditor 并列，网格按列来源二选一 */
@@ -200,10 +211,21 @@ export const BuiltinCellEditor = ({
   variant = "grid",
   deferTextCommit = false,
   autoFocus = false,
+  placeholder,
 }: TBuiltinEditorProps) => {
   const { t } = useTranslation();
+  /** headline / chip 只改这一个控件的取景，不另起一套底子 */
+  const base = variant === "headline" || variant === "chip" ? "modal" : variant;
   // 详情页跟着工作项侧栏走透明下拉；网格保留边框按钮，否则单元格看不出能点
-  const dropdownVariant = variant === "detail" ? "transparent-with-text" : "border-with-text";
+  const dropdownVariant = base === "detail" ? "transparent-with-text" : "border-with-text";
+  const inputClass = variant === "headline" ? FIELD_HEADLINE_INPUT_CLASS : FIELD_INPUT_CLASS[base];
+  // 属性条上的胶囊与工作项 IssueDefaultProperties 同高（h-7），别跟着字段行的 38px 跑
+  const isChip = variant === "chip";
+  const dropdownClass = cn(
+    FIELD_DROPDOWN_CLASS[base],
+    isChip && "h-7 w-auto !border-strong bg-transparent px-2"
+  );
+  const containerClass = isChip ? "min-w-0" : "w-full min-w-0";
 
   if (columnKey === "title") {
     return deferTextCommit ? (
@@ -211,16 +233,18 @@ export const BuiltinCellEditor = ({
         value={values.title}
         onCommit={(next) => onChange({ title: next })}
         maxLength={255}
-        className={FIELD_INPUT_CLASS[variant]}
+        className={inputClass}
         autoFocus={autoFocus}
+        placeholder={placeholder}
       />
     ) : (
       <input
         value={values.title}
         onChange={(event) => onChange({ title: event.target.value })}
         maxLength={255}
-        className={FIELD_INPUT_CLASS[variant]}
+        className={inputClass}
         autoFocus={autoFocus}
+        placeholder={placeholder}
       />
     );
   }
@@ -236,7 +260,7 @@ export const BuiltinCellEditor = ({
         value={values.description_html ?? ""}
         onChange={(html) => onChange({ description_html: html })}
         onAssetUpload={onAssetUpload}
-        variant={variant}
+        variant={base}
       />
     );
   }
@@ -257,8 +281,8 @@ export const BuiltinCellEditor = ({
         value={values.priority}
         onChange={(next) => onChange({ priority: next as TRequirementPriority })}
         buttonVariant={dropdownVariant}
-        buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
-        buttonContainerClassName="w-full min-w-0"
+        buttonClassName={dropdownClass}
+        buttonContainerClassName={containerClass}
       />
     );
   }
@@ -270,8 +294,8 @@ export const BuiltinCellEditor = ({
         value={values.assignee_id}
         onChange={(memberId) => onChange({ assignee_id: memberId })}
         buttonVariant={dropdownVariant}
-        buttonClassName={`${FIELD_DROPDOWN_CLASS[variant]} text-14`}
-        buttonContainerClassName="w-full min-w-0"
+        buttonClassName={cn(dropdownClass, "text-14")}
+        buttonContainerClassName={containerClass}
         placeholder={t("requirement_grid.data.select_member")}
         showUserDetails
       />
@@ -289,8 +313,8 @@ export const BuiltinCellEditor = ({
         maxDate={isStart && values.target_date ? new Date(values.target_date) : undefined}
         placeholder={t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)}
         buttonVariant={dropdownVariant}
-        buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
-        buttonContainerClassName="w-full min-w-0"
+        buttonClassName={dropdownClass}
+        buttonContainerClassName={containerClass}
       />
     );
   }
@@ -300,7 +324,10 @@ export const BuiltinCellEditor = ({
       value={values.parent_id}
       onChange={(parentId) => onChange({ parent_id: parentId })}
       excludeId={rowId}
-      buttonClassName={FIELD_DROPDOWN_CLASS[variant]}
+      buttonClassName={cn(dropdownClass, isChip && "gap-1.5")}
+      // 胶囊上没有字段名，图标就是它的标签 —— 其余几个下拉自带图标，这个得显式给
+      icon={isChip ? GitBranch : undefined}
+      containerClassName={isChip ? "w-auto" : undefined}
       {...parentScope}
     />
   );

@@ -24,6 +24,11 @@ type Props = {
   /** 排除自身：一行不能做自己的父项 */
   excludeId?: string;
   buttonClassName?: string;
+  /**
+   * 外层定位容器。缺省撑满格子；建行弹窗底部的属性条要让它随内容收缩，
+   * 否则这一个胶囊会把整行吃掉。
+   */
+  containerClassName?: string;
   /** 按钮文字的字号/颜色。缺省 text-14 + primary/placeholder（网格单元格的形态） */
   buttonTextClassName?: string;
   /** 按钮前置图标。属性条里用它表意，网格单元格里没有位置给图标 */
@@ -47,6 +52,7 @@ export const RequirementParentDropdown = ({
   onChange,
   excludeId,
   buttonClassName,
+  containerClassName,
   buttonTextClassName,
   icon: Icon,
   disabled = false,
@@ -115,14 +121,14 @@ export const RequirementParentDropdown = ({
         setIsOpen(false);
       }}
       disabled={disabled}
-      className="relative w-full min-w-0"
+      className={cn("relative min-w-0", containerClassName ?? "w-full")}
     >
       <button
         type="button"
         ref={setReferenceElement}
         disabled={disabled}
         onClick={() => setIsOpen((previous) => !previous)}
-        className={cn("flex w-full min-w-0 items-center rounded-md text-left", buttonClassName)}
+        className={cn("flex min-w-0 items-center rounded-md text-left", containerClassName ? "w-auto" : "w-full", buttonClassName)}
       >
         {Icon && <Icon className="size-3.5 shrink-0 text-tertiary" />}
         <span

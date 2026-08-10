@@ -1594,8 +1594,12 @@ export default {
       in_review: "评审中",
       pending_deletion: "删除待审",
       approved: "已通过",
-      /** 「待提交」的意思由旁边那个圆点的 tooltip（has_unsubmitted_changes）补，胶囊只留三个字才塞得进 144px 的审批列 */
-      modified: "已改动",
+      /**
+       * 对齐禅道需求状态里的「已变更」。不叫「变更中」：这一栏只有真在流程里的
+       * 「评审中」用进行时，而这个状态恰恰是没人在审、等作者提交。
+       * 「尚未提交」由旁边圆点的 tooltip（has_unsubmitted_changes）补。
+       */
+      modified: "已变更",
     },
   },
   /** 相对时间。date-fns 的 calculateTimeAgo 不接 locale，中文界面下会吐英文，所以走 i18n */
@@ -1709,6 +1713,10 @@ export default {
       },
       last_changed_version: "最后变更于",
       add: "新增记录",
+      /** 建行弹窗里标题与描述没有标签，占位文案就是它们的标签 */
+      title_placeholder: "需求标题",
+      description_placeholder: "补充背景、验收标准…",
+      pick_type_hint: "先选需求类型，该类型的字段会出现在这里",
       new: "新增",
       copy_badge: "副本",
       saved: "记录已保存。",
@@ -2278,13 +2286,10 @@ export default {
         confirm: "导入",
         error_title: "无法加载标准库条目",
       },
+      /** 建行弹窗顶上的类型选择器。title 在没选中时当占位文案用 */
       requirement_type_picker: {
         title: "选择需求类型",
-        description: "明细行的字段由所选模板决定。",
-        search: "搜索需求类型",
         empty: "还没有可用的需求类型",
-        field_count: "{count} 个字段",
-        confirm: "下一步",
       },
       state: {
         based_on: "基于 v{version}",

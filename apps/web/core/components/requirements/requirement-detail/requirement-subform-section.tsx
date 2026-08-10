@@ -32,6 +32,11 @@ type TProps = {
   readOnly: boolean;
   /** 默认展开几块：抽屉 1、整页 2 —— 版面宽窄不同，能一眼看到的量也不同 */
   defaultOpenCount: number;
+  /**
+   * 空表单是否也进默认展开。详情页关掉（展开一块「暂无数据」白占版面）；
+   * 建行弹窗要开 —— 新建时表单本来就是空的，折叠起来用户找不到「加一行」。
+   */
+  defaultOpenEmpty?: boolean;
   /** 折叠态的存储命名空间，按需求类型区分 */
   storageKey: string;
   onChange: (data: TRequirementData) => void;
@@ -39,7 +44,18 @@ type TProps = {
 };
 
 export const RequirementSubformSection = (props: TProps) => {
-  const { forms, data, workspaceSlug, entityId, readOnly, defaultOpenCount, storageKey, onChange, onUpload } = props;
+  const {
+    forms,
+    data,
+    workspaceSlug,
+    entityId,
+    readOnly,
+    defaultOpenCount,
+    defaultOpenEmpty = false,
+    storageKey,
+    onChange,
+    onUpload,
+  } = props;
   const { t } = useTranslation();
   const { storedValue: openIds, setValue: setOpenIds } = useLocalStorage<string[] | null>(storageKey, null);
   /** 点索引胶囊后要滚过去，滚动容器由调用方决定，所以只记 id 让 ref 回调去做 */
@@ -51,13 +67,15 @@ export const RequirementSubformSection = (props: TProps) => {
   );
 
   /**
-   * 没存过折叠态时的缺省：按顺序展开前 N 块，但空表单一律折叠 —— 展开一块「暂无数据」
-   * 只是白占版面。
+   * 没存过折叠态时的缺省：按顺序展开前 N 块。
+   * 详情页空表单默认折叠；建行弹窗靠 defaultOpenEmpty 把空表单也展开。
    */
   const defaultOpenIds = useMemo(() => {
-    const withRows = forms.filter((form) => (rowsByForm[form.id]?.length ?? 0) > 0);
-    return withRows.slice(0, defaultOpenCount).map((form) => form.id);
-  }, [defaultOpenCount, forms, rowsByForm]);
+    const candidates = defaultOpenEmpty
+      ? forms
+      : forms.filter((form) => (rowsByForm[form.id]?.length ?? 0) > 0);
+    return candidates.slice(0, defaultOpenCount).map((form) => form.id);
+  }, [defaultOpenCount, defaultOpenEmpty, forms, rowsByForm]);
 
   const effectiveOpenIds = openIds ?? defaultOpenIds;
 

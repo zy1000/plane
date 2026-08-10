@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirementChangeSnapshot,
@@ -160,8 +161,13 @@ type TProps = {
   onFocusVersion?: (version: number) => void;
 };
 
+/**
+ * 变更轨迹。折叠交互与下方版本历史对齐：标题左侧 chevron，点一下收起/展开。
+ * 默认展开 —— 轨迹数据随详情一起到齐，不像版本历史要等展开才去拉。
+ */
 export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersion }: TProps) => {
   const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(true);
 
   const rows = useMemo(
     () =>
@@ -175,33 +181,47 @@ export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersio
     [entries, requirementType, t]
   );
 
-  if (!entries.length) {
-    return (
-      <HistoryEmpty
-        title={t("requirement_detail.trail.empty")}
-        description={t("requirement_detail.trail.empty_description")}
-      />
-    );
-  }
-
   return (
-    <HistoryTimeline>
-      {rows.map(({ entry, fields }, index) => {
-        const isFirst = index === 0;
-        const isLast = index === rows.length - 1;
-        return entry.kind === "content" ? (
-          <ContentEntry
-            key={entry.id}
-            entry={entry}
-            fields={fields}
-            isFirst={isFirst}
-            isLast={isLast}
-            onFocusVersion={onFocusVersion}
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex items-center gap-1.5 text-12 font-medium text-primary"
+      >
+        {isOpen ? (
+          <ChevronDown className="size-3 text-tertiary" />
+        ) : (
+          <ChevronRight className="size-3 text-tertiary" />
+        )}
+        {t("requirement_detail.change_trail")}
+      </button>
+
+      {isOpen &&
+        (!entries.length ? (
+          <HistoryEmpty
+            title={t("requirement_detail.trail.empty")}
+            description={t("requirement_detail.trail.empty_description")}
           />
         ) : (
-          <SchemaEntry key={entry.id} entry={entry} isFirst={isFirst} isLast={isLast} />
-        );
-      })}
-    </HistoryTimeline>
+          <HistoryTimeline>
+            {rows.map(({ entry, fields }, index) => {
+              const isFirst = index === 0;
+              const isLast = index === rows.length - 1;
+              return entry.kind === "content" ? (
+                <ContentEntry
+                  key={entry.id}
+                  entry={entry}
+                  fields={fields}
+                  isFirst={isFirst}
+                  isLast={isLast}
+                  onFocusVersion={onFocusVersion}
+                />
+              ) : (
+                <SchemaEntry key={entry.id} entry={entry} isFirst={isFirst} isLast={isLast} />
+              );
+            })}
+          </HistoryTimeline>
+        ))}
+    </div>
   );
 };

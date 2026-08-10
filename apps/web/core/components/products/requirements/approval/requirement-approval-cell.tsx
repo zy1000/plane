@@ -12,7 +12,7 @@ import type { TRequirement, TRequirementApprovalState } from "@plane/types";
 import { cn } from "@plane/utils";
 
 export const REQUIREMENT_APPROVAL_PILL: Record<TRequirementApprovalState, string> = {
-  draft: "bg-layer-2 text-secondary",
+  draft: "bg-layer-3 text-primary",
   in_review: "bg-warning-subtle text-warning-primary",
   pending_deletion: "bg-danger-subtle text-danger-primary",
   approved: "bg-success-subtle text-success-primary",
@@ -31,7 +31,7 @@ export const RequirementApprovalCell = ({ requirement, isStagedCreate, onOpenCha
 
   if (isStagedCreate || !requirement) {
     return (
-      <span className={cn("inline-flex h-5 items-center rounded px-1.5 text-10", REQUIREMENT_APPROVAL_PILL.draft)}>
+      <span className={cn("inline-flex h-5 items-center rounded px-1.5 text-11", REQUIREMENT_APPROVAL_PILL.draft)}>
         {t("requirement_approval.state.draft")}
       </span>
     );
@@ -45,7 +45,7 @@ export const RequirementApprovalCell = ({ requirement, isStagedCreate, onOpenCha
   const pill = (
     <span
       className={cn(
-        "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-10 font-medium",
+        "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-11 font-medium",
         REQUIREMENT_APPROVAL_PILL[state]
       )}
     >
@@ -78,7 +78,7 @@ export const RequirementApprovalCell = ({ requirement, isStagedCreate, onOpenCha
       ) : (
         pill
       )}
-      <span className="flex shrink-0 items-center gap-1 text-10 text-tertiary tabular-nums">
+      <span className="flex shrink-0 items-center gap-1 text-11 text-tertiary tabular-nums">
         {requirement.approved_version !== null && `v${requirement.approved_version}`}
         {state === "modified" && (
           <Tooltip tooltipContent={t("requirement_approval.has_unsubmitted_changes")}>

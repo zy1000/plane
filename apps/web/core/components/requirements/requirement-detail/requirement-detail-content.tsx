@@ -426,13 +426,12 @@ export const RequirementDetailContent = (props: TProps) => {
         这一整块讲的是「过去」，与上面的「现在」之间给一条分隔线，其余区块之间只用留白。
       */}
       <div className="flex flex-col gap-6 border-t border-subtle pt-6">
-        <Section label={t("requirement_detail.change_trail")}>
-          <RequirementChangeTrail
-            entries={trail}
-            requirementType={requirementType}
-            onFocusVersion={focusVersion}
-          />
-        </Section>
+        {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}
+        <RequirementChangeTrail
+          entries={trail}
+          requirementType={requirementType}
+          onFocusVersion={focusVersion}
+        />
 
         <RequirementVersionHistory
           workspaceSlug={workspaceSlug}

@@ -1546,6 +1546,9 @@ export default {
       },
       last_changed_version: "Last changed in",
       add: "Add record",
+      title_placeholder: "Requirement title",
+      description_placeholder: "Add context, acceptance criteria…",
+      pick_type_hint: "Pick a requirement type and its fields will appear here",
       new: "New",
       copy_badge: "Copy",
       saved: "Record saved.",
@@ -2120,11 +2123,7 @@ export default {
       },
       requirement_type_picker: {
         title: "Choose a requirement type",
-        description: "The row's fields come from the template you pick.",
-        search: "Search templates",
         empty: "No requirement types available",
-        field_count: "{count} fields",
-        confirm: "Continue",
       },
       state: {
         based_on: "Based on v{version}",
