@@ -81,8 +81,16 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   /** 打开的基线；两个都在时进对比视图 */
   const openedBaselineId = searchParams.get("bl");
   const compareBaselineId = searchParams.get("cmp");
-  /** 详情抽屉开在哪一条。走 URL 而不是内存态：需求经常要贴链接给别人 */
-  const peekRequirementId = searchParams.get("peek");
+  /**
+   * 详情抽屉开在哪一条。
+   *
+   * URL 仍是入口与出口（深链、刷新、贴给别人都要还原得回来），但开合本身走本地态：
+   * setSearchParams 是一次真正的路由导航，React Router 会把它裹进 startTransition，
+   * 点开与关闭都得等一次低优先级渲染才生效 —— 工作项的 peek 是纯内存态，手感的差别
+   * 就出在这一步。URL 留到副作用里补。
+   */
+  const urlPeekRequirementId = searchParams.get("peek");
+  const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
   const canEdit = Boolean(policy?.can_edit);
   /** 能不能改审批配置本身 —— 必然比 canEdit 窄 */
@@ -157,12 +165,30 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     setSearchParams(next, { replace: true });
   };
 
-  const setPeekRequirement = (requirementId: string | null) => {
+  /** 最后一次由本地态写出去的 peek。用来把「自己写的」和「外面改的」分开 */
+  const syncedPeekRef = useRef(urlPeekRequirementId);
+
+  /**
+   * 前进后退、直接改地址栏：这个方向上 URL 是源。
+   *
+   * 自己写出去的那一次要跳过 —— 否则「点开后立刻关掉」时，先前那次导航晚一步提交回来，
+   * 会把已经关掉的抽屉重新弹开。
+   */
+  useEffect(() => {
+    if (urlPeekRequirementId === syncedPeekRef.current) return;
+    syncedPeekRef.current = urlPeekRequirementId;
+    setPeekRequirement(urlPeekRequirementId);
+  }, [urlPeekRequirementId]);
+
+  /** 反方向补 URL。放在副作用里 = 抽屉先画出来，导航晚一帧再发生，不挡开合 */
+  useEffect(() => {
+    if (urlPeekRequirementId === peekRequirementId) return;
+    syncedPeekRef.current = peekRequirementId;
     const next = new URLSearchParams(searchParams);
-    if (requirementId) next.set("peek", requirementId);
+    if (peekRequirementId) next.set("peek", peekRequirementId);
     else next.delete("peek");
     setSearchParams(next, { replace: true });
-  };
+  }, [peekRequirementId, urlPeekRequirementId, searchParams, setSearchParams]);
 
   const openChangeRequest = (changeRequestId: string | null) => {
     const next = new URLSearchParams(searchParams);

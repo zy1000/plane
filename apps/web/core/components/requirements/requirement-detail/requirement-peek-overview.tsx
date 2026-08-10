@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
 import { Link2, Loader as LoaderIcon, Maximize2, MoveRight } from "lucide-react";
@@ -19,7 +19,7 @@ import { useRequirementDetail } from "./use-requirement-detail";
 type TProps = {
   workspaceSlug: string;
   productId: string;
-  /** 打开哪一条；null = 关闭。由 URL 上的 ?peek= 驱动，刷新和分享都能还原 */
+  /** 打开哪一条；null = 关闭。上层会把它同步到 URL 的 ?peek=，刷新和分享都能还原 */
   requirementId: string | null;
   requirementTypes: TRequirementTypeSchema[];
   /** 网格当前页的行，命中就不必再请求一次 */
@@ -35,8 +35,9 @@ type TProps = {
 /**
  * 需求详情抽屉。
  *
- * 与工作项的 peek 一样 portal 到 #full-screen-portal，但开合由 URL 参数驱动而不是
- * 内存态 —— 需求经常要贴给别人看，一个能直接打开这条需求的链接比少一次跳转更值。
+ * 与工作项的 peek 一样 portal 到 #full-screen-portal，开合同样是内存态；URL 上的
+ * ?peek= 由上层在副作用里跟着补 —— 需求经常要贴给别人看，链接要能直接打开这一条，
+ * 但这件事不该挡在开合的关键路径上。
  */
 export const RequirementPeekOverview = (props: TProps) => {
   const {
@@ -52,12 +53,29 @@ export const RequirementPeekOverview = (props: TProps) => {
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
+  const isOpen = Boolean(requirementId);
 
-  const seed = useMemo(
-    () => rows.find((row) => row.id === requirementId) ?? null,
-    [requirementId, rows]
-  );
-  const detail = useRequirementDetail({ workspaceSlug, productId, requirementId, seed });
+  /**
+   * 关掉时上层立刻把 requirementId 置空，但抽屉还要滑 150ms 才消失。详情直接跟着空，
+   * 滑出的这一段就会先把内容换成「未找到」、顺带清掉子需求与轨迹。这里握住最后一条，
+   * 等滑完（afterLeave）再松手。
+   */
+  const [activeId, setActiveId] = useState(requirementId);
+  useEffect(() => {
+    if (requirementId) setActiveId(requirementId);
+  }, [requirementId]);
+
+  /**
+   * 首帧要同时挂描述编辑器、子表单、变更轨迹这一堆东西，主线程被占住，「面板出现」
+   * 本身就被推迟。改成滑入的过程中先出骨架、进场动画走完（afterEnter）再挂内容 ——
+   * 与工作项 peek 先渲 loader、数据回来再填是同一个手感。
+   *
+   * 初值取 isOpen：带着 ?peek= 直接进页面时没有进场动画，afterEnter 不会来。
+   */
+  const [isBodyMounted, setIsBodyMounted] = useState(isOpen);
+
+  const seed = useMemo(() => rows.find((row) => row.id === activeId) ?? null, [activeId, rows]);
+  const detail = useRequirementDetail({ workspaceSlug, productId, requirementId: activeId, seed });
   const { requirement } = detail;
 
   const parentTitles = useRequirementTitles({
@@ -83,7 +101,6 @@ export const RequirementPeekOverview = (props: TProps) => {
     [detail, onRequirementUpdated]
   );
 
-  const isOpen = Boolean(requirementId);
   useKeypress("Escape", () => {
     if (isOpen) onClose();
   });
@@ -92,7 +109,15 @@ export const RequirementPeekOverview = (props: TProps) => {
   if (!portalContainer) return null;
 
   return createPortal(
-    <Transition show={isOpen} as={Fragment}>
+    <Transition
+      show={isOpen}
+      as={Fragment}
+      afterEnter={() => setIsBodyMounted(true)}
+      afterLeave={() => {
+        setActiveId(null);
+        setIsBodyMounted(false);
+      }}
+    >
       <div className="absolute inset-0 z-[25]">
         <Transition.Child
           as={Fragment}
@@ -135,9 +160,9 @@ export const RequirementPeekOverview = (props: TProps) => {
                 icon={Maximize2}
                 aria-label={t("requirement_detail.open_full_page")}
                 onClick={() => {
-                  if (!requirementId) return;
+                  if (!activeId) return;
                   onClose();
-                  router.push(`/${workspaceSlug}/products/${productId}/requirements/${requirementId}`);
+                  router.push(`/${workspaceSlug}/products/${productId}/requirements/${activeId}`);
                 }}
               />
               <span className="ml-auto flex items-center gap-1.5">
@@ -148,9 +173,9 @@ export const RequirementPeekOverview = (props: TProps) => {
                   icon={Link2}
                   aria-label={t("requirement_detail.copy_link")}
                   onClick={() => {
-                    if (!requirementId) return;
+                    if (!activeId) return;
                     void copyUrlToClipboard(
-                      `${workspaceSlug}/products/${productId}/requirements/${requirementId}`
+                      `${workspaceSlug}/products/${productId}/requirements/${activeId}`
                     ).then(() =>
                       setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
                     );
@@ -160,7 +185,7 @@ export const RequirementPeekOverview = (props: TProps) => {
             </div>
 
             <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-6 pt-1 pb-12">
-              {detail.isLoading && !requirement ? (
+              {!isBodyMounted || (detail.isLoading && !requirement) ? (
                 <Loader className="flex flex-col gap-3 py-2">
                   <Loader.Item height="28px" width="60%" />
                   <Loader.Item height="56px" />

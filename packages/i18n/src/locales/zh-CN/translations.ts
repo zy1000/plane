@@ -1595,11 +1595,11 @@ export default {
       pending_deletion: "删除待审",
       approved: "已通过",
       /**
-       * 对齐禅道需求状态里的「已变更」。不叫「变更中」：这一栏只有真在流程里的
-       * 「评审中」用进行时，而这个状态恰恰是没人在审、等作者提交。
-       * 「尚未提交」由旁边圆点的 tooltip（has_unsubmitted_changes）补。
+       * 通过后又改过、还没提交评审。用进行时的「变更中」强调这一版没走完流程，
+       * 而不是已经定稿的一次变更。「尚未提交」由旁边圆点的 tooltip
+       * （has_unsubmitted_changes）补。
        */
-      modified: "已变更",
+      modified: "变更中",
     },
   },
   /** 相对时间。date-fns 的 calculateTimeAgo 不接 locale，中文界面下会吐英文，所以走 i18n */
