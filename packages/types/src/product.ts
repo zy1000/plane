@@ -5,6 +5,8 @@ export type TProductNetwork = 0 | 2;
 export type TProduct = {
   id: string;
   name: string;
+  /** 需求编号的前缀（ECOM-1 里的 ECOM）。工作区内唯一，服务端强制大写。 */
+  identifier: string;
   description_html: string | null;
   network: TProductNetwork;
   workspace: string;
@@ -20,6 +22,7 @@ export type TProduct = {
 
 export type TCreateProductPayload = {
   name: string;
+  identifier: string;
   description_html?: string | null;
   network: TProductNetwork;
   owner: string;

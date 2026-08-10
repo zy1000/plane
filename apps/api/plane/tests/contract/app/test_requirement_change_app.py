@@ -45,6 +45,7 @@ class RequirementApprovalHarness:
             )
         self.product = Product.objects.create(
             name=f"Requirement product {uuid4()}",
+            identifier=f"P{uuid4().hex[:7].upper()}",
             workspace=self.workspace,
             owner=self.owner,
         )
@@ -725,7 +726,10 @@ class TestRequirementApprovalInboxApp(RequirementApprovalHarness):
         self.submit_ok(api_client, [row["id"]])
 
         other_product = Product.objects.create(
-            name=f"Other product {uuid4()}", workspace=self.workspace, owner=self.owner
+            name=f"Other product {uuid4()}",
+            identifier=f"O{uuid4().hex[:7].upper()}",
+            workspace=self.workspace,
+            owner=self.owner,
         )
 
         api_client.force_authenticate(user=self.approver)

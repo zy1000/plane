@@ -63,6 +63,7 @@ class TestRequirementApp:
             )
         self.product = Product.objects.create(
             name=f"Requirement product {uuid4()}",
+            identifier=f"P{uuid4().hex[:7].upper()}",
             workspace=self.workspace,
             owner=self.owner,
         )
@@ -233,6 +234,7 @@ class TestRequirementApp:
             workspace=self.workspace,
             requirement_type_id=type_id,
             name=f"Library {uuid4()}",
+            identifier=f"L{uuid4().hex[:7].upper()}",
         )
         by_name = {field["name"]: field["id"] for field in fields}
 
@@ -255,6 +257,11 @@ class TestRequirementApp:
         # 标准库条目永不走审批 —— 由 req_library_item_never_approved 约束硬保证
         assert item.approved_version is None
         assert item.status == "draft"
+        # 库条目有自己作用域内的编号，且它是导入的源头，不可能有来源
+        assert item.sequence_id == 1
+        assert created.data["display_id"] == f"{library.identifier}-1"
+        assert item.source_library_id is None
+        assert created.data["source_display_id"] is None
 
         imported = api_client.post(
             f"{self.requirements_url()}import/",
@@ -268,6 +275,40 @@ class TestRequirementApp:
         assert copy.title == "标准条目"
         assert copy.description_html == "库描述"
         assert list(copy.data.values()) == ["中"]
+        # 导入的行同时有自己的产品编号和来源库编号
+        payload = imported.data["created"][0]["requirement"]
+        assert payload["display_id"] == f"{self.product.identifier}-1"
+        assert copy.source_library_id == library.id
+        assert copy.source_sequence_id == item.sequence_id
+        assert payload["source_display_id"] == f"{library.identifier}-1"
+
+        # 库改名换标识后，已导入行的来源编号跟着变 —— 这正是存结构化 id
+        # 而不是快照字符串的理由
+        library.identifier = "RENAMED"
+        library.save()
+        listed = api_client.get(self.requirements_url())
+        assert listed.status_code == status.HTTP_200_OK, listed.data
+        assert listed.data["results"][0]["source_display_id"] == "RENAMED-1"
+
+    def test_sequence_ids_increment_per_scope_and_are_never_reused(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+
+        rows = [self.add_requirement(api_client, type_id, f"需求 {i}") for i in range(3)]
+        assert [row["sequence_id"] for row in rows] == [1, 2, 3]
+        assert [row["display_id"] for row in rows] == [
+            f"{self.product.identifier}-{n}" for n in (1, 2, 3)
+        ]
+        # 手工录入的行没有来源
+        assert all(row["source_display_id"] is None for row in rows)
+
+        deleted = api_client.delete(f"{self.requirements_url()}{rows[-1]['id']}/")
+        assert deleted.status_code == status.HTTP_204_NO_CONTENT, deleted.data
+
+        # 编号永不复用：软删的行仍然占着 3 号，取号侧用的是 all_objects。
+        # 用 objects 的话这里会拿到 3，然后撞 req_unique_product_sequence。
+        again = self.add_requirement(api_client, type_id, "删完再建")
+        assert again["sequence_id"] == 4
 
     def test_requirement_type_cannot_be_deleted_while_requirements_reference_it(
         self, api_client

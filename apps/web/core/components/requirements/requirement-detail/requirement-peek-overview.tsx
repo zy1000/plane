@@ -10,6 +10,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementTypeSchema } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
@@ -164,6 +165,13 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onClose();
                   router.push(`/${workspaceSlug}/products/${productId}/requirements/${activeId}`);
                 }}
+              />
+              {/* 抽屉里唯一能稳定引用这条需求的东西 —— 这里默认开点击复制 */}
+              <RequirementIdentifier
+                displayId={requirement?.display_id}
+                sourceDisplayId={requirement?.source_display_id}
+                size="sm"
+                enableClickToCopy
               />
               <span className="ml-auto flex items-center gap-1.5">
                 {detail.isLoading && <LoaderIcon className="size-3.5 animate-spin text-tertiary" />}

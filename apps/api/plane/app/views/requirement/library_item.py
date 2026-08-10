@@ -85,7 +85,8 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
             queryset=Requirement.objects.filter(library=owner).order_by(
                 "sort_order", "created_at", "id"
             ),
-            serializer_context={},
+            # 库内条目的展示编号前缀（SEC-12 里的 SEC）
+            serializer_context={"scope_identifier": owner.identifier},
             requirement_type_ids=[owner.requirement_type_id],
             fields=fields,
             fields_by_requirement_type=fields_by_requirement_type,

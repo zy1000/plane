@@ -9,6 +9,7 @@ import { EUserWorkspaceRoles } from "@plane/types";
 import type { TProductNetwork } from "@plane/types";
 import { CustomSelect, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
+import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PageHead } from "@/components/core/page-title";
@@ -37,6 +38,8 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.id?.toString() : undefined;
 
   const [name, setName] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [descriptionHTML, setDescriptionHTML] = useState(EMPTY_DESCRIPTION);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
@@ -68,11 +71,13 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
   useEffect(() => {
     if (!product) return;
     setName(product.name);
+    setIdentifier(product.identifier);
     setDescriptionHTML(product.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product.owner);
     setReviewerIds(product.reviewers);
     setNetwork(product.network);
     setFormError(null);
+    setIdentifierError(null);
     setOwnerError(null);
     resetAssets();
     setEditorVersion((version) => version + 1);
@@ -93,6 +98,10 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       setFormError(t("workspace_products.settings.validation.name_required"));
       return;
     }
+    if (!isValidIdentifier(identifier)) {
+      setIdentifierError(t("common.identifier.invalid"));
+      return;
+    }
     if (!ownerId) {
       setOwnerError(t("workspace_products.validation.owner_required"));
       return;
@@ -100,10 +109,12 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
 
     setIsSaving(true);
     setFormError(null);
+    setIdentifierError(null);
     setOwnerError(null);
     try {
       const savedProduct = await updateProduct(product.id, {
         name: trimmedName,
+        identifier,
         description_html: descriptionHTML,
         network,
         owner: ownerId,
@@ -124,8 +135,18 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         });
       }
     } catch (error) {
-      const errorPayload = error && typeof error === "object" ? (error as { name?: string[]; owner?: string[] }) : {};
+      const errorPayload =
+        error && typeof error === "object"
+          ? (error as { name?: string[]; identifier?: string[]; owner?: string[] })
+          : {};
       if (errorPayload.owner?.[0]) setOwnerError(String(errorPayload.owner[0]));
+      // 后端返回 PRODUCT_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
+      else if (errorPayload.identifier?.[0])
+        setIdentifierError(
+          errorPayload.identifier[0] === "PRODUCT_IDENTIFIER_ALREADY_EXISTS"
+            ? t("common.identifier.already_exists")
+            : t("common.identifier.invalid")
+        );
       else setFormError(String(errorPayload.name?.[0] ?? t("workspace_products.toast.failed")));
     } finally {
       setIsSaving(false);
@@ -157,6 +178,19 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
             />
             {formError && <p className="mt-1.5 text-caption-md-regular text-danger-primary">{formError}</p>}
           </div>
+
+          {/* 改标识符只影响展示：编号是读时拼的，所有已有需求的编号会立刻跟着变 */}
+          <IdentifierInput
+            id="product-settings-identifier"
+            value={identifier}
+            onChange={(value) => {
+              setIdentifier(value);
+              setIdentifierError(null);
+            }}
+            error={identifierError}
+            label={t("workspace_products.fields.identifier")}
+            hint={t("workspace_products.fields.identifier_hint")}
+          />
 
           <div>
             <p className="mb-1.5 text-body-sm-medium text-primary">

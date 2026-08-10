@@ -74,6 +74,7 @@ import {
   resolveRequirementTitleColumnWidth,
   useRequirementGridScrollContainer,
 } from "./requirement-grid-shared";
+import { RequirementIdentifier } from "./requirement-identifier";
 import { getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 import { copyRequirementData, createEmptyRequirementData } from "./requirement-row-data";
 import { RequirementCreateModal, type TRequirementCreateSeed } from "./requirement-create-modal";
@@ -673,6 +674,13 @@ export const RequirementGrid = observer(
                         )}
                       />
                     )}
+
+                    {/* 编号放在 sticky 标题格里而不是单独一列：不占列宽、不参与横滚，
+                        与工作项在列表里的做法一致 */}
+                    <RequirementIdentifier
+                      displayId={requirement.display_id}
+                      sourceDisplayId={requirement.source_display_id}
+                    />
 
                     <span className="min-w-0 flex-1">
                       {isRowEditable ? (

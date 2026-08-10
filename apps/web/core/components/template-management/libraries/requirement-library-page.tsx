@@ -53,6 +53,9 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                   component={
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate text-13 font-medium text-primary">{pageTitle}</span>
+                      {library?.identifier && (
+                        <span className="shrink-0 text-12 text-tertiary">{library.identifier}</span>
+                      )}
                       {library && (
                         <Tooltip tooltipContent={t("requirement_libraries.detail.requirement_type_tooltip")} position="bottom">
                           <Link

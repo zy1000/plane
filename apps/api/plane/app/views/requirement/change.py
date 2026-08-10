@@ -132,6 +132,18 @@ class ProductScopedMixin:
             create=True,
         )
 
+    def snapshot_context(self, policy):
+        """快照序列化用的 context：把编号前缀带进去。
+
+        快照里只存 sequence_id 不存拼好的编号 —— 产品改标识后，历史版本、变更单与
+        基线里的编号要跟着变，所以前缀一律读时解析。作用域内是常量，零额外查询。
+        """
+        return {
+            "scope_identifier": (
+                policy.product.identifier if policy.product_id else policy.project.identifier
+            )
+        }
+
     @staticmethod
     def not_found():
         return Response(
@@ -352,7 +364,8 @@ class RequirementChangeItemViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementChangeItemSerializer
 
     def list(self, request, slug, product_id, pk):
-        if self.resolve_policy() is None:
+        policy = self.resolve_policy()
+        if policy is None:
             return self.not_found()
         queryset = (
             RequirementChangeItem.objects.filter(
@@ -378,7 +391,7 @@ class RequirementChangeItemViewSet(ProductScopedMixin, BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda results: RequirementChangeItemSerializer(
-                results, many=True
+                results, many=True, context=self.snapshot_context(policy)
             ).data,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
@@ -392,7 +405,8 @@ class RequirementVersionViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementVersionSerializer
 
     def list(self, request, slug, product_id, requirement_id):
-        if self.resolve_policy() is None:
+        policy = self.resolve_policy()
+        if policy is None:
             return self.not_found()
         queryset = (
             RequirementVersion.objects.filter(
@@ -405,7 +419,7 @@ class RequirementVersionViewSet(ProductScopedMixin, BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda results: RequirementVersionSerializer(
-                results, many=True
+                results, many=True, context=self.snapshot_context(policy)
             ).data,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
@@ -664,7 +678,8 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def requirements(self, request, slug, product_id, pk):
         """基线收录的条目。内容与字段结构都取自被收录的那一版，不跟随需求现状。"""
-        if self.resolve_policy() is None:
+        policy = self.resolve_policy()
+        if policy is None:
             return self.not_found()
         baseline = self.get_queryset().filter(id=pk).first()
         if baseline is None:
@@ -684,7 +699,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda results: RequirementBaselineEntrySerializer(
-                results, many=True
+                results, many=True, context=self.snapshot_context(policy)
             ).data,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,

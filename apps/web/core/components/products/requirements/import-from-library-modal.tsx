@@ -9,6 +9,7 @@ import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
 import { LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
 
@@ -317,6 +318,11 @@ export const RequirementImportFromLibraryModal = ({
                             aria-label={t("workspace_products.requirements.import_modal.select_all_page")}
                           />
                         </th>
+                        {/* 编号排在标题之前：导入后它会作为来源编号跟着落到产品需求上，
+                            用户在这里就该看到将要带过去的是哪几个号 */}
+                        <th className="min-w-[88px] px-3 py-2">
+                          <span className="truncate">{t("requirements.identifier.column")}</span>
+                        </th>
                         {PREVIEW_BUILTIN_COLUMNS.map((column) => (
                           <th key={column.key} className="min-w-[130px] px-3 py-2">
                             <span className="truncate">{t(column.labelKey)}</span>
@@ -349,6 +355,9 @@ export const RequirementImportFromLibraryModal = ({
                                 onChange={() => toggleItem(item)}
                                 onClick={(event) => event.stopPropagation()}
                               />
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              <RequirementIdentifier displayId={item.display_id} />
                             </td>
                             {PREVIEW_BUILTIN_COLUMNS.map((column) => (
                               <td key={column.key} className="px-3 py-2 align-top">

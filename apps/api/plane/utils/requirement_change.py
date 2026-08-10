@@ -68,10 +68,26 @@ class RequirementChangeError(Exception):
 
 
 def requirement_row_snapshot(row):
-    """行快照：八个内置列平铺在顶层，data 只装自定义字段。"""
+    """行快照：八个内置列平铺在顶层，data 只装自定义字段。
+
+    编号（sequence_id / source_*）直接写在顶层，**没有**走 BUILTIN_COLUMN_DEFAULTS ——
+    原因见那份 dict 上方的注释。快照顶层的额外 key 则完全安全：所有消费方
+    （_row_compare_values 按 CONTENT_BUILTIN_COLUMNS 取、builtin_values_from_payload
+    按 BUILTIN_COLUMNS 取）都是白名单取值，不是整体比对，所以编号既不会污染 diff，
+    也不会被回滚写回活行。
+
+    基线视图把 version.snapshot 原样吐给前端，没有编号那里就显示不出 ECOM-1，
+    而基线恰恰是最需要稳定编号的场景。
+    历史快照没有这三个 key，读侧一律 .get()，前端拿不到就不显示编号。
+    """
     return {
         "id": str(row.id),
         "requirement_type_id": str(row.requirement_type_id),
+        "sequence_id": row.sequence_id,
+        "source_library_id": (
+            str(row.source_library_id) if row.source_library_id else None
+        ),
+        "source_sequence_id": row.source_sequence_id,
         **serialize_builtin_values(row),
         "data": deepcopy(row.data or {}),
         "sort_order": row.sort_order,

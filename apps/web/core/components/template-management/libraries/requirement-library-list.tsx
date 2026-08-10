@@ -368,6 +368,8 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                           >
                             {library.name}
                           </Link>
+                          {/* 标识符跟在名称下 —— 它决定了库内条目的编号长什么样 */}
+                          <span className="mt-0.5 block truncate text-11 text-tertiary">{library.identifier}</span>
                         </td>
                         <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
                           <Link

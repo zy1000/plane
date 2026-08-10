@@ -223,7 +223,7 @@ class RequirementViewSet(BaseRequirementRowViewSet):
                 return Response(payload, status=status.HTTP_409_CONFLICT)
         return Response(
             RequirementSerializer(
-                row, context=self._serializer_context(layer, owner)
+                row, context=self._row_context(layer, owner, [row])
             ).data,
             status=status.HTTP_200_OK,
         )

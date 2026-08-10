@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from plane.app.serializers.product import IDENTIFIER_PATTERN
 from plane.db.models import RequirementLibrary, RequirementType
 
 from .base import BaseSerializer
@@ -13,6 +14,9 @@ class RequirementLibrarySerializer(BaseSerializer):
     )
     requirement_type_detail = serializers.SerializerMethodField()
     name = serializers.CharField(max_length=255, required=False)
+    # 与 name 一样 required=False + 在 validate() 里补必填校验，这样 PATCH 只改
+    # description 时不用把标识一起传上来
+    identifier = serializers.CharField(max_length=12, required=False)
     description = serializers.CharField(required=False, allow_blank=True)
     field_count = serializers.SerializerMethodField()
     item_count = serializers.SerializerMethodField()
@@ -25,6 +29,9 @@ class RequirementLibrarySerializer(BaseSerializer):
             "requirement_type_id",
             "requirement_type_detail",
             "name",
+            # 库内条目编号的前缀（SEC-12），也是导入后目标行溯源显示的前缀。
+            # 可改 —— 前缀是读时解析的，改完已导入需求的来源编号自动跟随。
+            "identifier",
             "description",
             "field_count",
             "item_count",
@@ -72,6 +79,15 @@ class RequirementLibrarySerializer(BaseSerializer):
             raise serializers.ValidationError("Library name cannot be empty.")
         return name
 
+    def validate_identifier(self, value):
+        # 归一化排在任何查重之前。这里尤其要紧：create/update 会调 full_clean()，
+        # 而 full_clean 的 validate_constraints 跑在 save() 之前 —— 只靠模型 save()
+        # 里的 upper() 的话，提交 "sec" 会被放行，然后在 INSERT 时撞已有的 "SEC"。
+        identifier = (value or "").strip().upper()
+        if not IDENTIFIER_PATTERN.match(identifier):
+            raise serializers.ValidationError("REQUIREMENT_LIBRARY_IDENTIFIER_INVALID")
+        return identifier
+
     def validate(self, attrs):
         workspace = self.context.get("workspace")
         if workspace is None:
@@ -109,6 +125,24 @@ class RequirementLibrarySerializer(BaseSerializer):
         if duplicates.exists():
             raise serializers.ValidationError(
                 {"name": "A requirement library with this name already exists."}
+            )
+
+        identifier = attrs.get(
+            "identifier", getattr(self.instance, "identifier", None)
+        )
+        if not identifier:
+            raise serializers.ValidationError(
+                {"identifier": "This field is required."}
+            )
+        identifier_duplicates = RequirementLibrary.objects.filter(
+            workspace=workspace,
+            identifier=identifier,
+        )
+        if self.instance:
+            identifier_duplicates = identifier_duplicates.exclude(pk=self.instance.pk)
+        if identifier_duplicates.exists():
+            raise serializers.ValidationError(
+                {"identifier": "REQUIREMENT_LIBRARY_IDENTIFIER_ALREADY_EXISTS"}
             )
         return attrs
 

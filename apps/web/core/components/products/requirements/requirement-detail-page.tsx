@@ -15,6 +15,7 @@ import {
   RequirementDetailProperties,
   useRequirementDetail,
 } from "@/components/requirements/requirement-detail";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
@@ -92,6 +93,12 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 {t("workspace_products.navigation.requirements")}
               </Link>
               <span className="shrink-0 text-13 text-tertiary">/</span>
+              <RequirementIdentifier
+                displayId={requirement?.display_id}
+                sourceDisplayId={requirement?.source_display_id}
+                size="sm"
+                enableClickToCopy
+              />
               <h1 className="min-w-0 truncate text-13 font-medium text-primary">
                 {requirement?.title || t("requirement_detail.untitled")}
               </h1>

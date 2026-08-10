@@ -25,8 +25,22 @@ const VARIANT_MAP: Record<TIdentifierTextVariant, string> = {
   success: "text-success-primary",
 };
 
-export function IdentifierText(props: TIdentifierTextProps) {
-  const { identifier, enableClickToCopyIdentifier = false, size = "lg", variant = "default" } = props;
+type TProps = TIdentifierTextProps & {
+  /** 复制成功的 toast 标题。需求等非工作项场景必须传，否则会弹出工作项的文案 */
+  copyToastTitle?: string;
+  /** 悬浮提示文案 */
+  copyTooltipContent?: string;
+};
+
+export function IdentifierText(props: TProps) {
+  const {
+    identifier,
+    enableClickToCopyIdentifier = false,
+    size = "lg",
+    variant = "default",
+    copyToastTitle = "Work item ID copied to clipboard",
+    copyTooltipContent = "Click to copy",
+  } = props;
   // handlers
   const handleCopyIssueIdentifier = () => {
     if (enableClickToCopyIdentifier) {
@@ -35,12 +49,12 @@ export function IdentifierText(props: TIdentifierTextProps) {
         .then(() => {
           setToast({
             type: TOAST_TYPE.SUCCESS,
-            title: "Work item ID copied to clipboard",
+            title: copyToastTitle,
           });
           return;
         })
         .catch(() => {
-          console.error("Failed to copy work item ID");
+          console.error("Failed to copy identifier");
         });
     }
   };
@@ -53,7 +67,7 @@ export function IdentifierText(props: TIdentifierTextProps) {
 
   // 非「点击复制」时为纯文本：避免在外层为 <button> 的父级中再包一层 <button disabled>，否则点击会落在内层，无法触发行级操作（如菜单项跳转）
   return (
-    <Tooltip tooltipContent="Click to copy" disabled={!enableClickToCopyIdentifier} position="top">
+    <Tooltip tooltipContent={copyTooltipContent} disabled={!enableClickToCopyIdentifier} position="top">
       {enableClickToCopyIdentifier ? (
         <button type="button" className={textClassName} onClick={handleCopyIssueIdentifier}>
           {identifier}

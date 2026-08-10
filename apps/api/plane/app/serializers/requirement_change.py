@@ -40,6 +40,7 @@ class RequirementChangeItemSerializer(BaseSerializer):
         source="requirement_type.name", read_only=True
     )
     title = serializers.SerializerMethodField()
+    display_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementChangeItem
@@ -51,6 +52,7 @@ class RequirementChangeItemSerializer(BaseSerializer):
             "requirement_type_name",
             "schema_revision_id",
             "title",
+            "display_id",
             "before_snapshot",
             "proposed_snapshot",
             "base_version",
@@ -63,6 +65,26 @@ class RequirementChangeItemSerializer(BaseSerializer):
         """删除项没有 proposed_snapshot，标题要回落到变更前那份。"""
         snapshot = obj.proposed_snapshot or obj.before_snapshot or {}
         return snapshot.get("title") or ""
+
+    def get_display_id(self, obj):
+        # 与 title 同样的回落：删除项只有 before_snapshot
+        snapshot = obj.proposed_snapshot or obj.before_snapshot or {}
+        return snapshot_display_id(snapshot, self.context)
+
+
+def snapshot_display_id(snapshot, context):
+    """快照里的 sequence_id + context 里的作用域前缀 -> "ECOM-1"。
+
+    快照刻意只存序号不存拼好的编号：产品改标识后，历史版本、变更单与基线里的编号要
+    跟着变。前缀由视图放进 context（ProductScopedMixin.snapshot_context），零查询。
+
+    本次改动之前落的快照没有 sequence_id 这个 key，返回 None，前端不显示编号。
+    """
+    prefix = context.get("scope_identifier")
+    sequence_id = (snapshot or {}).get("sequence_id")
+    if not prefix or sequence_id is None:
+        return None
+    return f"{prefix}-{sequence_id}"
 
 
 class RequirementSchemaRevisionSerializer(BaseSerializer):
@@ -317,6 +339,7 @@ class RequirementVersionSerializer(BaseSerializer):
         source="change_request.reason", read_only=True, allow_null=True
     )
     fields_snapshot = serializers.SerializerMethodField()
+    display_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementVersion
@@ -328,6 +351,7 @@ class RequirementVersionSerializer(BaseSerializer):
             "change_type",
             "snapshot",
             "fields_snapshot",
+            "display_id",
             "approved_by",
             "change_request_id",
             "change_request_sequence_id",
@@ -340,6 +364,9 @@ class RequirementVersionSerializer(BaseSerializer):
 
     def get_fields_snapshot(self, obj):
         return (obj.schema_revision.fields if obj.schema_revision_id else []) or []
+
+    def get_display_id(self, obj):
+        return snapshot_display_id(obj.snapshot, self.context)
 
 
 class RequirementBaselineSerializer(BaseSerializer):
@@ -419,6 +446,7 @@ class RequirementBaselineEntrySerializer(BaseSerializer):
         source="version.requirement_type_id", read_only=True
     )
     fields_snapshot = serializers.SerializerMethodField()
+    display_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementBaselineEntry
@@ -430,9 +458,13 @@ class RequirementBaselineEntrySerializer(BaseSerializer):
             "version_number",
             "snapshot",
             "fields_snapshot",
+            "display_id",
             "sort_order",
         ]
         read_only_fields = fields
 
     def get_fields_snapshot(self, obj):
         return (obj.version.schema_revision.fields if obj.version.schema_revision_id else []) or []
+
+    def get_display_id(self, obj):
+        return snapshot_display_id(obj.version.snapshot, self.context)

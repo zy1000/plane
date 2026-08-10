@@ -21,6 +21,7 @@ class TestProductAssets:
         )
         self.product = Product.objects.create(
             name="Launchpad",
+            identifier="LAUNCHPAD",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -122,6 +123,7 @@ class TestProductAssets:
         asset = FileAsset.objects.get(id=response.data["asset_id"])
         product = Product.objects.create(
             name="Delegated private product",
+            identifier="DELEGATED",
             workspace=self.workspace,
             owner=product_owner,
             network=0,
@@ -180,6 +182,7 @@ class TestProductAssets:
         )
         other_product = Product.objects.create(
             name="Other product",
+            identifier="OTHERWS",
             workspace=other_workspace,
             owner=other_owner,
             network=2,
@@ -230,6 +233,7 @@ class TestProductAssets:
         self.authenticate(api_client, self.owner)
         other_product = Product.objects.create(
             name="Other product",
+            identifier="OTHERPRD",
             workspace=self.workspace,
             owner=self.owner,
             network=2,

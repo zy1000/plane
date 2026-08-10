@@ -12,7 +12,7 @@ class RequirementLibraryViewSet(BaseViewSet):
 
     model = RequirementLibrary
     serializer_class = RequirementLibrarySerializer
-    search_fields = ["name"]
+    search_fields = ["name", "identifier"]
     filterset_fields = {
         "requirement_type_id": ["exact"],
         "is_active": ["exact"],

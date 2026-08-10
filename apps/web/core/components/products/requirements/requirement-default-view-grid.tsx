@@ -41,6 +41,7 @@ import {
   resolveRequirementTitleColumnWidth,
   useRequirementGridScrollContainer,
 } from "@/components/requirements/requirement-grid-shared";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { copyRequirementData } from "@/components/requirements/requirement-row-data";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 
@@ -466,6 +467,10 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                           )}
                         />
                       )}
+                      <RequirementIdentifier
+                        displayId={requirement.display_id}
+                        sourceDisplayId={requirement.source_display_id}
+                      />
                       <Tooltip tooltipContent={requirement.title}>
                         <button
                           type="button"

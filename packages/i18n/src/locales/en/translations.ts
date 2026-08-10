@@ -585,6 +585,13 @@ export default {
     created_on: "Created on",
     update_project: "Update project",
     identifier_already_exists: "Identifier already exists",
+    identifier: {
+      label: "Identifier",
+      placeholder: "e.g. ECOM",
+      hint: "Used as the prefix of requirement IDs, like ECOM-1. Unique per workspace, up to 12 characters.",
+      invalid: "Must start with a letter, contain only letters and digits, and be at most 12 characters.",
+      already_exists: "That identifier is taken. Pick another one.",
+    },
     add_more: "Add more",
     defaults: "Defaults",
     add_label: "Add label",
@@ -1291,6 +1298,13 @@ export default {
       },
     },
   },
+  requirements: {
+    identifier: {
+      copied: "Requirement ID copied to clipboard",
+      source_tooltip: "Original ID from the standard library",
+      column: "ID",
+    },
+  },
   requirement_fields: {
     inactive: "Disabled",
     builtin: {
@@ -1602,6 +1616,8 @@ export default {
     fields: {
       name: "Library name",
       name_placeholder: "e.g. Payment API library",
+      identifier: "Library identifier",
+      identifier_hint: "Prefix of item IDs in this library, like SEC-12. Shown as the source ID after import.",
       requirement_type: "Requirement type",
       requirement_type_placeholder: "Pick a requirement type",
       requirement_type_hint: "Cannot be changed later — switching templates would invalidate all data in the library.",
@@ -1758,6 +1774,8 @@ export default {
     view_product: "Product details",
     fields: {
       name: "Name",
+      identifier: "Product identifier",
+      identifier_hint: "Prefix of requirement IDs in this product, like ECOM-1. Unique per workspace.",
       description: "Description",
       no_description: "No description",
       owner: "Owner",
@@ -1797,6 +1815,8 @@ export default {
       },
       fields: {
         name: "Product name",
+        identifier: "Product identifier",
+        identifier_hint: "Prefix of requirement IDs in this product, like ECOM-1. Unique per workspace.",
         description: "Product description",
         owner: "Owner",
         visibility: "Visibility",

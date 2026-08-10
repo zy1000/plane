@@ -11,6 +11,9 @@ class Product(BaseModel):
     NETWORK_CHOICES = ((0, "Secret"), (2, "Public"))
 
     name = models.CharField(max_length=255)
+    identifier = models.CharField(
+        max_length=12, db_index=True, verbose_name="产品标识（需求编号前缀）"
+    )
     description_html = models.TextField(
         verbose_name="Product Description HTML", blank=True, null=True
     )
@@ -31,6 +34,13 @@ class Product(BaseModel):
         verbose_name="评审人",
     )
 
+    def save(self, *args, **kwargs):
+        # 最后一道防线 —— 真正的归一化在 ProductSerializer.validate_identifier，
+        # 那里必须先归一化再查重，否则 "ecom" 会绕过查重直接撞 DB 约束。
+        if self.identifier:
+            self.identifier = self.identifier.strip().upper()
+        return super().save(*args, **kwargs)
+
     class Meta:
         db_table = "products"
         ordering = ("-created_at",)
@@ -40,7 +50,21 @@ class Product(BaseModel):
                 fields=["name", "workspace"],
                 condition=models.Q(deleted_at__isnull=True),
                 name="product_unique_name_workspace_deleted_at__isnull",
-            )
+            ),
+            # 标识是需求编号的前缀（ECOM-1）。带 deleted_at 条件是刻意的：
+            # 标识由用户手填，产品删掉之后应该允许改嫁给新产品。
+            # 需求行上的 sequence_id 则相反，见 Requirement.Meta.constraints。
+            models.UniqueConstraint(
+                fields=["identifier", "workspace"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="product_unique_identifier_workspace_active",
+            ),
+            # 空标识撑不起 ECOM-1。没有它，第一个漏填的产品会静默拿到 ''，
+            # 直到同工作区第二个漏填的产品才报唯一约束 —— 那时排查现场已经不在了。
+            models.CheckConstraint(
+                check=~models.Q(identifier=""),
+                name="product_identifier_not_blank",
+            ),
         ]
 
 

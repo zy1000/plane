@@ -9,6 +9,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore, Loader } from "@plane/ui";
 import { BuiltinCellValue, REQUIREMENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
 import { LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { diffSnapshotFieldNames } from "./requirement-change-trail";
 import {
   HistoryEmpty,
@@ -259,6 +260,14 @@ const VersionRow = ({
           // 对齐到内容列而不是轨道 —— 旧实现用 pl-16 对齐左栏宽度，漏算了 gap，差 12px
           <div className="flex flex-col gap-3 border-l-2 border-subtle pl-3.5">
             <div className="grid grid-cols-[minmax(5rem,7rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-12">
+              {version.display_id && (
+                <div className="contents">
+                  <span className="text-tertiary">{t("requirements.identifier.column")}</span>
+                  <span className="min-w-0">
+                    <RequirementIdentifier displayId={version.display_id} />
+                  </span>
+                </div>
+              )}
               {REQUIREMENT_BUILTIN_COLUMNS.filter((column) => column.key !== "description_html").map((column) => (
                 <div key={column.key} className="contents">
                   <span className="text-tertiary">{t(column.labelKey)}</span>

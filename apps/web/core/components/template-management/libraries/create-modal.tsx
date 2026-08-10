@@ -5,6 +5,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { useRequirementLibrariesContext } from "./context";
 
@@ -15,6 +16,7 @@ export function RequirementLibraryCreateModal() {
     useRequirementLibrariesContext();
   const { requirementTypes, isLoading: isRequirementTypesLoading } = useRequirementTypes(workspaceSlug);
   const [name, setName] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [description, setDescription] = useState("");
   const [requirementTypeId, setRequirementTypeId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,7 @@ export function RequirementLibraryCreateModal() {
   useEffect(() => {
     if (!isCreateModalOpen) return;
     setName("");
+    setIdentifier("");
     setDescription("");
     setRequirementTypeId("");
     setError(null);
@@ -33,6 +36,10 @@ export function RequirementLibraryCreateModal() {
       setError(t("requirement_libraries.validation.name_required"));
       return;
     }
+    if (!isValidIdentifier(identifier)) {
+      setError(t("common.identifier.invalid"));
+      return;
+    }
     if (!requirementTypeId) {
       setError(t("requirement_libraries.validation.requirement_type_required"));
       return;
@@ -41,6 +48,7 @@ export function RequirementLibraryCreateModal() {
     try {
       const library = await createLibrary({
         name: normalizedName,
+        identifier,
         requirement_type_id: requirementTypeId,
         description: description.trim(),
       });
@@ -52,9 +60,27 @@ export function RequirementLibraryCreateModal() {
         message: t("requirement_libraries.toast.created"),
       });
     } catch (requestError) {
-      const payload = requestError as { name?: string[]; requirement_type_id?: string[]; error?: string };
+      const payload = requestError as {
+        name?: string[];
+        identifier?: string[];
+        requirement_type_id?: string[];
+        error?: string;
+      };
+      // 后端返回 REQUIREMENT_LIBRARY_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
+      const identifierError = payload?.identifier?.[0];
+      const identifierMessage = identifierError
+        ? t(
+            identifierError === "REQUIREMENT_LIBRARY_IDENTIFIER_ALREADY_EXISTS"
+              ? "common.identifier.already_exists"
+              : "common.identifier.invalid"
+          )
+        : undefined;
       setError(
-        payload?.name?.[0] ?? payload?.requirement_type_id?.[0] ?? payload?.error ?? t("requirement_libraries.toast.failed")
+        payload?.name?.[0] ??
+          identifierMessage ??
+          payload?.requirement_type_id?.[0] ??
+          payload?.error ??
+          t("requirement_libraries.toast.failed")
       );
     }
   };
@@ -98,6 +124,13 @@ export function RequirementLibraryCreateModal() {
             placeholder={t("requirement_libraries.fields.name_placeholder")}
           />
         </label>
+        <IdentifierInput
+          id="requirement-library-identifier"
+          value={identifier}
+          onChange={setIdentifier}
+          label={t("requirement_libraries.fields.identifier")}
+          hint={t("requirement_libraries.fields.identifier_hint")}
+        />
         <label className="block">
           <span className="mb-1.5 block text-12 font-medium text-secondary">
             {t("requirement_libraries.fields.requirement_type")}

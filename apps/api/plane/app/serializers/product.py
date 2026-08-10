@@ -1,3 +1,5 @@
+import re
+
 from django.db import transaction
 from rest_framework import serializers
 
@@ -13,6 +15,11 @@ from plane.db.models import (
 from plane.utils.content_validator import validate_html_content
 
 from .base import BaseSerializer
+
+
+# 首位必须是字母，且不含连字符 —— 展示编号是 "{identifier}-{sequence_id}"，
+# 标识里再出现连字符就没法反解（"A-B-1" 有两种读法）。
+IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{0,11}$")
 
 
 class ProductSerializer(BaseSerializer):
@@ -43,6 +50,24 @@ class ProductSerializer(BaseSerializer):
         if queryset.exists():
             raise serializers.ValidationError("PRODUCT_NAME_ALREADY_EXISTS")
         return name
+
+    def validate_identifier(self, value):
+        # 归一化必须排在查重之前：先查后转的话，提交 "ecom" 会绕过这里的查重，
+        # 然后在 Product.save() 里变成 "ECOM" 撞上 DB 唯一约束 —— 用户拿到 500 而不是 400。
+        identifier = (value or "").strip().upper()
+        if not IDENTIFIER_PATTERN.match(identifier):
+            raise serializers.ValidationError("PRODUCT_IDENTIFIER_INVALID")
+
+        workspace = self.context.get("workspace")
+        if workspace is None:
+            raise serializers.ValidationError("Workspace is required.")
+
+        queryset = Product.objects.filter(workspace=workspace, identifier=identifier)
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("PRODUCT_IDENTIFIER_ALREADY_EXISTS")
+        return identifier
 
     def validate_reviewers(self, reviewers):
         workspace = self.context.get("workspace")
@@ -94,6 +119,9 @@ class ProductSerializer(BaseSerializer):
         fields = [
             "id",
             "name",
+            # 需求编号的前缀（ECOM-1）。可以 PATCH 改 —— 编号是读时拼的，
+            # 改完所有已有需求的展示编号自动跟随，没有第二份真相要同步。
+            "identifier",
             "description_html",
             "network",
             "workspace",

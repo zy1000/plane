@@ -23,6 +23,7 @@ import {
   shouldShowRequirementStatus,
 } from "@/components/requirements/requirement-builtin-fields";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import {
   RequirementRichTextEditor,
   RequirementRichTextValue,
@@ -289,6 +290,17 @@ export const RequirementDetailContent = (props: TProps) => {
             </span>
           </button>
         )}
+
+        {/* 整页时抽屉那条 bar 不存在，编号在这里出场；抽屉里两处都显示也不冲突 ——
+            标题上方这一行是编号唯一固定的位置 */}
+        <div className="mb-1">
+          <RequirementIdentifier
+            displayId={requirement.display_id}
+            sourceDisplayId={requirement.source_display_id}
+            size="sm"
+            enableClickToCopy
+          />
+        </div>
 
         {readOnly ? (
           <h1

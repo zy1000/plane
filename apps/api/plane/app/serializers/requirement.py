@@ -901,6 +901,15 @@ ROW_FIELDS = [
     "project_id",
     "library_id",
     "requirement_type_id",
+    # 作用域内自增序号 + 服务端拼好的展示编号（ECOM-1）。
+    # 前缀是每个 RowLayer 的常量，从 context 拿，零查询。
+    "sequence_id",
+    "display_id",
+    # 标准库出处。source_library_id 是裸 UUID（不是外键），前缀按页批量解析，
+    # 见 BaseRequirementRowViewSet._row_context。手工创建的行三个都是 None。
+    "source_library_id",
+    "source_sequence_id",
+    "source_display_id",
     *BUILTIN_COLUMNS,
     "data",
     "sort_order",
@@ -937,11 +946,32 @@ class RequirementSerializer(BaseSerializer):
     pending_change_type = serializers.SerializerMethodField()
     can_submit_review = serializers.SerializerMethodField()
     can_withdraw = serializers.SerializerMethodField()
+    display_id = serializers.SerializerMethodField()
+    source_display_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
         fields = ROW_FIELDS
         read_only_fields = fields
+
+    def get_display_id(self, obj):
+        # 作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目/库
+        prefix = self.context.get("scope_identifier")
+        if not prefix or obj.sequence_id is None:
+            return None
+        return f"{prefix}-{obj.sequence_id}"
+
+    def get_source_display_id(self, obj):
+        if not obj.source_library_id:
+            return None
+        # 拿不到前缀说明调用方用的是 _serializer_context 而不是 _row_context ——
+        # 这时来源编号会静默消失（不报错），排查从这里开始
+        prefix = (self.context.get("source_library_identifiers") or {}).get(
+            str(obj.source_library_id)
+        )
+        if not prefix:
+            return None
+        return f"{prefix}-{obj.source_sequence_id}"
 
     def get_pending_change_request_id(self, obj):
         value = getattr(obj, "pending_change_request_id", None)

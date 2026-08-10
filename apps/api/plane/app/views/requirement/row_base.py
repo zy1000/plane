@@ -33,6 +33,7 @@ from plane.utils.requirement import (
     requirement_content_values,
     resync_approved_row_version,
     row_was_approved,
+    source_library_identifier_map,
 )
 
 
@@ -98,6 +99,18 @@ class BaseRequirementRowViewSet(BaseViewSet):
             **layer.serializer_context,
             "request": self.request,
             "can_write": self.can_write(owner),
+        }
+
+    def _row_context(self, layer, owner, rows):
+        """给一批行准备序列化 context：作用域前缀（来自 layer）+ 来源库前缀。
+
+        任何要吐 RequirementSerializer 的地方都走这个方法，不要直接用
+        _serializer_context —— 后者不含来源库前缀，source_display_id 会静默返回
+        None（不报错，只是编号消失）。
+        """
+        return {
+            **self._serializer_context(layer, owner),
+            "source_library_identifiers": source_library_identifier_map(rows),
         }
 
     @staticmethod
@@ -186,38 +199,46 @@ class BaseRequirementRowViewSet(BaseViewSet):
             )
             queryset = queryset.filter(id__in=matching_ids)
 
-        context = self._serializer_context(layer, owner)
         return self.paginate(
             request=request,
             queryset=annotate_pending(queryset),
             on_results=lambda results: RequirementSerializer(
-                results, many=True, context=context
+                results, many=True, context=self._row_context(layer, owner, results)
             ).data,
             default_per_page=20,
             max_per_page=100,
         )
 
     def create(self, request, *args, **kwargs):
-        """新增永不设闸门 —— 新行恒为草稿态，没有已批准内容需要保护。"""
-        owner, error = self._owner_or_error()
-        if error is not None:
-            return error
-        layer = self.resolve_layer(owner)
-        serializer = RequirementCreateSerializer(
-            data=request.data,
-            context={
-                "owner": owner,
-                "parent_queryset": layer.queryset,
-                "requirement_type_resolver": layer.requirement_type_resolver,
-                "default_requirement_type_id": layer.default_requirement_type_id,
-            },
-        )
-        serializer.is_valid(raise_exception=True)
-        builtin = dict(serializer.validated_data["builtin"])
-        # 新行一律从草稿开始，客户端传什么状态都不算数（DB 约束也这么要求）
-        builtin["status"] = RequirementItemStatus.DRAFT
+        """新增永不设闸门 —— 新行恒为草稿态，没有已批准内容需要保护。
+
+        整个方法体在一个事务里，**第一件事**就是拿作用域写锁（产品是审批配置行，
+        标准库是库行）：sequence_id 用 Max+1 取号，没有这把锁，两个并发的单条创建会
+        拿到同一个号然后撞 req_unique_*_sequence。锁的顺序与 bulk_save /
+        import_from_library 一致（owner 行 → requirements 行），所以不会与它们死锁。
+
+        校验留在锁内是刻意的 —— 与 bulk_save 现有写法一致。挪到锁外要多跑一遍
+        resolve_layer，代价更大，而且两次解析出的 owner 可能不一致。
+        """
         try:
             with transaction.atomic():
+                owner, error = self._owner_or_error(for_update=True)
+                if error is not None:
+                    return error
+                layer = self.resolve_layer(owner)
+                serializer = RequirementCreateSerializer(
+                    data=request.data,
+                    context={
+                        "owner": owner,
+                        "parent_queryset": layer.queryset,
+                        "requirement_type_resolver": layer.requirement_type_resolver,
+                        "default_requirement_type_id": layer.default_requirement_type_id,
+                    },
+                )
+                serializer.is_valid(raise_exception=True)
+                builtin = dict(serializer.validated_data["builtin"])
+                # 新行一律从草稿开始，客户端传什么状态都不算数（DB 约束也这么要求）
+                builtin["status"] = RequirementItemStatus.DRAFT
                 row = layer.insert(
                     data=serializer.validated_data["data"],
                     builtin=builtin,
@@ -230,7 +251,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             RequirementSerializer(
-                row, context=self._serializer_context(layer, owner)
+                row, context=self._row_context(layer, owner, [row])
             ).data,
             status=status.HTTP_201_CREATED,
         )
@@ -305,7 +326,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
             )
         return Response(
             RequirementSerializer(
-                row, context=self._serializer_context(layer, owner)
+                row, context=self._row_context(layer, owner, [row])
             ).data,
             status=status.HTTP_200_OK,
         )
@@ -442,7 +463,9 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-        context = self._serializer_context(layer, owner)
+        context = self._row_context(
+            layer, owner, [row for _, row in created] + list(updated)
+        )
         return Response(
             {
                 "created": [
@@ -491,7 +514,11 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
                 )
 
-        context = self._serializer_context(layer, owner)
+        context = {
+            **self._serializer_context(layer, owner),
+            # 这一批的来源库就是 library 自己，直接给前缀，省掉那次 IN 查询
+            "source_library_identifiers": {str(library.id): library.identifier},
+        }
         return Response(
             {
                 "created": [

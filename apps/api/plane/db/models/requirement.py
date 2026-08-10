@@ -174,7 +174,10 @@ class RequirementType(BaseModel):
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     # 与 IssueType.logo_props 同形状：{"icon": {"name", "color", "background_color"}}。
     # 沿用同一份结构，前端的选择器与渲染器两边可以共用。
-    logo_props = models.JSONField(default=dict, verbose_name="图标配置")
+    # blank=True 是必需的：不填图标是正常状态（默认就是 {}），而
+    # RequirementTypeSerializer.create/update 会调 full_clean()，
+    # 没有 blank=True 时 {} 会被判为「此字段不能为空」，创建类型直接 400。
+    logo_props = models.JSONField(default=dict, blank=True, verbose_name="图标配置")
     # 存整数而不是外键：类型 -> 修订 -> 类型 的循环外键可以避免，就避免。
     # (requirement_type_id, current_schema_revision) 命中修订表的唯一索引。
     current_schema_revision = models.PositiveIntegerField(
@@ -373,6 +376,9 @@ class RequirementLibrary(BaseModel):
         verbose_name="所选需求类型",
     )
     name = models.CharField(max_length=255, verbose_name="标准库名称")
+    identifier = models.CharField(
+        max_length=12, db_index=True, verbose_name="标准库标识（条目编号前缀）"
+    )
     description = models.TextField(blank=True, default="", verbose_name="标准库描述")
     is_active = models.BooleanField(default=True, verbose_name="是否启用")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
@@ -385,13 +391,31 @@ class RequirementLibrary(BaseModel):
                 fields=["workspace", "name"],
                 condition=Q(deleted_at__isnull=True),
                 name="requirement_library_unique_workspace_name_active",
-            )
+            ),
+            # 标识是库内条目编号的前缀（SEC-12），也是导入后目标行溯源显示的前缀。
+            # 带 deleted_at 条件：标识由用户手填，库删掉后应允许改嫁。
+            models.UniqueConstraint(
+                fields=["workspace", "identifier"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_library_unique_workspace_identifier_active",
+            ),
+            models.CheckConstraint(
+                check=~Q(identifier=""),
+                name="requirement_library_identifier_not_blank",
+            ),
         ]
 
     def __str__(self):
         return self.name
 
     def clean(self):
+        # 归一化必须发生在任何唯一性判定之前。serializer 的 create/update 会调
+        # full_clean()，而 full_clean 的顺序是 clean_fields → clean →
+        # validate_unique → validate_constraints，save() 在这之后 ——
+        # 只在 save() 里 upper() 的话，提交 "sec" 会被 validate_constraints 放行，
+        # 然后在 INSERT 时撞上已有的 "SEC"，用户拿到 500 而不是 400。
+        if self.identifier:
+            self.identifier = self.identifier.strip().upper()
         super().clean()
         # 跨表规则，DB 表达不了：来源必须是本工作区的需求类型
         if (
@@ -403,6 +427,8 @@ class RequirementLibrary(BaseModel):
             )
 
     def save(self, *args, **kwargs):
+        if self.identifier:
+            self.identifier = self.identifier.strip().upper()
         if not self.workspace_id and self.requirement_type_id:
             self.workspace_id = self.requirement_type.workspace_id
         return super().save(*args, **kwargs)
@@ -533,6 +559,21 @@ class Requirement(BaseModel):
         related_name="requirements",
         verbose_name="所属需求类型",
     )
+    # 作用域内自增，与所属产品/项目/库的 identifier 拼成展示编号（ECOM-1）。
+    # 刻意不给 default —— 无 default 的 PositiveIntegerField 让任何绕过
+    # utils.requirement 那两个工厂的构造在 INSERT 时立刻炸，指向出问题的那行代码；
+    # 给 default=1 会静默造出假编号，直到撞唯一约束才暴露，而那时现场已经跑偏了。
+    sequence_id = models.PositiveIntegerField(verbose_name="作用域内自增序号")
+    # 从标准库导入时记下出处，手工创建恒为 NULL。
+    # 用裸 UUID 而不是外键：这是溯源记录，标准库被删之后「这条需求当年从 SEC 导入」
+    # 这个事实不该跟着消失，也不该因此 PROTECT 住库的删除。
+    # 前缀在读侧批量解析，见 utils.requirement.source_library_identifier_map。
+    source_library_id = models.UUIDField(
+        null=True, blank=True, db_index=True, verbose_name="来源标准库 ID"
+    )
+    source_sequence_id = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="来源标准库条目序号"
+    )
     title = models.CharField(max_length=255, blank=True, default="", verbose_name="需求标题")
     description_html = models.TextField(
         blank=True, null=True, verbose_name="需求描述 HTML"
@@ -650,6 +691,45 @@ class Requirement(BaseModel):
                     status=RequirementItemStatus.DRAFT,
                 ),
                 name="req_library_item_never_approved",
+            ),
+            # 编号在作用域内唯一，三个作用域各自独立编号
+            # （靠 requirement_owner_exactly_one 保证一行只落进一个）。
+            #
+            # 条件里**故意不带** deleted_at__isnull=True：编号永不复用。
+            # 软删的需求仍然占着自己的号 —— 它的编号已经写进版本快照、变更单快照和
+            # 基线，也可能被别的行的 source_sequence_id 引用。复用会让历史里的
+            # ECOM-7 指向两条不同的需求，那是审计链损坏，不是显示问题。
+            # 取号侧必须对应地用 Requirement.all_objects，
+            # 见 utils.requirement._sequence_allocator。
+            models.UniqueConstraint(
+                fields=["product", "sequence_id"],
+                condition=Q(product__isnull=False),
+                name="req_unique_product_sequence",
+            ),
+            models.UniqueConstraint(
+                fields=["project", "sequence_id"],
+                condition=Q(project__isnull=False),
+                name="req_unique_project_sequence",
+            ),
+            models.UniqueConstraint(
+                fields=["library", "sequence_id"],
+                condition=Q(library__isnull=False),
+                name="req_unique_library_sequence",
+            ),
+            # 来源两列同生同死
+            models.CheckConstraint(
+                check=Q(source_library_id__isnull=True, source_sequence_id__isnull=True)
+                | Q(
+                    source_library_id__isnull=False,
+                    source_sequence_id__isnull=False,
+                ),
+                name="req_source_pair_consistent",
+            ),
+            # 标准库条目是导入的源头，不可能有来源。把 _new_library_item 里
+            # 「无条件丢弃 source」这个约定变成写不进去的事。
+            models.CheckConstraint(
+                check=Q(library__isnull=True) | Q(source_library_id__isnull=True),
+                name="req_library_item_has_no_source",
             ),
         ]
 

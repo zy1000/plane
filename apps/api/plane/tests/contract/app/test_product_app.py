@@ -51,6 +51,8 @@ class TestProductApp:
             self.list_url,
             {
                 "name": "  Launchpad  ",
+                # 小写 + 空白：标识必须在查重之前就被归一化成 "LP"
+                "identifier": "  lp  ",
                 "description_html": '<p>Hello</p><script>alert("x")</script>',
                 "network": 0,
                 "owner": str(reviewer.id),
@@ -61,6 +63,7 @@ class TestProductApp:
 
         assert create_response.status_code == status.HTTP_201_CREATED
         assert create_response.data["name"] == "Launchpad"
+        assert create_response.data["identifier"] == "LP"
         assert create_response.data["network"] == 0
         assert str(create_response.data["owner"]) == str(reviewer.id)
         assert str(create_response.data["owner_detail"]["id"]) == str(reviewer.id)
@@ -106,6 +109,7 @@ class TestProductApp:
         self.authenticate(api_client, self.owner)
         Product.objects.create(
             name="Launchpad",
+            identifier="LAUNCHPAD",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -113,7 +117,7 @@ class TestProductApp:
 
         duplicate_response = api_client.post(
             self.list_url,
-            {"name": "  Launchpad  "},
+            {"name": "  Launchpad  ", "identifier": "LP2"},
             format="json",
         )
         assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -122,7 +126,7 @@ class TestProductApp:
         outsider = UserFactory(username=f"product-outsider-{uuid4()}")
         reviewer_response = api_client.post(
             self.list_url,
-            {"name": "Another product", "reviewers": [str(outsider.id)]},
+            {"name": "Another product", "identifier": "ANOTHER", "reviewers": [str(outsider.id)]},
             format="json",
         )
         assert reviewer_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -130,7 +134,7 @@ class TestProductApp:
 
         owner_response = api_client.post(
             self.list_url,
-            {"name": "Outside owner", "owner": str(outsider.id)},
+            {"name": "Outside owner", "identifier": "OUTSIDE", "owner": str(outsider.id)},
             format="json",
         )
         assert owner_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -138,7 +142,7 @@ class TestProductApp:
 
         network_response = api_client.post(
             self.list_url,
-            {"name": "Invalid network", "network": 1},
+            {"name": "Invalid network", "identifier": "INVALIDNET", "network": 1},
             format="json",
         )
         assert network_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -152,6 +156,7 @@ class TestProductApp:
         unrelated_guest = self.add_member(role=5)
         product = Product.objects.create(
             name="Private product",
+            identifier="PRIVATE",
             workspace=self.workspace,
             owner=owner,
             network=0,
@@ -182,6 +187,7 @@ class TestProductApp:
         guest = self.add_member(role=5)
         product = Product.objects.create(
             name="Shared product",
+            identifier="SHARED",
             workspace=self.workspace,
             owner=member,
             network=2,
@@ -199,7 +205,9 @@ class TestProductApp:
         self.authenticate(api_client, guest)
         assert (
             api_client.post(
-                self.list_url, {"name": "Guest product"}, format="json"
+                self.list_url,
+                {"name": "Guest product", "identifier": "GUESTPRD"},
+                format="json",
             ).status_code
             == status.HTTP_403_FORBIDDEN
         )
@@ -213,7 +221,9 @@ class TestProductApp:
         self.authenticate(api_client, member)
         assert (
             api_client.post(
-                self.list_url, {"name": "Member product"}, format="json"
+                self.list_url,
+                {"name": "Member product", "identifier": "MEMBERNEW"},
+                format="json",
             ).status_code
             == status.HTTP_201_CREATED
         )
@@ -226,6 +236,7 @@ class TestProductApp:
 
         other_product = Product.objects.create(
             name="Owner product",
+            identifier="OWNERPRD",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -251,6 +262,7 @@ class TestProductApp:
 
         deletable_product = Product.objects.create(
             name="Admin deletable product",
+            identifier="ADMINDEL",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -296,6 +308,7 @@ class TestProductApp:
     def test_product_member_crud_and_multi_role_assignment(self, api_client):
         product = Product.objects.create(
             name="Member product",
+            identifier="MEMBERPRD",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -313,6 +326,7 @@ class TestProductApp:
         )
         other_product = Product.objects.create(
             name="Other member product",
+            identifier="OTHERMEM",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -417,6 +431,7 @@ class TestProductApp:
         outsider = UserFactory(username=f"product-outsider-{uuid4()}")
         product = Product.objects.create(
             name="Managed member product",
+            identifier="MANAGED",
             workspace=self.workspace,
             owner=product_owner,
             network=2,
@@ -482,12 +497,14 @@ class TestProductApp:
     def test_product_member_filters_scope_and_clear_roles(self, api_client):
         product = Product.objects.create(
             name="Filtered member product",
+            identifier="FILTERED",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
         )
         other_product = Product.objects.create(
             name="Other filtered member product",
+            identifier="OTHERFIL",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -555,12 +572,14 @@ class TestProductApp:
     def test_product_role_crud_scope_and_member_cleanup(self, api_client):
         product = Product.objects.create(
             name="Role product",
+            identifier="ROLEPRD",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
         )
         other_product = Product.objects.create(
             name="Other role product",
+            identifier="OTHERROLE",
             workspace=self.workspace,
             owner=self.owner,
             network=2,
@@ -666,6 +685,7 @@ class TestProductApp:
         outsider = UserFactory(username=f"product-outsider-{uuid4()}")
         product = Product.objects.create(
             name="Permission role product",
+            identifier="PERMROLE",
             workspace=self.workspace,
             owner=product_owner,
             network=2,

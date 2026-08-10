@@ -16,7 +16,7 @@ from plane.utils.product import (
 class ProductViewSet(BaseViewSet):
     model = Product
     serializer_class = ProductSerializer
-    search_fields = ["name"]
+    search_fields = ["name", "identifier"]
     filterset_fields = {
         "network": ["exact"],
         "owner_id": ["exact"],

@@ -747,6 +747,13 @@ export default {
     created_on: "创建于",
     update_project: "更新项目",
     identifier_already_exists: "标识符已存在",
+    identifier: {
+      label: "标识符",
+      placeholder: "例如 ECOM",
+      hint: "作为需求编号的前缀，如 ECOM-1。工作区内唯一，最多 12 个字符。",
+      invalid: "标识符须以字母开头，只能包含字母和数字，最多 12 个字符。",
+      already_exists: "该标识符已被占用，请换一个。",
+    },
     add_more: "添加更多",
     defaults: "默认值",
     add_label: "添加标签",
@@ -1456,6 +1463,13 @@ export default {
     completed_work_items: "已完成的{entity}",
     total: "{entity}总数",
   },
+  requirements: {
+    identifier: {
+      copied: "需求编号已复制",
+      source_tooltip: "来自标准库的原始编号",
+      column: "编号",
+    },
+  },
   requirement_fields: {
     inactive: "已停用",
     builtin: {
@@ -1770,6 +1784,8 @@ export default {
     fields: {
       name: "标准库名称",
       name_placeholder: "例如：支付域接口标准库",
+      identifier: "标准库标识符",
+      identifier_hint: "库内条目编号的前缀，如 SEC-12。导入到产品后作为来源编号展示。",
       requirement_type: "需求类型",
       requirement_type_placeholder: "选择一个需求类型",
       requirement_type_hint: "创建后不可更换——换模板会让库内已填的数据全部失效。",
@@ -1925,6 +1941,8 @@ export default {
     view_product: "产品详情",
     fields: {
       name: "名称",
+      identifier: "产品标识符",
+      identifier_hint: "作为该产品下需求编号的前缀，如 ECOM-1。工作区内唯一。",
       description: "描述",
       no_description: "暂无描述",
       owner: "负责人",
@@ -1964,6 +1982,8 @@ export default {
       },
       fields: {
         name: "产品名称",
+        identifier: "产品标识符",
+        identifier_hint: "作为该产品下需求编号的前缀，如 ECOM-1。工作区内唯一。",
         description: "产品描述",
         owner: "负责人",
         visibility: "可见性",

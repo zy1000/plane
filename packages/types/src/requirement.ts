@@ -98,6 +98,21 @@ export type TRequirement = TRequirementBuiltinValues & {
   library_id: string | null;
   /** 定义本行字段的需求类型 */
   requirement_type_id: string;
+  /**
+   * 作用域内自增序号，服务端分配、永不复用（软删的行也占着号）。
+   *
+   * 这一组编号字段全部**只读**，刻意放在 TRequirementBuiltinValues 之外 ——
+   * 那个类型同时是写载荷（TRequirementBatchCreate.builtin），而 pickBuiltinValues
+   * 会把它整组回传给服务端，编号进去就成了客户端可伪造的输入。
+   */
+  sequence_id: number;
+  /** 拼好的展示编号，如 "ECOM-1"。前缀取自所属产品/项目/库的 identifier */
+  display_id: string | null;
+  /** 从标准库导入时的出处；手工录入的行三个 source_* 都是 null */
+  source_library_id: string | null;
+  source_sequence_id: number | null;
+  /** 拼好的来源编号，如 "SEC-12"。库改名后会自动跟随 */
+  source_display_id: string | null;
   data: TRequirementData;
   sort_order: number;
   /**
@@ -264,6 +279,8 @@ export type TRequirementLibrary = {
     logo_props?: Partial<TLogoProps>;
   };
   name: string;
+  /** 库内条目编号的前缀（SEC-12 里的 SEC），也是导入后目标行溯源显示的前缀 */
+  identifier: string;
   description: string;
   /** 需求类型的字段数——库内条目共用这套字段 */
   field_count: number;
@@ -278,12 +295,15 @@ export type TRequirementLibrary = {
 
 export type TCreateRequirementLibraryPayload = {
   name: string;
+  identifier: string;
   requirement_type_id: string;
   description?: string;
 };
 
 /** requirement_type_id 创建后不可变——换类型会让库内已填数据全部失效 */
-export type TUpdateRequirementLibraryPayload = Partial<Pick<TRequirementLibrary, "name" | "description" | "is_active">>;
+export type TUpdateRequirementLibraryPayload = Partial<
+  Pick<TRequirementLibrary, "name" | "identifier" | "description" | "is_active">
+>;
 
 /** 条目网格的表头：字段来自库所选的需求类型，只读 */
 export type TRequirementLibraryConfiguration = {
@@ -358,6 +378,13 @@ export type TRequirementSchemaChangeSnapshot = {
 export type TRequirementChangeSnapshot = TRequirementBuiltinValues & {
   id: string;
   requirement_type_id: string;
+  /**
+   * 编号三件套。历史快照（本次改动之前落的那些）里没有这几个 key，所以是可选的 ——
+   * 读到 undefined 就不显示编号。
+   */
+  sequence_id?: number;
+  source_library_id?: string | null;
+  source_sequence_id?: number | null;
   data: TRequirementData;
   sort_order: number;
 };
@@ -377,6 +404,11 @@ export type TRequirementDiffItem = {
   requirement_type_name: string;
   /** 拟变更后的标题；删除项回落到变更前那份 */
   title: string;
+  /**
+   * 快照里的编号，由服务端用「当前」的产品标识拼出来 —— 产品改标识后历史条目里的
+   * 编号跟着变。历史快照没有序号时为 null。
+   */
+  display_id?: string | null;
   before_snapshot: TRequirementChangeSnapshot | null;
   proposed_snapshot: TRequirementChangeSnapshot | null;
   /** 变更单里是提交时的 approved_version；基线对比里是前一份基线收录的版本号 */
@@ -512,6 +544,8 @@ export type TRequirementVersion = {
   snapshot: TRequirementChangeSnapshot;
   /** 这一版当时的字段结构。字段结构立即生效不走审批，没有它旧版本会拿今天的表头渲染 */
   fields_snapshot: TRequirementField[];
+  /** 这一版快照里的编号，前缀取自当前产品标识；历史快照没有序号时为 null */
+  display_id?: string | null;
   approved_by: string[];
   change_request_id: string | null;
   change_request_sequence_id: number | null;
@@ -604,6 +638,8 @@ export type TRequirementBaselineEntry = {
   version_number: number;
   snapshot: TRequirementChangeSnapshot;
   fields_snapshot: TRequirementField[];
+  /** 收录那一版快照里的编号，前缀取自当前产品标识；历史快照没有序号时为 null */
+  display_id?: string | null;
   sort_order: number;
 };
 

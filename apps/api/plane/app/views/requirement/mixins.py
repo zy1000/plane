@@ -12,6 +12,7 @@
 from typing import NamedTuple
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 
 from plane.db.models import (
     Product,
@@ -109,6 +110,13 @@ def resolve_row_layer(policy):
         serializer_context={
             "product_id": policy.product_id,
             "project_id": policy.project_id,
+            # 这一批行的展示编号前缀（ECOM-1 里的 ECOM）。作用域内是常量，
+            # policy 已经 select_related 了 product/project，取它零查询。
+            "scope_identifier": (
+                policy.product.identifier
+                if policy.product_id
+                else policy.project.identifier
+            ),
         },
         requirement_type_ids=requirement_type_ids,
         fields=fields,
@@ -153,18 +161,27 @@ def get_scoped_policy(user, *, slug, product_id, for_update=False, create=False)
         return None, None
 
     queryset = RequirementApprovalPolicy.objects.filter(product=product).select_related(
-        "workspace", "product", "owner"
+        "workspace", "product", "project", "owner"
     )
     if for_update:
         queryset = queryset.select_for_update(of=("self",))
     policy = queryset.first()
     if policy is None and create:
-        policy = RequirementApprovalPolicy.objects.create(
-            product=product,
-            workspace_id=product.workspace_id,
-            owner=user,
-            created_by=user,
-        )
+        # 配置行还不存在时 for_update 锁不住任何东西，两个并发的「产品第一条需求」
+        # 会同时走到这里。谁先 INSERT 谁赢，输的那个吞掉 IntegrityError 再回头把
+        # 赢家的行锁住 —— 否则两条需求会各自取到 sequence_id=1。
+        # 内层 atomic 是必需的：不开 savepoint 的话 IntegrityError 会把外层事务
+        # 标记成 broken，后面一句查询都发不出去。
+        try:
+            with transaction.atomic():
+                policy = RequirementApprovalPolicy.objects.create(
+                    product=product,
+                    workspace_id=product.workspace_id,
+                    owner=user,
+                    created_by=user,
+                )
+        except IntegrityError:
+            policy = None
         policy = queryset.first() or policy
     return product, policy
 

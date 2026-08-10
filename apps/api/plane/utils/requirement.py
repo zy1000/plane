@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 from uuid import uuid4
 
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils import timezone
 from django.utils.html import strip_tags
 
@@ -20,6 +20,7 @@ from plane.db.models import (
     RequirementFieldCategory,
     RequirementFieldType,
     RequirementItemStatus,
+    RequirementLibrary,
     RequirementPriority,
     RequirementType,
     User,
@@ -35,6 +36,12 @@ SORT_ORDER_STEP = 1000
 #
 # 这里的名字直接是模型属性名（外键用 *_id），因此这份 dict 可以原样当模型 kwargs，
 # 也可以原样作为接口里的平铺键。data 从此只装自定义字段。
+#
+# sequence_id / source_* 不属于这里，别顺手加进来。它们是服务端分配的只读列，
+# 而这份 dict 同时是 CONTENT_BUILTIN_COLUMNS 的来源（加进来 → 每次提交评审都显示
+# 「编号变了」）、是请求体的平铺键（加进来 → 客户端能自选编号）、也是
+# ROLLBACK_RESTORED_COLUMNS 的上游（加进来 → 回滚会把旧编号写回活行）。
+# 编号只出现在两个地方：模型字段定义，和 requirement_row_snapshot 的快照顶层。
 BUILTIN_COLUMN_DEFAULTS = {
     "title": "",
     "description_html": None,
@@ -949,12 +956,90 @@ def insert_requirement_row(
     return row
 
 
+@dataclass(frozen=True)
+class RequirementSource:
+    """一条需求的标准库出处。只有导入路径会构造它。
+
+    存的是库 id + 库内序号，不是拼好的 "SEC-12" —— 库改名之后已导入需求的来源编号
+    要跟着变，前缀在读侧解析（source_library_identifier_map）。
+    """
+
+    library_id: Any
+    sequence_id: int
+
+
+def _sequence_allocator(scope):
+    """作用域内取号器：每个工厂实例只查一次 Max，之后在内存里自增。
+
+    惰性是刻意的 —— 工厂在 save_requirement_row_batch 的 select_for_update **之前**
+    构造，惰性让第一次 allocate() 落在锁之后；顺带让没有 creates 的批次一次查询都不发。
+
+    用 all_objects 而不是 objects：编号永不复用，软删的行也占着号。这与
+    Requirement.Meta 里那三条**不带** deleted_at 条件的唯一约束是一对 ——
+    用 objects 的话，删掉 ECOM-7 之后下一条新建会拿到 7，然后撞
+    req_unique_product_sequence，整批回滚。
+
+    并发正确性完全依赖调用方已经持有该作用域的写锁：产品/项目是
+    RequirementApprovalPolicy 行（get_scoped_policy(for_update=True)），
+    标准库是 RequirementLibrary 行（get_scoped_library(for_update=True)）。
+
+    计数器活在闭包里，所以**工厂实例必须一次写入用一个**，绝不能提到 RowLayer
+    字段上或缓存在按请求复用的对象里 —— 跨事务复用会发出重复的号。
+    """
+    state = {"next": None}
+
+    def allocate():
+        if state["next"] is None:
+            current = Requirement.all_objects.filter(**scope).aggregate(
+                value=Max("sequence_id")
+            )["value"]
+            state["next"] = (current or 0) + 1
+        value = state["next"]
+        state["next"] += 1
+        return value
+
+    return allocate
+
+
+def source_library_identifier_map(rows):
+    """这一批行引用到的标准库 -> identifier，用于拼来源编号（SEC-12）。
+
+    source_library_id 是裸 UUID 不是外键（溯源不该被库的生命周期绑架），所以没有
+    prefetch 可用，改成按页批量解析：一页 100 行跨 N 个来源库也只多一次走主键的
+    IN 查询，没有来源的批次一次都不发。
+
+    用 all_objects：库被软删之后，从它导入的需求仍然该显示 SEC-12 ——
+    溯源不能因为源头没了就变成空白。
+    """
+    library_ids = {row.source_library_id for row in rows if row.source_library_id}
+    if not library_ids:
+        return {}
+    return {
+        str(library_id): identifier
+        for library_id, identifier in RequirementLibrary.all_objects.filter(
+            id__in=library_ids
+        ).values_list("id", "identifier")
+    }
+
+
 def _new_scoped_requirement(*, product=None, project=None):
-    def factory(data, columns, sort_order, actor, requirement_type_id):
+    if product is not None:
+        scope = {"product_id": product.id}
+    elif project is not None:
+        scope = {"project_id": project.id}
+    else:
+        raise ValueError("A scoped requirement needs a product or a project.")
+    allocate = _sequence_allocator(scope)
+
+    def factory(data, columns, sort_order, actor, requirement_type_id, source=None):
         return Requirement(
             product=product,
             project=project,
             requirement_type_id=requirement_type_id,
+            sequence_id=allocate(),
+            # 只有从标准库导入才有来源；手工创建恒为 (None, None)
+            source_library_id=source.library_id if source else None,
+            source_sequence_id=source.sequence_id if source else None,
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -965,11 +1050,16 @@ def _new_scoped_requirement(*, product=None, project=None):
 
 
 def _new_library_item(library):
-    def factory(data, columns, sort_order, actor, requirement_type_id):
-        # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定
+    allocate = _sequence_allocator({"library_id": library.id})
+
+    def factory(data, columns, sort_order, actor, requirement_type_id, source=None):
+        # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定。
+        # source 同理被**无条件丢弃** —— 库条目是导入的源头，不可能有来源。
+        # DB 侧有 req_library_item_has_no_source 兜底。
         return Requirement(
             library=library,
             requirement_type_id=library.requirement_type_id,
+            sequence_id=allocate(),
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -1164,6 +1254,10 @@ def save_requirement_row_batch(
             sort_order=sort_order,
             actor=actor,
             requirement_type_id=item.get("requirement_type_id"),
+            # source 只可能由 build_library_import_creates 放进来 ——
+            # RequirementBatchSaveSerializer 没有这个字段，所以客户端伪造不了。
+            # 别给那个 serializer 加 source 字段，否则溯源就成了可伪造的输入。
+            source=item.get("source"),
         )
         row.save()
         ordered_rows.insert(insert_at, row)
@@ -1240,6 +1334,11 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
                 "data": prune_requirement_data_to_fields(deepcopy(item.data), specs),
                 "builtin": builtin,
                 "requirement_type_id": library.requirement_type_id,
+                # 溯源：目标行记住自己来自 SEC-12。库条目侧不写任何东西 ——
+                # 一条库条目可以被导入无数次，反向指针没有单值可存。
+                "source": RequirementSource(
+                    library_id=library.id, sequence_id=item.sequence_id
+                ),
                 **({"before_id": before_id} if before_id else {}),
                 **({"after_id": after_id} if after_id else {}),
             }

@@ -25,6 +25,7 @@ import {
   REQUIREMENT_CONTENT_BUILTIN_COLUMNS,
 } from "@/components/requirements/requirement-builtin-fields";
 import { getFormRows, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 type TProps = {
@@ -170,6 +171,8 @@ export function ChangeRequestRequirementDiff({ item, fields, workspaceSlug }: TP
         <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type])}>
           {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
         </span>
+        {/* 一张单里可能有十几条需求，编号是审批人唯一能拿去对照的稳定标识 */}
+        <RequirementIdentifier displayId={item.display_id} size="sm" />
         <h3 className="min-w-0 truncate text-14 font-medium text-primary">
           {item.title || t("requirement_detail.untitled")}
         </h3>

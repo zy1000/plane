@@ -9,6 +9,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TRequirementBaselineEntry, TRequirementField } from "@plane/types";
 import { BuiltinCellValue, REQUIREMENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
 import { getFormRows, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 
 const Empty = () => {
   const { t } = useTranslation();
@@ -83,6 +84,11 @@ export function BaselineEntrySnapshot({
 
   return (
     <div className="rounded-md border border-subtle bg-layer-1">
+      {entry.display_id && (
+        <Row label={t("requirements.identifier.column")}>
+          <RequirementIdentifier displayId={entry.display_id} />
+        </Row>
+      )}
       {REQUIREMENT_BUILTIN_COLUMNS.map((column) => (
         <Row key={column.key} label={t(column.labelKey)}>
           <BuiltinCellValue columnKey={column.key} values={entry.snapshot} />

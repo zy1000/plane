@@ -28,6 +28,7 @@ import {
   BuiltinCellValue,
   REQUIREMENT_CONTENT_BUILTIN_COLUMNS,
 } from "@/components/requirements/requirement-builtin-fields";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import {
   ChangedFieldCorner,
@@ -338,6 +339,12 @@ export function RequirementDiffGrid(props: TProps) {
                   <span className={cn(CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL[item.change_type])}>
                     {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
                   </span>
+                  {/* 变更类型格是这一条需求在网格里唯一的固定表头，编号跟在它下面 */}
+                  {item.display_id && (
+                    <span className="mt-1 block">
+                      <RequirementIdentifier displayId={item.display_id} />
+                    </span>
+                  )}
                 </td>
               )}
               {isFirstRow &&

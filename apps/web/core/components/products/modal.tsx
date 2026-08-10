@@ -9,6 +9,7 @@ import { EUserWorkspaceRoles } from "@plane/types";
 import type { TProduct, TProductNetwork } from "@plane/types";
 import { Avatar, AvatarGroup, CustomSelect, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { getFileURL } from "@plane/utils";
+import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
@@ -31,6 +32,8 @@ export const ProductModal = observer(function ProductModal() {
   const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
 
   const [name, setName] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [descriptionHTML, setDescriptionHTML] = useState(EMPTY_DESCRIPTION);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
@@ -72,11 +75,13 @@ export const ProductModal = observer(function ProductModal() {
   useEffect(() => {
     if (!isOpen) return;
     setName(product?.name ?? "");
+    setIdentifier(product?.identifier ?? "");
     setDescriptionHTML(product?.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product?.owner ?? currentUser?.id ?? null);
     setReviewerIds(product?.reviewers ?? []);
     setNetwork(product?.network ?? 2);
     setFormError(null);
+    setIdentifierError(null);
     setOwnerError(null);
     setAttachmentWarning(false);
     setPersistedProductId(null);
@@ -101,6 +106,10 @@ export const ProductModal = observer(function ProductModal() {
       setFormError(t("workspace_products.fields.name"));
       return;
     }
+    if (!isValidIdentifier(identifier)) {
+      setIdentifierError(t("common.identifier.invalid"));
+      return;
+    }
     if (!ownerId) {
       setOwnerError(t("workspace_products.validation.owner_required"));
       return;
@@ -108,10 +117,12 @@ export const ProductModal = observer(function ProductModal() {
 
     setIsSaving(true);
     setFormError(null);
+    setIdentifierError(null);
     setOwnerError(null);
     setAttachmentWarning(false);
     const payload = {
       name: trimmedName,
+      identifier,
       description_html: descriptionHTML,
       network,
       owner: ownerId,
@@ -158,9 +169,19 @@ export const ProductModal = observer(function ProductModal() {
       });
       closeProductModal();
     } catch (error) {
-      const errorPayload = error && typeof error === "object" ? (error as { name?: string[]; owner?: string[] }) : {};
+      const errorPayload =
+        error && typeof error === "object"
+          ? (error as { name?: string[]; identifier?: string[]; owner?: string[] })
+          : {};
       if (errorPayload.owner?.[0]) {
         setOwnerError(String(errorPayload.owner[0]));
+      } else if (errorPayload.identifier?.[0]) {
+        // 后端返回 PRODUCT_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
+        setIdentifierError(
+          errorPayload.identifier[0] === "PRODUCT_IDENTIFIER_ALREADY_EXISTS"
+            ? t("common.identifier.already_exists")
+            : t("common.identifier.invalid")
+        );
       } else {
         setFormError(String(errorPayload.name?.[0] ?? t("workspace_products.toast.failed")));
       }
@@ -235,6 +256,19 @@ export const ProductModal = observer(function ProductModal() {
                   )}
                   {formError && <p className="mt-1.5 text-11 text-danger-primary">{formError}</p>}
                 </div>
+
+                <IdentifierInput
+                  id="product-identifier"
+                  value={identifier}
+                  onChange={(value) => {
+                    setIdentifier(value);
+                    setIdentifierError(null);
+                  }}
+                  editable={editable}
+                  error={identifierError}
+                  label={t("workspace_products.fields.identifier")}
+                  hint={t("workspace_products.fields.identifier_hint")}
+                />
 
                 <div>
                   <p className="mb-1.5 text-12 font-medium text-secondary">
