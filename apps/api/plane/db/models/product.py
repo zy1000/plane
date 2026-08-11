@@ -5,6 +5,7 @@ from django.db import models
 from plane.db.mixins import TimeAuditModel
 
 from .base import BaseModel
+from .project import ProjectBaseModel
 
 
 class Product(BaseModel):
@@ -162,3 +163,40 @@ class ProductMemberRole(TimeAuditModel):
 
     def __str__(self):
         return f"{self.member} -> {self.role.name}"
+
+
+class ProductProject(ProjectBaseModel):
+    """产品与项目的关联。项目通过它确定自己能引用哪些产品的需求。
+
+    Product 本身是工作区级的、与 Project 没有外键关系（见 docs/domain-glossary.md
+    的「已知的断链」）。这张表是唯一的桥，且**只表达引用关系** —— 产品不因此归属
+    某个项目，项目也不因此获得产品的写权限。
+
+    两端必须同工作区。这条跨表规则 DB 表达不了（workspace 在各自的父表上），由
+    写入口校验，见 plane/utils/requirement_project.py::resolve_linkable_products。
+    """
+
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="product_projects",
+        verbose_name="所属产品",
+    )
+    # project / workspace 由 ProjectBaseModel 提供
+
+    class Meta:
+        unique_together = ["product", "project", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "project"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="product_project_unique_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Product Project"
+        verbose_name_plural = "Product Projects"
+        db_table = "product_projects"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.product.name} <-> {self.project.name}"

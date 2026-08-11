@@ -4,11 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import type { IRelease, TReleaseStatus } from "@plane/types";
+import { useParams } from "next/navigation";
+import type { IRelease, TProjectRequirement, TReleaseStatus } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
 import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
+import { RequirementService } from "@/services/requirement.service";
+import { ReleasePublishConfirmModal } from "./release-publish-confirm-modal";
 import { getAllowedReleaseStatusOptions, getReleaseStatusDetails } from "./release-status-config";
 import { ReleaseStatusReasonModal } from "./release-status-reason-modal";
 
@@ -22,17 +25,87 @@ type Props = {
 
 const REASON_REQUIRED_STATUSES = new Set<TReleaseStatus>(["rejected", "cancelled"]);
 
+// 与后端 CustomPaginator.max_page_size 一致
+const PUBLISH_CHECK_PAGE_SIZE = 100;
+// 软提示的兜底页数上限，防止游标异常时死循环
+const PUBLISH_CHECK_MAX_PAGES = 10;
+
+/** 按 cursor 翻页拉全量关联需求 —— 只取首页会在超过一页时漏报在途变更 */
+const fetchAllReleaseRequirements = async (
+  requirementService: RequirementService,
+  workspaceSlug: string,
+  projectId: string,
+  releaseId: string
+): Promise<TProjectRequirement[]> => {
+  const rows: TProjectRequirement[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < PUBLISH_CHECK_MAX_PAGES; page++) {
+    const response = await requirementService.listReleaseRequirements(workspaceSlug, projectId, releaseId, {
+      perPage: PUBLISH_CHECK_PAGE_SIZE,
+      ...(cursor ? { cursor } : {}),
+    });
+    rows.push(...(response?.results ?? []));
+    if (!response?.next_page_results || !response?.next_cursor) break;
+    cursor = response.next_cursor;
+  }
+  return rows;
+};
+
 export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(props: Props) {
   const { isDisabled, releaseDetails, handleReleaseDetailsChange } = props;
+  const { workspaceSlug } = useParams();
+  const requirementService = useMemo(() => new RequirementService(), []);
   const releaseStatus = getReleaseStatusDetails(releaseDetails.status);
   const allowedStatusOptions = getAllowedReleaseStatusOptions(releaseDetails.status);
   const CurrentStatusIcon = releaseStatus.icon;
 
   const [pendingReasonStatus, setPendingReasonStatus] = useState<TReleaseStatus | null>(null);
   const [pendingDateConfirmStatus, setPendingDateConfirmStatus] = useState<TReleaseStatus | null>(null);
+  // 发布软提示（第三条 pending 支路）：在途变更的关联需求列表 + 确认框开关
+  const [pendingPublishConfirmStatus, setPendingPublishConfirmStatus] = useState<TReleaseStatus | null>(null);
+  const [lockedRequirements, setLockedRequirements] = useState<TProjectRequirement[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // 发布前检查在飞期间锁住状态切换，避免重复触发交错
+  const [isCheckingRequirements, setIsCheckingRequirements] = useState(false);
+
+  /**
+   * 发布（completed）前先查关联需求里有没有在途变更（is_locked）的行。
+   * 有则弹黄色确认框列出，确认后照常提交 —— 需求永不阻塞交付域，
+   * 查询失败也直接放行，软提示不能变成硬门槛。
+   */
+  const handlePublishAttempt = async (val: TReleaseStatus) => {
+    setIsCheckingRequirements(true);
+    try {
+      const slug = workspaceSlug?.toString();
+      let locked: TProjectRequirement[] = [];
+      if (slug && releaseDetails.project_id) {
+        try {
+          const rows = await fetchAllReleaseRequirements(
+            requirementService,
+            slug,
+            releaseDetails.project_id,
+            releaseDetails.id
+          );
+          locked = rows.filter((row) => row.is_locked);
+        } catch {
+          // 软提示查不到就当没有，照常提交
+        }
+      }
+      if (locked.length > 0) {
+        setLockedRequirements(locked);
+        setPendingPublishConfirmStatus(val);
+        return;
+      }
+      void handleReleaseDetailsChange({ status: val });
+    } finally {
+      setIsCheckingRequirements(false);
+    }
+  };
 
   const handleStatusChange = (val: TReleaseStatus) => {
+    // 提交/检查在飞或任一确认支路挂起时不接受新的状态切换，避免支路交错
+    if (submitting || isCheckingRequirements || pendingReasonStatus || pendingDateConfirmStatus || pendingPublishConfirmStatus)
+      return;
     if (val === releaseDetails.status) return;
     if (releaseDetails.status === "rejected" && val === "in-progress") {
       setPendingDateConfirmStatus(val);
@@ -42,10 +115,34 @@ export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(pro
       setPendingReasonStatus(val);
       return;
     }
+    if (val === "completed") {
+      void handlePublishAttempt(val);
+      return;
+    }
     void handleReleaseDetailsChange({ status: val });
   };
 
+  const handlePublishConfirm = async () => {
+    if (submitting) return;
+    if (!pendingPublishConfirmStatus) return;
+    try {
+      setSubmitting(true);
+      await handleReleaseDetailsChange({ status: pendingPublishConfirmStatus });
+      setPendingPublishConfirmStatus(null);
+      setLockedRequirements([]);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePublishCancel = () => {
+    if (submitting) return;
+    setPendingPublishConfirmStatus(null);
+    setLockedRequirements([]);
+  };
+
   const handleReasonConfirm = async (reason: string, testHandoffDate?: string | null) => {
+    if (submitting) return;
     if (!pendingReasonStatus) return;
     try {
       setSubmitting(true);
@@ -66,6 +163,7 @@ export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(pro
   };
 
   const handleTestingDatesConfirm = async (payload: { endDate: string; testHandoffDate: string }) => {
+    if (submitting) return;
     if (!pendingDateConfirmStatus) return;
     try {
       setSubmitting(true);
@@ -140,6 +238,13 @@ export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(pro
         testHandoffDate={releaseDetails.test_handoff_date ?? null}
         onCancel={handleTestingDatesCancel}
         onConfirm={handleTestingDatesConfirm}
+      />
+      <ReleasePublishConfirmModal
+        open={pendingPublishConfirmStatus !== null}
+        loading={submitting}
+        requirements={lockedRequirements}
+        onCancel={handlePublishCancel}
+        onConfirm={() => void handlePublishConfirm()}
       />
     </>
   );

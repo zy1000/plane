@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
 import { Link2, Loader as LoaderIcon, Maximize2, MoveRight } from "lucide-react";
@@ -31,6 +31,21 @@ type TProps = {
   onOpenRequirement: (requirementId: string) => void;
   /** 抽屉里改完，上层网格要跟着更新，否则关掉抽屉看到的还是旧值 */
   onRequirementUpdated?: (requirement: TRequirement) => void;
+  /**
+   * 「复制链接」的目标。默认是产品的需求详情页；项目需求页把抽屉开在自己的路由上
+   * （`?peek=`），复制出去的应该是他正在看的那个页面，所以由调用方传入。
+   */
+  shareHref?: (requirementId: string) => string;
+  /**
+   * 「打开整页」。传 false 则整个按钮不渲染 —— 项目侧就是这种情况：需求没有项目内的
+   * 整页路由，而跳去产品的整页会把用户静默弹出项目上下文。
+   *
+   * 注意不能"指回本页 + ?peek="来糊弄：按钮会先 onClose()，随后页面的 peek↔URL 同步
+   * 副作用把刚写上去的参数又删掉，点了等于没点。
+   */
+  showDetailAction?: boolean;
+  /** 头部的所属产品标识。项目侧一页可能混着多个产品的需求，不标出来根本分不清 */
+  productChip?: ReactNode;
 };
 
 /**
@@ -51,6 +66,9 @@ export const RequirementPeekOverview = (props: TProps) => {
     onClose,
     onOpenRequirement,
     onRequirementUpdated,
+    shareHref,
+    showDetailAction = true,
+    productChip,
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
@@ -155,17 +173,19 @@ export const RequirementPeekOverview = (props: TProps) => {
                 aria-label={t("requirement_detail.close")}
                 onClick={onClose}
               />
-              <IconButton
-                variant="ghost"
-                size="base"
-                icon={Maximize2}
-                aria-label={t("requirement_detail.open_full_page")}
-                onClick={() => {
-                  if (!activeId) return;
-                  onClose();
-                  router.push(`/${workspaceSlug}/products/${productId}/requirements/${activeId}`);
-                }}
-              />
+              {showDetailAction && (
+                <IconButton
+                  variant="ghost"
+                  size="base"
+                  icon={Maximize2}
+                  aria-label={t("requirement_detail.open_full_page")}
+                  onClick={() => {
+                    if (!activeId) return;
+                    onClose();
+                    router.push(`/${workspaceSlug}/products/${productId}/requirements/${activeId}`);
+                  }}
+                />
+              )}
               {/* 抽屉里唯一能稳定引用这条需求的东西 —— 这里默认开点击复制 */}
               <RequirementIdentifier
                 displayId={requirement?.display_id}
@@ -173,6 +193,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                 size="sm"
                 enableClickToCopy
               />
+              {productChip}
               <span className="ml-auto flex items-center gap-1.5">
                 {detail.isLoading && <LoaderIcon className="size-3.5 animate-spin text-tertiary" />}
                 <IconButton
@@ -183,7 +204,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onClick={() => {
                     if (!activeId) return;
                     void copyUrlToClipboard(
-                      `${workspaceSlug}/products/${productId}/requirements/${activeId}`
+                      shareHref?.(activeId) ?? `${workspaceSlug}/products/${productId}/requirements/${activeId}`
                     ).then(() =>
                       setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
                     );

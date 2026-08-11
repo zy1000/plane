@@ -9,6 +9,7 @@ from plane.app.views.product import (
     ProductRoleViewSet,
     ProductViewSet,
 )
+from plane.app.views.project.product import ProductProjectViewSet, ProjectProductViewSet
 
 urlpatterns = [
     path(
@@ -54,6 +55,17 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/roles/",
         ProductRoleViewSet.as_view({"get": "list", "post": "create"}),
         name="product-roles",
+    ),
+    # --- 产品 ↔ 项目 ------------------------------------------------------
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/projects/",
+        ProductProjectViewSet.as_view({"get": "list"}),
+        name="product-projects",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/products/",
+        ProjectProductViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-products",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/roles/<int:pk>/",

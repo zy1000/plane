@@ -38,13 +38,13 @@
 - **change**（`RequirementChangeRequest` + `RequirementChangeItem`）— **唯一的审批载体**。一张单覆盖 1..N 条需求，同批通过 / 同批驳回。审批单位是**变更单**，不是条目。
 - **baseline**（`RequirementBaseline` + `Entry`）— 一组 (需求, 版本) 的不可变命名快照，**语义等同 git tag**。没有状态、不参与审批、创建后内容不可改（只有 name/description 能改）。
 
-### 两根正交的状态轴 —— 最容易搞混的地方
+### 三根正交的状态轴 —— 最容易搞混的地方
 
 **轴 A：`Requirement.status`（落库，交付进度）**
 `draft → confirmed → (implemented | obsolete)`
 - 整列**只由系统写**，写序列化器根本不收它。
 - 首次审批通过时置 `confirmed`，此后回不到 draft（CheckConstraint `req_draft_status_iff_never_approved` 钉死）。
-- `implemented` / `obsolete` **目前无人可写**，等关联任务派生规则落地。
+- `implemented` **对称派生**（`utils/requirement_project.py::recalculate_requirement_status`）：所有关联项目的 `RequirementProject.stage` 均为 `released` 且至少有一条关联行 → 置 `implemented`；条件失效 → 退回 `confirmed`。零关联行的需求不参与判定。`obsolete` 仍是人为动作，不派生。
 - `status` 不算内容，不触发评审、不被回滚倒推。
 
 **轴 B：`Requirement.approval_state`（不落库，派生 property，`requirement.py:667`）**
@@ -58,6 +58,21 @@
 
 > 设计动机（原注释）：「存成字符串就会多出第四个可以和这三列对不上的事实来源；派生则不可能不一致。」
 > **不要试图把 approval_state 落库或缓存。**
+
+**轴 C：`RequirementProject.stage`（落库在关联行上，每 (需求, 项目) 一份，纯关联事实派生）**
+阶梯 `linked`(已立项) → `planned`(已排期) → `pending_verification`(待验证) → `released`(已发布)，按现存有效事实取最高档重算（`recalculate_stage`）；`in_progress` / `done` 枚举保留给工作项派生（P3）。零关联行时前端展示「未开始」，不落库。
+
+| 事实 | 阶段 |
+|---|---|
+| 关联到项目 | `linked` |
+| 关联该项目未取消的迭代（`RequirementCycle`） | `planned` |
+| 关联该项目在途发布单（`RequirementRelease`，未拒绝/终止） | `pending_verification` |
+| 关联的发布单已发布 | `released` |
+
+- **手动改 stage 已退役**：项目侧 PATCH 只收 `sort_order`，payload 带 stage 报 400 `REQUIREMENT_STAGE_DERIVED`。
+- 迭代完成不改阶段（时间盒到期不是进度事实，列表注解 `carryover` 做 UI 标记）；降档留痕写 `RequirementProjectActivity`。
+- 与轴 A 的唯一联动即上面 `implemented` 的对称派生；需求阶段**永不**进入迭代/发布状态流转的门槛条件（只做软提示）。
+- 完整规则见 `docs/project-requirement-link-requirements.md` §4.4。
 
 ### 生命周期
 
@@ -99,10 +114,10 @@
 
 | 层 | 路径 |
 |---|---|
-| Model | `apps/api/plane/db/models/requirement.py`（全部 11 个），导出在 `__init__.py:148-172` |
-| Views | `apps/api/plane/app/views/requirement/`：`base.py` / `row_base.py`（产品与库共享行读写基类） / `change.py`（变更单+版本+轨迹+基线+收件箱） / `type.py` / `library.py` / `library_item.py` / `mixins.py` |
-| Serializers | `serializers/requirement.py`(1222行) / `requirement_change.py` / `requirement_type.py` / `requirement_library.py` |
-| Utils | `utils/requirement.py`(领域核心) / `requirement_change.py`(提交审批驳回撤回回滚) / `requirement_baseline.py` / `requirement_schema.py` / `requirement_notification.py` |
+| Model | `apps/api/plane/db/models/requirement.py`（单文件集中，含关联表 `RequirementProject` / `RequirementCycle` / `RequirementRelease` 与阶段留痕表 `RequirementProjectActivity`），导出在 `__init__.py` |
+| Views | `apps/api/plane/app/views/requirement/`：`base.py` / `row_base.py`（产品与库共享行读写基类） / `change.py`（变更单+版本+轨迹+基线+收件箱） / `type.py` / `library.py` / `library_item.py` / `mixins.py` / `project.py`（项目侧关联/排序） / `container.py`（迭代/发布关联需求） |
+| Serializers | `serializers/requirement.py`(1222行) / `requirement_change.py` / `requirement_type.py` / `requirement_library.py` / `requirement_project.py` |
+| Utils | `utils/requirement.py`(领域核心) / `requirement_change.py`(提交审批驳回撤回回滚) / `requirement_project.py`(阶段重算 + status 对称回写) / `requirement_baseline.py` / `requirement_schema.py` / `requirement_notification.py` |
 | URLs | `apps/api/plane/app/urls/requirement.py` |
 | 迁移 | `0302`–`0323`（`0319` drop baseline approval、`0320` 审批下沉到条目 是两次关键转向） |
 | 前端类型 | `packages/types/src/requirement.ts`、`requirement-type.ts` |
@@ -119,7 +134,7 @@
 - **workspace 级**，路由 `workspaces/<slug>/products/...`，**完全不经过 Project**。
 - 自带**一套平行于 Project 的成员与角色体系**（`ProductMember` + `ProductRole.permissions` JSON），**不复用** Plane 的 ProjectMember / WorkspaceMember 权限。改产品权限时不要去动原生权限体系。
 - `ProductMember` 主键是 AutoField，不是 UUID。
-- **product 和 project 之间没有外键**。`Project.product_type` 只是 CharField。「一个产品下有哪些项目」这个关系在数据层不存在。
+- **product 和 project 之间没有直接外键**，但已有 `ProductProject` 关联表（`db/models/product.py`）表达「项目引用了哪些产品」——它是项目侧关联需求的候选池前提。`Project.product_type` 只是 CharField，与该关联表无关。
 - 产品导航有 5 个 tab（dashboard / requirements / plans / projects / releases，见 `components/products/navigation.ts`），**只有 requirements 是实装的**，其余渲染 `ProductFeaturePage` 空态占位。后端无对应模型。
 
 ## release（发布）
@@ -213,8 +228,8 @@ Project (原生)
 ```
 
 **已知的断链（不要以为有关联而去找）：**
-- **release 和 requirement 之间没有任何关联。** `requirement.py` 里 grep 不到 Release / Issue / Cycle / Module。需求既不能关联 Issue 也不能关联 Release，需求到交付之间缺一环。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表毫无外键关系，只能人工对应。
-- **product 和 project 之间没有外键**（见上）。
+- **需求 ↔ Issue 仍无关联**（工作项派生留给 P3，`requirement.py` 里 grep 不到 Issue / Module）。需求 ↔ Cycle / Release 已由 `RequirementCycle` / `RequirementRelease` 关联表打通，驱动 `RequirementProject.stage` 推导（见 requirement 节轴 C）。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表仍无外键关系，只能人工对应。
+- **product 和 project 之间没有直接外键**，关系走 `ProductProject` 关联表（见上）。
 - milestone 与除 Issue / Project 外的一切无关联。
 - changelog 与所有模块零关联。
 

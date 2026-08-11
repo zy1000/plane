@@ -20,6 +20,7 @@ import {
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
+  PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
   PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY,
   PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
   PROJECT_VIEWS_VIEW_PERMISSION_KEY,
@@ -36,7 +37,7 @@ import {
   WorkItemsIcon,
   TestManagementIcon,
 } from "@plane/propel/icons";
-import { BookOpenText, Bug, Clock } from "lucide-react";
+import { BookOpenText, Bug, Clock, ListChecks } from "lucide-react";
 import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
@@ -136,6 +137,17 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "需求",
         href: `/${workspaceSlug}/projects/${projectId}/requirements`,
         icon: BookOpenText,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY],
+        shouldRender: true,
+        sortOrder: 1.2,
+      },
+      {
+        i18n_key: "sidebar.dev_requirements",
+        key: "dev_requirements",
+        name: "研发需求",
+        href: `/${workspaceSlug}/projects/${projectId}/dev-requirements`,
+        icon: ListChecks,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY],
         shouldRender: true,

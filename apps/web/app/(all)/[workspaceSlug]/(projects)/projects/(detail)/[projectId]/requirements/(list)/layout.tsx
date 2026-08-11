@@ -6,17 +6,18 @@
 
 import { Outlet } from "react-router";
 import { AppHeader } from "@/components/core/app-header";
-import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectIssuesHeader } from "../../issues/(list)/header";
-import { ProjectIssuesMobileHeader } from "../../issues/(list)/mobile-header";
+import { ProjectRequirementsHeader } from "./header";
 
+/**
+ * 只包页头，不包 ContentWrapper —— 页面自己铺一层带
+ * `flex min-h-0 flex-col overflow-hidden` 的容器，网格靠它才能正确算出可滚动高度。
+ * 与产品需求页的做法一致。
+ */
 export default function ProjectRequirementsLayout() {
   return (
     <>
-      <AppHeader header={<ProjectIssuesHeader />} mobileHeader={<ProjectIssuesMobileHeader />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
+      <AppHeader header={<ProjectRequirementsHeader />} />
+      <Outlet />
     </>
   );
 }

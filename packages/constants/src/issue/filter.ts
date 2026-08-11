@@ -287,7 +287,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       },
     },
   },
-  requirements: {
+  dev_requirements: {
     filters: [
       "name",
       "priority",

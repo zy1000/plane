@@ -20,6 +20,7 @@ export default {
     analytics: "分析",
     work_items: "工作项",
     requirements: "需求",
+    dev_requirements: "研发需求",
     defects: "缺陷",
     cycles: "迭代",
     modules: "模块",
@@ -1625,6 +1626,13 @@ export default {
     yesterday: "昨天",
   },
   requirement_detail: {
+    /** 这条需求进了哪些项目（RequirementProject）。不是需求的内容字段 */
+    projects: {
+      label: "所属项目",
+      placeholder: "未进入任何项目",
+      needs_approval: "需求通过评审后才能进入项目",
+      no_candidates: "没有可选的项目（项目需先关联本产品）",
+    },
     open: "打开详情",
     open_full_page: "在整页中打开",
     close: "关闭",
@@ -1934,7 +1942,119 @@ export default {
       },
     },
   },
+  /**
+   * 项目引用的产品需求。与 workspace_products.requirements（产品侧维护需求）是两回事：
+   * 这里全部只读，项目能改的只有阶段与关联关系本身。
+   */
+  project_requirements: {
+    scope_tabs: {
+      work_items: "工作项",
+      requirements: "需求",
+    },
+    unknown_type: "未知类型",
+    hidden_project: "无权查看的项目",
+    clear_filters: "清除筛选",
+    filtered_empty: {
+      title: "没有符合条件的需求",
+      description: "换个产品、阶段或类型，或清空搜索词再看看。",
+    },
+    columns: "列设置",
+    all_types: "全部类型",
+    title: "需求",
+    readonly_hint: "需求内容由产品维护，如需修改请提交变更单",
+    link: "关联需求",
+    unlink: "解除关联",
+    unlink_selected: "解除关联 {count} 条",
+    submit_change: "提交变更",
+    product_column: "所属产品",
+    stage_column: "阶段",
+    all_products: "全部产品",
+    all_stages: "全部阶段",
+    empty: {
+      title: "还没有关联任何需求",
+      description: "把产品里已通过评审的需求关联进来，就能在项目里跟踪它们的交付进度。",
+    },
+    no_products: {
+      title: "本项目还没有关联产品",
+      description: "需求来自产品。用右上角的「管理关联产品」把产品关联进来，才能引用它下面的需求。",
+    },
+    linkable: {
+      title: "关联需求",
+      search_placeholder: "按编号或标题搜索",
+      empty: "没有可关联的需求（需先关联产品，且需求需通过评审）",
+      selected: "已选 {count} 条",
+      submit: "关联",
+    },
+    unlink_confirm: {
+      title: "解除关联？",
+      description: "将解除 {count} 条需求与本项目的关联。需求仍保留在产品中，不会被删除；本项目内记录的阶段会一并清除。",
+    },
+    stage: {
+      linked: "已立项",
+      planned: "已排期",
+      in_progress: "研发中",
+      done: "研发完毕",
+      pending_verification: "待验证",
+      released: "已发布",
+    },
+    /** 零关联行的展示值，不落库 */
+    stage_not_started: "未开始",
+    /** 已排期但关联迭代已结束的黄标 */
+    stage_carryover: "迭代已结束",
+    /** 阶段胶囊 tooltip 的推导依据。阶段是纯派生，手动改阶段入口已退役 */
+    stage_reason: {
+      linked: "已关联到本项目",
+      planned: "因关联迭代「{name}」",
+      in_progress: "按工作项推导",
+      done: "按工作项推导",
+      pending_verification: "因关联发布单「{name}」",
+      released: "发布单「{name}」已发布",
+    },
+    /** 产品需求网格的「项目阶段」列 */
+    project_stage_column: "项目阶段",
+    /** 迭代 tab / 发布 section 的容器侧关联需求入口 */
+    container: {
+      title: "关联需求",
+      link_button: "关联需求",
+      unlink: "解除关联",
+      empty: "暂无关联需求",
+      toast_linked: "已关联需求",
+      toast_unlinked: "已解除关联",
+      toast_failed: "操作失败",
+    },
+    /** 迭代完成软提示：不阻断，确认后照常完成 */
+    cycle_complete_confirm: {
+      title: "确认完成迭代",
+      body: "{count} 条关联需求尚未进入发布单，完成迭代后它们将保持「已排期」。",
+      confirm: "仍要完成",
+      cancel: "取消",
+    },
+    /** 发布软提示：在途变更需求标黄展示，不阻断 */
+    release_publish_confirm: {
+      title: "确认发布",
+      body: "{count} 条关联需求正在变更评审中，发布不会被阻塞，但请知悉：",
+      confirm: "仍要发布",
+      cancel: "取消",
+    },
+    toast: {
+      linked: "已关联 {count} 条需求",
+      unlinked: "已解除关联",
+      change_submitted: "变更单已提交",
+      failed: "操作失败，请稍后重试",
+    },
+  },
+  /** 项目关联的产品。它决定了项目能引用哪些产品的需求 */
+  project_products: {
+    no_visible_products: "当前工作区没有你可见的产品",
+    title: "关联产品",
+    link: "关联产品",
+    unlink: "解除关联",
+    empty: "尚未关联任何产品",
+    manage: "管理关联产品",
+    has_linked_requirements: "该产品下还有需求关联在本项目中，请先解除这些需求的关联。",
+  },
   workspace_products: {
+    identifier_copied: "产品标识已复制",
     title: "产品管理",
     search_placeholder: "按名称搜索产品",
     create_product: "新建产品",
@@ -2634,6 +2754,20 @@ export default {
           any: "最快",
           all: "最严",
         },
+      },
+    },
+    /** 产品详情页的「项目」页签。关联关系由项目侧维护，这里只读 */
+    projects: {
+      requirement_count: "需求数",
+      stage_distribution: "阶段分布",
+      completion: "完成率",
+      completion_hint: "按需求阶段计算：（研发完毕 + 已发布）/ 总数。暂不按关联工作项计算。",
+      title: "关联项目",
+      linked_at: "关联时间",
+      error_title: "无法加载关联项目",
+      empty: {
+        title: "还没有项目引用该产品",
+        description: "在项目的需求页用「管理关联产品」关联本产品后，项目会出现在这里。",
       },
     },
     features: {

@@ -67,7 +67,11 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
   const baseUrl = `/${workspaceSlug}/projects/${projectId}`;
   const tabUrlMap: Record<string, string> = {
     work_items: `${baseUrl}/issues`,
+    // requirements = 产品需求（实体页）；dev_requirements = 研发需求（工作项视图）。
+    // 存量的 tab 偏好里 "requirements" 会落到新的产品需求页 —— 这是接管的既定后果，
+    // 不做数据迁移，见 docs/project-requirement-link-requirements.md 7.1 第 6 条。
     requirements: `${baseUrl}/requirements`,
+    dev_requirements: `${baseUrl}/dev-requirements`,
     defects: `${baseUrl}/defects`,
     cycles: `${baseUrl}/cycles`,
     modules: `${baseUrl}/modules`,

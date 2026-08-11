@@ -6,6 +6,7 @@ import { Pagination } from "antd";
 import {
   BookMarked,
   Copy,
+  FolderKanban,
   Hash,
   History,
   Layers,
@@ -46,6 +47,8 @@ import {
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { copyRequirementData } from "@/components/requirements/requirement-row-data";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
+import { useProductProjects } from "@/hooks/store/use-product-projects";
+import { RequirementProjectStageBadges } from "./requirement-project-stage-badges";
 
 /**
  * 多类型时的默认视图：跨全部需求类型的总览。
@@ -204,12 +207,20 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
 
   /** 标题列之外的所有列宽，用来反推标题列该吃掉多少 */
   const propertyColumnsWidth =
-    // 编号 + 标准库编号 + 审批列 + 内置属性列 + 所属类型列
+    // 编号 + 标准库编号 + 审批列 + 项目阶段列 + 内置属性列 + 所属类型列
+    REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     propertyBuiltinColumns.reduce((total, column) => total + getRequirementColumnWidth(column.key), 0) +
     REQUIREMENT_GRID_COLUMN_WIDTH;
+  // 项目阶段列的 tooltip 要把 project_id 翻成项目名，名录与详情页「所属项目」同源
+  const { links: productProjectLinks } = useProductProjects({ workspaceSlug, productId });
+  const projectNameById = useMemo(
+    () => new Map(productProjectLinks.map((link) => [link.project, link.project_detail?.name])),
+    [productProjectLinks]
+  );
+  const resolveProjectName = useCallback((projectId: string) => projectNameById.get(projectId), [projectNameById]);
   const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, propertyColumnsWidth);
   const tableWidth = titleColumnWidth + propertyColumnsWidth;
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
@@ -363,6 +374,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
               <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
             )}
             <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
             {remainingBuiltinColumns.map((column) => (
               <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
             ))}
@@ -421,6 +433,13 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
               {/* 审批紧跟描述：每行都要扫一眼，不能放到要横滚才看得见的地方 */}
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
+              </th>
+              {/* 项目阶段紧跟审批：关联驱动派生的交付进度，同样是逐行要扫的信号 */}
+              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                <RequirementGridHeaderLabel
+                  icon={FolderKanban}
+                  label={t("project_requirements.project_stage_column")}
+                />
               </th>
               {remainingBuiltinColumns.map((column) => (
                 <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
@@ -579,6 +598,12 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   )}
                   <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
                     <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
+                  </td>
+                  <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
+                    <RequirementProjectStageBadges
+                      projectLinks={requirement.project_links}
+                      resolveProjectName={resolveProjectName}
+                    />
                   </td>
                   {remainingBuiltinColumns.map((column) => (
                     <td key={column.key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>

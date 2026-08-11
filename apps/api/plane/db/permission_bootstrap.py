@@ -59,7 +59,9 @@ MODULE_LABELS = {
     "project.asset": "项目资产",
     "project.group_grant": "项目用户组授权",
     "project.member": "项目成员",
+    "project.product_link": "项目关联产品",
     "project.publish": "项目发布",
+    "project.requirement_link": "项目关联需求",
     "project.role": "项目角色",
     "project.settings": "项目设置",
     "qa.case": "测试用例",
@@ -133,6 +135,23 @@ PERMISSION_OVERRIDES = {
         "module": "issue",
         "action": "import_export",
         "category": "工作项",
+    },
+    # 与 project.requirements.view 同归「需求」类，否则角色编辑器里三个 key 会散落
+    # 在「项目」类下，跟研发需求页那一项对不上。
+    "project.requirement_link.view": {
+        "name": "查看项目关联的产品需求",
+        "category": "需求",
+        "sort_order": 110,
+    },
+    "project.requirement_link.manage": {
+        "name": "关联/解除关联产品需求",
+        "category": "需求",
+        "sort_order": 120,
+    },
+    "project.product_link.manage": {
+        "name": "管理项目关联的产品",
+        "category": "需求",
+        "sort_order": 130,
     },
 }
 

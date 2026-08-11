@@ -37,7 +37,16 @@ import { ProjectSpreadsheetLayout } from "../spreadsheet/roots/project-root";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type TTypedPageVariant = "requirements" | "defects";
+/**
+ * 这个联合的取值必须与 TProjectIssueScope 逐字一致 —— 下面 `variant as
+ * TProjectIssueScope` 是一次无检查的断言，两边对不上不会有编译错误，只会让整条
+ * 链路（fetchFilters / getIssueFilters / 后端的 scope 查询参数）拿到一个不存在的
+ * scope，静默失去权限校验与类别过滤。
+ *
+ * dev_requirements 是「研发需求」工作项视图（/dev-requirements）。
+ * 产品需求实体页（/requirements）不走这个组件。
+ */
+export type TTypedPageVariant = "dev_requirements" | "defects";
 
 type TTypedProjectLayoutRootProps = {
   variant: TTypedPageVariant;
@@ -47,7 +56,7 @@ type TTypedProjectLayoutRootProps = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** 需求页面对应的类别名称 */
+/** 研发需求页面对应的工作项类别名称。这是 IssueType.category 的中文名，不是 URL —— 不要跟着路由改名 */
 const REQUIREMENTS_CATEGORY_NAME = "需求";
 
 /** 缺陷页面对应的类别名称 */
@@ -149,7 +158,7 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
 
   // ── Compute fixed type IDs ─────────────────────────────────────────────
-  const allowedCategoryName = variant === "requirements" ? REQUIREMENTS_CATEGORY_NAME : DEFECTS_CATEGORY_NAME;
+  const allowedCategoryName = variant === "dev_requirements" ? REQUIREMENTS_CATEGORY_NAME : DEFECTS_CATEGORY_NAME;
 
   const fixedTypeIds = useMemo(() => {
     if (!issueTypes || issueTypes.length === 0) return [];

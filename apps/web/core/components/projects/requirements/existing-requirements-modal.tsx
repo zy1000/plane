@@ -1,0 +1,324 @@
+/**
+ * 「关联需求」弹窗：从候选池里挑需求进本项目。
+ *
+ * 结构照搬 components/core/modals/existing-issues-list-modal.tsx（Combobox 多选 +
+ * 防抖搜索 + 无限滚动 + 请求序号防串台），但没有直接复用它 —— 那个组件的行渲染、
+ * 类型筛选、workspace 级开关全部绑死在工作项上，需求这边的行是编号 + 标题 + 所属
+ * 产品，套不进去。
+ *
+ * 候选池只包含**已关联产品下、且已通过评审**的需求，这条规则由服务端保证
+ * （utils/requirement_project.linkable_requirements_queryset）；前端不再过滤一遍，
+ * 否则两处规则迟早对不上。
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Combobox } from "@headlessui/react";
+import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
+import { CloseIcon, SearchIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
+import type { TRequirement } from "@plane/types";
+import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import { cn } from "@plane/utils";
+import { ProductChip } from "@/components/products/product-chip";
+import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import useDebounce from "@/hooks/use-debounce";
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
+import { RequirementService } from "@/services/requirement.service";
+
+const requirementService = new RequirementService();
+const PAGE_SIZE = 50;
+
+type TProps = {
+  isOpen: boolean;
+  workspaceSlug: string;
+  projectId: string;
+  /** 本项目已关联的产品。候选池就是从这些产品里来的，也是弹窗内产品筛选的选项 */
+  products: { id: string; name: string; identifier: string }[];
+  handleClose: () => void;
+  /** 返回后由调用方负责刷新列表 */
+  onSubmit: (requirementIds: string[]) => Promise<void>;
+};
+
+export const ExistingRequirementsModal = (props: TProps) => {
+  const { isOpen, workspaceSlug, projectId, products, handleClose: onClose, onSubmit } = props;
+  const { t } = useTranslation();
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [productFilter, setProductFilter] = useState<string | undefined>();
+  const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+  const [rows, setRows] = useState<TRequirement[]>([]);
+  const [selected, setSelected] = useState<TRequirement[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
+
+  const optionsContainerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 请求序号：搜索词变化很快，慢的那次响应可能后到并把新结果覆盖掉。
+   * 只认最后一次发出的请求。
+   */
+  const requestSequenceRef = useRef(0);
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+
+  const handleClose = useCallback(() => {
+    requestSequenceRef.current += 1;
+    onClose();
+    setSearchTerm("");
+    setRows([]);
+    setSelected([]);
+    setPage(0);
+    setHasMore(false);
+    setIsLoading(false);
+    setIsLoadingMore(false);
+    setProductFilter(undefined);
+  }, [onClose]);
+
+  const fetchRows = useCallback(
+    // nextPage 是**页序号**，不是行偏移。后端游标的形状是 "limit:page:is_prev"
+    // （见 utils/paginator.py 的 Cursor），第 0 页就是 "50:0:0"。
+    async ({ reset, nextPage }: { reset: boolean; nextPage: number }) => {
+      if (!isOpen || !workspaceSlug || !projectId) return;
+      const requestSequence = ++requestSequenceRef.current;
+
+      if (reset) {
+        setIsLoading(true);
+        setHasMore(false);
+      } else {
+        setIsLoadingMore(true);
+      }
+
+      try {
+        const response = await requirementService.listLinkableRequirements(workspaceSlug, projectId, {
+          search: debouncedSearchTerm,
+          productId: productFilter,
+          perPage: PAGE_SIZE,
+          cursor: `${PAGE_SIZE}:${nextPage}:0`,
+        });
+        if (requestSequence !== requestSequenceRef.current) return;
+
+        const results = response?.results ?? [];
+        setRows((previous) => (reset ? results : [...previous, ...results]));
+        setPage(nextPage);
+        setHasMore(Boolean(response?.next_page_results));
+      } catch {
+        if (requestSequence !== requestSequenceRef.current) return;
+        if (reset) setRows([]);
+        setHasMore(false);
+      } finally {
+        if (requestSequence === requestSequenceRef.current) {
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
+      }
+    },
+    [debouncedSearchTerm, isOpen, productFilter, projectId, workspaceSlug]
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    void fetchRows({ reset: true, nextPage: 0 });
+  }, [fetchRows, isOpen]);
+
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoading || isLoadingMore) return;
+    void fetchRows({ reset: false, nextPage: page + 1 });
+  }, [fetchRows, hasMore, isLoading, isLoadingMore, page]);
+
+  useIntersectionObserver(optionsContainerRef, loadMoreElement, loadMore, "0px 0px 120px 0px");
+
+  const selectedIds = useMemo(() => new Set(selected.map((row) => row.id)), [selected]);
+
+  const handleSubmit = async () => {
+    if (!selected.length) return;
+    setIsSubmitting(true);
+    try {
+      await onSubmit(selected.map((row) => row.id));
+      handleClose();
+    } catch (error) {
+      const payload = error as { error?: string } | null;
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: payload?.error ?? t("project_requirements.toast.failed"),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXXL}>
+      <Combobox
+        as="div"
+        onChange={(row: TRequirement) => {
+          setSelected((previous) =>
+            previous.some((item) => item.id === row.id)
+              ? previous.filter((item) => item.id !== row.id)
+              : [...previous, row]
+          );
+        }}
+      >
+        <div className="border-b border-subtle px-3 py-3">
+          <div className="relative">
+            <SearchIcon
+              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-secondary"
+              aria-hidden="true"
+            />
+            <Combobox.Input
+              className="h-10 w-full rounded-md border border-subtle bg-layer-1 pr-9 pl-9 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-primary"
+              placeholder={t("project_requirements.linkable.search_placeholder")}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                aria-label={t("cancel")}
+                onClick={() => setSearchTerm("")}
+                className="absolute top-1/2 right-3 -translate-y-1/2 rounded p-0.5 text-secondary hover:bg-layer-2 hover:text-primary"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/*
+          候选池横跨本项目关联的全部产品。产品多起来时，一个没有分面的扁平列表根本挑
+          不动 —— 与主列表的产品页签同一个理由。
+        */}
+        {products.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1 border-b border-subtle px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setProductFilter(undefined)}
+              className={cn(
+                "h-6 rounded-md px-2 text-11 transition-colors",
+                productFilter === undefined
+                  ? "bg-layer-2 text-primary"
+                  : "text-secondary hover:bg-layer-transparent-hover"
+              )}
+            >
+              {t("project_requirements.all_products")}
+            </button>
+            {products.map((product) => (
+              <button
+                key={product.id}
+                type="button"
+                onClick={() => setProductFilter(product.id)}
+                className={cn(
+                  "h-6 rounded-md px-2 text-11 transition-colors",
+                  productFilter === product.id
+                    ? "bg-layer-2 text-primary"
+                    : "text-secondary hover:bg-layer-transparent-hover"
+                )}
+              >
+                {product.identifier}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 已选区：与工作项弹窗一致，选中项以可撤销的胶囊常驻在搜索框下方 */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-subtle px-3 py-2 text-13 text-secondary">
+          {selected.length > 0 ? (
+            selected.map((row) => (
+              <span
+                key={row.id}
+                className="flex items-center gap-1 rounded-md border border-subtle bg-layer-1 py-1 pr-1 pl-2 text-11 whitespace-nowrap text-primary"
+              >
+                {row.display_id ?? row.title}
+                <button
+                  type="button"
+                  className="group p-1"
+                  onClick={() => setSelected((previous) => previous.filter((item) => item.id !== row.id))}
+                >
+                  <CloseIcon className="h-3 w-3 text-secondary group-hover:text-primary" />
+                </button>
+              </span>
+            ))
+          ) : (
+            <span className="w-min rounded-md border border-subtle bg-layer-1 p-2 text-11 whitespace-nowrap">
+              {t("project_requirements.linkable.selected", { count: 0 })}
+            </span>
+          )}
+        </div>
+
+        <Combobox.Options static as="div" ref={optionsContainerRef} className="max-h-96 overflow-y-auto px-2 py-2">
+          {isLoading ? (
+            <Loader className="space-y-2 p-2">
+              <Loader.Item height="36px" />
+              <Loader.Item height="36px" />
+              <Loader.Item height="36px" />
+            </Loader>
+          ) : rows.length === 0 ? (
+            <p className="px-3 py-8 text-center text-13 text-secondary">
+              {t("project_requirements.linkable.empty")}
+            </p>
+          ) : (
+            <>
+              {rows.map((row) => {
+                const isSelected = selectedIds.has(row.id);
+                return (
+                  <Combobox.Option
+                    key={row.id}
+                    value={row}
+                    className={({ active }) =>
+                      cn(
+                        "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-13 text-primary select-none",
+                        active && "bg-layer-transparent-hover",
+                        isSelected && "bg-accent-primary/5"
+                      )
+                    }
+                  >
+                    <input type="checkbox" checked={isSelected} readOnly className="pointer-events-none size-3.5" />
+                    {row.display_id && <RequirementIdentifier displayId={row.display_id} />}
+                    <Tooltip tooltipContent={row.title}>
+                      <span className="min-w-0 flex-1 truncate">{row.title}</span>
+                    </Tooltip>
+                    {/*
+                      候选池横跨本项目已关联的全部产品，两条同名需求只能靠这个区分。
+                      窄弹窗里只留标识徽标，名字进 tooltip。
+                    */}
+                    <ProductChip
+                      identifier={productById.get(row.product_id ?? "")?.identifier}
+                      name={productById.get(row.product_id ?? "")?.name}
+                      hideName
+                      className="shrink-0"
+                    />
+                  </Combobox.Option>
+                );
+              })}
+              {/* 无限滚动哨兵 */}
+              <div ref={setLoadMoreElement} className="h-1" />
+              {isLoadingMore && (
+                <p className="px-3 py-2 text-center text-11 text-secondary">{t("loading")}</p>
+              )}
+            </>
+          )}
+        </Combobox.Options>
+
+        <div className="flex items-center justify-end gap-2 border-t border-subtle px-3 py-3">
+          <Button variant="neutral-primary" size="sm" onClick={handleClose}>
+            {t("cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={isSubmitting}
+            disabled={!selected.length || isSubmitting}
+            onClick={() => void handleSubmit()}
+          >
+            {selected.length > 0
+              ? `${t("project_requirements.linkable.submit")} · ${selected.length}`
+              : t("project_requirements.linkable.submit")}
+          </Button>
+        </div>
+      </Combobox>
+    </ModalCore>
+  );
+};

@@ -129,6 +129,18 @@ export type TRequirement = TRequirementBuiltinValues & {
   is_locked: boolean;
   can_submit_review: boolean;
   can_withdraw: boolean;
+  /**
+   * 这条需求被哪些项目引用（RequirementProject）。
+   *
+   * 只有产品需求列表会注解它 —— 详情页的「所属项目」多选靠它回显。别处恒为 []，
+   * 不是 undefined，所以调用方不必到处补 ?? []。
+   */
+  project_ids: string[];
+  /**
+   * 逐项目的关联行（项目 + 该项目内的阶段）。project_ids 由它派生保留，老消费点不破坏。
+   * 注解口径与 project_ids 相同：只有产品需求列表会注解，别处恒为 []。
+   */
+  project_links: { project_id: string; stage: TRequirementProjectStage }[];
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -321,6 +333,113 @@ export type TRequirementConfigurationPayload = {
 };
 
 export type TRequirementsResponse = TPaginatedResponse<TRequirement[]>;
+
+/* --- 需求进项目（RequirementProject） -------------------------------------- */
+
+/**
+ * 需求在某个项目内的交付阶段。与 TRequirement 上的 status（全局、粗粒度）正交：
+ * 同一条需求可以在 A 项目已发布、在 B 项目还没开工。
+ */
+export type TRequirementProjectStage =
+  | "linked"
+  | "planned"
+  | "in_progress"
+  | "done"
+  | "pending_verification"
+  | "released";
+
+/** 阶段全序（阶梯）。重算取最高档；in_progress/done 本期不产出，P3 工作项派生时启用 */
+export const REQUIREMENT_PROJECT_STAGES: TRequirementProjectStage[] = [
+  "linked",
+  "planned",
+  "in_progress",
+  "done",
+  "pending_verification",
+  "released",
+];
+
+/** 项目侧看到的一条需求：需求内容 + 本项目内的阶段。内容一律只读。 */
+export type TProjectRequirement = TRequirement & {
+  stage: TRequirementProjectStage;
+  /** 关联行上的排序，与需求本体的 sort_order 是两个数 */
+  link_sort_order: number | null;
+  product_name: string | null;
+  /** 产品标识（ECOM），画所属产品 chip 的徽标要它 */
+  product_identifier: string | null;
+  /** 最新有效迭代关联的迭代名，阶段胶囊 tooltip 拼推导依据用；无关联为 null */
+  latest_cycle_name: string | null;
+  /** 最新在途/已发布发布单名，同上 */
+  latest_release_name: string | null;
+  /** 已排期但关联迭代已结束。时间盒到期不降档，只做「迭代已结束」黄标 */
+  carryover: boolean;
+};
+
+/**
+ * 项目需求页顶部分面的计数。
+ *
+ * 口径由服务端定死（utils/requirement_project.requirement_facets）：
+ * `by_product` 是全集、不随任何筛选变化；`by_stage` / `by_requirement_type` 只跟随
+ * 当前选中的产品，不跟随搜索与它们自身。前端不要再二次加工这些数字。
+ */
+export type TProjectRequirementFacets = {
+  by_product: { product_id: string; name: string; identifier: string; count: number }[];
+  /** 全部阶段的键恒存在（含 0），阶段条段数固定 */
+  by_stage: Record<TRequirementProjectStage, number>;
+  by_requirement_type: Record<string, number>;
+  total: number;
+};
+
+export type TProjectRequirementsResponse = Omit<
+  TPaginatedResponse<TProjectRequirement[]>,
+  "extra_stats"
+> & {
+  /** 项目需求列表带分面；迭代/发布容器的需求列表复用同一信封，但不带分面 */
+  extra_stats?: TProjectRequirementFacets | null;
+};
+
+/** 关联行本身。改排序的接口返回它；stage 是纯派生，写入口已退役 */
+export type TRequirementProjectLink = {
+  id: string;
+  requirement: string;
+  project: string;
+  workspace: string;
+  stage: TRequirementProjectStage;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+/** 产品 ↔ 项目关联行。项目靠它确定自己能引用哪些产品的需求 */
+export type TProductProject = {
+  id: string;
+  product: string;
+  project: string;
+  workspace: string;
+  product_name: string;
+  product_identifier: string;
+  project_detail: {
+    id: string;
+    name: string;
+    identifier: string;
+    logo_props?: TLogoProps;
+  } | null;
+  /** 本产品有多少需求进了这个项目 */
+  requirement_count: number;
+  /** 各阶段各多少。全部阶段的键恒存在（含 0） */
+  stage_counts: Record<TRequirementProjectStage, number>;
+  created_at: string;
+  created_by: string | null;
+};
+
+/**
+ * 迭代/发布单批量关联需求的请求体（POST .../cycles|releases/<id>/requirements/）。
+ * 解除关联走 DELETE 单条，不用载荷。
+ */
+export type TRequirementContainerLinkPayload = {
+  requirements: string[];
+};
 
 /* --- 从标准库导入 -------------------------------------------------------- */
 

@@ -923,6 +923,12 @@ ROW_FIELDS = [
     "is_locked",
     "can_submit_review",
     "can_withdraw",
+    # 这条需求被哪些项目引用（RequirementProject）。只有产品需求列表会注解它，
+    # 别处拿不到注解时返回 []，见 utils/requirement_project.annotate_project_links。
+    # project_ids 由 project_links 派生保留 —— 「所属项目」多选只要 id 列表，
+    # 阶段徽章要 (project_id, stage) 对。
+    "project_ids",
+    "project_links",
     "created_at",
     "updated_at",
     "created_by",
@@ -948,11 +954,25 @@ class RequirementSerializer(BaseSerializer):
     can_withdraw = serializers.SerializerMethodField()
     display_id = serializers.SerializerMethodField()
     source_display_id = serializers.SerializerMethodField()
+    project_ids = serializers.SerializerMethodField()
+    project_links = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
         fields = ROW_FIELDS
         read_only_fields = fields
+
+    def get_project_links(self, obj):
+        # 没注解就是 [] 而不是 None —— 前端直接 map，
+        # 少一处 ?? [] 就少一处忘了写的机会
+        return [
+            {"project_id": str(item["project_id"]), "stage": item["stage"]}
+            for item in getattr(obj, "project_links", None) or []
+        ]
+
+    def get_project_ids(self, obj):
+        # 从 project_links 派生，两个字段永远一致
+        return [item["project_id"] for item in self.get_project_links(obj)]
 
     def get_display_id(self, obj):
         # 作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目/库

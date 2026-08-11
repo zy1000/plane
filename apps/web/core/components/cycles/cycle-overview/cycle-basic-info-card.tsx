@@ -12,6 +12,7 @@ import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
+import { CycleCompleteConfirmModal } from "@/components/cycles/cycle-complete-confirm-modal";
 import { useCycleStatusChange } from "@/components/cycles/use-cycle-status-change";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
@@ -63,7 +64,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const canChangeStatus = canEdit && !cycleDetails?.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = canEdit && !cycleDetails?.archived_at && !isCompleted;
   const canUpdateOwner = canEdit && !cycleDetails?.archived_at && isCurrentOwner;
-  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps, completeConfirmModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
     cycleId,
@@ -92,6 +93,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-between">
       <TestingDatesConfirmModal {...testingDatesModalProps} />
+      <CycleCompleteConfirmModal {...completeConfirmModalProps} />
       <div className="grid grid-cols-3 gap-3 pt-2 pb-5">
         <div className="flex min-w-0 flex-col items-center gap-2">
           <span className="text-center text-sm font-medium leading-5 text-primary">工作项完成率</span>
@@ -229,7 +231,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
             </CustomSelect>
           ) : statusInfo ? (
             <span
-              className="inline-flex min-w-0 flex-1 items-center rounded-md px-2.5 py-1 text-sm font-medium"
+              className="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium"
               style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
             >
               {t(statusInfo.i18n_title)}

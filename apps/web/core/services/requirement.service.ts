@@ -1,6 +1,8 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateRequirementLibraryPayload,
+  TProductProject,
+  TProjectRequirementsResponse,
   TRequirement,
   TRequirementApprovalAction,
   TRequirementApprovalInboxResponse,
@@ -22,12 +24,15 @@ import type {
   TRequirementChangeType,
   TRequirementConfiguration,
   TRequirementConfigurationPayload,
+  TRequirementContainerLinkPayload,
   TRequirementData,
   TRequirementFilter,
   TRequirementImportPayload,
   TRequirementImportResponse,
   TRequirementLibrary,
   TRequirementLibraryConfiguration,
+  TRequirementProjectLink,
+  TRequirementProjectStage,
   TRequirementsResponse,
   TRequirementSubmitReviewPayload,
   TRequirementTrailResponse,
@@ -36,24 +41,51 @@ import type {
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
+/** 需求接口的作用域。product = 归属（可写），project = 引用（只读） */
+export type TRequirementScope = { kind: "product" | "project"; id: string };
+
 export class RequirementService extends APIService {
   constructor() {
     super(API_BASE_URL);
   }
 
-  /** 产品需求条目的作用域前缀 */
-  private requirementsRoot(workspaceSlug: string, productId: string) {
-    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirements`;
+  /**
+   * 作用域前缀。产品是需求的**归属**，项目只是**引用** —— 两个作用域下的能力完全
+   * 不同（项目侧没有任何内容写入口），所以不要拿它当通用的「换个 id 就行」开关。
+   */
+  private scopeRoot(workspaceSlug: string, scope: TRequirementScope) {
+    const segment = scope.kind === "product" ? "products" : "projects";
+    return `/api/workspaces/${workspaceSlug}/${segment}/${scope.id}`;
   }
 
-  /** 变更单的作用域前缀 */
+  /** 产品需求条目的作用域前缀 */
+  private requirementsRoot(workspaceSlug: string, productId: string) {
+    return `${this.scopeRoot(workspaceSlug, { kind: "product", id: productId })}/requirements`;
+  }
+
+  /** 项目引用的需求 */
+  private projectRequirementsRoot(workspaceSlug: string, projectId: string) {
+    return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/requirements`;
+  }
+
+  /** 迭代关联的需求 */
+  private cycleRequirementsRoot(workspaceSlug: string, projectId: string, cycleId: string) {
+    return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/cycles/${cycleId}/requirements`;
+  }
+
+  /** 发布单关联的需求 */
+  private releaseRequirementsRoot(workspaceSlug: string, projectId: string, releaseId: string) {
+    return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/releases/${releaseId}/requirements`;
+  }
+
+  /** 变更单的作用域前缀。**始终是产品** —— 项目只是提单入口，审批权威不下放 */
   private changeRequestsRoot(workspaceSlug: string, productId: string) {
-    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-change-requests`;
+    return `${this.scopeRoot(workspaceSlug, { kind: "product", id: productId })}/requirement-change-requests`;
   }
 
   /** 基线快照的作用域前缀 */
   private baselinesRoot(workspaceSlug: string, productId: string) {
-    return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-baselines`;
+    return `${this.scopeRoot(workspaceSlug, { kind: "product", id: productId })}/requirement-baselines`;
   }
 
   /* --- 需求标准库 ------------------------------------------------------- */
@@ -658,6 +690,294 @@ export class RequirementService extends APIService {
         ...(params.perPage ? { per_page: params.perPage } : {}),
       },
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 项目 ↔ 产品 ------------------------------------------------------ */
+
+  async listProjectProducts(workspaceSlug: string, projectId: string): Promise<TProductProject[]> {
+    return this.get(`${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/products/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 一次调用同时增删，与工作项挂模块的接口同形 */
+  async updateProjectProducts(
+    workspaceSlug: string,
+    projectId: string,
+    payload: { products?: string[]; removed_products?: string[] }
+  ): Promise<{ message: string }> {
+    return this.post(`${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/products/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 产品侧：这个产品被哪些项目引用 */
+  async listProductProjects(workspaceSlug: string, productId: string): Promise<TProductProject[]> {
+    return this.get(`${this.scopeRoot(workspaceSlug, { kind: "product", id: productId })}/projects/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 项目 ↔ 需求 ------------------------------------------------------ */
+
+  /** 项目网格渲染自定义列所需的需求类型与字段。形状与产品的 configuration 一致，但 policy 恒为 null */
+  async getProjectRequirementConfiguration(
+    workspaceSlug: string,
+    projectId: string
+  ): Promise<TRequirementConfiguration> {
+    return this.get(`${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/requirement-configuration/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listProjectRequirements(
+    workspaceSlug: string,
+    projectId: string,
+    params: {
+      cursor?: string;
+      perPage?: number;
+      search?: string;
+      filters?: TRequirementFilter[];
+      requirementTypeId?: string;
+      /** 只看某个产品来的需求；项目可以同时引用多个产品 */
+      productId?: string;
+      stage?: TRequirementProjectStage;
+      ids?: string[];
+      /** 关联选择器用：排除已关联到该迭代的行 */
+      exclude_cycle_id?: string;
+      /** 关联选择器用：排除已关联到该发布单的行 */
+      exclude_release_id?: string;
+    } = {}
+  ): Promise<TProjectRequirementsResponse> {
+    return this.get(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.search ? { search: params.search } : {}),
+        ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
+        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
+        ...(params.productId ? { product_id: params.productId } : {}),
+        ...(params.stage ? { stage: params.stage } : {}),
+        ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
+        ...(params.exclude_cycle_id ? { exclude_cycle_id: params.exclude_cycle_id } : {}),
+        ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 候选池：可以关联进本项目的需求。
+   *
+   * 只包含已关联产品下、且已通过评审的需求 —— 未过评审的需求不进入交付链路。
+   */
+  async listLinkableRequirements(
+    workspaceSlug: string,
+    projectId: string,
+    params: {
+      cursor?: string;
+      perPage?: number;
+      search?: string;
+      requirementTypeId?: string;
+      productId?: string;
+    } = {}
+  ): Promise<TRequirementsResponse> {
+    return this.get(`${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/linkable-requirements/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+        ...(params.search ? { search: params.search } : {}),
+        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
+        ...(params.productId ? { product_id: params.productId } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async linkRequirementsToProject(
+    workspaceSlug: string,
+    projectId: string,
+    payload: { requirements: string[] }
+  ): Promise<{ message: string }> {
+    return this.post(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除关联。软删关联行 —— 需求本体、版本、审批历史一律不动 */
+  async unlinkRequirementFromProject(
+    workspaceSlug: string,
+    projectId: string,
+    requirementId: string
+  ): Promise<void> {
+    return this.delete(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/${requirementId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 改本项目内的排序。阶段已改为纯派生（由迭代/发布关联事实重算），
+   * payload 带 stage 服务端会以 REQUIREMENT_STAGE_DERIVED 拒绝。
+   */
+  async updateProjectRequirement(
+    workspaceSlug: string,
+    projectId: string,
+    requirementId: string,
+    payload: { sort_order?: number }
+  ): Promise<TRequirementProjectLink> {
+    return this.patch(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/${requirementId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 项目侧发起变更单。
+   *
+   * 变更单本身仍是产品作用域、审批人仍是产品的名单 —— 项目只是提单入口。
+   * 需求内容与已批准版本一致时服务端会以 REQUIREMENT_NO_CHANGES 拒绝，那是对的：
+   * 没有变化就没有可审的东西。
+   */
+  async submitChangeFromProject(
+    workspaceSlug: string,
+    projectId: string,
+    requirementId: string,
+    payload: { reason?: string } = {}
+  ): Promise<TRequirementChangeRequest> {
+    return this.post(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/${requirementId}/changes/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 需求侧：改这条需求进了哪些项目 */
+  async updateRequirementProjects(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    payload: { projects?: string[]; removed_projects?: string[] }
+  ): Promise<{ message: string }> {
+    return this.post(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/projects/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 迭代/发布单 ↔ 需求（容器关联） ------------------------------------ */
+
+  /** 迭代已关联的需求列表。行形状与项目需求列表一致，但不带分面 */
+  async listCycleRequirements(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TProjectRequirementsResponse> {
+    return this.get(`${this.cycleRequirementsRoot(workspaceSlug, projectId, cycleId)}/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量关联需求进迭代。需求必须先关联本项目，否则服务端 409；阶段升档由服务端重算 */
+  async linkRequirementsToCycle(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    payload: TRequirementContainerLinkPayload
+  ): Promise<{ message: string }> {
+    return this.post(`${this.cycleRequirementsRoot(workspaceSlug, projectId, cycleId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除需求与迭代的关联。软删关联行，阶段降档与留痕由服务端重算 */
+  async unlinkRequirementFromCycle(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    requirementId: string
+  ): Promise<void> {
+    return this.delete(`${this.cycleRequirementsRoot(workspaceSlug, projectId, cycleId)}/${requirementId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 发布单已关联的需求列表。行形状与项目需求列表一致，但不带分面 */
+  async listReleaseRequirements(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TProjectRequirementsResponse> {
+    return this.get(`${this.releaseRequirementsRoot(workspaceSlug, projectId, releaseId)}/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量关联需求进发布单。需求必须先关联本项目，否则服务端 409；阶段升档由服务端重算 */
+  async linkRequirementsToRelease(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    payload: TRequirementContainerLinkPayload
+  ): Promise<{ message: string }> {
+    return this.post(`${this.releaseRequirementsRoot(workspaceSlug, projectId, releaseId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除需求与发布单的关联。软删关联行，阶段降档与留痕由服务端重算 */
+  async unlinkRequirementFromRelease(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    requirementId: string
+  ): Promise<void> {
+    return this.delete(`${this.releaseRequirementsRoot(workspaceSlug, projectId, releaseId)}/${requirementId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

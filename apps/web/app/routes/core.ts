@@ -213,7 +213,18 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/issues/(list)/page.tsx"
             ),
           ]),
-          // Requirements List (epic / feature / user story)
+          // Dev Requirements List — 工作项视图（epic / feature / user story）
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/dev-requirements/(list)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/dev-requirements",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/dev-requirements/(list)/page.tsx"
+              ),
+            ]
+          ),
+          // Product Requirements — 关联进本项目的产品需求（RequirementProject）。
+          // 刻意接管 /requirements 这个 URL，不加重定向：老书签打开的就是新页面。
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/requirements/(list)/layout.tsx", [
             route(
               ":workspaceSlug/projects/:projectId/requirements",

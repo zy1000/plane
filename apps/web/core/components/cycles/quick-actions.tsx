@@ -33,6 +33,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { ArchiveCycleModal } from "./archived-cycles/modal";
 import { CycleDeleteModal } from "./delete-modal";
 import { CycleCreateUpdateModal } from "./modal";
+import { CycleCompleteConfirmModal } from "./cycle-complete-confirm-modal";
 import { useCycleStatusChange } from "./use-cycle-status-change";
 
 type Props = {
@@ -68,7 +69,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const canDeleteSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
   const canArchiveSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY], workspaceSlug, projectId);
   const canChangeStatus = Boolean(cycleDetails && isEditingAllowed && canEditSprint && !cycleDetails.archived_at);
-  const { handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+  const { handleStatusChange, testingDatesModalProps, completeConfirmModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
     cycleId,
@@ -191,6 +192,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
             projectId={projectId}
           />
           <TestingDatesConfirmModal {...testingDatesModalProps} />
+          <CycleCompleteConfirmModal {...completeConfirmModalProps} />
           {additionalModals}
         </div>
       )}

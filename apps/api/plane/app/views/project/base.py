@@ -685,7 +685,27 @@ class ProjectViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.PROJECT_DELETE)
     def destroy(self, request, slug, pk):
         project = Project.objects.get(pk=pk, workspace__slug=slug)
+        # 删除项目改变需求「全部已发布」判定的分母(项目下的需求关联行随级联软删,
+        # 但级联是异步的且不会触发回写)。先取受影响需求、同步软删三张关联行,
+        # 项目删完后逐条回写需求本体 status
+        from plane.db.models import (
+            RequirementCycle,
+            RequirementProject,
+            RequirementRelease,
+        )
+        from plane.utils.requirement_project import recalculate_requirement_status
+
+        affected_requirement_ids = list(
+            RequirementProject.objects.filter(project_id=pk).values_list(
+                "requirement_id", flat=True
+            )
+        )
+        RequirementCycle.objects.filter(project_id=pk).delete()
+        RequirementRelease.objects.filter(project_id=pk).delete()
+        RequirementProject.objects.filter(project_id=pk).delete()
         project.delete()
+        for requirement_id in affected_requirement_ids:
+            recalculate_requirement_status(requirement_id)
         webhook_activity.delay(
             event="project",
             verb="deleted",

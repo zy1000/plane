@@ -1,6 +1,9 @@
 from django.urls import path
 
 from plane.app.views.requirement import (
+    CycleRequirementViewSet,
+    ProjectRequirementViewSet,
+    ReleaseRequirementViewSet,
     RequirementApprovalInboxAPIView,
     RequirementBaselineViewSet,
     RequirementConfigurationAPIView,
@@ -10,6 +13,7 @@ from plane.app.views.requirement import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
+    RequirementProjectsViewSet,
     RequirementTypeConfigurationAPIView,
     RequirementTypeViewSet,
     RequirementVersionViewSet,
@@ -131,6 +135,62 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/versions/",
         RequirementVersionViewSet.as_view({"get": "list"}),
         name="product-requirement-versions",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/projects/",
+        RequirementProjectsViewSet.as_view({"post": "create"}),
+        name="product-requirement-projects",
+    ),
+    # --- 项目需求：引用产品需求 -------------------------------------------
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/",
+        ProjectRequirementViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/linkable-requirements/",
+        ProjectRequirementViewSet.as_view({"get": "linkable"}),
+        name="project-linkable-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirement-configuration/",
+        ProjectRequirementViewSet.as_view({"get": "configuration"}),
+        name="project-requirement-configuration",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/<uuid:requirement_id>/",
+        ProjectRequirementViewSet.as_view(
+            {"patch": "partial_update", "delete": "destroy"}
+        ),
+        name="project-requirement-item",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/<uuid:requirement_id>/changes/",
+        ProjectRequirementViewSet.as_view({"post": "submit_change"}),
+        name="project-requirement-changes",
+    ),
+    # --- 项目需求：迭代 / 发布关联（阶段派生的事实来源） -----------------
+    # URL kwarg 统一叫 container_id：两套端点共用 BaseRequirementContainerViewSet，
+    # 方法签名一致；kwarg 名不出现在 URL 文本里，对客户端不可见
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:container_id>/requirements/",
+        CycleRequirementViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-cycle-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:container_id>/requirements/<uuid:requirement_id>/",
+        CycleRequirementViewSet.as_view({"delete": "destroy"}),
+        name="project-cycle-requirement-item",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:container_id>/requirements/",
+        ReleaseRequirementViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-release-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:container_id>/requirements/<uuid:requirement_id>/",
+        ReleaseRequirementViewSet.as_view({"delete": "destroy"}),
+        name="project-release-requirement-item",
     ),
     # --- 产品需求：审批配置与变更单 -------------------------------------
     path(

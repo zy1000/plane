@@ -41,6 +41,7 @@ from plane.utils.requirement import (
     requirement_types_field_payload_from_specs,
     scope_row_filter,
 )
+from plane.utils.requirement_project import annotate_project_links
 
 
 def policy_with_relations(policy_id):
@@ -181,6 +182,12 @@ class RequirementViewSet(BaseRequirementRowViewSet):
             slug=self.workspace_slug,
             library_id=library_id,
         )
+
+    has_extra_annotations = True
+
+    def annotate_extra(self, queryset):
+        # 需求详情的「所属项目」多选要拿到这条需求进了哪些项目
+        return annotate_project_links(queryset)
 
     def get_queryset(self):
         return (

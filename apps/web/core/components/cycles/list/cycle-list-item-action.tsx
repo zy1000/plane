@@ -44,6 +44,7 @@ import { CycleAdditionalActions } from "@/plane-web/components/cycles";
 import { CycleQuickActions } from "../quick-actions";
 import { TransferIssuesModal } from "../transfer-issues-modal";
 import { formatCycleUpdateError } from "../use-cycle-error-message";
+import { CycleCompleteConfirmModal } from "../cycle-complete-confirm-modal";
 import { useCycleStatusChange } from "../use-cycle-status-change";
 
 type Props = {
@@ -135,7 +136,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = isEditingAllowed && !cycleDetails.archived_at && !isCompleted;
   const canUpdateOwner = isEditingAllowed && !cycleDetails.archived_at && isCurrentOwner;
-  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps, completeConfirmModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
     cycleId,
@@ -313,6 +314,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
         cycleId={cycleId.toString()}
       />
       <TestingDatesConfirmModal {...testingDatesModalProps} />
+      <CycleCompleteConfirmModal {...completeConfirmModalProps} />
       <button
         onClick={openCycleOverview}
         className={`z-[1] flex flex-shrink-0 gap-1 text-11 text-accent-secondary ${

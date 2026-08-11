@@ -1,5 +1,3 @@
-import { ProductFeaturePage } from "@/components/products";
+import { ProductProjectsPage } from "@/components/products/projects";
 
-export default function ProductProjectsPage() {
-  return <ProductFeaturePage tabKey="projects" />;
-}
+export default ProductProjectsPage;

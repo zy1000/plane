@@ -144,7 +144,13 @@ from .workflow import (
     IssueTransitionApprovalRecord,
 )
 from .timesheet import TimeSheet, TimesheetCategory
-from .product import Product, ProductMember, ProductMemberRole, ProductRole
+from .product import (
+    Product,
+    ProductMember,
+    ProductMemberRole,
+    ProductProject,
+    ProductRole,
+)
 from .requirement import (
     Requirement,
     RequirementApprovalAction,
@@ -159,13 +165,19 @@ from .requirement import (
     RequirementChangeRequest,
     RequirementChangeStatus,
     RequirementChangeType,
+    RequirementCycle,
     RequirementField,
     RequirementFieldCategory,
     RequirementFieldType,
     RequirementItemStatus,
     RequirementLibrary,
     RequirementPriority,
+    RequirementProject,
+    RequirementProjectActivity,
+    RequirementProjectStage,
+    RequirementRelease,
     RequirementScope,
+    STAGE_LADDER,
     RequirementType,
     RequirementTypeSchemaRevision,
     RequirementVersion,

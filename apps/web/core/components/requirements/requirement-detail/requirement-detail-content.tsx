@@ -32,6 +32,7 @@ import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/ap
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { RequirementChangeTrail } from "./requirement-change-trail";
 import { RequirementModifiedBanner } from "./requirement-modified-banner";
+import { RequirementProjectsSelect } from "./requirement-projects-select";
 import { RequirementPropertyBar } from "./requirement-property-bar";
 import { RequirementSubformSection } from "./requirement-subform-section";
 import { RequirementVersionHistory } from "./requirement-version-history";
@@ -469,6 +470,7 @@ export const RequirementDetailProperties = ({
   productId,
   resolveParentTitle,
   onPatch,
+  onProjectsChanged,
 }: {
   requirement: TRequirement;
   requirementTypeName: string | null;
@@ -477,6 +479,8 @@ export const RequirementDetailProperties = ({
   productId: string;
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
+  /** project_ids 是服务端注解的，改完必须重新拉这一行才能回显 */
+  onProjectsChanged?: () => void;
 }) => {
   const { t } = useTranslation();
   const parentScope = useMemo(() => ({ workspaceSlug, productId }), [productId, workspaceSlug]);
@@ -496,6 +500,22 @@ export const RequirementDetailProperties = ({
           value: requirementTypeName ?? "—",
         }}
       />
+
+      {/*
+        所属项目：这条需求进了哪些项目（RequirementProject）。它不是需求的内容字段，
+        所以不进 PropertyGrid —— 那一栅格里的每一项都会走 onPatch 写回需求本体，而
+        这里写的是关联表。
+      */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-11 text-tertiary">{t("requirement_detail.projects.label")}</span>
+        <RequirementProjectsSelect
+          workspaceSlug={workspaceSlug}
+          productId={productId}
+          requirement={requirement}
+          readOnly={readOnly}
+          onChanged={onProjectsChanged}
+        />
+      </div>
 
       <div className="mt-auto flex flex-col gap-1 border-t border-subtle pt-3 text-11 text-placeholder">
         <span>{t("requirement_detail.meta.created_at", { date: requirement.created_at?.slice(0, 10) ?? "—" })}</span>

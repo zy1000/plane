@@ -56,6 +56,10 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import {
+  getCycleScopeSubTabStorageKey,
+  useScopeSubTab,
+} from "@/components/common/use-scope-sub-tab";
 import useLocalStorage from "@/hooks/use-local-storage";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
@@ -153,6 +157,14 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
       ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/attachments`
       : "";
   const cycleScopePath = workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}` : "";
+  /**
+   * 「迭代范围」页里的二级切换。右侧工具条（布局切换 / 筛选 / 添加工作项）只服务于
+   * 工作项子页，切到需求时必须整排隐藏。页面与 header 是两棵渲染树，靠
+   * useLocalStorage 的同 key 广播同步。
+   */
+  const { activeSubTab: activeScopeSubTab } = useScopeSubTab(
+    getCycleScopeSubTabStorageKey(cycleId?.toString() ?? "unknown")
+  );
   const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
   const isAttachmentsActive = /\/attachments\/?$/.test(pathname ?? "");
   const activeCycleTab = isOverviewActive
@@ -307,7 +319,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             ) : null}
           </div>
         </Header.LeftItem>
-        {activeCycleTab === "scope" && (
+        {activeCycleTab === "scope" && activeScopeSubTab === "work-items" && (
           <Header.RightItem className="items-center">
             <div className="hidden items-center gap-2 md:flex">
               <div className="hidden @4xl:flex">

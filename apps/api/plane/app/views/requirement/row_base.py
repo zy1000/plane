@@ -201,13 +201,47 @@ class BaseRequirementRowViewSet(BaseViewSet):
 
         return self.paginate(
             request=request,
-            queryset=annotate_pending(queryset),
+            queryset=self.annotate_extra(annotate_pending(queryset)),
             on_results=lambda results: RequirementSerializer(
                 results, many=True, context=self._row_context(layer, owner, results)
             ).data,
             default_per_page=20,
             max_per_page=100,
         )
+
+    #: 子类是否会在 annotate_extra 里加注解。为 True 时写操作的响应要重读一次补上，
+    #: 见 reload_with_extra。
+    has_extra_annotations = False
+
+    def annotate_extra(self, queryset):
+        """列表额外注解。默认什么也不加。
+
+        标准库条目走的是同一个 list()，但库里的条目不可能被项目引用 —— 让它们也
+        背上 project_ids 子查询是白花钱。产品需求那一支自己覆盖。
+        """
+        return queryset
+
+    def reload_with_extra(self, rows):
+        """把写操作返回的行重新读一遍，带上 annotate_extra 的注解。
+
+        必须这么做，不能省：`project_ids` 是注解字段，序列化器拿不到注解时会吐 `[]`
+        而不是「未知」。前端的详情抽屉把 PATCH 响应直接当作最新一行存下来
+        （use-requirement-detail.ts 的 applyRow），于是改一次优先级就会把「所属项目」
+        清空 —— 值是错的，而且看起来像是用户自己解除了关联。
+
+        没有额外注解的子类（标准库）原样返回，不多打一次查询。
+        """
+        rows = list(rows)
+        if not rows or not self.has_extra_annotations:
+            return rows
+        by_id = {
+            row.id: row
+            for row in self.annotate_extra(
+                self.model.objects.filter(id__in=[row.id for row in rows])
+            )
+        }
+        # 取不到就退回原行：这里只是补注解，不该让写操作因为读不到而失败
+        return [by_id.get(row.id, row) for row in rows]
 
     def create(self, request, *args, **kwargs):
         """新增永不设闸门 —— 新行恒为草稿态，没有已批准内容需要保护。
@@ -324,6 +358,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     "updated_by",
                 ]
             )
+        [row] = self.reload_with_extra([row])
         return Response(
             RequirementSerializer(
                 row, context=self._row_context(layer, owner, [row])
@@ -463,6 +498,9 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     status=status.HTTP_409_CONFLICT,
                 )
 
+        # 写路径同样要补注解，否则网格的 syncRequirements 会把空的 project_ids
+        # 合并回当前页，抽屉再从那一页取种子行
+        updated = self.reload_with_extra(updated)
         context = self._row_context(
             layer, owner, [row for _, row in created] + list(updated)
         )

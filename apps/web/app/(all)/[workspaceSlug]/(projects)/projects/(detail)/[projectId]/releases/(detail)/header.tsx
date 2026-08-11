@@ -56,6 +56,10 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
+import {
+  getReleaseScopeSubTabStorageKey,
+  useScopeSubTab,
+} from "@/components/common/use-scope-sub-tab";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 import { IconButton } from "@plane/propel/icon-button";
@@ -84,6 +88,14 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const { currentProjectDetails, loader } = useProject();
   const { setValue, storedValue } = useLocalStorage("release_sidebar_collapsed", "false");
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
+  /**
+   * 「发布内容」页里的二级切换。右侧那排工具条（布局切换 / 筛选 / 分析 / 添加工作项）
+   * 只服务于工作项子页，切到需求时必须整排隐藏 —— 否则「添加工作项」看起来像是往
+   * 需求列表里加东西。页面与 header 是两棵渲染树，靠 useLocalStorage 的同 key 广播同步。
+   */
+  const { activeSubTab: activeScopeSubTab } = useScopeSubTab(
+    getReleaseScopeSubTabStorageKey(releaseId?.toString() ?? "unknown")
+  );
   const activeLayout = issueFilters?.displayFilters?.layout;
   const releaseDetails = releaseId ? getReleaseById(releaseId) : undefined;
   const { setValue: setStoredReleaseDetailTab, storedValue: storedReleaseDetailTab } = useLocalStorage<
@@ -275,7 +287,7 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
             )}
           </div>
         </Header.LeftItem>
-        {!isOverviewActive && (
+        {!isOverviewActive && activeScopeSubTab === "work-items" && (
           <Header.RightItem className="items-center">
             <div className="hidden gap-2 md:flex">
               <div className="hidden @4xl:flex">

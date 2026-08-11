@@ -4,6 +4,7 @@ export * from "./requirement-change-trail";
 export * from "./requirement-detail-content";
 export * from "./requirement-modified-banner";
 export * from "./requirement-peek-overview";
+export * from "./requirement-projects-select";
 export * from "./requirement-subform-section";
 export * from "./requirement-version-history";
 export * from "./use-requirement-detail";

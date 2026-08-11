@@ -10,7 +10,15 @@ from .change import (
     RequirementChangeTrailViewSet,
     RequirementVersionViewSet,
 )
+from .container import (
+    CycleRequirementViewSet,
+    ReleaseRequirementViewSet,
+)
 from .library import RequirementLibraryViewSet
+from .project import (
+    ProjectRequirementViewSet,
+    RequirementProjectsViewSet,
+)
 from .library_item import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
@@ -21,6 +29,9 @@ from .type import (
 )
 
 __all__ = [
+    "CycleRequirementViewSet",
+    "ProjectRequirementViewSet",
+    "ReleaseRequirementViewSet",
     "RequirementApprovalInboxAPIView",
     "RequirementBaselineViewSet",
     "RequirementChangeItemViewSet",
@@ -30,6 +41,7 @@ __all__ = [
     "RequirementLibraryConfigurationAPIView",
     "RequirementLibraryItemViewSet",
     "RequirementLibraryViewSet",
+    "RequirementProjectsViewSet",
     "RequirementTypeConfigurationAPIView",
     "RequirementTypeViewSet",
     "RequirementVersionViewSet",

@@ -19,6 +19,7 @@ import {
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
+  PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
   PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY,
   PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
   PROJECT_VIEWS_VIEW_PERMISSION_KEY,
@@ -27,7 +28,7 @@ import {
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, BookOpenText, Bug, Folder, Milestone, Rocket, Rss } from "lucide-react";
+import { ArchiveIcon, BookOpenText, Bug, Folder, ListChecks, Milestone, Rocket, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -80,6 +81,17 @@ export const useNavigationItems = ({
         name: "需求",
         href: `/${workspaceSlug}/projects/${projectId}/requirements`,
         icon: BookOpenText,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY],
+        shouldRender: true,
+        sortOrder: 1.2,
+      },
+      {
+        i18n_key: "sidebar.dev_requirements",
+        key: "dev_requirements",
+        name: "研发需求",
+        href: `/${workspaceSlug}/projects/${projectId}/dev-requirements`,
+        icon: ListChecks,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY],
         shouldRender: true,

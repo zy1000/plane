@@ -8,6 +8,7 @@ from django.db import models
 from django.db.models import Q
 
 from .base import BaseModel
+from .project import ProjectBaseModel
 
 
 DEFAULT_SORT_ORDER = 65535
@@ -42,8 +43,10 @@ class RequirementItemStatus(models.TextChoices):
     它**不算内容**（见 utils/requirement.py 的 NON_CONTENT_BUILTIN_COLUMNS）：研发做
     完了推进一格，不该触发一轮内容评审，也不该被内容回滚倒推回去。
 
-    implemented / obsolete 目前无人可写 —— 它们应当由关联任务派生出来（对齐禅道的
-    「研发阶段」），派生规则落地之前先空着，而不是留一个手选下拉假装它是内容。
+    implemented 由 utils/requirement_project.recalculate_requirement_status 对称
+    派生：所有关联项目的阶段均为已发布 → implemented，条件失效退回 confirmed ——
+    confirmed ↔ implemented 之间可往返，其余流转不可逆。obsolete 仍无人可写，
+    留给「需求关闭」的人为动作（P4）。
     """
 
     DRAFT = "draft", "草稿"
@@ -1286,3 +1289,192 @@ class RequirementBaselineEntry(BaseModel):
 
     def __str__(self):
         return f"{self.requirement_id} @ {self.baseline_id}"
+
+
+class RequirementProjectStage(models.TextChoices):
+    """需求在某个项目内的交付阶段。与 Requirement.status（全局）正交。
+
+    禅道把这个字段放在需求本体上，于是同一条需求在 A 项目已发布、B 项目还没开工时
+    一个字段存不下。这里放在关联行上：每个 (需求, 项目) 各有一份。
+
+    整列由 utils/requirement_project.recalculate_stage 按关联事实派生（取
+    STAGE_LADDER 里的最高档），不接受手动写入。in_progress / done 两档保留给
+    将来的工作项派生（P3），本期没有任何代码产出它们。
+    """
+
+    LINKED = "linked", "已立项"
+    PLANNED = "planned", "已排期"
+    IN_PROGRESS = "in_progress", "研发中"
+    DONE = "done", "研发完毕"
+    PENDING_VERIFICATION = "pending_verification", "待验证"
+    RELEASED = "released", "已发布"
+
+
+# 阶段全序。重算取「现存事实能达到的最高档」时按此比较；P3 的工作项派生
+# 落地时 in_progress / done 直接开始产出，无需重排。
+STAGE_LADDER = [
+    RequirementProjectStage.LINKED,
+    RequirementProjectStage.PLANNED,
+    RequirementProjectStage.IN_PROGRESS,
+    RequirementProjectStage.DONE,
+    RequirementProjectStage.PENDING_VERIFICATION,
+    RequirementProjectStage.RELEASED,
+]
+
+
+class RequirementProject(ProjectBaseModel):
+    """需求被项目引用的关联行。
+
+    需求本体仍归属产品（`Requirement.product`），此表只表达「引用」与「项目内进度」。
+    刻意**不复用** `Requirement.project` —— 那条腿是排他归属，由 CheckConstraint
+    requirement_owner_exactly_one 钉死；用它搬作用域会重新取号（编号永不复用，见
+    req_unique_product_sequence 上的注释）、让版本/基线/变更单的历史行作用域与活行
+    对不上，并且表达不了「一条需求同时被多个项目引用」。
+
+    归属唯一，引用多个。
+    """
+
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="requirement_projects",
+        verbose_name="关联需求",
+    )
+    stage = models.CharField(
+        max_length=20,
+        choices=RequirementProjectStage.choices,
+        default=RequirementProjectStage.LINKED,
+        db_index=True,
+        verbose_name="项目内阶段",
+    )
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="项目内排序")
+
+    class Meta:
+        unique_together = ["requirement", "project", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "project"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_project_unique_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Requirement Project"
+        verbose_name_plural = "Requirement Projects"
+        db_table = "requirement_projects"
+        ordering = ("sort_order", "-created_at")
+
+    def __str__(self):
+        return f"{self.requirement_id} @ {self.project_id}"
+
+
+class RequirementCycle(ProjectBaseModel):
+    """需求 ↔ 迭代的关联行。存在一条未取消的关联 = 该项目内「已排期」的事实。
+
+    只允许挂到需求**已关联项目**下的迭代（写入口校验，不建跨表约束 —— cycle 换
+    project 在本仓库不存在写路径）。迭代完成不改阶段（时间盒到期不是进度事实），
+    所以这张表不追踪迭代状态，重算时现查 cycle.status。
+    """
+
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="requirement_cycles",
+        verbose_name="关联需求",
+    )
+    cycle = models.ForeignKey(
+        "db.Cycle",
+        on_delete=models.CASCADE,
+        related_name="cycle_requirements",
+        verbose_name="关联迭代",
+    )
+
+    class Meta:
+        unique_together = ["requirement", "cycle", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "cycle"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_cycle_unique_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Requirement Cycle"
+        verbose_name_plural = "Requirement Cycles"
+        db_table = "requirement_cycles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.requirement_id} @ cycle {self.cycle_id}"
+
+
+class RequirementRelease(ProjectBaseModel):
+    """需求 ↔ 发布单的关联行。
+
+    在途（未驳回/未取消）的关联 = 「待验证」的事实；发布单已发布（completed）=
+    「已发布」的事实。驳回/取消不删行 —— 关联关系还在，只是不再算有效事实，
+    重算时按 release.status 现判。
+    """
+
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="requirement_releases",
+        verbose_name="关联需求",
+    )
+    release = models.ForeignKey(
+        "db.Release",
+        on_delete=models.CASCADE,
+        related_name="release_requirements",
+        verbose_name="关联发布",
+    )
+
+    class Meta:
+        unique_together = ["requirement", "release", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "release"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_release_unique_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Requirement Release"
+        verbose_name_plural = "Requirement Releases"
+        db_table = "requirement_releases"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.requirement_id} @ release {self.release_id}"
+
+
+class RequirementProjectActivity(ProjectBaseModel):
+    """(需求, 项目) 阶段变更留痕。阶段是派生值，会因发布单驳回等静默降档 ——
+    没有这张表，用户只能看着阶段掉下来猜原因。
+
+    requirement 用裸 UUIDField 而非外键（见文件头 118-153 行的设计注释）：留痕要
+    活过需求删除，而仓库的 soft_delete_related_objects 会把 PROTECT 当 CASCADE。
+    """
+
+    requirement_id = models.UUIDField(verbose_name="需求 ID", db_index=True)
+    old_stage = models.CharField(
+        max_length=20, choices=RequirementProjectStage.choices, verbose_name="原阶段"
+    )
+    new_stage = models.CharField(
+        max_length=20, choices=RequirementProjectStage.choices, verbose_name="新阶段"
+    )
+    # 触发来源快照，如 {"type": "release_rejected", "release_id": "...", "release_name": "..."}。
+    # 存名称快照而非只存 ID：来源对象可能后续被删,留痕必须自足可读。
+    trigger = models.JSONField(default=dict, verbose_name="触发来源")
+
+    class Meta:
+        verbose_name = "Requirement Project Activity"
+        verbose_name_plural = "Requirement Project Activities"
+        db_table = "requirement_project_activities"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=["requirement_id", "project", "-created_at"],
+                name="req_proj_activity_lookup",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.requirement_id} @ {self.project_id}: {self.old_stage} -> {self.new_stage}"

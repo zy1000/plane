@@ -112,14 +112,19 @@ from plane.db.models import State as StateModel
 from .. import BaseAPIView, BaseViewSet
 
 
+# scope 的取值由前端 TProjectIssueScope 直接发过来（issue.store.ts 把它当查询参数
+# 拼进 GET /issues）。「研发需求」页从 /requirements 迁到 /dev-requirements 时，这里
+# 的键必须跟着改 —— 否则 _resolve_project_issue_page_scope 认不出新 scope，会**同时**
+# 跳过权限校验和类别过滤，页面静默列出项目全部工作项。
+# permission key 本身刻意保持 project.requirements.view 不变（它已写进线上角色配置）。
 PROJECT_ISSUE_PAGE_SCOPE_PERMISSION_KEYS = {
     "issues": PermissionKey.PROJECT_WORK_ITEMS_VIEW,
-    "requirements": PermissionKey.PROJECT_REQUIREMENTS_VIEW,
+    "dev_requirements": PermissionKey.PROJECT_REQUIREMENTS_VIEW,
     "defects": PermissionKey.PROJECT_DEFECTS_VIEW,
 }
 
 PROJECT_ISSUE_PAGE_SCOPE_CATEGORY_FILTERS = {
-    "requirements": "需求",
+    "dev_requirements": "需求",
     "defects": "缺陷",
 }
 

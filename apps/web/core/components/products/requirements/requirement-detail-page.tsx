@@ -148,6 +148,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                     productId={product}
                     resolveParentTitle={resolveParentTitle}
                     onPatch={detail.submitPatch}
+                    onProjectsChanged={() => void detail.refresh()}
                   />
                 </div>
               </div>
@@ -173,6 +174,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 productId={product}
                 resolveParentTitle={resolveParentTitle}
                 onPatch={detail.submitPatch}
+                onProjectsChanged={() => void detail.refresh()}
               />
             </div>
           </div>

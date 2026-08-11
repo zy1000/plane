@@ -57,6 +57,12 @@ class PermissionKey(str, Enum):
     PROJECT_WORK_ITEMS_VIEW = "project.work_items.view"
     PROJECT_REQUIREMENTS_VIEW = "project.requirements.view"
     PROJECT_DEFECTS_VIEW = "project.defects.view"
+    # 产品需求进项目（RequirementProject）。刻意不复用上面的
+    # project.requirements.view —— 那个 key 已经写进线上角色配置，迁走的研发需求页
+    # 还要继续用它。新起 key 可以完全避免角色权限的数据迁移。
+    PROJECT_REQUIREMENT_LINK_VIEW = "project.requirement_link.view"
+    PROJECT_REQUIREMENT_LINK_MANAGE = "project.requirement_link.manage"
+    PROJECT_PRODUCT_LINK_MANAGE = "project.product_link.manage"
     # 工作项 CRUD/归档权限按 IssueType 动态衍生为 project.issue_type.<id_hex>.<action>，
     # 见 plane.db.models.issue_type.build_issue_type_permission_key。
     ISSUE_COMMENT_CREATE = "issue.comment.create"
