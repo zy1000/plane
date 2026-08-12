@@ -166,7 +166,7 @@ const RequirementImageValue = ({
         width="100vw"
         style={{ top: 0, paddingBottom: 0 }}
         styles={{ body: { padding: 0 } }}
-        destroyOnClose
+        destroyOnHidden
         title={
           <div className="flex items-center justify-between gap-3 pr-8" style={{ marginTop: -16, marginBottom: -16 }}>
             <Typography.Text strong className="min-w-0 truncate">

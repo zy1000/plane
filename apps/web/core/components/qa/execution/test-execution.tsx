@@ -838,7 +838,7 @@ export default function TestExecutionPage() {
           value={v}
           onChange={(e) => setV(e.target.value)}
           onBlur={() => onCommit(v)}
-          bordered={false}
+          variant="borderless"
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
@@ -910,7 +910,7 @@ export default function TestExecutionPage() {
               onChange={(v) => onChangeExec(idx, String(v))}
               variant="borderless"
               className="w-full text-sm leading-5 font-medium [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
-              popupClassName="min-w-[100px]"
+              classNames={{ popup: { root: "min-w-[100px]" } }}
               suffixIcon={null}
             />
           ),
@@ -1090,7 +1090,7 @@ export default function TestExecutionPage() {
                           <Card
                             key={item.id}
                             data-case-id={caseId}
-                            bordered
+                            variant="outlined"
                             hoverable
                             onClick={() => {
                               setSelectedCaseId(caseId);
@@ -1593,7 +1593,7 @@ export default function TestExecutionPage() {
           setReason(reasonDraft);
           setReasonModalOpen(false);
         }}
-        destroyOnClose
+        destroyOnHidden
         width={600}
       >
         <Input.TextArea

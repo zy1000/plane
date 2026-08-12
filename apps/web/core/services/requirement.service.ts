@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateRequirementLibraryPayload,
+  TLinkableRequirementsResponse,
   TProductProject,
   TProjectRequirementsResponse,
   TRequirement,
@@ -796,7 +797,7 @@ export class RequirementService extends APIService {
       requirementTypeId?: string;
       productId?: string;
     } = {}
-  ): Promise<TRequirementsResponse> {
+  ): Promise<TLinkableRequirementsResponse> {
     return this.get(`${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/linkable-requirements/`, {
       params: {
         ...(params.cursor ? { cursor: params.cursor } : {}),

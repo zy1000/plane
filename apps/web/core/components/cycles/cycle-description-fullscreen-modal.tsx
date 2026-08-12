@@ -137,7 +137,7 @@ export const CycleDescriptionFullscreenModal: FC<Props> = observer(function Cycl
         },
         ...(editing && canEdit ? { footer: { flexShrink: 0, margin: 0, padding: "12px 20px" } } : {}),
       }}
-      destroyOnClose
+      destroyOnHidden
       getContainer={() => document.body}
     >
       <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">

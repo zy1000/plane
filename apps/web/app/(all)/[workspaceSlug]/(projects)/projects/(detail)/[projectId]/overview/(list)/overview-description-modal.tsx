@@ -80,7 +80,7 @@ export const OverviewDescriptionModal: React.FC<Props> = observer((props) => {
           flexDirection: "column",
         },
       }}
-      destroyOnClose
+      destroyOnHidden
       getContainer={() => document.body}
     >
       <div className="flex h-full min-h-0 flex-1 flex-col">

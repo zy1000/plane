@@ -122,7 +122,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
       onCancel={onClose}
       title={mode === "edit" ? "编辑评审" : "新建评审"}
       width={700}
-      destroyOnClose
+      destroyOnHidden
       maskClosable={false}
       footer={
         <div className="flex justify-end gap-2">

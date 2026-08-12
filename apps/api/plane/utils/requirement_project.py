@@ -91,6 +91,27 @@ def linkable_requirements_queryset(*, slug, project_id):
     )
 
 
+def linkable_facets(*, slug, project_id):
+    """关联需求弹窗左侧产品分面的计数。
+
+    口径与 requirement_facets 的 by_product 同一条规矩：统计**全集**（整个候选池），
+    不随搜索 / product_id 筛选变化 —— 分面是最外层作用域，自己的数字不该跟着选中项走。
+    搭 linkable 列表一起返回（extra_stats），不另开端点、不多发请求。
+
+    .order_by() 必须清掉候选池的默认排序，否则排序列会被拖进 GROUP BY。
+    """
+    from django.db.models import Count
+
+    by_product = {
+        str(row["product_id"]): row["count"]
+        for row in linkable_requirements_queryset(slug=slug, project_id=project_id)
+        .order_by()
+        .values("product_id")
+        .annotate(count=Count("id"))
+    }
+    return {"by_product": by_product, "total": sum(by_product.values())}
+
+
 def linked_requirements_queryset(*, slug, project_id):
     """本项目已关联的需求，按关联行的 sort_order 排。
 

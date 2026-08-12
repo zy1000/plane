@@ -11,17 +11,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@headlessui/react";
 import { Layers, Package } from "lucide-react";
-import { ISSUE_PRIORITIES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { CloseIcon, PriorityIcon, SearchIcon } from "@plane/propel/icons";
+import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirement } from "@plane/types";
+import type { TLinkableRequirementFacets, TRequirement } from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
-import useDebounce from "@/hooks/use-debounce";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { RequirementService } from "@/services/requirement.service";
 
@@ -53,28 +51,39 @@ export const ExistingRequirementsModal = (props: TProps) => {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  /** 各产品分面的总数缓存：切过去拉一次就记住，避免侧栏数字空白 */
-  const [productCountByKey, setProductCountByKey] = useState<Record<string, number>>({});
+  /** 左侧分面计数：全集口径，服务端搭每次列表响应的 extra_stats 一起返回 */
+  const [facetCounts, setFacetCounts] = useState<TLinkableRequirementFacets | null>(null);
+  /** 列表拉取失败：区分「候选池真是空的」和「接口挂了」，别把故障说成空数据 */
+  const [loadError, setLoadError] = useState(false);
   const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
 
   const optionsContainerRef = useRef<HTMLDivElement | null>(null);
+  /** 打开时聚焦搜索框。不指定的话焦点落在顶栏关闭按钮上，回车会直接关弹窗 */
+  const searchInputRef = useRef<HTMLElement | null>(null);
   /**
    * 请求序号：搜索词变化很快，慢的那次响应可能后到并把新结果覆盖掉。
    * 只认最后一次发出的请求。
    */
   const requestSequenceRef = useRef(0);
-  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  // 防抖不走共享 hook：关闭时要能立刻清掉防抖值，否则 500ms 内重开会带着旧搜索词发请求
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500);
+    return () => clearTimeout(timeout);
+  }, [searchTerm]);
 
   const handleClose = useCallback(() => {
     requestSequenceRef.current += 1;
     onClose();
     setSearchTerm("");
+    setDebouncedSearchTerm("");
     setRows([]);
     setSelected([]);
     setPage(0);
     setHasMore(false);
     setTotalCount(0);
-    setProductCountByKey({});
+    setFacetCounts(null);
+    setLoadError(false);
     setIsLoading(false);
     setIsLoadingMore(false);
     setProductFilter(undefined);
@@ -87,6 +96,7 @@ export const ExistingRequirementsModal = (props: TProps) => {
       if (!isOpen || !workspaceSlug || !projectId) return;
       const requestSequence = ++requestSequenceRef.current;
 
+      setLoadError(false);
       if (reset) {
         setIsLoading(true);
         setHasMore(false);
@@ -108,16 +118,12 @@ export const ExistingRequirementsModal = (props: TProps) => {
         setRows((previous) => (reset ? results : [...previous, ...results]));
         setPage(nextPage);
         setHasMore(Boolean(response?.next_page_results));
-        if (reset) {
-          setTotalCount(count);
-          // 无搜索时才把总数记进分面；带搜索词的 count 不是全集口径
-          if (!debouncedSearchTerm) {
-            const key = productFilter ?? "__all__";
-            setProductCountByKey((previous) => ({ ...previous, [key]: count }));
-          }
-        }
+        if (reset) setTotalCount(count);
+        // 分面计数是全集口径（不随搜索/筛选变化），服务端每次响应都带，直接覆盖
+        if (response?.extra_stats) setFacetCounts(response.extra_stats);
       } catch {
         if (requestSequence !== requestSequenceRef.current) return;
+        setLoadError(true);
         if (reset) {
           setRows([]);
           setTotalCount(0);
@@ -137,43 +143,6 @@ export const ExistingRequirementsModal = (props: TProps) => {
     if (!isOpen) return;
     void fetchRows({ reset: true, nextPage: 0 });
   }, [fetchRows, isOpen]);
-
-  /**
-   * 打开弹窗时给左侧产品分面预取数量（无搜索词）。产品数通常很少，并行打几次
-   * count 用的列表接口可接受；失败就让该行不显示数字，不影响主列表。
-   */
-  useEffect(() => {
-    if (!isOpen || !workspaceSlug || !projectId || products.length === 0) return;
-    let cancelled = false;
-    void (async () => {
-      const entries = await Promise.all(
-        products.map(async (product) => {
-          try {
-            const response = await requirementService.listLinkableRequirements(workspaceSlug, projectId, {
-              productId: product.id,
-              perPage: 1,
-              cursor: "1:0:0",
-            });
-            const count = response?.total_count ?? response?.total_results ?? response?.count ?? 0;
-            return [product.id, count] as const;
-          } catch {
-            return null;
-          }
-        })
-      );
-      if (cancelled) return;
-      setProductCountByKey((previous) => {
-        const next = { ...previous };
-        for (const entry of entries) {
-          if (entry) next[entry[0]] = entry[1];
-        }
-        return next;
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, products, projectId, workspaceSlug]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || isLoading || isLoadingMore) return;
@@ -209,10 +178,17 @@ export const ExistingRequirementsModal = (props: TProps) => {
   const showProductSidebar = products.length > 0;
 
   return (
-    <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.VXL}>
+    <ModalCore
+      isOpen={isOpen}
+      handleClose={handleClose}
+      position={EModalPosition.CENTER}
+      width={EModalWidth.XXXXL}
+      initialFocus={searchInputRef}
+    >
       <Combobox
         as="div"
-        className="flex max-h-[min(80vh,640px)] flex-col"
+        // 固定视口高度：避免条目少时又宽又扁；宽度用 4xl，比原先 5xl 收一档
+        className="flex h-[min(86vh,720px)] flex-col"
         onChange={(row: TRequirement) => {
           setSelected((previous) =>
             previous.some((item) => item.id === row.id)
@@ -222,12 +198,9 @@ export const ExistingRequirementsModal = (props: TProps) => {
         }}
       >
         {/* 顶栏：标题 + 副标题 + 关闭 */}
-        <div className="flex items-start justify-between gap-3 border-b border-subtle px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-subtle px-5 py-4">
           <div className="min-w-0">
             <h3 className="text-body-sm-semibold text-primary">{t("project_requirements.linkable.title")}</h3>
-            <p className="mt-0.5 text-caption-sm-regular text-tertiary">
-              {t("project_requirements.linkable.subtitle")}
-            </p>
           </div>
           <button
             type="button"
@@ -240,9 +213,9 @@ export const ExistingRequirementsModal = (props: TProps) => {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          {/* 左栏：产品分面，与数据行物理隔离 */}
+          {/* 左栏：产品分面，与数据行物理隔离。窄屏（<sm）收起，退回单列布局 */}
           {showProductSidebar && (
-            <aside className="flex w-44 shrink-0 flex-col border-r border-subtle bg-surface-1/60">
+            <aside className="hidden w-44 shrink-0 flex-col border-r border-subtle bg-surface-2 sm:flex">
               <div className="px-3 pt-3 pb-1.5 text-caption-sm-medium text-tertiary">
                 {t("project_requirements.linkable.products_label")}
               </div>
@@ -265,20 +238,21 @@ export const ExistingRequirementsModal = (props: TProps) => {
                     aria-hidden
                   />
                   <span className="min-w-0 flex-1 truncate">{t("project_requirements.all_products")}</span>
-                  {typeof productCountByKey.__all__ === "number" && (
+                  {facetCounts && (
                     <span
                       className={cn(
                         "tabular-nums text-caption-sm-medium",
                         productFilter === undefined ? "text-accent-primary" : "text-placeholder"
                       )}
                     >
-                      {productCountByKey.__all__}
+                      {facetCounts.total}
                     </span>
                   )}
                 </button>
                 {products.map((product) => {
                   const isActive = productFilter === product.id;
-                  const count = productCountByKey[product.id];
+                  // 没有候选的产品不出现在 by_product 里，显示 0 比空白更明确
+                  const count = facetCounts ? (facetCounts.by_product[product.id] ?? 0) : undefined;
                   return (
                     <button
                       key={product.id}
@@ -328,6 +302,9 @@ export const ExistingRequirementsModal = (props: TProps) => {
                   aria-hidden="true"
                 />
                 <Combobox.Input
+                  ref={(element: HTMLInputElement | null) => {
+                    searchInputRef.current = element;
+                  }}
                   className="h-9 w-full rounded-md border-[0.5px] border-strong bg-surface-1 pr-9 pl-9 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-primary"
                   placeholder={t("project_requirements.linkable.search_placeholder")}
                   value={searchTerm}
@@ -361,6 +338,14 @@ export const ExistingRequirementsModal = (props: TProps) => {
                   <Loader.Item height="56px" />
                   <Loader.Item height="56px" />
                 </Loader>
+              ) : loadError && rows.length === 0 ? (
+                // 接口挂了 ≠ 候选池是空的：给错误态和重试入口，别误导用户去重配产品关联
+                <div className="flex flex-col items-center gap-2.5 px-2 py-10">
+                  <p className="text-13 text-secondary">{t("project_requirements.linkable.load_failed")}</p>
+                  <Button variant="secondary" size="sm" onClick={() => void fetchRows({ reset: true, nextPage: 0 })}>
+                    {t("retry")}
+                  </Button>
+                </div>
               ) : rows.length === 0 ? (
                 <p className="px-2 py-10 text-center text-13 text-secondary">
                   {t("project_requirements.linkable.empty")}
@@ -369,18 +354,13 @@ export const ExistingRequirementsModal = (props: TProps) => {
                 <>
                   {rows.map((row) => {
                     const isSelected = selectedIds.has(row.id);
-                    const priority = row.priority;
-                    const priorityTitle =
-                      priority && priority !== "none"
-                        ? (ISSUE_PRIORITIES.find((item) => item.key === priority)?.title ?? priority)
-                        : null;
                     return (
                       <Combobox.Option
                         key={row.id}
                         value={row}
                         className={({ active }) =>
                           cn(
-                            "flex cursor-pointer items-start gap-2.5 rounded-md border-[0.5px] border-subtle bg-surface-1 px-3 py-2.5 text-13 text-primary select-none transition-colors",
+                            "flex cursor-pointer items-center gap-2.5 rounded-md border-[0.5px] border-subtle bg-surface-1 px-3 py-2.5 text-13 text-primary select-none transition-colors",
                             active && "border-strong bg-layer-transparent-hover",
                             isSelected && "border-accent-strong bg-accent-primary/5"
                           )
@@ -390,27 +370,14 @@ export const ExistingRequirementsModal = (props: TProps) => {
                           type="checkbox"
                           checked={isSelected}
                           readOnly
-                          className="pointer-events-none mt-0.5 size-3.5 shrink-0 accent-[var(--color-accent-primary)]"
+                          className="pointer-events-none size-3.5 shrink-0 accent-[var(--bg-accent-primary)]"
                         />
-                        <Layers className="mt-0.5 size-3.5 shrink-0 text-accent-primary" aria-hidden />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            {row.display_id && <RequirementIdentifier displayId={row.display_id} />}
-                            <Tooltip tooltipContent={row.title}>
-                              <span className="min-w-0 truncate text-body-xs-medium text-primary">{row.title}</span>
-                            </Tooltip>
-                          </div>
-                          {(row.target_date || priorityTitle) && (
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-caption-sm-regular text-tertiary">
-                              {row.target_date && <span>{renderFormattedDate(row.target_date)}</span>}
-                              {priorityTitle && priority && (
-                                <span className="inline-flex items-center gap-1">
-                                  <PriorityIcon priority={priority} size={12} className="shrink-0" />
-                                  <span>{priorityTitle}</span>
-                                </span>
-                              )}
-                            </div>
-                          )}
+                        <Layers className="size-3.5 shrink-0 text-accent-primary" aria-hidden />
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                          {row.display_id && <RequirementIdentifier displayId={row.display_id} />}
+                          <Tooltip tooltipContent={row.title}>
+                            <span className="min-w-0 truncate text-body-xs-medium text-primary">{row.title}</span>
+                          </Tooltip>
                         </div>
                       </Combobox.Option>
                     );
@@ -419,13 +386,26 @@ export const ExistingRequirementsModal = (props: TProps) => {
                   {isLoadingMore && (
                     <p className="px-2 py-2 text-center text-11 text-secondary">{t("loading")}</p>
                   )}
+                  {loadError && (
+                    // 加载更多失败：列表被截断了，明说并给重试，别装作已经到底
+                    <div className="flex items-center justify-center gap-2 px-2 py-2">
+                      <span className="text-11 text-secondary">{t("project_requirements.linkable.load_failed")}</span>
+                      <button
+                        type="button"
+                        onClick={() => void fetchRows({ reset: false, nextPage: page + 1 })}
+                        className="text-11 text-accent-primary hover:underline"
+                      >
+                        {t("retry")}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </Combobox.Options>
           </div>
 
-          {/* 右栏：已选清单 */}
-          <aside className="flex w-48 shrink-0 flex-col border-l border-subtle bg-surface-1/60">
+          {/* 右栏：已选清单。窄屏（<sm）收起，已选数量看底栏 */}
+          <aside className="hidden w-48 shrink-0 flex-col border-l border-subtle bg-surface-2 sm:flex">
             <div className="flex items-center justify-between gap-2 border-b border-subtle px-3 py-3">
               <span className="text-caption-sm-medium text-tertiary">
                 {t("project_requirements.linkable.selected_panel")}
@@ -477,20 +457,20 @@ export const ExistingRequirementsModal = (props: TProps) => {
 
         <div className="flex items-center justify-between gap-3 border-t border-subtle px-5 py-3">
           <span className="text-caption-sm-regular text-tertiary">
-            {t("project_requirements.linkable.selected_items", { count: selected.length })}
+            {t("project_requirements.linkable.selected", { count: selected.length })}
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={handleClose}>
+            <Button variant="secondary" size="lg" onClick={handleClose}>
               {t("cancel")}
             </Button>
             <Button
               variant="primary"
-              size="sm"
+              size="lg"
               loading={isSubmitting}
               disabled={!selected.length || isSubmitting}
               onClick={() => void handleSubmit()}
             >
-              {t("project_requirements.linkable.confirm_submit")}
+              {t("confirm")}
             </Button>
           </div>
         </div>

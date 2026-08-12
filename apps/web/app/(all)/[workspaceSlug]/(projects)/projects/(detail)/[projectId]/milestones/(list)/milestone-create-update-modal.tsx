@@ -122,7 +122,7 @@ export function MilestoneCreateUpdateModal(props: Props) {
       okText={mode === "edit" ? "保存" : "创建"}
       cancelText="取消"
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
       width={560}
     >
       <Form form={form} layout="vertical" autoComplete="off">

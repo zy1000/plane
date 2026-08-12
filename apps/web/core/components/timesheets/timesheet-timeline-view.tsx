@@ -1000,7 +1000,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
         okText="保存"
         cancelText="取消"
         confirmLoading={isSavingDescription}
-        destroyOnClose
+        destroyOnHidden
       >
         {descriptionEditBlock && (
           <div className="space-y-3">

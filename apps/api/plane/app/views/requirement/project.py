@@ -58,6 +58,7 @@ from plane.utils.requirement_change import (
 from plane.utils.requirement_project import (
     RequirementLinkError,
     can_submit_change_from_project,
+    linkable_facets,
     linkable_requirements_queryset,
     linked_requirement_ids,
     linked_requirements_queryset,
@@ -295,6 +296,9 @@ class ProjectRequirementViewSet(BaseViewSet):
             on_results=lambda rows: MultiProductRequirementSerializer(
                 rows, many=True, context=self._row_context(rows)
             ).data,
+            # 左侧产品分面的计数搭列表一起回来（全集口径，不随搜索/产品筛选变化），
+            # 与 list 的 extra_stats 同一套路：不另开端点、不多发请求。
+            extra_stats=linkable_facets(slug=slug, project_id=project_id),
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
         )

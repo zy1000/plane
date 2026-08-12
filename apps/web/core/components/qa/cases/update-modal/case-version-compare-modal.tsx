@@ -319,7 +319,7 @@ export function CaseVersionCompareModal({
       onCancel={onClose}
       footer={null}
       width={width}
-      destroyOnClose
+      destroyOnHidden
       closable={false}
       zIndex={1250}
     >
@@ -335,7 +335,7 @@ export function CaseVersionCompareModal({
                 value={compareBaseVersion}
                 options={historyVersionOptions}
                 onChange={(v) => setCompareBaseVersion(Number(v))}
-                dropdownStyle={{ zIndex: 1300 }}
+                styles={{ popup: { root: { zIndex: 1300 } } }}
               />
               <span className="text-sm text-secondary shrink-0">当前版本</span>
               <span className="text-sm text-primary">{currentVersionLabel}</span>

@@ -551,8 +551,8 @@ function FilestorePage() {
         footer={null}
         width="100vw"
         style={{ top: 0, paddingBottom: 0 }}
-        bodyStyle={{ padding: 0 }}
-        destroyOnClose
+        styles={{ body: { padding: 0 } }}
+        destroyOnHidden
         title={
           <div className="flex items-center justify-between gap-2 pr-12" style={{ marginTop: -16, marginBottom: -16, height: 56 }}>
             <div className="flex items-center gap-2">
@@ -609,7 +609,7 @@ function FilestorePage() {
         width="100vw"
         style={{ top: 0, paddingBottom: 0 }}
         styles={{ body: { padding: 0 } }}
-        destroyOnClose
+        destroyOnHidden
         title={
           <Typography.Text strong style={{ marginTop: -16, marginBottom: -16 }}>
             {`预览：${imagePreview?.name ?? "图片"}`}
@@ -632,7 +632,7 @@ function FilestorePage() {
         footer={null}
         width={920}
         title="历史版本"
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { minHeight: 500 } }}
       >
         <Table

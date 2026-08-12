@@ -334,6 +334,22 @@ export type TRequirementConfigurationPayload = {
 
 export type TRequirementsResponse = TPaginatedResponse<TRequirement[]>;
 
+/**
+ * 关联需求弹窗左侧产品分面的计数。
+ *
+ * 口径由服务端定死（utils/requirement_project.linkable_facets）：统计整个候选池，
+ * 不随搜索与产品筛选变化。前端不要再二次加工这些数字。
+ */
+export type TLinkableRequirementFacets = {
+  /** product_id -> 候选数；没有候选的产品不出现在键里 */
+  by_product: Record<string, number>;
+  total: number;
+};
+
+export type TLinkableRequirementsResponse = Omit<TPaginatedResponse<TRequirement[]>, "extra_stats"> & {
+  extra_stats?: TLinkableRequirementFacets | null;
+};
+
 /* --- 需求进项目（RequirementProject） -------------------------------------- */
 
 /**

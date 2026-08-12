@@ -163,7 +163,7 @@ export const RepositoryModal: React.FC<Props> = ({
       onCancel={onCancel}
       title={initialValues?.id ? "编辑用例库" : "新增用例库"}
       footer={footer}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} layout="vertical">
         <Form.Item name="name" label="用例库名称" rules={[{ required: true, message: "请输入用例库名称" }]}>

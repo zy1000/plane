@@ -1976,7 +1976,7 @@ export default {
     },
     no_products: {
       title: "本项目还没有关联产品",
-      description: "需求来自产品。用右上角的「管理关联产品」把产品关联进来，才能引用它下面的需求。",
+      description: "需求来自产品。用顶部的「管理」把产品关联进来，才能引用它下面的需求。",
     },
     linkable: {
       title: "关联需求",
@@ -1985,9 +1985,9 @@ export default {
       products_label: "产品",
       total_count: "共 {count} 个需求",
       empty: "没有可关联的需求（需先关联产品，且需求需通过评审）",
+      load_failed: "加载失败",
       selected: "已选 {count} 条",
       selected_panel: "已选",
-      selected_items: "{count} 项",
       selected_empty: "尚未选择需求",
       submit: "关联",
       confirm_submit: "确认关联",
@@ -2061,6 +2061,8 @@ export default {
     unlink: "解除关联",
     empty: "尚未关联任何产品",
     manage: "管理关联产品",
+    manage_short: "管理",
+    linked_label: "已关联产品",
     has_linked_requirements: "该产品下还有需求关联在本项目中，请先解除这些需求的关联。",
   },
   workspace_products: {

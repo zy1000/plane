@@ -418,7 +418,7 @@ export function ProfileMetricDetailModal({ metric, metricTitle, onClose, open, u
       footer={null}
       centered
       width={1200}
-      destroyOnClose
+      destroyOnHidden
       styles={{ body: { padding: 0, overflow: "hidden" } }}
     >
       <div className="flex h-[76vh] max-h-[760px] min-h-[520px] bg-surface-1">

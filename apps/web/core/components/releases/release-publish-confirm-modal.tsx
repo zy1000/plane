@@ -39,7 +39,7 @@ export function ReleasePublishConfirmModal(props: Props) {
       okText={t("project_requirements.release_publish_confirm.confirm")}
       cancelText={t("project_requirements.release_publish_confirm.cancel")}
       okButtonProps={{ loading }}
-      destroyOnClose
+      destroyOnHidden
       maskClosable={!loading}
       width={560}
     >

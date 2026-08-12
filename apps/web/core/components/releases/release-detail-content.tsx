@@ -975,7 +975,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
           loading: associatingPlans,
         }}
         width={720}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="mt-2">
           {selectablePlansLoading ? (

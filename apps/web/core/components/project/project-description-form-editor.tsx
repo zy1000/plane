@@ -176,7 +176,7 @@ export const ProjectDescriptionFormEditor: React.FC<Props> = observer((props) =>
           body: { padding: 0 },
         }}
         className="[&_.ant-modal-close]:!right-5 [&_.ant-modal-close]:!top-4 [&_.ant-modal-close]:inline-flex [&_.ant-modal-close]:!h-auto [&_.ant-modal-close]:!w-auto [&_.ant-modal-close]:items-center [&_.ant-modal-close]:justify-center [&_.ant-modal-close]:rounded-md [&_.ant-modal-close]:px-2 [&_.ant-modal-close]:py-1.5 [&_.ant-modal-close]:transition-colors [&_.ant-modal-close]:hover:!bg-surface-2 [&_.ant-modal-close]:hover:!text-primary"
-        destroyOnClose
+        destroyOnHidden
         getContainer={() => document.body}
       >
         <div className="flex max-h-[94vh] min-h-[min(72vh,680px)] flex-col overflow-y-auto vertical-scrollbar scrollbar-sm p-3">

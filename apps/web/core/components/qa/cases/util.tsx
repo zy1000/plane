@@ -679,7 +679,7 @@ export const StepsEditor: React.FC<{
                 </Button>,
               ]
         }
-        destroyOnClose
+        destroyOnHidden
       >
         <Input.TextArea
           readOnly={!editable}

@@ -442,7 +442,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
       onCancel={onClose}
       title="选择工作项"
       width="70vw"
-      destroyOnClose
+      destroyOnHidden
       maskClosable={false}
       zIndex={1250}
       footer={

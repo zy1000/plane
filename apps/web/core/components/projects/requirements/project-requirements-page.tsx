@@ -33,12 +33,9 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useSearchParamFilter } from "@/hooks/use-search-param-filter";
 import { RequirementService } from "@/services/requirement.service";
 import { ExistingRequirementsModal } from "./existing-requirements-modal";
+import { ProjectLinkedProductsBar } from "./project-linked-products-bar";
 import { ProjectProductsModal } from "./project-products-modal";
-import {
-  getProductFromParam,
-  PRODUCT_PARAM,
-  ProjectRequirementProductTabs,
-} from "./project-requirement-product-tabs";
+import { getProductFromParam, PRODUCT_PARAM } from "./project-requirement-product-tabs";
 import {
   getStageFromParam,
   ProjectRequirementStageFilter,
@@ -104,7 +101,12 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     param: PRODUCT_PARAM,
     value: store.productFilter,
     setValue: store.setProductFilter,
-    parse: (raw) => getProductFromParam(raw, facets),
+    // 以 productLinks 为准（方案 A 常驻条的数据源），加载中先放行深链
+    parse: (raw) =>
+      getProductFromParam(
+        raw,
+        isProductLinksLoading ? null : productLinks.map((link) => link.product)
+      ),
   });
   useSearchParamFilter({
     param: STAGE_PARAM,
@@ -253,11 +255,14 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     <>
       <PageHead title={pageTitle} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        {/* 产品页签：整页最外层作用域。只有一个产品时组件自己不渲染 */}
-        <ProjectRequirementProductTabs
-          facets={facets}
+        {/* 方案 A：已关联产品常驻条（展示 + 筛选）；编辑走「管理」弹窗 */}
+        <ProjectLinkedProductsBar
+          links={productLinks}
+          isLoading={isProductLinksLoading}
           value={store.productFilter}
           onChange={store.setProductFilter}
+          canManage={canManageProducts}
+          onManage={() => setIsProductsModalOpen(true)}
         />
 
         <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-2">

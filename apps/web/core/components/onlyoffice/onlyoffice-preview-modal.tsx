@@ -146,7 +146,7 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
       width="100vw"
       style={{ top: 0, paddingBottom: 0 }}
       styles={{ body: { padding: 0 } }}
-      destroyOnClose
+      destroyOnHidden
       title={
         <Typography.Text strong style={{ marginTop: -16, marginBottom: -16 }}>
           预览：{fileName ?? "文件"}

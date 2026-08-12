@@ -63,7 +63,7 @@ export const XmindPreviewModal = ({
         content: { padding: 0 },
         header: { padding: "8px 12px", margin: 0 },
       }}
-      destroyOnClose
+      destroyOnHidden
       closable={false}
       title={
         <div className="flex min-w-0 items-center gap-2">

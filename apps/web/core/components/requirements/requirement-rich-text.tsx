@@ -282,7 +282,7 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
         cancelText={t("cancel")}
         width={720}
         modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="vertical-scrollbar scrollbar-sm max-h-[52vh] min-h-[240px] overflow-y-auto rounded-md border border-subtle bg-surface-1">
           <RequirementRichTextField

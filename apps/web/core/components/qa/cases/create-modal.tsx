@@ -236,7 +236,7 @@ const StepsEditor: React.FC<{
             保存
           </Button>,
         ]}
-        destroyOnClose
+        destroyOnHidden
       >
         <Input.TextArea
           autoSize={{ minRows: 6, maxRows: 20 }}
@@ -1096,7 +1096,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
           </Button>
         </div>
       }
-      destroyOnClose
+      destroyOnHidden
       maskClosable={false}
     >
       <Form

@@ -90,7 +90,7 @@ export function TestingDatesConfirmModal(props: Props) {
       okText="确定"
       cancelText="取消"
       okButtonProps={{ loading, disabled: !!validationMessage }}
-      destroyOnClose
+      destroyOnHidden
       maskClosable={!loading}
       width={560}
     >

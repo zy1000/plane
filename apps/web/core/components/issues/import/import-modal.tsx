@@ -84,7 +84,7 @@ export function ImportIssuesModal({ isOpen, onClose, workspaceSlug, projectId, o
       title="导入工作项"
       footer={footer}
       width={920}
-      destroyOnClose
+      destroyOnHidden
       maskClosable={false}
     >
       {step === "upload" ? (

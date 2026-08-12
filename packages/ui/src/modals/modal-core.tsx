@@ -18,6 +18,11 @@ type Props = {
   position?: EModalPosition;
   width?: EModalWidth;
   className?: string;
+  /**
+   * 打开时聚焦的元素。不传时 Headless UI 聚焦面板内第一个可聚焦元素——
+   * 若首个元素是关闭按钮，回车会直接关掉弹窗，此时必须显式指定。
+   */
+  initialFocus?: React.MutableRefObject<HTMLElement | null>;
 };
 export function ModalCore(props: Props) {
   const {
@@ -27,6 +32,7 @@ export function ModalCore(props: Props) {
     position = EModalPosition.CENTER,
     width = EModalWidth.XXL,
     className = "",
+    initialFocus,
   } = props;
 
   const isOpenRef = useRef(isOpen);
@@ -56,7 +62,12 @@ export function ModalCore(props: Props) {
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-30" onClose={() => handleClose && handleClose()}>
+      <Dialog
+        as="div"
+        className="relative z-30"
+        onClose={() => handleClose && handleClose()}
+        initialFocus={initialFocus}
+      >
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"

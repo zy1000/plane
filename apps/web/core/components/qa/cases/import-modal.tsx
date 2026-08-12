@@ -240,7 +240,7 @@ export function ImportCaseModal(props: Props) {
       title="导入用例"
       footer={footer}
       width={920}
-      destroyOnClose
+      destroyOnHidden
     >
       {currentStep === 0 && (
         <div className="rounded-lg border border-subtle bg-surface-1 p-4">

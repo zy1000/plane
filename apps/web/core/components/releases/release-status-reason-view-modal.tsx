@@ -28,7 +28,7 @@ export function ReleaseStatusReasonViewModal(props: Props) {
       onCancel={onClose}
       footer={null}
       width={720}
-      destroyOnClose
+      destroyOnHidden
     >
       <div className="space-y-2 py-2">
         <Input.TextArea
