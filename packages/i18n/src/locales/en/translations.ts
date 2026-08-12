@@ -1807,10 +1807,17 @@ export default {
     },
     linkable: {
       title: "Link requirements",
+      subtitle: "Pick approved requirements from linked products",
       search_placeholder: "Search by ID or title",
+      products_label: "Products",
+      total_count: "{count} requirements",
       empty: "No requirements available to link (link a product first, and only approved requirements qualify)",
       selected: "{count} selected",
+      selected_panel: "Selected",
+      selected_items: "{count} selected",
+      selected_empty: "No requirements selected",
       submit: "Link",
+      confirm_submit: "Confirm link",
     },
     unlink_confirm: {
       title: "Unlink this requirement?",

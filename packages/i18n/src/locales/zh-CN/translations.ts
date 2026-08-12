@@ -1980,10 +1980,17 @@ export default {
     },
     linkable: {
       title: "关联需求",
+      subtitle: "从已关联产品中选择已通过评审的需求",
       search_placeholder: "按编号或标题搜索",
+      products_label: "产品",
+      total_count: "共 {count} 个需求",
       empty: "没有可关联的需求（需先关联产品，且需求需通过评审）",
       selected: "已选 {count} 条",
+      selected_panel: "已选",
+      selected_items: "{count} 项",
+      selected_empty: "尚未选择需求",
       submit: "关联",
+      confirm_submit: "确认关联",
     },
     unlink_confirm: {
       title: "解除关联？",
