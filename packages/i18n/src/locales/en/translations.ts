@@ -1843,6 +1843,12 @@ export default {
       toast_linked: "Requirements linked",
       toast_unlinked: "Requirement unlinked",
       toast_failed: "Operation failed",
+      /** Group header above the list, mirrors the work items tab's "All work items" */
+      group_title: "All requirements",
+      /** Full-page empty state on the cycle scope tab */
+      empty_title: "No requirements in this sprint yet",
+      empty_description:
+        "Once linked, a requirement moves to the Scheduled stage in this project, and you can follow its progress here until the sprint ends.",
     },
     release_linkable_empty: "No requirements available to link",
     release_publish_confirm: {

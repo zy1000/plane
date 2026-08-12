@@ -6,24 +6,29 @@
 
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
+import useSWR from "swr";
 import { PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
+import { ProductChip } from "@/components/products/product-chip";
+import { ScopeRequirementsSection } from "@/components/projects/requirements/scope-requirements-section";
+import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useReleaseRequirements } from "./release-overview/use-release-requirements";
+import { RequirementService } from "@/services/requirement.service";
 import { ReleaseRequirementsAssociateModal } from "./release-overview/release-requirements-associate-modal";
-import { ReleaseRequirementsSection } from "./release-overview/release-requirements-section";
+import { useReleaseRequirements } from "./release-overview/use-release-requirements";
 
 /**
  * 「发布内容」页里的需求子页。
  *
- * 只是把 release-detail-content 里那套（hook + section + 关联弹窗）在这条路由上再挂
- * 一份 —— 两处用的是同一个 SWR key（见 use-release-requirements），所以在任一处关联/
- * 解除，另一处再打开时拿到的是同一份缓存，不会出现两个页面数据打架。
+ * 版式与迭代「范围 · 需求」对齐：无外层 padding / 卡片头，行用 ScopeRequirementsSection。
+ * 关联弹窗在 header 与本 pane 各挂一份（同 SWR key），任一处关联完另一处会跟着刷新。
  *
- * 高度：外层给 `min-h-0 flex-1`。section 只有横向滚动（内部 `overflow-x-auto`）且
- * 带 `min-h-[380px]`，纵向靠这一层的 `overflow-y-auto` —— 一次拉 100 条，条数多时
- * 卡片会长，必须有人负责滚。
+ * 根节点**不要**再套 padding：行的左右缩进由 `Row` 的 px-page-x 提供，套了就会和
+ * 工作项子页对不齐。
  */
+
+const requirementService = new RequirementService();
 
 type TProps = {
   workspaceSlug: string;
@@ -51,23 +56,71 @@ export const ReleaseScopeRequirementsPane = observer(function ReleaseScopeRequir
     requirementsError,
     requirementAssociateOpen,
     unlinkingRequirementId,
+    updatingStageRequirementId,
     openRequirementAssociateModal,
     closeRequirementAssociateModal,
     handleLinkRequirements,
     handleUnlinkRequirement,
+    updateStage,
   } = useReleaseRequirements({ workspaceSlug, projectId, releaseId });
 
+  const [peekRequirementId, setPeekRequirementId] = useState<string | null>(null);
+  const peekRow = useMemo(
+    () => requirements.find((row) => row.id === peekRequirementId) ?? null,
+    [peekRequirementId, requirements]
+  );
+
+  /** 解除关联之后那一行已经不在列表里了，别留一个空抽屉 */
+  useEffect(() => {
+    if (peekRequirementId && !peekRow) setPeekRequirementId(null);
+  }, [peekRequirementId, peekRow]);
+
+  /**
+   * 需求类型：列表行首图标 + 详情抽屉自定义字段都靠它。
+   * 定义变化不频繁，与列表同生命周期缓存即可。
+   */
+  const { data: configuration } = useSWR(
+    workspaceSlug && projectId ? `project-requirement-configuration-${workspaceSlug}-${projectId}` : null,
+    () => requirementService.getProjectRequirementConfiguration(workspaceSlug, projectId)
+  );
+  const requirementTypes = configuration?.requirement_types ?? [];
+
   return (
-    <div className="h-full w-full overflow-y-auto p-4 vertical-scrollbar scrollbar-sm">
-      <ReleaseRequirementsSection
+    <div className="flex h-full w-full flex-col">
+      <ScopeRequirementsSection
+        workspaceSlug={workspaceSlug}
         requirements={requirements}
-        requirementsLoading={requirementsLoading}
-        requirementsError={requirementsError}
+        requirementTypes={requirementTypes}
+        isLoading={requirementsLoading}
+        error={requirementsError}
+        canManage={canManage}
         unlinkingRequirementId={unlinkingRequirementId}
-        canManageReleaseRequirements={canManage}
-        onOpenRequirementAssociate={openRequirementAssociateModal}
-        onUnlinkRequirement={handleUnlinkRequirement}
+        updatingStageRequirementId={updatingStageRequirementId}
+        onOpenLinkModal={openRequirementAssociateModal}
+        onUnlink={handleUnlinkRequirement}
+        onStageChange={updateStage}
+        onOpenDetail={setPeekRequirementId}
       />
+
+      {/*
+        详情抽屉打到**产品**的端点上：需求内容、版本、变更轨迹的权威都在产品。
+        canEdit 恒 false —— 发布侧对需求内容没有任何写入口，能改的只有阶段。
+        与项目需求页同理，「打开整页」隐藏：需求在项目里没有整页路由。
+      */}
+      {peekRow && (
+        <RequirementPeekOverview
+          workspaceSlug={workspaceSlug}
+          productId={peekRow.product_id ?? ""}
+          requirementId={peekRequirementId}
+          requirementTypes={requirementTypes}
+          rows={requirements}
+          canEdit={false}
+          onClose={() => setPeekRequirementId(null)}
+          onOpenRequirement={setPeekRequirementId}
+          showDetailAction={false}
+          productChip={<ProductChip identifier={peekRow.product_identifier} name={peekRow.product_name} />}
+        />
+      )}
 
       <ReleaseRequirementsAssociateModal
         isOpen={requirementAssociateOpen}

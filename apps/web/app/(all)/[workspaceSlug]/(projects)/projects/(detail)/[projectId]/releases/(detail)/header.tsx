@@ -16,10 +16,12 @@ import {
   WORK_ITEM_TRACKER_ELEMENTS,
   PROJECT_ERROR_MESSAGES,
   PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
+  PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY,
   isProjectPermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button, getButtonStyling } from "@plane/propel/button";
+import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   ICustomSearchSelectOption,
@@ -33,6 +35,10 @@ import { cn } from "@plane/utils";
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
+import {
+  getReleaseScopeSubTabStorageKey,
+  useScopeSubTab,
+} from "@/components/common/use-scope-sub-tab";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import {
   DisplayFiltersSelection,
@@ -46,6 +52,8 @@ import {
   getReleaseDetailTabStorageKey,
 } from "@/components/releases/release-overview";
 import type { ReleaseDetailTabKey } from "@/components/releases/release-overview";
+import { ReleaseRequirementsAssociateModal } from "@/components/releases/release-overview/release-requirements-associate-modal";
+import { useReleaseRequirements } from "@/components/releases/release-overview/use-release-requirements";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -54,15 +62,9 @@ import { useProject } from "@/hooks/store/use-project";
 import { useRelease } from "@/hooks/store/use-release";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
-import { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
-import {
-  getReleaseScopeSubTabStorageKey,
-  useScopeSubTab,
-} from "@/components/common/use-scope-sub-tab";
-import useLocalStorage from "@/hooks/use-local-storage";
+import useLocalStorage, { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
-import { IconButton } from "@plane/propel/icon-button";
 
 const DEFAULT_RELEASE_DETAIL_TAB_KEY = DEFAULT_RELEASE_DETAIL_TAB;
 
@@ -70,6 +72,7 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const parentRef = useRef<HTMLDivElement>(null);
   const [analyticsModal, setAnalyticsModal] = useState(false);
   const [openExistingIssueListModal, setOpenExistingIssueListModal] = useState(false);
+  const [requirementAssociateOpen, setRequirementAssociateOpen] = useState(false);
   const { t } = useTranslation();
   const router = useAppRouter();
   const { workspaceSlug, projectId, releaseId: routerReleaseId } = useParams();
@@ -77,6 +80,17 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const workspaceSlugValue = workspaceSlug?.toString();
   const projectIdValue = projectId?.toString();
   const releaseId = routerReleaseId ? routerReleaseId.toString() : undefined;
+  /**
+   * 只用它的 handleLinkRequirements：SWR key 与需求子页那份相同，关联完列表会自己刷新。
+   * 概览路由上不挂这份请求（传空 releaseId 让 key 变 null）。
+   */
+  const isReleaseScopeRoute = !/\/overview\/?$/.test(pathname ?? "");
+  const { handleLinkRequirements } = useReleaseRequirements({
+    workspaceSlug: workspaceSlugValue ?? "",
+    projectId: projectIdValue ?? "",
+    releaseId: isReleaseScopeRoute ? (releaseId ?? "") : "",
+    enabled: isReleaseScopeRoute && !!releaseId,
+  });
   const {
     issuesFilter: { issueFilters },
     issues: { addIssuesToRelease },
@@ -89,9 +103,9 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const { setValue, storedValue } = useLocalStorage("release_sidebar_collapsed", "false");
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
   /**
-   * 「发布内容」页里的二级切换。右侧那排工具条（布局切换 / 筛选 / 分析 / 添加工作项）
-   * 只服务于工作项子页，切到需求时必须整排隐藏 —— 否则「添加工作项」看起来像是往
-   * 需求列表里加东西。页面与 header 是两棵渲染树，靠 useLocalStorage 的同 key 广播同步。
+   * 「发布内容」页里的二级切换。工作项工具条（布局 / 筛选 / 分析 / 添加工作项）只在
+   * work-items 子页显示；需求子页换成「关联需求」。页面与 header 靠同 key 的
+   * useLocalStorage 广播同步。
    */
   const { activeSubTab: activeScopeSubTab } = useScopeSubTab(
     getReleaseScopeSubTabStorageKey(releaseId?.toString() ?? "unknown")
@@ -110,6 +124,13 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
     workspaceSlugValue ?? "",
     projectIdValue ?? ""
   );
+  // 归档的发布单不允许再改关联，与需求子页空状态 CTA 的判断保持一致
+  const canManageRequirements =
+    allowProjectPermissionKeys(
+      [PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY],
+      workspaceSlugValue ?? "",
+      projectIdValue ?? ""
+    ) && !releaseDetails?.archived_at;
   const projectReleaseIds = projectIdValue ? getProjectReleaseIds(projectIdValue) : undefined;
 
   const releaseOverviewPath =
@@ -398,7 +419,56 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
             )}
           </Header.RightItem>
         )}
+        {/*
+          需求子页的工具条。布局切换 / 筛选 / 分析只服务工作项，这里换成需求自己的
+          主操作，但面板开关与发布菜单保持在原位 —— 它们跟子页无关，跟着一起消失
+          会让右上角整片空掉。
+        */}
+        {!isOverviewActive && activeScopeSubTab === "requirements" && (
+          <Header.RightItem className="items-center">
+            <div className="hidden items-center gap-2 md:flex">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => setRequirementAssociateOpen(true)}
+                disabled={!canManageRequirements}
+              >
+                {t("project_requirements.container.link_button")}
+              </Button>
+              <IconButton
+                variant="tertiary"
+                size="lg"
+                icon={PanelRight}
+                onClick={toggleSidebar}
+                className={cn({
+                  "bg-accent-subtle text-accent-primary": !isSidebarCollapsed,
+                })}
+              />
+              {releaseId && (
+                <ReleaseQuickActions
+                  parentRef={parentRef}
+                  releaseId={releaseId}
+                  projectId={projectId.toString()}
+                  workspaceSlug={workspaceSlug.toString()}
+                  customClassName="flex-shrink-0 flex items-center justify-center bg-layer-1/70 rounded-sm size-[26px]"
+                />
+              )}
+            </div>
+          </Header.RightItem>
+        )}
       </Header>
+
+      {/* 与需求子页那份同 SWR key；两份弹窗互不影响，提交后列表一起刷新 */}
+      {workspaceSlugValue && projectIdValue && releaseId && (
+        <ReleaseRequirementsAssociateModal
+          isOpen={requirementAssociateOpen}
+          workspaceSlug={workspaceSlugValue}
+          projectId={projectIdValue}
+          releaseId={releaseId}
+          handleClose={() => setRequirementAssociateOpen(false)}
+          onSubmit={handleLinkRequirements}
+        />
+      )}
     </>
   );
 });

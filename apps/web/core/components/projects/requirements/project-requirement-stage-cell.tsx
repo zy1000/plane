@@ -37,6 +37,23 @@ export const REQUIREMENT_STAGE_PILL: Record<TRequirementProjectStage, string> = 
   released: "bg-success-subtle text-success-primary",
 };
 
+/** chip 变体的色点。底色换成白底描边后，档位差别改由这颗点承担 */
+const REQUIREMENT_STAGE_DOT: Record<TRequirementProjectStage, string> = {
+  linked: "bg-tertiary",
+  planned: "bg-accent-primary",
+  in_progress: "bg-warning-primary",
+  done: "bg-success-primary",
+  released: "bg-success-primary",
+};
+
+/**
+ * pill = 密集网格里的着色胶囊（项目需求网格在用）。
+ * chip = 与工作项行右侧 DropdownButton（border-with-text）同壳：
+ * h-5 / rounded-sm / border-[0.5px] border-strong / px-1.5 / caption，
+ * 色点承担档位差异。用在「一行工作项/需求」并排出现的地方（迭代范围页）。
+ */
+export type TRequirementStageVariant = "pill" | "chip";
+
 type TProps = {
   stage: TRequirementProjectStage;
   /** 最新有效迭代关联的迭代名；planned 档的推导依据，无名字时回退到 linked 文案 */
@@ -51,6 +68,7 @@ type TProps = {
   locked?: boolean;
   /** 锁定原因，追加进 tooltip */
   lockedReason?: string;
+  variant?: TRequirementStageVariant;
 };
 
 export const ProjectRequirementStageCell = ({
@@ -61,6 +79,7 @@ export const ProjectRequirementStageCell = ({
   onChange,
   locked = false,
   lockedReason,
+  variant = "pill",
 }: TProps) => {
   const { t } = useTranslation();
 
@@ -92,14 +111,21 @@ export const ProjectRequirementStageCell = ({
 
   const pill = (
     <span className="inline-flex max-w-full items-center gap-1">
-      <span
-        className={cn(
-          "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-11 font-medium",
-          REQUIREMENT_STAGE_PILL[stage]
-        )}
-      >
-        <span className="truncate">{t(`project_requirements.stage.${stage}`)}</span>
-      </span>
+      {variant === "chip" ? (
+        <span className="inline-flex h-5 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-md-medium text-secondary">
+          <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", REQUIREMENT_STAGE_DOT[stage])} />
+          <span className="truncate">{t(`project_requirements.stage.${stage}`)}</span>
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-11 font-medium",
+            REQUIREMENT_STAGE_PILL[stage]
+          )}
+        >
+          <span className="truncate">{t(`project_requirements.stage.${stage}`)}</span>
+        </span>
+      )}
       {/* 迭代已结束仍停在已排期：黄点提醒，不降档（carryover 语义） */}
       {showCarryover && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-warning-primary" />}
     </span>

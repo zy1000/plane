@@ -30,6 +30,11 @@ type TProps = {
   enableClickToCopy?: boolean;
   /** 只要徽标，不要名字（窄列里用） */
   hideName?: boolean;
+  /**
+   * plain = 图标+文字（标签页、peek 头等内联场景）。
+   * property = 工作项行右侧属性同款描边壳（迭代范围需求列表等）。
+   */
+  appearance?: "plain" | "property";
   className?: string;
 };
 
@@ -42,15 +47,25 @@ export const ProductChip = (props: TProps) => {
     variant = "secondary",
     enableClickToCopy = false,
     hideName = false,
+    appearance = "plain",
     className,
   } = props;
   const { t } = useTranslation();
 
   if (!identifier && !name) return null;
 
+  const isProperty = appearance === "property";
+
   const body = (
-    <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
-      <Package className="size-3.5 shrink-0 text-tertiary" />
+    <span
+      className={cn(
+        "inline-flex min-w-0 items-center gap-1.5",
+        isProperty &&
+          "h-5 max-w-full whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-md-medium text-secondary",
+        className
+      )}
+    >
+      <Package className={cn("shrink-0 text-tertiary", isProperty ? "size-3" : "size-3.5")} />
       {identifier && (
         <IdentifierText
           identifier={identifier}
@@ -61,7 +76,9 @@ export const ProductChip = (props: TProps) => {
           copyToastTitle={t("workspace_products.identifier_copied")}
         />
       )}
-      {!hideName && name && <span className="min-w-0 truncate text-13">{name}</span>}
+      {!hideName && name && (
+        <span className={cn("min-w-0 truncate", isProperty ? "text-caption-md-medium" : "text-13")}>{name}</span>
+      )}
     </span>
   );
 
@@ -70,7 +87,10 @@ export const ProductChip = (props: TProps) => {
   if (!href) return content;
 
   return (
-    <Link to={href} className="inline-flex min-w-0 items-center hover:text-accent-primary">
+    <Link
+      to={href}
+      className={cn("inline-flex min-w-0 items-center hover:text-accent-primary", isProperty && "h-5")}
+    >
       {content}
     </Link>
   );

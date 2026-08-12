@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectRequirement } from "@plane/types";
+import type { TProjectRequirement, TRequirementProjectStage } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
 
 type TUseReleaseRequirementsProps = {
@@ -46,6 +46,7 @@ export const useReleaseRequirements = ({
   const requirementService = useMemo(() => new RequirementService(), []);
   const [requirementAssociateOpen, setRequirementAssociateOpen] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
+  const [updatingStageRequirementId, setUpdatingStageRequirementId] = useState<string | null>(null);
 
   const {
     data: requirementsResp,
@@ -111,16 +112,51 @@ export const useReleaseRequirements = ({
     [projectId, refresh, releaseId, requirementService, t, workspaceSlug]
   );
 
+  /**
+   * 人工设置研发段档位。写的是**项目**关联行（阶段长在项目上，不长在发布单上），
+   * 与迭代侧 updateStage 同口径；挂在在途发布单上时服务端会以 stage_locked 拒绝。
+   */
+  const updateStage = useCallback(
+    async (requirementId: string, stage: TRequirementProjectStage) => {
+      if (!workspaceSlug || !projectId) return;
+      try {
+        setUpdatingStageRequirementId(requirementId);
+        const applied = await requirementService.updateProjectRequirement(workspaceSlug, projectId, requirementId, {
+          stage,
+        });
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("project_requirements.toast.stage_updated", {
+            stage: t(`project_requirements.stage.${applied.stage}`),
+          }),
+        });
+        refresh();
+      } catch (error) {
+        const payload = error as { error?: string; detail?: string } | null;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("project_requirements.container.toast_failed"),
+          message: payload?.error ?? payload?.detail ?? t("project_requirements.toast.failed"),
+        });
+      } finally {
+        setUpdatingStageRequirementId(null);
+      }
+    },
+    [projectId, refresh, requirementService, t, workspaceSlug]
+  );
+
   return {
     requirements,
     requirementsLoading,
     requirementsError,
     requirementAssociateOpen,
     unlinkingRequirementId,
+    updatingStageRequirementId,
     openRequirementAssociateModal,
     closeRequirementAssociateModal,
     handleLinkRequirements,
     handleUnlinkRequirement,
+    updateStage,
     /** 供外部动作（如发布/驳回）成功后主动刷新关联需求列表 */
     refresh,
   };

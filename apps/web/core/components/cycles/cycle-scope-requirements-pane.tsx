@@ -6,79 +6,117 @@
 
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
-import { useCycle } from "@/hooks/store/use-cycle";
-import { useUserPermissions } from "@/hooks/store/user";
-import { CycleRequirementLinkModal } from "./cycle-overview/cycle-requirement-link-modal";
+import useSWR from "swr";
+import type { TProjectRequirement, TRequirementProjectStage } from "@plane/types";
+import { ProductChip } from "@/components/products/product-chip";
+import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
+import { RequirementService } from "@/services/requirement.service";
 import { CycleRequirementsSection } from "./cycle-overview/cycle-requirements-section";
-import { useCycleRequirements } from "./cycle-overview/use-cycle-requirements";
 
 /**
  * 「迭代范围」页里的需求子页。
  *
- * 这三件套（hook + section + 关联弹窗）原本挂在 cycle-overview-content.tsx 上，而那个
- * 文件自 2026-06-02 起就不再被任何路由引用（迭代概览走的是 cycle-display-content.tsx），
- * 于是整个功能在 UI 上不可达。现已把它接到真正活着的这条路由上，那个孤儿文件也一并删除
- * —— 它孤儿化之后还被例行维护过三次，留着迟早还会有人往里写。
- *
  * 需求进迭代 = 阶段升到「已排期」（服务端 recalculate_stage 按关联事实派生），
  * 所以这不只是个展示列表，它是阶段流转的入口之一。
+ *
+ * 数据由页面统一持有（页面还要拿条数喂二级切换条的计数），这里只负责渲染与详情抽屉。
+ * 「关联需求」的按钮和弹窗在 header 上 —— 它和「添加工作项」占同一个位置，同一套
+ * SWR key 保证 header 关联完这里会自己刷新。
+ *
+ * 根节点**不要**再套 padding：行的左右缩进由 `Row` 的 px-page-x 提供，套了就会和
+ * 工作项子页对不齐。
  */
+
+const requirementService = new RequirementService();
 
 type TProps = {
   workspaceSlug: string;
   projectId: string;
-  cycleId: string;
+  requirements: TProjectRequirement[];
+  isLoading: boolean;
+  error: string | null;
+  canManage: boolean;
+  unlinkingRequirementId: string | null;
+  updatingStageRequirementId: string | null;
+  onOpenLinkModal: () => void;
+  onUnlink: (requirementId: string) => Promise<void>;
+  onStageChange: (requirementId: string, stage: TRequirementProjectStage) => void;
 };
 
-export const CycleScopeRequirementsPane = observer(function CycleScopeRequirementsPane({
-  workspaceSlug,
-  projectId,
-  cycleId,
-}: TProps) {
-  const { allowProjectPermissionKeys } = useUserPermissions();
-  const { getCycleById } = useCycle();
-  // 归档的迭代不允许再改关联
-  const isCycleArchived = Boolean(getCycleById(cycleId)?.archived_at);
-  const canManage =
-    allowProjectPermissionKeys([PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY], workspaceSlug, projectId) &&
-    !isCycleArchived;
-
+export const CycleScopeRequirementsPane = observer(function CycleScopeRequirementsPane(props: TProps) {
   const {
-    cycleRequirements,
-    requirementsLoading,
-    requirementsError,
-    linkModalOpen,
+    workspaceSlug,
+    projectId,
+    requirements,
+    isLoading,
+    error,
+    canManage,
     unlinkingRequirementId,
-    openLinkModal,
-    closeLinkModal,
-    linkRequirements,
-    unlinkRequirement,
-  } = useCycleRequirements({ workspaceSlug, projectId, cycleId });
+    updatingStageRequirementId,
+    onOpenLinkModal,
+    onUnlink,
+    onStageChange,
+  } = props;
 
-  // CycleRequirementsSection 根节点是 `flex h-full min-h-0 flex-col`，自己管滚动。
-  // 外面**不要**再套 overflow-y-auto，否则会出现两条滚动条。
+  const [peekRequirementId, setPeekRequirementId] = useState<string | null>(null);
+  const peekRow = useMemo(
+    () => requirements.find((row) => row.id === peekRequirementId) ?? null,
+    [peekRequirementId, requirements]
+  );
+
+  /** 解除关联之后那一行已经不在列表里了，别留一个空抽屉 */
+  useEffect(() => {
+    if (peekRequirementId && !peekRow) setPeekRequirementId(null);
+  }, [peekRequirementId, peekRow]);
+
+  /**
+   * 需求类型：列表行首图标 + 详情抽屉自定义字段都靠它。
+   * 定义变化不频繁，与列表同生命周期缓存即可。
+   */
+  const { data: configuration } = useSWR(
+    workspaceSlug && projectId ? `project-requirement-configuration-${workspaceSlug}-${projectId}` : null,
+    () => requirementService.getProjectRequirementConfiguration(workspaceSlug, projectId)
+  );
+  const requirementTypes = configuration?.requirement_types ?? [];
+
   return (
-    <div className="h-full w-full p-4">
+    <div className="flex h-full w-full flex-col">
       <CycleRequirementsSection
-        requirements={cycleRequirements}
-        isLoading={requirementsLoading}
-        error={requirementsError}
+        workspaceSlug={workspaceSlug}
+        requirements={requirements}
+        requirementTypes={requirementTypes}
+        isLoading={isLoading}
+        error={error}
         canManage={canManage}
         unlinkingRequirementId={unlinkingRequirementId}
-        onOpenLinkModal={openLinkModal}
-        onUnlink={unlinkRequirement}
+        updatingStageRequirementId={updatingStageRequirementId}
+        onOpenLinkModal={onOpenLinkModal}
+        onUnlink={onUnlink}
+        onStageChange={onStageChange}
+        onOpenDetail={setPeekRequirementId}
       />
 
-      <CycleRequirementLinkModal
-        isOpen={linkModalOpen}
-        workspaceSlug={workspaceSlug}
-        projectId={projectId}
-        cycleId={cycleId}
-        handleClose={closeLinkModal}
-        onSubmit={linkRequirements}
-      />
+      {/*
+        详情抽屉打到**产品**的端点上：需求内容、版本、变更轨迹的权威都在产品。
+        canEdit 恒 false —— 迭代侧对需求内容没有任何写入口，能改的只有阶段。
+        与项目需求页同理，「打开整页」隐藏：需求在项目里没有整页路由。
+      */}
+      {peekRow && (
+        <RequirementPeekOverview
+          workspaceSlug={workspaceSlug}
+          productId={peekRow.product_id ?? ""}
+          requirementId={peekRequirementId}
+          requirementTypes={requirementTypes}
+          rows={requirements}
+          canEdit={false}
+          onClose={() => setPeekRequirementId(null)}
+          onOpenRequirement={setPeekRequirementId}
+          showDetailAction={false}
+          productChip={<ProductChip identifier={peekRow.product_identifier} name={peekRow.product_name} />}
+        />
+      )}
     </div>
   );
 });

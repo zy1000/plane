@@ -7,4 +7,5 @@ export * from "./project-requirement-type-filter";
 export * from "./project-requirements-columns";
 export * from "./project-requirements-grid";
 export * from "./project-requirements-page";
+export * from "./scope-requirements-section";
 export * from "./unlink-confirm-modal";

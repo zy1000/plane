@@ -21,6 +21,7 @@ import {
 import { PageHead } from "@/components/core/page-title";
 import { ReleaseLayoutRoot } from "@/components/issues/issue-layouts/roots/release-layout-root";
 import { ReleaseAnalyticsSidebar } from "@/components/releases/release-analytics-sidebar";
+import { useReleaseRequirements } from "@/components/releases/release-overview/use-release-requirements";
 import { ReleaseScopeRequirementsPane } from "@/components/releases/release-scope-requirements-pane";
 import { useProject } from "@/hooks/store/use-project";
 import { useRelease } from "@/hooks/store/use-release";
@@ -38,6 +39,15 @@ function ReleaseIssuesPage({ params }: Route.ComponentProps) {
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
   // 二级切换：工作项 | 需求。header 右侧那排工具条也读这个 key，切到需求时整排隐藏
   const { activeSubTab, setSubTab } = useScopeSubTab(getReleaseScopeSubTabStorageKey(releaseId));
+  /**
+   * 只用条数喂二级切换条。SWR key 与需求子页 / header 相同，关联完计数会跟着刷新，
+   * 不会多打一份请求。
+   */
+  const { requirements, requirementsLoading } = useReleaseRequirements({
+    workspaceSlug,
+    projectId,
+    releaseId,
+  });
 
   const { error } = useSWR(`CURRENT_RELEASE_DETAILS_${releaseId}`, () =>
     fetchReleaseDetails(workspaceSlug, projectId, releaseId)
@@ -82,11 +92,14 @@ function ReleaseIssuesPage({ params }: Route.ComponentProps) {
                   key: "work-items",
                   label: t("project_requirements.scope_tabs.work_items"),
                   icon: SCOPE_SUB_TAB_ICONS["work-items"],
+                  // 发布详情自带的总数，与工作项列表是否已加载无关
+                  count: projectRelease?.total_issues,
                 },
                 {
                   key: "requirements",
                   label: t("project_requirements.scope_tabs.requirements"),
                   icon: SCOPE_SUB_TAB_ICONS.requirements,
+                  count: requirementsLoading ? undefined : requirements.length,
                 },
               ]}
             />

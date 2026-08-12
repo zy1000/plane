@@ -2021,6 +2021,12 @@ export default {
       toast_linked: "已关联需求",
       toast_unlinked: "已解除关联",
       toast_failed: "操作失败",
+      /** 列表上方的分组头，与工作项子页的「All work items」同位 */
+      group_title: "全部需求",
+      /** 迭代范围页的整页空状态 */
+      empty_title: "本迭代还没有关联需求",
+      empty_description:
+        "关联之后，需求在本项目内的阶段会自动升到「已排期」，迭代结束前都能在这里看到它们的进展。",
     },
     /** 发布单关联候选为空 */
     release_linkable_empty: "没有可关联的需求",
