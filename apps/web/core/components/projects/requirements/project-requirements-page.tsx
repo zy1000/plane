@@ -33,7 +33,6 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useSearchParamFilter } from "@/hooks/use-search-param-filter";
 import { RequirementService } from "@/services/requirement.service";
 import { ExistingRequirementsModal } from "./existing-requirements-modal";
-import { ProjectLinkedProductsBar } from "./project-linked-products-bar";
 import { ProjectProductsModal } from "./project-products-modal";
 import { getProductFromParam, PRODUCT_PARAM } from "./project-requirement-product-tabs";
 import {
@@ -255,16 +254,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     <>
       <PageHead title={pageTitle} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        {/* 方案 A：已关联产品常驻条（展示 + 筛选）；编辑走「管理」弹窗 */}
-        <ProjectLinkedProductsBar
-          links={productLinks}
-          isLoading={isProductLinksLoading}
-          value={store.productFilter}
-          onChange={store.setProductFilter}
-          canManage={canManageProducts}
-          onManage={() => setIsProductsModalOpen(true)}
-        />
-
         <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-2">
           <div className="flex min-w-0 flex-wrap items-center gap-4">
             <ProjectRequirementStageFilter

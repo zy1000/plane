@@ -1,13 +1,8 @@
 /**
- * 「关联产品」弹窗。
+ * 「管理产品」弹窗：在弹窗内展示并勾选本项目关联的产品。
  *
- * 这一步是整条链路的入口：需求来自产品，项目必须先关联产品，候选池才有东西。没有
- * 这个弹窗，后端的 POST .../projects/:id/products/ 就没有任何调用方，需求关联按钮会
- * 永远停在禁用态。
- *
- * 候选项是**当前用户看得见的**工作区产品（productService.list 已经按可见性过滤过：
- * 公开产品 / 自己是负责人、评审人或成员的私密产品）。后端会再校验一次可见性与同
- * 工作区，见 utils/requirement_project.resolve_linkable_products。
+ * 这一步是整条链路的入口：需求来自产品，项目必须先关联产品，候选池才有东西。
+ * 候选项是当前用户看得见的工作区产品；后端会再校验可见性与同工作区。
  */
 import { useEffect, useMemo, useState } from "react";
 import { xor } from "lodash-es";
@@ -17,6 +12,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProduct, TProductProject } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { ProductChip } from "@/components/products/product-chip";
 
 type TProps = {
   isOpen: boolean;
@@ -35,6 +31,7 @@ export const ProjectProductsModal = (props: TProps) => {
   const { t } = useTranslation();
 
   const linkedIds = useMemo(() => links.map((link) => link.product), [links]);
+  const linkByProductId = useMemo(() => new Map(links.map((link) => [link.product, link])), [links]);
   const [selectedIds, setSelectedIds] = useState<string[]>(linkedIds);
 
   // 每次打开都以服务端的现状为准，不要沿用上一次关掉时的草稿选择
@@ -69,8 +66,6 @@ export const ProjectProductsModal = (props: TProps) => {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
-        // 解除关联时后端会挡下「该产品下还有需求关联在本项目里」，那句提示比通用
-        // 失败文案有用得多
         message:
           payload?.code === "PRODUCT_HAS_LINKED_REQUIREMENTS"
             ? t("project_products.has_linked_requirements")
@@ -81,53 +76,62 @@ export const ProjectProductsModal = (props: TProps) => {
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
-      <div className="border-b border-subtle px-4 py-3">
-        <h3 className="text-14 font-medium text-primary">{t("project_products.title")}</h3>
+      <div className="border-b border-subtle px-5 py-4">
+        <h3 className="text-body-sm-semibold text-primary">{t("project_products.manage")}</h3>
+        <p className="mt-1 text-caption-sm-regular text-tertiary">{t("project_products.manage_subtitle")}</p>
       </div>
 
-      <div className="max-h-96 overflow-y-auto px-2 py-2">
+      <div className="max-h-96 overflow-y-auto px-3 py-2">
         {isProductsLoading ? (
           <Loader className="space-y-2 p-2">
-            <Loader.Item height="36px" />
-            <Loader.Item height="36px" />
-            <Loader.Item height="36px" />
+            <Loader.Item height="40px" />
+            <Loader.Item height="40px" />
+            <Loader.Item height="40px" />
           </Loader>
         ) : products.length === 0 ? (
-          // 这一支是「工作区里一个可见产品都没有」，不是「还没关联」—— 两件事文案不能共用
           <p className="px-3 py-8 text-center text-13 text-secondary">
             {t("project_products.no_visible_products")}
           </p>
         ) : (
           products.map((product) => {
             const isSelected = selectedIds.includes(product.id);
+            const link = linkByProductId.get(product.id);
             return (
               <button
                 key={product.id}
                 type="button"
                 onClick={() => toggle(product.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-13 text-primary",
+                  "flex w-full items-center gap-2.5 rounded-md border-[0.5px] border-transparent px-3 py-2.5 text-left text-13 text-primary transition-colors",
                   "hover:bg-layer-transparent-hover",
-                  isSelected && "bg-accent-primary/5"
+                  isSelected && "border-accent-strong bg-accent-primary/5"
                 )}
               >
                 <Checkbox checked={isSelected} onChange={() => toggle(product.id)} />
-                <span className="shrink-0 rounded bg-layer-2 px-1.5 py-0.5 text-11 text-secondary">
-                  {product.identifier}
+                <ProductChip identifier={product.identifier} name={product.name} className="min-w-0" />
+                <span className="ml-auto shrink-0 text-11 text-tertiary">
+                  {link
+                    ? t("project_products.linked_meta", { count: link.requirement_count ?? 0 })
+                    : t("project_products.unlinked_meta")}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{product.name}</span>
               </button>
             );
           })
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-subtle px-4 py-3">
-        <Button variant="neutral-primary" size="sm" onClick={handleClose}>
+      <div className="flex items-center justify-end gap-2 border-t border-subtle px-5 py-3">
+        <Button variant="secondary" size="lg" onClick={handleClose}>
           {t("cancel")}
         </Button>
-        <Button variant="primary" size="sm" loading={isSubmitting} disabled={isSubmitting} onClick={() => void handleSubmit()}>
-          {t("submit")}
+        <Button
+          variant="primary"
+          size="lg"
+          loading={isSubmitting}
+          disabled={isSubmitting}
+          onClick={() => void handleSubmit()}
+        >
+          {t("confirm")}
         </Button>
       </div>
     </ModalCore>

@@ -1803,7 +1803,7 @@ export default {
     },
     no_products: {
       title: "No product linked to this project",
-      description: "Requirements come from products. Use \"Manage\" at the top to link one first.",
+      description: "Requirements come from products. Use \"Manage products\" in the toolbar to link one first.",
     },
     linkable: {
       title: "Link requirements",
@@ -1878,9 +1878,11 @@ export default {
     link: "Link products",
     unlink: "Unlink",
     empty: "No product linked yet",
-    manage: "Manage linked products",
-    manage_short: "Manage",
-    linked_label: "Linked products",
+    manage: "Manage products",
+    manage_subtitle:
+      "Select products to link to this project. You can then reference their approved requirements.",
+    linked_meta: "Linked · {count} requirements",
+    unlinked_meta: "Not linked",
     has_linked_requirements:
       "Requirements from this product are still linked to the project. Unlink them first.",
   },

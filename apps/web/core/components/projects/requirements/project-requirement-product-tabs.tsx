@@ -1,8 +1,8 @@
 /**
  * 产品筛选的 URL 参数约定。
  *
- * 展示层已改为方案 A 的 ProjectLinkedProductsBar；这里只保留深链解析，避免
- * ?product= 在名单未就绪时被首帧抹掉。
+ * 页面入口已改为工具栏「管理产品」弹窗；这里只保留深链解析，避免 ?product=
+ * 在名单未就绪时被首帧抹掉。
  */
 
 export const PRODUCT_PARAM = "product";

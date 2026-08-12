@@ -13,7 +13,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pagination } from "antd";
-import { Columns3, Link2Off, Loader as LoaderIcon, Send } from "lucide-react";
+import { Columns3, Link2Off, Loader as LoaderIcon, Package, Send } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -394,6 +394,12 @@ export const ProjectRequirementsGrid = (props: TProps) => {
           </div>
         )}
       </div>
+      {canManageProducts && (
+        <Button variant="secondary" size="lg" onClick={onManageProducts}>
+          <Package className="size-3.5" />
+          {t("project_products.manage")}
+        </Button>
+      )}
       {canManage && (
         <Button variant="primary" size="lg" disabled={isMutating || !hasLinkedProducts} onClick={onLink}>
           {t("project_requirements.link")}
