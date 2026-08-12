@@ -28,7 +28,9 @@ class ProductViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.workspace_slug)
-            .select_related("workspace", "owner", "created_by", "updated_by")
+            .select_related(
+                "workspace", "owner", "created_by", "updated_by", "cover_image_asset"
+            )
             .prefetch_related("reviewers")
         )
 
@@ -101,6 +103,12 @@ class ProductViewSet(BaseViewSet):
             network=serializer.validated_data.get("network", 2),
             created_by=request.user,
         )
+        # 创建流的封面资产上传时 product 还不存在，这里反向把 asset 挂到产品上
+        # （正向 product.cover_image_asset 已由 serializer.save 落库）
+        cover_asset = serializer.validated_data.get("cover_image_asset")
+        if cover_asset:
+            cover_asset.product_id = product.id
+            cover_asset.save(update_fields=["product"])
         return Response(
             self.get_serializer(product).data,
             status=status.HTTP_201_CREATED,
@@ -121,6 +129,8 @@ class ProductViewSet(BaseViewSet):
 
         data = request.data.copy()
         data.pop("workspace", None)
+        # 编辑换封面统一走资产上传确认（entity_asset_save）回写，不允许从这里改绑
+        data.pop("cover_image_asset", None)
         serializer = self.get_serializer(
             product,
             data=data,

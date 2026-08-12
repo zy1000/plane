@@ -1889,6 +1889,7 @@ export default {
   workspace_products: {
     identifier_copied: "Product ID copied to clipboard",
     title: "Product management",
+    cover_image_alt: "Product cover image",
     search_placeholder: "Search products by name",
     create_product: "New product",
     edit_product: "Edit product",
@@ -1913,7 +1914,13 @@ export default {
       private_access_warning: "You will lose access after saving unless you add yourself as a reviewer.",
     },
     validation: { owner_required: "Select an owner" },
-    actions: { view: "View", edit: "Edit", delete: "Delete" },
+    actions: {
+      view: "View",
+      edit: "Edit",
+      delete: "Delete",
+      no_permission_edit: "No permission to edit",
+      no_permission_delete: "No permission to delete",
+    },
     navigation: {
       dashboard: "Dashboard",
       requirements: "Requirements",
@@ -2546,7 +2553,6 @@ export default {
       },
       configuration: {
         title: "Requirement configuration",
-        fields_moved_hint: "Field structure is now managed under Templates → Requirement types.",
         read_only: "You have view-only access to this product requirement.",
         read_only_published: "Published content is read-only. Use Edit to create a draft before changing it.",
         read_only_in_review: "A change request is under review, so the field configuration is read-only for now.",
@@ -2654,6 +2660,8 @@ export default {
       attachment_title: "The product was saved, but its images are still being linked.",
       attachment_description:
         "Retry saving to finish linking the uploaded images. A duplicate product will not be created.",
+      cover_upload_title: "Cover image not uploaded",
+      cover_upload_description: "The cover image could not be uploaded. Please try again.",
     },
     delete: {
       title: "Delete product",

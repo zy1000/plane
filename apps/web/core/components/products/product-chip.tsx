@@ -3,8 +3,9 @@
 import { Package } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TIdentifierTextVariant, TIssueIdentifierSize } from "@plane/types";
+import type { TIdentifierTextVariant, TIssueIdentifierSize, TLogoProps } from "@plane/types";
 import { cn } from "@plane/utils";
 import { IdentifierText } from "@/components/issues/issue-detail/identifier-text";
 
@@ -23,6 +24,8 @@ import { IdentifierText } from "@/components/issues/issue-detail/identifier-text
 type TProps = {
   identifier: string | null | undefined;
   name?: string | null;
+  /** 产品的 logo 配置；没有（或老产品未设置）时回落到 Package 图标 */
+  logoProps?: TLogoProps | null;
   /** 给了就整体变成链接，点进该产品的需求页 */
   href?: string;
   size?: TIssueIdentifierSize;
@@ -42,6 +45,7 @@ export const ProductChip = (props: TProps) => {
   const {
     identifier,
     name,
+    logoProps,
     href,
     size = "xs",
     variant = "secondary",
@@ -65,7 +69,13 @@ export const ProductChip = (props: TProps) => {
         className
       )}
     >
-      <Package className={cn("shrink-0 text-tertiary", isProperty ? "size-3" : "size-3.5")} />
+      {logoProps?.in_use ? (
+        <span className={cn("grid shrink-0 place-items-center", isProperty ? "size-3" : "size-3.5")}>
+          <Logo logo={logoProps} size={isProperty ? 12 : 14} />
+        </span>
+      ) : (
+        <Package className={cn("shrink-0 text-tertiary", isProperty ? "size-3" : "size-3.5")} />
+      )}
       {identifier && (
         <IdentifierText
           identifier={identifier}

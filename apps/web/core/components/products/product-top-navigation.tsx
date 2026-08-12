@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import { ChevronDown, MoreHorizontal, PackageOpen, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Menu } from "@plane/propel/menu";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import type { ICustomSearchSelectOption, TProduct } from "@plane/types";
@@ -30,7 +31,7 @@ function ProductSwitcherButton({ product }: { product: TProduct }) {
     <Tooltip tooltipContent={product.name} position="bottom">
       <div className="relative flex w-full max-w-48 items-center pr-1 text-left select-none">
         <div className="flex size-7 flex-shrink-0 items-center justify-center rounded-md bg-layer-1 text-secondary">
-          <PackageOpen className="size-4" />
+          {product.logo_props?.in_use ? <Logo logo={product.logo_props} size={16} /> : <PackageOpen className="size-4" />}
         </div>
         <div className="relative min-w-0 flex-1 hover:rounded">
           <p className="truncate px-2 text-14 font-medium text-secondary">{product.name}</p>
@@ -139,7 +140,11 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
         content: (
           <div className="flex min-w-0 items-center gap-2">
             <span className="flex size-6 shrink-0 items-center justify-center rounded bg-layer-1 text-secondary">
-              <PackageOpen className="size-3.5" />
+              {product.logo_props?.in_use ? (
+                <Logo logo={product.logo_props} size={14} />
+              ) : (
+                <PackageOpen className="size-3.5" />
+              )}
             </span>
             <span className="truncate text-12 text-primary">{product.name}</span>
           </div>

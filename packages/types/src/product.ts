@@ -1,3 +1,4 @@
+import type { TLogoProps } from "./common";
 import type { IUserLite } from "./users";
 
 export type TProductNetwork = 0 | 2;
@@ -14,6 +15,10 @@ export type TProduct = {
   reviewers: string[];
   owner_detail: IUserLite;
   reviewer_details: IUserLite[];
+  logo_props: TLogoProps;
+  /** 封面外链（Unsplash 等）。上传的封面存在 cover_image_asset，读取统一走 cover_image_url。 */
+  cover_image: string | null;
+  readonly cover_image_url: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -27,6 +32,10 @@ export type TCreateProductPayload = {
   network: TProductNetwork;
   owner: string;
   reviewers?: string[];
+  logo_props?: TLogoProps;
+  cover_image?: string | null;
+  /** 仅创建时有效：已上传的 PRODUCT_COVER 资产 id，由后端在 create 时反向绑定 */
+  cover_image_asset?: string | null;
 };
 
 export type TUpdateProductPayload = Partial<TCreateProductPayload>;

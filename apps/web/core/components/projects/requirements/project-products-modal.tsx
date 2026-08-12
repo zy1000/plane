@@ -108,7 +108,12 @@ export const ProjectProductsModal = (props: TProps) => {
                 )}
               >
                 <Checkbox checked={isSelected} onChange={() => toggle(product.id)} />
-                <ProductChip identifier={product.identifier} name={product.name} className="min-w-0" />
+                <ProductChip
+                  identifier={product.identifier}
+                  name={product.name}
+                  logoProps={product.logo_props}
+                  className="min-w-0"
+                />
                 <span className="ml-auto shrink-0 text-11 text-tertiary">
                   {link
                     ? t("project_products.linked_meta", { count: link.requirement_count ?? 0 })

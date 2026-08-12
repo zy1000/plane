@@ -6,7 +6,7 @@ export default function ProductsPage() {
   return (
     <>
       <AppHeader header={<ProductsHeader />} />
-      <ContentWrapper>
+      <ContentWrapper className="!overflow-hidden">
         <ProductsRoot />
       </ContentWrapper>
     </>

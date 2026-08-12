@@ -2069,8 +2069,9 @@ export default {
   workspace_products: {
     identifier_copied: "产品标识已复制",
     title: "产品管理",
+    cover_image_alt: "产品封面图片",
     search_placeholder: "按名称搜索产品",
-    create_product: "新建产品",
+    create_product: "创建产品",
     edit_product: "编辑产品",
     view_product: "产品详情",
     fields: {
@@ -2093,7 +2094,13 @@ export default {
       private_access_warning: "保存后你将无法继续访问；如需保留查看权限，请将自己添加为评审人。",
     },
     validation: { owner_required: "请选择负责人" },
-    actions: { view: "查看", edit: "编辑", delete: "删除" },
+    actions: {
+      view: "查看",
+      edit: "编辑",
+      delete: "删除",
+      no_permission_edit: "无权限编辑",
+      no_permission_delete: "无权限删除",
+    },
     navigation: {
       dashboard: "仪表盘",
       requirements: "需求",
@@ -2719,7 +2726,6 @@ export default {
       },
       configuration: {
         title: "需求配置",
-        fields_moved_hint: "字段结构现由「模板管理 → 需求类型」维护，在这里不可修改。",
         read_only: "你仅拥有该产品需求的查看权限。",
         read_only_published: "已发布内容为只读，点击「编辑」生成草稿后才能修改。",
         read_only_in_review: "变更审批中，字段配置暂时只读。",
@@ -2827,6 +2833,8 @@ export default {
       description: "请重试以获取当前工作区的最新产品数据。",
       attachment_title: "产品已保存，但描述图片仍在关联中。",
       attachment_description: "再次保存可重试图片关联，系统不会重复创建产品。",
+      cover_upload_title: "封面上传失败",
+      cover_upload_description: "封面图片上传失败，请重试。",
     },
     delete: {
       title: "删除产品",

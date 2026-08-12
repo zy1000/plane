@@ -5,8 +5,8 @@ import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { EUserWorkspaceRoles } from "@plane/types";
-import type { TProductNetwork } from "@plane/types";
+import { EFileAssetType, EUserWorkspaceRoles } from "@plane/types";
+import type { TLogoProps, TProductNetwork } from "@plane/types";
 import { CustomSelect, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
@@ -15,12 +15,14 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PageHead } from "@/components/core/page-title";
 import { SettingsBoxedControlItem } from "@/components/settings/boxed-control-item";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
+import { handleCoverImageChange } from "@/helpers/cover-image.helper";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "../context";
 import { DeleteProductModal } from "../delete-modal";
+import { ProductLogoCoverHeader } from "../logo-cover-header";
 import { ProductSettingsHeader } from "./header";
 
 const workspaceService = new WorkspaceService();
@@ -44,6 +46,8 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [network, setNetwork] = useState<TProductNetwork>(2);
+  const [logoProps, setLogoProps] = useState<TLogoProps | undefined>(undefined);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [ownerError, setOwnerError] = useState<string | null>(null);
@@ -76,6 +80,9 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     setOwnerId(product.owner);
     setReviewerIds(product.reviewers);
     setNetwork(product.network);
+    // 老产品可能没有 logo/封面：不注入随机默认，展示层用 PackageOpen/默认封面兜底
+    setLogoProps(product.logo_props?.in_use ? product.logo_props : undefined);
+    setCoverImageUrl(product.cover_image_url ?? null);
     setFormError(null);
     setIdentifierError(null);
     setOwnerError(null);
@@ -112,6 +119,12 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     setIdentifierError(null);
     setOwnerError(null);
     try {
+      // 换封面：静态图/上传在资产确认时由后端直接回写绑定，外链才进 PATCH payload
+      const coverPayload = await handleCoverImageChange(product.cover_image_url, coverImageUrl, {
+        workspaceSlug,
+        entityIdentifier: product.id,
+        entityType: EFileAssetType.PRODUCT_COVER,
+      });
       const savedProduct = await updateProduct(product.id, {
         name: trimmedName,
         identifier,
@@ -119,6 +132,8 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         network,
         owner: ownerId,
         reviewers: reviewerIds,
+        ...(logoProps ? { logo_props: logoProps } : {}),
+        ...(coverPayload ?? {}),
       });
       await commitAssets(descriptionHTML);
       setToast({
@@ -160,6 +175,16 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       <PageHead title={`${t("workspace_products.settings.navigation.general")} - ${product.name}`} />
 
       <div className="w-full">
+        <div className="mb-8">
+          <ProductLogoCoverHeader
+            coverImageUrl={coverImageUrl}
+            logoProps={logoProps}
+            editable
+            entityIdentifier={product.id}
+            onCoverChange={setCoverImageUrl}
+            onLogoChange={setLogoProps}
+          />
+        </div>
         <div className="space-y-6">
           <div>
             <label htmlFor="product-settings-name" className="mb-1.5 block text-body-sm-medium text-primary">

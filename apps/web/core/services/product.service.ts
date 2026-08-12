@@ -32,13 +32,17 @@ export class ProductService extends APIService {
   }
 
   async update(workspaceSlug: string, productId: string, payload: TUpdateProductPayload): Promise<TProduct> {
-    const { name, description_html, network, owner, reviewers } = payload;
+    // 不透传 cover_image_asset：编辑换封面统一走资产上传确认由后端回写绑定
+    const { name, identifier, description_html, network, owner, reviewers, logo_props, cover_image } = payload;
     return this.patch(`/api/workspaces/${workspaceSlug}/products/${productId}/`, {
       ...(name !== undefined ? { name } : {}),
+      ...(identifier !== undefined ? { identifier } : {}),
       ...(description_html !== undefined ? { description_html } : {}),
       ...(network !== undefined ? { network } : {}),
       ...(owner !== undefined ? { owner } : {}),
       ...(reviewers !== undefined ? { reviewers } : {}),
+      ...(logo_props !== undefined ? { logo_props } : {}),
+      ...(cover_image !== undefined ? { cover_image } : {}),
     })
       .then((response) => response?.data)
       .catch((error) => {

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { AlertTriangle, Globe2, LockKeyhole, PackageOpen, Pencil, X } from "lucide-react";
+import { AlertTriangle, Globe2, LockKeyhole, Pencil, X } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { InfoIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import { EUserWorkspaceRoles } from "@plane/types";
-import type { TProduct, TProductNetwork } from "@plane/types";
+import { EFileAssetType, EUserWorkspaceRoles } from "@plane/types";
+import type { TLogoProps, TProduct, TProductNetwork } from "@plane/types";
 import { Avatar, AvatarGroup, CustomSelect, EModalPosition, EModalWidth, Input, Loader, ModalCore } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import {
@@ -18,12 +18,18 @@ import {
 } from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { handleCoverImageChange } from "@/helpers/cover-image.helper";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
+import {
+  ProductLogoCoverHeader,
+  buildCreateProductCoverPayload,
+  getProductLogoCoverDefaults,
+} from "./logo-cover-header";
 
 const workspaceService = new WorkspaceService();
 const EMPTY_DESCRIPTION = "<p></p>";
@@ -45,6 +51,8 @@ export const ProductModal = observer(function ProductModal() {
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [network, setNetwork] = useState<TProductNetwork>(2);
+  const [logoProps, setLogoProps] = useState<TLogoProps | undefined>(undefined);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [ownerError, setOwnerError] = useState<string | null>(null);
@@ -88,6 +96,15 @@ export const ProductModal = observer(function ProductModal() {
     setOwnerId(product?.owner ?? currentUser?.id ?? null);
     setReviewerIds(product?.reviewers ?? []);
     setNetwork(product?.network ?? 2);
+    if (mode === "create") {
+      const visualDefaults = getProductLogoCoverDefaults();
+      setLogoProps(visualDefaults.logoProps);
+      setCoverImageUrl(visualDefaults.coverImageUrl);
+    } else {
+      // 老产品可能没有 logo/封面：不注入随机默认，展示层用 PackageOpen/默认封面兜底
+      setLogoProps(product?.logo_props?.in_use ? product.logo_props : undefined);
+      setCoverImageUrl(product?.cover_image_url ?? null);
+    }
     setFormError(null);
     setIdentifierError(null);
     setOwnerError(null);
@@ -135,21 +152,40 @@ export const ProductModal = observer(function ProductModal() {
       network,
       owner: ownerId,
       reviewers: reviewerIds,
+      ...(logoProps ? { logo_props: logoProps } : {}),
     };
 
     try {
       let savedProduct;
       if (mode === "create") {
         if (persistedProductId) {
+          // 重试路径：产品已建成（封面也已绑定），只需补描述附件
           if (!persistedProduct.current) return;
           savedProduct = persistedProduct.current;
         } else {
-          savedProduct = await createProduct(payload);
+          let coverPayload: { cover_image?: string | null; cover_image_asset?: string | null } = {};
+          try {
+            coverPayload = await buildCreateProductCoverPayload(workspaceSlug, coverImageUrl);
+          } catch {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("workspace_products.error.cover_upload_title"),
+              message: t("workspace_products.error.cover_upload_description"),
+            });
+            return;
+          }
+          savedProduct = await createProduct({ ...payload, ...coverPayload });
           setPersistedProductId(savedProduct.id);
           persistedProduct.current = savedProduct;
         }
       } else if (product) {
-        savedProduct = await updateProduct(product.id, payload);
+        // 编辑换封面：静态图/上传在资产确认时由后端直接回写绑定，外链才进 PATCH payload
+        const coverPayload = await handleCoverImageChange(product.cover_image_url, coverImageUrl, {
+          workspaceSlug,
+          entityIdentifier: product.id,
+          entityType: EFileAssetType.PRODUCT_COVER,
+        });
+        savedProduct = await updateProduct(product.id, { ...payload, ...(coverPayload ?? {}) });
       } else {
         return;
       }
@@ -198,13 +234,6 @@ export const ProductModal = observer(function ProductModal() {
     }
   };
 
-  const title =
-    mode === "create"
-      ? t("workspace_products.create_product")
-      : mode === "edit"
-        ? t("workspace_products.edit_product")
-        : t("workspace_products.view_product");
-
   return (
     <ModalCore
       isOpen={isOpen}
@@ -213,20 +242,20 @@ export const ProductModal = observer(function ProductModal() {
       width={EModalWidth.XXXXL}
     >
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center justify-between px-3 pt-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-11 shrink-0 place-items-center rounded-md border border-subtle bg-layer-2 text-secondary">
-              <PackageOpen className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="truncate text-16 font-medium text-primary">{title}</h2>
-              {product && mode !== "create" && <p className="truncate text-11 text-secondary">{product.name}</p>}
-            </div>
-          </div>
+        <div className="relative">
+          <ProductLogoCoverHeader
+            coverImageUrl={coverImageUrl}
+            logoProps={logoProps}
+            editable={editable}
+            entityIdentifier={mode === "create" ? "" : (product?.id ?? "")}
+            onCoverChange={setCoverImageUrl}
+            onLogoChange={setLogoProps}
+            className="rounded-lg"
+          />
           <button
             type="button"
             onClick={() => void handleClose()}
-            className="grid size-8 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+            className="absolute top-2 right-2 grid size-8 place-items-center rounded-md text-on-color hover:bg-layer-transparent-hover"
             aria-label={t("close")}
           >
             <X className="size-5" />
@@ -234,7 +263,7 @@ export const ProductModal = observer(function ProductModal() {
         </div>
 
         {isDetailLoading && product ? (
-          <div className="p-3">
+          <div className="p-3 pt-9">
             <Loader>
               <Loader.Item height="38px" />
               <Loader.Item height="96px" />
@@ -242,7 +271,7 @@ export const ProductModal = observer(function ProductModal() {
           </div>
         ) : (
           <div data-modal-wheel-scroll className="px-3">
-            <div className="mt-6 space-y-6 pb-5">
+            <div className="mt-9 space-y-6 pb-5">
               <div className="grid grid-cols-1 gap-x-2 gap-y-3 md:grid-cols-4">
                 <div className="md:col-span-3">
                   {editable ? (

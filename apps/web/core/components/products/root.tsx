@@ -1,13 +1,17 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Link } from "react-router";
-import { AlertCircle, Eye, Globe2, LockKeyhole, PackageOpen, Pencil, Trash2 } from "lucide-react";
+import { Pagination } from "antd";
+import { AlertCircle, Eye, Globe2, LockKeyhole, PackageOpen, Pencil, Settings, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { Logo } from "@plane/propel/emoji-icon-picker";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TProduct } from "@plane/types";
 import { EUserWorkspaceRoles } from "@plane/types";
-import { Avatar, AvatarGroup, CustomMenu, Loader } from "@plane/ui";
-import { calculateTimeAgo, getFileURL, stripAndTruncateHTML } from "@plane/utils";
+import { Avatar, AvatarGroup, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
+import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
 import { PageHead } from "@/components/core/page-title";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { DeleteProductModal } from "./delete-modal";
@@ -17,18 +21,18 @@ import { useProductsContext } from "./context";
 const ProductPeople = ({ product, type }: { product: TProduct; type: "owner" | "reviewers" }) => {
   if (type === "owner") {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Avatar
           size="sm"
           name={product.owner_detail?.display_name}
           src={getFileURL(product.owner_detail?.avatar_url ?? "")}
           showTooltip={false}
         />
-        <span className="max-w-32 truncate text-12 text-primary">{product.owner_detail?.display_name ?? "-"}</span>
+        <span className="truncate text-xs text-primary">{product.owner_detail?.display_name ?? "-"}</span>
       </div>
     );
   }
-  if (!product.reviewer_details.length) return <span className="text-placeholder">-</span>;
+  if (!product.reviewer_details.length) return <span className="text-secondary">-</span>;
   return (
     <AvatarGroup showTooltip>
       {product.reviewer_details.map((reviewer) => (
@@ -51,140 +55,262 @@ export const ProductsRoot = observer(function ProductsRoot() {
   const canCreate = workspaceInfo?.role === EUserWorkspaceRoles.MEMBER || isWorkspaceAdmin;
   const canManage = (product: TProduct) => isWorkspaceAdmin || product.owner === currentUser?.id;
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
-  const filteredProducts = normalizedSearch
-    ? products.filter((product) => product.name.toLocaleLowerCase().includes(normalizedSearch))
-    : products;
+  const filteredProducts = useMemo(
+    () =>
+      normalizedSearch
+        ? products.filter((product) => product.name.toLocaleLowerCase().includes(normalizedSearch))
+        : products,
+    [normalizedSearch, products]
+  );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredProducts.length, normalizedSearch]);
+
+  const total = filteredProducts.length;
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(currentPage * pageSize, total);
+  const currentPageProducts = useMemo(
+    () => filteredProducts.slice(startIndex, startIndex + pageSize),
+    [filteredProducts, startIndex, pageSize]
+  );
+  const handlePaginationChange = useCallback((page: number, size: number) => {
+    setCurrentPage(page);
+    setPageSize(size);
+  }, []);
 
   return (
     <>
       <PageHead title={t("workspace_products.title")} />
-      <div className="h-full overflow-auto bg-surface-1">
-        {isLoading ? (
-          <div className="min-w-[920px]">
-            <div className="grid grid-cols-[minmax(280px,1.7fr)_180px_150px_110px_130px_52px] gap-4 border-b border-subtle bg-layer-1 px-5 py-2.5">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Loader.Item key={index} height="14px" />
-              ))}
-            </div>
-            {Array.from({ length: 6 }).map((_, row) => (
-              <div
-                key={row}
-                className="grid grid-cols-[minmax(280px,1.7fr)_180px_150px_110px_130px_52px] items-center gap-4 border-b border-subtle px-5 py-3"
-              >
-                <Loader.Item height="34px" />
-                <Loader.Item height="24px" />
-                <Loader.Item height="24px" />
-                <Loader.Item height="24px" />
-                <Loader.Item height="16px" />
-                <Loader.Item height="24px" />
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="flex h-full min-h-80 items-center justify-center p-6">
-            <div className="max-w-sm text-center">
-              <span className="mx-auto grid size-10 place-items-center rounded-full bg-danger-subtle text-danger-primary">
-                <AlertCircle className="size-5" />
-              </span>
-              <h2 className="mt-3 text-14 font-medium text-primary">{t("workspace_products.error.title")}</h2>
-              <p className="mt-1 text-12 text-secondary">{t("workspace_products.error.description")}</p>
-              <Button className="mt-4" variant="secondary" onClick={() => void fetchProducts().catch(() => undefined)}>
-                {t("retry")}
-              </Button>
-            </div>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="flex h-full min-h-80 items-center justify-center p-6">
-            <div className="max-w-md text-center">
-              <span className="mx-auto grid size-11 place-items-center rounded-lg border border-subtle bg-layer-1 text-secondary">
-                <PackageOpen className="size-5" />
-              </span>
-              <h2 className="mt-3 text-14 font-medium text-primary">
-                {normalizedSearch ? t("workspace_products.empty.search_title") : t("workspace_products.empty.title")}
-              </h2>
-              <p className="mt-1 text-12 leading-5 text-secondary">
-                {normalizedSearch
-                  ? t("workspace_products.empty.search_description")
-                  : t("workspace_products.empty.description")}
-              </p>
-              {!normalizedSearch && canCreate && (
-                <Button className="mt-4" variant="primary" onClick={() => openProductModal("create")}>
-                  {t("workspace_products.create_product")}
-                </Button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="min-w-[920px]">
-            <table className="w-full table-fixed border-collapse text-left">
-              <thead className="sticky top-0 z-[1] bg-layer-1">
-                <tr className="border-b border-subtle text-11 font-medium text-secondary">
-                  <th className="w-[38%] px-5 py-2.5">{t("workspace_products.fields.name")}</th>
-                  <th className="w-[18%] px-4 py-2.5">{t("workspace_products.fields.owner")}</th>
-                  <th className="w-[15%] px-4 py-2.5">{t("workspace_products.fields.reviewers")}</th>
-                  <th className="w-[12%] px-4 py-2.5">{t("workspace_products.fields.visibility")}</th>
-                  <th className="w-[13%] px-4 py-2.5">{t("workspace_products.fields.updated_at")}</th>
-                  <th className="w-12 px-3 py-2.5">
-                    <span className="sr-only">{t("workspace_products.fields.actions")}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="group border-b border-subtle hover:bg-layer-transparent-hover">
-                    <td className="px-5 py-3 align-middle">
-                      <Link to={`/${slug}/products/${product.id}/dashboard`} className="block max-w-full text-left">
-                        <span className="block truncate text-13 font-medium text-primary group-hover:text-accent-primary">
-                          {product.name}
-                        </span>
-                        <span className="mt-0.5 block truncate text-11 text-secondary">
-                          {product.description_html
-                            ? stripAndTruncateHTML(product.description_html, 110)
-                            : t("workspace_products.fields.no_description")}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <ProductPeople product={product} type="owner" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <ProductPeople product={product} type="reviewers" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-md bg-layer-2 px-2 py-1 text-11 text-secondary">
-                        {product.network === 0 ? <LockKeyhole className="size-3" /> : <Globe2 className="size-3" />}
-                        {t(
-                          product.network === 0
-                            ? "workspace_products.visibility.private"
-                            : "workspace_products.visibility.public"
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-11 text-secondary">{calculateTimeAgo(product.updated_at)}</td>
-                    <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
-                      <CustomMenu ellipsis placement="bottom-end">
-                        <CustomMenu.MenuItem onClick={() => openProductModal("view", product)}>
-                          <Eye className="size-3.5" /> {t("workspace_products.actions.view")}
-                        </CustomMenu.MenuItem>
-                        {canManage(product) && (
-                          <>
-                            <CustomMenu.MenuItem onClick={() => openProductModal("edit", product)}>
-                              <Pencil className="size-3.5" /> {t("workspace_products.actions.edit")}
-                            </CustomMenu.MenuItem>
-                            <CustomMenu.MenuItem onClick={() => setProductToDelete(product)}>
-                              <Trash2 className="size-3.5" /> {t("workspace_products.actions.delete")}
-                            </CustomMenu.MenuItem>
-                          </>
-                        )}
-                      </CustomMenu>
-                    </td>
-                  </tr>
+      {isLoading ? (
+        <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
+          <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
+            <div className="min-h-0 flex-1 overflow-auto vertical-scrollbar scrollbar-lg p-4">
+              <div className="space-y-3">
+                {Array.from({ length: 8 }).map((_, row) => (
+                  <Loader.Item key={row} height="40px" width="100%" />
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </ContentWrapper>
+      ) : error ? (
+        <div className="flex h-full min-h-80 items-center justify-center p-6">
+          <div className="max-w-sm text-center">
+            <span className="mx-auto grid size-10 place-items-center rounded-full bg-danger-subtle text-danger-primary">
+              <AlertCircle className="size-5" />
+            </span>
+            <h2 className="mt-3 text-14 font-medium text-primary">{t("workspace_products.error.title")}</h2>
+            <p className="mt-1 text-12 text-secondary">{t("workspace_products.error.description")}</p>
+            <Button className="mt-4" variant="secondary" onClick={() => void fetchProducts().catch(() => undefined)}>
+              {t("retry")}
+            </Button>
+          </div>
+        </div>
+      ) : filteredProducts.length === 0 ? (
+        <div className="flex h-full min-h-80 items-center justify-center p-6">
+          <div className="max-w-md text-center">
+            <span className="mx-auto grid size-11 place-items-center rounded-lg border border-subtle bg-layer-1 text-secondary">
+              <PackageOpen className="size-5" />
+            </span>
+            <h2 className="mt-3 text-14 font-medium text-primary">
+              {normalizedSearch ? t("workspace_products.empty.search_title") : t("workspace_products.empty.title")}
+            </h2>
+            <p className="mt-1 text-12 leading-5 text-secondary">
+              {normalizedSearch
+                ? t("workspace_products.empty.search_description")
+                : t("workspace_products.empty.description")}
+            </p>
+            {!normalizedSearch && canCreate && (
+              <Button className="mt-4" variant="primary" onClick={() => openProductModal("create")}>
+                {t("workspace_products.create_product")}
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
+          <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
+            <div className="min-h-0 flex-1 overflow-auto vertical-scrollbar scrollbar-lg">
+              <table className="w-full min-w-[920px] table-fixed text-sm">
+                <thead className="border-b border-subtle bg-layer-1">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-secondary">
+                      {t("workspace_products.fields.name")}
+                    </th>
+                    <th className="hidden w-40 px-4 py-3 text-left font-medium text-secondary sm:table-cell">
+                      {t("workspace_products.fields.owner")}
+                    </th>
+                    <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary md:table-cell">
+                      {t("workspace_products.fields.reviewers")}
+                    </th>
+                    <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
+                      {t("workspace_products.fields.visibility")}
+                    </th>
+                    <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
+                      {t("workspace_products.fields.updated_at")}
+                    </th>
+                    <th className="w-40 px-4 py-3 text-left font-medium text-secondary">
+                      {t("workspace_products.fields.actions")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentPageProducts.map((product) => {
+                    const manageable = canManage(product);
+                    const settingsPath = `/${slug}/settings/products/${product.id}`;
+
+                    return (
+                      <tr key={product.id} className="hover:bg-layer-1-hover">
+                        <td className="px-4 py-3">
+                          <Link
+                            to={`/${slug}/products/${product.id}/dashboard`}
+                            className="flex min-w-0 items-center gap-1.5 text-primary"
+                          >
+                            <span className="grid size-4 shrink-0 place-items-center">
+                              {product.logo_props?.in_use ? (
+                                <Logo logo={product.logo_props} size={14} />
+                              ) : (
+                                <PackageOpen className="size-3.5 text-secondary" />
+                              )}
+                            </span>
+                            <p className="min-w-0 truncate text-sm font-medium text-primary">{product.name}</p>
+                          </Link>
+                        </td>
+                        <td className="hidden px-4 py-3 sm:table-cell">
+                          <ProductPeople product={product} type="owner" />
+                        </td>
+                        <td className="hidden px-4 py-3 md:table-cell">
+                          <ProductPeople product={product} type="reviewers" />
+                        </td>
+                        <td className="hidden px-4 py-3 lg:table-cell">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-primary">
+                            {product.network === 0 ? (
+                              <LockKeyhole className="size-3 text-secondary" />
+                            ) : (
+                              <Globe2 className="size-3 text-secondary" />
+                            )}
+                            {t(
+                              product.network === 0
+                                ? "workspace_products.visibility.private"
+                                : "workspace_products.visibility.public"
+                            )}
+                          </span>
+                        </td>
+                        <td className="hidden whitespace-nowrap px-4 py-3 text-secondary lg:table-cell">
+                          {product.updated_at ? renderFormattedDate(product.updated_at) : "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-start gap-2">
+                            <Tooltip
+                              tooltipContent={
+                                <div className="text-xs text-primary">{t("workspace_products.actions.view")}</div>
+                              }
+                              position="top"
+                            >
+                              <button
+                                type="button"
+                                className="grid h-6 w-6 place-items-center rounded text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
+                                aria-label={t("workspace_products.actions.view")}
+                                onClick={() => openProductModal("view", product)}
+                              >
+                                <Eye className="h-3 w-3" />
+                              </button>
+                            </Tooltip>
+                            <Tooltip
+                              tooltipContent={
+                                <div className="text-xs text-primary">
+                                  {manageable
+                                    ? t("workspace_products.actions.edit")
+                                    : t("workspace_products.actions.no_permission_edit")}
+                                </div>
+                              }
+                              position="top"
+                            >
+                              <button
+                                type="button"
+                                disabled={!manageable}
+                                className={cn(
+                                  "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
+                                  manageable
+                                    ? "hover:bg-layer-1-hover hover:text-primary"
+                                    : "cursor-not-allowed opacity-50"
+                                )}
+                                aria-label={t("workspace_products.actions.edit")}
+                                onClick={() => manageable && openProductModal("edit", product)}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </Tooltip>
+                            <Tooltip
+                              tooltipContent={
+                                <div className="text-xs text-primary">
+                                  {manageable
+                                    ? t("workspace_products.actions.delete")
+                                    : t("workspace_products.actions.no_permission_delete")}
+                                </div>
+                              }
+                              position="top"
+                            >
+                              <button
+                                type="button"
+                                disabled={!manageable}
+                                className={cn(
+                                  "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
+                                  manageable
+                                    ? "hover:bg-layer-1-hover hover:text-primary"
+                                    : "cursor-not-allowed opacity-50"
+                                )}
+                                aria-label={t("workspace_products.actions.delete")}
+                                onClick={() => manageable && setProductToDelete(product)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </Tooltip>
+                            <Tooltip
+                              tooltipContent={<div className="text-xs text-primary">{t("settings")}</div>}
+                              position="top"
+                            >
+                              <Link
+                                to={settingsPath}
+                                className="flex items-center justify-center rounded p-1 text-placeholder hover:bg-layer-1-hover hover:text-primary"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <Settings className="h-3.5 w-3.5" />
+                              </Link>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-secondary">
+                  {total > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${total} 条` : ""}
+                </span>
+              </div>
+              <Pagination
+                simple
+                current={currentPage}
+                pageSize={pageSize}
+                total={total}
+                showSizeChanger
+                pageSizeOptions={["10", "20", "50", "100"]}
+                onChange={handlePaginationChange}
+                onShowSizeChange={handlePaginationChange}
+                size="small"
+              />
+            </div>
+          </div>
+        </ContentWrapper>
+      )}
       <ProductModal />
       <DeleteProductModal />
     </>

@@ -555,26 +555,21 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           </div>
         ) : (
           /* 配置只剩负责人与审批 —— 字段由「需求类型」维护，标题描述在每条需求上 */
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-subtle px-4 py-2 text-11 text-tertiary md:px-6">
-              {t("workspace_products.requirements.configuration.fields_moved_hint")}
-            </div>
-            <div className="flex min-h-0 flex-1">
-              {settingsDraft ? (
-                <RequirementSettingsPanel
-                  draft={settingsDraft}
-                  readOnly={!canManagePolicy}
-                  memberOptions={memberOptions}
-                  onChange={setSettingsDraft}
-                />
-              ) : (
-                <div className="min-w-0 flex-1 p-6">
-                  <Loader>
-                    <Loader.Item height="420px" />
-                  </Loader>
-                </div>
-              )}
-            </div>
+          <div className="flex min-h-0 flex-1">
+            {settingsDraft ? (
+              <RequirementSettingsPanel
+                draft={settingsDraft}
+                readOnly={!canManagePolicy}
+                memberOptions={memberOptions}
+                onChange={setSettingsDraft}
+              />
+            ) : (
+              <div className="min-w-0 flex-1 p-6">
+                <Loader>
+                  <Loader.Item height="420px" />
+                </Loader>
+              </div>
+            )}
           </div>
         )}
       </ContentWrapper>

@@ -114,7 +114,10 @@ def _is_cross_workspace_product(workspace, product_id):
 
 
 def _can_access_product_asset(user, asset, *, manage=False):
-    if asset.entity_type != FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+    if asset.entity_type not in (
+        FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+        FileAsset.EntityTypeContext.PRODUCT_COVER,
+    ):
         return True
     if asset.product_id:
         return (
@@ -314,6 +317,10 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.PROJECT_COVER:
             return {"project_id": entity_id}
 
+        # Product Cover（创建流 entity_id 为空串，显式归一成 NULL）
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_COVER:
+            return {"product_id": entity_id or None}
+
         # User Avatar and Cover
         if entity_type in [
             FileAsset.EntityTypeContext.USER_AVATAR,
@@ -393,6 +400,20 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
             project.cover_image_asset_id = asset_id
             project.save()
             return
+
+        # Product Cover（创建流上传时 product_id 为空，绑定由 ProductViewSet.create 完成）
+        elif entity_type == FileAsset.EntityTypeContext.PRODUCT_COVER:
+            product = Product.objects.filter(id=asset.product_id).first()
+            if product is None:
+                return
+            # Delete the previous cover image
+            if product.cover_image_asset_id:
+                self.asset_delete(product.cover_image_asset_id)
+            # Save the new cover image
+            product.cover_image = ""
+            product.cover_image_asset_id = asset_id
+            product.save()
+            return
         else:
             return
 
@@ -424,6 +445,14 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 return
             project.cover_image_asset_id = None
             project.save()
+            return
+        # Product Cover
+        elif entity_type == FileAsset.EntityTypeContext.PRODUCT_COVER:
+            product = Product.objects.filter(id=asset.product_id).first()
+            if product is None:
+                return
+            product.cover_image_asset_id = None
+            product.save()
             return
         else:
             return
@@ -502,9 +531,30 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                     {"error": "You do not have permission to create product assets."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        if (
-            project_scope_id
-            and entity_type != FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_COVER:
+            product = _get_product(workspace, entity_identifier)
+            if product is not None:
+                if not can_manage_product(request.user, product):
+                    return Response(
+                        {"error": "You do not have permission to edit this product."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                entity_id_fields["product_id"] = product.id
+            elif entity_identifier:
+                # 传了 id 却解析不到（跨 workspace 或不存在），一律 404，
+                # 避免把无效 id 直接写进 FK 触发 IntegrityError
+                return Response(
+                    {"error": "Product not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            elif not can_create_product(request.user, workspace):
+                return Response(
+                    {"error": "You do not have permission to create product assets."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        if project_scope_id and entity_type not in (
+            FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+            FileAsset.EntityTypeContext.PRODUCT_COVER,
         ):
             entity_id_fields["project_id"] = project_scope_id
 
@@ -739,6 +789,7 @@ class StaticFileAssetEndpoint(BaseAPIView):
             FileAsset.EntityTypeContext.USER_COVER,
             FileAsset.EntityTypeContext.WORKSPACE_LOGO,
             FileAsset.EntityTypeContext.PROJECT_COVER,
+            FileAsset.EntityTypeContext.PRODUCT_COVER,
         ]:
             return Response(
                 {"error": "Invalid entity type.", "status": False},

@@ -43,13 +43,28 @@ type Props = {
   tabIndex?: number;
   isProfileCover?: boolean;
   projectId?: string | null;
+  /** 上传 tab 建资产用的 entity_type，默认项目封面；产品封面等场景传对应类型 */
+  entityType?: EFileAssetType;
+  /** 上传 tab 建资产用的 entity_identifier，默认取 projectId */
+  entityIdentifier?: string;
 };
 
 // services
 const fileService = new FileService();
 
 export const ImagePickerPopover = observer(function ImagePickerPopover(props: Props) {
-  const { label, value, control, onChange, disabled = false, tabIndex, isProfileCover = false, projectId } = props;
+  const {
+    label,
+    value,
+    control,
+    onChange,
+    disabled = false,
+    tabIndex,
+    isProfileCover = false,
+    projectId,
+    entityType = EFileAssetType.PROJECT_COVER,
+    entityIdentifier,
+  } = props;
   // states
   const [image, setImage] = useState<File | null>(null);
   const [isImageUploading, setIsImageUploading] = useState(false);
@@ -151,8 +166,8 @@ export const ImagePickerPopover = observer(function ImagePickerPopover(props: Pr
         .uploadWorkspaceAsset(
           workspaceSlug.toString(),
           {
-            entity_identifier: projectId?.toString() ?? "",
-            entity_type: EFileAssetType.PROJECT_COVER,
+            entity_identifier: entityIdentifier ?? projectId?.toString() ?? "",
+            entity_type: entityType,
           },
           image
         )

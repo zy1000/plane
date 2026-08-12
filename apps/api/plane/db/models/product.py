@@ -34,6 +34,24 @@ class Product(BaseModel):
         blank=True,
         verbose_name="评审人",
     )
+    cover_image = models.TextField(blank=True, null=True)
+    cover_image_asset = models.ForeignKey(
+        "db.FileAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="product_cover_image",
+    )
+    logo_props = models.JSONField(default=dict)
+
+    @property
+    def cover_image_url(self):
+        # 上传的 asset 优先于外链文本，与 Project.cover_image_url 同序
+        if self.cover_image_asset:
+            return self.cover_image_asset.asset_url
+        if self.cover_image:
+            return self.cover_image
+        return None
 
     def save(self, *args, **kwargs):
         # 最后一道防线 —— 真正的归一化在 ProductSerializer.validate_identifier，
