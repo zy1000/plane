@@ -1,5 +1,5 @@
 /**
- * 阶段筛选条：「全部」+ REQUIREMENT_PROJECT_STAGES 的每一档（含「待验证」），每段带计数。
+ * 阶段筛选条：「全部」+ REQUIREMENT_PROJECT_STAGES 的每一档，每段带计数。
  * 段数跟随枚举走，不在这里硬编码；计数键由后端 by_stage 保证恒存在（含 0）。
  *
  * 视觉照 issues/defects/defect-quick-filter-bar.tsx 的分段控件（track + 白色滑块），

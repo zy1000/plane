@@ -1994,22 +1994,22 @@ export default {
       planned: "已排期",
       in_progress: "研发中",
       done: "研发完毕",
-      pending_verification: "待验证",
       released: "已发布",
     },
     /** 零关联行的展示值，不落库 */
     stage_not_started: "未开始",
     /** 已排期但关联迭代已结束的黄标 */
     stage_carryover: "迭代已结束",
-    /** 阶段胶囊 tooltip 的推导依据。阶段是纯派生，手动改阶段入口已退役 */
+    /** 阶段胶囊 tooltip 的推导依据。两端派生、研发段人工填 */
     stage_reason: {
       linked: "已关联到本项目",
       planned: "因关联迭代「{name}」",
-      in_progress: "按工作项推导",
-      done: "按工作项推导",
-      pending_verification: "因关联发布单「{name}」",
+      in_progress: "已手动标记为研发中",
+      done: "已手动标记为研发完毕",
       released: "发布单「{name}」已发布",
     },
+    /** 挂在在途发布单上时阶段锁死，追加进胶囊 tooltip */
+    stage_locked_hint: "已进入发布单，需先移出才能改阶段",
     /** 产品需求网格的「项目阶段」列 */
     project_stage_column: "项目阶段",
     /** 迭代 tab / 发布 section 的容器侧关联需求入口 */
@@ -2022,13 +2022,8 @@ export default {
       toast_unlinked: "已解除关联",
       toast_failed: "操作失败",
     },
-    /** 迭代完成软提示：不阻断，确认后照常完成 */
-    cycle_complete_confirm: {
-      title: "确认完成迭代",
-      body: "{count} 条关联需求尚未进入发布单，完成迭代后它们将保持「已排期」。",
-      confirm: "仍要完成",
-      cancel: "取消",
-    },
+    /** 发布单关联候选为空 */
+    release_linkable_empty: "没有可关联的需求",
     /** 发布软提示：在途变更需求标黄展示，不阻断 */
     release_publish_confirm: {
       title: "确认发布",
@@ -2040,6 +2035,8 @@ export default {
       linked: "已关联 {count} 条需求",
       unlinked: "已解除关联",
       change_submitted: "变更单已提交",
+      /** {stage} 是归一之后的落地档位，可能与用户选的不同 */
+      stage_updated: "阶段已更新为「{stage}」",
       failed: "操作失败，请稍后重试",
     },
   },

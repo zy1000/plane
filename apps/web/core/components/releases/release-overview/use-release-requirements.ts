@@ -31,8 +31,10 @@ export const getReleaseRequirementsKey = (workspaceSlug: string, projectId: stri
 /**
  * 发布单「关联需求」section 的局部状态（照 cycles/cycle-overview/use-cycle-plans.ts 风格）。
  *
- * 列表、批量关联、解除关联都走这里；阶段的升降档（待验证/已发布/退回）由服务端
- * 按关联事实重算，前端只负责动作完成后刷新列表。
+ * 列表、批量关联、解除关联都走这里。关联本身**不改阶段**（只圈定发版范围），
+ * 只有发布单发布（completed）才由服务端把关联需求推到「已发布」，前端只负责动作
+ * 完成后刷新列表。关联不再要求需求处于「研发完毕」——原阶段门槛已移除，任意阶段
+ * 的需求都能被圈进发布范围。
  */
 export const useReleaseRequirements = ({
   workspaceSlug,

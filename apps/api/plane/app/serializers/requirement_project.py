@@ -4,15 +4,19 @@
 
 from rest_framework import serializers
 
-from plane.db.models import RequirementProject, RequirementProjectStage
+from plane.db.models import (
+    MANUAL_STAGES,
+    RequirementProject,
+    RequirementProjectStage,
+)
 
 from .base import BaseSerializer
 from .requirement import ROW_FIELDS, RequirementSerializer
 
 
 class RequirementProjectSerializer(BaseSerializer):
-    """需求 ↔ 项目关联行本身。stage 是派生列（由关联事实重算），全行只读，
-    唯一可写的列是 sort_order。"""
+    """需求 ↔ 项目关联行本身。响应用，全行只读 —— stage 的写入走
+    RequirementProjectStageWriteSerializer + utils.set_manual_stage，不在这里改。"""
 
     class Meta:
         model = RequirementProject
@@ -42,14 +46,22 @@ class RequirementProjectSerializer(BaseSerializer):
 
 
 class RequirementProjectStageWriteSerializer(serializers.Serializer):
-    """PATCH 关联行。只收 sort_order —— stage 是派生列，写入在视图层被显式
-    拒绝（REQUIREMENT_STAGE_DERIVED），不在这里静默丢弃。"""
+    """PATCH 关联行：排序 + 人工设档。
+
+    stage 白名单只有三个值。linked 与 released 刻意不在里面：前者是零事实时的
+    基线、后者由发布单是否已发布决定，都不该手填。planned 收下不是因为它可以
+    手填，而是它承担「撤销人工标记」—— set_manual_stage 写完立刻归一，没有迭代
+    关联的会落回 linked。
+    """
 
     sort_order = serializers.FloatField(required=False)
+    stage = serializers.ChoiceField(
+        choices=[*MANUAL_STAGES, RequirementProjectStage.PLANNED], required=False
+    )
 
     def validate(self, attrs):
         if not attrs:
-            raise serializers.ValidationError("Provide sort_order.")
+            raise serializers.ValidationError("Provide sort_order or stage.")
         return attrs
 
 
@@ -76,8 +88,9 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
     继承 RequirementSerializer 而不是另起一份，是为了让项目页与产品页拿到**同一份**
     行结构 —— 前端的网格、详情抽屉、内置列注册表可以原样复用。多出来的是来自
     关联行的注解：`stage` / `link_sort_order`，阶段推导依据
-    （`latest_cycle_name` / `latest_release_name`，胶囊 tooltip 用）与
-    `carryover`（已排期但迭代已结束 —— 顺延信号），以及所属产品的名字。
+    （`latest_cycle_name` / `latest_release_name`，胶囊 tooltip 用）、
+    `carryover`（已排期但迭代已结束 —— 顺延信号）、`stage_locked`（挂在在途发布单
+    上，阶段下拉该禁用），以及所属产品的名字。
     """
 
     stage = serializers.SerializerMethodField()
@@ -85,6 +98,7 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
     latest_cycle_name = serializers.SerializerMethodField()
     latest_release_name = serializers.SerializerMethodField()
     carryover = serializers.SerializerMethodField()
+    stage_locked = serializers.SerializerMethodField()
     product_name = serializers.CharField(source="product.name", read_only=True)
     # 标识（ECOM）与名字一起给：项目页把所属产品渲染成 chip，光有名字画不出徽标
     product_identifier = serializers.CharField(source="product.identifier", read_only=True)
@@ -96,6 +110,7 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
             "latest_cycle_name",
             "latest_release_name",
             "carryover",
+            "stage_locked",
             "product_name",
             "product_identifier",
         ]
@@ -114,9 +129,14 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
         return getattr(obj, "latest_release_name", None)
 
     def get_carryover(self, obj):
-        # 顺延 = 排了期、迭代结束了、却还没进发布单。阶段值刻意不动
+        # 顺延 = 排了期、迭代结束了、却还没标研发完毕。阶段值刻意不动
         # （时间盒到期不是进度事实），黄标是给人看的排期信号
         return bool(
             getattr(obj, "stage", None) == RequirementProjectStage.PLANNED
             and getattr(obj, "has_completed_cycle", False)
         )
+
+    def get_stage_locked(self, obj):
+        # 缺注解时按「未锁」返回：容器列表等不带这个注解的场景本来也不给编辑入口，
+        # 真要越过前端写进来，set_manual_stage 还会再挡一道
+        return bool(getattr(obj, "stage_locked", False))

@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from plane.db.models import (
     Cycle,
+    MANUAL_STAGES,
     ProductProject,
     ReleaseStatus,
     Requirement,
@@ -96,9 +97,10 @@ def linked_requirements_queryset(*, slug, project_id):
     stage / link_sort_order 从关联行拉平到需求行上，列表序列化器直接读注解，
     不必为每行再查一次中间表。
 
-    另外三个注解服务「阶段可解释」：latest_cycle_name / latest_release_name 是
-    阶段胶囊 tooltip 的推导依据（阶段是派生值，不给依据用户只能猜）；
-    has_completed_cycle 供序列化器算 carryover（已排期但迭代已结束的顺延信号）。
+    另外几个注解服务「阶段可解释」：latest_cycle_name / latest_release_name 是
+    阶段胶囊 tooltip 的推导依据（派生档不给依据用户只能猜）；has_completed_cycle
+    供序列化器算 carryover（已排期但迭代已结束的顺延信号）；stage_locked 告诉前端
+    这一行的阶段下拉该不该禁用（挂在在途发布单上时禁止手动改，见 set_manual_stage）。
     """
     from django.db.models import Exists
 
@@ -148,6 +150,9 @@ def linked_requirements_queryset(*, slug, project_id):
                 .values("release__name")[:1]
             ),
             has_completed_cycle=Exists(completed_cycle_rows),
+            # 与 set_manual_stage 的降档锁同一条判定（在途 = 未驳回未取消），
+            # 让前端直接读而不是从 latest_release_name 反推
+            stage_locked=Exists(live_release_rows),
         )
         .select_related("product")
         .order_by("link_sort_order", "product__identifier", "sequence_id")
@@ -399,22 +404,31 @@ def resolve_policy_for_linked_requirement(requirement):
 
 
 def recalculate_stage(requirement_id, project_id, *, trigger=None, actor=None):
-    """按现存关联事实重算 (需求, 项目) 的阶段，取 STAGE_LADDER 里的最高档。
+    """按现存关联事实重算 (需求, 项目) 的派生档，再用地板规则护住人工档。
 
     事实 → 档位（全部现查关联对象的当前状态，不存副本）：
-    - 存在未取消的迭代关联            → planned（已排期）
-    - 存在在途（未驳回/未取消）发布关联 → pending_verification（待验证）
-    - 存在已发布（completed）发布关联   → released（已发布）
-    - 什么都没有                      → linked（已立项）
+    - 存在未取消的迭代关联          → planned（已排期）
+    - 存在已发布（completed）发布关联 → released（已发布）
+    - 什么都没有                    → linked（已立项）
 
-    幂等、顺序无关：升档降档走同一条路 —— 事实作废（发布单被驳回、迭代被取消、
-    解除关联）后重算自然回落。**迭代完成刻意不是事实**：时间盒到期不说明需求做完，
-    顺延是常态，阶段保持已排期（前端用 carryover 标记提示）。
+    研发段（in_progress / done）**没有事实来源，只由人写**（见 set_manual_stage）。
+    这里唯一为它们做的事是地板规则：派生结果不得把当前的人工档往下冲。所以标了
+    「研发完毕」的需求再进下一个迭代、被解除迭代关联、进发布单、发布单被驳回或
+    取消，一律保持研发完毕。
+
+    **幂等，但不再顺序无关** —— 结果依赖 link.stage 的当前值（地板取自它）。这是
+    人工档能存活的唯一机制，不是脏代码：没有它，任何一次容器事件都会把人手填的
+    研发完毕算没了，而容器事件恰恰包括「关联进发布单」这个最该用到它的时刻。
+
+    已发布回落时地板取 done 而非当前值：进发布单不再要求先研发完毕（该门槛已
+    移除），所以这不再是一个可证明安全的推断，而是一个启发式默认 —— 已经发布过
+    的东西，在途研发状态被判定回滚时，把它当成至少「研发完毕」比直接掉回已排期
+    更接近事实（发布单被改回测试中不代表代码退回去了）。
 
     **显式调用，不挂信号** —— 信号会让阶段推导与迭代/发布写路径耦合到无法排查。
     写入点清单：需求↔迭代/发布关联增删（views/requirement/container.py）、迭代状态
     变更涉及已取消（views/cycle/base.py）、发布状态任何变更（views/release/base.py）、
-    以及 P3 之后的工作项事实（届时在下方补 in_progress / done 两档）。
+    人工设档后的归一（utils.set_manual_stage）。
 
     阶段变化时写一行 RequirementProjectActivity 留痕（trigger 记触发来源快照），
     并级联重算需求本体 status。返回新阶段；无变化返回 None。
@@ -441,26 +455,32 @@ def recalculate_stage(requirement_id, project_id, *, trigger=None, actor=None):
         .exists()
     )
 
-    # 发布事实一次取全：同一批状态既判「在途」又判「已发布」。
-    # release__deleted_at 过滤理由同上
-    release_statuses = set(
-        RequirementRelease.objects.filter(
-            requirement_id=requirement_id,
-            project_id=project_id,
-            release__deleted_at__isnull=True,
-        ).values_list("release__status", flat=True)
-    )
-    dead_statuses = {ReleaseStatus.REJECTED, ReleaseStatus.CANCELLED}
+    # 发布事实只剩一条：有没有已发布的关联。在途关联不再产出任何档位 ——
+    # 圈进发版范围不等于研发完成。release__deleted_at 过滤理由同上
+    has_released = RequirementRelease.objects.filter(
+        requirement_id=requirement_id,
+        project_id=project_id,
+        release__deleted_at__isnull=True,
+        release__status=ReleaseStatus.COMPLETED,
+    ).exists()
 
     candidates = [RequirementProjectStage.LINKED]
     if has_scheduled_cycle:
         candidates.append(RequirementProjectStage.PLANNED)
-    if any(status not in dead_statuses for status in release_statuses):
-        candidates.append(RequirementProjectStage.PENDING_VERIFICATION)
-    if ReleaseStatus.COMPLETED in release_statuses:
+    if has_released:
         candidates.append(RequirementProjectStage.RELEASED)
 
     new_stage = max(candidates, key=STAGE_LADDER.index)
+
+    # 地板：派生结果不得把人工档往下冲。released 回落时地板取 done（理由见 docstring）
+    floor = None
+    if link.stage in MANUAL_STAGES:
+        floor = link.stage
+    elif link.stage == RequirementProjectStage.RELEASED:
+        floor = RequirementProjectStage.DONE
+    if floor is not None:
+        new_stage = max(new_stage, floor, key=STAGE_LADDER.index)
+
     if link.stage == new_stage:
         # 阶段没变也要级联 status：解除项目关联等场景改变的是「全部已发布」的
         # 分母而不是本行阶段
@@ -482,6 +502,77 @@ def recalculate_stage(requirement_id, project_id, *, trigger=None, actor=None):
     )
     recalculate_requirement_status(requirement_id)
     return new_stage
+
+
+def has_live_release_link(requirement_id, project_id):
+    """这条 (需求, 项目) 是否挂在未驳回未取消的发布单上。
+
+    与 linked_requirements_queryset 的 stage_locked 注解同一条判定，两处必须一致：
+    前端据注解禁用下拉，后端据这里拒绝写入，判定不同会出现「点得动但报错」。
+    """
+    return RequirementRelease.objects.filter(
+        requirement_id=requirement_id,
+        project_id=project_id,
+        release__deleted_at__isnull=True,
+    ).exclude(
+        release__status__in=[ReleaseStatus.REJECTED, ReleaseStatus.CANCELLED]
+    ).exists()
+
+
+def set_manual_stage(requirement_id, project_id, *, stage, actor=None):
+    """人工设置研发段档位。这是 stage 唯一的手动写入口。
+
+    只接受 in_progress / done / planned 三个值：前两个是人工档；planned 是「撤销
+    人工标记」—— 写进去之后立刻走 recalculate_stage 归一，没有迭代关联的需求会
+    落回 linked，因为「已排期」必须对应真实的迭代事实，不能靠手填假装。
+
+    **降档锁**：挂在在途发布单上时整行禁止手动改。已发布（released）同样被这条
+    盖住（completed 不在 dead_statuses 里）。进发布单不再要求先研发完毕，但这条
+    锁依然保证「已经进了发布单的需求，研发段档位不会在挂靠期间被人悄悄改低」。
+    想改就先从发布单里移出去 —— 动作明确，比默默降档更难出错。
+
+    返回归一后的最终档位。
+    """
+    link = RequirementProject.objects.filter(
+        requirement_id=requirement_id, project_id=project_id
+    ).first()
+    if link is None:
+        raise RequirementLinkError(
+            "This requirement is not linked to the project.",
+            code="REQUIREMENT_NOT_LINKED_TO_PROJECT",
+        )
+
+    if has_live_release_link(requirement_id, project_id):
+        raise RequirementLinkError(
+            "Stage is locked while the requirement is attached to a live release.",
+            code="REQUIREMENT_IN_LIVE_RELEASE",
+        )
+
+    if link.stage != stage:
+        old_stage = link.stage
+        link.stage = stage
+        link.updated_by_id = actor.id if actor else None
+        link.save(update_fields=["stage", "updated_by", "updated_at"])
+        RequirementProjectActivity.objects.create(
+            workspace_id=link.workspace_id,
+            project_id=link.project_id,
+            requirement_id=requirement_id,
+            old_stage=old_stage,
+            new_stage=stage,
+            trigger={"type": "manual_stage"},
+            created_by_id=actor.id if actor else None,
+            updated_by_id=actor.id if actor else None,
+        )
+
+    # 归一：planned 无迭代事实时回落 linked；人工档则被地板规则原样保住。
+    # 归一若真的改了值会再写一行留痕，这是想要的 —— 用户选了 A 落成 B 必须可查
+    normalized = recalculate_stage(
+        requirement_id,
+        project_id,
+        trigger={"type": "manual_stage_normalized"},
+        actor=actor,
+    )
+    return normalized or stage
 
 
 def recalculate_stages_for_cycle(cycle_id, *, trigger=None, actor=None):

@@ -340,22 +340,28 @@ export type TRequirementsResponse = TPaginatedResponse<TRequirement[]>;
  * 需求在某个项目内的交付阶段。与 TRequirement 上的 status（全局、粗粒度）正交：
  * 同一条需求可以在 A 项目已发布、在 B 项目还没开工。
  */
-export type TRequirementProjectStage =
-  | "linked"
-  | "planned"
-  | "in_progress"
-  | "done"
-  | "pending_verification"
-  | "released";
+export type TRequirementProjectStage = "linked" | "planned" | "in_progress" | "done" | "released";
 
-/** 阶段全序（阶梯）。重算取最高档；in_progress/done 本期不产出，P3 工作项派生时启用 */
+/** 阶段全序（阶梯）。两端派生（linked/planned/released 由关联事实重算），中间人工 */
 export const REQUIREMENT_PROJECT_STAGES: TRequirementProjectStage[] = [
   "linked",
   "planned",
   "in_progress",
   "done",
-  "pending_verification",
   "released",
+];
+
+/**
+ * 阶段下拉的可选项，与后端 RequirementProjectStageWriteSerializer 的白名单一一对应。
+ *
+ * linked / released 不在里面：前者是零事实时的基线、后者由发布单是否已发布决定。
+ * planned 在里面不是因为它能手填，而是它承担「撤销人工标记」—— 服务端写完立刻
+ * 归一，没有迭代关联的会落回 linked，所以要用响应返回的值刷新那一行。
+ */
+export const MANUAL_REQUIREMENT_PROJECT_STAGES: TRequirementProjectStage[] = [
+  "planned",
+  "in_progress",
+  "done",
 ];
 
 /** 项目侧看到的一条需求：需求内容 + 本项目内的阶段。内容一律只读。 */
@@ -372,6 +378,8 @@ export type TProjectRequirement = TRequirement & {
   latest_release_name: string | null;
   /** 已排期但关联迭代已结束。时间盒到期不降档，只做「迭代已结束」黄标 */
   carryover: boolean;
+  /** 挂在在途（未驳回未取消）发布单上 —— 阶段下拉要禁用，服务端也会拒绝写入 */
+  stage_locked: boolean;
 };
 
 /**
@@ -397,7 +405,7 @@ export type TProjectRequirementsResponse = Omit<
   extra_stats?: TProjectRequirementFacets | null;
 };
 
-/** 关联行本身。改排序的接口返回它；stage 是纯派生，写入口已退役 */
+/** 关联行本身。改排序 / 设阶段的接口返回它，stage 是归一**之后**的最终值 */
 export type TRequirementProjectLink = {
   id: string;
   requirement: string;

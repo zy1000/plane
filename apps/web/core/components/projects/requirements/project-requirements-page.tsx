@@ -19,7 +19,7 @@ import {
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectRequirement } from "@plane/types";
+import type { TProjectRequirement, TRequirementProjectStage } from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -226,6 +226,22 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     }
   };
 
+  const handleStageChange = async (requirementId: string, stage: TRequirementProjectStage) => {
+    try {
+      // 服务端会归一，落地档位以返回值为准 —— 选了「已排期」但没有迭代关联时
+      // 实际会落成「已立项」，toast 得说实话
+      const applied = await store.updateStage(requirementId, stage);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("project_requirements.toast.stage_updated", {
+          stage: t(`project_requirements.stage.${applied}`),
+        }),
+      });
+    } catch (error) {
+      notifyFailure(error);
+    }
+  };
+
   if (!slug || !project) return null;
 
   // workspaceUserInfo 还没回来时不要抢先渲染 403：权限是异步取的，先渲染会闪一下
@@ -317,6 +333,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           onLink={() => setIsLinkModalOpen(true)}
           onUnlink={setIdsToUnlink}
           onSubmitChange={(requirementId) => void handleSubmitChange(requirementId)}
+          onStageChange={(requirementId, stage) => void handleStageChange(requirementId, stage)}
           toolbarPortalEl={dataToolbarHost}
         />
       </ContentWrapper>

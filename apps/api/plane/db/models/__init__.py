@@ -177,6 +177,7 @@ from .requirement import (
     RequirementProjectStage,
     RequirementRelease,
     RequirementScope,
+    MANUAL_STAGES,
     STAGE_LADDER,
     RequirementType,
     RequirementTypeSchemaRevision,

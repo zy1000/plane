@@ -1297,29 +1297,41 @@ class RequirementProjectStage(models.TextChoices):
     禅道把这个字段放在需求本体上，于是同一条需求在 A 项目已发布、B 项目还没开工时
     一个字段存不下。这里放在关联行上：每个 (需求, 项目) 各有一份。
 
-    整列由 utils/requirement_project.recalculate_stage 按关联事实派生（取
-    STAGE_LADDER 里的最高档），不接受手动写入。in_progress / done 两档保留给
-    将来的工作项派生（P3），本期没有任何代码产出它们。
+    两端派生、中间人工：
+
+    - linked / planned / released 由 utils/requirement_project.recalculate_stage
+      按关联事实派生（分别对应：关联进项目、关联未取消的迭代、关联已发布的发布单）。
+    - in_progress / done 只由人写（MANUAL_STAGES），派生逻辑只保证它们不被更低的
+      事实档冲掉 —— 「东西做没做完」没有任何关联事实能可靠推断，只有人知道。
+
+    曾经有过一档 pending_verification（待验证），由「存在在途发布关联」产出。它被
+    删除了：把「圈进发版范围」当成「研发完成待验证」在语义上站不住，且发布单一旦
+    取消阶段就回落，系统全程不记得需求究竟做完没有。现在关联发布单**不产生任何
+    档位**，只有发布成功（completed）才推到 released。
     """
 
     LINKED = "linked", "已立项"
     PLANNED = "planned", "已排期"
     IN_PROGRESS = "in_progress", "研发中"
     DONE = "done", "研发完毕"
-    PENDING_VERIFICATION = "pending_verification", "待验证"
     RELEASED = "released", "已发布"
 
 
-# 阶段全序。重算取「现存事实能达到的最高档」时按此比较；P3 的工作项派生
-# 落地时 in_progress / done 直接开始产出，无需重排。
+# 阶段全序。重算取「现存事实能达到的最高档」时按此比较。
 STAGE_LADDER = [
     RequirementProjectStage.LINKED,
     RequirementProjectStage.PLANNED,
     RequirementProjectStage.IN_PROGRESS,
     RequirementProjectStage.DONE,
-    RequirementProjectStage.PENDING_VERIFICATION,
     RequirementProjectStage.RELEASED,
 ]
+
+# 人工档：只由人写。派生逻辑碰到它们时只做一件事 —— 保证更低的事实档不把它们
+# 冲掉（recalculate_stage 里的地板规则）。
+MANUAL_STAGES = (
+    RequirementProjectStage.IN_PROGRESS,
+    RequirementProjectStage.DONE,
+)
 
 
 class RequirementProject(ProjectBaseModel):
@@ -1409,9 +1421,12 @@ class RequirementCycle(ProjectBaseModel):
 class RequirementRelease(ProjectBaseModel):
     """需求 ↔ 发布单的关联行。
 
-    在途（未驳回/未取消）的关联 = 「待验证」的事实；发布单已发布（completed）=
-    「已发布」的事实。驳回/取消不删行 —— 关联关系还在，只是不再算有效事实，
+    关联本身**不是阶段事实** —— 它只圈定发版范围。只有发布单已发布（completed）
+    才给出「已发布」的档位。驳回/取消不删行 —— 关联关系还在，只是不再算有效事实，
     重算时按 release.status 现判。
+
+    建立这条关联不要求需求处于任何特定阶段（原 done-only 门槛已移除）；关联在途
+    期间仍然禁止手动降档（见 set_manual_stage 的降档锁）。
     """
 
     requirement = models.ForeignKey(

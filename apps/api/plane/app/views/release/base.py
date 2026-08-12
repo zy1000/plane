@@ -799,8 +799,9 @@ class ReleaseViewSet(BaseViewSet):
             new_status = updated_release.status
             if new_status and new_status != previous_status:
                 sync_overdue_on_status_change(updated_release, previous_status, new_status)
-                # 发布单状态是需求阶段的事实来源（在途=待验证、completed=已发布、
-                # 驳回/取消=事实作废降档），任何流转都同步重算关联需求
+                # 只有 completed 给出「已发布」这一档；其余流转（含驳回/取消）都是
+                # 事实作废，重算会把它降回研发完毕（地板规则兜住，不会掉到已排期）。
+                # 任何流转都同步重算，判 completed 与否交给 recalculate_stage
                 recalculate_stages_for_release(
                     updated_release.id,
                     trigger={
@@ -1002,9 +1003,9 @@ class ReleaseViewSet(BaseViewSet):
             project_id=str(project_id),
             epoch=int(timezone.now().timestamp()),
         )
-        # 删除发布单 = 「待验证/已发布」事实作废(契约:拒绝/终止/删除/解除关联走
-        # 同一条降档路径)。先取受影响对、同步软删关联行(不能等异步级联,批量重算
-        # 读的就是这张表),再逐对重算
+        # 删除发布单 = 「已发布」事实作废(契约:拒绝/终止/删除/解除关联走同一条
+        # 降档路径,地板规则保证只降到研发完毕)。先取受影响对、同步软删关联行
+        # (不能等异步级联,批量重算读的就是这张表),再逐对重算
         affected_pairs = list(
             RequirementRelease.objects.filter(release_id=pk).values_list(
                 "requirement_id", "project_id"

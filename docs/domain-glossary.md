@@ -59,20 +59,23 @@
 > 设计动机（原注释）：「存成字符串就会多出第四个可以和这三列对不上的事实来源；派生则不可能不一致。」
 > **不要试图把 approval_state 落库或缓存。**
 
-**轴 C：`RequirementProject.stage`（落库在关联行上，每 (需求, 项目) 一份，纯关联事实派生）**
-阶梯 `linked`(已立项) → `planned`(已排期) → `pending_verification`(待验证) → `released`(已发布)，按现存有效事实取最高档重算（`recalculate_stage`）；`in_progress` / `done` 枚举保留给工作项派生（P3）。零关联行时前端展示「未开始」，不落库。
+**轴 C：`RequirementProject.stage`（落库在关联行上，每 (需求, 项目) 一份，两端派生、中间人工）**
+阶梯 `linked`(已立项) → `planned`(已排期) → `in_progress`(研发中) → `done`(研发完毕) → `released`(已发布)。零关联行时前端展示「未开始」，不落库。
 
-| 事实 | 阶段 |
-|---|---|
-| 关联到项目 | `linked` |
-| 关联该项目未取消的迭代（`RequirementCycle`） | `planned` |
-| 关联该项目在途发布单（`RequirementRelease`，未拒绝/终止） | `pending_verification` |
-| 关联的发布单已发布 | `released` |
+| 档位 | 来源 | 规则 |
+|---|---|---|
+| `linked` | 派生 | 关联到项目（基线） |
+| `planned` | 派生 | 关联该项目未取消的迭代（`RequirementCycle`） |
+| `in_progress` / `done` | **人工** | `utils.set_manual_stage`，无事实来源 |
+| `released` | 派生 | 关联的发布单已发布（`completed`） |
 
-- **手动改 stage 已退役**：项目侧 PATCH 只收 `sort_order`，payload 带 stage 报 400 `REQUIREMENT_STAGE_DERIVED`。
-- 迭代完成不改阶段（时间盒到期不是进度事实，列表注解 `carryover` 做 UI 标记）；降档留痕写 `RequirementProjectActivity`。
-- 与轴 A 的唯一联动即上面 `implemented` 的对称派生；需求阶段**永不**进入迭代/发布状态流转的门槛条件（只做软提示）。
-- 完整规则见 `docs/project-requirement-link-requirements.md` §4.4。
+- **关联发布单不产生任何档位** —— 它只圈定发版范围。曾经有过一档 `pending_verification`(待验证) 由「在途发布关联」产出，已于 2026-08-11 删除（迁移 `0331`）：把圈范围当成研发完成在语义上站不住，且发布单一取消阶段就回落，系统全程不记得需求做完没有。
+- **地板规则**（`recalculate_stage`）：派生结果不得把当前的人工档往下冲；`released` 回落时地板取 `done`。因此 `recalculate_stage` **幂等但不再顺序无关** —— 结果依赖 `link.stage` 当前值，这是人工档能存活的唯一机制。
+- **发布硬门槛已移除**（2026-08-12）：任意阶段的需求都能关联进发布单，不再要求先 `done`。**降档锁**仍在：挂在在途发布单上时禁止手动改档（409 `REQUIREMENT_IN_LIVE_RELEASE`）。因此「在发布单里 ⇒ 必然已研发完毕」的不变量不再成立，`recalculate_stage` 的地板规则（已发布回落取 `done`）现在是启发式默认而非可证明安全的推断。迭代侧无任何门槛。
+- 手动写入口：`PATCH .../projects/{pid}/requirements/{rid}/`，`stage` 白名单只有 `in_progress` / `done` / `planned`（后者是撤销键，写完立刻归一，无迭代关联时落回 `linked`）。响应返回归一**之后**的值。
+- 迭代完成不改阶段（时间盒到期不是进度事实，列表注解 `carryover` 做 UI 标记）；档位变化留痕写 `RequirementProjectActivity`。
+- 与轴 A 的唯一联动即上面 `implemented` 的对称派生；需求阶段**永不**进入迭代状态流转的门槛条件。
+- `docs/project-requirement-link-requirements.md` §4.4 是这套模型改造**之前**的版本，阶段部分已过时，以本节为准。
 
 ### 生命周期
 

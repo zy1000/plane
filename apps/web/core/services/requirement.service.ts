@@ -838,14 +838,18 @@ export class RequirementService extends APIService {
   }
 
   /**
-   * 改本项目内的排序。阶段已改为纯派生（由迭代/发布关联事实重算），
-   * payload 带 stage 服务端会以 REQUIREMENT_STAGE_DERIVED 拒绝。
+   * 改本项目内的排序 / 人工设置研发段档位。
+   *
+   * stage 只收 MANUAL_REQUIREMENT_PROJECT_STAGES 里的三个值，且服务端会**归一**
+   * （选 planned 但没有迭代关联时落回 linked），所以调用方必须用返回的
+   * `stage` 刷新那一行，不能直接用请求里传的值。
+   * 需求挂在在途发布单上时整行锁死，返回 409 `REQUIREMENT_IN_LIVE_RELEASE`。
    */
   async updateProjectRequirement(
     workspaceSlug: string,
     projectId: string,
     requirementId: string,
-    payload: { sort_order?: number }
+    payload: { sort_order?: number; stage?: TRequirementProjectStage }
   ): Promise<TRequirementProjectLink> {
     return this.patch(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/${requirementId}/`, payload)
       .then((response) => response?.data)

@@ -4,9 +4,10 @@
 
 """项目侧的产品需求：引用、排序、提变更单。
 
-项目对需求**只读**。唯一属于项目的可写数据是关联关系本身与 RequirementProject
-上的 sort_order —— stage 是派生列，由 utils/requirement_project.recalculate_stage
-按迭代/发布关联事实重算，任何手动写入都被显式拒绝（REQUIREMENT_STAGE_DERIVED）。
+项目对需求内容**只读**。属于项目的可写数据只有三样：关联关系本身、
+RequirementProject 上的 sort_order，以及研发段档位（in_progress / done，走
+utils.set_manual_stage，带降档锁与归一）。阶段的另外三档 linked / planned /
+released 仍由 recalculate_stage 按关联事实派生，手填不了。
 需求内容的唯一权威在产品 —— 项目成员想改内容只能提变更单，走产品现有的审批名单。
 
 因此这里刻意不复用 BaseRequirementRowViewSet：那套基类的每一个写端点都以
@@ -64,6 +65,7 @@ from plane.utils.requirement_project import (
     requirement_facets,
     resolve_linkable_requirements,
     resolve_policy_for_linked_requirement,
+    set_manual_stage,
 )
 
 DEFAULT_PER_PAGE = 20
@@ -362,22 +364,17 @@ class ProjectRequirementViewSet(BaseViewSet):
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def partial_update(self, request, slug, project_id, requirement_id):
-        """改本项目内的排序。这是项目对需求唯一的行级写入口。
+        """改本项目内的排序，以及人工设置研发段档位。项目对需求唯一的行级写入口。
 
-        stage 显式拒绝而非静默丢弃：它由迭代/发布关联事实派生
-        （utils/requirement_project.recalculate_stage），静默会让旧前端以为改成功了，
-        联调时最难查的就是 200 但什么都没发生。
+        stage 与 sort_order 是两条独立的路：前者的锁、留痕与归一都在
+        utils.set_manual_stage 里（阶段不是普通字段，setattr 写下去会绕开地板规则
+        与降档锁）；后者仍走原来的 setattr。响应返回归一**之后**的行 —— 用户选了
+        「已排期」但需求没有迭代关联时会落成「已立项」，这件事必须当场可见。
         """
-        if "stage" in request.data:
-            return Response(
-                {
-                    "error": "Stage is derived from cycle/release facts and cannot be set manually.",
-                    "code": "REQUIREMENT_STAGE_DERIVED",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         serializer = RequirementProjectStageWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        payload = dict(serializer.validated_data)
+        stage = payload.pop("stage", None)
 
         link = RequirementProject.objects.filter(
             workspace__slug=slug, project_id=project_id, requirement_id=requirement_id
@@ -388,12 +385,21 @@ class ProjectRequirementViewSet(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        for field, value in serializer.validated_data.items():
-            setattr(link, field, value)
-        link.updated_by_id = request.user.id
-        link.save(
-            update_fields=[*serializer.validated_data.keys(), "updated_by", "updated_at"]
-        )
+        if payload:
+            for field, value in payload.items():
+                setattr(link, field, value)
+            link.updated_by_id = request.user.id
+            link.save(update_fields=[*payload.keys(), "updated_by", "updated_at"])
+
+        if stage is not None:
+            try:
+                set_manual_stage(
+                    requirement_id, project_id, stage=stage, actor=request.user
+                )
+            except RequirementLinkError as exc:
+                return _link_error_response(exc)
+            link.refresh_from_db()
+
         return Response(
             RequirementProjectSerializer(link).data, status=status.HTTP_200_OK
         )

@@ -4,7 +4,10 @@
  * 结构照搬 projects/requirements/existing-requirements-modal.tsx（Combobox 多选 +
  * 防抖搜索 + 无限滚动 + 请求序号防串台），但候选池不同：这里取的是**项目需求列表**
  * （listProjectRequirements）带 exclude_release_id —— 已进本发布单的行由服务端排除，
- * 前端不再过滤一遍。行上带着项目内阶段，方便挑选时看清哪些还停在已立项/已排期。
+ * 前端不再过滤一遍。
+ *
+ * 候选不再限制阶段（原「只有研发完毕能进发布单」的门槛已移除），任意阶段的需求
+ * 都能被圈进发布范围，所以行上带阶段胶囊，方便区分。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@headlessui/react";
@@ -214,7 +217,7 @@ export const ReleaseRequirementsAssociateModal = (props: TProps) => {
             </Loader>
           ) : rows.length === 0 ? (
             <p className="px-3 py-8 text-center text-13 text-secondary">
-              {t("project_requirements.filtered_empty.title")}
+              {t("project_requirements.release_linkable_empty")}
             </p>
           ) : (
             <>
@@ -237,7 +240,7 @@ export const ReleaseRequirementsAssociateModal = (props: TProps) => {
                     <Tooltip tooltipContent={row.title}>
                       <span className="min-w-0 flex-1 truncate">{row.title}</span>
                     </Tooltip>
-                    {/* 项目内阶段：挑选时一眼看出哪些还停在已立项/已排期 */}
+                    {/* 候选不再限制阶段，行上带阶段胶囊，方便区分挑的是哪一档 */}
                     <span
                       className={cn(
                         "inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded px-1.5 text-11 font-medium",

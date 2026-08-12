@@ -20,7 +20,7 @@ import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TProjectRequirement, TRequirementTypeSchema } from "@plane/types";
+import type { TProjectRequirement, TRequirementProjectStage, TRequirementTypeSchema } from "@plane/types";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
@@ -85,6 +85,8 @@ type TProps = {
   onLink: () => void;
   onUnlink: (requirementIds: string[]) => void;
   onSubmitChange: (requirementId: string) => void;
+  /** 人工设研发段档位。与关联/解除共用 canManage，不单设权限 key */
+  onStageChange: (requirementId: string, stage: TRequirementProjectStage) => void;
   /** 与筛选行共用容器：换筛选/换页时右上角那排控件不该跟着卸载重建 */
   toolbarPortalEl?: HTMLElement | null;
   /** 一条产品都没关联时，空态该说的是「先去关联产品」而不是「没有需求」 */
@@ -123,6 +125,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     onLink,
     onUnlink,
     onSubmitChange,
+    onStageChange,
     toolbarPortalEl,
     hasLinkedProducts,
     hasAnyLinked,
@@ -289,13 +292,18 @@ export const ProjectRequirementsGrid = (props: TProps) => {
           <span className="text-placeholder">—</span>
         );
       case "stage":
-        // 阶段纯派生、恒只读；推导依据（迭代/发布单名与 carryover 信号）都在行数据上
+        /*
+         * 研发段（研发中/研发完毕）可人工设置，另外三档由服务端按关联事实派生。
+         * stage_locked = 挂在在途发布单上 —— 那时整行锁死，服务端也会拒绝写入。
+         */
         return (
           <ProjectRequirementStageCell
             stage={requirement.stage}
             latestCycleName={requirement.latest_cycle_name}
             latestReleaseName={requirement.latest_release_name}
             carryover={requirement.carryover}
+            onChange={canManage ? (next) => onStageChange(requirement.id, next) : undefined}
+            locked={requirement.stage_locked || requirement.stage === "released"}
           />
         );
       case "approval":

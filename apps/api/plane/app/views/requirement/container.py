@@ -4,17 +4,20 @@
 
 """需求 ↔ 迭代 / 发布单的关联端点（项目侧）。
 
-这两张关联表是阶段派生的事实来源：迭代关联给出「已排期」，发布关联给出
-「待验证 / 已发布」。所以每次增删之后**同步**调 recalculate_stage —— 显式调用，
-不挂信号（理由见 utils/requirement_project.recalculate_stage 的 docstring）。
+这两张关联表是阶段派生的事实来源：迭代关联给出「已排期」，发布单**已发布**给出
+「已发布」。注意发布关联本身不产生档位 —— 它只圈定发版范围。每次增删之后
+**同步**调 recalculate_stage —— 显式调用，不挂信号（理由见
+utils/requirement_project.recalculate_stage 的 docstring）。
 
-前置校验只有两条，都报 409：容器必须属于本项目；需求必须已关联进本项目
-（先进项目，再进项目下的容器 —— 反过来会绕开候选池的评审门槛）。需求在途变更
+公共前置校验一条，报 409：需求必须已关联进本项目（先进项目，再进项目下的
+容器 —— 反过来会绕开候选池的评审门槛）。发布侧不再额外要求阶段必须是「研发
+完毕」——这道门槛已按需求方要求移除，进发布单不再对 stage 设限。需求在途变更
 （in_review）刻意**不拦**：发布是项目侧的节奏，不被产品侧审批阻塞，前端标黄
 提示即可（单向依赖铁律的软提示分支）。
 
-迭代与发布两套端点完全同构，共用一个私有基类 —— 关联校验、错误码、重算触发的
-行为必须逐字一致，分开写迟早漂移。
+迭代与发布两套端点几乎同构，共用一个私有基类 —— 关联校验、错误码、重算触发的
+行为必须逐字一致，分开写迟早漂移。两者唯一的差异走 _validate_stages 钩子，不要
+为它覆盖整个 create。
 """
 
 from rest_framework import status
@@ -67,6 +70,10 @@ class BaseRequirementContainerViewSet(BaseViewSet):
                 "can_write": False,
             },
         ).data
+
+    def _validate_stages(self, project_id, requested):
+        """关联前的阶段门槛。默认放行；发布子类覆盖。返回 Response 表示拒绝。"""
+        return None
 
     def _trigger(self, action, container):
         # 名称存快照：容器后续可能被删，留痕必须自足可读
@@ -137,6 +144,10 @@ class BaseRequirementContainerViewSet(BaseViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        stage_error = self._validate_stages(project_id, requested)
+        if stage_error is not None:
+            return stage_error
+
         self.link_model.objects.bulk_create(
             [
                 self.link_model(
@@ -198,7 +209,13 @@ class CycleRequirementViewSet(BaseRequirementContainerViewSet):
 
 
 class ReleaseRequirementViewSet(BaseRequirementContainerViewSet):
-    """发布单 ↔ 需求。在途关联 = 「待验证」，发布单发布 = 「已发布」。"""
+    """发布单 ↔ 需求。关联只圈定发版范围，发布单发布（completed）= 「已发布」。
+
+    不再要求阶段必须是「研发完毕」才能进发布单 —— 任意阶段的需求都能被圈进发布
+    范围，_validate_stages 沿用基类的放行默认。因此「在发布单里 ⇒ 必然已研发
+    完毕」这个不变量不再成立，recalculate_stage 的地板规则已改为按启发式处理
+    （见其 docstring）。
+    """
 
     model = RequirementRelease
     serializer_class = ProjectRequirementSerializer

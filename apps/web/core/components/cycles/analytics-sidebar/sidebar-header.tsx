@@ -27,7 +27,6 @@ import { useTimeZoneConverter } from "@/hooks/use-timezone-converter";
 // services
 import { CycleService } from "@/services/cycle.service";
 import { formatCycleUpdateError } from "../use-cycle-error-message";
-import { CycleCompleteConfirmModal } from "../cycle-complete-confirm-modal";
 import { useCycleStatusChange } from "../use-cycle-status-change";
 
 type Props = {
@@ -173,7 +172,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   const statusOptions = cycleStatus ? CYCLE_STATUS_TRANSITIONS[cycleStatus] ?? [] : [];
 
   const canChangeStatus = isEditingAllowed && !isArchived && statusOptions.length > 0;
-  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps, completeConfirmModalProps } = useCycleStatusChange({
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
     cycleId: cycleDetails.id,
@@ -184,7 +183,6 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   return (
     <>
       <TestingDatesConfirmModal {...testingDatesModalProps} />
-      <CycleCompleteConfirmModal {...completeConfirmModalProps} />
       <div className="sticky top-0 z-10 flex items-center justify-between bg-surface-1 pt-2">
         <div className="flex size-5 items-center justify-center">
           <button

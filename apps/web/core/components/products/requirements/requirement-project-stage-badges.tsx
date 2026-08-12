@@ -20,7 +20,6 @@ const STAGE_BADGE_CLASS: Record<TRequirementProjectStage, string> = {
   planned: "bg-accent-subtle text-accent-primary",
   in_progress: "bg-warning-subtle text-warning-primary",
   done: "bg-success-subtle text-success-primary",
-  pending_verification: "bg-warning-subtle text-warning-primary",
   released: "bg-success-subtle text-success-primary",
 };
 

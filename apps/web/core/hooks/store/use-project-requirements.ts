@@ -37,8 +37,9 @@ const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
  *
  * 与 use-product-requirements 的形状刻意对齐（同样是局部 state hook，不进 MobX root
  * store，见 docs/domain-glossary.md 的前端接线约定），但能力少得多：
- * 项目对需求内容**没有任何写入口**，这里只有关联/解除关联。阶段由关联迭代/发布单
- * 派生（后端重算），手动改阶段入口已退役。
+ * 项目对需求内容**没有任何写入口**，这里只有关联/解除关联，外加研发段档位的人工
+ * 设置（updateStage）。阶段的另外三档 linked / planned / released 仍由服务端按关联
+ * 事实派生，改不了。
  *
  * 需求类型与字段单独取一次（configuration）：网格要靠它渲染自定义列，而它只随
  * 关联关系变化，不该跟着分页与筛选一起重拉。
@@ -202,6 +203,47 @@ export const useProjectRequirements = ({
     [fetchRequirements, projectId, workspaceSlug]
   );
 
+  /**
+   * 人工设置研发段档位。
+   *
+   * 只改这一行 + 分面计数，不重拉列表 —— 阶段变化不改变结果集构成（除非当前正按
+   * 阶段筛选，那种情况下重拉反而会让刚改完的行凭空消失，更难理解）。
+   *
+   * 落地值以**响应**为准：服务端会归一（选了「已排期」但需求没有迭代关联时落回
+   * 「已立项」），用请求里传的值刷新会显示一个不存在的状态。
+   *
+   * by_stage 必须本地纠正，否则顶部阶段筛选条的数字会停在改动前。
+   */
+  const updateStage = useCallback(
+    async (requirementId: string, stage: TRequirementProjectStage) => {
+      if (!workspaceSlug || !projectId) throw new Error("Project is required.");
+      const link = await requirementService.updateProjectRequirement(workspaceSlug, projectId, requirementId, {
+        stage,
+      });
+      setRequirementsPage((current) => {
+        const previous = current.results.find((row) => row.id === requirementId);
+        if (!previous || previous.stage === link.stage) return current;
+        const facets = current.extra_stats;
+        return {
+          ...current,
+          results: current.results.map((row) => (row.id === requirementId ? { ...row, stage: link.stage } : row)),
+          extra_stats: facets
+            ? {
+                ...facets,
+                by_stage: {
+                  ...facets.by_stage,
+                  [previous.stage]: Math.max(0, (facets.by_stage[previous.stage] ?? 0) - 1),
+                  [link.stage]: (facets.by_stage[link.stage] ?? 0) + 1,
+                },
+              }
+            : facets,
+        };
+      });
+      return link.stage;
+    },
+    [projectId, workspaceSlug]
+  );
+
   /** 把服务端返回的整行合并回当前页，不重拉列表 */
   const syncRequirements = useCallback((rows: TProjectRequirement[]) => {
     if (!rows.length) return;
@@ -275,6 +317,7 @@ export const useProjectRequirements = ({
     linkRequirements,
     unlinkRequirements,
     submitChange,
+    updateStage,
     syncRequirements,
   };
 };
