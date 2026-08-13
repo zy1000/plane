@@ -3,13 +3,13 @@
  *
  * 展示的是**产品需求被本项目引用的那一份**：内容只读，项目能改的只有关联关系本身
  * （阶段由关联迭代/发布单派生，不可手动改），想改内容只能提变更单（走产品现有的
- * 审批名单）。这与同一路径下曾经的「按工作项
- * 类别过滤的列表」不是一回事 —— 那个页面已经迁到 /dev-requirements。
+ * 审批名单）。这与同一路径下曾经的「按工作项类别过滤的列表」不是一回事 ——
+ * 那个页面（研发需求 /dev-requirements）已下线。
  *
  * 详情抽屉复用产品侧的 RequirementPeekOverview 并传 productId={row.product_id}：
  * 需求内容、版本、变更轨迹的权威都在产品，项目侧不该另开一套读路径。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "react-router";
 import {
@@ -24,7 +24,7 @@ import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { ProductChip } from "@/components/products/product-chip";
-import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
+import { RequirementIssuesSection, RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
@@ -36,10 +36,11 @@ import { ExistingRequirementsModal } from "./existing-requirements-modal";
 import { ProjectProductsModal } from "./project-products-modal";
 import { getProductFromParam, PRODUCT_PARAM } from "./project-requirement-product-tabs";
 import {
-  getStageFromParam,
-  ProjectRequirementStageFilter,
-  STAGE_PARAM,
-} from "./project-requirement-stage-filter";
+  PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID,
+  ProjectRequirementFiltersRow,
+  ProjectRequirementFiltersToggle,
+} from "./project-requirement-filters";
+import { getStageFromParam, STAGE_PARAM } from "./project-requirement-stage-filter";
 import {
   getTypeFromParam,
   ProjectRequirementTypeFilter,
@@ -65,6 +66,18 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   /** 待确认解除的行；非空即弹确认框，单行与批量共用同一条链路 */
   const [idsToUnlink, setIdsToUnlink] = useState<string[]>([]);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
+  const [isFilterVisible, setIsFilterVisible] = useState(() =>
+    Boolean(getStageFromParam(searchParams.get(STAGE_PARAM)))
+  );
+  const [isStageChipVisible, setIsStageChipVisible] = useState(() =>
+    Boolean(getStageFromParam(searchParams.get(STAGE_PARAM)))
+  );
+
+  useLayoutEffect(() => {
+    setDataToolbarHost(
+      document.getElementById(PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID) as HTMLDivElement | null
+    );
+  }, []);
 
   const store = useProjectRequirements({ workspaceSlug: slug, projectId: project });
   const {
@@ -119,6 +132,11 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     setValue: store.setRequirementTypeFilter,
     parse: (raw) => getTypeFromParam(raw, store.requirementTypes),
   });
+
+  // 深链 / 前进后退带了 stage 时，把 chip 亮出来；空值（--）不算筛选，不自动藏
+  useEffect(() => {
+    if (store.stageFilter) setIsStageChipVisible(true);
+  }, [store.stageFilter]);
 
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
@@ -218,12 +236,24 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     }
   };
 
-  const handleSubmitChange = async (requirementId: string) => {
+  /**
+   * 关联/解除工作项后只刷新这一行：阶段与工作项数是服务端注解，重算发生在服务端，
+   * 不重拉的话网格行和抽屉 seed 会停在旧值上。列表构成没变，不整页重拉。
+   */
+  const refreshRequirementRow = async (requirementId: string) => {
+    if (!slug || !project) return;
     try {
-      await store.submitChange(requirementId);
-      setToast({ type: TOAST_TYPE.SUCCESS, title: t("project_requirements.toast.change_submitted") });
-    } catch (error) {
-      notifyFailure(error);
+      const response = await requirementService.listProjectRequirements(slug, project, {
+        ids: [requirementId],
+        perPage: 1,
+      });
+      const row = response?.results?.[0];
+      if (!row) return;
+      store.syncRequirements([row]);
+      // 深链打开的行不在当前页里，喂抽屉的是 fetchedPeekRow，也要跟着换新
+      setFetchedPeekRow((current) => (current?.id === row.id ? row : current));
+    } catch {
+      // 行刷新失败不打断主操作 —— 下一次列表拉取会补上
     }
   };
 
@@ -254,19 +284,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     <>
       <PageHead title={pageTitle} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-4">
-            <ProjectRequirementStageFilter
-              value={store.stageFilter}
-              counts={facets?.by_stage}
-              totalCount={
-                // 「全部」段的计数要跟随当前产品，与其余五段同一作用域
-                store.productFilter
-                  ? (facets?.by_product.find((item) => item.product_id === store.productFilter)?.count ?? 0)
-                  : (facets?.total ?? 0)
-              }
-              onChange={store.setStageFilter}
-            />
+        {(store.requirementTypes.length >= 2 || Boolean(store.requirementTypeFilter)) && (
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-subtle px-4 py-2">
             <ProjectRequirementTypeFilter
               requirementTypes={store.requirementTypes}
               counts={facets?.by_requirement_type}
@@ -274,9 +293,25 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               onChange={store.setRequirementTypeFilter}
             />
           </div>
-          {/* 网格把工具栏 portal 到这里：换筛选/换页时右上角那排控件不该跟着卸载重建 */}
-          <div ref={setDataToolbarHost} className="flex flex-shrink-0 items-center gap-2" />
-        </div>
+        )}
+
+        <ProjectRequirementFiltersRow
+          isVisible={isFilterVisible}
+          showStageChip={isStageChipVisible}
+          stageValue={store.stageFilter}
+          stageCounts={facets?.by_stage}
+          totalCount={
+            store.productFilter
+              ? (facets?.by_product.find((item) => item.product_id === store.productFilter)?.count ?? 0)
+              : (facets?.total ?? 0)
+          }
+          onStageChange={store.setStageFilter}
+          onAddStage={() => setIsStageChipVisible(true)}
+          onRemoveStage={() => {
+            store.setStageFilter(undefined);
+            setIsStageChipVisible(false);
+          }}
+        />
 
         <ProjectRequirementsGrid
           requirementTypes={store.requirementTypes}
@@ -318,6 +353,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             store.setStageFilter(undefined);
             store.setRequirementTypeFilter(undefined);
             store.setSearch("");
+            setIsStageChipVisible(false);
           }}
           search={store.search}
           onSearchChange={store.setSearch}
@@ -326,9 +362,15 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           onOpenDetail={setPeekRequirement}
           onLink={() => setIsLinkModalOpen(true)}
           onUnlink={setIdsToUnlink}
-          onSubmitChange={(requirementId) => void handleSubmitChange(requirementId)}
           onStageChange={(requirementId, stage) => void handleStageChange(requirementId, stage)}
           toolbarPortalEl={dataToolbarHost}
+          toolbarAfterSearch={
+            <ProjectRequirementFiltersToggle
+              hasConditions={isStageChipVisible}
+              isVisible={isFilterVisible}
+              onToggle={() => setIsFilterVisible((visible) => !visible)}
+            />
+          }
         />
       </ContentWrapper>
 
@@ -356,6 +398,21 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           showDetailAction={false}
           productChip={
             <ProductChip identifier={peekRow.product_identifier} name={peekRow.product_name} />
+          }
+          /*
+           * 关联工作项 Section 只在项目侧注入：拆分/关联/解除都要项目语境，产品侧
+           * 抽屉没有。预填取列表行 —— 项目侧看到的就是已通过评审的那一版内容，
+           * linked_cycle_ids 注解也只有它带。
+           */
+          issuesSection={
+            <RequirementIssuesSection
+              workspaceSlug={slug}
+              projectId={project}
+              requirementId={peekRow.id}
+              requirement={peekRow}
+              canManage={canManage}
+              onChanged={() => void refreshRequirementRow(peekRow.id)}
+            />
           }
         />
       )}

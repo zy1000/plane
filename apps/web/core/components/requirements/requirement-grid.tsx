@@ -1289,7 +1289,7 @@ export const RequirementGrid = observer(
 
       <div
         ref={setScrollContainer}
-        className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 flex-1 overflow-auto bg-surface-1"
+        className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 min-w-0 flex-1 overflow-auto bg-surface-1"
       >
         {/*
           只有手上一行都没有时才让骨架屏顶掉表格。后台重拉（删除、新增、搜索、翻页、

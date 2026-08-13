@@ -4,7 +4,7 @@
 
 from rest_framework import serializers
 
-from plane.db.models import ProductProject
+from plane.db.models import ProductProject, RequirementProjectStage
 
 from .base import BaseSerializer
 from .project import ProjectLiteSerializer
@@ -59,4 +59,8 @@ class ProductProjectSerializer(BaseSerializer):
 
     def get_requirement_count(self, obj):
         counts = self._counts(obj)
-        return sum(counts.values()) if counts else 0
+        if not counts:
+            return 0
+        # 只累计五个阶段键：bucket 里另有 issue_total 等工作项聚合键（见
+        # stage_counts_by_project），对整个 dict 求和会把工作项数算进需求数
+        return sum(counts.get(stage, 0) for stage in RequirementProjectStage.values)

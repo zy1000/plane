@@ -38,7 +38,7 @@ export const REQUIREMENT_STAGE_PILL: Record<TRequirementProjectStage, string> = 
 };
 
 /** chip 变体的色点。底色换成白底描边后，档位差别改由这颗点承担 */
-const REQUIREMENT_STAGE_DOT: Record<TRequirementProjectStage, string> = {
+export const REQUIREMENT_STAGE_DOT: Record<TRequirementProjectStage, string> = {
   linked: "bg-tertiary",
   planned: "bg-accent-primary",
   in_progress: "bg-warning-primary",

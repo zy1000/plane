@@ -9,7 +9,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { EFileAssetType, EUserWorkspaceRoles } from "@plane/types";
 import type { TLogoProps, TProduct, TProductNetwork } from "@plane/types";
-import { Avatar, AvatarGroup, CustomSelect, EModalPosition, EModalWidth, Input, Loader, ModalCore } from "@plane/ui";
+import { Avatar, CustomSelect, EModalPosition, EModalWidth, Input, Loader, ModalCore } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import {
   IDENTIFIER_MAX_LENGTH,
@@ -49,7 +49,6 @@ export const ProductModal = observer(function ProductModal() {
   const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [descriptionHTML, setDescriptionHTML] = useState(EMPTY_DESCRIPTION);
   const [ownerId, setOwnerId] = useState<string | null>(null);
-  const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [network, setNetwork] = useState<TProductNetwork>(2);
   const [logoProps, setLogoProps] = useState<TLogoProps | undefined>(undefined);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
@@ -84,7 +83,6 @@ export const ProductModal = observer(function ProductModal() {
     isPrivateProduct &&
     ownerId &&
     ownerId !== currentUser?.id &&
-    !reviewerIds.includes(currentUser?.id ?? "") &&
     !hasWorkspaceAdminAccess
   );
 
@@ -94,7 +92,6 @@ export const ProductModal = observer(function ProductModal() {
     setIdentifier(product?.identifier ?? "");
     setDescriptionHTML(product?.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product?.owner ?? currentUser?.id ?? null);
-    setReviewerIds(product?.reviewers ?? []);
     setNetwork(product?.network ?? 2);
     if (mode === "create") {
       const visualDefaults = getProductLogoCoverDefaults();
@@ -151,7 +148,6 @@ export const ProductModal = observer(function ProductModal() {
       description_html: descriptionHTML,
       network,
       owner: ownerId,
-      reviewers: reviewerIds,
       ...(logoProps ? { logo_props: logoProps } : {}),
     };
 
@@ -467,34 +463,6 @@ export const ProductModal = observer(function ProductModal() {
                     </span>
                   </div>
                 )}
-
-                {editable ? (
-                  <div className="h-7 flex-shrink-0">
-                    <MemberDropdown
-                      multiple
-                      value={reviewerIds}
-                      onChange={setReviewerIds}
-                      buttonVariant="border-with-text"
-                      buttonClassName="text-11"
-                      placeholder={t("workspace_products.fields.reviewers")}
-                      showUserDetails
-                    />
-                  </div>
-                ) : product?.reviewer_details?.length ? (
-                  <div className="flex h-7 items-center gap-1.5 rounded-md border border-subtle px-2">
-                    <AvatarGroup showTooltip>
-                      {product.reviewer_details.map((reviewer) => (
-                        <Avatar
-                          key={reviewer.id}
-                          size="sm"
-                          name={reviewer.display_name}
-                          src={getFileURL(reviewer.avatar_url ?? "")}
-                        />
-                      ))}
-                    </AvatarGroup>
-                    <span className="text-11 text-secondary">{product.reviewer_details.length}</span>
-                  </div>
-                ) : null}
 
                 {willLosePrivateAccess && (
                   <p className="flex w-full items-start gap-1.5 text-11 leading-4 text-warning-primary">

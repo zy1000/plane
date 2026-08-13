@@ -5,8 +5,8 @@
 sort_order。stage 是**纯派生列**：由 recalculate_stage 按现存关联事实取最高档，
 不接受任何手动写入。
 
-工作项派生（in_progress / done 两档）属于 P3，届时在 recalculate_stage 里补
-事实来源即可，阶梯与调用点都不用动。
+研发段（in_progress / done）已接入工作项事实：有关联工作项时由 Issue 状态派生，
+零工作项时沿用手填 + 地板规则（双轨制，见 recalculate_stage）。
 """
 
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -32,12 +32,14 @@ from plane.db.models import (
     Requirement,
     RequirementApprovalPolicy,
     RequirementCycle,
+    RequirementIssue,
     RequirementItemStatus,
     RequirementProject,
     RequirementProjectActivity,
     RequirementProjectStage,
     RequirementRelease,
     STAGE_LADDER,
+    StateGroup,
 )
 
 
@@ -122,8 +124,13 @@ def linked_requirements_queryset(*, slug, project_id):
     阶段胶囊 tooltip 的推导依据（派生档不给依据用户只能猜）；has_completed_cycle
     供序列化器算 carryover（已排期但迭代已结束的顺延信号）；stage_locked 告诉前端
     这一行的阶段下拉该不该禁用（挂在在途发布单上时禁止手动改，见 set_manual_stage）。
+
+    工作项三个计数供网格「工作项数 + 完成率」列（完成率由前端算，这里只给分子
+    分母）与阶段下拉禁用判定 —— issue_count > 0 即研发段派生，与 has_issue_links
+    同一条判定；linked_cycle_ids 供「拆分工作项」弹窗在恰好一个未取消迭代时预填
+    （多个不猜）。
     """
-    from django.db.models import Exists
+    from django.db.models import Count, Exists
 
     link_rows = RequirementProject.objects.filter(
         requirement_id=OuterRef("pk"), project_id=project_id
@@ -147,6 +154,13 @@ def linked_requirements_queryset(*, slug, project_id):
         project_id=project_id,
         cycle__deleted_at__isnull=True,
         cycle__status=Cycle.Status.COMPLETED,
+    )
+    # live 工作项关联。issue__deleted_at 过滤理由同上：删除工作项与异步级联之间的
+    # 窗口期里，已删行不能再计进工作项数与完成率
+    live_issue_rows = RequirementIssue.objects.filter(
+        requirement_id=OuterRef("pk"),
+        project_id=project_id,
+        issue__deleted_at__isnull=True,
     )
     return (
         Requirement.objects.filter(
@@ -174,6 +188,39 @@ def linked_requirements_queryset(*, slug, project_id):
             # 与 set_manual_stage 的降档锁同一条判定（在途 = 未驳回未取消），
             # 让前端直接读而不是从 latest_release_name 反推
             stage_locked=Exists(live_release_rows),
+            # Count 子查询统一 .order_by() 清默认排序再 GROUP BY —— 少了它
+            # 排序列会被拖进 GROUP BY，单行子查询变多行
+            issue_count=Subquery(
+                live_issue_rows.order_by()
+                .values("requirement_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            completed_issue_count=Subquery(
+                live_issue_rows.filter(issue__state__group=StateGroup.COMPLETED)
+                .order_by()
+                .values("requirement_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            cancelled_issue_count=Subquery(
+                live_issue_rows.filter(issue__state__group=StateGroup.CANCELLED)
+                .order_by()
+                .values("requirement_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            # 复用有效迭代口径（未删未取消），照 annotate_project_links 的
+            # ArrayAgg + Coalesce 空数组范式
+            linked_cycle_ids=Coalesce(
+                Subquery(
+                    valid_cycle_rows.order_by()
+                    .values("requirement_id")
+                    .annotate(arr=ArrayAgg("cycle_id"))
+                    .values("arr")
+                ),
+                Value([], output_field=ArrayField(UUIDField())),
+            ),
         )
         .select_related("product")
         .order_by("link_sort_order", "product__identifier", "sequence_id")
@@ -274,12 +321,22 @@ def requirement_facets(*, project_id, product_id=None):
 def stage_counts_by_project(*, product_id, project_ids):
     """产品侧「关联项目」列表用：每个项目引用了本产品多少需求、各阶段各多少。
 
+    每个 bucket 在五个阶段键之外另带 issue_total / issue_completed /
+    issue_cancelled 三个工作项聚合键（本产品需求在该项目下的 live 关联工作项，
+    按 State.group 分桶），供前端按任务完成率展示 —— 阶段键与工作项键混在同一个
+    dict 里，消费方按键取用，不要对整个 bucket 求和。
+
     一次分组查询覆盖所有项目，序列化器按 project_id 取用 —— 不要每行查一次。
     """
     from django.db.models import Count
 
     counts = {
-        str(project_id): {value: 0 for value in RequirementProjectStage.values}
+        str(project_id): {
+            **{value: 0 for value in RequirementProjectStage.values},
+            "issue_total": 0,
+            "issue_completed": 0,
+            "issue_cancelled": 0,
+        }
         for project_id in project_ids
     }
     rows = (
@@ -296,6 +353,29 @@ def stage_counts_by_project(*, product_id, project_ids):
         bucket = counts.get(str(row["project_id"]))
         if bucket is not None:
             bucket[row["stage"]] = row["count"]
+
+    # 工作项聚合同样一次分组覆盖所有项目。issue__/requirement__deleted_at 显式
+    # 过滤理由同上：FK 穿透不走软删 manager，窗口期里已删行不能再计进完成率
+    issue_rows = (
+        RequirementIssue.objects.filter(
+            project_id__in=project_ids,
+            requirement__product_id=product_id,
+            requirement__deleted_at__isnull=True,
+            issue__deleted_at__isnull=True,
+        )
+        .order_by()
+        .values("project_id", "issue__state__group")
+        .annotate(count=Count("id"))
+    )
+    for row in issue_rows:
+        bucket = counts.get(str(row["project_id"]))
+        if bucket is None:
+            continue
+        bucket["issue_total"] += row["count"]
+        if row["issue__state__group"] == StateGroup.COMPLETED:
+            bucket["issue_completed"] += row["count"]
+        elif row["issue__state__group"] == StateGroup.CANCELLED:
+            bucket["issue_cancelled"] += row["count"]
     return counts
 
 
@@ -428,32 +508,44 @@ def recalculate_stage(requirement_id, project_id, *, trigger=None, actor=None):
     """按现存关联事实重算 (需求, 项目) 的派生档，再用地板规则护住人工档。
 
     事实 → 档位（全部现查关联对象的当前状态，不存副本）：
-    - 存在未取消的迭代关联          → planned（已排期）
-    - 存在已发布（completed）发布关联 → released（已发布）
-    - 什么都没有                    → linked（已立项）
+    - 存在未取消的迭代关联            → planned（已排期）
+    - 任一关联工作项 group=started     → in_progress（研发中）
+    - 至少一条 completed 工作项且其余
+      全是 completed/cancelled         → done（研发完毕）
+    - 存在已发布（completed）发布关联  → released（已发布）
+    - 什么都没有                      → linked（已立项）
 
-    研发段（in_progress / done）**没有事实来源，只由人写**（见 set_manual_stage）。
-    这里唯一为它们做的事是地板规则：派生结果不得把当前的人工档往下冲。所以标了
-    「研发完毕」的需求再进下一个迭代、被解除迭代关联、进发布单、发布单被驳回或
-    取消，一律保持研发完毕。
+    研发段（in_progress / done）是**双轨制**：有关联工作项时完全由工作项的
+    State.group 派生（手填入口同步关闭，见 set_manual_stage），两条地板一并
+    让位 —— 事实可查之后，遗留的手工档与 released 回落取 done 的启发式都不再是
+    可信推断，继续保护会卡出「工作项还在 started、档位停在 done」的矛盾状态。
+    零工作项时保持手填：这里唯一为它们做的事是地板规则 —— 派生结果不得把当前的
+    人工档往下冲，所以标了「研发完毕」的需求再进下一个迭代、被解除迭代关联、
+    进发布单、发布单被驳回或取消，一律保持研发完毕。
 
-    **幂等，但不再顺序无关** —— 结果依赖 link.stage 的当前值（地板取自它）。这是
-    人工档能存活的唯一机制，不是脏代码：没有它，任何一次容器事件都会把人手填的
-    研发完毕算没了，而容器事件恰恰包括「关联进发布单」这个最该用到它的时刻。
+    **幂等，但不再顺序无关** —— 零工作项时结果依赖 link.stage 的当前值（地板取
+    自它）。这是人工档能存活的唯一机制，不是脏代码：没有它，任何一次容器事件都
+    会把人手填的研发完毕算没了，而容器事件恰恰包括「关联进发布单」这个最该用到
+    它的时刻。
 
-    已发布回落时地板取 done 而非当前值：进发布单不再要求先研发完毕（该门槛已
-    移除），所以这不再是一个可证明安全的推断，而是一个启发式默认 —— 已经发布过
-    的东西，在途研发状态被判定回滚时，把它当成至少「研发完毕」比直接掉回已排期
-    更接近事实（发布单被改回测试中不代表代码退回去了）。
+    已发布回落时地板取 done 而非当前值（仅零工作项路径）：进发布单不再要求先
+    研发完毕（该门槛已移除），所以这不再是一个可证明安全的推断，而是一个启发式
+    默认 —— 已经发布过的东西，在途研发状态被判定回滚时，把它当成至少「研发完毕」
+    比直接掉回已排期更接近事实（发布单被改回测试中不代表代码退回去了）。有工作
+    项时启发式的前提（无事实可查）消失：started → in_progress 是真相，全部完成
+    的 done 由候选档自然产出，不需要地板兜底。
 
     **显式调用，不挂信号** —— 信号会让阶段推导与迭代/发布写路径耦合到无法排查。
     写入点清单：需求↔迭代/发布关联增删（views/requirement/container.py）、迭代状态
     变更涉及已取消（views/cycle/base.py）、发布状态任何变更（views/release/base.py）、
-    人工设档后的归一（utils.set_manual_stage）。
+    人工设档后的归一（utils.set_manual_stage）、工作项关联增删与 Issue.state_id
+    落库后的重算（recalculate_stages_for_issue / recalculate_stages_for_issues）。
 
     阶段变化时写一行 RequirementProjectActivity 留痕（trigger 记触发来源快照），
     并级联重算需求本体 status。返回新阶段；无变化返回 None。
     """
+    from django.db.models import Count
+
     link = RequirementProject.objects.filter(
         requirement_id=requirement_id, project_id=project_id
     ).first()
@@ -485,22 +577,52 @@ def recalculate_stage(requirement_id, project_id, *, trigger=None, actor=None):
         release__status=ReleaseStatus.COMPLETED,
     ).exists()
 
+    # 工作项事实（研发段的事实来源）。issue__deleted_at 显式过滤：FK 穿透不走
+    # 软删 manager，删除工作项与异步级联之间的窗口期里已删行不能再算事实。
+    issue_groups = {
+        row["issue__state__group"]: row["count"]
+        for row in RequirementIssue.objects.filter(
+            requirement_id=requirement_id,
+            project_id=project_id,
+            issue__deleted_at__isnull=True,
+        )
+        .order_by()  # 清默认排序，防止排序列进 GROUP BY
+        .values("issue__state__group")
+        .annotate(count=Count("id"))
+    }
+    issue_total = sum(issue_groups.values())
+    started_count = issue_groups.get(StateGroup.STARTED.value, 0)
+    completed_count = issue_groups.get(StateGroup.COMPLETED.value, 0)
+    cancelled_count = issue_groups.get(StateGroup.CANCELLED.value, 0)
+
     candidates = [RequirementProjectStage.LINKED]
     if has_scheduled_cycle:
         candidates.append(RequirementProjectStage.PLANNED)
+    if issue_total:
+        if started_count:
+            # 任一条开工即研发中（含「有 started 也有 completed」的混合态）
+            candidates.append(RequirementProjectStage.IN_PROGRESS)
+        elif completed_count and (issue_total - completed_count - cancelled_count) == 0:
+            # 至少一条完成，且除 completed/cancelled 外没有别的桶
+            candidates.append(RequirementProjectStage.DONE)
+        # 全 cancelled / 只有待办未开始 / 只有 NULL 状态 → 不产研发档，
+        # 自然回落 planned / linked
     if has_released:
         candidates.append(RequirementProjectStage.RELEASED)
 
     new_stage = max(candidates, key=STAGE_LADDER.index)
 
-    # 地板：派生结果不得把人工档往下冲。released 回落时地板取 done（理由见 docstring）
-    floor = None
-    if link.stage in MANUAL_STAGES:
-        floor = link.stage
-    elif link.stage == RequirementProjectStage.RELEASED:
-        floor = RequirementProjectStage.DONE
-    if floor is not None:
-        new_stage = max(new_stage, floor, key=STAGE_LADDER.index)
+    # 地板只在零工作项时生效：有工作项后研发段事实可查，两条地板都让位（理由见
+    # docstring 的双轨制说明）
+    if not issue_total:
+        # 地板：派生结果不得把人工档往下冲。released 回落时地板取 done（理由见 docstring）
+        floor = None
+        if link.stage in MANUAL_STAGES:
+            floor = link.stage
+        elif link.stage == RequirementProjectStage.RELEASED:
+            floor = RequirementProjectStage.DONE
+        if floor is not None:
+            new_stage = max(new_stage, floor, key=STAGE_LADDER.index)
 
     if link.stage == new_stage:
         # 阶段没变也要级联 status：解除项目关联等场景改变的是「全部已发布」的
@@ -540,6 +662,16 @@ def has_live_release_link(requirement_id, project_id):
     ).exists()
 
 
+def has_issue_links(requirement_id, project_id):
+    """该 (需求, 项目) 是否有 live 工作项关联。与 linked_requirements_queryset 的
+    issue_count 注解同一条判定 —— 前端据注解禁用下拉，后端据这里拒绝写入。"""
+    return RequirementIssue.objects.filter(
+        requirement_id=requirement_id,
+        project_id=project_id,
+        issue__deleted_at__isnull=True,
+    ).exists()
+
+
 def set_manual_stage(requirement_id, project_id, *, stage, actor=None):
     """人工设置研发段档位。这是 stage 唯一的手动写入口。
 
@@ -552,6 +684,9 @@ def set_manual_stage(requirement_id, project_id, *, stage, actor=None):
     锁依然保证「已经进了发布单的需求，研发段档位不会在挂靠期间被人悄悄改低」。
     想改就先从发布单里移出去 —— 动作明确，比默默降档更难出错。
 
+    有关联工作项时三个值一律拒绝（REQUIREMENT_STAGE_ISSUE_DERIVED）：研发段
+    完全由工作项派生，不存在可手填、可撤销的人工标记。
+
     返回归一后的最终档位。
     """
     link = RequirementProject.objects.filter(
@@ -561,6 +696,14 @@ def set_manual_stage(requirement_id, project_id, *, stage, actor=None):
         raise RequirementLinkError(
             "This requirement is not linked to the project.",
             code="REQUIREMENT_NOT_LINKED_TO_PROJECT",
+        )
+
+    # 有工作项时整个下拉都不存在，「派生」比「锁定」是更根本的拒绝理由，
+    # 所以排在 release 降档锁之前
+    if has_issue_links(requirement_id, project_id):
+        raise RequirementLinkError(
+            "Stage is derived from linked work items and cannot be set manually.",
+            code="REQUIREMENT_STAGE_ISSUE_DERIVED",
         )
 
     if has_live_release_link(requirement_id, project_id):
@@ -604,6 +747,32 @@ def recalculate_stages_for_cycle(cycle_id, *, trigger=None, actor=None):
     """
     pairs = RequirementCycle.objects.filter(cycle_id=cycle_id).values_list(
         "requirement_id", "project_id"
+    )
+    for requirement_id, project_id in pairs:
+        recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)
+
+
+def recalculate_stages_for_issue(issue_id, *, trigger=None, actor=None):
+    """工作项状态落库后，重算它关联的 (需求, 项目)。
+
+    快速 no-op：绝大多数工作项没挂需求 —— issue 单列上有条件唯一索引，
+    这里恒为一次索引点查，零行即返回。至多一行。
+    """
+    pairs = RequirementIssue.objects.filter(issue_id=issue_id).values_list(
+        "requirement_id", "project_id"
+    )
+    for requirement_id, project_id in pairs:
+        recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)
+
+
+def recalculate_stages_for_issues(issue_ids, *, trigger=None, actor=None):
+    """批量路径（batch 更新 / 自动关闭）。一次 in 查询取对、去重后逐对重算。"""
+    if not issue_ids:
+        return
+    pairs = set(
+        RequirementIssue.objects.filter(issue_id__in=issue_ids).values_list(
+            "requirement_id", "project_id"
+        )
     )
     for requirement_id, project_id in pairs:
         recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)

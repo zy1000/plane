@@ -1,0 +1,262 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
+"""需求 ↔ 工作项的关联端点（项目侧）。
+
+这张关联表是研发段（in_progress / done）阶段派生的事实来源：有关联工作项时，
+研发中/完毕由工作项的 State.group 推导，手填入口随之关闭。每次增删之后
+**同步**调 recalculate_stage —— 显式调用，不挂信号（理由见
+utils/requirement_project.recalculate_stage 的 docstring）。
+
+**不复用 BaseRequirementContainerViewSet** —— 容器基类的方向是
+container→requirements（list 返回需求行），这里方向相反（requirement→issues，
+list 返回工作项行），409 语义也不同（冲突主语是「工作项已挂别的需求」，不是
+「需求没进项目」），强套基类每个方法都要覆盖。校验顺序借鉴它，bulk_create
+范式借鉴 ReleaseIssueViewSet。
+
+公共前置校验一条，报 409：需求必须已关联进本项目（先进项目，再挂项目下的
+事实 —— 反过来会绕开候选池的评审门槛）。
+"""
+
+from django.contrib.postgres.aggregates import ArrayAgg
+from django.contrib.postgres.fields import ArrayField
+from django.db.models import F, OuterRef, Subquery, UUIDField, Value
+from django.db.models.functions import Coalesce
+from rest_framework import status
+from rest_framework.response import Response
+
+from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.views.base import BaseViewSet
+from plane.db.models import (
+    Issue,
+    IssueAssignee,
+    RequirementIssue,
+    RequirementProject,
+)
+from plane.utils.requirement_project import recalculate_stage
+
+
+def _requirement_display_id(requirement):
+    """需求编号（如 ECOM-12）。product 可空（历史行 / 库内草稿），此时给 None ——
+    与 MultiProductRequirementSerializer.get_display_id 的口径一致。"""
+    product = requirement.product
+    if product is None or requirement.sequence_id is None:
+        return None
+    return f"{product.identifier}-{requirement.sequence_id}"
+
+
+class RequirementIssueViewSet(BaseViewSet):
+    """需求 ↔ 工作项。关联 = 研发段（in_progress / done）的事实。"""
+
+    model = RequirementIssue
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    def list(self, request, slug, project_id, requirement_id):
+        """轻量工作项行，不走 issue_on_results / grouper 重型链路（那是给全功能
+        网格的）。Issue.objects **含归档** —— 归档不是进度回退，仍算研发事实，
+        前端按 archived_at 置灰。state 三列拍平给出：前端完成率、行内状态色
+        都靠 state_group / state_color，不再逐行查 State。"""
+        issues = (
+            Issue.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                issue_requirement__requirement_id=requirement_id,
+                issue_requirement__deleted_at__isnull=True,
+            )
+            .annotate(
+                assignee_ids=Coalesce(
+                    Subquery(
+                        IssueAssignee.objects.filter(
+                            issue_id=OuterRef("pk"),
+                            assignee__member_project__is_active=True,
+                        )
+                        .values("issue_id")
+                        .annotate(arr=ArrayAgg("assignee_id", distinct=True))
+                        .values("arr")
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                )
+            )
+            .order_by("-created_at")
+            .values(
+                "id",
+                "name",
+                "sequence_id",
+                "priority",
+                "project_id",
+                "type_id",
+                "state_id",
+                "assignee_ids",
+                "archived_at",
+                "created_at",
+                "updated_at",
+                state_name=F("state__name"),
+                state_group=F("state__group"),
+                state_color=F("state__color"),
+            )
+        )
+        return Response(issues, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    def create(self, request, slug, project_id, requirement_id):
+        """关联已有工作项，唯一载荷 {"issues": [id, ...]}。全有或全无，与
+        resolve_linkable_requirements 同取舍 —— 部分成功会让前端不知道该刷谁。"""
+        issue_ids = request.data.get("issues", [])
+        if not issue_ids:
+            return Response(
+                {"error": "Issues are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        requested = list(dict.fromkeys(str(item) for item in issue_ids))
+
+        # ① 先进项目，再挂项目下的事实
+        link = RequirementProject.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            requirement_id=requirement_id,
+        ).first()
+        if link is None:
+            return Response(
+                {
+                    "error": "This requirement is not linked to this project.",
+                    "code": "REQUIREMENT_NOT_LINKED_TO_PROJECT",
+                    "requirement_ids": [str(requirement_id)],
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # ② 工作项必须全部落在本项目 —— 保证 RequirementIssue.project =
+        # Issue.project 的不变量（重算按 (requirement, project) 聚合时不穿透 issue 表）
+        found = {
+            str(value)
+            for value in Issue.objects.filter(
+                workspace__slug=slug, project_id=project_id, pk__in=requested
+            )
+            .order_by()
+            .values_list("id", flat=True)
+        }
+        missing = [item for item in requested if item not in found]
+        if missing:
+            return Response(
+                {
+                    "error": "Some work items do not belong to this project.",
+                    "issue_ids": missing,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ③ 一条工作项至多挂一条需求：已挂**其他**需求 → 409 带对方编号，
+        # 让前端能提示「先去解除」。已挂本需求的行不算冲突 —— 交给条件唯一索引
+        # 静默吸收（幂等），并发竞态同样由 DB 唯一索引裁决
+        conflict_rows = (
+            RequirementIssue.objects.filter(issue_id__in=requested)
+            .exclude(requirement_id=requirement_id)
+            .select_related("requirement__product")
+        )
+        conflicts = [
+            {
+                "issue_id": str(row.issue_id),
+                "requirement_id": str(row.requirement_id),
+                "requirement_display_id": _requirement_display_id(row.requirement),
+                "requirement_name": row.requirement.title,
+            }
+            for row in conflict_rows
+        ]
+        if conflicts:
+            return Response(
+                {
+                    "error": "Some work items are already linked to another requirement.",
+                    "code": "ISSUE_ALREADY_LINKED",
+                    "conflicts": conflicts,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        RequirementIssue.objects.bulk_create(
+            [
+                RequirementIssue(
+                    requirement_id=requirement_id,
+                    issue_id=issue_id,
+                    project_id=project_id,
+                    # bulk_create 不走 ProjectBaseModel.save()，workspace 不会被自动派生
+                    workspace_id=link.workspace_id,
+                    created_by_id=request.user.id,
+                    updated_by_id=request.user.id,
+                )
+                for issue_id in requested
+            ],
+            batch_size=100,
+            ignore_conflicts=True,
+        )
+        # 同一 (需求, 项目)，一次重算即可，不必逐条
+        recalculate_stage(
+            requirement_id,
+            project_id,
+            trigger={"type": "issue_linked", "issue_ids": requested},
+            actor=request.user,
+        )
+        return Response({"message": "success"}, status=status.HTTP_201_CREATED)
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    def destroy(self, request, slug, project_id, requirement_id, issue_id):
+        link = (
+            RequirementIssue.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                requirement_id=requirement_id,
+                issue_id=issue_id,
+            )
+            .select_related("issue")
+            .first()
+        )
+        if link is None:
+            return Response(
+                {"error": "This work item is not linked to it."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        # 名称存快照：工作项后续可能被删，留痕必须自足可读
+        issue_name = link.issue.name if link.issue else ""
+        link.delete()
+        recalculate_stage(
+            requirement_id,
+            project_id,
+            trigger={
+                "type": "issue_unlinked",
+                "issue_id": str(issue_id),
+                "issue_name": issue_name,
+            },
+            actor=request.user,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    def requirement_link(self, request, slug, project_id, issue_id):
+        """工作项侧反查：这条工作项挂在哪条需求上（live 行至多一条）。
+
+        给工作项详情属性栏的只读芯片供数 —— 刻意**不动 Issue 主序列化器热路径**，
+        绝大多数工作项没挂需求，塞进主序列化器是全站为少数行买单。无关联时
+        返回 200 null，前端整行不渲染。"""
+        link = (
+            RequirementIssue.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                issue_id=issue_id,
+            )
+            .select_related("requirement__product")
+            .first()
+        )
+        if link is None:
+            return Response(None, status=status.HTTP_200_OK)
+        requirement = link.requirement
+        return Response(
+            {
+                "requirement_id": str(requirement.id),
+                "requirement_display_id": _requirement_display_id(requirement),
+                "requirement_name": requirement.title,
+                "product_id": str(requirement.product_id)
+                if requirement.product_id
+                else None,
+            },
+            status=status.HTTP_200_OK,
+        )

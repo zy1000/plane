@@ -46,6 +46,11 @@ type TProps = {
   showDetailAction?: boolean;
   /** 头部的所属产品标识。项目侧一页可能混着多个产品的需求，不标出来根本分不清 */
   productChip?: ReactNode;
+  /**
+   * 透传给正文的「关联工作项」区块。项目需求页传入可操作的 Section（拆分/关联/解除
+   * 要项目语境与 link 管理权限，都长在那一页上）；产品侧抽屉不传则不渲染。
+   */
+  issuesSection?: ReactNode;
 };
 
 /**
@@ -69,6 +74,7 @@ export const RequirementPeekOverview = (props: TProps) => {
     shareHref,
     showDetailAction = true,
     productChip,
+    issuesSection,
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
@@ -238,6 +244,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onPatch={handlePatch}
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void detail.refresh()}
+                  issuesSection={issuesSection}
                 />
               )}
             </div>

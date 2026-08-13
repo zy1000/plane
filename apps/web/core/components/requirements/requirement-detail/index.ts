@@ -2,6 +2,8 @@ export * from "./requirement-approval-panel";
 export * from "./requirement-approved-diff";
 export * from "./requirement-change-trail";
 export * from "./requirement-detail-content";
+export * from "./requirement-issues-by-project";
+export * from "./requirement-issues-section";
 export * from "./requirement-modified-banner";
 export * from "./requirement-peek-overview";
 export * from "./requirement-projects-select";

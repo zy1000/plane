@@ -3,7 +3,7 @@
  *
  * 上一版把八个内置列 + 编号 + 产品 + 阶段 + 审批 + 类型全铺开，固定列宽合计 1800px，
  * 1440px 窗口下要横滚约 850px —— 而被推到屏幕外的恰好是最没用的两列（父项常年显示
- * 「未知需求」、需求类型已经升级成顶部分面）。这里改成「默认 8 列 + 用户可勾回」。
+ * 「未知需求」、需求类型已经升级成顶部分面）。这里改成「默认 9 列 + 用户可勾回」。
  *
  * 显隐偏好按项目存 localStorage，与产品网格的自定义字段显隐是同一套做法
  * （requirement-grid.tsx 的 hiddenFieldIds + storageKey）。
@@ -15,6 +15,7 @@ export type TProjectRequirementColumnKey =
   | "display_id"
   | "product"
   | "stage"
+  | "issues"
   | "approval"
   | "requirement_type"
   | TRequirementBuiltinKey;
@@ -31,6 +32,7 @@ export const DEFAULT_VISIBLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
   "product",
   "stage",
+  "issues",
   "approval",
   "priority",
   "assignee_id",
@@ -42,6 +44,7 @@ export const TOGGLEABLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
   "product",
   "stage",
+  "issues",
   "approval",
   "priority",
   "assignee_id",
@@ -58,6 +61,7 @@ export const COLUMN_LABEL_KEYS: Partial<Record<TProjectRequirementColumnKey, str
   display_id: "requirements.identifier.column",
   product: "project_requirements.product_column",
   stage: "project_requirements.stage_column",
+  issues: "project_requirements.issues.column",
   approval: "requirement_approval.column",
   requirement_type: "requirement_detail.requirement_type",
 };

@@ -1,5 +1,6 @@
 import type { TLogoProps } from "./common";
 import type { TPaginatedResponse } from "./pagination";
+import type { TStateGroups } from "./state";
 import type { IUserLite } from "./users";
 
 export type TRequirementApprovalType = "any" | "all" | "n_of_m";
@@ -396,6 +397,17 @@ export type TProjectRequirement = TRequirement & {
   carryover: boolean;
   /** 挂在在途（未驳回未取消）发布单上 —— 阶段下拉要禁用，服务端也会拒绝写入 */
   stage_locked: boolean;
+  /** live 关联工作项数。>0 时研发段档位改由工作项派生，阶段下拉要关掉（服务端 409 兜底） */
+  issue_count: number;
+  /** 关联工作项中 state.group=completed 的条数。完成率 = completed / (issue_count − cancelled)，由前端算 */
+  completed_issue_count: number;
+  /** 关联工作项中 state.group=cancelled 的条数——完成率分母的扣减项 */
+  cancelled_issue_count: number;
+  /**
+   * 未取消迭代关联的迭代 id。「拆分工作项」在 length === 1 时预填迭代；
+   * 多个迭代不猜，留给用户在创建弹窗里自己选。
+   */
+  linked_cycle_ids: string[];
 };
 
 /**
@@ -463,6 +475,47 @@ export type TProductProject = {
  */
 export type TRequirementContainerLinkPayload = {
   requirements: string[];
+};
+
+/* --- 需求 ↔ 工作项（RequirementIssue） ------------------------------------ */
+
+/**
+ * 需求已关联的一条工作项（轻量行，服务端 .values() 直出）。
+ *
+ * 刻意不是完整的工作项：关联工作项 section 只要编号/标题/状态/负责人几列，不走
+ * 工作项网格的重型链路。完成率与状态胶囊配色都按 state_group 判断，不看状态名
+ * （状态是项目内自定义的，group 才是稳定的跨项目语义轴）。state 三列随 state_id
+ * 可空 —— 无状态的工作项归「未完成未取消」桶：挡 done、不产 in_progress。
+ */
+export type TRequirementIssue = {
+  id: string;
+  name: string;
+  sequence_id: number;
+  priority: TRequirementPriority;
+  project_id: string;
+  type_id: string | null;
+  state_id: string | null;
+  state_name: string | null;
+  state_group: TStateGroups | null;
+  state_color: string | null;
+  assignee_ids: string[];
+  /** 非空 = 已归档。归档仍是事实（照常计入阶段派生），只在展示上置灰 */
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * 工作项侧反查：这条工作项挂在哪条需求上。一条工作项至多挂一条需求，所以是
+ * 单个对象；端点在无关联时返回 null —— 详情属性栏的只读芯片整行不渲染。
+ */
+export type TIssueRequirementLink = {
+  requirement_id: string;
+  /** 拼好的展示编号（如 ECOM-12），芯片文案直接用 */
+  requirement_display_id: string;
+  requirement_name: string;
+  /** 芯片跳转产品需求详情要它 */
+  product_id: string;
 };
 
 /* --- 从标准库导入 -------------------------------------------------------- */

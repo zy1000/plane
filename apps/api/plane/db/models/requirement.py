@@ -1460,6 +1460,46 @@ class RequirementRelease(ProjectBaseModel):
         return f"{self.requirement_id} @ release {self.release_id}"
 
 
+class RequirementIssue(ProjectBaseModel):
+    """需求 ↔ 工作项的关联行。研发段（in_progress / done）阶段派生的事实来源。
+
+    一条工作项至多挂一条需求：唯一约束落在 issue **单列**（软删条件唯一）——
+    与 RequirementCycle 的 (requirement, cycle) 复合唯一不同，这里唯一性的主语
+    是工作项本身。project 冗余自 issue.project（写入口校验二者一致），重算按
+    (requirement, project) 聚合时不穿透 issue 表。不遍历父子树：只认关联行。
+    """
+
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="requirement_issues",
+        verbose_name="关联需求",
+    )
+    issue = models.ForeignKey(
+        "db.Issue",
+        on_delete=models.CASCADE,
+        related_name="issue_requirement",
+        verbose_name="关联工作项",
+    )
+
+    class Meta:
+        unique_together = ["issue", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_issue_unique_issue_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Requirement Issue"
+        verbose_name_plural = "Requirement Issues"
+        db_table = "requirement_issues"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.requirement_id} @ issue {self.issue_id}"
+
+
 class RequirementProjectActivity(ProjectBaseModel):
     """(需求, 项目) 阶段变更留痕。阶段是派生值，会因发布单驳回等静默降档 ——
     没有这张表，用户只能看着阶段掉下来猜原因。

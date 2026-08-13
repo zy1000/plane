@@ -10,7 +10,7 @@ import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProduct } from "@plane/types";
 import { EUserWorkspaceRoles } from "@plane/types";
-import { Avatar, AvatarGroup, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
+import { Avatar, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
 import { PageHead } from "@/components/core/page-title";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
@@ -18,29 +18,17 @@ import { DeleteProductModal } from "./delete-modal";
 import { ProductModal } from "./modal";
 import { useProductsContext } from "./context";
 
-const ProductPeople = ({ product, type }: { product: TProduct; type: "owner" | "reviewers" }) => {
-  if (type === "owner") {
-    return (
-      <div className="flex min-w-0 items-center gap-2">
-        <Avatar
-          size="sm"
-          name={product.owner_detail?.display_name}
-          src={getFileURL(product.owner_detail?.avatar_url ?? "")}
-          showTooltip={false}
-        />
-        <span className="truncate text-xs text-primary">{product.owner_detail?.display_name ?? "-"}</span>
-      </div>
-    );
-  }
-  if (!product.reviewer_details.length) return <span className="text-secondary">-</span>;
-  return (
-    <AvatarGroup showTooltip>
-      {product.reviewer_details.map((reviewer) => (
-        <Avatar key={reviewer.id} size="sm" name={reviewer.display_name} src={getFileURL(reviewer.avatar_url ?? "")} />
-      ))}
-    </AvatarGroup>
-  );
-};
+const ProductOwner = ({ product }: { product: TProduct }) => (
+  <div className="flex min-w-0 items-center gap-2">
+    <Avatar
+      size="sm"
+      name={product.owner_detail?.display_name}
+      src={getFileURL(product.owner_detail?.avatar_url ?? "")}
+      showTooltip={false}
+    />
+    <span className="truncate text-xs text-primary">{product.owner_detail?.display_name ?? "-"}</span>
+  </div>
+);
 
 export const ProductsRoot = observer(function ProductsRoot() {
   const { workspaceSlug } = useParams();
@@ -144,9 +132,6 @@ export const ProductsRoot = observer(function ProductsRoot() {
                     <th className="hidden w-40 px-4 py-3 text-left font-medium text-secondary sm:table-cell">
                       {t("workspace_products.fields.owner")}
                     </th>
-                    <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary md:table-cell">
-                      {t("workspace_products.fields.reviewers")}
-                    </th>
                     <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
                       {t("workspace_products.fields.visibility")}
                     </th>
@@ -181,10 +166,7 @@ export const ProductsRoot = observer(function ProductsRoot() {
                           </Link>
                         </td>
                         <td className="hidden px-4 py-3 sm:table-cell">
-                          <ProductPeople product={product} type="owner" />
-                        </td>
-                        <td className="hidden px-4 py-3 md:table-cell">
-                          <ProductPeople product={product} type="reviewers" />
+                          <ProductOwner product={product} />
                         </td>
                         <td className="hidden px-4 py-3 lg:table-cell">
                           <span className="inline-flex items-center gap-1.5 text-xs text-primary">

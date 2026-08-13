@@ -169,6 +169,7 @@ from .requirement import (
     RequirementField,
     RequirementFieldCategory,
     RequirementFieldType,
+    RequirementIssue,
     RequirementItemStatus,
     RequirementLibrary,
     RequirementPriority,

@@ -13,6 +13,7 @@ import {
   RequirementApprovalPanel,
   RequirementDetailContent,
   RequirementDetailProperties,
+  RequirementIssuesByProject,
   useRequirementDetail,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
@@ -137,6 +138,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   onPatch={detail.submitPatch}
                   onOpenRequirement={openRequirement}
                   onRolledBack={() => void detail.refresh()}
+                  /* 产品侧只读：按项目分组看已拆工作项；「拆」必须先选项目，入口在项目侧 */
+                  issuesSection={<RequirementIssuesByProject workspaceSlug={slug} requirement={requirement} />}
                 />
                 {/* 窄屏没有右栏，属性回落到主列底部 —— 与工作项详情同款处理 */}
                 <div className="mt-8 border-t border-subtle pt-6 lg:hidden">

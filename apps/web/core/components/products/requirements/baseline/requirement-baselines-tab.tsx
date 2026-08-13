@@ -161,6 +161,7 @@ export function RequirementBaselinesTab(props: TProps) {
         onOpen={(baseline) => onOpenBaseline(baseline.id)}
         onCompare={(fromId, toId) => onOpenBaseline(fromId, toId)}
         onDelete={setBaselineToDelete}
+        onCreate={() => onCreateOpenChange(true)}
       />
     );
 

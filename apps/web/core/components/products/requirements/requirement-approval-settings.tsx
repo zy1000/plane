@@ -29,7 +29,7 @@ function UserOption({ user }: { user: IUserLite }) {
   );
 }
 
-/** 一行标签 + 控件 + 常显说明。表单里所有字段共用这一种排布 */
+/** 标签在上、控件在下，与产品通用设置其它字段同一套排布，字段间不加分割线 */
 export function SettingsField({
   label,
   required,
@@ -42,15 +42,15 @@ export function SettingsField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-x-4 gap-y-1.5 border-t border-subtle py-4 sm:grid-cols-[8.25rem_minmax(0,1fr)]">
-      <span className="pt-1.5 text-12 font-medium text-primary">
+    <div>
+      <p className="mb-1.5 text-body-sm-medium text-primary">
         {label}
         {required && <span className="ml-0.5 text-danger-primary">*</span>}
-      </span>
+      </p>
       <div className="min-w-0">
         {children}
         {/* 说明常显而不是塞进占位符：占位符一旦选了值就消失，而这些话恰恰是选完才需要 */}
-        {help && <p className="mt-1.5 text-11 leading-5 text-tertiary">{help}</p>}
+        {help && <p className="mt-1.5 text-caption-md-regular text-tertiary">{help}</p>}
       </div>
     </div>
   );
@@ -78,11 +78,8 @@ export function RequirementApprovalSettings({
   const isRuleDisabled = readOnly || !approverIds.length;
 
   return (
-    <div className={className}>
-      <SettingsField
-        label={t("workspace_products.requirements.fields.approvers")}
-        help={t("workspace_products.requirements.configuration.approvers_help")}
-      >
+    <div className={cn("space-y-6", className)}>
+      <SettingsField label={t("workspace_products.requirements.fields.approvers")}>
         <MultiSelectDropdown
           value={approverIds}
           onChange={onApproverIdsChange}

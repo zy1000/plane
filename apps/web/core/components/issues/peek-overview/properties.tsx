@@ -6,16 +6,18 @@
 
 import { type ComponentType, type ReactNode, useState } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, CalendarPlus, Rocket, UserRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, FileText, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
 import { CycleIcon, EstimatePropertyIcon, ModuleIcon, LabelPropertyIcon } from "@plane/propel/icons";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
+import { RequirementChip } from "@/components/requirements/requirement-chip";
 // helpers
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useIssueRequirementLink } from "@/hooks/store/use-issue-requirement-link";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 
@@ -94,6 +96,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
     issue: { getIssueById },
   } = useIssueDetail();
   const { getUserDetails } = useMember();
+  // 工作项侧反查所挂需求：无关联时「需求」行整行不渲染
+  const { link: requirementLink } = useIssueRequirementLink(workspaceSlug, projectId, issueId);
   // derived values
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
@@ -213,6 +217,20 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
                 disabled={disabled}
               />
             </StructureFieldValue>
+
+            {/* 来源需求：只读芯片，改关联回需求侧的「关联工作项」section 操作 */}
+            {requirementLink && (
+              <>
+                <StructureFieldLabel icon={FileText} label={t("project_requirements.issues.source_requirement")} />
+                <StructureFieldValue>
+                  <RequirementChip
+                    displayId={requirementLink.requirement_display_id}
+                    name={requirementLink.requirement_name}
+                    href={`/${workspaceSlug}/products/${requirementLink.product_id}/requirements/${requirementLink.requirement_id}`}
+                  />
+                </StructureFieldValue>
+              </>
+            )}
           </div>
         </PropertyGroupSection>
 

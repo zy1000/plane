@@ -150,6 +150,9 @@ export const ScopeRequirementsSection = (props: TProps) => {
                   {/*
                     研发段可人工设置，其余三档服务端派生。stage_locked = 挂在在途发布单上，
                     此时整行阶段锁死；提交中的那一行也按锁定处理，避免连点发出两次写入。
+                    有关联工作项时研发段也改由任务状态派生，人工下拉关掉（不传 onChange
+                    即恒只读）—— 与项目需求网格同一判定，后端 409
+                    REQUIREMENT_STAGE_ISSUE_DERIVED 兜底。
                   */}
                   <div className="h-5">
                     <ProjectRequirementStageCell
@@ -158,7 +161,9 @@ export const ScopeRequirementsSection = (props: TProps) => {
                       latestCycleName={row.latest_cycle_name}
                       latestReleaseName={row.latest_release_name}
                       carryover={row.carryover}
-                      onChange={canManage ? (next) => onStageChange(row.id, next) : undefined}
+                      onChange={
+                        canManage && !row.issue_count ? (next) => onStageChange(row.id, next) : undefined
+                      }
                       locked={
                         row.stage_locked || row.stage === "released" || updatingStageRequirementId === row.id
                       }

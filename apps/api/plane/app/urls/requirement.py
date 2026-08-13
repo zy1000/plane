@@ -10,6 +10,7 @@ from plane.app.views.requirement import (
     RequirementChangeItemViewSet,
     RequirementChangeRequestViewSet,
     RequirementChangeTrailViewSet,
+    RequirementIssueViewSet,
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
@@ -191,6 +192,23 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:container_id>/requirements/<uuid:requirement_id>/",
         ReleaseRequirementViewSet.as_view({"delete": "destroy"}),
         name="project-release-requirement-item",
+    ),
+    # --- 项目需求：工作项关联（研发段阶段派生的事实来源） -----------------
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/<uuid:requirement_id>/issues/",
+        RequirementIssueViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-requirement-issues",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/<uuid:requirement_id>/issues/<uuid:issue_id>/",
+        RequirementIssueViewSet.as_view({"delete": "destroy"}),
+        name="project-requirement-issue-item",
+    ),
+    # 工作项侧反查：详情属性栏的只读需求芯片供数
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/requirement-link/",
+        RequirementIssueViewSet.as_view({"get": "requirement_link"}),
+        name="project-issue-requirement-link",
     ),
     # --- 产品需求：审批配置与变更单 -------------------------------------
     path(

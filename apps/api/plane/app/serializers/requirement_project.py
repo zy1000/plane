@@ -99,6 +99,10 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
     latest_release_name = serializers.SerializerMethodField()
     carryover = serializers.SerializerMethodField()
     stage_locked = serializers.SerializerMethodField()
+    issue_count = serializers.SerializerMethodField()
+    completed_issue_count = serializers.SerializerMethodField()
+    cancelled_issue_count = serializers.SerializerMethodField()
+    linked_cycle_ids = serializers.SerializerMethodField()
     product_name = serializers.CharField(source="product.name", read_only=True)
     # 标识（ECOM）与名字一起给：项目页把所属产品渲染成 chip，光有名字画不出徽标
     product_identifier = serializers.CharField(source="product.identifier", read_only=True)
@@ -111,6 +115,10 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
             "latest_release_name",
             "carryover",
             "stage_locked",
+            "issue_count",
+            "completed_issue_count",
+            "cancelled_issue_count",
+            "linked_cycle_ids",
             "product_name",
             "product_identifier",
         ]
@@ -140,3 +148,20 @@ class ProjectRequirementSerializer(MultiProductRequirementSerializer):
         # 缺注解时按「未锁」返回：容器列表等不带这个注解的场景本来也不给编辑入口，
         # 真要越过前端写进来，set_manual_stage 还会再挡一道
         return bool(getattr(obj, "stage_locked", False))
+
+    def get_issue_count(self, obj):
+        # 工作项三元组由 linked_requirements_queryset 注解提供，完成率 =
+        # completed / (issue_count − cancelled) 由前端算，这里只给分子分母。
+        # 缺注解按零回落 —— 零工作项语义恰好是「研发段仍手填」，下拉不被误禁
+        return getattr(obj, "issue_count", 0) or 0
+
+    def get_completed_issue_count(self, obj):
+        return getattr(obj, "completed_issue_count", 0) or 0
+
+    def get_cancelled_issue_count(self, obj):
+        return getattr(obj, "cancelled_issue_count", 0) or 0
+
+    def get_linked_cycle_ids(self, obj):
+        # 「拆分工作项」弹窗恰好一个未取消迭代时预填；多个不猜。注解给的是
+        # UUID 列表，响应里统一转字符串
+        return [str(item) for item in (getattr(obj, "linked_cycle_ids", None) or [])]

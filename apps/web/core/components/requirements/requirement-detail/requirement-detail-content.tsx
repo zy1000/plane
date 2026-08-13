@@ -64,6 +64,12 @@ type TProps = {
   onOpenRequirement: (requirementId: string) => void;
   /** 回滚写的是活行而不是版本链，所以要让调用方重新拉一次这一行 */
   onRolledBack?: () => void;
+  /**
+   * 「关联工作项」区块，由调用方按侧别注入：项目侧抽屉给可操作的 Section（拆分/
+   * 关联/解除），产品侧整页给按项目分组的只读变体。这里不自己挂 —— 两个变体需要的
+   * 作用域（projectId、link 管理权限、linked_cycle_ids 注解）都长在调用方的行数据上。
+   */
+  issuesSection?: React.ReactNode;
 };
 
 /** 标签 + 值的两列排布，全部叶子字段（非 form）共用同一个网格，值列才有统一的 x 起点 */
@@ -235,6 +241,7 @@ export const RequirementDetailContent = (props: TProps) => {
     onPatch,
     onOpenRequirement,
     onRolledBack,
+    issuesSection,
   } = props;
   const { t } = useTranslation();
   const { uploadEditorAsset } = useEditorAsset();
@@ -433,6 +440,9 @@ export const RequirementDetailContent = (props: TProps) => {
           </div>
         </Section>
       )}
+
+      {/* 关联工作项与子需求并列 —— 都在回答「这条需求现在被拆成了什么」 */}
+      {issuesSection}
 
       {/*
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。

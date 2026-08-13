@@ -11,11 +11,16 @@ from plane.app.views import BaseAPIView
 from plane.db.models import (
     Issue,
     IssueTransitionRecord,
+    RequirementIssue,
     State,
     TransitionRecordStatus,
     UserRecentVisit,
 )
 from plane.utils.host import base_host
+from plane.utils.requirement_project import (
+    recalculate_stage,
+    recalculate_stages_for_issues,
+)
 from plane.utils.workflow.transition import (
     cancel_issue_pending_transitions,
     capture_issue_content_snapshot,
@@ -46,6 +51,7 @@ class IssueBatchUpdate(BaseAPIView):
         queryset = self.queryset.filter(project_id=project_id, id__in=issue_ids).select_related("state", "type")
         blocked = []
         updated_issue_ids = []
+        state_changed_ids = []
         to_state = None
 
         if state_id:
@@ -108,6 +114,9 @@ class IssueBatchUpdate(BaseAPIView):
                     )
                     continue
 
+            # save 后 query.state_id 就是新值了，此处必须先记「状态是否真变」
+            state_changed = bool(state_id and str(state_id) != str(query.state_id))
+
             serializer = IssueBatchUpdateSerializer(instance=query, data=properties, partial=True)
             if not serializer.is_valid():
                 blocked.append(
@@ -143,6 +152,15 @@ class IssueBatchUpdate(BaseAPIView):
                     project_id=str(project_id),
                 )
             updated_issue_ids.append(str(query.id))
+            if state_changed:
+                state_changed_ids.append(str(query.id))
+
+        # 207 部分成功时已成功的行也已落库，同样要重算（空列表时 helper 直接返回）
+        recalculate_stages_for_issues(
+            state_changed_ids,
+            trigger={"type": "issue_state_changed", "source": "batch_update"},
+            actor=request.user,
+        )
 
         if blocked:
             return Response(
@@ -157,7 +175,25 @@ class IssueBatchUpdate(BaseAPIView):
 
     def delete(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])
-        for pk in issue_ids:
+        # 先做作用域校验，只保留本 workspace/project 下真实存在的 id —— 与
+        # base.py destroy 先取 scoped issue 的做法对齐。不能拿原始 issue_ids
+        # 直接删关联行：跨项目 id 会越权删掉其他项目的需求关联；无效/过期 id
+        # 会让下方删除循环中途 404，此时关联行已删而逐对重算还没跑到
+        valid_ids = list(
+            Issue.objects.filter(
+                workspace__slug=slug, project_id=project_id, pk__in=issue_ids
+            ).values_list("id", flat=True)
+        )
+        # 批量删除 = 「开工/完成」事实可能作废。
+        # 先一次查询取受影响对（set 去重）、同步软删关联行，删完再逐对重算
+        # —— 不能等 Celery 级联：异步清理有时延且不回写阶段
+        affected_pairs = set(
+            RequirementIssue.objects.filter(issue_id__in=valid_ids).values_list(
+                "requirement_id", "project_id"
+            )
+        )
+        RequirementIssue.objects.filter(issue_id__in=valid_ids).delete()
+        for pk in valid_ids:
             issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
             issue.delete()
             # delete the issue from recent visits
@@ -178,5 +214,12 @@ class IssueBatchUpdate(BaseAPIView):
                 notification=True,
                 origin=base_host(request=request, is_app=True),
                 subscriber=False,
+            )
+        for requirement_id, link_project_id in affected_pairs:
+            recalculate_stage(
+                requirement_id,
+                link_project_id,
+                trigger={"type": "issue_deleted", "source": "batch"},
+                actor=request.user,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)

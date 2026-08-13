@@ -12,10 +12,11 @@
  * 逐字对应 —— 改这里必须同时改那里，否则后端认不出 scope，会**同时**跳过权限校验
  * 和类别过滤，页面静默列出项目全部工作项。
  *
- * `dev_requirements`（研发需求）是工作项视图；产品需求实体页在
- * /projects/:id/requirements，与本枚举无关。
+ * 产品需求实体页在 /projects/:id/requirements，与本枚举无关。原先还有一档
+ * `dev_requirements`（研发需求工作项视图），页面已下线；后端 scope 表里的对应
+ * 条目保留不删 —— 前端不再发这个值，留着无害，删了反而可能影响外部调用方。
  */
-export type TProjectIssueScope = "issues" | "dev_requirements" | "defects";
+export type TProjectIssueScope = "issues" | "defects";
 
 export const DEFAULT_PROJECT_ISSUE_SCOPE: TProjectIssueScope = "issues";
 
@@ -25,10 +26,8 @@ export const getProjectIssueScopeKey = (
 ): string => `${projectId}__${scope}`;
 
 export const getProjectIssueScopeFromPathname = (pathname: string | null | undefined): TProjectIssueScope => {
-  // 必须先判 /dev-requirements。它不含子串 "/requirements"（前面是连字符），
-  // 但反过来 /requirements 现在是产品需求页 —— 那个页面没有工作项 store，
-  // 不能落到任何 typed scope 上，所以它走默认分支。
-  if (pathname?.includes("/dev-requirements")) return "dev_requirements";
+  // /requirements 是产品需求页 —— 那个页面没有工作项 store，不能落到任何
+  // typed scope 上，所以它走默认分支。
   if (pathname?.includes("/defects")) return "defects";
   return DEFAULT_PROJECT_ISSUE_SCOPE;
 };

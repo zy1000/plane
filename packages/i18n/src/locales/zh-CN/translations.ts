@@ -20,7 +20,6 @@ export default {
     analytics: "分析",
     work_items: "工作项",
     requirements: "需求",
-    dev_requirements: "研发需求",
     defects: "缺陷",
     cycles: "迭代",
     modules: "模块",
@@ -2052,6 +2051,32 @@ export default {
       stage_updated: "阶段已更新为「{stage}」",
       failed: "操作失败，请稍后重试",
     },
+    /** 需求 ↔ 工作项关联：拆分 / 关联已有 / 解除，与研发段阶段派生联动 */
+    issues: {
+      column: "工作项",
+      section_title: "关联工作项",
+      split: "拆分工作项",
+      link_existing: "关联已有工作项",
+      empty: "暂无关联工作项",
+      unlink: "解除关联",
+      unlink_confirm_title: "解除工作项关联",
+      unlink_confirm_description: "解除后该工作项不再计入本需求的研发阶段与完成率。",
+      /** 有关联工作项时阶段下拉禁用，tooltip 说明原因 */
+      stage_derived_hint: "阶段由关联工作项派生",
+      /** 工作项详情属性栏只读芯片的行标签 */
+      source_requirement: "需求",
+      /** 产品侧按项目分组展示时，该分组下还没有工作项 */
+      group_empty: "该项目暂无已拆工作项",
+      /** 产品侧「拆分工作项」的前置：工作项必须落在具体项目里 */
+      select_project_first: "请先选择项目",
+      /** 409 ISSUE_ALREADY_LINKED 的冲突提示，{display_id} 是已挂需求的编号 */
+      already_linked: "工作项已关联需求 {display_id}",
+      toast_linked: "已关联工作项",
+      toast_unlinked: "已解除关联",
+      toast_link_failed: "关联失败",
+      /** 拆分链路是「创建 + 关联」两步、非原子；兜第二步失败的补救提示 */
+      toast_created_link_failed: "工作项已创建，但关联需求失败，可用「关联已有工作项」重试",
+    },
   },
   /** 项目关联的产品。它决定了项目能引用哪些产品的需求 */
   project_products: {
@@ -2081,7 +2106,6 @@ export default {
       description: "描述",
       no_description: "暂无描述",
       owner: "负责人",
-      reviewers: "评审人",
       visibility: "可见性",
       updated_at: "更新时间",
       actions: "操作",
@@ -2090,8 +2114,8 @@ export default {
       public: "公开",
       public_description: "当前工作区的所有成员均可查看。",
       private: "私有",
-      private_description: "仅负责人、评审人和工作区管理员可查看。",
-      private_access_warning: "保存后你将无法继续访问；如需保留查看权限，请将自己添加为评审人。",
+      private_description: "仅负责人、产品成员和工作区管理员可查看。",
+      private_access_warning: "保存后你将无法继续访问；如需保留查看权限，请将自己添加为产品成员。",
     },
     validation: { owner_required: "请选择负责人" },
     actions: {
@@ -2128,7 +2152,6 @@ export default {
         description: "产品描述",
         owner: "负责人",
         visibility: "可见性",
-        reviewers: "评审人",
       },
       validation: {
         name_required: "请输入产品名称。",
@@ -2315,7 +2338,6 @@ export default {
       },
       tabs: {
         data: "数据",
-        configuration: "审批配置",
         changes: "变更记录",
         baselines: "基线",
       },
@@ -2345,7 +2367,7 @@ export default {
         },
       },
       baseline: {
-        create: "打基线",
+        create: "创建基线",
         delete: "删除基线",
         error_title: "基线加载失败",
         total: "共 {count} 份基线",
@@ -2353,8 +2375,10 @@ export default {
         delete_title: "删除基线",
         delete_description: "删除基线「{name}」后不可恢复，被收录的需求本身不受影响。",
         empty: {
-          title: "还没有打过基线",
-          description: "基线是一份不可变快照，用来记住某个时点通过审批的需求长什么样。",
+          title: "用基线锁定某个时点的需求快照",
+          description:
+            "基线是一份不可变快照，收录当时已通过审批的需求内容。创建后不能改写，需要更新时再创建一份新的。",
+          cta: "创建基线",
         },
         columns: {
           name: "基线",
@@ -2363,7 +2387,7 @@ export default {
           created_at: "创建时间",
         },
         form: {
-          title: "打基线",
+          title: "创建基线",
           description: "基线只收录通过过审批的需求。创建后内容不可更改，想更新就再打一份。",
           name: "基线名称",
           name_placeholder: "如 R1.0 需求基线",
@@ -2380,7 +2404,7 @@ export default {
             stale: "{count} 条纳入的不是当前内容",
             unavailable: "选择收录范围后显示纳入结果",
           },
-          confirm: "打基线",
+          confirm: "创建基线",
         },
         stale_reason: {
           in_review: "{title}：评审中，收录 v{version}",
@@ -2408,11 +2432,13 @@ export default {
         },
       },
       data: {
-        import_from_library: "导入",
-        manual_entry: "录入",
+        import_from_library: "导入需求",
+        import_from_library_full: "导入需求",
+        more_create_actions: "更多新建方式",
+        manual_entry: "新建需求",
         empty: {
-          title: "该需求还没有明细数据",
-          description: "可以从标准库导入，或选择一个需求类型手动录入。",
+          title: "开始沉淀产品的结构化需求",
+          description: "从标准库批量导入，或按需求类型新建条目。字段结构由需求类型维护，这里负责录入与评审。",
         },
         toast: {
           imported: "已导入 {count} 条标准需求。",
@@ -2503,6 +2529,9 @@ export default {
         title: "变更记录",
         breadcrumb: "变更记录",
         empty: "暂无变更记录",
+        empty_title: "变更会以评审单的形式留在这里",
+        empty_description:
+          "提交需求评审后，每一次通过、驳回或撤回都会生成变更记录，方便追溯谁改了什么、何时生效。",
         error_title: "无法加载变更记录",
         columns: {
           change_request: "变更单",
@@ -2752,9 +2781,6 @@ export default {
         default_value_summary: "默认 {value}",
         current_version: "v{version}",
         approval_label: "审批设置：",
-        save: "保存配置",
-        owner_help: "需求的默认负责人。不参与审批 —— 审批人在下面单独配。",
-        approvers_help: "留空时任何人都提交不了评审 —— 提交会被服务端直接拒绝。",
         rule_help: "计数控件常驻在它自己那一行，选中与否都不改变行高。",
         read_only_hint: "只有产品管理员能改这份配置。",
         summary: {
@@ -2780,7 +2806,7 @@ export default {
       requirement_count: "需求数",
       stage_distribution: "阶段分布",
       completion: "完成率",
-      completion_hint: "按需求阶段计算：（研发完毕 + 已发布）/ 总数。暂不按关联工作项计算。",
+      completion_hint: "有关联工作项时按任务计算：已完成 / (工作项数 − 已取消)；零工作项时按需求阶段计算：（研发完毕 + 已发布）/ 总数。",
       title: "关联项目",
       linked_at: "关联时间",
       error_title: "无法加载关联项目",

@@ -7,6 +7,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TRequirementChangeApproval, TRequirementChangeRequest } from "@plane/types";
 import { Avatar, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
@@ -107,9 +108,11 @@ export function ChangeRequestList(props: TProps) {
 
   if (!changeRequests.length) {
     return (
-      <div className="grid flex-1 place-items-center px-6 py-16 text-center text-13 text-tertiary">
-        {t("workspace_products.requirements.change.empty")}
-      </div>
+      <EmptyStateDetailed
+        assetKey="changelog"
+        title={t("workspace_products.requirements.change.empty_title")}
+        description={t("workspace_products.requirements.change.empty_description")}
+      />
     );
   }
 

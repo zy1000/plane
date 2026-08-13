@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { Database, History, Inbox, Layers, Save, Settings2 } from "lucide-react";
+import { Database, History, Inbox, Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirementApprovalPolicy, IUserLite } from "@plane/types";
-import { Loader } from "@plane/ui";
+import type { IUserLite } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -24,6 +24,7 @@ import { ApprovalInboxModal } from "./approval/approval-inbox-modal";
 import { SubmitReviewModal } from "./approval/submit-review-modal";
 import { useRequirementApprovalActions } from "./approval/use-requirement-approval-actions";
 import { RequirementImportFromLibraryModal } from "./import-from-library-modal";
+import { RequirementCreateActions } from "./requirement-create-actions";
 import {
   DEFAULT_VIEW_KEY,
   getViewKey,
@@ -33,26 +34,15 @@ import {
 } from "./requirement-data-views";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
-import { RequirementSettingsPanel, type TRequirementSettingsDraft } from "./requirement-settings-panel";
 
-const TABS = ["data", "configuration", "changes", "baselines"] as const;
+const TABS = ["data", "changes", "baselines"] as const;
 
 type TProductRequirementsTab = (typeof TABS)[number];
-
-const toSettingsDraft = (policy: TRequirementApprovalPolicy): TRequirementSettingsDraft => ({
-  owner_id: policy.owner_id,
-  approver_ids: policy.approver_ids,
-  approval_type: policy.approval_type,
-  required_count: policy.required_count,
-});
-
-const serializeSettings = (settings: TRequirementSettingsDraft) => JSON.stringify(settings);
 
 /**
  * 产品需求页。
  *
- * 审批的单位是**一条需求**，所以页面级只剩「谁能批」这份配置；状态与版本都长在每一行
- * 上。整个产品不再有只读闸门 —— A 提交了需求 A 的评审，B 照样可以改需求 B。
+ * 审批配置已迁到产品设置「通用」；这里只做数据 / 变更 / 基线。状态与版本长在每一行上。
  */
 export const ProductRequirementsPage = observer(function ProductRequirementsPage() {
   const { t } = useTranslation();
@@ -70,8 +60,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const gridRef = useRef<TRequirementGridHandle | null>(null);
   const [isCreateBaselineOpen, setIsCreateBaselineOpen] = useState(false);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState<TRequirementSettingsDraft | null>(null);
-  const [settingsBaseline, setSettingsBaseline] = useState("");
 
   const store = useProductRequirements({ workspaceSlug, productId });
   const policy = store.policy;
@@ -93,8 +81,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
   const canEdit = Boolean(policy?.can_edit);
-  /** 能不能改审批配置本身 —— 必然比 canEdit 窄 */
-  const canManagePolicy = Boolean(policy?.can_manage);
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
   const baselinesStore = useRequirementBaselines({ workspaceSlug, productId });
   /**
@@ -106,15 +92,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const memberOptions = useMemo(() => {
     const byId = new Map<string, IUserLite>();
     members.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    if (policy?.owner_detail) byId.set(policy.owner_id, policy.owner_detail);
     policy?.approver_details.forEach((member) => byId.set(member.id, member));
     if (currentUser) byId.set(currentUser.id, currentUser);
     return Array.from(byId.values());
   }, [currentUser, members, policy]);
-  const isDirty = useMemo(
-    () => Boolean(settingsBaseline && settingsDraft && serializeSettings(settingsDraft) !== settingsBaseline),
-    [settingsBaseline, settingsDraft]
-  );
 
   const requirementTypes = store.requirementTypes;
   const activeView = useMemo(
@@ -131,13 +112,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     entityId: productId ?? "",
   });
 
-  useEffect(() => {
-    if (!store.configuration) return;
-    const nextSettings = toSettingsDraft(store.configuration.policy);
-    setSettingsDraft(nextSettings);
-    setSettingsBaseline(serializeSettings(nextSettings));
-  }, [store.configuration]);
-
   /**
    * 视图与条目过滤保持同步：单类型时也要把过滤设成那个类型，否则会拉到全部行。
    * 依赖只取用到的两个值 —— store 每次渲染都是新对象，整个放进依赖会死循环。
@@ -149,7 +123,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   }, [activeView, setRequirementTypeFilter, requirementTypeFilter]);
 
   const setTab = (tab: TProductRequirementsTab) => {
-    if (activeTab === "configuration" && isDirty) return;
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
     next.delete("cr");
@@ -219,65 +192,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     onSubmitted: () => setTab("changes"),
   });
 
-  /** 只保存负责人与审批配置 —— 字段归需求类型，标题描述归每一条需求 */
-  const saveConfiguration = async () => {
-    if (!store.configuration || !settingsDraft) return;
-    if (!settingsDraft.owner_id) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_products.requirements.validation.owner"),
-      });
-      return;
-    }
-    if (
-      settingsDraft.approver_ids.length > 0 &&
-      settingsDraft.approval_type === "n_of_m" &&
-      (!settingsDraft.required_count ||
-        settingsDraft.required_count < 1 ||
-        settingsDraft.required_count > settingsDraft.approver_ids.length)
-    ) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_products.requirements.validation.required_count"),
-      });
-      return;
-    }
-    try {
-      const response = await store.updateConfiguration({
-        expected_updated_at: store.configuration.policy.updated_at,
-        policy: {
-          owner_id: settingsDraft.owner_id,
-          approver_ids: settingsDraft.approver_ids,
-          approval_type: settingsDraft.approver_ids.length ? settingsDraft.approval_type : "any",
-          required_count:
-            settingsDraft.approver_ids.length && settingsDraft.approval_type === "n_of_m"
-              ? settingsDraft.required_count
-              : null,
-        },
-      });
-      const nextSettings = toSettingsDraft(response.policy);
-      setSettingsDraft(nextSettings);
-      setSettingsBaseline(serializeSettings(nextSettings));
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: t("workspace_products.requirements.toast.configuration_saved"),
-      });
-    } catch (error) {
-      const payload = error as { code?: string; error?: string };
-      if (payload?.code === "REQUIREMENT_CONFIGURATION_CONFLICT") {
-        await store.fetchConfiguration().catch(() => undefined);
-      }
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
-      });
-    }
-  };
-
   const isLoading = store.isConfigurationLoading || !policy;
 
   return (
@@ -288,11 +202,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           <div className="min-w-0 flex-1 self-stretch overflow-x-auto">
             <div className="flex h-full min-w-max items-end gap-1">
               {[
-                {
-                  key: "configuration" as const,
-                  icon: Settings2,
-                  label: t("workspace_products.requirements.tabs.configuration"),
-                },
                 { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
                 { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
                 {
@@ -306,10 +215,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   <button
                     key={tab.key}
                     type="button"
-                    disabled={activeTab === "configuration" && isDirty}
                     onClick={() => setTab(tab.key)}
                     className={cn(
-                      "relative flex h-11 items-center gap-1.5 px-3 text-12 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                      "relative flex h-11 items-center gap-1.5 px-3 text-12 transition-colors",
                       activeTab === tab.key
                         ? "font-medium text-accent-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:bg-accent-primary"
                         : "text-secondary hover:text-primary"
@@ -339,55 +247,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 )}
               </Button>
             )}
-            {activeTab === "data" && canEdit && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onMouseEnter={() => setShouldPrefetchImport(true)}
-                  onFocus={() => setShouldPrefetchImport(true)}
-                  onClick={() => setIsImportOpen(true)}
-                >
-                  {t("workspace_products.requirements.data.import_from_library")}
-                </Button>
-                {/*
-                  录入的落点按视图分：类型视图里类型已知，直接走表格自己的建行弹窗；
-                  默认视图是跨类型总览，开弹窗在里面选类型 —— 总览的表格只有内置列，
-                  自定义字段在那儿根本没有格子可填。
-                */}
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={() =>
-                    activeView.kind === "requirementType" ? gridRef.current?.addRow() : setIsCreateOpen(true)
-                  }
-                >
-                  {t("workspace_products.requirements.data.manual_entry")}
-                </Button>
-              </>
-            )}
             {activeTab === "baselines" && !openedBaselineId && canEdit && (
               <Button variant="primary" size="lg" onClick={() => setIsCreateBaselineOpen(true)}>
-                <Layers className="size-3.5" />
                 {t("workspace_products.requirements.baseline.create")}
-              </Button>
-            )}
-            {activeTab === "configuration" && canManagePolicy && (
-              <Button
-                variant="primary"
-                size="lg"
-                disabled={!isDirty}
-                loading={store.isMutating}
-                onClick={() => void saveConfiguration()}
-              >
-                <Save className="size-3.5" />
-                {t("workspace_products.requirements.configuration.save")}
               </Button>
             )}
           </div>
         </nav>
 
-        {/* 视图控制自成一行：左边选看哪一类，右边是网格自己的工具栏（搜索、编辑态的保存/取消） */}
+        {/* 视图控制自成一行：左边选看哪一类，右边是导入/录入 + 网格工具栏（搜索等） */}
         {activeTab === "data" && requirementTypes.length > 0 && (
           <div className="flex shrink-0 items-center gap-3 border-b border-subtle px-4 py-1.5 md:px-6">
             <RequirementDataViewSwitcher
@@ -395,7 +263,18 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               activeKey={getViewKey(activeView)}
               onChange={changeView}
             />
-            <div ref={setDataToolbarHost} className="ml-auto flex min-w-0 items-center" />
+            <div className="ml-auto flex min-w-0 items-center gap-1.5">
+              <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
+              {canEdit && (
+                <RequirementCreateActions
+                  onImportPrefetch={() => setShouldPrefetchImport(true)}
+                  onImport={() => setIsImportOpen(true)}
+                  onManualEntry={() =>
+                    activeView.kind === "requirementType" ? gridRef.current?.addRow() : setIsCreateOpen(true)
+                  }
+                />
+              )}
+            </div>
           </div>
         )}
 
@@ -443,31 +322,20 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           />
         ) : activeTab === "data" ? (
           requirementTypes.length === 0 ? (
-            <div className="grid flex-1 place-items-center p-6 text-center">
-              <div className="max-w-md">
-                <p className="text-13 font-medium text-primary">
-                  {t("workspace_products.requirements.data.empty.title")}
-                </p>
-                <p className="mt-1 text-12 text-secondary">
-                  {t("workspace_products.requirements.data.empty.description")}
-                </p>
-                {canEdit && (
-                  <div className="mt-4 flex items-center justify-center gap-2">
-                    <Button
-                      variant="primary"
-                      onMouseEnter={() => setShouldPrefetchImport(true)}
-                      onFocus={() => setShouldPrefetchImport(true)}
-                      onClick={() => setIsImportOpen(true)}
-                    >
-                      {t("workspace_products.requirements.data.import_from_library")}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setIsCreateOpen(true)}>
-                      {t("workspace_products.requirements.data.manual_entry")}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <EmptyStateDetailed
+              assetKey="work-item"
+              title={t("workspace_products.requirements.data.empty.title")}
+              description={t("workspace_products.requirements.data.empty.description")}
+              customButton={
+                canEdit ? (
+                  <RequirementCreateActions
+                    onImportPrefetch={() => setShouldPrefetchImport(true)}
+                    onImport={() => setIsImportOpen(true)}
+                    onManualEntry={() => setIsCreateOpen(true)}
+                  />
+                ) : undefined
+              }
+            />
           ) : activeView.kind === "default" ? (
             <RequirementDefaultViewGrid
               workspaceSlug={workspaceSlug ?? ""}
@@ -547,31 +415,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               toolbarPortalEl={dataToolbarHost}
             />
           )
-        ) : store.isConfigurationLoading ? (
-          <div className="p-6">
-            <Loader>
-              <Loader.Item height="420px" />
-            </Loader>
-          </div>
-        ) : (
-          /* 配置只剩负责人与审批 —— 字段由「需求类型」维护，标题描述在每条需求上 */
-          <div className="flex min-h-0 flex-1">
-            {settingsDraft ? (
-              <RequirementSettingsPanel
-                draft={settingsDraft}
-                readOnly={!canManagePolicy}
-                memberOptions={memberOptions}
-                onChange={setSettingsDraft}
-              />
-            ) : (
-              <div className="min-w-0 flex-1 p-6">
-                <Loader>
-                  <Loader.Item height="420px" />
-                </Loader>
-              </div>
-            )}
-          </div>
-        )}
+        ) : null}
       </ContentWrapper>
 
       <RequirementPeekOverview

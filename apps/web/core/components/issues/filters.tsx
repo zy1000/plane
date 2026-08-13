@@ -143,7 +143,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
         entityType={storeType}
         entityId={filterEntityId}
         initialExpression={scopedIssueFilters?.richFilters}
-        filterRowHiddenOnMount={scope === "dev_requirements" || scope === "defects"}
+        filterRowHiddenOnMount={scope === "defects"}
         onToggleFilter={onFilterToggle}
       />
       <FiltersDropdown

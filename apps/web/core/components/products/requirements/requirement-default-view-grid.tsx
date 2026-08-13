@@ -351,11 +351,19 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   );
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div ref={setMenuPortalEl} className="requirement-grid-menu-portal" />
       {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="px-4 py-2">{toolbar}</div>}
 
-      <div ref={setScrollContainer} className="flex-1 overflow-auto">
+      {/*
+        min-w-0：列方向 flex 子项默认 min-width:auto，会被定宽表格撑到整表宽度，父级再
+        overflow-hidden 裁掉——表现就是「右边列被切掉、容器自身却滚不动」。压到 0 后
+        宽度才受容器约束，overflow-auto 才能出横向滚动条。
+      */}
+      <div
+        ref={setScrollContainer}
+        className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 min-w-0 flex-1 overflow-auto bg-surface-1"
+      >
         {/*
           列宽全部显式给定（table-fixed + colgroup），且照工作项电子表格的排法：
           标题列左固定并吃掉容器剩余宽度，其余列一律定宽。这样表格恒好铺满容器

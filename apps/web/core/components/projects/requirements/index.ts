@@ -1,5 +1,6 @@
 export * from "./existing-requirements-modal";
 export * from "./project-products-modal";
+export * from "./project-requirement-filters";
 export * from "./project-requirement-product-tabs";
 export * from "./project-requirement-stage-cell";
 export * from "./project-requirement-stage-filter";

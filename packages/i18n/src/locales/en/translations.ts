@@ -1871,6 +1871,26 @@ export default {
       stage_updated: "Stage updated to {stage}",
       failed: "Something went wrong. Please try again.",
     },
+    issues: {
+      column: "Work items",
+      section_title: "Linked work items",
+      split: "Split into work item",
+      link_existing: "Link existing work items",
+      empty: "No linked work items yet",
+      unlink: "Unlink",
+      unlink_confirm_title: "Unlink work item",
+      unlink_confirm_description:
+        "Once unlinked, this work item no longer counts toward this requirement's development stage or completion rate.",
+      stage_derived_hint: "Stage is derived from linked work items",
+      source_requirement: "Requirement",
+      group_empty: "No work items in this project yet",
+      select_project_first: "Select a project first",
+      already_linked: "Work item is already linked to requirement {display_id}",
+      toast_linked: "Work items linked",
+      toast_unlinked: "Work item unlinked",
+      toast_link_failed: "Failed to link work items",
+      toast_created_link_failed: "Work item created but linking failed. Retry via \"Link existing work items\"",
+    },
   },
   project_products: {
     no_visible_products: "No product in this workspace is visible to you",
@@ -1901,7 +1921,6 @@ export default {
       description: "Description",
       no_description: "No description",
       owner: "Owner",
-      reviewers: "Reviewers",
       visibility: "Visibility",
       updated_at: "Updated",
       actions: "Actions",
@@ -1910,8 +1929,8 @@ export default {
       public: "Public",
       public_description: "Visible to every member of this workspace.",
       private: "Private",
-      private_description: "Visible only to the owner, reviewers, and workspace admins.",
-      private_access_warning: "You will lose access after saving unless you add yourself as a reviewer.",
+      private_description: "Visible only to the owner, product members, and workspace admins.",
+      private_access_warning: "You will lose access after saving unless you add yourself as a product member.",
     },
     validation: { owner_required: "Select an owner" },
     actions: {
@@ -1948,7 +1967,6 @@ export default {
         description: "Product description",
         owner: "Owner",
         visibility: "Visibility",
-        reviewers: "Reviewers",
       },
       validation: {
         name_required: "Enter a product name.",
@@ -2136,7 +2154,6 @@ export default {
       },
       tabs: {
         data: "Data",
-        configuration: "Approval settings",
         changes: "Change log",
         baselines: "Baselines",
       },
@@ -2174,8 +2191,10 @@ export default {
         delete_title: "Delete baseline",
         delete_description: "Deleting the baseline \"{name}\" cannot be undone. The requirements themselves are not affected.",
         empty: {
-          title: "No baselines yet",
-          description: "A baseline is an immutable snapshot of what the approved requirements looked like at a point in time.",
+          title: "Lock a point-in-time snapshot of requirements",
+          description:
+            "A baseline freezes the approved requirement content at creation. It cannot be edited afterward — create a new one when you need an update.",
+          cta: "Create baseline",
         },
         columns: {
           name: "Baseline",
@@ -2229,11 +2248,14 @@ export default {
         },
       },
       data: {
-        import_from_library: "Import",
-        manual_entry: "Add",
+        import_from_library: "Import requirements",
+        import_from_library_full: "Import requirements",
+        more_create_actions: "More ways to add",
+        manual_entry: "New requirement",
         empty: {
-          title: "No requirement data yet",
-          description: "Import from a standard library, or pick a template and enter rows manually.",
+          title: "Start capturing structured product requirements",
+          description:
+            "Import from a library in bulk, or create rows by requirement type. Field structure lives on the type; this view is for entry and review.",
         },
         toast: {
           imported: "Imported {count} items.",
@@ -2327,6 +2349,9 @@ export default {
         title: "Change log",
         breadcrumb: "Change log",
         empty: "No change requests yet",
+        empty_title: "Reviews show up here as change requests",
+        empty_description:
+          "After a requirement is submitted for review, every approve, reject, or withdraw leaves a record so you can see what changed and when it took effect.",
         error_title: "Unable to load the change log",
         columns: {
           change_request: "Change request",
@@ -2579,9 +2604,6 @@ export default {
         default_value_summary: "Default {value}",
         current_version: "v{version}",
         approval_label: "Approval settings: ",
-        save: "Save configuration",
-        owner_help: "Default owner of the requirements. Not an approver — approvers are configured below.",
-        approvers_help: "With no approver configured, nobody can submit anything for review — the server rejects it.",
         rule_help: "The counter lives on its own row, so selecting it never changes the row height.",
         read_only_hint: "Only product admins can change this configuration.",
         summary: {
@@ -2606,7 +2628,7 @@ export default {
       requirement_count: "Requirements",
       stage_distribution: "Stages",
       completion: "Done",
-      completion_hint: "Based on requirement stage: (Developed + Released) / total. Not derived from linked work items.",
+      completion_hint: "With linked work items: completed / (work items − cancelled). Without: (Developed + Released) / requirement total.",
       title: "Linked project",
       linked_at: "Linked on",
       error_title: "Unable to load linked projects",
@@ -4554,7 +4576,6 @@ export default {
     analytics: "Analytics",
     work_items: "Work items",
     requirements: "Requirements",
-    dev_requirements: "Dev requirements",
     defects: "Defects",
     cycles: "Cycles",
     modules: "Modules",

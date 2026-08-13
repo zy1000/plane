@@ -39,6 +39,7 @@ from plane.db.models import (
     Project,
     Requirement,
     RequirementCycle,
+    RequirementIssue,
     RequirementProject,
     RequirementProjectStage,
     RequirementRelease,
@@ -412,7 +413,7 @@ class ProjectRequirementViewSet(BaseViewSet):
     def destroy(self, request, slug, project_id, requirement_id):
         """解除关联。软删关联行 —— 需求本体、版本、审批历史一律不动。
 
-        该 (需求, 项目) 下的迭代/发布关联一并软删：它们是项目关联的子事实，
+        该 (需求, 项目) 下的迭代/发布/工作项关联一并软删：它们是项目关联的子事实，
         项目都退出了还留着，重新关联进来会带着旧阶段复活。
         """
         link = RequirementProject.objects.filter(
@@ -427,6 +428,9 @@ class ProjectRequirementViewSet(BaseViewSet):
             requirement_id=requirement_id, project_id=project_id
         ).delete()
         RequirementRelease.objects.filter(
+            requirement_id=requirement_id, project_id=project_id
+        ).delete()
+        RequirementIssue.objects.filter(
             requirement_id=requirement_id, project_id=project_id
         ).delete()
         link.delete()
@@ -579,6 +583,9 @@ class RequirementProjectsViewSet(BaseViewSet):
                 requirement_id=requirement.id, project_id__in=removed_ids
             ).delete()
             RequirementRelease.objects.filter(
+                requirement_id=requirement.id, project_id__in=removed_ids
+            ).delete()
+            RequirementIssue.objects.filter(
                 requirement_id=requirement.id, project_id__in=removed_ids
             ).delete()
             RequirementProject.objects.filter(

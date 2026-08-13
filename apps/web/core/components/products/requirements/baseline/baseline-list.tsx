@@ -8,6 +8,7 @@ import { useState } from "react";
 import { GitCompareArrows, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TRequirementBaseline } from "@plane/types";
 import { Avatar, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
@@ -30,6 +31,7 @@ type TProps = {
   onOpen: (baseline: TRequirementBaseline) => void;
   onCompare: (fromId: string, toId: string) => void;
   onDelete: (baseline: TRequirementBaseline) => void;
+  onCreate?: () => void;
 };
 
 export function BaselineList(props: TProps) {
@@ -50,6 +52,7 @@ export function BaselineList(props: TProps) {
     onOpen,
     onCompare,
     onDelete,
+    onCreate,
   } = props;
   const { t } = useTranslation();
   const [selected, setSelected] = useState<string[]>([]);
@@ -91,16 +94,22 @@ export function BaselineList(props: TProps) {
 
   if (!baselines.length) {
     return (
-      <div className="grid flex-1 place-items-center px-6 py-16 text-center">
-        <div className="max-w-md">
-          <p className="text-13 font-medium text-primary">
-            {t("workspace_products.requirements.baseline.empty.title")}
-          </p>
-          <p className="mt-1 text-12 text-secondary">
-            {t("workspace_products.requirements.baseline.empty.description")}
-          </p>
-        </div>
-      </div>
+      <EmptyStateDetailed
+        assetKey="view"
+        title={t("workspace_products.requirements.baseline.empty.title")}
+        description={t("workspace_products.requirements.baseline.empty.description")}
+        actions={
+          canManage && onCreate
+            ? [
+                {
+                  label: t("workspace_products.requirements.baseline.empty.cta"),
+                  onClick: onCreate,
+                  variant: "primary",
+                },
+              ]
+            : undefined
+        }
+      />
     );
   }
 

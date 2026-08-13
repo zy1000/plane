@@ -7,13 +7,13 @@
  * 表格骨架与量化常量取自 requirement-grid-shared，与另外两个需求网格共用一套：
  * 标题列左固定并吃掉容器剩余宽度、其余列定宽、行高 44px、勾选框折进标题格里悬停显形。
  *
- * 列不再全铺：默认 8 列（约 1008px 固定宽），其余靠「列设置」勾回，偏好按项目存
+ * 列不再全铺：默认 9 列（约 1152px 固定宽），其余靠「列设置」勾回，偏好按项目存
  * localStorage。见 project-requirements-columns.ts。
  */
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pagination } from "antd";
-import { Columns3, Link2Off, Loader as LoaderIcon, Package, Send } from "lucide-react";
+import { Columns3, Loader as LoaderIcon, Package } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -84,11 +84,12 @@ type TProps = {
   onOpenDetail: (requirementId: string) => void;
   onLink: () => void;
   onUnlink: (requirementIds: string[]) => void;
-  onSubmitChange: (requirementId: string) => void;
   /** 人工设研发段档位。与关联/解除共用 canManage，不单设权限 key */
   onStageChange: (requirementId: string, stage: TRequirementProjectStage) => void;
   /** 与筛选行共用容器：换筛选/换页时右上角那排控件不该跟着卸载重建 */
   toolbarPortalEl?: HTMLElement | null;
+  /** 插在搜索后面、其余操作前面，例如过滤按钮 */
+  toolbarAfterSearch?: ReactNode;
   /** 一条产品都没关联时，空态该说的是「先去关联产品」而不是「没有需求」 */
   hasLinkedProducts: boolean;
   /** 本项目到底有没有关联过需求（取自分面总数，不随筛选变化） */
@@ -124,9 +125,9 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     onOpenDetail,
     onLink,
     onUnlink,
-    onSubmitChange,
     onStageChange,
     toolbarPortalEl,
+    toolbarAfterSearch,
     hasLinkedProducts,
     hasAnyLinked,
     activeFilterCount,
@@ -295,6 +296,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         /*
          * 研发段（研发中/研发完毕）可人工设置，另外三档由服务端按关联事实派生。
          * stage_locked = 挂在在途发布单上 —— 那时整行锁死，服务端也会拒绝写入。
+         * 有关联工作项时研发段也改为按任务状态派生，人工下拉关掉（不传 onChange
+         * 即恒只读，组件零改动），后端 409 REQUIREMENT_STAGE_ISSUE_DERIVED 兜底。
          */
         return (
           <ProjectRequirementStageCell
@@ -302,10 +305,29 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             latestCycleName={requirement.latest_cycle_name}
             latestReleaseName={requirement.latest_release_name}
             carryover={requirement.carryover}
-            onChange={canManage ? (next) => onStageChange(requirement.id, next) : undefined}
+            onChange={
+              canManage && !requirement.issue_count ? (next) => onStageChange(requirement.id, next) : undefined
+            }
             locked={requirement.stage_locked || requirement.stage === "released"}
           />
         );
+      case "issues": {
+        /*
+         * 完成率口径：分母去掉已取消（cancelled 既不算没做也不算做完）。
+         * 全部被取消时分母为 0，百分比无意义，退回占位符。
+         */
+        if (!requirement.issue_count) return <span className="text-placeholder">—</span>;
+        const effectiveCount = requirement.issue_count - requirement.cancelled_issue_count;
+        const percent =
+          effectiveCount > 0
+            ? `${Math.round((requirement.completed_issue_count / effectiveCount) * 100)}%`
+            : "—";
+        return (
+          <span className="text-12 text-secondary">
+            {requirement.completed_issue_count}/{effectiveCount} · {percent}
+          </span>
+        );
+      }
       case "approval":
         return <RequirementApprovalCell requirement={requirement} />;
       case "requirement_type":
@@ -359,10 +381,46 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     <div className="flex items-center gap-2">
       {canManage && selectedIds.length > 0 && (
         <Button variant="error-outline" size="sm" disabled={isMutating} onClick={() => onUnlink(selectedIds)}>
-          <Link2Off className="size-3.5" />
           {t("project_requirements.unlink_selected", { count: selectedIds.length })}
         </Button>
       )}
+      <div className="flex items-center">
+        {!isSearchOpen && (
+          <IconButton
+            variant="ghost"
+            size="lg"
+            className="-mr-1"
+            onClick={() => {
+              setIsSearchOpen(true);
+              window.setTimeout(() => searchInputRef.current?.focus(), 0);
+            }}
+            icon={SearchIcon}
+            aria-label={t("search")}
+          />
+        )}
+        <div
+          className={cn(
+            "box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+            { "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen }
+          )}
+        >
+          <SearchIcon className="h-3.5 w-3.5" />
+          <input
+            ref={searchInputRef}
+            className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+            placeholder={t("search")}
+            value={searchInput}
+            onChange={(event) => scheduleSearch(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
+          />
+          {isSearchOpen && (
+            <button type="button" className="grid place-items-center" onClick={clearSearch}>
+              <CloseIcon className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+      {toolbarAfterSearch}
       <div className="relative" ref={columnsRef}>
         <Tooltip tooltipContent={t("project_requirements.columns")}>
           <IconButton
@@ -405,42 +463,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
           {t("project_requirements.link")}
         </Button>
       )}
-      <div className="flex items-center">
-        {!isSearchOpen && (
-          <IconButton
-            variant="ghost"
-            size="lg"
-            className="-mr-1"
-            onClick={() => {
-              setIsSearchOpen(true);
-              window.setTimeout(() => searchInputRef.current?.focus(), 0);
-            }}
-            icon={SearchIcon}
-            aria-label={t("search")}
-          />
-        )}
-        <div
-          className={cn(
-            "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
-            { "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen }
-          )}
-        >
-          <SearchIcon className="h-3.5 w-3.5" />
-          <input
-            ref={searchInputRef}
-            className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-            placeholder={t("search")}
-            value={searchInput}
-            onChange={(event) => scheduleSearch(event.target.value)}
-            onKeyDown={handleSearchKeyDown}
-          />
-          {isSearchOpen && (
-            <button type="button" className="grid place-items-center" onClick={clearSearch}>
-              <CloseIcon className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 
@@ -456,7 +478,10 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     <div className="relative flex flex-1 flex-col overflow-hidden">
       {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="px-4 py-2">{toolbar}</div>}
 
-      <div ref={setScrollContainer} className="flex-1 overflow-auto">
+      <div
+        ref={setScrollContainer}
+        className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 min-w-0 flex-1 overflow-auto bg-surface-1"
+      >
         {/* 没有行就不渲染表格：否则会看到一条空荡荡的表头横在那里，横滚时还会错位 */}
         {isEmpty ? (
           <div className="grid h-full place-items-center p-10 text-center">
@@ -602,25 +627,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                             <BuiltinCellValue columnKey="title" values={requirement} />
                           </button>
                         </Tooltip>
-                        {/*
-                          提变更是项目侧唯一能触发的写操作，且只对「已通过审批后又被改过」
-                          的行有意义 —— 内容与批准版本一致时服务端会以 REQUIREMENT_NO_CHANGES
-                          拒绝。can_submit_review 已经把这层判断算好了。
-                        */}
-                        {requirement.can_submit_review && (
-                          <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
-                            <Tooltip tooltipContent={t("project_requirements.submit_change")}>
-                              <IconButton
-                                variant="ghost"
-                                size="sm"
-                                icon={Send}
-                                disabled={isMutating}
-                                onClick={() => onSubmitChange(requirement.id)}
-                                aria-label={t("project_requirements.submit_change")}
-                              />
-                            </Tooltip>
-                          </span>
-                        )}
                       </div>
                     </td>
                     {visibleColumns.map((key) => (

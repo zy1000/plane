@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateRequirementLibraryPayload,
+  TIssueRequirementLink,
   TLinkableRequirementsResponse,
   TProductProject,
   TProjectRequirementsResponse,
@@ -30,6 +31,7 @@ import type {
   TRequirementFilter,
   TRequirementImportPayload,
   TRequirementImportResponse,
+  TRequirementIssue,
   TRequirementLibrary,
   TRequirementLibraryConfiguration,
   TRequirementProjectLink,
@@ -77,6 +79,11 @@ export class RequirementService extends APIService {
   /** 发布单关联的需求 */
   private releaseRequirementsRoot(workspaceSlug: string, projectId: string, releaseId: string) {
     return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/releases/${releaseId}/requirements`;
+  }
+
+  /** 需求关联的工作项。方向与容器关联相反：需求是主语，工作项是宾语 */
+  private requirementIssuesRoot(workspaceSlug: string, projectId: string, requirementId: string) {
+    return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/requirements/${requirementId}/issues`;
   }
 
   /** 变更单的作用域前缀。**始终是产品** —— 项目只是提单入口，审批权威不下放 */
@@ -983,6 +990,68 @@ export class RequirementService extends APIService {
     requirementId: string
   ): Promise<void> {
     return this.delete(`${this.releaseRequirementsRoot(workspaceSlug, projectId, releaseId)}/${requirementId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 需求 ↔ 工作项（RequirementIssue） --------------------------------- */
+
+  /** 需求已关联的工作项列表。轻量行（含归档，前端按 archived_at 置灰），不走工作项网格链路 */
+  async listRequirementIssues(
+    workspaceSlug: string,
+    projectId: string,
+    requirementId: string
+  ): Promise<TRequirementIssue[]> {
+    return this.get(`${this.requirementIssuesRoot(workspaceSlug, projectId, requirementId)}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 批量关联已有工作项。需求必须先关联本项目，否则 409 REQUIREMENT_NOT_LINKED_TO_PROJECT；
+   * 任一工作项已挂其他需求 → 409 ISSUE_ALREADY_LINKED（conflicts 带已挂需求编号，调用方
+   * 据此提示）。研发段阶段升档由服务端重算。
+   */
+  async linkIssuesToRequirement(
+    workspaceSlug: string,
+    projectId: string,
+    requirementId: string,
+    issueIds: string[]
+  ): Promise<{ message: string }> {
+    return this.post(`${this.requirementIssuesRoot(workspaceSlug, projectId, requirementId)}/`, { issues: issueIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除工作项与需求的关联。软删关联行，阶段回落由服务端重算 */
+  async unlinkIssueFromRequirement(
+    workspaceSlug: string,
+    projectId: string,
+    requirementId: string,
+    issueId: string
+  ): Promise<void> {
+    return this.delete(`${this.requirementIssuesRoot(workspaceSlug, projectId, requirementId)}/${issueId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 工作项侧反查所挂需求。无关联时服务端返回 null，属性栏只读芯片据此整行不渲染 */
+  async getIssueRequirementLink(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string
+  ): Promise<TIssueRequirementLink | null> {
+    return this.get(
+      `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/issues/${issueId}/requirement-link/`
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
