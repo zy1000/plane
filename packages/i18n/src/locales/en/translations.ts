@@ -2637,6 +2637,31 @@ export default {
         description: "Link this product from a project's requirements page and it will show up here.",
       },
     },
+    releases: {
+      title: "Release",
+      project: "Project",
+      status: "Status",
+      lead: "Lead",
+      target_date: "Target date",
+      test_handoff_date: "Test handoff",
+      requirement_count: "Product requirements",
+      filter_all: "All",
+      filter_all_projects: "All projects",
+      only_this_product: "Only this product's requirements",
+      search_placeholder: "Search releases",
+      error_title: "Unable to load releases",
+      empty: {
+        no_projects: {
+          title: "No project references this product yet",
+          description: "Releases belong to projects. Link this product from a project's requirements page first, then their releases will be aggregated here.",
+        },
+        no_releases: {
+          title: "No releases in linked projects yet",
+          description: "Releases created in linked projects will show up here automatically.",
+        },
+        no_match: "No releases match your filters",
+      },
+    },
     features: {
       dashboard: {
         title: "Dashboard is coming soon",
@@ -2653,10 +2678,6 @@ export default {
       projects: {
         title: "Projects are coming soon",
         description: "See projects connected to this product and track their delivery progress here.",
-      },
-      releases: {
-        title: "Releases are coming soon",
-        description: "Manage product versions, release dates, and release content here.",
       },
       settings: {
         title: "Product settings are coming soon",

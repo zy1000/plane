@@ -2815,6 +2815,32 @@ export default {
         description: "在项目的需求页用「管理关联产品」关联本产品后，项目会出现在这里。",
       },
     },
+    /** 产品详情页的「发布」页签。关联项目下发布单的只读聚合，建单改单都在项目侧 */
+    releases: {
+      title: "发布单",
+      project: "所属项目",
+      status: "状态",
+      lead: "负责人",
+      target_date: "目标日期",
+      test_handoff_date: "提测日期",
+      requirement_count: "本产品需求数",
+      filter_all: "全部",
+      filter_all_projects: "全部项目",
+      only_this_product: "仅显示含本产品需求",
+      search_placeholder: "搜索发布单",
+      error_title: "无法加载发布单",
+      empty: {
+        no_projects: {
+          title: "还没有项目引用该产品",
+          description: "发布单挂在项目下。先在项目的需求页用「管理关联产品」关联本产品，这里才能聚合它们的发布单。",
+        },
+        no_releases: {
+          title: "关联项目暂无发布单",
+          description: "关联项目创建发布单后，会自动出现在这里。",
+        },
+        no_match: "没有匹配的发布单",
+      },
+    },
     features: {
       dashboard: {
         title: "仪表盘即将上线",
@@ -2831,10 +2857,6 @@ export default {
       projects: {
         title: "项目功能即将上线",
         description: "与当前产品关联的项目及其交付进展将在这里展示。",
-      },
-      releases: {
-        title: "发布功能即将上线",
-        description: "产品版本、发布时间和发布内容将在这里统一管理。",
       },
       settings: {
         title: "产品设置即将上线",

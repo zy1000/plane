@@ -465,3 +465,58 @@ class ReleaseCommentSerializer(BaseSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class ProductReleaseSerializer(BaseSerializer):
+    """产品聚合视图的发布单行。只读、轻量。
+
+    不要换成 ReleaseSerializer：它的一批注解字段依赖项目侧 ReleaseViewSet.get_queryset
+    的注解，脱离那个 queryset 会缺字段；且聚合端点无分页全量返回，description 三兄弟、
+    view_props 这类大字段进来会撑爆响应。
+
+    进度 / 逾期字段与项目侧列表同源（由 ProductReleaseViewSet 注解），给产品页画
+    进度环和逾期标签用，不把 description、view_props 带过来。
+    """
+
+    project_detail = ProjectLiteSerializer(source="project", read_only=True)
+    lead_detail = UserLiteSerializer(source="lead", read_only=True)
+    # 本产品有多少需求被圈进这张发布单，由视图注解提供
+    product_requirement_count = serializers.IntegerField(read_only=True)
+    total_issues = serializers.IntegerField(read_only=True)
+    completed_issues = serializers.IntegerField(read_only=True)
+    cancelled_issues = serializers.IntegerField(read_only=True)
+    has_active_overdue = serializers.BooleanField(read_only=True)
+    has_overdue_history = serializers.BooleanField(read_only=True)
+    active_overdue_phase = serializers.CharField(read_only=True, allow_null=True)
+    has_active_dev_overdue = serializers.BooleanField(read_only=True)
+    has_active_test_overdue = serializers.BooleanField(read_only=True)
+    has_dev_overdue_history = serializers.BooleanField(read_only=True)
+    has_test_overdue_history = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Release
+        fields = [
+            "id",
+            "name",
+            "status",
+            "start_date",
+            "target_date",
+            "test_handoff_date",
+            "project_id",
+            "project_detail",
+            "lead_id",
+            "lead_detail",
+            "product_requirement_count",
+            "total_issues",
+            "completed_issues",
+            "cancelled_issues",
+            "has_active_overdue",
+            "has_overdue_history",
+            "active_overdue_phase",
+            "has_active_dev_overdue",
+            "has_active_test_overdue",
+            "has_dev_overdue_history",
+            "has_test_overdue_history",
+            "created_at",
+        ]
+        read_only_fields = fields

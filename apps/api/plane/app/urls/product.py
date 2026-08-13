@@ -10,6 +10,7 @@ from plane.app.views.product import (
     ProductViewSet,
 )
 from plane.app.views.project.product import ProductProjectViewSet, ProjectProductViewSet
+from plane.app.views.release.product import ProductReleaseViewSet
 
 urlpatterns = [
     path(
@@ -61,6 +62,12 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/projects/",
         ProductProjectViewSet.as_view({"get": "list"}),
         name="product-projects",
+    ),
+    # --- 产品 ↔ 发布（关联项目下的发布单聚合，只读） ----------------------
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/releases/",
+        ProductReleaseViewSet.as_view({"get": "list"}),
+        name="product-releases",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/products/",

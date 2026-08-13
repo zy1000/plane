@@ -8,6 +8,8 @@ from .base import (
 
 from .issue import ReleaseIssueViewSet
 
+from .product import ProductReleaseViewSet
+
 from .archive import ReleaseArchiveUnarchiveEndpoint
 
 from .file import ReleaseFileAPI
