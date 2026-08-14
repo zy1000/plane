@@ -48,7 +48,7 @@ const formatDate = (value: string | null) => (value ? (renderFormattedDate(value
 function OverdueRecordsTitle({ count }: { count: number }) {
   return (
     <div className="flex items-center gap-2.5">
-      <h2 className="text-15 font-semibold text-primary">全部延期记录</h2>
+      <h2 className="text-13 font-medium text-primary">全部延期记录</h2>
       {count > 0 ? <CountChip count={count} /> : null}
     </div>
   );

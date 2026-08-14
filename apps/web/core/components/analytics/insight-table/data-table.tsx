@@ -244,7 +244,7 @@ export function DataTable<TData, TValue>({
       <div className={cn(!fillHeight && "rounded-md", fillHeight && "flex min-h-0 flex-1 flex-col overflow-hidden")}>
         <div className={cn(fillHeight && "min-h-0 flex-1 overflow-hidden")}>
           <Table wrapperClassName={fillHeight ? "h-full" : undefined}>
-            <TableHeader className={fillHeight ? "border-t-0" : undefined}>
+            <TableHeader className={fillHeight ? "sticky top-0 z-[2] border-t-0 bg-layer-1" : undefined}>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
@@ -286,8 +286,8 @@ export function DataTable<TData, TValue>({
         {enablePagination && table.getPageCount() > 0 && (
           <div
             className={cn(
-              "flex flex-shrink-0 items-center border-t border-subtle bg-surface-1 py-3",
-              fillHeight ? "px-page-x" : "px-4",
+              "flex flex-shrink-0 items-center border-t border-subtle bg-surface-1",
+              fillHeight ? "px-page-x py-1.5" : "px-4 py-3",
               showPaginationSummary ? "justify-between" : "justify-end"
             )}
           >
