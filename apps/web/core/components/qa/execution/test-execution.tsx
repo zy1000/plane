@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal, Checkbox, Upload } from "antd";
+import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal, Checkbox, Upload, Dropdown } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
@@ -46,6 +46,26 @@ type PlanCaseRow = {
   result: string;
   created_by: string | number | null;
 };
+
+const StepTypeSwitcher: React.FC<{ mode: number; onChange: (mode: number) => void }> = ({ mode, onChange }) => (
+  <Dropdown
+    trigger={["click"]}
+    overlayStyle={{ zIndex: 1200 }}
+    menu={{
+      selectable: true,
+      selectedKeys: [mode === 1 ? "text" : "step"],
+      items: [
+        { key: "step", label: "步骤描述" },
+        { key: "text", label: "文本描述" },
+      ],
+      onClick: ({ key }) => onChange(key === "text" ? 1 : 0),
+    }}
+  >
+    <Button type="text" size="small" className="px-0 text-sm font-medium text-tertiary hover:text-secondary">
+      更改类型 <DownOutlined />
+    </Button>
+  </Dropdown>
+);
 
 const formatFileSize = (bytes: number): string => {
   if (!bytes || bytes < 1024) return `${bytes || 0} B`;
@@ -116,6 +136,7 @@ export default function TestExecutionPage() {
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
   const [stepActualResultMap, setStepActualResultMap] = React.useState<Record<number, string>>({});
   const [stepExecResultMap, setStepExecResultMap] = React.useState<Record<number, string>>({});
+  const [stepViewMode, setStepViewMode] = React.useState<number>(0);
   const [isCreateDefectOpen, setIsCreateDefectOpen] = React.useState<boolean>(false);
   const { pendingFiles, add: addPendingFile, remove: removePendingFile, clear: clearPendingFiles, uploadAll: uploadPendingFiles } =
     usePendingExecutionFiles();
@@ -249,6 +270,7 @@ export default function TestExecutionPage() {
         data = await caseService.getCase(String(workspaceSlug), String(targetId));
       }
       setCaseDetail(data);
+      setStepViewMode(Number((data as any)?.mode) === 1 ? 1 : 0);
       try {
         const list = await caseService.getCaseAssetList(String(workspaceSlug), String(targetId));
         setAttachments(Array.isArray(list) ? list : []);
@@ -1303,18 +1325,55 @@ export default function TestExecutionPage() {
                                 />
                               </div>
 
-                              <div>
-                                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                                  测试步骤
-                                </label>
-                                <StepsTable
-                                  steps={displaySteps}
-                                  actualMap={stepActualResultMap}
-                                  execMap={stepExecResultMap}
-                                  onChangeActual={handleChangeActual}
-                                  onChangeExec={handleChangeExec}
-                                />
-                              </div>
+                              {stepViewMode === 1 ? (
+                                <>
+                                  <div>
+                                    <div className="mb-2 flex items-center justify-between gap-6">
+                                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                        文本描述
+                                      </label>
+                                      <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
+                                    </div>
+                                    <RichTextEditor
+                                      value={String(caseDetail?.text_description ?? "")}
+                                      onChange={() => {}}
+                                      onBlur={() => {}}
+                                      aria-label="文本描述"
+                                      placeholder="暂无内容"
+                                      editable={false}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                      预期结果
+                                    </label>
+                                    <RichTextEditor
+                                      value={String(caseDetail?.text_result ?? "")}
+                                      onChange={() => {}}
+                                      onBlur={() => {}}
+                                      aria-label="预期结果"
+                                      placeholder="暂无内容"
+                                      editable={false}
+                                    />
+                                  </div>
+                                </>
+                              ) : (
+                                <div>
+                                  <div className="mb-2 flex items-center justify-between gap-6">
+                                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                      测试步骤
+                                    </label>
+                                    <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
+                                  </div>
+                                  <StepsTable
+                                    steps={displaySteps}
+                                    actualMap={stepActualResultMap}
+                                    execMap={stepExecResultMap}
+                                    onChangeActual={handleChangeActual}
+                                    onChangeExec={handleChangeExec}
+                                  />
+                                </div>
+                              )}
 
                               <div>
                                 <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
