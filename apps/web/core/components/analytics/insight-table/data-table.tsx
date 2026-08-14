@@ -31,6 +31,7 @@ import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 import { IconButton } from "@plane/propel/icon-button";
 // plane package imports
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
+import { Header } from "@plane/ui";
 import { cn } from "@plane/utils";
 // plane web components
 
@@ -38,24 +39,30 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   searchPlaceholder: string;
+  toolbarLabel?: React.ReactNode;
   actions?: (table: TanstackTable<TData>) => React.ReactNode;
   filtersRow?: React.ReactNode;
   searchTriggerPosition?: "left" | "actions-left";
   searchToolbarMount?: HTMLElement | null;
   enablePagination?: boolean;
   pageSize?: number;
+  showPaginationSummary?: boolean;
+  fillHeight?: boolean;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   searchPlaceholder,
+  toolbarLabel,
   actions,
   filtersRow,
   searchTriggerPosition = "left",
   searchToolbarMount,
   enablePagination = false,
   pageSize = 20,
+  showPaginationSummary = true,
+  fillHeight = false,
 }: DataTableProps<TData, TValue>) {
   const [rowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -188,82 +195,109 @@ export function DataTable<TData, TValue>({
   );
 
   const useExternalSearchToolbar = searchToolbarMount !== undefined;
+  const toolbarLabelNode =
+    toolbarLabel !== undefined ? (
+      toolbarLabel
+    ) : (
+      <div className="flex items-center gap-2 text-13 whitespace-nowrap text-placeholder">{searchPlaceholder}</div>
+    );
   const searchToolbar = (
     <div className="relative flex max-w-[300px] items-center gap-4">
-      {firstColumnId && (
-        <div className="flex items-center gap-2 text-13 whitespace-nowrap text-placeholder">{searchPlaceholder}</div>
-      )}
+      {firstColumnId && toolbarLabelNode}
       {searchTriggerPosition === "left" && searchControl("left")}
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      {(useExternalSearchToolbar ? Boolean(actions) : true) && (
-        <div className="flex w-full items-center justify-between">
-          {!useExternalSearchToolbar && searchToolbar}
-          <div
-            className={cn("flex items-center", {
-              "ml-auto": useExternalSearchToolbar,
-              "gap-1": searchTriggerPosition === "actions-left",
-              "gap-2": searchTriggerPosition !== "actions-left",
-            })}
-          >
+    <div className={cn(fillHeight ? "flex h-full min-h-0 flex-col" : "space-y-4")}>
+      {fillHeight ? (
+        <Header className="h-11 border-b border-subtle px-page-x">
+          <Header.LeftItem>
+            {toolbarLabel !== undefined || firstColumnId ? toolbarLabelNode : null}
+            {searchTriggerPosition === "left" && searchControl("left")}
+          </Header.LeftItem>
+          <Header.RightItem>
             {searchTriggerPosition === "actions-left" && searchControl("actions-left")}
-            {actions && <div>{actions(table)}</div>}
+            {actions ? actions(table) : null}
+          </Header.RightItem>
+        </Header>
+      ) : (
+        (useExternalSearchToolbar ? Boolean(actions) : true) && (
+          <div className="flex w-full items-center justify-between">
+            {!useExternalSearchToolbar && searchToolbar}
+            <div
+              className={cn("flex items-center", {
+                "ml-auto": useExternalSearchToolbar,
+                "gap-1": searchTriggerPosition === "actions-left",
+                "gap-2": searchTriggerPosition !== "actions-left",
+              })}
+            >
+              {searchTriggerPosition === "actions-left" && searchControl("actions-left")}
+              {actions && <div>{actions(table)}</div>}
+            </div>
           </div>
-        </div>
+        )
       )}
       {useExternalSearchToolbar && searchToolbarMount && createPortal(searchToolbar, searchToolbarMount)}
-      {filtersRow}
+      {fillHeight && filtersRow ? <div className="flex-shrink-0">{filtersRow}</div> : filtersRow}
 
-      <div className="rounded-md">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan} className="whitespace-nowrap">
-                    {header.isPlaceholder
-                      ? null
-                      : (flexRender(header.column.columnDef.header, header.getContext()) as any)}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length > 0 ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext()) as any}
-                    </TableCell>
+      <div className={cn(!fillHeight && "rounded-md", fillHeight && "flex min-h-0 flex-1 flex-col overflow-hidden")}>
+        <div className={cn(fillHeight && "min-h-0 flex-1 overflow-hidden")}>
+          <Table wrapperClassName={fillHeight ? "h-full" : undefined}>
+            <TableHeader className={fillHeight ? "border-t-0" : undefined}>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id} colSpan={header.colSpan} className="whitespace-nowrap">
+                      {header.isPlaceholder
+                        ? null
+                        : (flexRender(header.column.columnDef.header, header.getContext()) as any)}
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="p-0">
-                  <EmptyStateCompact
-                    assetKey="unknown"
-                    assetClassName="size-20"
-                    rootClassName="border border-subtle px-5 py-10 md:py-20 md:px-20"
-                    title={t("workspace_empty_state.analytics_work_items.title")}
-                  />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length > 0 ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext()) as any}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="p-0">
+                    <EmptyStateCompact
+                      assetKey="unknown"
+                      assetClassName="size-20"
+                      rootClassName="border border-subtle px-5 py-10 md:py-20 md:px-20"
+                      title={t("workspace_empty_state.analytics_work_items.title")}
+                    />
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
         {enablePagination && table.getPageCount() > 0 && (
-          <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-secondary">
-                {filteredRowsCount > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${filteredRowsCount} 条` : ""}
-              </span>
-            </div>
+          <div
+            className={cn(
+              "flex flex-shrink-0 items-center border-t border-subtle bg-surface-1 py-3",
+              fillHeight ? "px-page-x" : "px-4",
+              showPaginationSummary ? "justify-between" : "justify-end"
+            )}
+          >
+            {showPaginationSummary ? (
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-secondary">
+                  {filteredRowsCount > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${filteredRowsCount} 条` : ""}
+                </span>
+              </div>
+            ) : null}
             <Pagination
               simple
               current={currentPage}

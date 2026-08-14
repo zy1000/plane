@@ -114,7 +114,11 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
                     <Tabs.Content
                       key={tab.key}
                       value={tab.key}
-                      className={"h-full overflow-hidden overflow-y-auto px-2"}
+                      className={
+                        tab.key === "overdue"
+                          ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                          : "h-full overflow-hidden overflow-y-auto px-2"
+                      }
                     >
                       <tab.content />
                     </Tabs.Content>

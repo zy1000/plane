@@ -9,8 +9,10 @@ import { observer } from "mobx-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useParams } from "next/navigation";
 import { Button } from "@plane/propel/button";
+import { Header } from "@plane/ui";
 import { cn, renderFormattedDate } from "@plane/utils";
 import type { TOverdueEntityType, TOverdueRecord } from "@plane/types";
+import { CountChip } from "@/components/common/count-chip";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -19,10 +21,12 @@ import { useOverdueFilter } from "./filters/use-overdue-filter";
 import { useOverdueFiltersConfig } from "./filters/use-overdue-filters-config";
 import { useOverdueExport } from "./use-overdue-export";
 import { DataTable } from "../insight-table/data-table";
+import { TableLoader } from "../insight-table/loader";
 
 type Props = {
   records: TOverdueRecord[];
   isLoading?: boolean;
+  onOpenAnalytics?: () => void;
 };
 
 type TQuickStatusFilter = "all" | "active" | "resolved";
@@ -40,6 +44,15 @@ const QUICK_STATUS_FILTERS: Array<{ key: Exclude<TQuickStatusFilter, "all">; lab
 ];
 
 const formatDate = (value: string | null) => (value ? (renderFormattedDate(value) ?? value) : "-");
+
+function OverdueRecordsTitle({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <h2 className="text-15 font-semibold text-primary">全部延期记录</h2>
+      {count > 0 ? <CountChip count={count} /> : null}
+    </div>
+  );
+}
 
 const buildEntityDetailLink = (workspaceSlug: string, record: TOverdueRecord) => {
   const { entity_type, entity_id, project_id, identifier } = record;
@@ -62,7 +75,7 @@ const buildEntityDetailLink = (workspaceSlug: string, record: TOverdueRecord) =>
   }
 };
 
-export const OverdueRecordsTable = observer(({ records, isLoading = false }: Props) => {
+export const OverdueRecordsTable = observer(({ records, isLoading = false, onOpenAnalytics }: Props) => {
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
   const { exportXlsx, isExporting } = useOverdueExport();
@@ -169,25 +182,31 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
     [router, workspaceSlugValue]
   );
 
+  const count = quickFilteredRecords.length;
+  const title = <OverdueRecordsTitle count={count} />;
+
   return (
-    <section className="rounded-md border border-subtle bg-surface-1 p-4">
-      <div className="mb-4 flex items-center gap-3">
-        <h2 className="text-15 font-semibold text-primary">全部延期记录</h2>
-      </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface-1">
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-24 animate-pulse rounded-md border border-subtle bg-layer-1" />
-          ))}
-        </div>
+        <>
+          <Header className="h-11 border-b border-subtle px-page-x">
+            <Header.LeftItem>{title}</Header.LeftItem>
+          </Header>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <TableLoader columns={columns} rows={8} />
+          </div>
+        </>
       ) : (
         <DataTable
           data={quickFilteredRecords}
           columns={columns}
-          searchPlaceholder={`${quickFilteredRecords.length} 条延期记录`}
+          searchPlaceholder={`${count} 条延期记录`}
+          toolbarLabel={title}
           searchTriggerPosition="actions-left"
           enablePagination
           pageSize={20}
+          showPaginationSummary={false}
+          fillHeight
           filtersRow={<FiltersRow filter={filter} />}
           actions={() => (
             <div className="flex items-center gap-2">
@@ -218,15 +237,18 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
                 variant="secondary"
                 className="h-8 px-3 text-12"
                 loading={isExporting}
-                disabled={isExporting || quickFilteredRecords.length === 0}
+                disabled={isExporting || count === 0}
                 onClick={() => void exportXlsx(quickFilteredRecords)}
               >
                 导出
+              </Button>
+              <Button variant="secondary" size="lg" className="hidden px-2 md:block" onClick={onOpenAnalytics}>
+                分析
               </Button>
             </div>
           )}
         />
       )}
-    </section>
+    </div>
   );
 });
