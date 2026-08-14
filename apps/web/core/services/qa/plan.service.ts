@@ -278,6 +278,16 @@ export class PlanService extends APIService {
       });
   }
 
+  async getExecutionFileCount(workspaceSlug: string, recordId: string): Promise<number> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/execution-file/list/`, {
+      params: { record_id: recordId, page_size: 1 },
+    })
+      .then((response) => Number(response?.data?.count ?? 0))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async uploadExecutionFile(workspaceSlug: string, recordId: string, file: File): Promise<any> {
     const fileMetaData = await getFileMetaDataForUpload(file);
     const presignResponse = await this.post(

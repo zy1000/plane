@@ -22,7 +22,10 @@ type ExecRecord = {
   created_by?: string | null;
   created_at?: string;
   steps?: StepItem[] | null;
+  file_count?: number;
 };
+
+type ExecutionRecordDetailTab = "steps" | "files" | "history";
 
 type StepItem = {
   description?: string;
@@ -58,6 +61,7 @@ type ExecutionRecordDetailModalProps = {
   record: ExecutionRecordDetailRecord | null;
   records?: ExecRecord[];
   workspaceSlug: string | undefined;
+  initialTab?: ExecutionRecordDetailTab;
 };
 
 const normalizeStepsForDetail = (steps: any): StepItem[] => {
@@ -79,7 +83,7 @@ const formatFileSizeForDetail = (bytes: number) => {
 type ExecutionRecordListProps = {
   records: ExecRecord[];
   resultColorMap: Record<string, string>;
-  onOpenDetail: (record: ExecRecord) => void;
+  onOpenDetail: (record: ExecRecord, tab?: ExecutionRecordDetailTab) => void;
   className?: string;
   showDetailAction?: boolean;
 };
@@ -110,6 +114,7 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
         const user = uid ? getUserDetails(uid) : undefined;
         const name = user?.display_name || "未知用户";
         const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
+        const fileCount = Number(r.file_count ?? 0);
         return (
           <div
             key={String(r.id)}
@@ -144,6 +149,19 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
             </div>
             <div className="flex-shrink-0">
               <div className="flex items-center gap-2">
+                {fileCount > 0 ? (
+                  <Tooltip title={`查看附件（${fileCount}）`} mouseEnterDelay={0.2} placement="top">
+                    <button
+                      type="button"
+                      aria-label={`查看附件，共 ${fileCount} 个`}
+                      onClick={() => onOpenDetail(r, "files")}
+                      className="inline-flex items-center gap-1 rounded-sm border border-subtle px-1.5 py-0.5 text-xs text-secondary hover:bg-layer-1-hover hover:text-blue-600"
+                    >
+                      <LucideIcons.Paperclip size={13} aria-hidden="true" />
+                      <span>{fileCount}</span>
+                    </button>
+                  </Tooltip>
+                ) : null}
                 {renderResult(r.result)}
                 {showDetailAction ? (
                   <Tooltip title="详情" mouseEnterDelay={0.2} placement="top">
@@ -173,6 +191,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   record,
   records,
   workspaceSlug,
+  initialTab = "steps",
 }) => {
   const planService = React.useMemo(() => new PlanApiService(), []);
   const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
@@ -180,13 +199,18 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   const [attachmentLoading, setAttachmentLoading] = React.useState(false);
   const [uploadLoading, setUploadLoading] = React.useState(false);
   const [attachmentPage, setAttachmentPage] = React.useState(1);
-  const [detailTab, setDetailTab] = React.useState<"steps" | "files" | "history">("steps");
+  const [detailTab, setDetailTab] = React.useState<ExecutionRecordDetailTab>(initialTab);
   const [activeRecord, setActiveRecord] = React.useState<ExecutionRecordDetailRecord | null>(record);
   const attachmentPageSize = 10;
 
   React.useEffect(() => {
     setActiveRecord(record);
   }, [record]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setDetailTab(initialTab);
+  }, [open, initialTab, record?.id]);
 
   React.useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(attachmentFiles.length / attachmentPageSize));
@@ -373,7 +397,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
             className="min-w-0 flex-1"
             mode="horizontal"
             selectedKeys={[detailTab]}
-            onClick={({ key }) => setDetailTab(key as "steps" | "files" | "history")}
+            onClick={({ key }) => setDetailTab(key as ExecutionRecordDetailTab)}
             items={[
               { key: "steps", label: "步骤详情" },
               { key: "files", label: "执行附件" },
@@ -414,9 +438,9 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                 records={records ?? []}
                 resultColorMap={resultColorMap}
                 showDetailAction={false}
-                onOpenDetail={(r) => {
+                onOpenDetail={(r, tab) => {
                   setActiveRecord({ id: String(r.id), steps: r.steps });
-                  setDetailTab("steps");
+                  setDetailTab(tab ?? "steps");
                 }}
               />
             </div>
@@ -526,6 +550,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
   const [stepsModalOpen, setStepsModalOpen] = React.useState(false);
   const [stepsModalSteps, setStepsModalSteps] = React.useState<StepItem[]>([]);
   const [stepsModalRecordId, setStepsModalRecordId] = React.useState<string | null>(null);
+  const [stepsModalTab, setStepsModalTab] = React.useState<ExecutionRecordDetailTab>("steps");
 
   const normalizeSteps = React.useCallback((steps: any): StepItem[] => {
     if (!Array.isArray(steps)) return [];
@@ -538,11 +563,12 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
   }, []);
 
   const openStepsModal = React.useCallback(
-    (rec: ExecRecord) => {
+    (rec: ExecRecord, tab: ExecutionRecordDetailTab = "steps") => {
       try {
         const steps = normalizeSteps(rec?.steps ?? []);
         setStepsModalSteps(steps);
         setStepsModalRecordId(rec.id);
+        setStepsModalTab(tab);
         setStepsModalOpen(true);
       } catch (e: any) {
         const msg = e?.message || "加载步骤详情失败";
@@ -571,7 +597,25 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
         case_id: String(caseId),
       });
       const list = Array.isArray(data) ? (data as ExecRecord[]) : [];
-      setRecords(list);
+      const needCount = list.filter((r) => r.file_count == null && r.id);
+      if (needCount.length === 0) {
+        setRecords(list);
+      } else {
+        const counts = await Promise.all(
+          needCount.map((r) =>
+            planService
+              .getExecutionFileCount(String(workspaceSlug), String(r.id))
+              .catch(() => 0)
+          )
+        );
+        const countMap = new Map(needCount.map((r, i) => [String(r.id), counts[i]]));
+        setRecords(
+          list.map((r) => ({
+            ...r,
+            file_count: r.file_count ?? countMap.get(String(r.id)) ?? 0,
+          }))
+        );
+      }
     } catch (e: any) {
       const msg = e?.message || e?.detail || e?.error || "获取执行记录失败";
       setError(msg);
@@ -619,6 +663,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
           setStepsModalOpen(false);
           setStepsModalRecordId(null);
           setStepsModalSteps([]);
+          setStepsModalTab("steps");
         }}
         record={
           stepsModalRecordId
@@ -627,6 +672,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
         }
         records={records}
         workspaceSlug={workspaceSlug}
+        initialTab={stepsModalTab}
       />
     </>
   );

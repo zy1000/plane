@@ -71,6 +71,14 @@ class PlanCaseCardSerializer(ModelSerializer):
 
 
 class PlanCaseRecordSerializer(ModelSerializer):
+    file_count = serializers.SerializerMethodField()
+
+    def get_file_count(self, obj: PlanCaseRecord):
+        count = getattr(obj, "file_count", None)
+        if count is not None:
+            return int(count)
+        return 0
+
     class Meta:
         model = PlanCaseRecord
         fields = '__all__'

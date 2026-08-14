@@ -899,7 +899,16 @@ class PlanView(BaseViewSet):
         plan_id = request.query_params["plan_id"]
         case_id = request.query_params["case_id"]
         plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
-        records = PlanCaseRecord.objects.filter(plan_case=plan_case)
+        records = PlanCaseRecord.objects.filter(plan_case=plan_case).annotate(
+            file_count=Count(
+                "assets",
+                filter=Q(
+                    assets__is_deleted=False,
+                    assets__is_uploaded=True,
+                    assets__entity_type=FileAsset.EntityTypeContext.PLAN_CASE_RECORD_FILE,
+                ),
+            )
+        )
         serializer = PlanCaseRecordSerializer(instance=records, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
