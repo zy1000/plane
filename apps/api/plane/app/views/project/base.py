@@ -111,13 +111,11 @@ class ProjectViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
-            .select_related(
-                "workspace",
-                "workspace__owner",
-                "default_assignee",
-                "project_lead",
-                "cover_image_asset",
-            )
+            # 仅保留 cover_image_url property 真正需要的关联。
+            # workspace / workspace__owner / default_assignee / project_lead 在
+            # ProjectListSerializer 中都序列化为主键，DRF 的 pk-only 优化直接读行上的
+            # *_id 列，不会触发关联加载，这些 JOIN 属于纯开销。
+            .select_related("cover_image_asset")
             .annotate(
                 is_favorite=Exists(
                     UserFavorite.objects.filter(
@@ -156,13 +154,17 @@ class ProjectViewSet(BaseViewSet):
             .prefetch_related(
                 Prefetch(
                     "project_projectmember",
+                    # members_list 的消费方只读 member_id / is_active / member.is_bot
+                    # （见 ProjectListSerializer.get_members 与 retrieve），
+                    # 不必拉取完整 User 行。
                     queryset=ProjectMember.objects.filter(
                         workspace__slug=self.kwargs.get("slug"), is_active=True
-                    ).select_related("member"),
+                    )
+                    .select_related("member")
+                    .only("project_id", "member_id", "is_active", "member__is_bot"),
                     to_attr="members_list",
                 )
             )
-            .distinct()
         )
 
     def _get_project_row_value(self, project_row, field):
@@ -408,13 +410,23 @@ class ProjectViewSet(BaseViewSet):
     def list_detail(self, request, slug):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
+        # 用子查询替代跨多值关联的 OR：原写法会把 project_projectmember 提升为
+        # LEFT JOIN，公开项目的每个成员行都会产生一条重复行，且所有注解子查询在
+        # 去重前逐行求值；随后的 DISTINCT 还要在含 JSON 大字段的宽行上做去重排序。
+        # 改成子查询后既无行放大也不再需要 DISTINCT，返回的行集完全一致。
+        #
+        # 必须用 all_objects：Django 跨关联过滤走的是裸 SQL JOIN，不会应用关联模型
+        # 的默认管理器，因此原写法能匹配到软删除的 ProjectMember 行。改用默认的
+        # objects（SoftDeletionManager）会收紧可见性，属于行为变更。
         projects = projects.filter(
             Q(
-                project_projectmember__member=self.request.user,
-                project_projectmember__is_active=True,
+                id__in=ProjectMember.all_objects.filter(
+                    member=self.request.user,
+                    is_active=True,
+                ).values("project_id")
             )
             | Q(network=ProjectNetwork.PUBLIC.value)
-        ).distinct()
+        )
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(

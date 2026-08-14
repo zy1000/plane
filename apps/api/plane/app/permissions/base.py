@@ -110,10 +110,24 @@ def _get_user_workspace_permission_keys(user, workspace_slug: str) -> set:
 
 
 def _is_instance_admin(user) -> bool:
+    # 单次请求内该判定会被多处重复调用（权限装饰器、项目权限键计算等），
+    # 每次都要 2 条 SQL。结果缓存在 user 实例上，其生命周期就是一次请求。
+    cached = getattr(user, "_instance_admin_cache", None)
+    if cached is not None:
+        return cached
+
     instance = Instance.objects.first()
     if not instance:
-        return False
-    return InstanceAdmin.objects.filter(instance=instance, user=user).exists()
+        result = False
+    else:
+        result = InstanceAdmin.objects.filter(instance=instance, user=user).exists()
+
+    try:
+        user._instance_admin_cache = result
+    except AttributeError:
+        # AnonymousUser 等不可写属性的对象跳过缓存，行为与改动前一致
+        pass
+    return result
 
 
 def is_workspace_member(user, workspace_slug: str) -> bool:
