@@ -4,7 +4,8 @@
  * 编辑态网格（requirement-grid.tsx）、变更 diff 网格和版本只读快照共用同一套
  * 二级表头结构、值渲染和行内子表单排布逻辑，所以这些纯 helper 与展示组件抽在这里。
  */
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { observer } from "mobx-react";
 import { Check, Download, File, Paperclip } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -378,11 +379,90 @@ export const getRequirementColumnWidth = (columnKey: string) =>
 export const resolveRequirementTitleColumnWidth = (containerWidth: number, otherColumnsWidth: number) =>
   Math.max(REQUIREMENT_GRID_TITLE_MIN_WIDTH, Math.floor(containerWidth - otherColumnsWidth - COLLAPSED_BORDER_WIDTH));
 
+/** 用户拖窄标题列的下限。自动撑开时仍走 REQUIREMENT_GRID_TITLE_MIN_WIDTH */
+export const REQUIREMENT_GRID_RESIZE_TITLE_MIN_WIDTH = 160;
+/** 其它数据列拖窄下限 */
+export const REQUIREMENT_GRID_RESIZE_COLUMN_MIN_WIDTH = 80;
+
+export type TRequirementGridColumnWidths = Record<string, number>;
+
+export const getRequirementResizeMinWidth = (key: string) =>
+  key === "title" ? REQUIREMENT_GRID_RESIZE_TITLE_MIN_WIDTH : REQUIREMENT_GRID_RESIZE_COLUMN_MIN_WIDTH;
+
+/**
+ * 列宽拖拽。默认用调用方算好的宽度；第一次拖任何列时把当时的 snapshot 钉死，
+ * 之后只改被拖的那一列。不写 localStorage，组件卸载即回默认。
+ */
+export const useRequirementGridColumnResize = () => {
+  const [overrides, setOverrides] = useState<TRequirementGridColumnWidths | null>(null);
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
+
+  const getWidth = useCallback(
+    (key: string, defaultWidth: number) => overrides?.[key] ?? defaultWidth,
+    [overrides]
+  );
+
+  const startResize = useCallback(
+    (key: string, snapshot: TRequirementGridColumnWidths, event: ReactMouseEvent) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const startX = event.clientX;
+      const base = { ...(overridesRef.current ?? snapshot) };
+      const startWidth = base[key] ?? snapshot[key];
+      if (startWidth === undefined) return;
+
+      const minWidth = getRequirementResizeMinWidth(key);
+      const originalCursor = document.body.style.cursor;
+      const originalUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        setOverrides({
+          ...base,
+          [key]: Math.max(minWidth, Math.round(startWidth + (moveEvent.clientX - startX))),
+        });
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = originalCursor;
+        document.body.style.userSelect = originalUserSelect;
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    []
+  );
+
+  return { getWidth, startResize };
+};
+
+export const RequirementGridColumnResizer = ({
+  onMouseDown,
+}: {
+  onMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
+}) => (
+  <div
+    className="absolute top-0 right-0 z-[1] h-full w-2 cursor-col-resize"
+    onMouseDown={onMouseDown}
+    role="presentation"
+  >
+    <div className="absolute top-0 right-0 h-full w-px bg-transparent transition-colors group-hover/header:bg-accent-primary/50" />
+  </div>
+);
+
 /**
  * 表头单元格。不画上下边框 —— 底线由 thead 统一给一条，免得和行分隔线叠成双线。
  * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
  */
-const HEADER_CELL_BASE = "h-11 border-r border-subtle bg-layer-1 text-left align-middle text-13 font-medium";
+const HEADER_CELL_BASE =
+  "group/header relative h-11 border-r border-subtle bg-layer-1 text-left align-middle text-13 font-medium";
 export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
 export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
 
@@ -502,6 +582,7 @@ export const RequirementGridHeader = ({
   builtinHeaders,
   extraHeaders,
   trailingHeader,
+  onFieldResize,
 }: {
   rootFields: TRequirementField[];
   showActionGutter: boolean;
@@ -511,15 +592,28 @@ export const RequirementGridHeader = ({
     content: React.ReactNode;
     style?: React.CSSProperties;
     stickyCell?: boolean;
+    onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
   };
   /**
    * 内置列的表头，恒排在自定义字段列之前。内置列永远是单列，不参与表单字段的
    * 二级表头跨列逻辑，所以只跟着 spanRows 走。
    */
-  builtinHeaders?: { key: string; className?: string; content: React.ReactNode }[];
+  builtinHeaders?: {
+    key: string;
+    className?: string;
+    content: React.ReactNode;
+    onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  }[];
   /** 字段列之后、操作列之前的附加列（产品需求的「变更 / 最后变更于」） */
-  extraHeaders?: { key: string; className: string; content: React.ReactNode }[];
+  extraHeaders?: {
+    key: string;
+    className: string;
+    content: React.ReactNode;
+    onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  }[];
   trailingHeader?: { className: string; content: React.ReactNode };
+  /** 自定义字段 / 表单子字段的列宽拖拽。分组表头和操作沟槽不走这里 */
+  onFieldResize?: (fieldId: string, event: ReactMouseEvent<HTMLDivElement>) => void;
 }) => {
   const { t } = useTranslation();
   const formFields = rootFields.filter((field) => field.field_type === "form");
@@ -537,6 +631,7 @@ export const RequirementGridHeader = ({
             data-requirement-sticky-cell={leadingHeader.stickyCell ? "" : undefined}
           >
             {leadingHeader.content}
+            {leadingHeader.onResize && <RequirementGridColumnResizer onMouseDown={leadingHeader.onResize} />}
           </th>
         )}
         {builtinHeaders?.map((header) => (
@@ -546,6 +641,7 @@ export const RequirementGridHeader = ({
             className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, header.className)}
           >
             {header.content}
+            {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
           </th>
         ))}
         {rootFields.map((field) =>
@@ -567,12 +663,16 @@ export const RequirementGridHeader = ({
           ) : (
             <th key={field.id} rowSpan={spanRows} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
               <RequirementGridHeaderLabel label={field.name} isRequired={field.is_required} />
+              {onFieldResize && (
+                <RequirementGridColumnResizer onMouseDown={(event) => onFieldResize(field.id, event)} />
+              )}
             </th>
           )
         )}
         {extraHeaders?.map((header) => (
           <th key={header.key} rowSpan={spanRows} className={header.className}>
             {header.content}
+            {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
           </th>
         ))}
         {trailingHeader && (
@@ -592,6 +692,9 @@ export const RequirementGridHeader = ({
                     className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "font-normal")}
                   >
                     <RequirementGridHeaderLabel label={child.name} isRequired={child.is_required} />
+                    {onFieldResize && (
+                      <RequirementGridColumnResizer onMouseDown={(event) => onFieldResize(child.id, event)} />
+                    )}
                   </th>
                 ))}
                 {showActionGutter && (

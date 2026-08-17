@@ -808,10 +808,20 @@ export class RequirementService extends APIService {
       search?: string;
       filters?: TRequirementFilter[];
       requirementTypeId?: string;
-      /** 只看某个产品来的需求；项目可以同时引用多个产品 */
+      /** 只看某个产品来的需求；逗号分隔多值 */
       productId?: string;
-      /** 按需求级状态筛选 */
-      status?: TRequirementItemStatus;
+      /** 按需求级状态筛选；逗号分隔多值 */
+      status?: string;
+      title?: string;
+      approvalState?: string;
+      priority?: string;
+      assigneeId?: string;
+      startDate?: string;
+      startDateFrom?: string;
+      startDateTo?: string;
+      targetDate?: string;
+      targetDateFrom?: string;
+      targetDateTo?: string;
       ids?: string[];
       /** 关联选择器用：排除已关联到该迭代的行 */
       exclude_cycle_id?: string;
@@ -830,6 +840,16 @@ export class RequirementService extends APIService {
         ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
         ...(params.productId ? { product_id: params.productId } : {}),
         ...(params.status ? { status: params.status } : {}),
+        ...(params.title ? { title: params.title } : {}),
+        ...(params.approvalState ? { approval_state: params.approvalState } : {}),
+        ...(params.priority ? { priority: params.priority } : {}),
+        ...(params.assigneeId ? { assignee_id: params.assigneeId } : {}),
+        ...(params.startDate ? { start_date: params.startDate } : {}),
+        ...(params.startDateFrom ? { start_date_from: params.startDateFrom } : {}),
+        ...(params.startDateTo ? { start_date_to: params.startDateTo } : {}),
+        ...(params.targetDate ? { target_date: params.targetDate } : {}),
+        ...(params.targetDateFrom ? { target_date_from: params.targetDateFrom } : {}),
+        ...(params.targetDateTo ? { target_date_to: params.targetDateTo } : {}),
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
         ...(params.exclude_cycle_id ? { exclude_cycle_id: params.exclude_cycle_id } : {}),
         ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),

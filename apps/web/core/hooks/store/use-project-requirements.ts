@@ -7,6 +7,7 @@ import type {
   TRequirementItemStatus,
   TRequirementTypeSchema,
 } from "@plane/types";
+import type { TProjectRequirementListQuery } from "@/components/projects/requirements/filters";
 import { RequirementService } from "@/services/requirement.service";
 
 const requirementService = new RequirementService();
@@ -47,9 +48,11 @@ const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
 export const useProjectRequirements = ({
   workspaceSlug,
   projectId,
+  initialListQuery,
 }: {
   workspaceSlug: string | undefined;
   projectId: string | undefined;
+  initialListQuery?: TProjectRequirementListQuery;
 }) => {
   const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TProjectRequirementsResponse>(EMPTY_PAGE);
@@ -62,9 +65,7 @@ export const useProjectRequirements = ({
   const [filters, setFilters] = useState<TRequirementFilter[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
-  const [requirementTypeFilter, setRequirementTypeFilter] = useState<string | undefined>();
-  const [statusFilter, setStatusFilter] = useState<TRequirementItemStatus | undefined>();
-  const [productFilter, setProductFilter] = useState<string | undefined>();
+  const [listFilters, setListFiltersState] = useState<TProjectRequirementListQuery>(initialListQuery ?? {});
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !projectId) return null;
@@ -102,9 +103,19 @@ export const useProjectRequirements = ({
           perPage,
           search,
           filters,
-          requirementTypeId: requirementTypeFilter,
-          productId: productFilter,
-          status: statusFilter,
+          requirementTypeId: listFilters.requirementTypeId,
+          productId: listFilters.productId,
+          status: listFilters.status,
+          title: listFilters.title,
+          approvalState: listFilters.approvalState,
+          priority: listFilters.priority,
+          assigneeId: listFilters.assigneeId,
+          startDate: listFilters.startDate,
+          startDateFrom: listFilters.startDateFrom,
+          startDateTo: listFilters.startDateTo,
+          targetDate: listFilters.targetDate,
+          targetDateFrom: listFilters.targetDateFrom,
+          targetDateTo: listFilters.targetDateTo,
         });
         if (requestSequence !== requestSequenceRef.current) return response;
         setRequirementsPage(response);
@@ -118,7 +129,7 @@ export const useProjectRequirements = ({
         if (requestSequence === requestSequenceRef.current) setIsRequirementsLoading(false);
       }
     },
-    [cursor, filters, perPage, productFilter, projectId, requirementTypeFilter, search, statusFilter, workspaceSlug]
+    [cursor, filters, listFilters, perPage, projectId, search, workspaceSlug]
   );
 
   useEffect(() => {
@@ -263,26 +274,9 @@ export const useProjectRequirements = ({
     setCursor(undefined);
     setPerPage(value);
   }, []);
-  const updateStatusFilter = useCallback((value: TRequirementItemStatus | undefined) => {
+  const setListFilters = useCallback((value: TProjectRequirementListQuery) => {
     setCursor(undefined);
-    setStatusFilter(value);
-  }, []);
-  const updateProductFilter = useCallback((value: string | undefined) => {
-    setCursor(undefined);
-    setProductFilter(value);
-  }, []);
-  /** 切类型视图。搜索与筛选一并清空 —— 筛选条件是按字段 ID 定的，换个类型就没有意义了 */
-  const updateRequirementTypeFilter = useCallback((value: string | undefined) => {
-    setCursor(undefined);
-    setSearch("");
-    setFilters([]);
-    /*
-     * 行要清掉：列随类型走，留着旧行会闪出「新类型的列配旧类型的行」。
-     * 但 extra_stats 要留着 —— 产品页签与状态计数都从它来，整个清掉会让顶部两条
-     * 控件在每次切类型时闪现消失。
-     */
-    setRequirementsPage((current) => ({ ...EMPTY_PAGE, extra_stats: current.extra_stats }));
-    setRequirementTypeFilter(value);
+    setListFiltersState(value);
   }, []);
 
   return {
@@ -298,16 +292,12 @@ export const useProjectRequirements = ({
     filters,
     cursor,
     perPage,
-    requirementTypeFilter,
-    statusFilter,
-    productFilter,
+    listFilters,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
     setPerPage: updatePerPage,
-    setRequirementTypeFilter: updateRequirementTypeFilter,
-    setStatusFilter: updateStatusFilter,
-    setProductFilter: updateProductFilter,
+    setListFilters,
     fetchConfiguration,
     fetchRequirements,
     linkRequirements,

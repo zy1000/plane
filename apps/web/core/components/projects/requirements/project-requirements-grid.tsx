@@ -6,15 +6,16 @@
  * 一张表」的可编辑录入界面，整套暂存/批量保存/乐观锁机制在项目侧全无用武之地。
  *
  * 表格骨架与量化常量取自 requirement-grid-shared，与另外两个需求网格共用一套：
- * 标题列左固定并吃掉容器剩余宽度、其余列定宽、行高 44px、勾选框折进标题格里悬停显形。
+ * 编号列可见时排在最前并左固定、标题列紧随其后左固定并吃掉容器剩余宽度、
+ * 其余列定宽、行高 44px、勾选框折进当前最左列悬停显形。
  *
- * 列不再全铺：默认 9 列（约 1152px 固定宽），其余靠「列设置」勾回，偏好按项目存
+ * 列不再全铺：默认 9 列（约 1152px 固定宽），其余靠「显示」勾回，偏好按项目存
  * localStorage。见 project-requirements-columns.ts。
  */
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pagination } from "antd";
-import { Columns3, Loader as LoaderIcon, Package } from "lucide-react";
+import { Loader as LoaderIcon, Package } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -24,6 +25,7 @@ import { Tooltip } from "@plane/propel/tooltip";
 import type { TProjectRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { ProductChip } from "@/components/products/product-chip";
 import { RequirementStatusCell } from "@/components/requirements";
@@ -40,14 +42,17 @@ import {
   REQUIREMENT_GRID_ROW_SELECTED_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
+  RequirementGridColumnResizer,
   RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
+  useRequirementGridColumnResize,
   useRequirementGridScrollContainer,
 } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { ProjectRequirementDisplayProperties } from "./project-requirement-display-properties";
 import {
+  COLUMN_ICONS,
   COLUMN_LABEL_KEYS,
-  defaultHiddenColumns,
   getColumnStorageKey,
   readHiddenColumns,
   TOGGLEABLE_COLUMNS,
@@ -134,10 +139,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchInput, setSearchInput] = useState(search);
   const [isSearchOpen, setIsSearchOpen] = useState(() => search.trim().length > 0);
-  const [isColumnsOpen, setIsColumnsOpen] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const columnsRef = useRef<HTMLDivElement>(null);
 
   // --- 列显隐 ---------------------------------------------------------
   const [hiddenColumns, setHiddenColumns] = useState<TProjectRequirementColumnKey[]>(() =>
@@ -149,14 +152,14 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(getColumnStorageKey(projectId), JSON.stringify(hiddenColumns));
   }, [hiddenColumns, projectId]);
-  useOutsideClickDetector(columnsRef, () => setIsColumnsOpen(false));
 
   const isVisible = useCallback(
     (key: TProjectRequirementColumnKey) => !hiddenColumns.includes(key),
     [hiddenColumns]
   );
-  const visibleColumns = useMemo(
-    () => TOGGLEABLE_COLUMNS.filter(isVisible),
+  const isDisplayIdVisible = isVisible("display_id");
+  const propertyColumns = useMemo(
+    () => TOGGLEABLE_COLUMNS.filter((key) => key !== "display_id" && isVisible(key)),
     [isVisible]
   );
   const toggleColumn = (key: TProjectRequirementColumnKey) =>
@@ -176,6 +179,10 @@ export const ProjectRequirementsGrid = (props: TProps) => {
       return builtin ? t(builtin.labelKey) : key;
     },
     [builtinByKey, t]
+  );
+  const columnIcon = useCallback(
+    (key: TProjectRequirementColumnKey) => COLUMN_ICONS[key] ?? builtinByKey[key]?.icon,
+    [builtinByKey]
   );
 
   // --- 搜索 -----------------------------------------------------------
@@ -238,16 +245,36 @@ export const ProjectRequirementsGrid = (props: TProps) => {
 
   const titleColumn = builtinByKey["title"];
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
+  const { getWidth, startResize } = useRequirementGridColumnResize();
 
-  /** 每列的宽度：内置列各有自己的宽度定义，本页特有列一律 144px */
-  const columnWidth = useCallback(
+  /** 每列的默认宽度：内置列各有自己的宽度定义，本页特有列一律 144px */
+  const defaultColumnWidth = useCallback(
     (key: TProjectRequirementColumnKey) =>
       builtinByKey[key] ? getRequirementColumnWidth(key) : REQUIREMENT_GRID_COLUMN_WIDTH,
     [builtinByKey]
   );
-  const propertyColumnsWidth = visibleColumns.reduce((total, key) => total + columnWidth(key), 0);
-  const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, propertyColumnsWidth);
-  const tableWidth = titleColumnWidth + propertyColumnsWidth;
+  const defaultPropertyColumnsWidth = propertyColumns.reduce((total, key) => total + defaultColumnWidth(key), 0);
+  const defaultDisplayIdWidth = isDisplayIdVisible ? defaultColumnWidth("display_id") : 0;
+  const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(
+    containerWidth,
+    defaultPropertyColumnsWidth + defaultDisplayIdWidth
+  );
+  const columnSnapshot = useMemo(() => {
+    const snapshot: Record<string, number> = { title: defaultTitleColumnWidth };
+    if (isDisplayIdVisible) snapshot.display_id = defaultDisplayIdWidth;
+    propertyColumns.forEach((key) => {
+      snapshot[key] = defaultColumnWidth(key);
+    });
+    return snapshot;
+  }, [defaultColumnWidth, defaultDisplayIdWidth, defaultTitleColumnWidth, isDisplayIdVisible, propertyColumns]);
+  const displayIdWidth = isDisplayIdVisible ? getWidth("display_id", defaultDisplayIdWidth) : 0;
+  const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
+  const propertyColumnsWidth = propertyColumns.reduce(
+    (total, key) => total + getWidth(key, defaultColumnWidth(key)),
+    0
+  );
+  const tableWidth = displayIdWidth + titleColumnWidth + propertyColumnsWidth;
+  const titleStickyLeft = displayIdWidth;
 
   /**
    * 父项标题只从**本页已有的行**里解析，不额外发请求。
@@ -270,6 +297,33 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   const toggleOne = (id: string) =>
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
 
+  const renderSelectCheckbox = ({
+    checked,
+    hoverGroup,
+    indeterminate,
+    onChange,
+  }: {
+    checked: boolean;
+    hoverGroup: "header" | "requirement";
+    indeterminate?: boolean;
+    onChange: () => void;
+  }) => (
+    <Checkbox
+      checked={checked}
+      indeterminate={indeterminate}
+      disabled={hoverGroup === "header" && !visibleIds.length}
+      onChange={onChange}
+      aria-label={t("requirement_grid.data.select_row")}
+      containerClassName={cn(
+        "pointer-events-none opacity-0 transition-opacity",
+        hoverGroup === "header"
+          ? "group-hover/header:pointer-events-auto group-hover/header:opacity-100"
+          : "group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
+        (checked || (hoverGroup === "header" && selectedIds.length > 0)) && "pointer-events-auto opacity-100"
+      )}
+    />
+  );
+
   // --- 单元格 ---------------------------------------------------------
   const renderCell = (key: TProjectRequirementColumnKey, requirement: TProjectRequirement) => {
     switch (key) {
@@ -285,6 +339,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             identifier={requirement.product_identifier}
             name={requirement.product_name}
             href={`/${workspaceSlug}/products/${requirement.product_id}/requirements`}
+            hideIcon
+            hideIdentifier
           />
         ) : (
           <span className="text-placeholder">—</span>
@@ -399,37 +455,13 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         </div>
       </div>
       {toolbarAfterSearch}
-      <div className="relative" ref={columnsRef}>
-        <Tooltip tooltipContent={t("project_requirements.columns")}>
-          <IconButton
-            variant="ghost"
-            size="lg"
-            icon={Columns3}
-            onClick={() => setIsColumnsOpen((value) => !value)}
-            aria-label={t("project_requirements.columns")}
-          />
-        </Tooltip>
-        {isColumnsOpen && (
-          <div className="absolute top-9 right-0 z-30 max-h-80 w-56 overflow-y-auto rounded-lg border border-subtle bg-surface-1 p-2 shadow-lg">
-            {TOGGLEABLE_COLUMNS.map((key) => (
-              <label
-                key={key}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-12 hover:bg-layer-transparent-hover"
-              >
-                <input type="checkbox" checked={isVisible(key)} onChange={() => toggleColumn(key)} />
-                <span className="truncate">{columnLabel(key)}</span>
-              </label>
-            ))}
-            <button
-              type="button"
-              onClick={() => setHiddenColumns(defaultHiddenColumns())}
-              className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-12 text-secondary hover:bg-layer-transparent-hover"
-            >
-              {t("common.reset")}
-            </button>
+      <FiltersDropdown title={t("common.display")} placement="bottom-end">
+        <div className="vertical-scrollbar relative scrollbar-sm h-full w-full divide-y divide-subtle-1 overflow-hidden overflow-y-auto px-2.5">
+          <div className="py-2">
+            <ProjectRequirementDisplayProperties hiddenColumns={hiddenColumns} onToggle={toggleColumn} />
           </div>
-        )}
-      </div>
+        </div>
+      </FiltersDropdown>
       {canManageProducts && (
         <Button variant="secondary" size="lg" onClick={onManageProducts}>
           <Package className="size-3.5" />
@@ -512,13 +544,41 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         ) : (
           <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
             <colgroup>
+              {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
               <col style={{ width: titleColumnWidth }} />
-              {visibleColumns.map((key) => (
-                <col key={key} style={{ width: columnWidth(key) }} />
+              {propertyColumns.map((key) => (
+                <col key={key} style={{ width: getWidth(key, defaultColumnWidth(key)) }} />
               ))}
             </colgroup>
             <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
               <tr>
+                {isDisplayIdVisible && (
+                  <th
+                    className={cn(
+                      "group/header relative",
+                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                      REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                    )}
+                    style={{ width: displayIdWidth, minWidth: displayIdWidth, maxWidth: displayIdWidth, left: 0 }}
+                  >
+                    <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                      {canManage &&
+                        renderSelectCheckbox({
+                          checked: allSelected,
+                          hoverGroup: "header",
+                          indeterminate: !allSelected && selectedIds.length > 0,
+                          onChange: toggleAll,
+                        })}
+                      <RequirementGridHeaderLabel
+                        icon={columnIcon("display_id")}
+                        label={columnLabel("display_id")}
+                      />
+                    </div>
+                    <RequirementGridColumnResizer
+                      onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
+                    />
+                  </th>
+                )}
                 <th
                   data-requirement-sticky-cell
                   className={cn(
@@ -526,31 +586,37 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                     REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
                     REQUIREMENT_GRID_STICKY_HEADER_CLASS
                   )}
-                  style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+                  style={{
+                    width: titleColumnWidth,
+                    minWidth: titleColumnWidth,
+                    maxWidth: titleColumnWidth,
+                    left: titleStickyLeft,
+                  }}
                 >
                   <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
-                    {canManage && (
-                      <Checkbox
-                        checked={allSelected}
-                        indeterminate={!allSelected && selectedIds.length > 0}
-                        disabled={!visibleIds.length}
-                        onChange={toggleAll}
-                        aria-label={t("requirement_grid.data.select_row")}
-                        containerClassName={cn(
-                          "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
-                          selectedIds.length > 0 && "pointer-events-auto opacity-100"
-                        )}
-                      />
-                    )}
+                    {canManage &&
+                      !isDisplayIdVisible &&
+                      renderSelectCheckbox({
+                        checked: allSelected,
+                        hoverGroup: "header",
+                        indeterminate: !allSelected && selectedIds.length > 0,
+                        onChange: toggleAll,
+                      })}
                     <RequirementGridHeaderLabel
                       icon={titleColumn?.icon}
                       label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                     />
                   </div>
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize("title", columnSnapshot, event)}
+                  />
                 </th>
-                {visibleColumns.map((key) => (
+                {propertyColumns.map((key) => (
                   <th key={key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                    <RequirementGridHeaderLabel icon={builtinByKey[key]?.icon} label={columnLabel(key)} />
+                    <RequirementGridHeaderLabel icon={columnIcon(key)} label={columnLabel(key)} />
+                    <RequirementGridColumnResizer
+                      onMouseDown={(event) => startResize(key, columnSnapshot, event)}
+                    />
                   </th>
                 ))}
               </tr>
@@ -567,6 +633,37 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       isSelected && REQUIREMENT_GRID_ROW_SELECTED_CLASS
                     )}
                   >
+                    {isDisplayIdVisible && (
+                      <td
+                        className={cn(
+                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          REQUIREMENT_GRID_STICKY_BODY_CLASS
+                        )}
+                        style={{
+                          width: displayIdWidth,
+                          minWidth: displayIdWidth,
+                          maxWidth: displayIdWidth,
+                          left: 0,
+                        }}
+                      >
+                        <div
+                          className={cn(
+                            "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                            isSelected
+                              ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                              : "group-hover/requirement:bg-layer-transparent-hover"
+                          )}
+                        >
+                          {canManage &&
+                            renderSelectCheckbox({
+                              checked: isSelected,
+                              hoverGroup: "requirement",
+                              onChange: () => toggleOne(requirement.id),
+                            })}
+                          {renderCell("display_id", requirement)}
+                        </div>
+                      </td>
+                    )}
                     <td
                       data-requirement-sticky-cell
                       className={cn(
@@ -574,7 +671,12 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                         REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
                         REQUIREMENT_GRID_STICKY_BODY_CLASS
                       )}
-                      style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+                      style={{
+                        width: titleColumnWidth,
+                        minWidth: titleColumnWidth,
+                        maxWidth: titleColumnWidth,
+                        left: titleStickyLeft,
+                      }}
                     >
                       {/* 左固定列的底色必须不透明，所以着色铺在内层 div 而不是 <tr> 上 */}
                       <div
@@ -585,17 +687,13 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                             : "group-hover/requirement:bg-layer-transparent-hover"
                         )}
                       >
-                        {canManage && (
-                          <Checkbox
-                            checked={isSelected}
-                            onChange={() => toggleOne(requirement.id)}
-                            aria-label={t("requirement_grid.data.select_row")}
-                            containerClassName={cn(
-                              "pointer-events-none opacity-0 transition-opacity group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
-                              isSelected && "pointer-events-auto opacity-100"
-                            )}
-                          />
-                        )}
+                        {canManage &&
+                          !isDisplayIdVisible &&
+                          renderSelectCheckbox({
+                            checked: isSelected,
+                            hoverGroup: "requirement",
+                            onChange: () => toggleOne(requirement.id),
+                          })}
                         <Tooltip tooltipContent={requirement.title}>
                           <button
                             type="button"
@@ -607,7 +705,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                         </Tooltip>
                       </div>
                     </td>
-                    {visibleColumns.map((key) => (
+                    {propertyColumns.map((key) => (
                       <td key={key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
                         {renderCell(key, requirement)}
                       </td>

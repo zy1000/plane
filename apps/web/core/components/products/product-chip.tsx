@@ -33,6 +33,10 @@ type TProps = {
   enableClickToCopy?: boolean;
   /** 只要徽标，不要名字（窄列里用） */
   hideName?: boolean;
+  /** 不要 Package / logo，只要文字 */
+  hideIcon?: boolean;
+  /** 不要产品编号，只要名称 */
+  hideIdentifier?: boolean;
   /**
    * plain = 图标+文字（标签页、peek 头等内联场景）。
    * property = 工作项行右侧属性同款描边壳（迭代范围需求列表等）。
@@ -51,6 +55,8 @@ export const ProductChip = (props: TProps) => {
     variant = "secondary",
     enableClickToCopy = false,
     hideName = false,
+    hideIcon = false,
+    hideIdentifier = false,
     appearance = "plain",
     className,
   } = props;
@@ -69,14 +75,15 @@ export const ProductChip = (props: TProps) => {
         className
       )}
     >
-      {logoProps?.in_use ? (
-        <span className={cn("grid shrink-0 place-items-center", isProperty ? "size-3" : "size-3.5")}>
-          <Logo logo={logoProps} size={isProperty ? 12 : 14} />
-        </span>
-      ) : (
-        <Package className={cn("shrink-0 text-tertiary", isProperty ? "size-3" : "size-3.5")} />
-      )}
-      {identifier && (
+      {!hideIcon &&
+        (logoProps?.in_use ? (
+          <span className={cn("grid shrink-0 place-items-center", isProperty ? "size-3" : "size-3.5")}>
+            <Logo logo={logoProps} size={isProperty ? 12 : 14} />
+          </span>
+        ) : (
+          <Package className={cn("shrink-0 text-tertiary", isProperty ? "size-3" : "size-3.5")} />
+        ))}
+      {!hideIdentifier && identifier && (
         <IdentifierText
           identifier={identifier}
           size={size}

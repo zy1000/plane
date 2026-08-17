@@ -56,6 +56,7 @@ from plane.utils.requirement_change import (
 )
 from plane.utils.requirement_project import (
     RequirementLinkError,
+    apply_project_requirement_list_filters,
     can_submit_change_from_project,
     linkable_facets,
     linkable_requirements_queryset,
@@ -66,6 +67,7 @@ from plane.utils.requirement_project import (
     resolve_linkable_requirements,
     resolve_policy_for_linked_requirement,
     set_requirement_status,
+    split_query_csv,
 )
 from plane.utils.requirement_test_case import unlink_test_cases_for_projects
 
@@ -157,13 +159,13 @@ class ProjectRequirementViewSet(BaseViewSet):
         搜索与筛选在 Python 里做，与产品需求列表同一条路径
         （filter_requirement_row_ids）—— 自定义字段的值在 JSON 里，推不进 SQL。
         """
-        requirement_type_id = request.query_params.get("requirement_type_id")
-        if requirement_type_id:
-            queryset = queryset.filter(requirement_type_id=requirement_type_id)
+        requirement_type_ids = split_query_csv(request.query_params.get("requirement_type_id"))
+        if requirement_type_ids:
+            queryset = queryset.filter(requirement_type_id__in=requirement_type_ids)
 
-        product_id = request.query_params.get("product_id")
-        if product_id:
-            queryset = queryset.filter(product_id=product_id)
+        product_ids = split_query_csv(request.query_params.get("product_id"))
+        if product_ids:
+            queryset = queryset.filter(product_id__in=product_ids)
 
         raw_ids = request.query_params.get("ids")
         if raw_ids:
@@ -213,14 +215,13 @@ class ProjectRequirementViewSet(BaseViewSet):
     def list(self, request, slug, project_id):
         _, specs, by_requirement_type = self._requirement_type_specs(project_id)
         queryset = linked_requirements_queryset(slug=slug, project_id=project_id)
-
-        status_value = request.query_params.get("status")
-        if status_value:
-            if status_value not in RequirementItemStatus.values:
-                return Response(
-                    {"status": "Unknown status."}, status=status.HTTP_400_BAD_REQUEST
-                )
-            queryset = queryset.filter(status=status_value)
+        # 审批态是派生列，必须先 annotate 才能用 Q 过滤
+        queryset = annotate_pending(queryset)
+        queryset, filter_error = apply_project_requirement_list_filters(
+            queryset, request.query_params
+        )
+        if filter_error is not None:
+            return Response(filter_error, status=status.HTTP_400_BAD_REQUEST)
 
         # 关联选择器（迭代/发布关联需求弹窗）用：已关闭的需求不进任何选择器。
         # 主列表默认不带 —— 项目页仍要看到已关闭的需求
@@ -256,15 +257,18 @@ class ProjectRequirementViewSet(BaseViewSet):
         if error is not None:
             return error
 
+        product_ids = split_query_csv(request.query_params.get("product_id"))
+        facet_product_id = product_ids[0] if len(product_ids) == 1 else None
+
         return self.paginate(
             request=request,
-            queryset=annotate_pending(queryset),
+            queryset=queryset,
             on_results=self._serialize_rows,
             # 顶部产品 tab 与阶段条的计数搭列表一起回来，不另开端点、不多发请求。
             # paginate 会把它原样放进响应信封的 extra_stats 字段。
             extra_stats=requirement_facets(
                 project_id=project_id,
-                product_id=request.query_params.get("product_id"),
+                product_id=facet_product_id,
             ),
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,

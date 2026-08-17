@@ -8,6 +8,8 @@
  * 显隐偏好按项目存 localStorage，与产品网格的自定义字段显隐是同一套做法
  * （requirement-grid.tsx 的 hiddenFieldIds + storageKey）。
  */
+import { Hash, Layers, ListTodo, Package, ShieldCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { TRequirementBuiltinKey } from "@plane/types";
 
 /** 网格里的一列。内置列直接复用 REQUIREMENT_BUILTIN_COLUMNS 的渲染器，其余是本页特有 */
@@ -31,7 +33,10 @@ export const DEFAULT_VISIBLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "target_date",
 ];
 
-/** 可勾选的全部列，顺序即渲染顺序 */
+/**
+ * 可勾选的全部列。display_id 可见时固定渲染在标题列之前（表格第一列），
+ * 其余按此顺序排在标题之后。
+ */
 export const TOGGLEABLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
   "product",
@@ -55,6 +60,15 @@ export const COLUMN_LABEL_KEYS: Partial<Record<TProjectRequirementColumnKey, str
   issues: "project_requirements.issues.column",
   approval: "requirement_approval.column",
   requirement_type: "requirement_detail.requirement_type",
+};
+
+/** 本页特有列的表头图标；内置列走 REQUIREMENT_BUILTIN_COLUMNS 自己的 icon */
+export const COLUMN_ICONS: Partial<Record<TProjectRequirementColumnKey, LucideIcon>> = {
+  display_id: Hash,
+  product: Package,
+  issues: ListTodo,
+  approval: ShieldCheck,
+  requirement_type: Layers,
 };
 
 /**

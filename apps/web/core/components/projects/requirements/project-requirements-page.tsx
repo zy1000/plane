@@ -9,7 +9,7 @@
  * 详情抽屉复用产品侧的 RequirementPeekOverview 并传 productId={row.product_id}：
  * 需求内容、版本、变更轨迹的权威都在产品，项目侧不该另开一套读路径。
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "react-router";
 import {
@@ -22,35 +22,35 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { PageHead } from "@/components/core/page-title";
 import { ProductChip } from "@/components/products/product-chip";
+import { PageHead } from "@/components/core/page-title";
 import { isRequirementClosed } from "@/components/requirements";
 import {
   RequirementIssuesSection,
   RequirementPeekOverview,
   RequirementTestCasesSection,
 } from "@/components/requirements/requirement-detail";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useProject } from "@/hooks/store/use-project";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useProjectRequirements } from "@/hooks/store/use-project-requirements";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useSearchParamFilter } from "@/hooks/use-search-param-filter";
 import { RequirementService } from "@/services/requirement.service";
 import { ExistingRequirementsModal } from "./existing-requirements-modal";
+import {
+  applyListQueryToSearchParams,
+  listQueryToExpression,
+  parseListQueryFromSearchParams,
+  projectRequirementExpressionToQuery,
+  serializeListQuery,
+  useProjectRequirementFilter,
+  useProjectRequirementFiltersConfig,
+  type TProjectRequirementFilterExpression,
+} from "./filters";
 import { ProjectProductsModal } from "./project-products-modal";
-import { getProductFromParam, PRODUCT_PARAM } from "./project-requirement-product-tabs";
-import {
-  PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID,
-  ProjectRequirementFiltersRow,
-  ProjectRequirementFiltersToggle,
-} from "./project-requirement-filters";
-import { getStatusFromParam, STATUS_PARAM } from "./project-requirement-status-filter";
-import {
-  getTypeFromParam,
-  ProjectRequirementTypeFilter,
-  TYPE_PARAM,
-} from "./project-requirement-type-filter";
+import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "./project-requirement-filters";
 import { ProjectRequirementsGrid } from "./project-requirements-grid";
 import { UnlinkRequirementConfirmModal } from "./unlink-confirm-modal";
 
@@ -71,12 +71,9 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   /** 待确认解除的行；非空即弹确认框，单行与批量共用同一条链路 */
   const [idsToUnlink, setIdsToUnlink] = useState<string[]>([]);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
-  const [isFilterVisible, setIsFilterVisible] = useState(() =>
-    Boolean(getStatusFromParam(searchParams.get(STATUS_PARAM)))
-  );
-  const [isStatusChipVisible, setIsStatusChipVisible] = useState(() =>
-    Boolean(getStatusFromParam(searchParams.get(STATUS_PARAM)))
-  );
+  const [initialListQuery] = useState(() => parseListQueryFromSearchParams(searchParams));
+  const [initialExpression] = useState(() => listQueryToExpression(initialListQuery));
+  const syncedFilterRef = useRef(serializeListQuery(initialListQuery));
 
   useLayoutEffect(() => {
     setDataToolbarHost(
@@ -84,7 +81,11 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     );
   }, []);
 
-  const store = useProjectRequirements({ workspaceSlug: slug, projectId: project });
+  const store = useProjectRequirements({
+    workspaceSlug: slug,
+    projectId: project,
+    initialListQuery,
+  });
   const {
     links: productLinks,
     isLoading: isProductLinksLoading,
@@ -113,35 +114,53 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
    */
   const facets = store.requirementsPage.extra_stats ?? null;
 
-  // 三个筛选与 URL 双向绑定：刷新、前进后退、分享链接都能还原当前视图
-  useSearchParamFilter({
-    param: PRODUCT_PARAM,
-    value: store.productFilter,
-    setValue: store.setProductFilter,
-    // 以 productLinks 为准（方案 A 常驻条的数据源），加载中先放行深链
-    parse: (raw) =>
-      getProductFromParam(
-        raw,
-        isProductLinksLoading ? null : productLinks.map((link) => link.product)
-      ),
-  });
-  useSearchParamFilter({
-    param: STATUS_PARAM,
-    value: store.statusFilter,
-    setValue: store.setStatusFilter,
-    parse: getStatusFromParam,
-  });
-  useSearchParamFilter({
-    param: TYPE_PARAM,
-    value: store.requirementTypeFilter,
-    setValue: store.setRequirementTypeFilter,
-    parse: (raw) => getTypeFromParam(raw, store.requirementTypes),
+  const { areAllConfigsInitialized, configs } = useProjectRequirementFiltersConfig({
+    workspaceSlug: slug ?? "",
+    projectId: project ?? "",
+    products: productLinks.map((link) => ({
+      id: link.product,
+      identifier: link.product_identifier,
+      name: link.product_name,
+    })),
+    requirementTypes: store.requirementTypes,
   });
 
-  // 深链 / 前进后退带了 status 时，把 chip 亮出来；空值（--）不算筛选，不自动藏
+  const handleExpressionChange = useCallback(
+    (expression: TProjectRequirementFilterExpression) => {
+      const query = projectRequirementExpressionToQuery(expression);
+      const snapshot = serializeListQuery(query);
+      if (snapshot === syncedFilterRef.current) return;
+      syncedFilterRef.current = snapshot;
+      store.setListFilters(query);
+      setSearchParams(
+        (previous) => {
+          const params = new URLSearchParams(previous);
+          applyListQueryToSearchParams(params, query);
+          return params;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams, store.setListFilters]
+  );
+
+  const filter = useProjectRequirementFilter({
+    instanceKey: project ?? "project-requirements",
+    initialExpression,
+    areAllConfigsInitialized,
+    configs,
+    onExpressionChange: handleExpressionChange,
+  });
+
+  // 前进后退改了筛选参数时，把表达式和列表 query 一起灌回去
   useEffect(() => {
-    if (store.statusFilter) setIsStatusChipVisible(true);
-  }, [store.statusFilter]);
+    const next = parseListQueryFromSearchParams(searchParams);
+    const snapshot = serializeListQuery(next);
+    if (snapshot === syncedFilterRef.current) return;
+    syncedFilterRef.current = snapshot;
+    store.setListFilters(next);
+    filter.resetExpression(listQueryToExpression(next));
+  }, [filter, searchParams, store.setListFilters]);
 
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
@@ -287,34 +306,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     <>
       <PageHead title={pageTitle} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        {(store.requirementTypes.length >= 2 || Boolean(store.requirementTypeFilter)) && (
-          <div className="flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-subtle px-4 py-2">
-            <ProjectRequirementTypeFilter
-              requirementTypes={store.requirementTypes}
-              counts={facets?.by_requirement_type}
-              value={store.requirementTypeFilter}
-              onChange={store.setRequirementTypeFilter}
-            />
-          </div>
-        )}
-
-        <ProjectRequirementFiltersRow
-          isVisible={isFilterVisible}
-          showStatusChip={isStatusChipVisible}
-          statusValue={store.statusFilter}
-          statusCounts={facets?.by_status}
-          totalCount={
-            store.productFilter
-              ? (facets?.by_product.find((item) => item.product_id === store.productFilter)?.count ?? 0)
-              : (facets?.total ?? 0)
-          }
-          onStatusChange={store.setStatusFilter}
-          onAddStatus={() => setIsStatusChipVisible(true)}
-          onRemoveStatus={() => {
-            store.setStatusFilter(undefined);
-            setIsStatusChipVisible(false);
-          }}
-        />
+        <FiltersRow filter={filter} />
 
         <ProjectRequirementsGrid
           requirementTypes={store.requirementTypes}
@@ -348,15 +340,10 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
            */
           hasLinkedProducts={isProductLinksLoading || productLinks.length > 0}
           hasAnyLinked={(facets?.total ?? 0) > 0}
-          activeFilterCount={
-            [store.productFilter, store.statusFilter, store.requirementTypeFilter].filter(Boolean).length
-          }
+          activeFilterCount={filter.allConditionsForDisplay.length + (store.search.trim() ? 1 : 0)}
           onClearFilters={() => {
-            store.setProductFilter(undefined);
-            store.setStatusFilter(undefined);
-            store.setRequirementTypeFilter(undefined);
+            void filter.clearFilters();
             store.setSearch("");
-            setIsStatusChipVisible(false);
           }}
           search={store.search}
           onSearchChange={store.setSearch}
@@ -367,13 +354,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           onUnlink={setIdsToUnlink}
           onStatusChange={(requirementId, status) => void handleStatusChange(requirementId, status)}
           toolbarPortalEl={dataToolbarHost}
-          toolbarAfterSearch={
-            <ProjectRequirementFiltersToggle
-              hasConditions={isStatusChipVisible}
-              isVisible={isFilterVisible}
-              onToggle={() => setIsFilterVisible((visible) => !visible)}
-            />
-          }
+          toolbarAfterSearch={<FiltersToggle filter={filter} />}
         />
       </ContentWrapper>
 

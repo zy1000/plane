@@ -75,6 +75,7 @@ import {
   RequirementGridHeader,
   RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
+  useRequirementGridColumnResize,
   useRequirementGridScrollContainer,
 } from "./requirement-grid-shared";
 import { RequirementIdentifier } from "./requirement-identifier";
@@ -386,11 +387,12 @@ export const RequirementGrid = observer(
     [propertyBuiltinColumns]
   );
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
+  const { getWidth, startResize } = useRequirementGridColumnResize();
 
   /** 产品需求才有来源标准库编号；标准库条目本身只有自己的编号 */
   const showSourceColumn = entityKind === "product";
 
-  const nonTitleColumnsWidth = useMemo(
+  const defaultNonTitleColumnsWidth = useMemo(
     () =>
       REQUIREMENT_GRID_COLUMN_WIDTH + // 编号
       (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
@@ -406,7 +408,45 @@ export const RequirementGrid = observer(
       }, 0),
     [propertyBuiltinColumns, showActionGutter, showApprovalColumn, showSourceColumn, visibleRootFields]
   );
-  const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, nonTitleColumnsWidth);
+  const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, defaultNonTitleColumnsWidth);
+  const columnSnapshot = useMemo(() => {
+    const snapshot: Record<string, number> = {
+      title: defaultTitleColumnWidth,
+      display_id: REQUIREMENT_GRID_COLUMN_WIDTH,
+    };
+    if (showSourceColumn) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
+    if (showApprovalColumn) snapshot.approval = REQUIREMENT_GRID_COLUMN_WIDTH;
+    propertyBuiltinColumns.forEach((column) => {
+      snapshot[column.key] = getRequirementColumnWidth(column.key);
+    });
+    visibleRootFields.forEach((field) => {
+      if (field.field_type !== "form" || !field.children.length) {
+        snapshot[field.id] = REQUIREMENT_GRID_COLUMN_WIDTH;
+        return;
+      }
+      field.children.forEach((child) => {
+        snapshot[child.id] = REQUIREMENT_GRID_COLUMN_WIDTH;
+      });
+    });
+    return snapshot;
+  }, [
+    defaultTitleColumnWidth,
+    propertyBuiltinColumns,
+    showApprovalColumn,
+    showSourceColumn,
+    visibleRootFields,
+  ]);
+  const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
+  const gutterWidth = visibleRootFields.reduce((sum, field) => {
+    if (field.field_type === "form" && field.children.length && showActionGutter) {
+      return sum + FORM_GUTTER_COLUMN_WIDTH;
+    }
+    return sum;
+  }, 0);
+  const nonTitleColumnsWidth =
+    Object.entries(columnSnapshot)
+      .filter(([key]) => key !== "title")
+      .reduce((sum, [key, defaultWidth]) => sum + getWidth(key, defaultWidth), 0) + gutterWidth;
   const tableWidth = titleColumnWidth + nonTitleColumnsWidth;
 
   // Column count for the trailing "add record" affordance row; mirrors the header's column math.
@@ -1373,21 +1413,33 @@ export const RequirementGrid = observer(
           >
             <colgroup>
               <col style={{ width: titleColumnWidth }} />
-              <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
-              {showSourceColumn && <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />}
-              {descriptionColumn && (
-                <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
+              <col style={{ width: getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
+              {showSourceColumn && (
+                <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
               )}
-              {showApprovalColumn && <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />}
+              {descriptionColumn && (
+                <col
+                  style={{
+                    width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)),
+                  }}
+                />
+              )}
+              {showApprovalColumn && <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />}
               {remainingBuiltinColumns.map((column) => (
-                <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
+                <col
+                  key={column.key}
+                  style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }}
+                />
               ))}
               {visibleRootFields.flatMap((field) =>
                 field.field_type !== "form" || !field.children.length
-                  ? [<col key={field.id} style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />]
+                  ? [<col key={field.id} style={{ width: getWidth(field.id, REQUIREMENT_GRID_COLUMN_WIDTH) }} />]
                   : [
                       ...field.children.map((child) => (
-                        <col key={child.id} style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+                        <col
+                          key={child.id}
+                          style={{ width: getWidth(child.id, REQUIREMENT_GRID_COLUMN_WIDTH) }}
+                        />
                       )),
                       ...(showActionGutter
                         ? [<col key={`${field.id}-gutter`} style={{ width: FORM_GUTTER_COLUMN_WIDTH }} />]
@@ -1411,6 +1463,7 @@ export const RequirementGrid = observer(
                 ),
                 style: { width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth },
                 stickyCell: true,
+                onResize: (event) => startResize("title", columnSnapshot, event),
                 content: (
                   <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
                     {!readOnly && (
@@ -1444,6 +1497,7 @@ export const RequirementGrid = observer(
                   content: (
                     <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
                   ),
+                  onResize: (event) => startResize("display_id", columnSnapshot, event),
                 },
                 ...(showSourceColumn
                   ? [
@@ -1455,6 +1509,7 @@ export const RequirementGrid = observer(
                             label={t("requirements.identifier.source_column")}
                           />
                         ),
+                        onResize: (event) => startResize("source_display_id", columnSnapshot, event),
                       },
                     ]
                   : []),
@@ -1468,6 +1523,7 @@ export const RequirementGrid = observer(
                             label={t(descriptionColumn.labelKey)}
                           />
                         ),
+                        onResize: (event) => startResize(descriptionColumn.key, columnSnapshot, event),
                       },
                     ]
                   : []),
@@ -1483,14 +1539,17 @@ export const RequirementGrid = observer(
                             label={t("requirement_approval.column")}
                           />
                         ),
+                        onResize: (event) => startResize("approval", columnSnapshot, event),
                       },
                     ]
                   : []),
                 ...remainingBuiltinColumns.map((column) => ({
                   key: column.key,
                   content: <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />,
+                  onResize: (event) => startResize(column.key, columnSnapshot, event),
                 })),
               ]}
+              onFieldResize={(fieldId, event) => startResize(fieldId, columnSnapshot, event)}
             />
             {rowGroups}
             {!readOnly &&

@@ -39,8 +39,10 @@ import {
   REQUIREMENT_GRID_ROW_SELECTED_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
+  RequirementGridColumnResizer,
   RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
+  useRequirementGridColumnResize,
   useRequirementGridScrollContainer,
 } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
@@ -212,16 +214,40 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   );
 
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
+  const { getWidth, startResize } = useRequirementGridColumnResize();
 
-  /** 标题列之外的所有列宽，用来反推标题列该吃掉多少 */
-  const propertyColumnsWidth =
+  /** 标题列之外的所有列默认宽，用来反推标题列该吃掉多少 */
+  const defaultPropertyColumnsWidth =
     // 编号 + 标准库编号 + 审批列 + 内置属性列（含描述与状态，状态列只是位置前提）+ 所属类型列
     REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     propertyBuiltinColumns.reduce((total, column) => total + getRequirementColumnWidth(column.key), 0) +
     REQUIREMENT_GRID_COLUMN_WIDTH;
-  const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, propertyColumnsWidth);
+  const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, defaultPropertyColumnsWidth);
+  const columnSnapshot = useMemo(() => {
+    const snapshot: Record<string, number> = {
+      title: defaultTitleColumnWidth,
+      display_id: REQUIREMENT_GRID_COLUMN_WIDTH,
+      source_display_id: REQUIREMENT_GRID_COLUMN_WIDTH,
+      approval: REQUIREMENT_GRID_COLUMN_WIDTH,
+      requirement_type: REQUIREMENT_GRID_COLUMN_WIDTH,
+    };
+    propertyBuiltinColumns.forEach((column) => {
+      snapshot[column.key] = getRequirementColumnWidth(column.key);
+    });
+    return snapshot;
+  }, [defaultTitleColumnWidth, propertyBuiltinColumns]);
+  const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
+  const propertyColumnsWidth =
+    getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) +
+    getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) +
+    getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) +
+    propertyBuiltinColumns.reduce(
+      (total, column) => total + getWidth(column.key, getRequirementColumnWidth(column.key)),
+      0
+    ) +
+    getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH);
   const tableWidth = titleColumnWidth + propertyColumnsWidth;
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
   const parentTitles = useRequirementTitles({
@@ -373,17 +399,19 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
         >
           <colgroup>
             <col style={{ width: titleColumnWidth }} />
-            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
-            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+            <col style={{ width: getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
+            <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
             {descriptionColumn && (
-              <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
+              <col style={{ width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)) }} />
             )}
-            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
-            {statusColumn && <col style={{ width: getRequirementColumnWidth(statusColumn.key) }} />}
+            <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
+            {statusColumn && (
+              <col style={{ width: getWidth(statusColumn.key, getRequirementColumnWidth(statusColumn.key)) }} />
+            )}
             {remainingBuiltinColumns.map((column) => (
-              <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
+              <col key={column.key} style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }} />
             ))}
-            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+            <col style={{ width: getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
           </colgroup>
           <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
             <tr>
@@ -420,40 +448,64 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                   />
                 </div>
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("title", columnSnapshot, event)}
+                />
               </th>
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
+                />
               </th>
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel
                   icon={BookMarked}
                   label={t("requirements.identifier.source_column")}
                 />
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
+                />
               </th>
               {descriptionColumn && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={descriptionColumn.icon} label={t(descriptionColumn.labelKey)} />
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize(descriptionColumn.key, columnSnapshot, event)}
+                  />
                 </th>
               )}
               {/* 审批紧跟描述：每行都要扫一眼，不能放到要横滚才看得见的地方 */}
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("approval", columnSnapshot, event)}
+                />
               </th>
               {/* 状态紧跟审批：需求级交付状态（人工维护），同样是逐行要扫的信号 */}
               {statusColumn && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={statusColumn.icon} label={t(statusColumn.labelKey)} />
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize(statusColumn.key, columnSnapshot, event)}
+                  />
                 </th>
               )}
               {remainingBuiltinColumns.map((column) => (
                 <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize(column.key, columnSnapshot, event)}
+                  />
                 </th>
               ))}
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel
                   icon={Layers}
                   label={t("workspace_products.requirements.data.views.requirement_type_column")}
+                />
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("requirement_type", columnSnapshot, event)}
                 />
               </th>
             </tr>

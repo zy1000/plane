@@ -46,8 +46,16 @@ export type TRequirementApprovalState =
   | "pending_deletion"
   | "approved"
   | "modified";
+export const REQUIREMENT_APPROVAL_STATES: TRequirementApprovalState[] = [
+  "draft",
+  "in_review",
+  "pending_deletion",
+  "approved",
+  "modified",
+];
 /** 与工作项优先级取值一致，可直接复用工作项的优先级下拉 */
 export type TRequirementPriority = "urgent" | "high" | "medium" | "low" | "none";
+export const REQUIREMENT_PRIORITIES: TRequirementPriority[] = ["urgent", "high", "medium", "low", "none"];
 
 export type TRequirementSelectOption = {
   id: string;

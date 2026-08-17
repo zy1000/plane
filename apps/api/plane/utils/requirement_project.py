@@ -9,9 +9,12 @@ RequirementItemStatus 的 docstring）。
 
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
+from datetime import date
+
 from django.db.models import (
     BooleanField,
     ExpressionWrapper,
+    F,
     OuterRef,
     Q,
     Subquery,
@@ -27,13 +30,151 @@ from plane.db.models import (
     ReleaseStatus,
     Requirement,
     RequirementApprovalPolicy,
+    RequirementApprovalState,
+    RequirementChangeType,
     RequirementCycle,
     RequirementIssue,
     RequirementItemStatus,
+    RequirementPriority,
     RequirementProject,
     RequirementRelease,
     StateGroup,
 )
+
+
+def split_query_csv(raw):
+    if not raw:
+        return []
+    return [item.strip() for item in str(raw).split(",") if item.strip()]
+
+
+def _parse_iso_date(raw, field_name):
+    if not raw:
+        return None, None
+    try:
+        return date.fromisoformat(raw), None
+    except ValueError:
+        return None, {field_name: "Invalid date."}
+
+
+def _choice_csv(raw, allowed, field_name):
+    values = split_query_csv(raw)
+    unknown = [item for item in values if item not in allowed]
+    if unknown:
+        return None, {field_name: f"Unknown {field_name}."}
+    return values, None
+
+
+def approval_state_q(states):
+    """把派生审批态收成 Q。调用方必须先 annotate_pending。"""
+    pending = Q(pending_change_item_id__isnull=False)
+    no_pending = Q(pending_change_item_id__isnull=True)
+    clauses = []
+    if RequirementApprovalState.PENDING_DELETION in states:
+        clauses.append(pending & Q(pending_change_type=RequirementChangeType.DELETE))
+    if RequirementApprovalState.IN_REVIEW in states:
+        clauses.append(pending & ~Q(pending_change_type=RequirementChangeType.DELETE))
+    if RequirementApprovalState.DRAFT in states:
+        clauses.append(no_pending & Q(approved_version__isnull=True))
+    if RequirementApprovalState.MODIFIED in states:
+        clauses.append(
+            no_pending
+            & Q(approved_version__isnull=False)
+            & ~Q(version=F("approved_row_version"))
+        )
+    if RequirementApprovalState.APPROVED in states:
+        clauses.append(
+            no_pending
+            & Q(approved_version__isnull=False)
+            & Q(version=F("approved_row_version"))
+        )
+    query = Q()
+    for clause in clauses:
+        query |= clause
+    return query
+
+
+def apply_project_requirement_list_filters(queryset, query_params):
+    """项目需求 list 的专用 SQL 筛选。成功返回 (queryset, None)，失败返回 (None, error_dict)。
+
+    多值参数用逗号分隔；单个旧值（?status=in_progress）仍然有效。
+    approval_state 依赖 annotate_pending 的 pending_change_type。
+    """
+    statuses, error = _choice_csv(
+        query_params.get("status"), RequirementItemStatus.values, "status"
+    )
+    if error:
+        return None, error
+    if statuses:
+        queryset = queryset.filter(status__in=statuses)
+
+    priorities, error = _choice_csv(
+        query_params.get("priority"), RequirementPriority.values, "priority"
+    )
+    if error:
+        return None, error
+    if priorities:
+        queryset = queryset.filter(priority__in=priorities)
+
+    approval_states, error = _choice_csv(
+        query_params.get("approval_state"),
+        RequirementApprovalState.values,
+        "approval_state",
+    )
+    if error:
+        return None, error
+    if approval_states:
+        queryset = queryset.filter(approval_state_q(approval_states))
+
+    title = (query_params.get("title") or "").strip()
+    if title:
+        queryset = queryset.filter(title__icontains=title)
+
+    assignee_ids = split_query_csv(query_params.get("assignee_id"))
+    if assignee_ids:
+        queryset = queryset.filter(assignee_id__in=assignee_ids)
+
+    start_date, error = _parse_iso_date(query_params.get("start_date"), "start_date")
+    if error:
+        return None, error
+    start_from, error = _parse_iso_date(
+        query_params.get("start_date_from"), "start_date_from"
+    )
+    if error:
+        return None, error
+    start_to, error = _parse_iso_date(query_params.get("start_date_to"), "start_date_to")
+    if error:
+        return None, error
+    if start_date:
+        queryset = queryset.filter(start_date=start_date)
+    else:
+        if start_from:
+            queryset = queryset.filter(start_date__gte=start_from)
+        if start_to:
+            queryset = queryset.filter(start_date__lte=start_to)
+
+    target_date, error = _parse_iso_date(query_params.get("target_date"), "target_date")
+    if error:
+        return None, error
+    target_from, error = _parse_iso_date(
+        query_params.get("target_date_from"), "target_date_from"
+    )
+    if error:
+        return None, error
+    target_to, error = _parse_iso_date(
+        query_params.get("target_date_to"), "target_date_to"
+    )
+    if error:
+        return None, error
+    if target_date:
+        queryset = queryset.filter(target_date=target_date)
+    else:
+        if target_from:
+            queryset = queryset.filter(target_date__gte=target_from)
+        if target_to:
+            queryset = queryset.filter(target_date__lte=target_to)
+
+    return queryset, None
 
 
 class RequirementLinkError(Exception):
