@@ -1,10 +1,11 @@
 "use client";
 
-import { CircleDot, GitBranch } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirement,
   TRequirementBuiltinValues,
+  TRequirementItemStatus,
   TRequirementPriority,
   TRequirementTypeSchema,
 } from "@plane/types";
@@ -14,7 +15,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { RequirementParentDropdown } from "../requirement-parent-dropdown";
-import { shouldShowRequirementStatus } from "../requirement-builtin-fields";
+import { RequirementStatusCell } from "../requirement-status-cell";
 
 type TProps = {
   requirement: TRequirement;
@@ -23,6 +24,11 @@ type TProps = {
   /** 父项选择器的检索范围 */
   parentScope: { workspaceSlug: string; productId: string };
   onPatch: (patch: { builtin?: Partial<TRequirementBuiltinValues> }) => Promise<unknown>;
+  /**
+   * 改需求级交付状态。不走 onPatch、不受 readOnly 管 —— closed 行内容只读但状态要能
+   * 选回去重开；不传则状态 chip 只读。
+   */
+  onStatusChange?: (status: TRequirementItemStatus) => void;
 };
 
 /**
@@ -33,7 +39,7 @@ type TProps = {
  * 不该有两种读法；标签-值栅格留给整页右栏（RequirementDetailProperties）。
  */
 export const RequirementPropertyBar = (props: TProps) => {
-  const { requirement, requirementType, readOnly, parentScope, onPatch } = props;
+  const { requirement, requirementType, readOnly, parentScope, onPatch, onStatusChange } = props;
   const { t } = useTranslation();
 
   const patch = (builtin: Partial<TRequirementBuiltinValues>) => void onPatch({ builtin });
@@ -58,14 +64,12 @@ export const RequirementPropertyBar = (props: TProps) => {
         </div>
       </div>
 
-      {shouldShowRequirementStatus(requirement.status) && (
-        <div className={fieldShell(false)}>
-          <div className="flex h-7 min-w-0 items-center gap-1.5 pl-1.5 text-body-xs-medium leading-5 text-secondary">
-            <CircleDot className="size-3.5 shrink-0 text-tertiary" />
-            <span className="truncate">{t(`requirement_fields.statuses.${requirement.status}`)}</span>
-          </div>
+      {/* 状态 chip 与右侧几个 DropdownButton 同壳（h-5 边框小胶囊）；有 onStatusChange 才是下拉 */}
+      <div className={fieldShell(false)}>
+        <div className="flex h-7 min-w-0 items-center">
+          <RequirementStatusCell variant="chip" status={requirement.status} onChange={onStatusChange} />
         </div>
-      )}
+      </div>
 
       <div className={fieldShell(false)}>
         <PriorityDropdown

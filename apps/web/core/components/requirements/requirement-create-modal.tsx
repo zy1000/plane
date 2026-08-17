@@ -132,9 +132,9 @@ export const RequirementCreateModal = ({
   /**
    * 底部属性条上的内置列 = 内置列去掉标题、描述与状态。
    *
-   * 标题和描述在上面占主区，是这条需求的内容本身；状态由系统写，BuiltinCellEditor 对它
-   * 只渲染只读值，后端建行时也一律拍成 draft（row_base.py 的 bulk_save）—— 摆一个
-   * 改不动的字段是噪音。剩下的优先级/负责人/起止日期/父项才是「元数据」，归到底部。
+   * 标题和描述在上面占主区，是这条需求的内容本身；状态不走内容载荷（BuiltinCellEditor
+   * 对它只渲染只读值），后端建行时一律落 not_started，之后在网格 / 详情里单独改 ——
+   * 摆一个改不动的字段是噪音。剩下的优先级/负责人/起止日期/父项才是「元数据」，归到底部。
    */
   const propertyColumns = useMemo(
     () =>

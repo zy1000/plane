@@ -81,7 +81,7 @@ export const RequirementIssueRow = ({
   );
 
   return (
-    // 归档仍是事实（照常计入阶段派生与完成率），只在展示上置灰
+    // 归档仍是事实（照常计入工作项数与完成率），只在展示上置灰
     <div className={cn("flex items-center gap-2.5 px-3 py-2 text-12", isArchived && "opacity-60")}>
       {workItemLink ? (
         <a
@@ -146,8 +146,8 @@ type TProps = {
   };
   canManage: boolean;
   /**
-   * 关联/解除成功后由父级刷新需求行 —— 阶段/工作项数是服务端注解，重算后不重拉
-   * 这一行，网格与抽屉 seed 会停在旧值上。
+   * 关联/解除成功后由父级刷新需求行 —— 工作项数 / 完成率是服务端注解，不重拉这一行，
+   * 网格与抽屉 seed 会停在旧值上。关联/解除不改需求状态（状态是人工维护的）。
    */
   onChanged?: () => void;
 };

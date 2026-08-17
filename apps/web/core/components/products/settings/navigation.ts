@@ -43,7 +43,7 @@ export const getProductSettingsReturnPath = (params: {
   workspaceSlug: string;
 }) => {
   const { productId, returnTo, workspaceSlug } = params;
-  const fallbackPath = `/${workspaceSlug}/products/${productId}/dashboard`;
+  const fallbackPath = `/${workspaceSlug}/products/${productId}/requirements`;
   if (!returnTo) return fallbackPath;
 
   const workspacePathPrefix = `/${workspaceSlug}/`;

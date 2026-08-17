@@ -15,6 +15,7 @@ from plane.app.serializers.requirement import (
     RequirementConfigurationConflict,
     RequirementRollbackSerializer,
     RequirementSerializer,
+    RequirementStatusWriteSerializer,
 )
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.library_item import get_scoped_library
@@ -24,11 +25,15 @@ from plane.app.views.requirement.mixins import (
     get_scoped_policy,
     resolve_row_layer,
 )
-from plane.app.views.requirement.row_base import BaseRequirementRowViewSet
+from plane.app.views.requirement.row_base import (
+    BaseRequirementRowViewSet,
+    annotate_pending,
+)
 from plane.db.models import (
     Requirement,
     RequirementApprovalPolicy,
     RequirementApprover,
+    RequirementItemStatus,
 )
 from plane.utils.requirement_change import (
     RequirementChangeError,
@@ -41,7 +46,10 @@ from plane.utils.requirement import (
     requirement_types_field_payload_from_specs,
     scope_row_filter,
 )
-from plane.utils.requirement_project import annotate_project_links
+from plane.utils.requirement_project import (
+    annotate_project_ids,
+    set_requirement_status,
+)
 
 
 def policy_with_relations(policy_id):
@@ -187,7 +195,7 @@ class RequirementViewSet(BaseRequirementRowViewSet):
 
     def annotate_extra(self, queryset):
         # 需求详情的「所属项目」多选要拿到这条需求进了哪些项目
-        return annotate_project_links(queryset)
+        return annotate_project_ids(queryset)
 
     def get_queryset(self):
         return (
@@ -218,6 +226,11 @@ class RequirementViewSet(BaseRequirementRowViewSet):
                     {"error": "Requirement not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+            # 已关闭的需求内容只读，用户发起的回滚也算内容写入。拦在视图层而不是
+            # util 里：驳回时的系统性还原（_revert_rejected_items）复用同一个 util，
+            # 不该被 closed 挡住
+            if row.status == RequirementItemStatus.CLOSED:
+                return self._closed_response([row.id])
             try:
                 rollback_requirement_to_version(
                     requirement=row,
@@ -228,6 +241,37 @@ class RequirementViewSet(BaseRequirementRowViewSet):
                 payload = {"error": str(exc), "code": exc.code}
                 payload.update(exc.detail or {})
                 return Response(payload, status=status.HTTP_409_CONFLICT)
+        return Response(
+            RequirementSerializer(
+                row, context=self._row_context(layer, owner, [row])
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def set_status(self, request, *args, pk=None, **kwargs):
+        """需求级交付状态的写入口（产品侧）。与内容 PATCH 分开：不带 version、不进
+        内容 diff、评审中的行也能改；closed 行改成任意非 closed 值即重开。
+        项目侧对应的入口是 ProjectRequirementViewSet.partial_update。
+        """
+        serializer = RequirementStatusWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        owner, error = self._owner_or_error()
+        if error is not None:
+            return error
+        layer = self.resolve_layer(owner)
+        if not layer.queryset.filter(id=pk).exists():
+            return Response(
+                {"error": "Requirement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        set_requirement_status(
+            pk, status=serializer.validated_data["status"], actor=request.user
+        )
+        # 重读要带上 annotate_pending：评审中的行也能改状态，响应缺了
+        # pending_change_request_id 前端的「撤回」入口会消失
+        row = (
+            self.annotate_extra(annotate_pending(layer.queryset)).filter(id=pk).first()
+        )
         return Response(
             RequirementSerializer(
                 row, context=self._row_context(layer, owner, [row])

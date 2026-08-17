@@ -4,10 +4,8 @@
 
 """需求 ↔ 工作项的关联端点（项目侧）。
 
-这张关联表是研发段（in_progress / done）阶段派生的事实来源：有关联工作项时，
-研发中/完毕由工作项的 State.group 推导，手填入口随之关闭。每次增删之后
-**同步**调 recalculate_stage —— 显式调用，不挂信号（理由见
-utils/requirement_project.recalculate_stage 的 docstring）。
+这张关联表供项目侧的工作项数 / 完成率统计，不影响需求状态（状态是需求级的
+人工字段，见 RequirementItemStatus）。
 
 **不复用 BaseRequirementContainerViewSet** —— 容器基类的方向是
 container→requirements（list 返回需求行），这里方向相反（requirement→issues，
@@ -15,8 +13,8 @@ list 返回工作项行），409 语义也不同（冲突主语是「工作项�
 「需求没进项目」），强套基类每个方法都要覆盖。校验顺序借鉴它，bulk_create
 范式借鉴 ReleaseIssueViewSet。
 
-公共前置校验一条，报 409：需求必须已关联进本项目（先进项目，再挂项目下的
-事实 —— 反过来会绕开候选池的评审门槛）。
+公共前置校验两条，报 409：需求必须已关联进本项目（先进项目，再挂项目下的
+事实 —— 反过来会绕开候选池的评审门槛）；已关闭（closed）的需求不能新挂工作项。
 """
 
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -31,10 +29,11 @@ from plane.app.views.base import BaseViewSet
 from plane.db.models import (
     Issue,
     IssueAssignee,
+    Requirement,
     RequirementIssue,
+    RequirementItemStatus,
     RequirementProject,
 )
-from plane.utils.requirement_project import recalculate_stage
 
 
 def _requirement_display_id(requirement):
@@ -47,7 +46,7 @@ def _requirement_display_id(requirement):
 
 
 class RequirementIssueViewSet(BaseViewSet):
-    """需求 ↔ 工作项。关联 = 研发段（in_progress / done）的事实。"""
+    """需求 ↔ 工作项。供工作项数 / 完成率统计。"""
 
     model = RequirementIssue
 
@@ -125,9 +124,21 @@ class RequirementIssueViewSet(BaseViewSet):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
+        # 已关闭的需求不进任何关联选择器：不能新挂工作项（解除仍允许）
+        if Requirement.objects.filter(
+            id=requirement_id, status=RequirementItemStatus.CLOSED
+        ).exists():
+            return Response(
+                {
+                    "error": "Closed requirements cannot link work items.",
+                    "code": "REQUIREMENT_CLOSED",
+                    "requirement_ids": [str(requirement_id)],
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         # ② 工作项必须全部落在本项目 —— 保证 RequirementIssue.project =
-        # Issue.project 的不变量（重算按 (requirement, project) 聚合时不穿透 issue 表）
+        # Issue.project 的不变量（按 (requirement, project) 聚合时不穿透 issue 表）
         found = {
             str(value)
             for value in Issue.objects.filter(
@@ -189,45 +200,22 @@ class RequirementIssueViewSet(BaseViewSet):
             batch_size=100,
             ignore_conflicts=True,
         )
-        # 同一 (需求, 项目)，一次重算即可，不必逐条
-        recalculate_stage(
-            requirement_id,
-            project_id,
-            trigger={"type": "issue_linked", "issue_ids": requested},
-            actor=request.user,
-        )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def destroy(self, request, slug, project_id, requirement_id, issue_id):
-        link = (
-            RequirementIssue.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                requirement_id=requirement_id,
-                issue_id=issue_id,
-            )
-            .select_related("issue")
-            .first()
-        )
+        link = RequirementIssue.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            requirement_id=requirement_id,
+            issue_id=issue_id,
+        ).first()
         if link is None:
             return Response(
                 {"error": "This work item is not linked to it."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        # 名称存快照：工作项后续可能被删，留痕必须自足可读
-        issue_name = link.issue.name if link.issue else ""
         link.delete()
-        recalculate_stage(
-            requirement_id,
-            project_id,
-            trigger={
-                "type": "issue_unlinked",
-                "issue_id": str(issue_id),
-                "issue_name": issue_name,
-            },
-            actor=request.user,
-        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)

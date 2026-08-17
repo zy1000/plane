@@ -27,7 +27,7 @@ from plane.app.serializers.requirement import (
 from plane.app.views.base import BaseViewSet
 from plane.db.models import Requirement, RequirementItemStatus
 from plane.utils.requirement import (
-    BUILTIN_COLUMNS,
+    CONTENT_BUILTIN_COLUMNS,
     RequirementBatchConflict,
     filter_requirement_row_ids,
     requirement_content_values,
@@ -38,6 +38,7 @@ from plane.utils.requirement import (
 
 
 IN_REVIEW_MESSAGE = "This requirement is under review and is read-only."
+CLOSED_MESSAGE = "This requirement is closed and is read-only. Reopen it to edit."
 DELETE_NEEDS_APPROVAL_MESSAGE = (
     "Deleting an approved requirement needs approval. Submit a delete review instead."
 )
@@ -125,6 +126,17 @@ class BaseRequirementRowViewSet(BaseViewSet):
         return Response(payload, status=status.HTTP_409_CONFLICT)
 
     @staticmethod
+    def _closed_response(row_ids):
+        return Response(
+            {
+                "error": CLOSED_MESSAGE,
+                "code": "REQUIREMENT_CLOSED",
+                "requirement_ids": [str(row_id) for row_id in row_ids],
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    @staticmethod
     def _delete_needs_approval_response(row_ids):
         return Response(
             {
@@ -187,6 +199,10 @@ class BaseRequirementRowViewSet(BaseViewSet):
             except drf_serializers.ValidationError as exc:
                 return Response({"ids": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
             queryset = queryset.filter(id__in=row_ids)
+        elif request.query_params.get("exclude_closed") in ("true", "1"):
+            # 关联选择器（父项下拉等）用：已关闭的需求不进任何选择器。
+            # 主列表默认不带；?ids= 回显豁免 —— 已指向已关闭父项的行仍要显示父项标题
+            queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
 
         search = request.query_params.get("search", "")
         if search.strip() or normalized_filters:
@@ -271,8 +287,8 @@ class BaseRequirementRowViewSet(BaseViewSet):
                 )
                 serializer.is_valid(raise_exception=True)
                 builtin = dict(serializer.validated_data["builtin"])
-                # 新行一律从草稿开始，客户端传什么状态都不算数（DB 约束也这么要求）
-                builtin["status"] = RequirementItemStatus.DRAFT
+                # 新行一律从「未开始」开始，客户端传什么状态都不算数
+                builtin["status"] = RequirementItemStatus.NOT_STARTED
                 row = layer.insert(
                     data=serializer.validated_data["data"],
                     builtin=builtin,
@@ -312,12 +328,15 @@ class BaseRequirementRowViewSet(BaseViewSet):
                     {"error": "Requirement not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            # 闸门就放在已经锁住的这一行上，零额外查询
+            # 闸门就放在已经锁住的这一行上，零额外查询。锁优先于 closed
             if row.pending_change_item_id:
                 return self._locked_response(
                     [row.id],
                     change_request_id=row.pending_change_item.change_request_id,
                 )
+            # 已关闭的需求内容只读；状态本身走独立的 set_status 端点（重开）
+            if row.status == RequirementItemStatus.CLOSED:
+                return self._closed_response([row.id])
 
             serializer = RequirementUpdateSerializer(
                 data=request.data,
@@ -343,14 +362,16 @@ class BaseRequirementRowViewSet(BaseViewSet):
             before = requirement_content_values(row)
             was_approved = row_was_approved(row)
             for column, value in serializer.validated_data["builtin"].items():
-                setattr(row, column, value)
+                # status 不算内容、不由内容路径写（见 NON_CONTENT_BUILTIN_COLUMNS）
+                if column in CONTENT_BUILTIN_COLUMNS:
+                    setattr(row, column, value)
             row.data = serializer.validated_data["data"]
             row.version += 1
             row.updated_by = request.user
             resync_approved_row_version(row, before=before, was_approved=was_approved)
             row.save(
                 update_fields=[
-                    *BUILTIN_COLUMNS,
+                    *CONTENT_BUILTIN_COLUMNS,
                     "data",
                     "version",
                     "approved_row_version",
@@ -448,12 +469,17 @@ class BaseRequirementRowViewSet(BaseViewSet):
             )
             serializer.is_valid(raise_exception=True)
 
-            # 锁定与「已确认不能直接删」折进现成的 conflicts 形状，前端不必学新的错误结构
+            # 锁定 / 已关闭 / 「已确认不能直接删」折进现成的 conflicts 形状，
+            # 前端不必学新的错误结构。已关闭只拦内容更新，不拦删除
             conflicts = []
             for update in serializer.validated_data["updates"]:
                 row = rows_by_id.get(update["id"])
-                if row is not None and row.pending_change_item_id:
+                if row is None:
+                    continue
+                if row.pending_change_item_id:
                     conflicts.append({"id": str(row.id), "reason": "in_review"})
+                elif row.status == RequirementItemStatus.CLOSED:
+                    conflicts.append({"id": str(row.id), "reason": "closed"})
             for delete in serializer.validated_data["deletes"]:
                 row = rows_by_id.get(delete["id"])
                 if row is None:
@@ -477,7 +503,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
                 payload = dict(payload)
                 payload["builtin"] = {
                     **payload["builtin"],
-                    "status": RequirementItemStatus.DRAFT,
+                    "status": RequirementItemStatus.NOT_STARTED,
                 }
                 creates.append(payload)
 

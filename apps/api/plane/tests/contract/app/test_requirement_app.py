@@ -31,7 +31,7 @@ FIELD_PAYLOAD_KEYS = (
     "field_type",
     "is_required",
     "is_active",
-    "field_category",
+    "show_in_library",
     "config",
     "default_value",
 )
@@ -112,7 +112,7 @@ class TestRequirementApp:
                 "field_type": "text",
                 "is_required": False,
                 "is_active": True,
-                "field_category": "standard",
+                "show_in_library": True,
                 "config": {},
                 "default_value": None,
                 "children": [],
@@ -256,7 +256,7 @@ class TestRequirementApp:
         assert item.title == "标准条目"
         # 标准库条目永不走审批 —— 由 req_library_item_never_approved 约束硬保证
         assert item.approved_version is None
-        assert item.status == "draft"
+        assert item.status == "not_started"
         # 库条目有自己作用域内的编号，且它是导入的源头，不可能有来源
         assert item.sequence_id == 1
         assert created.data["display_id"] == f"{library.identifier}-1"

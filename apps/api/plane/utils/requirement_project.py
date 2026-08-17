@@ -1,12 +1,10 @@
-"""需求进项目：候选池、关联校验、项目侧的提单授权，以及阶段重算引擎。
+"""需求进项目：候选池、关联校验、项目侧的提单授权，以及需求状态的写入口。
 
 这里只处理「引用」这一层。需求本体、字段结构、版本、基线、审批名单全部仍归产品，
-项目侧一律只读 —— 唯一的写入口是关联关系本身（项目/迭代/发布三张关联表）与
-sort_order。stage 是**纯派生列**：由 recalculate_stage 按现存关联事实取最高档，
-不接受任何手动写入。
-
-研发段（in_progress / done）已接入工作项事实：有关联工作项时由 Issue 状态派生，
-零工作项时沿用手填 + 地板规则（双轨制，见 recalculate_stage）。
+项目侧一律只读 —— 写入口只有关联关系本身（项目/迭代/发布/工作项四张关联表）、
+sort_order，以及需求级的交付状态 `Requirement.status`（人工维护，产品侧与项目侧
+共用 set_requirement_status；只有两条只升不降的自动推进 promote_*，见
+RequirementItemStatus 的 docstring）。
 """
 
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -14,19 +12,17 @@ from django.contrib.postgres.fields import ArrayField
 from django.db.models import (
     BooleanField,
     ExpressionWrapper,
-    JSONField,
     OuterRef,
     Q,
     Subquery,
     UUIDField,
     Value,
 )
-from django.db.models.functions import Coalesce, JSONObject
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from plane.db.models import (
     Cycle,
-    MANUAL_STAGES,
     ProductProject,
     ReleaseStatus,
     Requirement,
@@ -35,10 +31,7 @@ from plane.db.models import (
     RequirementIssue,
     RequirementItemStatus,
     RequirementProject,
-    RequirementProjectActivity,
-    RequirementProjectStage,
     RequirementRelease,
-    STAGE_LADDER,
     StateGroup,
 )
 
@@ -75,11 +68,10 @@ def linked_requirement_ids(project_id):
 
 
 def linkable_requirements_queryset(*, slug, project_id):
-    """候选池：本项目关联产品下、已通过评审、且尚未关联进来的需求。
+    """候选池：本项目关联产品下、已通过评审、未关闭、且尚未关联进来的需求。
 
     只放 approved_version 非空的行（决策 3）：未过评审的需求不进入交付链路。
-    副作用是正向的 —— 被关联的需求必然有 approved_version，后续把 status 推到
-    implemented 不会撞上 req_draft_status_iff_never_approved。
+    已关闭（closed）的需求不进任何关联选择器（见 RequirementItemStatus）。
     """
     return (
         Requirement.objects.filter(
@@ -87,6 +79,7 @@ def linkable_requirements_queryset(*, slug, project_id):
             product_id__in=linked_product_ids(project_id),
             approved_version__isnull=False,
         )
+        .exclude(status=RequirementItemStatus.CLOSED)
         .exclude(id__in=linked_requirement_ids(project_id))
         .select_related("product")
         .order_by("product__identifier", "sort_order", "created_at", "id")
@@ -117,44 +110,32 @@ def linkable_facets(*, slug, project_id):
 def linked_requirements_queryset(*, slug, project_id):
     """本项目已关联的需求，按关联行的 sort_order 排。
 
-    stage / link_sort_order 从关联行拉平到需求行上，列表序列化器直接读注解，
-    不必为每行再查一次中间表。
+    link_sort_order 从关联行拉平到需求行上，列表序列化器直接读注解，不必为每行
+    再查一次中间表。需求状态是需求本体上的真实列（Requirement.status），不需要注解。
 
-    另外几个注解服务「阶段可解释」：latest_cycle_name / latest_release_name 是
-    阶段胶囊 tooltip 的推导依据（派生档不给依据用户只能猜）；has_completed_cycle
-    供序列化器算 carryover（已排期但迭代已结束的顺延信号）；stage_locked 告诉前端
-    这一行的阶段下拉该不该禁用（挂在在途发布单上时禁止手动改，见 set_manual_stage）。
-
-    工作项三个计数供网格「工作项数 + 完成率」列（完成率由前端算，这里只给分子
-    分母）与阶段下拉禁用判定 —— issue_count > 0 即研发段派生，与 has_issue_links
-    同一条判定；linked_cycle_ids 供「拆分工作项」弹窗在恰好一个未取消迭代时预填
-    （多个不猜）。
+    latest_release_name 供「目标发布」chip 展示；工作项三个计数供网格「工作项数 +
+    完成率」列（完成率由前端算，这里只给分子分母）；linked_cycle_ids 供「拆分
+    工作项」弹窗在恰好一个未取消迭代时预填（多个不猜）。
     """
-    from django.db.models import Count, Exists
+    from django.db.models import Count
 
     link_rows = RequirementProject.objects.filter(
         requirement_id=OuterRef("pk"), project_id=project_id
     )
-    # 有效迭代关联（未取消；NULL 状态的历史行不算已取消）。取最近一条的名字做依据。
+    # 有效迭代关联（未取消；NULL 状态的历史行不算已取消）。
     # cycle__/release__deleted_at 显式过滤：FK 穿透不走软删 manager，
-    # 推导依据不能指向一个已删除的容器
+    # 不能指向一个已删除的容器
     valid_cycle_rows = RequirementCycle.objects.filter(
         requirement_id=OuterRef("pk"),
         project_id=project_id,
         cycle__deleted_at__isnull=True,
     ).filter(Q(cycle__status__isnull=True) | ~Q(cycle__status=Cycle.Status.CANCELLED))
-    # 在途或已发布的发布关联（驳回/取消的不再作为依据展示）
+    # 在途或已发布的发布关联（驳回/取消的不再展示）
     live_release_rows = RequirementRelease.objects.filter(
         requirement_id=OuterRef("pk"),
         project_id=project_id,
         release__deleted_at__isnull=True,
     ).exclude(release__status__in=[ReleaseStatus.REJECTED, ReleaseStatus.CANCELLED])
-    completed_cycle_rows = RequirementCycle.objects.filter(
-        requirement_id=OuterRef("pk"),
-        project_id=project_id,
-        cycle__deleted_at__isnull=True,
-        cycle__status=Cycle.Status.COMPLETED,
-    )
     # live 工作项关联。issue__deleted_at 过滤理由同上：删除工作项与异步级联之间的
     # 窗口期里，已删行不能再计进工作项数与完成率
     live_issue_rows = RequirementIssue.objects.filter(
@@ -168,13 +149,9 @@ def linked_requirements_queryset(*, slug, project_id):
             id__in=linked_requirement_ids(project_id),
         )
         .annotate(
-            stage=Subquery(link_rows.values("stage")[:1]),
             link_sort_order=Subquery(link_rows.values("sort_order")[:1]),
-            latest_cycle_name=Subquery(
-                valid_cycle_rows.order_by("-created_at").values("cycle__name")[:1]
-            ),
             latest_release_name=Subquery(
-                # 已发布的优先于在途的：released 档的依据必须指向那张已发布的单
+                # 已发布的优先于在途的
                 live_release_rows.annotate(
                     is_completed=ExpressionWrapper(
                         Q(release__status=ReleaseStatus.COMPLETED),
@@ -184,10 +161,6 @@ def linked_requirements_queryset(*, slug, project_id):
                 .order_by("-is_completed", "-created_at")
                 .values("release__name")[:1]
             ),
-            has_completed_cycle=Exists(completed_cycle_rows),
-            # 与 set_manual_stage 的降档锁同一条判定（在途 = 未驳回未取消），
-            # 让前端直接读而不是从 latest_release_name 反推
-            stage_locked=Exists(live_release_rows),
             # Count 子查询统一 .order_by() 清默认排序再 GROUP BY —— 少了它
             # 排序列会被拖进 GROUP BY，单行子查询变多行
             issue_count=Subquery(
@@ -210,7 +183,7 @@ def linked_requirements_queryset(*, slug, project_id):
                 .annotate(c=Count("id"))
                 .values("c")[:1]
             ),
-            # 复用有效迭代口径（未删未取消），照 annotate_project_links 的
+            # 复用有效迭代口径（未删未取消），照 annotate_project_ids 的
             # ArrayAgg + Coalesce 空数组范式
             linked_cycle_ids=Coalesce(
                 Subquery(
@@ -227,16 +200,12 @@ def linked_requirements_queryset(*, slug, project_id):
     )
 
 
-def annotate_project_links(queryset):
-    """把「这条需求进了哪些项目、各在什么阶段」注解成 JSON 数组
-    `[{"project_id": ..., "stage": ...}]`。
+def annotate_project_ids(queryset):
+    """把「这条需求进了哪些项目」注解成 UUID 数组 `project_ids`。
 
     照 utils/grouper.py 的 ArrayAgg 子查询范式。deleted_at__isnull=True 是必需的 ——
     关联行是软删的，漏了它解除关联的项目会一直挂在需求上。归档项目一并排除，否则
     详情页的「所属项目」多选会回显一个选不中的项目。
-
-    序列化器从这一个注解同时派生 project_ids（兼容旧消费方）与 project_links
-    （产品侧的项目阶段徽章、零关联时前端显示「未开始」）。
     """
     subquery = Subquery(
         RequirementProject.objects.filter(
@@ -245,13 +214,11 @@ def annotate_project_links(queryset):
             project__archived_at__isnull=True,
         )
         .values("requirement_id")
-        .annotate(arr=ArrayAgg(JSONObject(project_id="project_id", stage="stage")))
+        .annotate(arr=ArrayAgg("project_id"))
         .values("arr")
     )
     return queryset.annotate(
-        project_links=Coalesce(
-            subquery, Value([], output_field=ArrayField(JSONField()))
-        )
+        project_ids=Coalesce(subquery, Value([], output_field=ArrayField(UUIDField())))
     )
 
 
@@ -261,13 +228,13 @@ def requirement_facets(*, project_id, product_id=None):
     **口径**（改之前先读完，分面计数最容易出的 bug 就是「点了筛选之后其他分面全变 0」）：
     - `by_product` 统计**全集**，不受任何筛选影响 —— 产品 tab 是最外层作用域，它自己的
       数字不该随选中项变化，否则点进 ECOM 之后 PAY 变成 0，用户就再也回不去了。
-    - `by_stage` / `by_requirement_type` 跟随**当前选中的产品**（视觉上它们嵌套在产品
-      tab 之下），但不跟随搜索、阶段、类型自身 —— 同理，阶段条上的数字不能因为选了
-      「研发中」就把其余四段清零。
+    - `by_status` / `by_requirement_type` 跟随**当前选中的产品**（视觉上它们嵌套在产品
+      tab 之下），但不跟随搜索、状态、类型自身 —— 同理，状态条上的数字不能因为选了
+      「进行中」就把其余几段清零。
 
-    实现上直接聚合 `RequirementProject` 表，**不要**去
-    `linked_requirements_queryset` 的 `stage` Subquery 注解上做 GROUP BY —— 那会把整个
-    子查询塞进 GROUP BY 子句。这里一次分组扫的是关联表，代价与页大小无关。
+    实现上直接聚合 `RequirementProject` 表并 join 到需求本体的 `status` 真实列，
+    **不要**去 `linked_requirements_queryset` 的 Subquery 注解上做 GROUP BY —— 那会
+    把整个子查询塞进 GROUP BY 子句。这里一次分组扫的是关联表，代价与页大小无关。
     """
     from django.db.models import Count
 
@@ -298,10 +265,11 @@ def requirement_facets(*, project_id, product_id=None):
 
     scoped = base.filter(requirement__product_id=product_id) if product_id else base
 
-    # 五个阶段的键恒存在（含 0）：前端的阶段条是固定五段，缺键会让某一段直接消失
-    by_stage = {value: 0 for value in RequirementProjectStage.values}
-    for row in scoped.values("stage").annotate(count=Count("id")):
-        by_stage[row["stage"]] = row["count"]
+    # 五个状态的键恒存在（含 0）：前端的状态条是固定五段，缺键会让某一段直接消失
+    by_status = {value: 0 for value in RequirementItemStatus.values}
+    for row in scoped.values("requirement__status").annotate(count=Count("id")):
+        if row["requirement__status"] in by_status:
+            by_status[row["requirement__status"]] = row["count"]
 
     by_requirement_type = {
         str(row["requirement__requirement_type_id"]): row["count"]
@@ -312,18 +280,21 @@ def requirement_facets(*, project_id, product_id=None):
 
     return {
         "by_product": by_product,
-        "by_stage": by_stage,
+        "by_status": by_status,
         "by_requirement_type": by_requirement_type,
         "total": sum(item["count"] for item in by_product),
     }
 
 
-def stage_counts_by_project(*, product_id, project_ids):
-    """产品侧「关联项目」列表用：每个项目引用了本产品多少需求、各阶段各多少。
+def status_counts_by_project(*, product_id, project_ids):
+    """产品侧「关联项目」列表用：每个项目引用了本产品多少需求、各状态各多少。
 
-    每个 bucket 在五个阶段键之外另带 issue_total / issue_completed /
+    状态是需求级的（跨项目共享一份），所以同一条需求进了几个项目就会在几个项目的
+    bucket 里各计一次 —— 这里统计的是「该项目引用的本产品需求，按需求状态的分布」。
+
+    每个 bucket 在五个状态键之外另带 issue_total / issue_completed /
     issue_cancelled 三个工作项聚合键（本产品需求在该项目下的 live 关联工作项，
-    按 State.group 分桶），供前端按任务完成率展示 —— 阶段键与工作项键混在同一个
+    按 State.group 分桶），供前端按任务完成率展示 —— 状态键与工作项键混在同一个
     dict 里，消费方按键取用，不要对整个 bucket 求和。
 
     一次分组查询覆盖所有项目，序列化器按 project_id 取用 —— 不要每行查一次。
@@ -332,7 +303,7 @@ def stage_counts_by_project(*, product_id, project_ids):
 
     counts = {
         str(project_id): {
-            **{value: 0 for value in RequirementProjectStage.values},
+            **{value: 0 for value in RequirementItemStatus.values},
             "issue_total": 0,
             "issue_completed": 0,
             "issue_cancelled": 0,
@@ -346,13 +317,13 @@ def stage_counts_by_project(*, product_id, project_ids):
             # 同上：软删的需求不该计进产品侧的需求数与完成率
             requirement__deleted_at__isnull=True,
         )
-        .values("project_id", "stage")
+        .values("project_id", "requirement__status")
         .annotate(count=Count("id"))
     )
     for row in rows:
         bucket = counts.get(str(row["project_id"]))
-        if bucket is not None:
-            bucket[row["stage"]] = row["count"]
+        if bucket is not None and row["requirement__status"] in bucket:
+            bucket[row["requirement__status"]] = row["count"]
 
     # 工作项聚合同样一次分组覆盖所有项目。issue__/requirement__deleted_at 显式
     # 过滤理由同上：FK 穿透不走软删 manager，窗口期里已删行不能再计进完成率
@@ -393,7 +364,7 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
 
     rows = list(
         Requirement.objects.filter(id__in=requested, workspace__slug=slug).only(
-            "id", "product_id", "approved_version"
+            "id", "product_id", "approved_version", "status"
         )
     )
     found = {str(row.id): row for row in rows}
@@ -412,6 +383,8 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
             conflicts.append({"id": requirement_id, "reason": "PRODUCT_NOT_LINKED"})
         elif row.approved_version is None:
             conflicts.append({"id": requirement_id, "reason": "NOT_APPROVED"})
+        elif row.status == RequirementItemStatus.CLOSED:
+            conflicts.append({"id": requirement_id, "reason": "CLOSED"})
 
     if conflicts:
         raise RequirementLinkError(
@@ -459,6 +432,58 @@ def resolve_linkable_products(*, user, slug, project, product_ids):
     return requested
 
 
+def resolve_linkable_projects(*, user, slug, product, project_ids):
+    """解析一批可从产品侧关联的项目 id。
+
+    产品页写这张桥时，不能只看「看得见这个项目」：公开项目对工作区全员可见，
+    产品负责人若能把产品塞进任意公开项目，等于改了别人的需求候选池。
+    所以这里要求调用者是该项目的活跃成员，且项目未归档、与产品同工作区。
+    """
+    from plane.db.models import Project
+
+    requested = list(dict.fromkeys(str(item) for item in project_ids))
+    if not requested:
+        return []
+
+    rows = Project.objects.filter(
+        id__in=requested,
+        workspace__slug=slug,
+        workspace_id=product.workspace_id,
+        archived_at__isnull=True,
+        project_projectmember__member=user,
+        project_projectmember__is_active=True,
+    ).distinct()
+    visible = {str(row.id) for row in rows}
+    missing = [item for item in requested if item not in visible]
+    if missing:
+        raise RequirementLinkError(
+            "Some projects do not exist in this workspace.",
+            code="PROJECT_LINK_REJECTED",
+            detail={"project_ids": missing},
+        )
+    return requested
+
+
+def unlink_product_from_project(*, slug, project_id, product_id):
+    """解除一条产品 ↔ 项目关联。该项目下还有本产品需求时拒绝，避免留下孤儿引用。"""
+    linked_count = RequirementProject.objects.filter(
+        project_id=project_id, requirement__product_id=product_id
+    ).count()
+    if linked_count:
+        raise RequirementLinkError(
+            "Unlink this product's requirements from the project first.",
+            code="PRODUCT_HAS_LINKED_REQUIREMENTS",
+            detail={
+                "product_id": str(product_id),
+                "project_id": str(project_id),
+                "requirement_count": linked_count,
+            },
+        )
+    ProductProject.objects.filter(
+        workspace__slug=slug, project_id=project_id, product_id=product_id
+    ).delete()
+
+
 def is_requirement_linked(*, requirement_id, project_id):
     return RequirementProject.objects.filter(
         requirement_id=requirement_id, project_id=project_id
@@ -504,332 +529,61 @@ def resolve_policy_for_linked_requirement(requirement):
     )
 
 
-def recalculate_stage(requirement_id, project_id, *, trigger=None, actor=None):
-    """按现存关联事实重算 (需求, 项目) 的派生档，再用地板规则护住人工档。
+def set_requirement_status(requirement_id, *, status, actor=None):
+    """需求状态的人工写入口，产品侧与项目侧共用。
 
-    事实 → 档位（全部现查关联对象的当前状态，不存副本）：
-    - 存在未取消的迭代关联            → planned（已排期）
-    - 任一关联工作项 group=started     → in_progress（研发中）
-    - 至少一条 completed 工作项且其余
-      全是 completed/cancelled         → done（研发完毕）
-    - 存在已发布（completed）发布关联  → released（已发布）
-    - 什么都没有                      → linked（已立项）
+    条件化 `.update()` 而不是 `row.save()`：绕开 `Requirement.save()` 的其他副作用，
+    不 bump version、不碰 approved_row_version —— 状态不算内容
+    （utils/requirement.NON_CONTENT_BUILTIN_COLUMNS），改它不该触发评审。
 
-    研发段（in_progress / done）是**双轨制**：有关联工作项时完全由工作项的
-    State.group 派生（手填入口同步关闭，见 set_manual_stage），两条地板一并
-    让位 —— 事实可查之后，遗留的手工档与 released 回落取 done 的启发式都不再是
-    可信推断，继续保护会卡出「工作项还在 started、档位停在 done」的矛盾状态。
-    零工作项时保持手填：这里唯一为它们做的事是地板规则 —— 派生结果不得把当前的
-    人工档往下冲，所以标了「研发完毕」的需求再进下一个迭代、被解除迭代关联、
-    进发布单、发布单被驳回或取消，一律保持研发完毕。
-
-    **幂等，但不再顺序无关** —— 零工作项时结果依赖 link.stage 的当前值（地板取
-    自它）。这是人工档能存活的唯一机制，不是脏代码：没有它，任何一次容器事件都
-    会把人手填的研发完毕算没了，而容器事件恰恰包括「关联进发布单」这个最该用到
-    它的时刻。
-
-    已发布回落时地板取 done 而非当前值（仅零工作项路径）：进发布单不再要求先
-    研发完毕（该门槛已移除），所以这不再是一个可证明安全的推断，而是一个启发式
-    默认 —— 已经发布过的东西，在途研发状态被判定回滚时，把它当成至少「研发完毕」
-    比直接掉回已排期更接近事实（发布单被改回测试中不代表代码退回去了）。有工作
-    项时启发式的前提（无事实可查）消失：started → in_progress 是真相，全部完成
-    的 done 由候选档自然产出，不需要地板兜底。
-
-    **显式调用，不挂信号** —— 信号会让阶段推导与迭代/发布写路径耦合到无法排查。
-    写入点清单：需求↔迭代/发布关联增删（views/requirement/container.py）、迭代状态
-    变更涉及已取消（views/cycle/base.py）、发布状态任何变更（views/release/base.py）、
-    人工设档后的归一（utils.set_manual_stage）、工作项关联增删与 Issue.state_id
-    落库后的重算（recalculate_stages_for_issue / recalculate_stages_for_issues）。
-
-    阶段变化时写一行 RequirementProjectActivity 留痕（trigger 记触发来源快照），
-    并级联重算需求本体 status。返回新阶段；无变化返回 None。
+    不判 closed（closed → 任意非 closed 值就是「重开」）、不判 is_locked（评审轴与
+    状态轴正交）。status 的合法性由调用方的 ChoiceField 校验。
     """
-    from django.db.models import Count
-
-    link = RequirementProject.objects.filter(
-        requirement_id=requirement_id, project_id=project_id
-    ).first()
-    if link is None:
-        return None
-
-    # 迭代事实。cycle.status 可空（历史行），空状态不等于已取消 —— 用显式的
-    # isnull 分支兜住，否则 exclude/~Q 的 SQL 语义会把 NULL 行一并丢掉。
-    # cycle__deleted_at 必须显式过滤：FK 穿透不走软删 manager，删除容器与
-    # 异步级联之间的窗口期里，已删迭代不能再算有效事实。
-    has_scheduled_cycle = (
-        RequirementCycle.objects.filter(
-            requirement_id=requirement_id,
-            project_id=project_id,
-            cycle__deleted_at__isnull=True,
-        )
-        .filter(
-            Q(cycle__status__isnull=True) | ~Q(cycle__status=Cycle.Status.CANCELLED)
-        )
-        .exists()
-    )
-
-    # 发布事实只剩一条：有没有已发布的关联。在途关联不再产出任何档位 ——
-    # 圈进发版范围不等于研发完成。release__deleted_at 过滤理由同上
-    has_released = RequirementRelease.objects.filter(
-        requirement_id=requirement_id,
-        project_id=project_id,
-        release__deleted_at__isnull=True,
-        release__status=ReleaseStatus.COMPLETED,
-    ).exists()
-
-    # 工作项事实（研发段的事实来源）。issue__deleted_at 显式过滤：FK 穿透不走
-    # 软删 manager，删除工作项与异步级联之间的窗口期里已删行不能再算事实。
-    issue_groups = {
-        row["issue__state__group"]: row["count"]
-        for row in RequirementIssue.objects.filter(
-            requirement_id=requirement_id,
-            project_id=project_id,
-            issue__deleted_at__isnull=True,
-        )
-        .order_by()  # 清默认排序，防止排序列进 GROUP BY
-        .values("issue__state__group")
-        .annotate(count=Count("id"))
-    }
-    issue_total = sum(issue_groups.values())
-    started_count = issue_groups.get(StateGroup.STARTED.value, 0)
-    completed_count = issue_groups.get(StateGroup.COMPLETED.value, 0)
-    cancelled_count = issue_groups.get(StateGroup.CANCELLED.value, 0)
-
-    candidates = [RequirementProjectStage.LINKED]
-    if has_scheduled_cycle:
-        candidates.append(RequirementProjectStage.PLANNED)
-    if issue_total:
-        if started_count:
-            # 任一条开工即研发中（含「有 started 也有 completed」的混合态）
-            candidates.append(RequirementProjectStage.IN_PROGRESS)
-        elif completed_count and (issue_total - completed_count - cancelled_count) == 0:
-            # 至少一条完成，且除 completed/cancelled 外没有别的桶
-            candidates.append(RequirementProjectStage.DONE)
-        # 全 cancelled / 只有待办未开始 / 只有 NULL 状态 → 不产研发档，
-        # 自然回落 planned / linked
-    if has_released:
-        candidates.append(RequirementProjectStage.RELEASED)
-
-    new_stage = max(candidates, key=STAGE_LADDER.index)
-
-    # 地板只在零工作项时生效：有工作项后研发段事实可查，两条地板都让位（理由见
-    # docstring 的双轨制说明）
-    if not issue_total:
-        # 地板：派生结果不得把人工档往下冲。released 回落时地板取 done（理由见 docstring）
-        floor = None
-        if link.stage in MANUAL_STAGES:
-            floor = link.stage
-        elif link.stage == RequirementProjectStage.RELEASED:
-            floor = RequirementProjectStage.DONE
-        if floor is not None:
-            new_stage = max(new_stage, floor, key=STAGE_LADDER.index)
-
-    if link.stage == new_stage:
-        # 阶段没变也要级联 status：解除项目关联等场景改变的是「全部已发布」的
-        # 分母而不是本行阶段
-        recalculate_requirement_status(requirement_id)
-        return None
-
-    old_stage = link.stage
-    link.stage = new_stage
-    link.save(update_fields=["stage", "updated_at"])
-    RequirementProjectActivity.objects.create(
-        workspace_id=link.workspace_id,
-        project_id=link.project_id,
-        requirement_id=requirement_id,
-        old_stage=old_stage,
-        new_stage=new_stage,
-        trigger=trigger or {},
-        created_by_id=actor.id if actor else None,
+    Requirement.objects.filter(id=requirement_id).update(
+        status=status,
+        updated_at=timezone.now(),
         updated_by_id=actor.id if actor else None,
     )
-    recalculate_requirement_status(requirement_id)
-    return new_stage
 
 
-def has_live_release_link(requirement_id, project_id):
-    """这条 (需求, 项目) 是否挂在未驳回未取消的发布单上。
+def promote_on_project_link(requirement_ids):
+    """自动推进 (a)：需求被关联进项目 → not_started → projected。只升不降、幂等。
 
-    与 linked_requirements_queryset 的 stage_locked 注解同一条判定，两处必须一致：
-    前端据注解禁用下拉，后端据这里拒绝写入，判定不同会出现「点得动但报错」。
+    重复关联同一项目也算「关联事件」—— 曾被人工降回 not_started 的会再升一次。
     """
-    return RequirementRelease.objects.filter(
-        requirement_id=requirement_id,
-        project_id=project_id,
-        release__deleted_at__isnull=True,
-    ).exclude(
-        release__status__in=[ReleaseStatus.REJECTED, ReleaseStatus.CANCELLED]
-    ).exists()
-
-
-def has_issue_links(requirement_id, project_id):
-    """该 (需求, 项目) 是否有 live 工作项关联。与 linked_requirements_queryset 的
-    issue_count 注解同一条判定 —— 前端据注解禁用下拉，后端据这里拒绝写入。"""
-    return RequirementIssue.objects.filter(
-        requirement_id=requirement_id,
-        project_id=project_id,
-        issue__deleted_at__isnull=True,
-    ).exists()
-
-
-def set_manual_stage(requirement_id, project_id, *, stage, actor=None):
-    """人工设置研发段档位。这是 stage 唯一的手动写入口。
-
-    只接受 in_progress / done / planned 三个值：前两个是人工档；planned 是「撤销
-    人工标记」—— 写进去之后立刻走 recalculate_stage 归一，没有迭代关联的需求会
-    落回 linked，因为「已排期」必须对应真实的迭代事实，不能靠手填假装。
-
-    **降档锁**：挂在在途发布单上时整行禁止手动改。已发布（released）同样被这条
-    盖住（completed 不在 dead_statuses 里）。进发布单不再要求先研发完毕，但这条
-    锁依然保证「已经进了发布单的需求，研发段档位不会在挂靠期间被人悄悄改低」。
-    想改就先从发布单里移出去 —— 动作明确，比默默降档更难出错。
-
-    有关联工作项时三个值一律拒绝（REQUIREMENT_STAGE_ISSUE_DERIVED）：研发段
-    完全由工作项派生，不存在可手填、可撤销的人工标记。
-
-    返回归一后的最终档位。
-    """
-    link = RequirementProject.objects.filter(
-        requirement_id=requirement_id, project_id=project_id
-    ).first()
-    if link is None:
-        raise RequirementLinkError(
-            "This requirement is not linked to the project.",
-            code="REQUIREMENT_NOT_LINKED_TO_PROJECT",
-        )
-
-    # 有工作项时整个下拉都不存在，「派生」比「锁定」是更根本的拒绝理由，
-    # 所以排在 release 降档锁之前
-    if has_issue_links(requirement_id, project_id):
-        raise RequirementLinkError(
-            "Stage is derived from linked work items and cannot be set manually.",
-            code="REQUIREMENT_STAGE_ISSUE_DERIVED",
-        )
-
-    if has_live_release_link(requirement_id, project_id):
-        raise RequirementLinkError(
-            "Stage is locked while the requirement is attached to a live release.",
-            code="REQUIREMENT_IN_LIVE_RELEASE",
-        )
-
-    if link.stage != stage:
-        old_stage = link.stage
-        link.stage = stage
-        link.updated_by_id = actor.id if actor else None
-        link.save(update_fields=["stage", "updated_by", "updated_at"])
-        RequirementProjectActivity.objects.create(
-            workspace_id=link.workspace_id,
-            project_id=link.project_id,
-            requirement_id=requirement_id,
-            old_stage=old_stage,
-            new_stage=stage,
-            trigger={"type": "manual_stage"},
-            created_by_id=actor.id if actor else None,
-            updated_by_id=actor.id if actor else None,
-        )
-
-    # 归一：planned 无迭代事实时回落 linked；人工档则被地板规则原样保住。
-    # 归一若真的改了值会再写一行留痕，这是想要的 —— 用户选了 A 落成 B 必须可查
-    normalized = recalculate_stage(
-        requirement_id,
-        project_id,
-        trigger={"type": "manual_stage_normalized"},
-        actor=actor,
-    )
-    return normalized or stage
-
-
-def recalculate_stages_for_cycle(cycle_id, *, trigger=None, actor=None):
-    """迭代状态变更后，重算所有关联到它的 (需求, 项目)。
-
-    逐条走 recalculate_stage 保持单一代码路径 —— 每条约 4 个索引查询，一个挂了
-    几十条需求的迭代也就百余次点查，正确性优先于聚合优化。
-    """
-    pairs = RequirementCycle.objects.filter(cycle_id=cycle_id).values_list(
-        "requirement_id", "project_id"
-    )
-    for requirement_id, project_id in pairs:
-        recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)
-
-
-def recalculate_stages_for_issue(issue_id, *, trigger=None, actor=None):
-    """工作项状态落库后，重算它关联的 (需求, 项目)。
-
-    快速 no-op：绝大多数工作项没挂需求 —— issue 单列上有条件唯一索引，
-    这里恒为一次索引点查，零行即返回。至多一行。
-    """
-    pairs = RequirementIssue.objects.filter(issue_id=issue_id).values_list(
-        "requirement_id", "project_id"
-    )
-    for requirement_id, project_id in pairs:
-        recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)
-
-
-def recalculate_stages_for_issues(issue_ids, *, trigger=None, actor=None):
-    """批量路径（batch 更新 / 自动关闭）。一次 in 查询取对、去重后逐对重算。"""
-    if not issue_ids:
+    ids = list(requirement_ids)
+    if not ids:
         return
-    pairs = set(
-        RequirementIssue.objects.filter(issue_id__in=issue_ids).values_list(
-            "requirement_id", "project_id"
-        )
-    )
-    for requirement_id, project_id in pairs:
-        recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)
+    Requirement.objects.filter(
+        id__in=ids, status=RequirementItemStatus.NOT_STARTED
+    ).update(status=RequirementItemStatus.PROJECTED, updated_at=timezone.now())
 
 
-def recalculate_stages_for_release(release_id, *, trigger=None, actor=None):
-    """发布单状态变更（发布/驳回/终止/恢复）后，重算所有关联到它的 (需求, 项目)。"""
-    pairs = RequirementRelease.objects.filter(release_id=release_id).values_list(
-        "requirement_id", "project_id"
-    )
-    for requirement_id, project_id in pairs:
-        recalculate_stage(requirement_id, project_id, trigger=trigger, actor=actor)
+def promote_to_released(requirement_ids):
+    """自动推进 (b) 的核心：not_started / projected / in_progress → released。
+    closed 不动；已是 released 的自然幂等。"""
+    ids = list(requirement_ids)
+    if not ids:
+        return
+    Requirement.objects.filter(
+        id__in=ids,
+        status__in=[
+            RequirementItemStatus.NOT_STARTED,
+            RequirementItemStatus.PROJECTED,
+            RequirementItemStatus.IN_PROGRESS,
+        ],
+    ).update(status=RequirementItemStatus.RELEASED, updated_at=timezone.now())
 
 
-def recalculate_requirement_status(requirement_id):
-    """需求本体 status 的对称回写 —— stage 聚合到全局轴的唯一口子。
+def promote_on_release_completed(release_id):
+    """发布单变为已发布（completed）→ 该发布单下全部关联需求推到 released。
 
-    所有关联项目的 stage 均为已发布**且至少有一条关联行** → implemented；条件
-    失效（任一项目降档、或新关联进一个未发布的项目）→ 退回 confirmed。
-
-    只在 confirmed ↔ implemented 之间翻转：draft 属审批轴（能进项目的需求必已
-    审批，见 linkable_requirements_queryset 决策 3），obsolete 是人为动作，两者
-    都不许碰。条件化 .update() 天然幂等，也绕开 Requirement.save() 的其他副作用；
-    status 不算内容（NON_CONTENT_BUILTIN_COLUMNS），不 bump version、不触发评审。
-
-    行锁串行化并发重算：两个触发点各自读分母再写，交错会让后写者依据过期快照
-    （如 A 读到全部 released 的同时 B 插入一条 linked 行）。锁住需求行后再读
-    关联行，第二个拿到锁的必然看到最新分母。
+    发布单之后被驳回 / 取消 / 改回测试中，一律**不降档**。把需求补挂进一张已发布
+    的发布单时，调用方对「本批 ids」直接调 promote_to_released，不用整单 ——
+    避免把人工降回去的旧关联再推一次。
     """
-    from django.db import transaction
-
-    with transaction.atomic():
-        locked = (
-            Requirement.objects.select_for_update()
-            .filter(id=requirement_id)
-            .only("id", "status")
-            .first()
-        )
-        if locked is None:
-            return
-        stages = list(
-            RequirementProject.objects.filter(
-                requirement_id=requirement_id
-            ).values_list("stage", flat=True)
-        )
-        all_released = bool(stages) and all(
-            stage == RequirementProjectStage.RELEASED for stage in stages
-        )
-        if all_released:
-            Requirement.objects.filter(
-                id=requirement_id, status=RequirementItemStatus.CONFIRMED
-            ).update(
-                status=RequirementItemStatus.IMPLEMENTED, updated_at=timezone.now()
-            )
-        else:
-            Requirement.objects.filter(
-                id=requirement_id, status=RequirementItemStatus.IMPLEMENTED
-            ).update(
-                status=RequirementItemStatus.CONFIRMED, updated_at=timezone.now()
-            )
+    promote_to_released(
+        RequirementRelease.objects.filter(release_id=release_id)
+        .order_by()
+        .values_list("requirement_id", flat=True)
+    )

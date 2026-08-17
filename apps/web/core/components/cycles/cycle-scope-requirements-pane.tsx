@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import type { TProjectRequirement, TRequirementProjectStage } from "@plane/types";
+import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
 import { ProductChip } from "@/components/products/product-chip";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementService } from "@/services/requirement.service";
@@ -18,8 +18,8 @@ import { CycleRequirementsSection } from "./cycle-overview/cycle-requirements-se
 /**
  * 「迭代范围」页里的需求子页。
  *
- * 需求进迭代 = 阶段升到「已排期」（服务端 recalculate_stage 按关联事实派生），
- * 所以这不只是个展示列表，它是阶段流转的入口之一。
+ * 需求进迭代 = 服务端把 not_started 的需求自动推进到 projected（只升不降），
+ * 所以这不只是个展示列表，它是状态流转的入口之一。
  *
  * 数据由页面统一持有（页面还要拿条数喂二级切换条的计数），这里只负责渲染与详情抽屉。
  * 「关联需求」的按钮和弹窗在 header 上 —— 它和「添加工作项」占同一个位置，同一套
@@ -39,10 +39,10 @@ type TProps = {
   error: string | null;
   canManage: boolean;
   unlinkingRequirementId: string | null;
-  updatingStageRequirementId: string | null;
+  updatingStatusRequirementId: string | null;
   onOpenLinkModal: () => void;
   onUnlink: (requirementId: string) => Promise<void>;
-  onStageChange: (requirementId: string, stage: TRequirementProjectStage) => void;
+  onStatusChange: (requirementId: string, status: TRequirementItemStatus) => void;
 };
 
 export const CycleScopeRequirementsPane = observer(function CycleScopeRequirementsPane(props: TProps) {
@@ -54,10 +54,10 @@ export const CycleScopeRequirementsPane = observer(function CycleScopeRequiremen
     error,
     canManage,
     unlinkingRequirementId,
-    updatingStageRequirementId,
+    updatingStatusRequirementId,
     onOpenLinkModal,
     onUnlink,
-    onStageChange,
+    onStatusChange,
   } = props;
 
   const [peekRequirementId, setPeekRequirementId] = useState<string | null>(null);
@@ -91,16 +91,16 @@ export const CycleScopeRequirementsPane = observer(function CycleScopeRequiremen
         error={error}
         canManage={canManage}
         unlinkingRequirementId={unlinkingRequirementId}
-        updatingStageRequirementId={updatingStageRequirementId}
+        updatingStatusRequirementId={updatingStatusRequirementId}
         onOpenLinkModal={onOpenLinkModal}
         onUnlink={onUnlink}
-        onStageChange={onStageChange}
+        onStatusChange={onStatusChange}
         onOpenDetail={setPeekRequirementId}
       />
 
       {/*
         详情抽屉打到**产品**的端点上：需求内容、版本、变更轨迹的权威都在产品。
-        canEdit 恒 false —— 迭代侧对需求内容没有任何写入口，能改的只有阶段。
+        canEdit 恒 false —— 迭代侧对需求内容没有任何写入口，能改的只有需求级交付状态。
         与项目需求页同理，「打开整页」隐藏：需求在项目里没有整页路由。
       */}
       {peekRow && (

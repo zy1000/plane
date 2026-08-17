@@ -1,5 +1,6 @@
 export * from "./requirement-builtin-field-section";
 export * from "./requirement-builtin-fields";
+export * from "./requirement-status-cell";
 export * from "./requirement-grid";
 export * from "./requirement-field-builder";
 export * from "./requirement-parent-dropdown";

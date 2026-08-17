@@ -4,6 +4,7 @@ import type {
   TIssueRequirementLink,
   TLinkableRequirementsResponse,
   TProductProject,
+  TProjectRequirement,
   TProjectRequirementsResponse,
   TRequirement,
   TRequirementApprovalAction,
@@ -32,10 +33,9 @@ import type {
   TRequirementImportPayload,
   TRequirementImportResponse,
   TRequirementIssue,
+  TRequirementItemStatus,
   TRequirementLibrary,
   TRequirementLibraryConfiguration,
-  TRequirementProjectLink,
-  TRequirementProjectStage,
   TRequirementsResponse,
   TRequirementSubmitReviewPayload,
   TRequirementTrailResponse,
@@ -286,6 +286,8 @@ export class RequirementService extends APIService {
       requirementTypeId?: string;
       /** 按 id 直取，供父项选择器回显不在当前页的行 */
       ids?: string[];
+      /** 关联选择器（父项下拉等）用：排除已关闭的需求。带 ids 回显时服务端豁免 */
+      excludeClosed?: boolean;
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/`, {
@@ -296,6 +298,7 @@ export class RequirementService extends APIService {
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
         ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
+        ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
       },
     })
       .then((response) => response?.data)
@@ -347,6 +350,28 @@ export class RequirementService extends APIService {
     payload: { data: TRequirementData; builtin: TRequirementBuiltinValues; version: number }
   ): Promise<TRequirement> {
     return this.patch(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 改需求级交付状态（产品侧写入口）。
+   *
+   * 与内容 PATCH 分开：不带 version、不进内容 diff、评审中也能改；closed 行改成任意
+   * 非 closed 值即重开。返回整行，但调用方只该合并 status / can_submit_review ——
+   * 整行替换会与在飞的内容自动保存竞态。
+   */
+  async updateRequirementStatus(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    status: TRequirementItemStatus
+  ): Promise<TRequirement> {
+    return this.patch(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/status/`, {
+      status,
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -736,6 +761,19 @@ export class RequirementService extends APIService {
       });
   }
 
+  /** 产品侧一次增删关联项目，与项目侧 updateProjectProducts 对称 */
+  async updateProductProjects(
+    workspaceSlug: string,
+    productId: string,
+    payload: { projects?: string[]; removed_projects?: string[] }
+  ): Promise<{ message: string }> {
+    return this.post(`${this.scopeRoot(workspaceSlug, { kind: "product", id: productId })}/projects/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /* --- 项目 ↔ 需求 ------------------------------------------------------ */
 
   /** 项目网格渲染自定义列所需的需求类型与字段。形状与产品的 configuration 一致，但 policy 恒为 null */
@@ -761,12 +799,15 @@ export class RequirementService extends APIService {
       requirementTypeId?: string;
       /** 只看某个产品来的需求；项目可以同时引用多个产品 */
       productId?: string;
-      stage?: TRequirementProjectStage;
+      /** 按需求级状态筛选 */
+      status?: TRequirementItemStatus;
       ids?: string[];
       /** 关联选择器用：排除已关联到该迭代的行 */
       exclude_cycle_id?: string;
       /** 关联选择器用：排除已关联到该发布单的行 */
       exclude_release_id?: string;
+      /** 关联选择器用：排除已关闭的需求（主列表不带 —— 项目页仍要看到已关闭需求） */
+      excludeClosed?: boolean;
     } = {}
   ): Promise<TProjectRequirementsResponse> {
     return this.get(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/`, {
@@ -777,10 +818,11 @@ export class RequirementService extends APIService {
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
         ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
         ...(params.productId ? { product_id: params.productId } : {}),
-        ...(params.stage ? { stage: params.stage } : {}),
+        ...(params.status ? { status: params.status } : {}),
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
         ...(params.exclude_cycle_id ? { exclude_cycle_id: params.exclude_cycle_id } : {}),
         ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),
+        ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
       },
     })
       .then((response) => response?.data)
@@ -846,19 +888,18 @@ export class RequirementService extends APIService {
   }
 
   /**
-   * 改本项目内的排序 / 人工设置研发段档位。
+   * 改本项目内的排序 / 需求级交付状态（项目侧写入口，权限是项目的
+   * project.requirement_link.manage）。
    *
-   * stage 只收 MANUAL_REQUIREMENT_PROJECT_STAGES 里的三个值，且服务端会**归一**
-   * （选 planned 但没有迭代关联时落回 linked），所以调用方必须用返回的
-   * `stage` 刷新那一行，不能直接用请求里传的值。
-   * 需求挂在在途发布单上时整行锁死，返回 409 `REQUIREMENT_IN_LIVE_RELEASE`。
+   * status 写在需求本体上，跨项目共享一份；任意方向可改，closed 选回任意非 closed
+   * 值即重开。返回该行的项目侧整行（与列表同口径），调用方直接就地替换。
    */
   async updateProjectRequirement(
     workspaceSlug: string,
     projectId: string,
     requirementId: string,
-    payload: { sort_order?: number; stage?: TRequirementProjectStage }
-  ): Promise<TRequirementProjectLink> {
+    payload: { sort_order?: number; status?: TRequirementItemStatus }
+  ): Promise<TProjectRequirement> {
     return this.patch(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/${requirementId}/`, payload)
       .then((response) => response?.data)
       .catch((error) => {

@@ -19,9 +19,8 @@ const EMPTY_LINKS: TProductProject[] = [];
 /**
  * 引用了本产品的项目。
  *
- * 与 useProjectProducts 查的是同一张关联表，只是方向相反。这一侧刻意只读：关联关系
- * 由项目自己维护（项目设置里挑产品），产品页越权改它会让「项目能引用哪些产品」的
- * 归属变得含糊，所以这里只暴露读取。
+ * 与 useProjectProducts 查的是同一张关联表，只是方向相反。产品负责人可以在产品页
+ * 增删关联；解除时若该项目下还有本产品需求，后端会 409。
  */
 export const useProductProjects = ({
   workspaceSlug,
@@ -32,6 +31,7 @@ export const useProductProjects = ({
 }) => {
   const [links, setLinks] = useState<TProductProject[]>(EMPTY_LINKS);
   const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && productId));
+  const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
@@ -54,5 +54,19 @@ export const useProductProjects = ({
     void fetchProjects().catch(() => undefined);
   }, [fetchProjects]);
 
-  return { links, isLoading, error, fetchProjects };
+  const updateProjects = useCallback(
+    async (payload: { projects?: string[]; removed_projects?: string[] }) => {
+      if (!workspaceSlug || !productId) throw new Error("Product is required.");
+      setIsMutating(true);
+      try {
+        await requirementService.updateProductProjects(workspaceSlug, productId, payload);
+        await fetchProjects();
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [fetchProjects, productId, workspaceSlug]
+  );
+
+  return { links, isLoading, isMutating, error, fetchProjects, updateProjects };
 };

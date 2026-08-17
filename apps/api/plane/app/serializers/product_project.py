@@ -4,7 +4,7 @@
 
 from rest_framework import serializers
 
-from plane.db.models import ProductProject, RequirementProjectStage
+from plane.db.models import ProductProject, RequirementItemStatus
 
 from .base import BaseSerializer
 from .project import ProjectLiteSerializer
@@ -22,7 +22,7 @@ class ProductProjectSerializer(BaseSerializer):
         source="product.identifier", read_only=True
     )
     project_detail = ProjectLiteSerializer(source="project", read_only=True)
-    stage_counts = serializers.SerializerMethodField()
+    status_counts = serializers.SerializerMethodField()
     requirement_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,7 +36,7 @@ class ProductProjectSerializer(BaseSerializer):
             "product_identifier",
             "project_detail",
             "requirement_count",
-            "stage_counts",
+            "status_counts",
             "created_at",
             "created_by",
         ]
@@ -45,22 +45,22 @@ class ProductProjectSerializer(BaseSerializer):
         read_only_fields = fields
 
     def _counts(self, obj):
-        """本产品有多少需求进了这个项目，各阶段各多少。
+        """本产品有多少需求进了这个项目，各状态各多少（需求级状态，跨项目共享）。
 
-        context["stage_counts"] 由视图一次分组查询喂进来（见
-        utils/requirement_project.stage_counts_by_project）。拿不到就返回全 0 而不是
+        context["status_counts"] 由视图一次分组查询喂进来（见
+        utils/requirement_project.status_counts_by_project）。拿不到就返回全 0 而不是
         报错 —— 项目侧那份 ProductProjectSerializer 不需要统计，不该被这两个字段拖着
         多打一次查询。
         """
-        return (self.context.get("stage_counts") or {}).get(str(obj.project_id))
+        return (self.context.get("status_counts") or {}).get(str(obj.project_id))
 
-    def get_stage_counts(self, obj):
+    def get_status_counts(self, obj):
         return self._counts(obj) or {}
 
     def get_requirement_count(self, obj):
         counts = self._counts(obj)
         if not counts:
             return 0
-        # 只累计五个阶段键：bucket 里另有 issue_total 等工作项聚合键（见
-        # stage_counts_by_project），对整个 dict 求和会把工作项数算进需求数
-        return sum(counts.get(stage, 0) for stage in RequirementProjectStage.values)
+        # 只累计五个状态键：bucket 里另有 issue_total 等工作项聚合键（见
+        # status_counts_by_project），对整个 dict 求和会把工作项数算进需求数
+        return sum(counts.get(value, 0) for value in RequirementItemStatus.values)

@@ -14,14 +14,25 @@ export type TRequirementFieldType =
   | "image"
   | "boolean";
 export type TRequirementSelectMode = "single" | "multiple";
-/** 自定义字段的分类：标准字段进标准库，数据字段只在产品需求里出现。没有默认值，建字段时必须选 */
-export type TRequirementFieldCategory = "standard" | "data";
 /**
- * 需求的**内容**状态。不表达评审进度 —— 那是另一根轴，见 TRequirementApprovalState。
+ * 需求级的**交付状态**，跨项目共享一份，人工维护。不表达评审进度 —— 那是另一根轴，
+ * 见 TRequirementApprovalState；两根轴正交，评审中的行也能改状态。
  *
- * draft 只由系统写：新建时置入，首次通过审批后置 confirmed，此后再也回不到 draft。
+ * 写入口与内容 PATCH 分开（产品侧 PATCH .../requirements/{id}/status/、项目侧
+ * PATCH projects/{pid}/requirements/{rid}/ 带 status），不 bump 乐观锁 version。
+ * 只有两条只升不降的自动推进：关联进项目 not_started → projected；发布单发布成功
+ * → released。closed（已关闭）内容只读、不进任何关联选择器，选回任意非 closed 值即重开。
  */
-export type TRequirementItemStatus = "draft" | "confirmed" | "implemented" | "obsolete";
+export type TRequirementItemStatus = "not_started" | "projected" | "in_progress" | "released" | "closed";
+
+/** 状态全序（下拉与分布条按此顺序渲染）。closed 在阶梯之外，排最后 */
+export const REQUIREMENT_STATUSES: TRequirementItemStatus[] = [
+  "not_started",
+  "projected",
+  "in_progress",
+  "released",
+  "closed",
+];
 
 /**
  * 需求的**审批**态。服务端由三列派生后下发，前端不要自己从 pending_change_request_id
@@ -137,11 +148,6 @@ export type TRequirement = TRequirementBuiltinValues & {
    * 不是 undefined，所以调用方不必到处补 ?? []。
    */
   project_ids: string[];
-  /**
-   * 逐项目的关联行（项目 + 该项目内的阶段）。project_ids 由它派生保留，老消费点不破坏。
-   * 注解口径与 project_ids 相同：只有产品需求列表会注解，别处恒为 []。
-   */
-  project_links: { project_id: string; stage: TRequirementProjectStage }[];
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -186,8 +192,8 @@ export type TRequirementField = {
   is_required: boolean;
   is_active: boolean;
   sort_order: number;
-  /** 决定这个字段进不进标准库。表单子字段跟随所属表单，后端保存时强制继承 */
-  field_category: TRequirementFieldCategory;
+  /** 进不进标准库。默认进；表单子字段跟随所属表单，后端保存时强制继承 */
+  show_in_library: boolean;
   /** 定义该字段的需求类型 */
   requirement_type_id?: string | null;
   config: {
@@ -200,15 +206,10 @@ export type TRequirementField = {
   children: TRequirementField[];
 };
 
-export type TRequirementFieldDraft = Omit<
-  TRequirementField,
-  "id" | "sort_order" | "children" | "field_category"
-> & {
+export type TRequirementFieldDraft = Omit<TRequirementField, "id" | "sort_order" | "children"> & {
   id?: string;
   client_id?: string;
   sort_order?: number;
-  /** 草稿态允许未选，保存前拦截 —— 分类没有默认值 */
-  field_category: TRequirementFieldCategory | null;
   children: TRequirementFieldDraft[];
 };
 
@@ -353,51 +354,16 @@ export type TLinkableRequirementsResponse = Omit<TPaginatedResponse<TRequirement
 
 /* --- 需求进项目（RequirementProject） -------------------------------------- */
 
-/**
- * 需求在某个项目内的交付阶段。与 TRequirement 上的 status（全局、粗粒度）正交：
- * 同一条需求可以在 A 项目已发布、在 B 项目还没开工。
- */
-export type TRequirementProjectStage = "linked" | "planned" | "in_progress" | "done" | "released";
-
-/** 阶段全序（阶梯）。两端派生（linked/planned/released 由关联事实重算），中间人工 */
-export const REQUIREMENT_PROJECT_STAGES: TRequirementProjectStage[] = [
-  "linked",
-  "planned",
-  "in_progress",
-  "done",
-  "released",
-];
-
-/**
- * 阶段下拉的可选项，与后端 RequirementProjectStageWriteSerializer 的白名单一一对应。
- *
- * linked / released 不在里面：前者是零事实时的基线、后者由发布单是否已发布决定。
- * planned 在里面不是因为它能手填，而是它承担「撤销人工标记」—— 服务端写完立刻
- * 归一，没有迭代关联的会落回 linked，所以要用响应返回的值刷新那一行。
- */
-export const MANUAL_REQUIREMENT_PROJECT_STAGES: TRequirementProjectStage[] = [
-  "planned",
-  "in_progress",
-  "done",
-];
-
-/** 项目侧看到的一条需求：需求内容 + 本项目内的阶段。内容一律只读。 */
+/** 项目侧看到的一条需求：需求内容（含需求级 status）+ 本项目内的关联信息。内容一律只读。 */
 export type TProjectRequirement = TRequirement & {
-  stage: TRequirementProjectStage;
   /** 关联行上的排序，与需求本体的 sort_order 是两个数 */
   link_sort_order: number | null;
   product_name: string | null;
   /** 产品标识（ECOM），画所属产品 chip 的徽标要它 */
   product_identifier: string | null;
-  /** 最新有效迭代关联的迭代名，阶段胶囊 tooltip 拼推导依据用；无关联为 null */
-  latest_cycle_name: string | null;
-  /** 最新在途/已发布发布单名，同上 */
+  /** 最新在途/已发布发布单名（已发布的优先），目标发布 chip 用；无关联为 null */
   latest_release_name: string | null;
-  /** 已排期但关联迭代已结束。时间盒到期不降档，只做「迭代已结束」黄标 */
-  carryover: boolean;
-  /** 挂在在途（未驳回未取消）发布单上 —— 阶段下拉要禁用，服务端也会拒绝写入 */
-  stage_locked: boolean;
-  /** live 关联工作项数。>0 时研发段档位改由工作项派生，阶段下拉要关掉（服务端 409 兜底） */
+  /** live 关联工作项数 */
   issue_count: number;
   /** 关联工作项中 state.group=completed 的条数。完成率 = completed / (issue_count − cancelled)，由前端算 */
   completed_issue_count: number;
@@ -414,13 +380,13 @@ export type TProjectRequirement = TRequirement & {
  * 项目需求页顶部分面的计数。
  *
  * 口径由服务端定死（utils/requirement_project.requirement_facets）：
- * `by_product` 是全集、不随任何筛选变化；`by_stage` / `by_requirement_type` 只跟随
+ * `by_product` 是全集、不随任何筛选变化；`by_status` / `by_requirement_type` 只跟随
  * 当前选中的产品，不跟随搜索与它们自身。前端不要再二次加工这些数字。
  */
 export type TProjectRequirementFacets = {
   by_product: { product_id: string; name: string; identifier: string; count: number }[];
-  /** 全部阶段的键恒存在（含 0），阶段条段数固定 */
-  by_stage: Record<TRequirementProjectStage, number>;
+  /** 全部状态的键恒存在（含 0），状态条段数固定 */
+  by_status: Record<TRequirementItemStatus, number>;
   by_requirement_type: Record<string, number>;
   total: number;
 };
@@ -431,20 +397,6 @@ export type TProjectRequirementsResponse = Omit<
 > & {
   /** 项目需求列表带分面；迭代/发布容器的需求列表复用同一信封，但不带分面 */
   extra_stats?: TProjectRequirementFacets | null;
-};
-
-/** 关联行本身。改排序 / 设阶段的接口返回它，stage 是归一**之后**的最终值 */
-export type TRequirementProjectLink = {
-  id: string;
-  requirement: string;
-  project: string;
-  workspace: string;
-  stage: TRequirementProjectStage;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-  created_by: string | null;
-  updated_by: string | null;
 };
 
 /** 产品 ↔ 项目关联行。项目靠它确定自己能引用哪些产品的需求 */
@@ -463,8 +415,11 @@ export type TProductProject = {
   } | null;
   /** 本产品有多少需求进了这个项目 */
   requirement_count: number;
-  /** 各阶段各多少。全部阶段的键恒存在（含 0） */
-  stage_counts: Record<TRequirementProjectStage, number>;
+  /**
+   * 各状态各多少（需求级状态，跨项目共享一份 —— 同一条需求进了几个项目就在几个项目
+   * 的桶里各计一次）。全部状态的键恒存在（含 0）
+   */
+  status_counts: Record<TRequirementItemStatus, number>;
   created_at: string;
   created_by: string | null;
 };
@@ -559,7 +514,7 @@ export type TRequirementSchemaChangeSnapshot = {
   parent_field_id: string | null;
   parent_name: string | null;
   requirement_type_id: string | null;
-  field_category: TRequirementFieldCategory | null;
+  show_in_library: boolean;
   name: string;
   field_type: TRequirementFieldType;
   is_required: boolean;

@@ -13,22 +13,21 @@ import { useMemo } from "react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirement } from "@plane/types";
 import { Loader } from "@plane/ui";
-import { RequirementProjectStageBadges } from "@/components/products/requirements/requirement-project-stage-badges";
 import { useProductProjects } from "@/hooks/store/use-product-projects";
 import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
 import { RequirementIssueRow } from "./requirement-issues-section";
 
-/** 单个项目分组：分组头（项目名 + 阶段徽章）+ 该项目下已拆工作项的行列表 */
+/** 单个项目分组：分组头（项目名）+ 该项目下已拆工作项的行列表 */
 const ProjectIssuesGroup = ({
   workspaceSlug,
   requirementId,
-  projectLink,
+  projectId,
   projectName,
   projectIdentifier,
 }: {
   workspaceSlug: string;
   requirementId: string;
-  projectLink: TRequirement["project_links"][number];
+  projectId: string;
   /** 私密项目解析不到名称时为 undefined，分组头给中性占位，不甩 UUID */
   projectName?: string;
   projectIdentifier?: string;
@@ -36,7 +35,7 @@ const ProjectIssuesGroup = ({
   const { t } = useTranslation();
   const { issues, isLoading, error } = useRequirementIssues({
     workspaceSlug,
-    projectId: projectLink.project_id,
+    projectId,
     requirementId,
   });
 
@@ -46,8 +45,6 @@ const ProjectIssuesGroup = ({
         <span className="truncate text-12 font-medium text-primary">
           {projectName ?? t("project_requirements.hidden_project")}
         </span>
-        {/* 阶段徽章与产品需求网格「项目阶段」列同一组件，单链传入即单枚徽章 */}
-        <RequirementProjectStageBadges projectLinks={[projectLink]} resolveProjectName={() => projectName} />
       </div>
       {error ? (
         // 无权查看该项目（403 等）时如实说明，不能把「看不到」误报成「没拆工作项」
@@ -90,9 +87,9 @@ export const RequirementIssuesByProject = ({
     [links]
   );
 
-  const projectLinks = requirement.project_links ?? [];
+  const projectIds = requirement.project_ids ?? [];
   // 没进任何项目就整个 Section 不渲染 —— 没有分组可言，空标题只会让人误找操作入口
-  if (!projectLinks.length) return null;
+  if (!projectIds.length) return null;
 
   return (
     <section className="flex flex-col gap-2.5">
@@ -100,14 +97,14 @@ export const RequirementIssuesByProject = ({
         {t("project_requirements.issues.section_title")}
       </span>
       <div className="flex flex-col gap-4">
-        {projectLinks.map((link) => {
-          const detail = projectById.get(link.project_id);
+        {projectIds.map((projectId) => {
+          const detail = projectById.get(projectId);
           return (
             <ProjectIssuesGroup
-              key={link.project_id}
+              key={projectId}
               workspaceSlug={workspaceSlug}
               requirementId={requirement.id}
-              projectLink={link}
+              projectId={projectId}
               projectName={detail?.name}
               projectIdentifier={detail?.identifier}
             />

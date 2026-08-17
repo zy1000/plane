@@ -4,7 +4,7 @@ import type {
   TProjectRequirementsResponse,
   TRequirementConfiguration,
   TRequirementFilter,
-  TRequirementProjectStage,
+  TRequirementItemStatus,
   TRequirementTypeSchema,
 } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
@@ -37,9 +37,9 @@ const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
  *
  * 与 use-product-requirements 的形状刻意对齐（同样是局部 state hook，不进 MobX root
  * store，见 docs/domain-glossary.md 的前端接线约定），但能力少得多：
- * 项目对需求内容**没有任何写入口**，这里只有关联/解除关联，外加研发段档位的人工
- * 设置（updateStage）。阶段的另外三档 linked / planned / released 仍由服务端按关联
- * 事实派生，改不了。
+ * 项目对需求内容**没有任何写入口**，这里只有关联/解除关联，外加需求级交付状态的
+ * 人工维护（updateStatus）—— 状态长在需求本体上、跨项目共享一份，项目侧改的与
+ * 产品侧改的是同一个值。
  *
  * 需求类型与字段单独取一次（configuration）：网格要靠它渲染自定义列，而它只随
  * 关联关系变化，不该跟着分页与筛选一起重拉。
@@ -63,7 +63,7 @@ export const useProjectRequirements = ({
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
   const [requirementTypeFilter, setRequirementTypeFilter] = useState<string | undefined>();
-  const [stageFilter, setStageFilter] = useState<TRequirementProjectStage | undefined>();
+  const [statusFilter, setStatusFilter] = useState<TRequirementItemStatus | undefined>();
   const [productFilter, setProductFilter] = useState<string | undefined>();
 
   const fetchConfiguration = useCallback(async () => {
@@ -104,7 +104,7 @@ export const useProjectRequirements = ({
           filters,
           requirementTypeId: requirementTypeFilter,
           productId: productFilter,
-          stage: stageFilter,
+          status: statusFilter,
         });
         if (requestSequence !== requestSequenceRef.current) return response;
         setRequirementsPage(response);
@@ -118,7 +118,7 @@ export const useProjectRequirements = ({
         if (requestSequence === requestSequenceRef.current) setIsRequirementsLoading(false);
       }
     },
-    [cursor, filters, perPage, productFilter, projectId, requirementTypeFilter, search, stageFilter, workspaceSlug]
+    [cursor, filters, perPage, productFilter, projectId, requirementTypeFilter, search, statusFilter, workspaceSlug]
   );
 
   useEffect(() => {
@@ -203,47 +203,6 @@ export const useProjectRequirements = ({
     [fetchRequirements, projectId, workspaceSlug]
   );
 
-  /**
-   * 人工设置研发段档位。
-   *
-   * 只改这一行 + 分面计数，不重拉列表 —— 阶段变化不改变结果集构成（除非当前正按
-   * 阶段筛选，那种情况下重拉反而会让刚改完的行凭空消失，更难理解）。
-   *
-   * 落地值以**响应**为准：服务端会归一（选了「已排期」但需求没有迭代关联时落回
-   * 「已立项」），用请求里传的值刷新会显示一个不存在的状态。
-   *
-   * by_stage 必须本地纠正，否则顶部阶段筛选条的数字会停在改动前。
-   */
-  const updateStage = useCallback(
-    async (requirementId: string, stage: TRequirementProjectStage) => {
-      if (!workspaceSlug || !projectId) throw new Error("Project is required.");
-      const link = await requirementService.updateProjectRequirement(workspaceSlug, projectId, requirementId, {
-        stage,
-      });
-      setRequirementsPage((current) => {
-        const previous = current.results.find((row) => row.id === requirementId);
-        if (!previous || previous.stage === link.stage) return current;
-        const facets = current.extra_stats;
-        return {
-          ...current,
-          results: current.results.map((row) => (row.id === requirementId ? { ...row, stage: link.stage } : row)),
-          extra_stats: facets
-            ? {
-                ...facets,
-                by_stage: {
-                  ...facets.by_stage,
-                  [previous.stage]: Math.max(0, (facets.by_stage[previous.stage] ?? 0) - 1),
-                  [link.stage]: (facets.by_stage[link.stage] ?? 0) + 1,
-                },
-              }
-            : facets,
-        };
-      });
-      return link.stage;
-    },
-    [projectId, workspaceSlug]
-  );
-
   /** 把服务端返回的整行合并回当前页，不重拉列表 */
   const syncRequirements = useCallback((rows: TProjectRequirement[]) => {
     if (!rows.length) return;
@@ -253,6 +212,43 @@ export const useProjectRequirements = ({
       results: current.results.map((item) => byId.get(item.id) ?? item),
     }));
   }, []);
+
+  /**
+   * 人工改需求级交付状态。
+   *
+   * 只改这一行 + 分面计数，不重拉列表 —— 状态变化不改变结果集构成（除非当前正按
+   * 状态筛选，那种情况下重拉反而会让刚改完的行凭空消失，更难理解）。
+   * 服务端返回该行的项目侧整行（与列表同口径），直接就地替换。
+   *
+   * by_status 必须本地纠正，否则顶部状态筛选条的数字会停在改动前。
+   */
+  const updateStatus = useCallback(
+    async (requirementId: string, status: TRequirementItemStatus) => {
+      if (!workspaceSlug || !projectId) throw new Error("Project is required.");
+      const row = await requirementService.updateProjectRequirement(workspaceSlug, projectId, requirementId, {
+        status,
+      });
+      setRequirementsPage((current) => {
+        const previous = current.results.find((item) => item.id === requirementId);
+        const facets = current.extra_stats;
+        if (!previous || !facets || previous.status === row.status) return current;
+        return {
+          ...current,
+          extra_stats: {
+            ...facets,
+            by_status: {
+              ...facets.by_status,
+              [previous.status]: Math.max(0, (facets.by_status[previous.status] ?? 0) - 1),
+              [row.status]: (facets.by_status[row.status] ?? 0) + 1,
+            },
+          },
+        };
+      });
+      syncRequirements([row]);
+      return row;
+    },
+    [projectId, syncRequirements, workspaceSlug]
+  );
 
   // 所有会改变结果集的设置都必须先把游标清掉，否则会停在一个对新结果集无意义的页码上
   const updateSearch = useCallback((value: string) => {
@@ -267,9 +263,9 @@ export const useProjectRequirements = ({
     setCursor(undefined);
     setPerPage(value);
   }, []);
-  const updateStageFilter = useCallback((value: TRequirementProjectStage | undefined) => {
+  const updateStatusFilter = useCallback((value: TRequirementItemStatus | undefined) => {
     setCursor(undefined);
-    setStageFilter(value);
+    setStatusFilter(value);
   }, []);
   const updateProductFilter = useCallback((value: string | undefined) => {
     setCursor(undefined);
@@ -282,7 +278,7 @@ export const useProjectRequirements = ({
     setFilters([]);
     /*
      * 行要清掉：列随类型走，留着旧行会闪出「新类型的列配旧类型的行」。
-     * 但 extra_stats 要留着 —— 产品页签与阶段计数都从它来，整个清掉会让顶部两条
+     * 但 extra_stats 要留着 —— 产品页签与状态计数都从它来，整个清掉会让顶部两条
      * 控件在每次切类型时闪现消失。
      */
     setRequirementsPage((current) => ({ ...EMPTY_PAGE, extra_stats: current.extra_stats }));
@@ -303,21 +299,21 @@ export const useProjectRequirements = ({
     cursor,
     perPage,
     requirementTypeFilter,
-    stageFilter,
+    statusFilter,
     productFilter,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
     setPerPage: updatePerPage,
     setRequirementTypeFilter: updateRequirementTypeFilter,
-    setStageFilter: updateStageFilter,
+    setStatusFilter: updateStatusFilter,
     setProductFilter: updateProductFilter,
     fetchConfiguration,
     fetchRequirements,
     linkRequirements,
     unlinkRequirements,
     submitChange,
-    updateStage,
+    updateStatus,
     syncRequirements,
   };
 };

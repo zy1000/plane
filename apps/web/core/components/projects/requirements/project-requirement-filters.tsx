@@ -1,6 +1,6 @@
 /**
  * 项目需求筛选：工作项同款漏斗开关 + 筛选行。
- * 阶段是可添加/移除的条件，不常驻工具栏；类型筛选仍在工具栏左侧。
+ * 状态是可添加/移除的条件，不常驻工具栏；类型筛选仍在工具栏左侧。
  *
  * 网格工具栏 portal 到页头右侧，挂点 id 见 PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID。
  */
@@ -11,10 +11,10 @@ import { useTranslation } from "@plane/i18n";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { FilterAppliedIcon, FilterIcon } from "@plane/propel/icons";
-import type { TRequirementProjectStage } from "@plane/types";
+import type { TRequirementItemStatus } from "@plane/types";
 import { CustomMenu, EHeaderVariant, Header } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { ProjectRequirementStageFilter } from "./project-requirement-stage-filter";
+import { ProjectRequirementStatusFilter } from "./project-requirement-status-filter";
 
 export const PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID = "project-requirements-header-actions";
 
@@ -55,25 +55,25 @@ export const ProjectRequirementFiltersToggle = observer(function ProjectRequirem
 
 type TRowProps = {
   isVisible: boolean;
-  showStageChip: boolean;
-  stageValue: TRequirementProjectStage | undefined;
-  stageCounts: Record<TRequirementProjectStage, number> | undefined;
+  showStatusChip: boolean;
+  statusValue: TRequirementItemStatus | undefined;
+  statusCounts: Record<TRequirementItemStatus, number> | undefined;
   totalCount: number;
-  onStageChange: (stage: TRequirementProjectStage | undefined) => void;
-  onAddStage: () => void;
-  onRemoveStage: () => void;
+  onStatusChange: (status: TRequirementItemStatus | undefined) => void;
+  onAddStatus: () => void;
+  onRemoveStatus: () => void;
 };
 
 export const ProjectRequirementFiltersRow = observer(function ProjectRequirementFiltersRow(props: TRowProps) {
   const {
     isVisible,
-    showStageChip,
-    stageValue,
-    stageCounts,
+    showStatusChip,
+    statusValue,
+    statusCounts,
     totalCount,
-    onStageChange,
-    onAddStage,
-    onRemoveStage,
+    onStatusChange,
+    onAddStatus,
+    onRemoveStatus,
   } = props;
   const { t } = useTranslation();
 
@@ -90,13 +90,13 @@ export const ProjectRequirementFiltersRow = observer(function ProjectRequirement
       <Header variant={EHeaderVariant.TERNARY} className="min-h-11 bg-surface-1 !px-3">
         <div className="flex w-full items-start gap-2 rounded-lg bg-layer-1 px-4 py-2">
           <div className="flex w-full flex-wrap items-center gap-2">
-            {showStageChip && (
-              <ProjectRequirementStageFilter
-                value={stageValue}
-                counts={stageCounts}
+            {showStatusChip && (
+              <ProjectRequirementStatusFilter
+                value={statusValue}
+                counts={statusCounts}
                 totalCount={totalCount}
-                onChange={onStageChange}
-                onRemove={onRemoveStage}
+                onChange={onStatusChange}
+                onRemove={onRemoveStatus}
               />
             )}
             <CustomMenu
@@ -107,23 +107,23 @@ export const ProjectRequirementFiltersRow = observer(function ProjectRequirement
               maxHeight="md"
               ariaLabel="添加筛选"
             >
-              {showStageChip ? (
+              {showStatusChip ? (
                 <CustomMenu.MenuItem disabled>
                   <span className="text-placeholder italic">All filters applied</span>
                 </CustomMenu.MenuItem>
               ) : (
-                <CustomMenu.MenuItem onClick={onAddStage}>
+                <CustomMenu.MenuItem onClick={onAddStatus}>
                   <span className="flex items-center gap-2 text-13 text-secondary">
                     <span aria-hidden className="size-3.5 shrink-0 rounded-full border-[1.5px] border-tertiary" />
-                    {t("project_requirements.stage_column")}
+                    {t("requirement_fields.builtin.status")}
                   </span>
                 </CustomMenu.MenuItem>
               )}
             </CustomMenu>
           </div>
-          {showStageChip && (
+          {showStatusChip && (
             <div className="flex items-center gap-2 border-l border-subtle pl-4">
-              <Button variant="secondary" className="py-1" onClick={onRemoveStage}>
+              <Button variant="secondary" className="py-1" onClick={onRemoveStatus}>
                 {t("project_requirements.clear_filters")}
               </Button>
             </div>

@@ -16,11 +16,14 @@ from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.product_project import ProductProjectSerializer
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.mixins import get_scoped_product
-from plane.db.models import ProductProject, Project, ProjectNetwork, RequirementProject
+from plane.db.models import ProductProject, Project, ProjectNetwork
+from plane.utils.product import can_manage_product
 from plane.utils.requirement_project import (
     RequirementLinkError,
     resolve_linkable_products,
-    stage_counts_by_project,
+    resolve_linkable_projects,
+    status_counts_by_project,
+    unlink_product_from_project,
 )
 
 
@@ -96,31 +99,22 @@ class ProjectProductViewSet(BaseViewSet):
         for product_id in removed_products:
             # 解除产品关联会让这个产品下已关联的需求失去引用依据（候选池按产品过滤）。
             # 与其留下一批规则外的孤儿关联，不如让人先把需求解掉 —— 那一步是显式的，
-            # 而级联软删会把项目内的 stage 一起带走且没有提示。
-            linked_count = RequirementProject.objects.filter(
-                project_id=project_id, requirement__product_id=product_id
-            ).count()
-            if linked_count:
-                return Response(
-                    {
-                        "error": "Unlink this product's requirements from the project first.",
-                        "code": "PRODUCT_HAS_LINKED_REQUIREMENTS",
-                        "product_id": str(product_id),
-                        "requirement_count": linked_count,
-                    },
-                    status=status.HTTP_409_CONFLICT,
+            # 而级联软删会把项目内的迭代/发布/工作项关联一起带走且没有提示。
+            try:
+                unlink_product_from_project(
+                    slug=slug, project_id=project_id, product_id=product_id
                 )
-            ProductProject.objects.filter(
-                workspace__slug=slug, project_id=project_id, product_id=product_id
-            ).delete()
+            except RequirementLinkError as exc:
+                return _link_error_response(exc)
 
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
 
 class ProductProjectViewSet(BaseViewSet):
-    """产品侧：这个产品被哪些项目引用。填上产品导航里的 projects 占位 tab。
+    """产品侧：这个产品被哪些项目引用。
 
-    走产品自己的可见性判定（can_view_product），不是项目权限 —— 打开的是产品页。
+    读走产品可见性（can_view_product）；写（增删关联）走 can_manage_product。
+    打开的是产品页，不套项目权限。
     """
 
     model = ProductProject
@@ -159,12 +153,64 @@ class ProductProjectViewSet(BaseViewSet):
         rows = list(queryset)
         # 一次分组查询覆盖所有项目，序列化器按 project_id 取用；每行查一次会让这张
         # 表的查询数随项目数线性增长
-        stage_counts = stage_counts_by_project(
+        status_counts = status_counts_by_project(
             product_id=product.id, project_ids=[row.project_id for row in rows]
         )
         return Response(
             ProductProjectSerializer(
-                rows, many=True, context={"stage_counts": stage_counts}
+                rows, many=True, context={"status_counts": status_counts}
             ).data,
             status=status.HTTP_200_OK,
         )
+
+    def create(self, request, slug, product_id):
+        """一次调用同时增删，载荷与项目侧对称：{projects, removed_projects}。"""
+        product = get_scoped_product(request.user, slug=slug, product_id=product_id)
+        if product is None:
+            return Response(
+                {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        if not can_manage_product(request.user, product):
+            return Response(
+                {"error": "You do not have permission to update this product."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        projects = request.data.get("projects", [])
+        removed_projects = request.data.get("removed_projects", [])
+
+        if projects:
+            try:
+                project_ids = resolve_linkable_projects(
+                    user=request.user,
+                    slug=slug,
+                    product=product,
+                    project_ids=projects,
+                )
+            except RequirementLinkError as exc:
+                return _link_error_response(exc)
+
+            ProductProject.objects.bulk_create(
+                [
+                    ProductProject(
+                        product_id=product.id,
+                        project_id=project_id,
+                        workspace_id=product.workspace_id,
+                        created_by_id=request.user.id,
+                        updated_by_id=request.user.id,
+                    )
+                    for project_id in project_ids
+                ],
+                batch_size=100,
+                ignore_conflicts=True,
+            )
+
+        for project_id in removed_projects:
+            try:
+                unlink_product_from_project(
+                    slug=slug, project_id=project_id, product_id=product.id
+                )
+            except RequirementLinkError as exc:
+                return _link_error_response(exc)
+
+        return Response({"message": "success"}, status=status.HTTP_201_CREATED)

@@ -73,7 +73,13 @@ export const RequirementParentDropdown = ({
   const fetchRows = useCallback(
     async (params: { search?: string; ids?: string[] }) => {
       const query = { ...params, perPage: PER_PAGE };
-      if (productId) return requirementService.listRequirements(workspaceSlug, productId, query);
+      // 已关闭的需求不进候选：不能再往它下面挂子项。按 ids 回显那次不加 —— 已选的父项
+      // 哪怕后来关闭了也得把标题显示出来（服务端对带 ids 的请求本就豁免这个过滤）
+      if (productId)
+        return requirementService.listRequirements(workspaceSlug, productId, {
+          ...query,
+          ...(params.ids?.length ? {} : { excludeClosed: true }),
+        });
       if (libraryId) return requirementService.listLibraryItems(workspaceSlug, libraryId, query);
       return null;
     },

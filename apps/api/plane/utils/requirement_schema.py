@@ -30,7 +30,7 @@ from plane.utils.requirement import (
 FIELD_COMPARE_KEYS = (
     "name",
     "field_type",
-    "field_category",
+    "show_in_library",
     "is_required",
     "is_active",
     "position",
@@ -54,7 +54,7 @@ def flatten_field_tree(tree):
             "id": spec.id,
             "parent_field_id": spec.parent_field_id,
             "requirement_type_id": spec.requirement_type_id,
-            "field_category": spec.field_category,
+            "show_in_library": spec.show_in_library,
             "name": spec.name,
             "field_type": spec.field_type,
             "is_required": spec.is_required,

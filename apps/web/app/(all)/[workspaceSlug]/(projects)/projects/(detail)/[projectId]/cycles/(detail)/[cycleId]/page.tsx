@@ -59,12 +59,12 @@ function CycleDetailPage({ params }: Route.ComponentProps) {
     requirementsError,
     linkModalOpen,
     unlinkingRequirementId,
-    updatingStageRequirementId,
+    updatingStatusRequirementId,
     openLinkModal,
     closeLinkModal,
     linkRequirements,
     unlinkRequirement,
-    updateStage,
+    updateStatus,
   } = useCycleRequirements({ workspaceSlug, projectId, cycleId });
 
   useCyclesDetails({
@@ -140,10 +140,10 @@ function CycleDetailPage({ params }: Route.ComponentProps) {
                     error={requirementsError}
                     canManage={canManageRequirements}
                     unlinkingRequirementId={unlinkingRequirementId}
-                    updatingStageRequirementId={updatingStageRequirementId}
+                    updatingStatusRequirementId={updatingStatusRequirementId}
                     onOpenLinkModal={openLinkModal}
                     onUnlink={unlinkRequirement}
-                    onStageChange={(requirementId, stage) => void updateStage(requirementId, stage)}
+                    onStatusChange={(requirementId, status) => void updateStatus(requirementId, status)}
                   />
                 ) : (
                   <CycleLayoutRoot />

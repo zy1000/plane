@@ -3,8 +3,8 @@
  * 的 SWR 写法，但不进 MobX root store）。
  *
  * 注意：linkIssues / unlinkIssue 成功后只 mutate 本列表，**调用方还需自行刷新需求行** ——
- * 关联/解除会触发服务端 recalculate_stage，研发段档位可能被重算，落地值以响应/重拉为准
- * （与 useProjectRequirements.updateStage 同口径）。
+ * 关联/解除只影响需求行上的工作项数与完成率（服务端注解），不改需求状态（状态是需求级、
+ * 人工维护的，与工作项关联无关）。
  */
 import { useCallback, useMemo } from "react";
 import useSWR from "swr";

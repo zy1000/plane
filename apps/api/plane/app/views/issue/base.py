@@ -98,10 +98,6 @@ from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
-from plane.utils.requirement_project import (
-    recalculate_stage,
-    recalculate_stages_for_issue,
-)
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.extra_field_value import serialize_extra_field_values
 from plane.settings.redis import redis_instance
@@ -948,10 +944,6 @@ class IssueViewSet(BaseViewSet):
                 issue=issue, assignee_ids=issue.assignee_ids
             )
 
-        # 状态旧值快照：save 后用 instance 值比对（而非 request.data），
-        # 兼容置 null / serializer 拒写；工作流 403 拦截走不到 save，天然不触发重算
-        old_state_id = issue.state_id
-
         current_instance = json.dumps(
             IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder
         )
@@ -981,13 +973,6 @@ class IssueViewSet(BaseViewSet):
                     before_snapshot=approval_before_snapshot,
                     actor=request.user,
                     project_id=str(project_id),
-                )
-            # 状态真变了才重算关联需求的阶段（无关联时是一次索引点查 no-op）
-            if str(serializer.instance.state_id) != str(old_state_id):
-                recalculate_stages_for_issue(
-                    pk,
-                    trigger={"type": "issue_state_changed", "issue_id": str(pk)},
-                    actor=request.user,
                 )
             # 仅当本次 PATCH 是描述迁移（编辑器补全 unique-id / 追加空段落等
             # 非用户语义修改）时跳过活动记录，避免误报 "updated the description"
@@ -1043,27 +1028,9 @@ class IssueViewSet(BaseViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # 删除工作项 = 「开工/完成」事实可能作废。
-        # 先取受影响对、同步软删关联行，再逐对重算 —— 不能等 Celery 级联：
-        # 异步清理有时延且不回写阶段，期间需求会停留在过期档位
-        affected_pairs = list(
-            RequirementIssue.objects.filter(issue_id=pk).values_list(
-                "requirement_id", "project_id"
-            )
-        )
+        # 同步软删关联行，保证需求侧工作项计数准确 —— 不能等 Celery 级联清理
         RequirementIssue.objects.filter(issue_id=pk).delete()
         issue.delete()
-        for requirement_id, link_project_id in affected_pairs:
-            recalculate_stage(
-                requirement_id,
-                link_project_id,
-                trigger={
-                    "type": "issue_deleted",
-                    "issue_id": str(pk),
-                    "issue_name": issue.name,
-                },
-                actor=request.user,
-            )
         # delete the issue from recent visits
         UserRecentVisit.objects.filter(
             project_id=project_id,

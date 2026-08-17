@@ -2,7 +2,7 @@
 
 一条需求的生命周期（approval_state 由三列派生，不落库）：
 
-    draft ──提交──> in_review ──通过──> approved（写 v1，status=confirmed）
+    draft ──提交──> in_review ──通过──> approved（写 v1；status 是另一根轴，不动）
                               ──驳回/撤回──> draft（内容原样保留）
 
     approved ──改动──> modified ──提交──> in_review ──通过──> approved（写 v(N+1)）
@@ -294,6 +294,21 @@ def submit_change_request(*, policy, items, reason="", actor=None):
             if child.approved_version is not None:
                 targets.append((child, RequirementChangeType.DELETE))
 
+    # 已关闭的需求内容只读：不能提内容类（update / create）变更单。删除类放行 ——
+    # closed 保护内容不保护删除，父项删除展开出的 closed 后代也一并放行。
+    closed = [
+        str(row.id)
+        for row, change_type in targets
+        if change_type != RequirementChangeType.DELETE
+        and row.status == RequirementItemStatus.CLOSED
+    ]
+    if closed:
+        raise RequirementChangeError(
+            "Closed requirements cannot be submitted for review.",
+            code="REQUIREMENT_CLOSED",
+            detail={"requirement_ids": closed},
+        )
+
     locked = [
         str(row.id) for row, _ in targets if row.pending_change_item_id is not None
     ]
@@ -480,10 +495,7 @@ def _apply_approved_items(change_request, *, actor):
         if item.change_type == RequirementChangeType.DELETE:
             snapshot = item.before_snapshot or requirement_row_snapshot(row)
         else:
-            # 首次通过时把 draft 顶成 confirmed 再快照 —— 版本记录的是「批准后的样子」，
-            # 而 draft 这个状态按定义不可能是被批准的内容。
-            if row.status == RequirementItemStatus.DRAFT:
-                row.status = RequirementItemStatus.CONFIRMED
+            # 版本记录的是「批准后的样子」；status 是交付状态轴，审批通过不改它
             snapshot = requirement_row_snapshot(row)
 
         version = RequirementVersion(
@@ -533,7 +545,6 @@ def _apply_approved_items(change_request, *, actor):
         row.approved_row_version = row.version
         row.save(
             update_fields=[
-                "status",
                 "approved_version",
                 "approved_row_version",
                 "pending_change_item",

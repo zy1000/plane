@@ -94,7 +94,7 @@ const ProductSettingsLayoutContent = observer(function ProductSettingsLayoutCont
         isProjectView
         className="h-full"
         actionButton={
-          <Button variant="secondary" onClick={() => navigate(`/${workspaceSlug}/products/${productId}/dashboard`)}>
+          <Button variant="secondary" onClick={() => navigate(`/${workspaceSlug}/products/${productId}/requirements`)}>
             {t("workspace_products.settings.back_to_product")}
           </Button>
         }

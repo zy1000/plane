@@ -1,5 +1,7 @@
 # 需求关联工作项（RequirementIssue）需求说明
 
+> **2026-08-17 需求状态轴改造批注**：本文描述的「工作项派生研发段阶段（双轨制）」已推翻——`RequirementProject.stage` 与 `recalculate_stage` 派生引擎已删除，需求状态改为需求级人工维护的 `Requirement.status`（未开始 / 已立项 / 进行中 / 已发布 / 已关闭）。需求 ↔ 工作项关联表 `RequirementIssue` 保留，但只供工作项数 / 完成率统计，工作项的任何变化不再影响需求状态；已关闭的需求不再出现在关联选择器中。以 `docs/domain-glossary.md` requirement 节为准；下文涉及阶段派生的部分仅作历史记录。
+
 ## 1. 背景与定位
 
 需求是产品侧规格，工作项是项目侧执行。两者**不合并成一张表**，只在项目里用关联行把「这条规格由哪些活来完成」钉住。本文档是 P3 的实施计划：新建 `RequirementIssue` 关联表，并给 `RequirementProject.stage` 的 in_progress / done 两档补上工作项事实来源。

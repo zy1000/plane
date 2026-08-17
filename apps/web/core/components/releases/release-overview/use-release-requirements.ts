@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectRequirement, TRequirementProjectStage } from "@plane/types";
+import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
 
 type TUseReleaseRequirementsProps = {
@@ -22,8 +22,8 @@ const PAGE_SIZE = 100;
  * 关联需求列表的 SWR key。
  *
  * 导出是为了让**不展示这份列表**的地方（发布概览页）也能在状态流转后按 key 失效缓存 ——
- * 服务端会重算需求阶段，而列表现在住在 /releases/:id 的需求子页上。用全局 mutate 而不是
- * 再挂一个 hook，省掉概览页一次没人看的请求。
+ * 发布成功时服务端会把关联需求推到 released，而列表现在住在 /releases/:id 的需求子页上。
+ * 用全局 mutate 而不是再挂一个 hook，省掉概览页一次没人看的请求。
  */
 export const getReleaseRequirementsKey = (workspaceSlug: string, projectId: string, releaseId: string) =>
   `release-requirements-${workspaceSlug}-${projectId}-${releaseId}`;
@@ -31,10 +31,10 @@ export const getReleaseRequirementsKey = (workspaceSlug: string, projectId: stri
 /**
  * 发布单「关联需求」section 的局部状态（照 cycles/cycle-overview/use-cycle-plans.ts 风格）。
  *
- * 列表、批量关联、解除关联都走这里。关联本身**不改阶段**（只圈定发版范围），
- * 只有发布单发布（completed）才由服务端把关联需求推到「已发布」，前端只负责动作
- * 完成后刷新列表。关联不再要求需求处于「研发完毕」——原阶段门槛已移除，任意阶段
- * 的需求都能被圈进发布范围。
+ * 列表、批量关联、解除关联都走这里。关联本身**不改状态**（只圈定发版范围），
+ * 只有发布单发布（completed）才由服务端把关联需求推到 released，前端只负责动作
+ * 完成后刷新列表。关联不再要求需求处于「研发完毕」——原门槛已移除，除已关闭外
+ * 任意状态的需求都能被圈进发布范围。
  */
 export const useReleaseRequirements = ({
   workspaceSlug,
@@ -46,7 +46,7 @@ export const useReleaseRequirements = ({
   const requirementService = useMemo(() => new RequirementService(), []);
   const [requirementAssociateOpen, setRequirementAssociateOpen] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
-  const [updatingStageRequirementId, setUpdatingStageRequirementId] = useState<string | null>(null);
+  const [updatingStatusRequirementId, setUpdatingStatusRequirementId] = useState<string | null>(null);
 
   const {
     data: requirementsResp,
@@ -113,21 +113,19 @@ export const useReleaseRequirements = ({
   );
 
   /**
-   * 人工设置研发段档位。写的是**项目**关联行（阶段长在项目上，不长在发布单上），
-   * 与迭代侧 updateStage 同口径；挂在在途发布单上时服务端会以 stage_locked 拒绝。
+   * 人工改需求级交付状态。写的是需求本体（状态跨项目共享一份，不长在发布单上），
+   * 与迭代侧 updateStatus 同口径，走项目侧的 updateProjectRequirement。
    */
-  const updateStage = useCallback(
-    async (requirementId: string, stage: TRequirementProjectStage) => {
+  const updateStatus = useCallback(
+    async (requirementId: string, status: TRequirementItemStatus) => {
       if (!workspaceSlug || !projectId) return;
       try {
-        setUpdatingStageRequirementId(requirementId);
-        const applied = await requirementService.updateProjectRequirement(workspaceSlug, projectId, requirementId, {
-          stage,
-        });
+        setUpdatingStatusRequirementId(requirementId);
+        await requirementService.updateProjectRequirement(workspaceSlug, projectId, requirementId, { status });
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: t("project_requirements.toast.stage_updated", {
-            stage: t(`project_requirements.stage.${applied.stage}`),
+          title: t("project_requirements.toast.status_updated", {
+            status: t(`requirement_fields.statuses.${status}`),
           }),
         });
         refresh();
@@ -139,7 +137,7 @@ export const useReleaseRequirements = ({
           message: payload?.error ?? payload?.detail ?? t("project_requirements.toast.failed"),
         });
       } finally {
-        setUpdatingStageRequirementId(null);
+        setUpdatingStatusRequirementId(null);
       }
     },
     [projectId, refresh, requirementService, t, workspaceSlug]
@@ -151,12 +149,12 @@ export const useReleaseRequirements = ({
     requirementsError,
     requirementAssociateOpen,
     unlinkingRequirementId,
-    updatingStageRequirementId,
+    updatingStatusRequirementId,
     openRequirementAssociateModal,
     closeRequirementAssociateModal,
     handleLinkRequirements,
     handleUnlinkRequirement,
-    updateStage,
+    updateStatus,
     /** 供外部动作（如发布/驳回）成功后主动刷新关联需求列表 */
     refresh,
   };

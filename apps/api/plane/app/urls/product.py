@@ -60,7 +60,7 @@ urlpatterns = [
     # --- 产品 ↔ 项目 ------------------------------------------------------
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/projects/",
-        ProductProjectViewSet.as_view({"get": "list"}),
+        ProductProjectViewSet.as_view({"get": "list", "post": "create"}),
         name="product-projects",
     ),
     # --- 产品 ↔ 发布（关联项目下的发布单聚合，只读） ----------------------

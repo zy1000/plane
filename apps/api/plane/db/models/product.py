@@ -191,7 +191,8 @@ class ProductProject(ProjectBaseModel):
     某个项目，项目也不因此获得产品的写权限。
 
     两端必须同工作区。这条跨表规则 DB 表达不了（workspace 在各自的父表上），由
-    写入口校验，见 plane/utils/requirement_project.py::resolve_linkable_products。
+    写入口校验，见 plane/utils/requirement_project.py::resolve_linkable_products
+    与 resolve_linkable_projects。
     """
 
     product = models.ForeignKey(

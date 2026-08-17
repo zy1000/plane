@@ -143,14 +143,6 @@ def close_old_issues():
                         )
                         for issue in issues_to_update
                     ]
-                    # 状态批量落库后重算关联需求的阶段（无关联时一次 in 查询即返回）。
-                    # 局部导入避免 worker 装载期扩大顶层依赖面；系统动作不传 actor。
-                    from plane.utils.requirement_project import recalculate_stages_for_issues
-
-                    recalculate_stages_for_issues(
-                        [issue.id for issue in issues_to_update],
-                        trigger={"type": "issue_state_changed", "source": "auto_close"},
-                    )
         return
     except Exception as e:
         log_exception(e)

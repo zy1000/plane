@@ -6,7 +6,6 @@ import { Pagination } from "antd";
 import {
   BookMarked,
   Copy,
-  FolderKanban,
   Hash,
   History,
   Layers,
@@ -22,7 +21,7 @@ import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirement, TRequirementData, TRequirementTypeSchema } from "@plane/types";
+import type { TRequirement, TRequirementData, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { AlertModalCore, Checkbox, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
@@ -46,16 +45,16 @@ import {
 } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { copyRequirementData } from "@/components/requirements/requirement-row-data";
+import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
-import { useProductProjects } from "@/hooks/store/use-product-projects";
-import { RequirementProjectStageBadges } from "./requirement-project-stage-badges";
 
 /**
  * 多类型时的默认视图：跨全部需求类型的总览。
  *
  * 只展示每行都有的八个内置字段，外加一列「所属类型」—— 自定义字段随类型而异，跨类型
  * 摆在一张表里对不上列。刻意做成只读：总览里新增一行，对应类型的必填字段无处可填；
- * 要录入或改值就点进对应的类型视图。
+ * 要录入或改值就点进对应的类型视图。唯一例外是状态列 —— 它不是「内容」，走独立的
+ * 状态端点，总览里就地可改。
  *
  * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：标题列左固定
  * 并吃掉容器剩余宽度、其余列定宽 144px、行高 44px、勾选框与行操作都折进标题格里悬停
@@ -92,6 +91,11 @@ type TProps = {
   /** 提交 1..N 条需求进入评审。默认视图是唯一能组装跨需求类型变更单的地方 */
   onSubmitReview?: (requirementIds: string[]) => void;
   onWithdrawReview?: (changeRequestId: string) => void;
+  /**
+   * 改需求级交付状态。总览虽然是只读视图，状态是唯一例外 —— 它不属于「对应类型才能填
+   * 的内容」，走独立的状态端点；不传则状态格只读。
+   */
+  onStatusChange?: (requirementId: string, status: TRequirementItemStatus) => void;
   /** 与类型视图共用顶部工具栏容器：切视图时右上角不该整排控件消失 */
   toolbarPortalEl?: HTMLElement | null;
 };
@@ -123,6 +127,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     onOpenChangeRequest,
     onSubmitReview,
     onWithdrawReview,
+    onStatusChange,
     toolbarPortalEl,
   } = props;
   const { t } = useTranslation();
@@ -199,28 +204,23 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
    */
   const titleColumn = builtinColumns.find((column) => column.key === "title");
   const propertyBuiltinColumns = builtinColumns.filter((column) => column.key !== "title");
-  /** 描述紧跟标题；审批插在描述之后，其余内置列跟在审批后面 */
+  /** 描述紧跟标题；审批、状态依次插在描述之后，其余内置列跟在后面 */
   const descriptionColumn = propertyBuiltinColumns.find((column) => column.key === "description_html");
-  const remainingBuiltinColumns = propertyBuiltinColumns.filter((column) => column.key !== "description_html");
+  const statusColumn = propertyBuiltinColumns.find((column) => column.key === "status");
+  const remainingBuiltinColumns = propertyBuiltinColumns.filter(
+    (column) => column.key !== "description_html" && column.key !== "status"
+  );
 
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
 
   /** 标题列之外的所有列宽，用来反推标题列该吃掉多少 */
   const propertyColumnsWidth =
-    // 编号 + 标准库编号 + 审批列 + 项目阶段列 + 内置属性列 + 所属类型列
-    REQUIREMENT_GRID_COLUMN_WIDTH +
+    // 编号 + 标准库编号 + 审批列 + 内置属性列（含描述与状态，状态列只是位置前提）+ 所属类型列
     REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     REQUIREMENT_GRID_COLUMN_WIDTH +
     propertyBuiltinColumns.reduce((total, column) => total + getRequirementColumnWidth(column.key), 0) +
     REQUIREMENT_GRID_COLUMN_WIDTH;
-  // 项目阶段列的 tooltip 要把 project_id 翻成项目名，名录与详情页「所属项目」同源
-  const { links: productProjectLinks } = useProductProjects({ workspaceSlug, productId });
-  const projectNameById = useMemo(
-    () => new Map(productProjectLinks.map((link) => [link.project, link.project_detail?.name])),
-    [productProjectLinks]
-  );
-  const resolveProjectName = useCallback((projectId: string) => projectNameById.get(projectId), [projectNameById]);
   const titleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, propertyColumnsWidth);
   const tableWidth = titleColumnWidth + propertyColumnsWidth;
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
@@ -292,29 +292,11 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
 
   const toolbar = (
     <div className="flex items-center gap-2">
-      {!readOnly && onSubmitReview && submittableSelectedIds.length > 0 && (
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={isMutating}
-          onClick={() => onSubmitReview(submittableSelectedIds)}
-        >
-          <Send className="size-3.5" />
-          {t("requirement_approval.submit_review_count", { count: submittableSelectedIds.length })}
-        </Button>
-      )}
-      {!readOnly && selectedIds.length > 0 && (
-        <Button variant="error-outline" size="sm" disabled={isMutating} onClick={() => setIdsToDelete(selectedIds)}>
-          <Trash2 className="size-3.5" />
-          {t("workspace_products.requirements.data.views.delete_selected", { count: selectedIds.length })}
-        </Button>
-      )}
       <div className="flex items-center">
         {!isSearchOpen && (
           <IconButton
             variant="ghost"
             size="lg"
-            className="-mr-1"
             onClick={() => {
               setIsSearchOpen(true);
               window.setTimeout(() => searchInputRef.current?.focus(), 0);
@@ -325,7 +307,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
         )}
         <div
           className={cn(
-            "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+            "box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
             {
               "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
             }
@@ -347,6 +329,21 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
           )}
         </div>
       </div>
+      {!readOnly && onSubmitReview && submittableSelectedIds.length > 0 && (
+        <Button
+          variant="primary"
+          size="lg"
+          disabled={isMutating}
+          onClick={() => onSubmitReview(submittableSelectedIds)}
+        >
+          {t("requirement_approval.submit_review_count", { count: submittableSelectedIds.length })}
+        </Button>
+      )}
+      {!readOnly && selectedIds.length > 0 && (
+        <Button variant="error-outline" size="lg" disabled={isMutating} onClick={() => setIdsToDelete(selectedIds)}>
+          {t("workspace_products.requirements.data.views.delete_selected", { count: selectedIds.length })}
+        </Button>
+      )}
     </div>
   );
 
@@ -382,7 +379,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
               <col style={{ width: getRequirementColumnWidth(descriptionColumn.key) }} />
             )}
             <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
-            <col style={{ width: REQUIREMENT_GRID_COLUMN_WIDTH }} />
+            {statusColumn && <col style={{ width: getRequirementColumnWidth(statusColumn.key) }} />}
             {remainingBuiltinColumns.map((column) => (
               <col key={column.key} style={{ width: getRequirementColumnWidth(column.key) }} />
             ))}
@@ -442,13 +439,12 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
               <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                 <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
               </th>
-              {/* 项目阶段紧跟审批：关联驱动派生的交付进度，同样是逐行要扫的信号 */}
-              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                <RequirementGridHeaderLabel
-                  icon={FolderKanban}
-                  label={t("project_requirements.project_stage_column")}
-                />
-              </th>
+              {/* 状态紧跟审批：需求级交付状态（人工维护），同样是逐行要扫的信号 */}
+              {statusColumn && (
+                <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                  <RequirementGridHeaderLabel icon={statusColumn.icon} label={t(statusColumn.labelKey)} />
+                </th>
+              )}
               {remainingBuiltinColumns.map((column) => (
                 <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />
@@ -607,12 +603,20 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
                     <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
                   </td>
-                  <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
-                    <RequirementProjectStageBadges
-                      projectLinks={requirement.project_links}
-                      resolveProjectName={resolveProjectName}
-                    />
-                  </td>
+                  {statusColumn && (
+                    <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
+                      {/*
+                        总览只读，状态格是唯一能改的格：它不跟行级 is_locked / closed 走
+                        （closed 行要能重开、评审中也能改状态），只看页面级写权限
+                      */}
+                      <RequirementStatusCell
+                        status={requirement.status}
+                        onChange={
+                          !readOnly && onStatusChange ? (status) => onStatusChange(requirement.id, status) : undefined
+                        }
+                      />
+                    </td>
+                  )}
                   {remainingBuiltinColumns.map((column) => (
                     <td key={column.key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
                       <BuiltinCellValue

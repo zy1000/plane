@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirement,
   TRequirementApprovalPolicy,
@@ -9,6 +11,7 @@ import type {
   TRequirementData,
   TRequirementFilter,
   TRequirementImportPayload,
+  TRequirementItemStatus,
   TRequirementsResponse,
   TRequirementTypeSchema,
 } from "@plane/types";
@@ -50,6 +53,7 @@ export const useProductRequirements = ({
   productId: string | undefined;
   onPolicyUpdate?: (policy: TRequirementApprovalPolicy) => void;
 }) => {
+  const { t } = useTranslation();
   const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TRequirementsResponse>(EMPTY_PAGE);
   const [isConfigurationLoading, setIsConfigurationLoading] = useState(Boolean(workspaceSlug && productId));
@@ -224,6 +228,46 @@ export const useProductRequirements = ({
     }));
   }, []);
 
+  /**
+   * 改一行的需求级交付状态（网格状态格的写入口）。
+   *
+   * 走独立的状态端点，与内容 PATCH / bulk_save 分开：不带 version、不 bump version、
+   * 评审中也能改。响应虽是整行，但**只合并 status / can_submit_review** 进当前页 ——
+   * 整行替换会与网格 autosave 在飞的内容保存交错（那边回写的 version 会被盖回旧值）。
+   * 失败在这里统一 toast，调用方 void 掉即可。
+   */
+  const updateStatus = useCallback(
+    async (requirementId: string, status: TRequirementItemStatus) => {
+      if (!workspaceSlug || !productId) return null;
+      try {
+        const response = await requirementService.updateRequirementStatus(
+          workspaceSlug,
+          productId,
+          requirementId,
+          status
+        );
+        setRequirementsPage((current) => ({
+          ...current,
+          results: current.results.map((item) =>
+            item.id === requirementId
+              ? { ...item, status: response.status, can_submit_review: response.can_submit_review }
+              : item
+          ),
+        }));
+        return response;
+      } catch (requestError) {
+        const payload = requestError as { error?: string; detail?: string } | null;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message: payload?.error ?? payload?.detail ?? t("workspace_products.requirements.toast.failed"),
+        });
+        return null;
+      }
+    },
+    [productId, t, workspaceSlug]
+  );
+
   const deleteRequirements = useCallback(
     async (requirementIds: string[]) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
@@ -314,6 +358,7 @@ export const useProductRequirements = ({
     updateConfiguration,
     createRequirement,
     updateRequirement,
+    updateStatus,
     deleteRequirements,
     saveRequirementBatch,
     syncRequirements,

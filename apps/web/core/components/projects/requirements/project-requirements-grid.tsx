@@ -1,5 +1,6 @@
 /**
- * 项目需求网格：需求内容与阶段都只读（阶段由关联事实派生，手动改阶段已退役）。
+ * 项目需求网格：需求内容只读，唯一能写的是需求级交付状态（RequirementStatusCell 下拉，
+ * 与关联/解除共用 canManage）。
  *
  * 没有复用 components/requirements/requirement-grid.tsx —— 那个网格是「一个需求类型
  * 一张表」的可编辑录入界面，整套暂存/批量保存/乐观锁机制在项目侧全无用武之地。
@@ -20,16 +21,13 @@ import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TProjectRequirement, TRequirementProjectStage, TRequirementTypeSchema } from "@plane/types";
+import type { TProjectRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { ProductChip } from "@/components/products/product-chip";
-import {
-  BuiltinCellValue,
-  REQUIREMENT_BUILTIN_COLUMNS,
-  shouldShowRequirementStatus,
-} from "@/components/requirements/requirement-builtin-fields";
+import { RequirementStatusCell } from "@/components/requirements";
+import { BuiltinCellValue, REQUIREMENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
 import {
   getCurrentPageOffset,
   getRequirementColumnWidth,
@@ -55,7 +53,6 @@ import {
   TOGGLEABLE_COLUMNS,
   type TProjectRequirementColumnKey,
 } from "./project-requirements-columns";
-import { ProjectRequirementStageCell } from "./project-requirement-stage-cell";
 
 type TProps = {
   workspaceSlug: string;
@@ -84,8 +81,8 @@ type TProps = {
   onOpenDetail: (requirementId: string) => void;
   onLink: () => void;
   onUnlink: (requirementIds: string[]) => void;
-  /** 人工设研发段档位。与关联/解除共用 canManage，不单设权限 key */
-  onStageChange: (requirementId: string, stage: TRequirementProjectStage) => void;
+  /** 改需求级交付状态。与关联/解除共用 canManage，不单设权限 key；不传则状态列恒只读 */
+  onStatusChange?: (requirementId: string, status: TRequirementItemStatus) => void;
   /** 与筛选行共用容器：换筛选/换页时右上角那排控件不该跟着卸载重建 */
   toolbarPortalEl?: HTMLElement | null;
   /** 插在搜索后面、其余操作前面，例如过滤按钮 */
@@ -125,7 +122,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     onOpenDetail,
     onLink,
     onUnlink,
-    onStageChange,
+    onStatusChange,
     toolbarPortalEl,
     toolbarAfterSearch,
     hasLinkedProducts,
@@ -292,28 +289,10 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         ) : (
           <span className="text-placeholder">—</span>
         );
-      case "stage":
-        /*
-         * 研发段（研发中/研发完毕）可人工设置，另外三档由服务端按关联事实派生。
-         * stage_locked = 挂在在途发布单上 —— 那时整行锁死，服务端也会拒绝写入。
-         * 有关联工作项时研发段也改为按任务状态派生，人工下拉关掉（不传 onChange
-         * 即恒只读，组件零改动），后端 409 REQUIREMENT_STAGE_ISSUE_DERIVED 兜底。
-         */
-        return (
-          <ProjectRequirementStageCell
-            stage={requirement.stage}
-            latestCycleName={requirement.latest_cycle_name}
-            latestReleaseName={requirement.latest_release_name}
-            carryover={requirement.carryover}
-            onChange={
-              canManage && !requirement.issue_count ? (next) => onStageChange(requirement.id, next) : undefined
-            }
-            locked={requirement.stage_locked || requirement.stage === "released"}
-          />
-        );
       case "issues": {
         /*
-         * 完成率口径：分母去掉已取消（cancelled 既不算没做也不算做完）。
+         * 关联工作项完成率，与需求状态是两根轴（状态人工维护，不从这里派生）。
+         * 口径：分母去掉已取消（cancelled 既不算没做也不算做完）。
          * 全部被取消时分母为 0，百分比无意义，退回占位符。
          */
         if (!requirement.issue_count) return <span className="text-placeholder">—</span>;
@@ -337,15 +316,14 @@ export const ProjectRequirementsGrid = (props: TProps) => {
           </span>
         );
       case "status":
-        /*
-         * status 与 approval 语义高度重叠：已通过 / 已确认并排出现是噪音。
-         * 只有 implemented / obsolete 两个值携带 approval 表达不了的信息，
-         * shouldShowRequirementStatus 正是为此存在，详情抽屉早就在用了。
-         */
-        return shouldShowRequirementStatus(requirement.status) ? (
-          <BuiltinCellValue columnKey="status" values={requirement} />
-        ) : (
-          <span className="text-placeholder">—</span>
+        // 需求级交付状态，跨项目共享一份；有 canManage 才是下拉，否则只读胶囊
+        return (
+          <RequirementStatusCell
+            status={requirement.status}
+            onChange={
+              canManage && onStatusChange ? (next) => onStatusChange(requirement.id, next) : undefined
+            }
+          />
         );
       default:
         return (

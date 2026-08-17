@@ -24,7 +24,6 @@ import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
-  TRequirementFieldCategory,
   TRequirementFieldDraft,
   TRequirementFieldType,
   TRequirementSelectOption,
@@ -101,8 +100,8 @@ type TFieldRowProps = {
 type TFieldInlineFormProps = {
   field: TRequirementFieldDraft;
   isChild: boolean;
-  /** 这个字段实际归哪一类：子字段跟着所属表单。数据字段不允许设必填 */
-  effectiveCategory: TRequirementFieldCategory | null;
+  /** 这个字段实际进不进标准库：子字段跟着所属表单。不进库的字段不允许设必填 */
+  effectiveShowInLibrary: boolean;
   onChange: (field: TRequirementFieldDraft) => void;
   /** 还原成展开时的样子 */
   onCancel: () => void;
@@ -169,8 +168,7 @@ const createField = (
   field_type: type,
   is_required: false,
   is_active: true,
-  // 分类没有默认值：必须在字段设置里选完才能保存
-  field_category: null,
+  show_in_library: true,
   config:
     type === "select"
       ? {
@@ -419,10 +417,6 @@ function RequirementFieldRow(props: TFieldRowProps) {
             )}
           </button>
           <span className="shrink-0 text-xs text-secondary">{fieldTypeDescription}</span>
-          {/* 分类没选完保存会被拦下，所以只有这一个未完成态值得占一格 */}
-          {!isChild && !field.field_category && (
-            <StatusBadge tone="warning">{t("requirement_fields.field_categories.label")}</StatusBadge>
-          )}
           <StatusBadge tone={field.is_active ? "success" : "neutral"}>
             {t(field.is_active ? "requirement_fields.builder.enabled_badge" : "requirement_fields.inactive")}
           </StatusBadge>
@@ -465,103 +459,23 @@ function RequirementFieldRow(props: TFieldRowProps) {
   );
 }
 
-const FIELD_CATEGORIES: TRequirementFieldCategory[] = ["standard", "data"];
-
-/**
- * 字段分类：决定这个字段进不进标准库。没有默认值 —— 建字段时必须明确选一个，
- * 否则保存会被拦下（后端同样要求）。
- *
- * 表单子字段不单独设置，跟着所属表单走，这里只展示继承来源。
- */
-function FieldCategoryPicker({
-  field,
-  isChild,
-  onChange,
-}: {
-  field: TRequirementFieldDraft;
-  isChild: boolean;
-  onChange: (next: TRequirementFieldDraft) => void;
-}) {
-  const { t } = useTranslation();
-
-  if (isChild) {
-    return (
-      <div className="rounded-md border border-subtle bg-layer-1 px-3 py-2">
-        <span className="block text-12 font-medium text-secondary">
-          {t("requirement_fields.field_categories.label")}
-        </span>
-        <span className="mt-1 block text-11 text-tertiary">
-          {t("requirement_fields.field_categories.inherited")}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <span className="mb-1.5 block text-12 font-medium text-secondary">
-        {t("requirement_fields.field_categories.label")}
-      </span>
-      <div className="space-y-1.5">
-        {FIELD_CATEGORIES.map((category) => (
-          <button
-            key={category}
-            type="button"
-            onClick={() =>
-              onChange({
-                ...field,
-                field_category: category,
-                // 转成数据字段就把必填一并摘掉，连同子字段 —— 子字段的分类跟着表单走
-                ...(category === "data"
-                  ? {
-                      is_required: false,
-                      children: field.children.map((child) => ({ ...child, is_required: false })),
-                    }
-                  : {}),
-              })
-            }
-            className={cn(
-              "block w-full rounded-md border px-3 py-2 text-left transition-colors duration-150",
-              field.field_category === category
-                ? "border-accent-strong bg-accent-subtle/20"
-                : "border-subtle bg-surface-1 hover:border-strong"
-            )}
-          >
-            <span className="block text-12 font-medium text-primary">
-              {t(`requirement_fields.field_categories.${category}`)}
-            </span>
-            <span className="mt-0.5 block text-11 leading-4 text-secondary">
-              {t(`requirement_fields.field_categories.${category}_hint`)}
-            </span>
-          </button>
-        ))}
-      </div>
-      {!field.field_category && (
-        <span className="mt-1.5 block text-11 text-warning-primary">
-          {t("requirement_fields.field_categories.required")}
-        </span>
-      )}
-    </div>
-  );
-}
-
 /**
  * 字段的内联编辑表单：左栏是「这个字段是什么」（名称/说明/必填/启用），
- * 右栏是「怎么填」（类型、分类、选项、占位符）。与工作项属性的内联表单同构。
+ * 右栏是「怎么填」（类型、选项、占位符）。与工作项属性的内联表单同构。
  *
  * 改动直接写进草稿 —— 整页由顶部的「保存配置」统一提交，所以这里没有「更新」。
  * 「取消」还原到展开时的样子，「完成」只是收起。
  */
 function FieldInlineForm(props: TFieldInlineFormProps) {
-  const { field, isChild, effectiveCategory, onChange, onCancel, onDone } = props;
+  const { field, isChild, effectiveShowInLibrary, onChange, onCancel, onDone } = props;
   const { t } = useTranslation();
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
   /*
-   * 数据字段不能设必填 —— 标准库只按标准字段校验，库条目天生不带数据字段，
+   * 不进标准库的字段不能设必填 —— 标准库只按纳入库的字段校验，库条目天生不带它们，
    * 导入进来的行会卡在必填上再也存不动。后端在
    * RequirementFieldNodeWriteSerializer 里也拦一道，这里只是提前给出反馈。
    */
-  const canBeRequired = effectiveCategory !== "data";
+  const canBeRequired = effectiveShowInLibrary;
   const selectOptions = field.field_type === "select" ? getRequirementSelectOptions(field) : [];
   const hasValidSelectOptions = field.field_type !== "select" || hasValidRequirementSelectOptions(field);
 
@@ -569,6 +483,20 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
     t("requirement_fields.builder.default_option", { index: 1 }),
     t("requirement_fields.builder.default_option", { index: 2 }),
   ];
+
+  /** 移出标准库时把必填一并摘掉，连同子字段 —— 子字段跟着所属表单走 */
+  const toggleShowInLibrary = (next: boolean) => {
+    onChange({
+      ...field,
+      show_in_library: next,
+      ...(next
+        ? {}
+        : {
+            is_required: false,
+            children: field.children.map((child) => ({ ...child, is_required: false })),
+          }),
+    });
+  };
 
   const updateType = (fieldType: TRequirementFieldType) => {
     const commonConfig = {
@@ -632,6 +560,16 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
           placeholder={t("requirement_fields.builder.description_example")}
         />
         <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-subtle pt-3 text-12 text-secondary">
+          <label className={cn("flex items-center gap-2", isChild && "cursor-not-allowed text-disabled")}>
+            <input
+              type="checkbox"
+              checked={effectiveShowInLibrary}
+              disabled={isChild}
+              onChange={(event) => toggleShowInLibrary(event.target.checked)}
+              className="size-3.5 rounded border border-subtle accent-accent-primary disabled:cursor-not-allowed"
+            />
+            {t("requirement_fields.builder.library_title")}
+          </label>
           <label className={cn("flex items-center gap-2", !canBeRequired && "cursor-not-allowed text-disabled")}>
             <input
               type="checkbox"
@@ -642,11 +580,6 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
             />
             {t("requirement_fields.builder.required_title")}
           </label>
-          {!canBeRequired && (
-            <span className="basis-full text-11 leading-4 text-tertiary">
-              {t("requirement_fields.builder.required_data_field_hint")}
-            </span>
-          )}
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -656,6 +589,16 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
             />
             {t("requirement_fields.builder.enabled_title")}
           </label>
+          {isChild && (
+            <span className="basis-full text-11 leading-4 text-tertiary">
+              {t("requirement_fields.builder.library_inherited_hint")}
+            </span>
+          )}
+          {!canBeRequired && (
+            <span className="basis-full text-11 leading-4 text-tertiary">
+              {t("requirement_fields.builder.required_library_only_hint")}
+            </span>
+          )}
         </div>
       </div>
 
@@ -679,7 +622,6 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
           </label>
-          <FieldCategoryPicker field={field} isChild={isChild} onChange={onChange} />
           {field.field_type === "select" && (
             <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
               <div className="border-b border-subtle px-3 py-3">
@@ -880,14 +822,14 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   };
 
   const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => {
-    // 子字段的分类跟着所属表单走，「能不能设必填」也就得看根字段的分类
+    // 子字段跟着所属表单走，「能不能设必填」也就得看根字段进不进标准库
     const root = fields.find((item) => fieldKey(item) === target.rootKey);
-    const effectiveCategory = target.childKey ? (root?.field_category ?? null) : field.field_category;
+    const effectiveShowInLibrary = target.childKey ? (root?.show_in_library ?? true) : field.show_in_library;
     return (
       <FieldInlineForm
         field={field}
         isChild={Boolean(target.childKey)}
-        effectiveCategory={effectiveCategory}
+        effectiveShowInLibrary={effectiveShowInLibrary}
         onChange={updateSelectedField}
         onCancel={cancelEditing}
         onDone={closeEditor}

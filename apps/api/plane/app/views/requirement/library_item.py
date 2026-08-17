@@ -2,8 +2,8 @@
 
 与产品需求相比少了两件事 —— 不走审批、没有产品级权限；字段来自库所选的需求类型，
 只能在需求类型页改。「库条目永不走审批」由 Requirement 上的
-req_library_item_never_approved 约束硬保证，所以这里的写入路径不能给 status 等四个
-执行期列留口子（见 LIBRARY_HIDDEN_BUILTIN_COLUMNS）。
+req_library_item_never_approved 约束硬保证；status 等四个执行期列在库里既不展示
+也不开写入口（见 LIBRARY_HIDDEN_BUILTIN_COLUMNS，库条目的 status 恒为默认值）。
 """
 
 from rest_framework import status

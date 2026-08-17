@@ -1030,20 +1030,6 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
                 workspace_id=issue.workspace_id,
                 epoch=int(timezone.now().timestamp()),
             )
-            # 状态真正落库后重算关联需求的阶段（无关联时是一次索引点查 no-op）。
-            # 局部导入：requirement_project 与 workflow 同属 utils，顶层互引易成环。
-            # 本函数已在事务+行锁内，recalculate 内部的 atomic 自动降级为 savepoint。
-            from plane.utils.requirement_project import recalculate_stages_for_issue
-
-            recalculate_stages_for_issue(
-                issue.id,
-                trigger={
-                    "type": "issue_state_changed",
-                    "source": "workflow_approval",
-                    "transition_record_id": str(record.id),
-                },
-                actor=acted_by,
-            )
 
         # 同事务落目标负责人（仅当审批申请中携带了目标负责人）
         if record.target_assignee_ids is not None:

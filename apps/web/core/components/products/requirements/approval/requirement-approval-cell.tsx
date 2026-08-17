@@ -5,7 +5,7 @@
  * 每行都要扫一眼的信息。它替代了原来的「变更 / 最后变更于」两列：那两列是相对基线版本
  * 的，基线已经不是变更单位了。
  */
-import { Lock, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement, TRequirementApprovalState } from "@plane/types";
@@ -50,7 +50,6 @@ export const RequirementApprovalCell = ({ requirement, isStagedCreate, onOpenCha
       )}
     >
       {state === "pending_deletion" && <Trash2 className="size-2.5 shrink-0" />}
-      {state === "in_review" && <Lock className="size-2.5 shrink-0" />}
       <span className="truncate">{t(`requirement_approval.state.${state}`)}</span>
     </span>
   );

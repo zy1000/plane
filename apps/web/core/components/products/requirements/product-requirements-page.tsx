@@ -6,7 +6,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IUserLite } from "@plane/types";
+import type { IUserLite, TRequirementItemStatus } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -184,6 +184,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const refreshLayer = () => {
     void store.fetchConfiguration().catch(() => undefined);
     void store.fetchRequirements().catch(() => undefined);
+    void changesStore.fetchChangeRequests().catch(() => undefined);
+    // 提交 / 通过 / 驳回 / 撤回都会改「待我审批」条数，角标不能等整页刷新
+    void approvalInbox.fetchInbox({ silent: true }).catch(() => undefined);
   };
 
   const approvalActions = useRequirementApprovalActions({
@@ -193,6 +196,14 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   });
 
   const isLoading = store.isConfigurationLoading || !policy;
+
+  /**
+   * 网格状态格的写入口。只在有页面级写权限时给 —— 状态格刻意不跟行级 is_locked / closed
+   * 走（closed 行要能重开），所以「能不能改」在这里一次性由 canEdit 决定。
+   */
+  const onStatusChange = canEdit
+    ? (requirementId: string, status: TRequirementItemStatus) => void store.updateStatus(requirementId, status)
+    : undefined;
 
   return (
     <>
@@ -315,10 +326,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             store={changesStore}
             openedChangeRequestId={openedChangeRequestId}
             onOpenChangeRequest={openChangeRequest}
-            onSettled={() => {
-              refreshLayer();
-              void changesStore.fetchChangeRequests().catch(() => undefined);
-            }}
+            onSettled={refreshLayer}
           />
         ) : activeTab === "data" ? (
           requirementTypes.length === 0 ? (
@@ -367,6 +375,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onOpenChangeRequest={openChangeRequest}
               onSubmitReview={approvalActions.openSubmitModal}
               onWithdrawReview={approvalActions.withdraw}
+              onStatusChange={onStatusChange}
               toolbarPortalEl={dataToolbarHost}
             />
           ) : (
@@ -412,6 +421,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onSubmitReview={approvalActions.openSubmitModal}
               onWithdrawReview={approvalActions.withdraw}
               onOpenChangeRequest={openChangeRequest}
+              onStatusChange={onStatusChange}
               toolbarPortalEl={dataToolbarHost}
             />
           )
@@ -427,7 +437,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         canEdit={canEdit}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
-        // 抽屉已经把改完的整行交回来了，直接合并进当前页；重拉会让后面的网格整张闪一下
+        // 抽屉已经把改完的整行交回来了（内容 PATCH 与状态改动都走这条），直接合并进当前页；
+        // 重拉会让后面的网格整张闪一下
         onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
       />
 
@@ -474,9 +485,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
       <SubmitReviewModal
         isOpen={approvalActions.isSubmitModalOpen}
         isSubmitting={changesStore.isMutating}
-        requirements={approvalActions.pendingSelection.map(
-          (id) => store.requirementsPage.results.find((row) => row.id === id) ?? null
-        )}
         onClose={approvalActions.closeSubmitModal}
         onSubmit={(reason) => void approvalActions.submit(reason)}
       />
@@ -485,6 +493,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         isOpen={isInboxOpen}
         inbox={approvalInbox}
         onClose={() => setIsInboxOpen(false)}
+        onSettled={refreshLayer}
         onOpenChangeRequest={(item) => {
           setIsInboxOpen(false);
           // 收件箱是跨产品的：别的产品的单要整页跳过去，不能只改当前页的 query

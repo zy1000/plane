@@ -17,6 +17,7 @@ import {
   useRequirementDetail,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { canEditRequirementContent } from "@/components/requirements/requirement-status-cell";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
@@ -49,9 +50,11 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     () => store.requirementTypes.find((item) => item.id === requirement?.requirement_type_id) ?? null,
     [requirement?.requirement_type_id, store.requirementTypes]
   );
-  /** 能不能改需求条目；具体这一行还要看它自己在不在评审中 */
+  /** 能不能改需求条目（页面级写权限）；内容还要看这一行在不在评审中 / 有没有关闭 */
   const canEdit = Boolean(store.policy?.can_edit);
-  const isEditable = canEdit && !(requirement?.is_locked ?? false);
+  const isEditable = canEditRequirementContent(requirement, canEdit);
+  /** 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态 */
+  const onStatusChange = canEdit ? detail.updateStatus : undefined;
 
   const knownRows = useMemo(() => (requirement ? [requirement, ...detail.children] : []), [detail.children, requirement]);
   const parentTitles = useRequirementTitles({
@@ -136,6 +139,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   layout="page"
                   resolveParentTitle={resolveParentTitle}
                   onPatch={detail.submitPatch}
+                  onStatusChange={onStatusChange}
                   onOpenRequirement={openRequirement}
                   onRolledBack={() => void detail.refresh()}
                   /* 产品侧只读：按项目分组看已拆工作项；「拆」必须先选项目，入口在项目侧 */
@@ -147,10 +151,12 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                     requirement={requirement}
                     requirementTypeName={requirementType?.name ?? null}
                     readOnly={!isEditable}
+                    canEdit={canEdit}
                     workspaceSlug={slug}
                     productId={product}
                     resolveParentTitle={resolveParentTitle}
                     onPatch={detail.submitPatch}
+                    onStatusChange={onStatusChange}
                     onProjectsChanged={() => void detail.refresh()}
                   />
                 </div>
@@ -173,10 +179,12 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 requirement={requirement}
                 requirementTypeName={requirementType?.name ?? null}
                 readOnly={!isEditable}
+                canEdit={canEdit}
                 workspaceSlug={slug}
                 productId={product}
                 resolveParentTitle={resolveParentTitle}
                 onPatch={detail.submitPatch}
+                onStatusChange={onStatusChange}
                 onProjectsChanged={() => void detail.refresh()}
               />
             </div>
@@ -187,7 +195,6 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
       <SubmitReviewModal
         isOpen={approvalActions.isSubmitModalOpen}
         isSubmitting={changesStore.isMutating}
-        requirements={[requirement ?? null]}
         onClose={approvalActions.closeSubmitModal}
         onSubmit={(reason) => void approvalActions.submit(reason)}
       />

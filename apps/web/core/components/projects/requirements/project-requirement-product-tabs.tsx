@@ -8,7 +8,7 @@
 export const PRODUCT_PARAM = "product";
 
 /**
- * 非法/已解除关联的产品 id 回落到「全部」，与 getStageFromParam 同一范式。
+ * 非法/已解除关联的产品 id 回落到「全部」，与 getStatusFromParam 同一范式。
  *
  * `allowedProductIds === null/undefined` 表示名单尚未就绪：**一律放行**，避免深链
  * 首帧把自己抹掉。名单就绪后（含空数组）再校验是否仍在已关联产品里。

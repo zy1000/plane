@@ -4,20 +4,19 @@
 
 """需求 ↔ 迭代 / 发布单的关联端点（项目侧）。
 
-这两张关联表是阶段派生的事实来源：迭代关联给出「已排期」，发布单**已发布**给出
-「已发布」。注意发布关联本身不产生档位 —— 它只圈定发版范围。每次增删之后
-**同步**调 recalculate_stage —— 显式调用，不挂信号（理由见
-utils/requirement_project.recalculate_stage 的 docstring）。
+这两张关联表只圈定范围，不派生需求状态。唯一的联动是只升不降的自动推进 (b)：
+把需求补挂进一张**已发布**（completed）的发布单时，本批需求推到 released
+（utils/requirement_project.promote_to_released）；发布单自身变为 completed 的推进
+在 views/release/base.py。解除关联不改状态。
 
-公共前置校验一条，报 409：需求必须已关联进本项目（先进项目，再进项目下的
-容器 —— 反过来会绕开候选池的评审门槛）。发布侧不再额外要求阶段必须是「研发
-完毕」——这道门槛已按需求方要求移除，进发布单不再对 stage 设限。需求在途变更
-（in_review）刻意**不拦**：发布是项目侧的节奏，不被产品侧审批阻塞，前端标黄
-提示即可（单向依赖铁律的软提示分支）。
+公共前置校验两条，报 409：需求必须已关联进本项目（先进项目，再进项目下的
+容器 —— 反过来会绕开候选池的评审门槛）；已关闭（closed）的需求不进任何关联
+选择器。需求在途变更（in_review）刻意**不拦**：发布是项目侧的节奏，不被产品侧
+审批阻塞，前端标黄提示即可（单向依赖铁律的软提示分支）。
 
-迭代与发布两套端点几乎同构，共用一个私有基类 —— 关联校验、错误码、重算触发的
-行为必须逐字一致，分开写迟早漂移。两者唯一的差异走 _validate_stages 钩子，不要
-为它覆盖整个 create。
+迭代与发布两套端点几乎同构，共用一个私有基类 —— 关联校验、错误码的行为必须
+逐字一致，分开写迟早漂移。两者唯一的差异走 _after_link 钩子，不要为它覆盖整个
+create。
 """
 
 from rest_framework import status
@@ -31,14 +30,17 @@ from plane.app.views.requirement.row_base import annotate_pending
 from plane.db.models import (
     Cycle,
     Release,
+    ReleaseStatus,
+    Requirement,
     RequirementCycle,
+    RequirementItemStatus,
     RequirementProject,
     RequirementRelease,
 )
 from plane.utils.requirement import source_library_identifier_map
 from plane.utils.requirement_project import (
     linked_requirements_queryset,
-    recalculate_stage,
+    promote_to_released,
 )
 
 DEFAULT_PER_PAGE = 20
@@ -51,7 +53,6 @@ class BaseRequirementContainerViewSet(BaseViewSet):
     container_model = None  # Cycle | Release
     link_model = None  # RequirementCycle | RequirementRelease
     container_attr = ""  # 关联行上的外键名："cycle" | "release"
-    trigger_prefix = ""  # 留痕 trigger.type 前缀："cycle" | "release"
 
     def _get_container(self, slug, project_id, container_id):
         return self.container_model.objects.filter(
@@ -71,17 +72,9 @@ class BaseRequirementContainerViewSet(BaseViewSet):
             },
         ).data
 
-    def _validate_stages(self, project_id, requested):
-        """关联前的阶段门槛。默认放行；发布子类覆盖。返回 Response 表示拒绝。"""
+    def _after_link(self, container, requirement_ids):
+        """关联写入之后的钩子。默认什么也不做；发布子类覆盖做自动推进。"""
         return None
-
-    def _trigger(self, action, container):
-        # 名称存快照：容器后续可能被删，留痕必须自足可读
-        return {
-            "type": f"{self.trigger_prefix}_{action}",
-            f"{self.container_attr}_id": str(container.id),
-            f"{self.container_attr}_name": container.name,
-        }
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
     def list(self, request, slug, project_id, container_id):
@@ -144,9 +137,24 @@ class BaseRequirementContainerViewSet(BaseViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        stage_error = self._validate_stages(project_id, requested)
-        if stage_error is not None:
-            return stage_error
+        # 已关闭的需求不进任何关联选择器
+        closed = [
+            str(value)
+            for value in Requirement.objects.filter(
+                id__in=requested, status=RequirementItemStatus.CLOSED
+            )
+            .order_by()
+            .values_list("id", flat=True)
+        ]
+        if closed:
+            return Response(
+                {
+                    "error": "Closed requirements cannot be linked.",
+                    "code": "REQUIREMENT_CLOSED",
+                    "requirement_ids": closed,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         self.link_model.objects.bulk_create(
             [
@@ -164,11 +172,7 @@ class BaseRequirementContainerViewSet(BaseViewSet):
             batch_size=100,
             ignore_conflicts=True,
         )
-        trigger = self._trigger("linked", container)
-        for requirement_id in requested:
-            recalculate_stage(
-                requirement_id, project_id, trigger=trigger, actor=request.user
-            )
+        self._after_link(container, requested)
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
@@ -184,37 +188,26 @@ class BaseRequirementContainerViewSet(BaseViewSet):
                 {"error": "This requirement is not linked to it."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        container = self.container_model.objects.filter(pk=container_id).first()
+        # 解除关联不改需求状态（只升不降）
         link.delete()
-        recalculate_stage(
-            requirement_id,
-            project_id,
-            trigger=self._trigger("unlinked", container)
-            if container
-            else {"type": f"{self.trigger_prefix}_unlinked"},
-            actor=request.user,
-        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CycleRequirementViewSet(BaseRequirementContainerViewSet):
-    """迭代 ↔ 需求。关联 = 「已排期」的事实。"""
+    """迭代 ↔ 需求。只圈定迭代范围，不影响需求状态。"""
 
     model = RequirementCycle
     serializer_class = ProjectRequirementSerializer
     container_model = Cycle
     link_model = RequirementCycle
     container_attr = "cycle"
-    trigger_prefix = "cycle"
 
 
 class ReleaseRequirementViewSet(BaseRequirementContainerViewSet):
-    """发布单 ↔ 需求。关联只圈定发版范围，发布单发布（completed）= 「已发布」。
+    """发布单 ↔ 需求。关联圈定发版范围；任意状态（closed 除外）的需求都能进发布单。
 
-    不再要求阶段必须是「研发完毕」才能进发布单 —— 任意阶段的需求都能被圈进发布
-    范围，_validate_stages 沿用基类的放行默认。因此「在发布单里 ⇒ 必然已研发
-    完毕」这个不变量不再成立，recalculate_stage 的地板规则已改为按启发式处理
-    （见其 docstring）。
+    补挂进一张**已发布**的发布单 = 自动推进 (b)，只对本批需求推到 released
+    （不用整单，避免把人工降回去的旧关联再推一次）。
     """
 
     model = RequirementRelease
@@ -222,4 +215,7 @@ class ReleaseRequirementViewSet(BaseRequirementContainerViewSet):
     container_model = Release
     link_model = RequirementRelease
     container_attr = "release"
-    trigger_prefix = "release"
+
+    def _after_link(self, container, requirement_ids):
+        if container.status == ReleaseStatus.COMPLETED:
+            promote_to_released(requirement_ids)

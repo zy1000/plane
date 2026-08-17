@@ -1494,19 +1494,11 @@ export default {
       },
     },
     statuses: {
-      draft: "草稿",
-      confirmed: "已确认",
-      implemented: "已实现",
-      obsolete: "已废弃",
-    },
-    field_categories: {
-      label: "字段分类",
-      standard: "标准字段",
-      standard_hint: "标准库与产品需求都会展示",
-      data: "数据字段",
-      data_hint: "只在产品需求里展示，标准库不展示",
-      inherited: "跟随所属表单",
-      required: "请为每个字段选择分类。",
+      not_started: "未开始",
+      projected: "已立项",
+      in_progress: "进行中",
+      released: "已发布",
+      closed: "已关闭",
     },
     field_types: {
       text: "单行文本",
@@ -1562,7 +1554,10 @@ export default {
       description_example: "帮助填写人理解该字段",
       required_title: "设为必填",
       required_description: "提交前必须完成该字段。",
-      required_data_field_hint: "数据字段不能设为必填：标准库不收录数据字段，从库里导入的需求会因为缺这一项而无法再保存。",
+      required_library_only_hint:
+        "未纳入标准库的字段不能设为必填：标准库不收录它，从库里导入的需求会因为缺这一项而无法再保存。",
+      library_title: "纳入标准库",
+      library_inherited_hint: "是否纳入标准库跟随所属表单，子字段不单独设置。",
       enabled_title: "允许使用",
       enabled_description: "停用后保留字段，但不再显示于数据录入。",
       duplicate_field: "复制字段",
@@ -1640,6 +1635,8 @@ export default {
     properties: "属性",
     requirement_type: "需求类型",
     no_description: "暂无描述",
+    /** status=closed 时详情页顶部的只读提示 */
+    closed_hint: "需求已关闭：内容只读，选择其它状态可重新打开",
     modified_banner: {
       title: "当前内容尚未提交评审，已通过的是 v{version}",
       view_diff: "查看与 v{version} 的差异",
@@ -1943,7 +1940,7 @@ export default {
   },
   /**
    * 项目引用的产品需求。与 workspace_products.requirements（产品侧维护需求）是两回事：
-   * 这里全部只读，项目能改的只有阶段与关联关系本身。
+   * 这里全部只读，项目能改的只有需求状态与关联关系本身。
    */
   project_requirements: {
     scope_tabs: {
@@ -1955,7 +1952,7 @@ export default {
     clear_filters: "清除筛选",
     filtered_empty: {
       title: "没有符合条件的需求",
-      description: "换个产品、阶段或类型，或清空搜索词再看看。",
+      description: "换个产品、状态或类型，或清空搜索词再看看。",
     },
     columns: "列设置",
     all_types: "全部类型",
@@ -1966,9 +1963,8 @@ export default {
     unlink_selected: "解除关联 {count} 条",
     submit_change: "提交变更",
     product_column: "所属产品",
-    stage_column: "阶段",
     all_products: "全部产品",
-    all_stages: "全部阶段",
+    all_statuses: "全部状态",
     empty: {
       title: "还没有关联任何需求",
       description: "把产品里已通过评审的需求关联进来，就能在项目里跟踪它们的交付进度。",
@@ -1983,7 +1979,7 @@ export default {
       search_placeholder: "按编号或标题搜索",
       products_label: "产品",
       total_count: "共 {count} 个需求",
-      empty: "没有可关联的需求（需先关联产品，且需求需通过评审）",
+      empty: "没有可关联的需求（需先关联产品，且需求需通过评审；已关闭的需求不会出现）",
       load_failed: "加载失败",
       selected: "已选 {count} 条",
       selected_panel: "已选",
@@ -1993,31 +1989,8 @@ export default {
     },
     unlink_confirm: {
       title: "解除关联？",
-      description: "将解除 {count} 条需求与本项目的关联。需求仍保留在产品中，不会被删除；本项目内记录的阶段会一并清除。",
+      description: "将解除 {count} 条需求与本项目的关联。需求仍保留在产品中，状态不变、不会被删除；本项目内的迭代、发布与工作项关联会一并清除。",
     },
-    stage: {
-      linked: "已立项",
-      planned: "已排期",
-      in_progress: "研发中",
-      done: "研发完毕",
-      released: "已发布",
-    },
-    /** 零关联行的展示值，不落库 */
-    stage_not_started: "未开始",
-    /** 已排期但关联迭代已结束的黄标 */
-    stage_carryover: "迭代已结束",
-    /** 阶段胶囊 tooltip 的推导依据。两端派生、研发段人工填 */
-    stage_reason: {
-      linked: "已关联到本项目",
-      planned: "因关联迭代「{name}」",
-      in_progress: "已手动标记为研发中",
-      done: "已手动标记为研发完毕",
-      released: "发布单「{name}」已发布",
-    },
-    /** 挂在在途发布单上时阶段锁死，追加进胶囊 tooltip */
-    stage_locked_hint: "已进入发布单，需先移出才能改阶段",
-    /** 产品需求网格的「项目阶段」列 */
-    project_stage_column: "项目阶段",
     /** 迭代 tab / 发布 section 的容器侧关联需求入口 */
     container: {
       title: "关联需求",
@@ -2031,8 +2004,7 @@ export default {
       group_title: "全部需求",
       /** 迭代范围页的整页空状态 */
       empty_title: "本迭代还没有关联需求",
-      empty_description:
-        "关联之后，需求在本项目内的阶段会自动升到「已排期」，迭代结束前都能在这里看到它们的进展。",
+      empty_description: "关联需求以圈定本迭代的范围，迭代结束前都能在这里看到它们的进展。",
     },
     /** 发布单关联候选为空 */
     release_linkable_empty: "没有可关联的需求",
@@ -2047,11 +2019,10 @@ export default {
       linked: "已关联 {count} 条需求",
       unlinked: "已解除关联",
       change_submitted: "变更单已提交",
-      /** {stage} 是归一之后的落地档位，可能与用户选的不同 */
-      stage_updated: "阶段已更新为「{stage}」",
+      status_updated: "状态已更新为「{status}」",
       failed: "操作失败，请稍后重试",
     },
-    /** 需求 ↔ 工作项关联：拆分 / 关联已有 / 解除，与研发段阶段派生联动 */
+    /** 需求 ↔ 工作项关联：拆分 / 关联已有 / 解除，只供工作项数与完成率统计，不影响需求状态 */
     issues: {
       column: "工作项",
       section_title: "关联工作项",
@@ -2060,9 +2031,7 @@ export default {
       empty: "暂无关联工作项",
       unlink: "解除关联",
       unlink_confirm_title: "解除工作项关联",
-      unlink_confirm_description: "解除后该工作项不再计入本需求的研发阶段与完成率。",
-      /** 有关联工作项时阶段下拉禁用，tooltip 说明原因 */
-      stage_derived_hint: "阶段由关联工作项派生",
+      unlink_confirm_description: "解除后该工作项不再计入本需求的完成率。",
       /** 工作项详情属性栏只读芯片的行标签 */
       source_requirement: "需求",
       /** 产品侧按项目分组展示时，该分组下还没有工作项 */
@@ -2266,8 +2235,6 @@ export default {
         no_description: "暂无描述",
         owner: "负责人",
         select_owner: "选择负责人",
-        status: "状态",
-        status_hint: "由审批流程自动流转",
         approval: "审批",
         approvers: "审批人",
         select_approvers: "选择审批人",
@@ -2290,10 +2257,8 @@ export default {
           withdrawn: "已撤回评审",
         },
         submit: {
-          title: "提交 {count} 条需求评审",
-          description: "提交后这些需求会被锁定，审批通过前不能再改。",
+          title: "提交需求评审",
           reason: "变更原因",
-          reason_placeholder: "说明这次改了什么、为什么改",
           confirm: "提交评审",
         },
         unconfigured: "未配置",
@@ -2449,7 +2414,7 @@ export default {
           default: "默认视图",
           requirement_type_column: "所属模板",
           open_requirement_type_view: "打开「{name}」视图",
-          delete_selected: "删除所选 {count} 条",
+          delete_selected: "删除所选 ({count})",
           delete_one_title: "删除这条明细？",
           delete_one_description: "删除后无法恢复，确定继续吗？",
           delete_many_title: "删除所选明细？",
@@ -2795,24 +2760,27 @@ export default {
           all: "全部通过",
           n_of_m: "任意 {count} 人通过",
         },
-        rule_tone: {
-          any: "最快",
-          all: "最严",
-        },
       },
     },
-    /** 产品详情页的「项目」页签。关联关系由项目侧维护，这里只读 */
+    /** 产品详情页的「项目」页签。产品负责人可在此增删关联 */
     projects: {
       requirement_count: "需求数",
-      stage_distribution: "阶段分布",
+      status_distribution: "状态分布",
       completion: "完成率",
-      completion_hint: "有关联工作项时按任务计算：已完成 / (工作项数 − 已取消)；零工作项时按需求阶段计算：（研发完毕 + 已发布）/ 总数。",
+      completion_hint: "有关联工作项时按工作项完成率计算：已完成 / (工作项数 − 已取消)；否则按需求状态计算：已发布 / (总数 − 已关闭)。",
       title: "关联项目",
+      link: "关联项目",
       linked_at: "关联时间",
       error_title: "无法加载关联项目",
+      no_visible_projects: "当前工作区没有你可关联的项目",
+      search_placeholder: "搜索项目",
+      no_match: "没有匹配的项目",
+      linked_meta: "已关联 · {count} 条需求",
+      unlinked_meta: "未关联",
+      has_linked_requirements: "该项目下还有本产品需求，请先解除这些需求的关联。",
       empty: {
         title: "还没有项目引用该产品",
-        description: "在项目的需求页用「管理关联产品」关联本产品后，项目会出现在这里。",
+        description: "关联项目后，可在这里查看各项目对本产品需求的引用和交付进度。",
       },
     },
     /** 产品详情页的「发布」页签。关联项目下发布单的只读聚合，建单改单都在项目侧 */

@@ -164,7 +164,7 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
 
   const handleProductChange = useCallback(
     (nextProductId: string) => {
-      if (nextProductId !== productId) router.push(getProductTabPath(workspaceSlug, nextProductId, "dashboard"));
+      if (nextProductId !== productId) router.push(getProductTabPath(workspaceSlug, nextProductId, "requirements"));
     },
     [productId, router, workspaceSlug]
   );

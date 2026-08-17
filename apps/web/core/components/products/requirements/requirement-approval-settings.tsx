@@ -1,8 +1,7 @@
-import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementApprovalType, IUserLite } from "@plane/types";
-import { Avatar, MultiSelectDropdown } from "@plane/ui";
-import { cn, getFileURL } from "@plane/utils";
+import { cn } from "@plane/utils";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 
 const approvalTypes: TRequirementApprovalType[] = ["any", "all", "n_of_m"];
 
@@ -19,15 +18,6 @@ type TRequirementApprovalSettingsProps = {
   /** 没有配置权限时整块只读 —— 配置不再受审批保护，能改的人必须更窄 */
   readOnly?: boolean;
 };
-
-function UserOption({ user }: { user: IUserLite }) {
-  return (
-    <span className="flex min-w-0 items-center gap-2">
-      <Avatar name={user.display_name} src={getFileURL(user.avatar_url ?? "")} size="sm" className="shrink-0" />
-      <span className="truncate">{user.display_name}</span>
-    </span>
-  );
-}
 
 /** 标签在上、控件在下，与产品通用设置其它字段同一套排布，字段间不加分割线 */
 export function SettingsField({
@@ -80,62 +70,21 @@ export function RequirementApprovalSettings({
   return (
     <div className={cn("space-y-6", className)}>
       <SettingsField label={t("workspace_products.requirements.fields.approvers")}>
-        <MultiSelectDropdown
-          value={approverIds}
-          onChange={onApproverIdsChange}
-          disabled={readOnly}
-          options={memberOptions.map((member) => ({ value: member.id, data: member }))}
-          keyExtractor={(option) => option.value}
-          queryArray={["display_name", "email"]}
-          inputPlaceholder={t("workspace_products.requirements.fields.select_approvers")}
-          buttonContent={(_isOpen, selectedIds) => {
-            const selectedMembers = ((selectedIds as string[] | undefined) ?? [])
-              .map((id) => memberOptions.find((member) => member.id === id))
-              .filter((member): member is IUserLite => Boolean(member));
-            return (
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                {selectedMembers.length ? (
-                  <>
-                    {selectedMembers.slice(0, 4).map((member) => (
-                      <span
-                        key={member.id}
-                        className="flex h-6 min-w-0 items-center gap-1.5 rounded bg-layer-2 px-1.5 text-11 text-primary"
-                      >
-                        <Avatar
-                          name={member.display_name}
-                          src={getFileURL(member.avatar_url ?? "")}
-                          size="sm"
-                          className="shrink-0"
-                        />
-                        <span className="max-w-20 truncate">{member.display_name}</span>
-                      </span>
-                    ))}
-                    {selectedMembers.length > 4 && (
-                      <span className="text-11 text-secondary">+{selectedMembers.length - 4}</span>
-                    )}
-                  </>
-                ) : (
-                  <span className="truncate text-11 text-placeholder">
-                    {t("workspace_products.requirements.fields.select_approvers")}
-                  </span>
-                )}
-                <ChevronDown className="ml-auto size-3.5 shrink-0 text-placeholder" />
-              </div>
-            );
-          }}
-          buttonContainerClassName="min-h-8.5 w-full rounded-md border border-subtle bg-surface-1 px-2 py-1"
-          optionsContainerClassName="w-[min(20rem,calc(100vw-2rem))]"
-          renderItem={({ value, selected }) => {
-            const member = memberOptions.find((option) => option.id === value);
-            if (!member) return null;
-            return (
-              <div className="flex w-full items-center justify-between gap-2">
-                <UserOption user={member} />
-                {selected && <Check className="size-3.5 shrink-0 text-accent-primary" />}
-              </div>
-            );
-          }}
-        />
+        <div className="h-10 w-full">
+          <MemberDropdown
+            multiple
+            value={approverIds}
+            onChange={onApproverIdsChange}
+            disabled={readOnly}
+            memberIds={memberOptions.map((member) => member.id)}
+            buttonVariant="border-with-text"
+            className="h-full w-full"
+            buttonClassName="h-full w-full border !border-subtle bg-surface-1"
+            buttonContainerClassName="h-full w-full"
+            placeholder={t("workspace_products.requirements.fields.select_approvers")}
+            showUserDetails
+          />
+        </div>
       </SettingsField>
 
       <SettingsField label={t("workspace_products.requirements.fields.approval_rule")}>
@@ -161,7 +110,7 @@ export function RequirementApprovalSettings({
                     className="accent-accent-primary size-3.5 shrink-0"
                   />
                   <span className="font-medium">{t(`workspace_products.requirements.approval.${value}`)}</span>
-                  {value === "n_of_m" ? (
+                  {value === "n_of_m" && (
                     /* 计数常驻这一行，不随选中长出来 —— 长出来就会把整块撑高 */
                     <span className="ml-auto flex items-center gap-1.5 text-11 text-secondary">
                       <select
@@ -179,10 +128,6 @@ export function RequirementApprovalSettings({
                         )}
                       </select>
                       <span className="tabular-nums">/ {approverIds.length}</span>
-                    </span>
-                  ) : (
-                    <span className="ml-auto text-11 text-tertiary">
-                      {t(`workspace_products.requirements.configuration.rule_tone.${value}`)}
                     </span>
                   )}
                 </label>

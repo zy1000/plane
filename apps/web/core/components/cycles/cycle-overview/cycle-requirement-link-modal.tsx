@@ -3,8 +3,9 @@
  *
  * 结构照搬 projects/requirements/existing-requirements-modal.tsx（Combobox 多选 +
  * 防抖搜索 + 无限滚动 + 请求序号防串台），但候选池不同：这里是**项目需求列表**
- * （exclude_cycle_id 排除已在本迭代的行），不是产品下的可关联候选池，且行上自带
- * product_identifier，不需要外部传产品清单，所以没有直接复用那个组件。
+ * （exclude_cycle_id 排除已在本迭代的行，exclude_closed 排除已关闭的需求），不是产品
+ * 下的可关联候选池，且行上自带 product_identifier，不需要外部传产品清单，所以没有
+ * 直接复用那个组件。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@headlessui/react";
@@ -89,6 +90,7 @@ export const CycleRequirementLinkModal = (props: TProps) => {
           perPage: PAGE_SIZE,
           cursor: `${PAGE_SIZE}:${nextPage}:0`,
           exclude_cycle_id: cycleId,
+          excludeClosed: true,
         });
         if (requestSequence !== requestSequenceRef.current) return;
 

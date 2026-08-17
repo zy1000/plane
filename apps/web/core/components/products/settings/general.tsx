@@ -269,7 +269,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       const canStillManage = hasWorkspaceAdminAccess || savedProduct.owner === currentUser?.id;
       if (!canStillManage) {
         const canStillView = savedProduct.network === 2 || isProductMember;
-        navigate(canStillView ? `/${workspaceSlug}/products/${productId}/dashboard` : `/${workspaceSlug}/products`, {
+        navigate(canStillView ? `/${workspaceSlug}/products/${productId}/requirements` : `/${workspaceSlug}/products`, {
           replace: true,
         });
       }

@@ -2,7 +2,7 @@
  * 项目需求页（/:ws/projects/:pid/requirements）。
  *
  * 展示的是**产品需求被本项目引用的那一份**：内容只读，项目能改的只有关联关系本身
- * （阶段由关联迭代/发布单派生，不可手动改），想改内容只能提变更单（走产品现有的
+ * 与需求级交付状态（人工维护、跨项目共享一份），想改内容只能提变更单（走产品现有的
  * 审批名单）。这与同一路径下曾经的「按工作项类别过滤的列表」不是一回事 ——
  * 那个页面（研发需求 /dev-requirements）已下线。
  *
@@ -19,11 +19,12 @@ import {
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectRequirement, TRequirementProjectStage } from "@plane/types";
+import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { ProductChip } from "@/components/products/product-chip";
+import { isRequirementClosed } from "@/components/requirements";
 import { RequirementIssuesSection, RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProducts } from "@/hooks/store/use-products";
@@ -40,7 +41,7 @@ import {
   ProjectRequirementFiltersRow,
   ProjectRequirementFiltersToggle,
 } from "./project-requirement-filters";
-import { getStageFromParam, STAGE_PARAM } from "./project-requirement-stage-filter";
+import { getStatusFromParam, STATUS_PARAM } from "./project-requirement-status-filter";
 import {
   getTypeFromParam,
   ProjectRequirementTypeFilter,
@@ -67,10 +68,10 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const [idsToUnlink, setIdsToUnlink] = useState<string[]>([]);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(() =>
-    Boolean(getStageFromParam(searchParams.get(STAGE_PARAM)))
+    Boolean(getStatusFromParam(searchParams.get(STATUS_PARAM)))
   );
-  const [isStageChipVisible, setIsStageChipVisible] = useState(() =>
-    Boolean(getStageFromParam(searchParams.get(STAGE_PARAM)))
+  const [isStatusChipVisible, setIsStatusChipVisible] = useState(() =>
+    Boolean(getStatusFromParam(searchParams.get(STATUS_PARAM)))
   );
 
   useLayoutEffect(() => {
@@ -104,7 +105,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   /**
    * 分面计数随列表一起回来（后端塞在 extra_stats 里），不另发请求。
    * 口径见 utils/requirement_project.requirement_facets：by_product 恒为全集，
-   * by_stage / by_requirement_type 只跟随当前产品。
+   * by_status / by_requirement_type 只跟随当前产品。
    */
   const facets = store.requirementsPage.extra_stats ?? null;
 
@@ -121,10 +122,10 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
       ),
   });
   useSearchParamFilter({
-    param: STAGE_PARAM,
-    value: store.stageFilter,
-    setValue: store.setStageFilter,
-    parse: getStageFromParam,
+    param: STATUS_PARAM,
+    value: store.statusFilter,
+    setValue: store.setStatusFilter,
+    parse: getStatusFromParam,
   });
   useSearchParamFilter({
     param: TYPE_PARAM,
@@ -133,10 +134,10 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     parse: (raw) => getTypeFromParam(raw, store.requirementTypes),
   });
 
-  // 深链 / 前进后退带了 stage 时，把 chip 亮出来；空值（--）不算筛选，不自动藏
+  // 深链 / 前进后退带了 status 时，把 chip 亮出来；空值（--）不算筛选，不自动藏
   useEffect(() => {
-    if (store.stageFilter) setIsStageChipVisible(true);
-  }, [store.stageFilter]);
+    if (store.statusFilter) setIsStatusChipVisible(true);
+  }, [store.statusFilter]);
 
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
@@ -237,8 +238,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   };
 
   /**
-   * 关联/解除工作项后只刷新这一行：阶段与工作项数是服务端注解，重算发生在服务端，
-   * 不重拉的话网格行和抽屉 seed 会停在旧值上。列表构成没变，不整页重拉。
+   * 关联/解除工作项后只刷新这一行：工作项数与完成率是服务端注解，不重拉的话网格行
+   * 和抽屉 seed 会停在旧值上。列表构成没变，不整页重拉。
    */
   const refreshRequirementRow = async (requirementId: string) => {
     if (!slug || !project) return;
@@ -257,15 +258,13 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     }
   };
 
-  const handleStageChange = async (requirementId: string, stage: TRequirementProjectStage) => {
+  const handleStatusChange = async (requirementId: string, status: TRequirementItemStatus) => {
     try {
-      // 服务端会归一，落地档位以返回值为准 —— 选了「已排期」但没有迭代关联时
-      // 实际会落成「已立项」，toast 得说实话
-      const applied = await store.updateStage(requirementId, stage);
+      await store.updateStatus(requirementId, status);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: t("project_requirements.toast.stage_updated", {
-          stage: t(`project_requirements.stage.${applied}`),
+        title: t("project_requirements.toast.status_updated", {
+          status: t(`requirement_fields.statuses.${status}`),
         }),
       });
     } catch (error) {
@@ -297,19 +296,19 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
 
         <ProjectRequirementFiltersRow
           isVisible={isFilterVisible}
-          showStageChip={isStageChipVisible}
-          stageValue={store.stageFilter}
-          stageCounts={facets?.by_stage}
+          showStatusChip={isStatusChipVisible}
+          statusValue={store.statusFilter}
+          statusCounts={facets?.by_status}
           totalCount={
             store.productFilter
               ? (facets?.by_product.find((item) => item.product_id === store.productFilter)?.count ?? 0)
               : (facets?.total ?? 0)
           }
-          onStageChange={store.setStageFilter}
-          onAddStage={() => setIsStageChipVisible(true)}
-          onRemoveStage={() => {
-            store.setStageFilter(undefined);
-            setIsStageChipVisible(false);
+          onStatusChange={store.setStatusFilter}
+          onAddStatus={() => setIsStatusChipVisible(true)}
+          onRemoveStatus={() => {
+            store.setStatusFilter(undefined);
+            setIsStatusChipVisible(false);
           }}
         />
 
@@ -346,14 +345,14 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           hasLinkedProducts={isProductLinksLoading || productLinks.length > 0}
           hasAnyLinked={(facets?.total ?? 0) > 0}
           activeFilterCount={
-            [store.productFilter, store.stageFilter, store.requirementTypeFilter].filter(Boolean).length
+            [store.productFilter, store.statusFilter, store.requirementTypeFilter].filter(Boolean).length
           }
           onClearFilters={() => {
             store.setProductFilter(undefined);
-            store.setStageFilter(undefined);
+            store.setStatusFilter(undefined);
             store.setRequirementTypeFilter(undefined);
             store.setSearch("");
-            setIsStageChipVisible(false);
+            setIsStatusChipVisible(false);
           }}
           search={store.search}
           onSearchChange={store.setSearch}
@@ -362,11 +361,11 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           onOpenDetail={setPeekRequirement}
           onLink={() => setIsLinkModalOpen(true)}
           onUnlink={setIdsToUnlink}
-          onStageChange={(requirementId, stage) => void handleStageChange(requirementId, stage)}
+          onStatusChange={(requirementId, status) => void handleStatusChange(requirementId, status)}
           toolbarPortalEl={dataToolbarHost}
           toolbarAfterSearch={
             <ProjectRequirementFiltersToggle
-              hasConditions={isStageChipVisible}
+              hasConditions={isStatusChipVisible}
               isVisible={isFilterVisible}
               onToggle={() => setIsFilterVisible((visible) => !visible)}
             />
@@ -403,6 +402,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
            * 关联工作项 Section 只在项目侧注入：拆分/关联/解除都要项目语境，产品侧
            * 抽屉没有。预填取列表行 —— 项目侧看到的就是已通过评审的那一版内容，
            * linked_cycle_ids 注解也只有它带。
+           * 已关闭的需求不再拆分/关联新工作项（section 只有一个 canManage 同时管
+           * 新增与解除，closed 行的解除靠服务端 409 兜底）。
            */
           issuesSection={
             <RequirementIssuesSection
@@ -410,7 +411,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               projectId={project}
               requirementId={peekRow.id}
               requirement={peekRow}
-              canManage={canManage}
+              canManage={canManage && !isRequirementClosed(peekRow)}
               onChanged={() => void refreshRequirementRow(peekRow.id)}
             />
           }

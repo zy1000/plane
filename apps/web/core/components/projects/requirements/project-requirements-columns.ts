@@ -14,24 +14,16 @@ import type { TRequirementBuiltinKey } from "@plane/types";
 export type TProjectRequirementColumnKey =
   | "display_id"
   | "product"
-  | "stage"
   | "issues"
   | "approval"
   | "requirement_type"
   | TRequirementBuiltinKey;
 
-/**
- * 默认可见的列（标题是固定左列，不参与显隐，所以不在这里）。
- *
- * 「状态」刻意不在默认集里：它与「审批」语义高度重叠（已通过 / 已确认并排出现），
- * 仓库里本来就有 shouldShowRequirementStatus() 专门防这件事。真正需要看 status 的
- * 只有 implemented / obsolete 两个值，那两个值目前无人可写（见 RequirementItemStatus
- * 的注释），所以默认藏起来，需要的人自己勾回。
- */
+/** 默认可见的列（标题是固定左列，不参与显隐，所以不在这里） */
 export const DEFAULT_VISIBLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
   "product",
-  "stage",
+  "status",
   "issues",
   "approval",
   "priority",
@@ -43,14 +35,13 @@ export const DEFAULT_VISIBLE_COLUMNS: TProjectRequirementColumnKey[] = [
 export const TOGGLEABLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
   "product",
-  "stage",
+  "status",
   "issues",
   "approval",
   "priority",
   "assignee_id",
   "target_date",
   "start_date",
-  "status",
   "description_html",
   "parent_id",
   "requirement_type",
@@ -60,13 +51,17 @@ export const TOGGLEABLE_COLUMNS: TProjectRequirementColumnKey[] = [
 export const COLUMN_LABEL_KEYS: Partial<Record<TProjectRequirementColumnKey, string>> = {
   display_id: "requirements.identifier.column",
   product: "project_requirements.product_column",
-  stage: "project_requirements.stage_column",
+  status: "requirement_fields.builtin.status",
   issues: "project_requirements.issues.column",
   approval: "requirement_approval.column",
   requirement_type: "requirement_detail.requirement_type",
 };
 
-export const getColumnStorageKey = (projectId: string) => `project-requirements-columns__${projectId}`;
+/**
+ * 前缀带版本号：v1 时「状态」列默认隐藏，老用户的隐藏集合里已经存了 "status"；
+ * 状态列取代阶段列成为默认可见列后，不换 key 的话对他们仍然是隐藏的。
+ */
+export const getColumnStorageKey = (projectId: string) => `project-requirements-columns-v2__${projectId}`;
 
 /** 存进 localStorage 的是**隐藏**集合：将来新增列时默认可见，不必迁移老用户的偏好 */
 export const readHiddenColumns = (projectId: string): TProjectRequirementColumnKey[] => {

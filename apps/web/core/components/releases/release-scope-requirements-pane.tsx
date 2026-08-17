@@ -56,12 +56,12 @@ export const ReleaseScopeRequirementsPane = observer(function ReleaseScopeRequir
     requirementsError,
     requirementAssociateOpen,
     unlinkingRequirementId,
-    updatingStageRequirementId,
+    updatingStatusRequirementId,
     openRequirementAssociateModal,
     closeRequirementAssociateModal,
     handleLinkRequirements,
     handleUnlinkRequirement,
-    updateStage,
+    updateStatus,
   } = useReleaseRequirements({ workspaceSlug, projectId, releaseId });
 
   const [peekRequirementId, setPeekRequirementId] = useState<string | null>(null);
@@ -95,16 +95,16 @@ export const ReleaseScopeRequirementsPane = observer(function ReleaseScopeRequir
         error={requirementsError}
         canManage={canManage}
         unlinkingRequirementId={unlinkingRequirementId}
-        updatingStageRequirementId={updatingStageRequirementId}
+        updatingStatusRequirementId={updatingStatusRequirementId}
         onOpenLinkModal={openRequirementAssociateModal}
         onUnlink={handleUnlinkRequirement}
-        onStageChange={updateStage}
+        onStatusChange={updateStatus}
         onOpenDetail={setPeekRequirementId}
       />
 
       {/*
         详情抽屉打到**产品**的端点上：需求内容、版本、变更轨迹的权威都在产品。
-        canEdit 恒 false —— 发布侧对需求内容没有任何写入口，能改的只有阶段。
+        canEdit 恒 false —— 发布侧对需求内容没有任何写入口，能改的只有需求级交付状态。
         与项目需求页同理，「打开整页」隐藏：需求在项目里没有整页路由。
       */}
       {peekRow && (

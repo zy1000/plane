@@ -5,5 +5,5 @@ export default function ProductDetailIndexPage() {
 
   if (!workspaceSlug || !productId) return null;
 
-  return <Navigate to={`/${workspaceSlug}/products/${productId}/dashboard`} replace />;
+  return <Navigate to={`/${workspaceSlug}/products/${productId}/requirements`} replace />;
 }

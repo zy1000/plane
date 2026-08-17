@@ -3,7 +3,7 @@
  *
  * 类型是产品之下的第二层分面（禅道那一层是"模块"，Plane 的需求没有模块维度，最接近
  * 的分面就是需求类型）。做成下拉而不是页签：类型数量不可控，一个产品挂七八个类型时
- * 页签会把阶段条挤到换行。
+ * 页签会把状态条挤到换行。
  */
 import type { FC } from "react";
 import { ChevronDown } from "lucide-react";

@@ -81,10 +81,7 @@ from plane.utils.release.overdue_strategy import (
 )
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.paginator import CustomPaginator
-from plane.utils.requirement_project import (
-    recalculate_stage,
-    recalculate_stages_for_release,
-)
+from plane.utils.requirement_project import promote_on_release_completed
 from plane.utils.response import list_response
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
@@ -799,23 +796,10 @@ class ReleaseViewSet(BaseViewSet):
             new_status = updated_release.status
             if new_status and new_status != previous_status:
                 sync_overdue_on_status_change(updated_release, previous_status, new_status)
-                # 只有 completed 给出「已发布」这一档；其余流转（含驳回/取消）都是
-                # 事实作废，重算会把它降回研发完毕（地板规则兜住，不会掉到已排期）。
-                # 任何流转都同步重算，判 completed 与否交给 recalculate_stage
-                recalculate_stages_for_release(
-                    updated_release.id,
-                    trigger={
-                        "type": {
-                            ReleaseStatus.REJECTED: "release_rejected",
-                            ReleaseStatus.CANCELLED: "release_cancelled",
-                            ReleaseStatus.COMPLETED: "release_published",
-                        }.get(new_status, "release_status_changed"),
-                        "release_id": str(updated_release.id),
-                        "release_name": updated_release.name,
-                        "release_status": new_status,
-                    },
-                    actor=request.user,
-                )
+                # 发布成功 = 需求状态只升不降的自动推进 (b)：关联需求推到 released。
+                # 其余流转（驳回/取消/改回测试中）一律不降档
+                if new_status == ReleaseStatus.COMPLETED:
+                    promote_on_release_completed(updated_release.id)
             sync_overdue_on_date_change(
                 updated_release,
                 prev_handoff=previous_test_handoff_date,
@@ -934,28 +918,18 @@ class ReleaseViewSet(BaseViewSet):
     def update(self, request, *args, **kwargs):
         """PUT 全量更新走 ModelViewSet 默认实现，不经上面的 partial_update ——
         这是个历史缺口（overdue 同步、活动流、状态邮件都不触发，目前被
-        serializer 的负责人校验意外挡住）。这里只兜「需求阶段重算不能漏」这一件事，
-        不替它补齐其余副作用。
+        serializer 的负责人校验意外挡住）。这里只兜「发布成功推进需求状态不能漏」
+        这一件事，不替它补齐其余副作用。
         """
         instance = self.get_object()
         previous_status = instance.status
         response = super().update(request, *args, **kwargs)
         instance.refresh_from_db(fields=["status"])
-        if instance.status != previous_status:
-            recalculate_stages_for_release(
-                instance.id,
-                trigger={
-                    "type": {
-                        ReleaseStatus.REJECTED: "release_rejected",
-                        ReleaseStatus.CANCELLED: "release_cancelled",
-                        ReleaseStatus.COMPLETED: "release_published",
-                    }.get(instance.status, "release_status_changed"),
-                    "release_id": str(instance.id),
-                    "release_name": instance.name,
-                    "release_status": instance.status,
-                },
-                actor=request.user,
-            )
+        if (
+            instance.status != previous_status
+            and instance.status == ReleaseStatus.COMPLETED
+        ):
+            promote_on_release_completed(instance.id)
         return response
 
     @allow_fine_permission(PermissionKey.RELEASES_VIEW)
@@ -1003,28 +977,11 @@ class ReleaseViewSet(BaseViewSet):
             project_id=str(project_id),
             epoch=int(timezone.now().timestamp()),
         )
-        # 删除发布单 = 「已发布」事实作废(契约:拒绝/终止/删除/解除关联走同一条
-        # 降档路径,地板规则保证只降到研发完毕)。先取受影响对、同步软删关联行
-        # (不能等异步级联,批量重算读的就是这张表),再逐对重算
-        affected_pairs = list(
-            RequirementRelease.objects.filter(release_id=pk).values_list(
-                "requirement_id", "project_id"
-            )
-        )
+        # 同步软删需求关联行（不等异步级联，需求侧的发布关联计数读的就是这张表）。
+        # 删除发布单不改需求状态（只升不降）
         RequirementRelease.objects.filter(release_id=pk).delete()
         release.delete()
         ReleaseIssue.objects.filter(release=pk, project_id=project_id).delete()
-        for requirement_id, link_project_id in affected_pairs:
-            recalculate_stage(
-                requirement_id,
-                link_project_id,
-                trigger={
-                    "type": "release_deleted",
-                    "release_id": str(pk),
-                    "release_name": release.name,
-                },
-                actor=request.user,
-            )
         UserFavorite.objects.filter(
             user=request.user,
             entity_type="release",

@@ -40,6 +40,7 @@ import type {
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
   TRequirementFilter,
+  TRequirementItemStatus,
   TRequirementValue,
   TRequirementField,
   TRequirementFormRow,
@@ -78,6 +79,7 @@ import {
 } from "./requirement-grid-shared";
 import { RequirementIdentifier } from "./requirement-identifier";
 import { getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
+import { canEditRequirementContent, isRequirementClosed, RequirementStatusCell } from "./requirement-status-cell";
 import { copyRequirementData, createEmptyRequirementData } from "./requirement-row-data";
 import { RequirementCreateModal, type TRequirementCreateSeed } from "./requirement-create-modal";
 import { useRequirementAssetUpload } from "./use-requirement-asset-upload";
@@ -134,6 +136,11 @@ type TProps = {
   onBulkSave: (payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
   /** 打开这一行的详情。不传则不渲染详情入口（标准库没有详情页） */
   onOpenDetail?: (requirementId: string) => void;
+  /**
+   * 改需求级交付状态。走独立的状态端点、不进行内容 PATCH，所以不经 autosave；
+   * 不传则状态格只读（标准库没有这一列，产品侧无写权限时也不传）。
+   */
+  onStatusChange?: (requirementId: string, status: TRequirementItemStatus) => void;
   /** When set, search/filter/display/edit (and bulk-edit actions) render into this host instead of the grid toolbar. */
   toolbarPortalEl?: HTMLElement | null;
 };
@@ -175,6 +182,7 @@ export const RequirementGrid = observer(
     onRefresh,
     onBulkSave,
     onOpenDetail,
+    onStatusChange,
     toolbarPortalEl,
   } = props;
   const { t } = useTranslation();
@@ -609,10 +617,10 @@ export const RequirementGrid = observer(
     const builtin = localRow?.builtin ?? pickBuiltinValues(requirement);
     const isConflicted = Boolean(saveState.error);
     /**
-     * 评审中的行落回只读渲染器，零新增渲染路径。is_locked 以服务端为准 —— 从
-     * pending_change_request_id 反推会漏掉权限这一维。
+     * 评审中 / 已关闭的行落回只读渲染器，零新增渲染路径。is_locked 以服务端为准 —— 从
+     * pending_change_request_id 反推会漏掉权限这一维；closed 由 canEditRequirementContent 合流。
      */
-    const isRowEditable = !readOnly && !requirement.is_locked;
+    const isRowEditable = canEditRequirementContent(requirement, !readOnly);
     const rawRowCount = getMaxFormRows(data, formFields);
     /*
      * 一条需求占多少行，只由子表单的数据行数决定。
@@ -623,18 +631,21 @@ export const RequirementGrid = observer(
      */
     const totalRows = Math.max(1, rawRowCount);
     /*
-     * 行底色只剩三种状态：评审中（锁定）、保存失败、正常。
-     * 原先还有「已改动 / 已删除」两种暂存态的着色 —— 改动现在即时落库，删除即时执行，
-     * 都不再有「停在表格里等保存」的中间状态。
+     * 行底色：评审中（锁定）、已关闭（灰化）、保存失败、正常。锁色优先于关闭灰化 ——
+     * 评审中是更强的「不可动」信号。原先还有「已改动 / 已删除」两种暂存态的着色 ——
+     * 改动现在即时落库，删除即时执行，都不再有「停在表格里等保存」的中间状态。
      */
     const rowStateClass = requirement.is_locked
       ? // 评审中的行：删除待审用危险色，其余用警示色，都压低透明度表示「不可动」
         requirement.pending_change_type === "delete"
         ? "bg-danger-subtle/25 opacity-70"
         : "bg-warning-subtle/20 opacity-80"
-      : isConflicted
-        ? "bg-danger-subtle/25"
-        : "bg-surface-1 group-hover/requirement:bg-layer-transparent-hover";
+      : isRequirementClosed(requirement)
+        ? // 已关闭：内容只读、退场；状态格仍可点（重开），所以只压透明度不改底色
+          "bg-surface-1 opacity-60 group-hover/requirement:bg-layer-transparent-hover"
+        : isConflicted
+          ? "bg-danger-subtle/25"
+          : "bg-surface-1 group-hover/requirement:bg-layer-transparent-hover";
     const groupCellClass = "transition-colors duration-150 motion-reduce:transition-none";
 
     return (
@@ -805,7 +816,20 @@ export const RequirementGrid = observer(
                     rowSpan={totalRows}
                     className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
                   >
-                    {isRowEditable ? (
+                    {column.key === "status" ? (
+                      /*
+                       * 状态格绕开 readOnly/is_locked/closed 的行级只读判定：closed 行要能
+                       * 重开、评审中也能改状态，只看页面级写权限（onStatusChange 有没有传）。
+                       * 读 requirement.status 而不是 autosave 的 builtin.status —— dirty 行的
+                       * 本地副本会停在旧值上，状态端点的结果只回灌到 requirements。
+                       */
+                      <RequirementStatusCell
+                        status={requirement.status}
+                        onChange={
+                          !readOnly && onStatusChange ? (status) => onStatusChange(requirement.id, status) : undefined
+                        }
+                      />
+                    ) : isRowEditable ? (
                       <BuiltinCellEditor
                         columnKey={column.key}
                         values={builtin}

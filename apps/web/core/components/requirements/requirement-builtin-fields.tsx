@@ -11,12 +11,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { ISSUE_PRIORITIES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type {
-  TRequirementBuiltinKey,
-  TRequirementBuiltinValues,
-  TRequirementItemStatus,
-  TRequirementPriority,
-} from "@plane/types";
+import type { TRequirementBuiltinKey, TRequirementBuiltinValues, TRequirementPriority } from "@plane/types";
 import { PriorityIcon } from "@plane/propel/icons";
 import { cn, renderFormattedDate, renderFormattedPayloadDate, stripAndTruncateHTML } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
@@ -31,6 +26,7 @@ import {
 } from "./requirement-grid-shared";
 import { RequirementParentDropdown } from "./requirement-parent-dropdown";
 import { RequirementRichTextCell } from "./requirement-rich-text";
+import { RequirementStatusCell } from "./requirement-status-cell";
 
 /**
  * 八个内置字段。它们不是 RequirementField，而是需求行上的列，所以网格、diff、
@@ -40,7 +36,7 @@ import { RequirementRichTextCell } from "./requirement-rich-text";
  * typeLabelKey 只用于展示 —— 内置列没有 field_type，它们的形状是写死在列上的。
  *
  * showInLibrary=false 的四列是纯执行期属性：标准库是模板，模板不可能知道某个产品里
- * 谁负责、什么时候做，「已实现」这种状态放在模板上更是自相矛盾。它们在库的表单与
+ * 谁负责、什么时候做，「已发布」这种交付状态放在模板上更是自相矛盾。它们在库的表单与
  * 网格里不渲染，导入时也会被重置回缺省值（见 build_library_import_creates）。
  */
 export const REQUIREMENT_BUILTIN_COLUMNS = [
@@ -64,7 +60,8 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
   },
   {
     key: "status",
-    // 交付进度轴，不是被批准的内容 —— 不参与评审比对，也由系统写而非用户手选
+    // 需求级交付状态：人工维护，但不算「内容」—— 不参与评审比对、不进 diff（isContent:false 保持）。
+    // 写入口是独立的状态端点（RequirementStatusCell 的 onChange），不走内置列编辑器。
     isContent: false,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.status",
@@ -132,7 +129,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
  * 参与「内容变了没有」比对的内置列。
  *
  * 服务端的 changed_field_ids 管不到前端自己用 isEqual 算 diff 的那几处，所以那些地方要
- * 显式切到这个子集，否则「标了已实现」会在变更单里渲染成一行需要审批人签字的改动。
+ * 显式切到这个子集，否则「改了状态」会在变更单里渲染成一行需要审批人签字的改动。
  */
 export const REQUIREMENT_CONTENT_BUILTIN_COLUMNS = REQUIREMENT_BUILTIN_COLUMNS.filter(
   (column) => column.isContent
@@ -144,19 +141,11 @@ export const getBuiltinColumnsFor = (entityKind: "product" | "library") =>
     ? REQUIREMENT_BUILTIN_COLUMNS.filter((column) => column.showInLibrary)
     : REQUIREMENT_BUILTIN_COLUMNS;
 
-/**
- * 详情页要不要单独展示 status。draft/confirmed 与标题旁的审批胶囊说的是同一件事，
- * 两个「已确认」并排只会让人分不清哪个才是评审结论。等 status 变成派生的研发阶段
- * （未开始/研发中/已发布…）之后，它就不再与审批轴重复，这个判断可以去掉。
- */
-export const shouldShowRequirementStatus = (status: TRequirementItemStatus) =>
-  status !== "draft" && status !== "confirmed";
-
 /** 后端的列缺省值，新建行与「清空」都用它 */
 export const createEmptyBuiltinValues = (): TRequirementBuiltinValues => ({
   title: "",
   description_html: null,
-  status: "draft",
+  status: "not_started",
   priority: "none",
   assignee_id: null,
   start_date: null,
@@ -266,11 +255,12 @@ export const BuiltinCellEditor = ({
   }
 
   if (columnKey === "status") {
-    // 交付进度由系统写，编辑态也只读 —— 服务端同样会忽略客户端传来的 status。
+    // 状态不走内容 PATCH：这里恒只读，改状态由各页面单独渲染带 onChange 的
+    // RequirementStatusCell（走独立的状态端点）。服务端同样会忽略内容载荷里的 status。
     // 撑到和其它编辑器一样的行高，免得进出编辑态时整行跳一下。
     return (
       <div className="flex h-8 min-w-0 items-center px-2">
-        <BuiltinCellValue columnKey="status" values={values} />
+        <RequirementStatusCell status={values.status} />
       </div>
     );
   }
@@ -355,7 +345,7 @@ export const BuiltinCellValue = ({ columnKey, values, resolveParentTitle }: TBui
   }
 
   if (columnKey === "status") {
-    return <span className="truncate">{t(`requirement_fields.statuses.${value as TRequirementItemStatus}`)}</span>;
+    return <RequirementStatusCell status={value as string} />;
   }
   if (columnKey === "priority") {
     // 与编辑态的 PriorityDropdown 用同一份词汇（ISSUE_PRIORITIES 的原值），不另做一套翻译 ——

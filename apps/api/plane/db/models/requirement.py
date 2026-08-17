@@ -33,26 +33,30 @@ class RequirementFieldType(models.TextChoices):
 
 
 class RequirementItemStatus(models.TextChoices):
-    """需求条目的**交付进度**。不表达评审进度 —— 那是另一根轴，见
-    Requirement.approval_state。
+    """需求条目的**交付状态**，需求级、跨项目共享一份。不表达评审进度 —— 那是
+    另一根轴，见 Requirement.approval_state；两根轴正交，评审中的行也能改状态。
 
-    整列只由系统写，写序列化器根本不收它：新建时置 draft，首次审批通过后置
-    confirmed，此后再也回不到 draft（由 CheckConstraint
-    req_draft_status_iff_never_approved 钉住）。
+    **人工维护**：由产品侧 / 项目侧的状态写入口写（utils/requirement_project.
+    set_requirement_status），任意方向可改。内容写序列化器不收它。只有两条**只升
+    不降**的自动推进（utils/requirement_project.promote_*）：
+      - 需求被关联进项目：not_started → projected
+      - 发布单变为已发布（含补挂进已发布的发布单）：not_started/projected/in_progress → released
+    发布单驳回/取消/删除、解除关联、删除项目一律不降档；重开后的需求也不会被补推。
 
-    它**不算内容**（见 utils/requirement.py 的 NON_CONTENT_BUILTIN_COLUMNS）：研发做
-    完了推进一格，不该触发一轮内容评审，也不该被内容回滚倒推回去。
+    它**不算内容**（见 utils/requirement.py 的 NON_CONTENT_BUILTIN_COLUMNS）：改状态
+    不 bump version、不触发评审、不被内容回滚倒推。
 
-    implemented 由 utils/requirement_project.recalculate_requirement_status 对称
-    派生：所有关联项目的阶段均为已发布 → implemented，条件失效退回 confirmed ——
-    confirmed ↔ implemented 之间可往返，其余流转不可逆。obsolete 仍无人可写，
-    留给「需求关闭」的人为动作（P4）。
+    closed（已关闭）：内容只读（含新指派父项）、不能提交内容评审、不能被任何关联
+    选择器选中（项目 / 迭代 / 发布 / 工作项 / 父需求）；已有关联保留、可解除；
+    删除规则不变（closed 保护内容不保护删除）。行上唯一可写的是 status 本身 ——
+    改成任意非 closed 值即重开，不存「关闭前状态」。
     """
 
-    DRAFT = "draft", "草稿"
-    CONFIRMED = "confirmed", "已确认"
-    IMPLEMENTED = "implemented", "已实现"
-    OBSOLETE = "obsolete", "已废弃"
+    NOT_STARTED = "not_started", "未开始"
+    PROJECTED = "projected", "已立项"
+    IN_PROGRESS = "in_progress", "进行中"
+    RELEASED = "released", "已发布"
+    CLOSED = "closed", "已关闭"
 
 
 class RequirementApprovalState(models.TextChoices):
@@ -77,16 +81,6 @@ class RequirementPriority(models.TextChoices):
     MEDIUM = "medium", "中"
     LOW = "low", "低"
     NONE = "none", "无"
-
-
-class RequirementFieldCategory(models.TextChoices):
-    """自定义字段的分类，决定它在标准库里露不露面。
-
-    内置字段不参与这个分类 —— 它们根本不是 RequirementField，而是条目表上的列。
-    """
-
-    STANDARD = "standard", "标准字段"
-    DATA = "data", "数据字段"
 
 
 class RequirementApprovalType(models.TextChoices):
@@ -136,13 +130,12 @@ class RequirementChangeType(models.TextChoices):
 # Requirement 一行要么属于某个产品，要么属于某个项目，要么属于某个标准库，三者
 # 必居其一；但无论哪种归属，requirement_type 都必填。
 #
-# 字段分三类：
+# 字段分两类：
 #   内置字段 —— 标题、描述、状态、优先级、负责人、开始日期、截止日期、父项。每个需求
 #              类型都默认包含，不可删除不可编辑。它们不是 RequirementField，而是
 #              Requirement 上的真实列。
-#   标准字段 —— 用户自定义，产品需求与标准库都展示。
-#   数据字段 —— 用户自定义，只有产品需求展示，标准库不展示。
-# 后两类由 RequirementField.field_category 区分。
+#   自定义字段 —— RequirementField。默认产品需求与标准库都展示；关掉
+#                show_in_library 就只在产品需求里出现，标准库条目不带它。
 #
 # 字段定义（RequirementField）只归需求类型所有，条目通过 requirement_type 外键
 # 实时引用。**字段结构变更立即生效、不走审批**，失效的值由
@@ -464,11 +457,7 @@ class RequirementField(BaseModel):
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     config = models.JSONField(default=dict, blank=True, verbose_name="字段配置")
     default_value = models.JSONField(null=True, blank=True, verbose_name="默认值")
-    field_category = models.CharField(
-        max_length=20,
-        choices=RequirementFieldCategory.choices,
-        verbose_name="字段分类（标准字段 / 数据字段）",
-    )
+    show_in_library = models.BooleanField(default=True, verbose_name="纳入标准库")
 
     class Meta:
         db_table = "requirement_fields"
@@ -496,10 +485,10 @@ class RequirementField(BaseModel):
                 raise ValidationError(
                     {"field_type": "表单子字段不能继续使用表单类型。"}
                 )
-            # 子字段跟着所属表单走，不单独分类 —— 保存路径会强制继承，这里兜底
-            if self.field_category != parent_field.field_category:
+            # 子字段跟着所属表单走，不单独设置 —— 保存路径会强制继承，这里兜底
+            if self.show_in_library != parent_field.show_in_library:
                 raise ValidationError(
-                    {"field_category": "表单子字段的分类必须与所属表单一致。"}
+                    {"show_in_library": "表单子字段是否纳入标准库必须与所属表单一致。"}
                 )
 
         if (
@@ -584,7 +573,7 @@ class Requirement(BaseModel):
     status = models.CharField(
         max_length=30,
         choices=RequirementItemStatus.choices,
-        default=RequirementItemStatus.DRAFT,
+        default=RequirementItemStatus.NOT_STARTED,
         db_index=True,
         verbose_name="需求状态",
     )
@@ -673,25 +662,14 @@ class Requirement(BaseModel):
                 | Q(approved_version__isnull=False, approved_row_version__isnull=False),
                 name="req_approved_version_pair_consistent",
             ),
-            # draft ⟺ 从未通过审批。把「已确认的需求被打回 draft」变成写不进去的事，
-            # 而不是靠代码自觉 —— 写入路径上有个默认值会悄悄干这件事，见
-            # RequirementBuiltinWriteSerializer.status。
-            models.CheckConstraint(
-                check=Q(approved_version__isnull=True, status=RequirementItemStatus.DRAFT)
-                | (
-                    Q(approved_version__isnull=False)
-                    & ~Q(status=RequirementItemStatus.DRAFT)
-                ),
-                name="req_draft_status_iff_never_approved",
-            ),
-            # 标准库条目永不走审批（见 RequirementLibrary 的文档字符串）
+            # 标准库条目永不走审批（见 RequirementLibrary 的文档字符串）。
+            # status 不在约束里：库条目没有任何写 status 的路径，恒为默认值。
             models.CheckConstraint(
                 check=Q(library__isnull=True)
                 | Q(
                     library__isnull=False,
                     approved_version__isnull=True,
                     pending_change_item__isnull=True,
-                    status=RequirementItemStatus.DRAFT,
                 ),
                 name="req_library_item_never_approved",
             ),
@@ -1291,53 +1269,11 @@ class RequirementBaselineEntry(BaseModel):
         return f"{self.requirement_id} @ {self.baseline_id}"
 
 
-class RequirementProjectStage(models.TextChoices):
-    """需求在某个项目内的交付阶段。与 Requirement.status（全局）正交。
-
-    禅道把这个字段放在需求本体上，于是同一条需求在 A 项目已发布、B 项目还没开工时
-    一个字段存不下。这里放在关联行上：每个 (需求, 项目) 各有一份。
-
-    两端派生、中间人工：
-
-    - linked / planned / released 由 utils/requirement_project.recalculate_stage
-      按关联事实派生（分别对应：关联进项目、关联未取消的迭代、关联已发布的发布单）。
-    - in_progress / done 只由人写（MANUAL_STAGES），派生逻辑只保证它们不被更低的
-      事实档冲掉 —— 「东西做没做完」没有任何关联事实能可靠推断，只有人知道。
-
-    曾经有过一档 pending_verification（待验证），由「存在在途发布关联」产出。它被
-    删除了：把「圈进发版范围」当成「研发完成待验证」在语义上站不住，且发布单一旦
-    取消阶段就回落，系统全程不记得需求究竟做完没有。现在关联发布单**不产生任何
-    档位**，只有发布成功（completed）才推到 released。
-    """
-
-    LINKED = "linked", "已立项"
-    PLANNED = "planned", "已排期"
-    IN_PROGRESS = "in_progress", "研发中"
-    DONE = "done", "研发完毕"
-    RELEASED = "released", "已发布"
-
-
-# 阶段全序。重算取「现存事实能达到的最高档」时按此比较。
-STAGE_LADDER = [
-    RequirementProjectStage.LINKED,
-    RequirementProjectStage.PLANNED,
-    RequirementProjectStage.IN_PROGRESS,
-    RequirementProjectStage.DONE,
-    RequirementProjectStage.RELEASED,
-]
-
-# 人工档：只由人写。派生逻辑碰到它们时只做一件事 —— 保证更低的事实档不把它们
-# 冲掉（recalculate_stage 里的地板规则）。
-MANUAL_STAGES = (
-    RequirementProjectStage.IN_PROGRESS,
-    RequirementProjectStage.DONE,
-)
-
-
 class RequirementProject(ProjectBaseModel):
-    """需求被项目引用的关联行。
+    """需求被项目引用的关联行：纯引用 + 项目内排序。
 
-    需求本体仍归属产品（`Requirement.product`），此表只表达「引用」与「项目内进度」。
+    需求本体仍归属产品（`Requirement.product`），交付状态也在本体上
+    （`Requirement.status`，跨项目共享一份）；此表只表达「引用」。
     刻意**不复用** `Requirement.project` —— 那条腿是排他归属，由 CheckConstraint
     requirement_owner_exactly_one 钉死；用它搬作用域会重新取号（编号永不复用，见
     req_unique_product_sequence 上的注释）、让版本/基线/变更单的历史行作用域与活行
@@ -1351,13 +1287,6 @@ class RequirementProject(ProjectBaseModel):
         on_delete=models.CASCADE,
         related_name="requirement_projects",
         verbose_name="关联需求",
-    )
-    stage = models.CharField(
-        max_length=20,
-        choices=RequirementProjectStage.choices,
-        default=RequirementProjectStage.LINKED,
-        db_index=True,
-        verbose_name="项目内阶段",
     )
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="项目内排序")
 
@@ -1380,11 +1309,10 @@ class RequirementProject(ProjectBaseModel):
 
 
 class RequirementCycle(ProjectBaseModel):
-    """需求 ↔ 迭代的关联行。存在一条未取消的关联 = 该项目内「已排期」的事实。
+    """需求 ↔ 迭代的关联行，只圈定迭代范围，不影响需求状态。
 
     只允许挂到需求**已关联项目**下的迭代（写入口校验，不建跨表约束 —— cycle 换
-    project 在本仓库不存在写路径）。迭代完成不改阶段（时间盒到期不是进度事实），
-    所以这张表不追踪迭代状态，重算时现查 cycle.status。
+    project 在本仓库不存在写路径）。
     """
 
     requirement = models.ForeignKey(
@@ -1419,14 +1347,12 @@ class RequirementCycle(ProjectBaseModel):
 
 
 class RequirementRelease(ProjectBaseModel):
-    """需求 ↔ 发布单的关联行。
+    """需求 ↔ 发布单的关联行，圈定发版范围。
 
-    关联本身**不是阶段事实** —— 它只圈定发版范围。只有发布单已发布（completed）
-    才给出「已发布」的档位。驳回/取消不删行 —— 关联关系还在，只是不再算有效事实，
-    重算时按 release.status 现判。
-
-    建立这条关联不要求需求处于任何特定阶段（原 done-only 门槛已移除）；关联在途
-    期间仍然禁止手动降档（见 set_manual_stage 的降档锁）。
+    发布单变为已发布（completed）时，关联需求被只升不降地推到 released
+    （utils/requirement_project.promote_on_release_completed）；把需求补挂进已发布
+    的发布单同样只推本批。驳回/取消不删行、也不降档。建立关联不要求需求处于任何
+    特定状态（closed 除外，见 RequirementItemStatus）。
     """
 
     requirement = models.ForeignKey(
@@ -1461,11 +1387,11 @@ class RequirementRelease(ProjectBaseModel):
 
 
 class RequirementIssue(ProjectBaseModel):
-    """需求 ↔ 工作项的关联行。研发段（in_progress / done）阶段派生的事实来源。
+    """需求 ↔ 工作项的关联行，供工作项数 / 完成率统计；不影响需求状态。
 
     一条工作项至多挂一条需求：唯一约束落在 issue **单列**（软删条件唯一）——
     与 RequirementCycle 的 (requirement, cycle) 复合唯一不同，这里唯一性的主语
-    是工作项本身。project 冗余自 issue.project（写入口校验二者一致），重算按
+    是工作项本身。project 冗余自 issue.project（写入口校验二者一致），按
     (requirement, project) 聚合时不穿透 issue 表。不遍历父子树：只认关联行。
     """
 
@@ -1498,38 +1424,3 @@ class RequirementIssue(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.requirement_id} @ issue {self.issue_id}"
-
-
-class RequirementProjectActivity(ProjectBaseModel):
-    """(需求, 项目) 阶段变更留痕。阶段是派生值，会因发布单驳回等静默降档 ——
-    没有这张表，用户只能看着阶段掉下来猜原因。
-
-    requirement 用裸 UUIDField 而非外键（见文件头 118-153 行的设计注释）：留痕要
-    活过需求删除，而仓库的 soft_delete_related_objects 会把 PROTECT 当 CASCADE。
-    """
-
-    requirement_id = models.UUIDField(verbose_name="需求 ID", db_index=True)
-    old_stage = models.CharField(
-        max_length=20, choices=RequirementProjectStage.choices, verbose_name="原阶段"
-    )
-    new_stage = models.CharField(
-        max_length=20, choices=RequirementProjectStage.choices, verbose_name="新阶段"
-    )
-    # 触发来源快照，如 {"type": "release_rejected", "release_id": "...", "release_name": "..."}。
-    # 存名称快照而非只存 ID：来源对象可能后续被删,留痕必须自足可读。
-    trigger = models.JSONField(default=dict, verbose_name="触发来源")
-
-    class Meta:
-        verbose_name = "Requirement Project Activity"
-        verbose_name_plural = "Requirement Project Activities"
-        db_table = "requirement_project_activities"
-        ordering = ("-created_at",)
-        indexes = [
-            models.Index(
-                fields=["requirement_id", "project", "-created_at"],
-                name="req_proj_activity_lookup",
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.requirement_id} @ {self.project_id}: {self.old_stage} -> {self.new_stage}"

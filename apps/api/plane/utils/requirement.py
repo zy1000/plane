@@ -17,7 +17,6 @@ from plane.db.models import (
     RequirementChangeItem,
     RequirementChangeStatus,
     RequirementField,
-    RequirementFieldCategory,
     RequirementFieldType,
     RequirementItemStatus,
     RequirementLibrary,
@@ -45,7 +44,7 @@ SORT_ORDER_STEP = 1000
 BUILTIN_COLUMN_DEFAULTS = {
     "title": "",
     "description_html": None,
-    "status": RequirementItemStatus.DRAFT.value,
+    "status": RequirementItemStatus.NOT_STARTED.value,
     "priority": RequirementPriority.NONE.value,
     "assignee_id": None,
     "start_date": None,
@@ -57,8 +56,10 @@ BUILTIN_COLUMNS = tuple(BUILTIN_COLUMN_DEFAULTS)
 
 # 不算「内容」的内置列。
 #
-# status 是**交付进度轴**（这条需求做到哪了），不是被批准的内容。把它算进内容 diff 会
-# 让「标一次已实现」把行推进「已改动·待提交」，还要审批人为研发进度签字。
+# status 是**交付状态轴**（这条需求做到哪了），不是被批准的内容。把它算进内容 diff 会
+# 让「标一次已发布」把行推进「已改动·待提交」，还要审批人为研发进度签字。
+# 内容写路径（partial_update / save_requirement_row_batch）的写集合也只取
+# CONTENT_BUILTIN_COLUMNS，status 只由 utils/requirement_project 的状态 util 写。
 #
 # 与下面的 LIBRARY_HIDDEN_BUILTIN_COLUMNS 是两个独立常量，含义不同：那个说的是「模板里
 # 不该有」，这个说的是「不算内容」。合并会让以后调整任一侧都出错。
@@ -110,7 +111,7 @@ class RequirementFieldSpec:
     sort_order: float
     config: dict
     default_value: Any = None
-    field_category: Optional[str] = None
+    show_in_library: bool = True
     requirement_type_id: Optional[str] = None
 
 
@@ -128,7 +129,7 @@ def field_specs_from_models(fields):
             sort_order=field.sort_order,
             config=deepcopy(field.config) or {},
             default_value=deepcopy(field.default_value),
-            field_category=field.field_category,
+            show_in_library=field.show_in_library,
             requirement_type_id=str(field.requirement_type_id),
         )
         for field in fields
@@ -152,7 +153,7 @@ def field_specs_from_tree(tree, *, parent_id=None, requirement_type_id=None):
                 sort_order=node.get("sort_order", (index + 1) * SORT_ORDER_STEP),
                 config=deepcopy(node.get("config") or {}),
                 default_value=deepcopy(node.get("default_value")),
-                field_category=node.get("field_category"),
+                show_in_library=bool(node.get("show_in_library", True)),
                 requirement_type_id=str(node_type_id) if node_type_id else None,
             )
         )
@@ -184,7 +185,7 @@ def field_tree_from_specs(specs):
             "sort_order": spec.sort_order,
             "config": deepcopy(spec.config),
             "default_value": deepcopy(spec.default_value),
-            "field_category": spec.field_category,
+            "show_in_library": spec.show_in_library,
             "requirement_type_id": spec.requirement_type_id,
             "children": [],
         }
@@ -460,14 +461,14 @@ def serialize_requirement_type_field_tree(requirement_type):
 def get_library_field_specs(library):
     """标准库的字段实时引用所选需求类型，不拷贝。
 
-    只取标准字段 —— 数据字段是产品需求录入/导入时才填的东西，标准库不展示它，
-    这里是这条规则的唯一执行点（网格表头与写入校验都走 specs）。八个内置字段
-    不受影响，标准库照样有。
+    只取 show_in_library 的字段 —— 关掉这个开关的字段是产品需求录入/导入时才填的
+    东西，标准库不展示它，这里是这条规则的唯一执行点（网格表头与写入校验都走
+    specs）。八个内置字段不受影响，标准库照样有。
     """
     return [
         spec
         for spec in get_requirement_type_field_specs(library.requirement_type)
-        if spec.field_category == RequirementFieldCategory.STANDARD
+        if spec.show_in_library
     ]
 
 
@@ -726,9 +727,9 @@ def sync_requirement_type_fields(
         field.sort_order = (index + 1) * SORT_ORDER_STEP
         field.config = deepcopy(payload.get("config") or {})
         field.default_value = deepcopy(payload.get("default_value"))
-        # 子字段跟着所属表单走，分类不单独提交
-        field.field_category = (
-            parent.field_category if parent else payload["field_category"]
+        # 子字段跟着所属表单走，不单独提交
+        field.show_in_library = (
+            parent.show_in_library if parent else payload["show_in_library"]
         )
         field.full_clean(exclude=["created_by", "updated_by"])
         if field._state.adding and actor is not None:
@@ -1151,6 +1152,7 @@ def save_requirement_row_batch(
     rows_by_id = {row.id: row for row in existing}
     conflicts = []
 
+    update_ids = {item["id"] for item in updates}
     for item in [*updates, *deletes]:
         row = rows_by_id.get(item["id"])
         if row is None:
@@ -1166,6 +1168,18 @@ def save_requirement_row_batch(
                     "id": str(item["id"]),
                     "reason": "version_conflict",
                     "current_version": row.version,
+                }
+            )
+        elif (
+            item["id"] in update_ids
+            and row.status == RequirementItemStatus.CLOSED
+        ):
+            # 已关闭的需求内容只读（closed 保护内容不保护删除，deletes 不拦）。
+            # 视图层已前置判过一次，这里是拿到行锁之后的二道闸
+            conflicts.append(
+                {
+                    "id": str(item["id"]),
+                    "reason": "closed",
                 }
             )
 
@@ -1200,6 +1214,10 @@ def save_requirement_row_batch(
         before = requirement_content_values(row)
         was_approved = row_was_approved(row)
         for column, value in builtin_values_from_payload(item.get("builtin")).items():
+            # status 不算内容、不由内容路径写：跳过它，下面的 bulk_update 字段列表
+            # 也不含它 —— 否则序列化器阶段无锁读到的旧值会盖掉并发的状态改动
+            if column in NON_CONTENT_BUILTIN_COLUMNS:
+                continue
             setattr(row, column, value)
         row.data = deepcopy(item["data"] or {})
         row.version += 1
@@ -1211,7 +1229,7 @@ def save_requirement_row_batch(
         model.objects.bulk_update(
             updated_rows,
             [
-                *BUILTIN_COLUMNS,
+                *CONTENT_BUILTIN_COLUMNS,
                 "data",
                 "version",
                 "approved_row_version",

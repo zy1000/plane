@@ -7,10 +7,11 @@ import { Link2, Loader as LoaderIcon, Maximize2, MoveRight } from "lucide-react"
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirement, TRequirementTypeSchema } from "@plane/types";
+import type { TRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { canEditRequirementContent } from "@/components/requirements/requirement-status-cell";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
@@ -25,7 +26,7 @@ type TProps = {
   requirementTypes: TRequirementTypeSchema[];
   /** 网格当前页的行，命中就不必再请求一次 */
   rows: TRequirement[];
-  /** 能不能改需求条目。具体某一行还要看它自己的 is_locked */
+  /** 能不能改需求条目（页面级写权限）。内容还要看行自己的 is_locked / closed；状态格只看它 */
   canEdit: boolean;
   onClose: () => void;
   onOpenRequirement: (requirementId: string) => void;
@@ -122,6 +123,15 @@ export const RequirementPeekOverview = (props: TProps) => {
       const response = await detail.submitPatch(patch);
       if (response) onRequirementUpdated?.(response);
       return response;
+    },
+    [detail, onRequirementUpdated]
+  );
+
+  /** 改状态走独立端点；返回的是只合并了 status / can_submit_review 的行，同样回灌给网格 */
+  const handleStatusChange = useCallback(
+    async (status: TRequirementItemStatus) => {
+      const response = await detail.updateStatus(status);
+      if (response) onRequirementUpdated?.(response);
     },
     [detail, onRequirementUpdated]
   );
@@ -238,10 +248,12 @@ export const RequirementPeekOverview = (props: TProps) => {
                   requirementType={requirementType}
                   subRequirements={detail.children}
                   trail={detail.trail}
-                  readOnly={!canEdit || requirement.is_locked}
+                  readOnly={!canEditRequirementContent(requirement, canEdit)}
                   layout="drawer"
                   resolveParentTitle={resolveParentTitle}
                   onPatch={handlePatch}
+                  // 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态
+                  onStatusChange={canEdit ? (status) => void handleStatusChange(status) : undefined}
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void detail.refresh()}
                   issuesSection={issuesSection}

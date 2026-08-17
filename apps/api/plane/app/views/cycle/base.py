@@ -70,10 +70,6 @@ from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
-from plane.utils.requirement_project import (
-    recalculate_stage,
-    recalculate_stages_for_cycle,
-)
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
@@ -520,21 +516,6 @@ class CycleViewSet(BaseViewSet):
             new_status = updated_cycle.status
             if new_status and new_status != previous_status:
                 sync_overdue_on_status_change(updated_cycle, previous_status, new_status)
-                # 迭代取消/恢复改变「已排期」事实的有效性，重算关联需求的阶段。
-                # 其余流转（含已完成）刻意不触发 —— 时间盒到期不是需求进度事实，
-                # 顺延靠前端 carryover 标记提示
-                if Cycle.Status.CANCELLED in (previous_status, new_status):
-                    recalculate_stages_for_cycle(
-                        updated_cycle.id,
-                        trigger={
-                            "type": "cycle_cancelled"
-                            if new_status == Cycle.Status.CANCELLED
-                            else "cycle_restored",
-                            "cycle_id": str(updated_cycle.id),
-                            "cycle_name": updated_cycle.name,
-                        },
-                        actor=request.user,
-                    )
             sync_overdue_on_date_change(
                 updated_cycle,
                 prev_handoff=previous_test_handoff_date,
@@ -772,27 +753,11 @@ class CycleViewSet(BaseViewSet):
             project_id=str(project_id),
             epoch=int(timezone.now().timestamp()),
         )
-        # 删除迭代 = 「已排期」事实作废(与拒绝/解除关联同一条降档路径)。
-        # 先取受影响对、同步软删关联行,再逐对重算 —— 不能等异步级联
-        affected_pairs = list(
-            RequirementCycle.objects.filter(cycle_id=pk).values_list(
-                "requirement_id", "project_id"
-            )
-        )
+        # 同步软删需求关联行（不等异步级联，需求侧的迭代关联计数读的就是这张表）。
+        # 删除迭代不改需求状态
         RequirementCycle.objects.filter(cycle_id=pk).delete()
         # TODO: Soft delete the cycle break the onetoone relationship with cycle issue
         cycle.delete()
-        for requirement_id, link_project_id in affected_pairs:
-            recalculate_stage(
-                requirement_id,
-                link_project_id,
-                trigger={
-                    "type": "cycle_deleted",
-                    "cycle_id": str(pk),
-                    "cycle_name": cycle.name,
-                },
-                actor=request.user,
-            )
 
         # Delete the user favorite cycle
         UserFavorite.objects.filter(

@@ -25,9 +25,10 @@ type TProps = {
   inbox: ReturnType<typeof useRequirementApprovalInbox>;
   onClose: () => void;
   onOpenChangeRequest: (item: TRequirementApprovalInboxItem) => void;
+  onSettled?: () => void;
 };
 
-export function ApprovalInboxModal({ isOpen, inbox, onClose, onOpenChangeRequest }: TProps) {
+export function ApprovalInboxModal({ isOpen, inbox, onClose, onOpenChangeRequest, onSettled }: TProps) {
   const { t } = useTranslation();
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [comment, setComment] = useState("");
@@ -37,6 +38,7 @@ export function ApprovalInboxModal({ isOpen, inbox, onClose, onOpenChangeRequest
       await inbox.act(item, action, action === "rejected" ? comment.trim() : undefined);
       setRejectingId(null);
       setComment("");
+      onSettled?.();
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),

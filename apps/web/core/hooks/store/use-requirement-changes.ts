@@ -170,21 +170,29 @@ export const useRequirementApprovalInbox = ({
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchInbox = useCallback(async () => {
-    if (!workspaceSlug) return EMPTY_INBOX;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await requirementService.listMyApprovals(workspaceSlug, { tab, productId });
-      setInbox(response);
-      return response;
-    } catch (requestError) {
-      setError(getErrorMessage(requestError, "Unable to load your approvals."));
-      throw requestError;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [productId, tab, workspaceSlug]);
+  const fetchInbox = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!workspaceSlug) return EMPTY_INBOX;
+      if (!options?.silent) {
+        setIsLoading(true);
+        setError(null);
+      }
+      try {
+        const response = await requirementService.listMyApprovals(workspaceSlug, { tab, productId });
+        setInbox(response);
+        return response;
+      } catch (requestError) {
+        if (!options?.silent) {
+          setError(getErrorMessage(requestError, "Unable to load your approvals."));
+          throw requestError;
+        }
+        return EMPTY_INBOX;
+      } finally {
+        if (!options?.silent) setIsLoading(false);
+      }
+    },
+    [productId, tab, workspaceSlug]
+  );
 
   useEffect(() => {
     void fetchInbox().catch(() => undefined);

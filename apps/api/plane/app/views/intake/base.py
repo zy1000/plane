@@ -51,7 +51,6 @@ from plane.app.views.base import BaseAPIView
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.global_paginator import paginate
 from plane.utils.host import base_host
-from plane.utils.requirement_project import recalculate_stages_for_issue
 from plane.db.models.intake import SourceType
 
 
@@ -433,17 +432,7 @@ class IntakeIssueViewSet(BaseViewSet):
 
         # Both serializers are valid, now save them
         if issue_serializer:
-            # 已受理的工作项可能先被挂上需求、再经 intake 改状态：save 前记旧值，
-            # 落库后用 instance 值比对（兼容置 null / serializer 拒写），
-            # 真变了才重算关联需求的阶段（无关联时是一次索引点查 no-op）
-            old_state_id = issue.state_id
             issue_serializer.save()
-            if str(issue_serializer.instance.state_id) != str(old_state_id):
-                recalculate_stages_for_issue(
-                    issue.id,
-                    trigger={"type": "issue_state_changed", "source": "intake"},
-                    actor=request.user,
-                )
 
             # Check if the update is a migration description update
             is_migration_description_update = skip_activity and is_description_update

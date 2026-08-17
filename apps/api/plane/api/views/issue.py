@@ -77,7 +77,6 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.asset_upload import presigned_post_for_asset
 from .base import BaseAPIView
 from plane.utils.host import base_host
-from plane.utils.requirement_project import recalculate_stage, recalculate_stages_for_issue
 from plane.bgtasks.webhook_task import model_activity
 from plane.app.permissions import ROLE
 from plane.utils.openapi import (
@@ -601,8 +600,6 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     external_id=external_id,
                     external_source=external_source,
                 )
-                # v1 无工作流拦截、状态直落：save 前记旧值，供落库后比对重算需求阶段
-                old_state_id = issue.state_id
 
                 # Get the current instance of the issue in order to track
                 # changes and dispatch the issue activity
@@ -624,13 +621,6 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     # If the serializer is valid, save the issue and dispatch
                     # the update issue activity worker event.
                     serializer.save()
-                    # 状态真变了才重算关联需求的阶段（无关联时是一次索引点查 no-op）
-                    if str(serializer.instance.state_id) != str(old_state_id):
-                        recalculate_stages_for_issue(
-                            issue.id,
-                            trigger={"type": "issue_state_changed", "source": "external_api"},
-                            actor=request.user,
-                        )
                     issue_activity.delay(
                         type="issue.activity.updated",
                         requested_data=requested_data,
@@ -725,8 +715,6 @@ class IssueDetailAPIEndpoint(BaseAPIView):
         Supports external ID validation to prevent conflicts.
         """
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
-        # v1 无工作流拦截、状态直落：save 前记旧值，供落库后比对重算需求阶段
-        old_state_id = issue.state_id
         project = Project.objects.get(pk=project_id)
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
@@ -756,13 +744,6 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                 )
 
             serializer.save()
-            # 状态真变了才重算关联需求的阶段（无关联时是一次索引点查 no-op）
-            if str(serializer.instance.state_id) != str(old_state_id):
-                recalculate_stages_for_issue(
-                    issue.id,
-                    trigger={"type": "issue_state_changed", "source": "external_api"},
-                    actor=request.user,
-                )
             issue_activity.delay(
                 type="issue.activity.updated",
                 requested_data=requested_data,
@@ -809,25 +790,9 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
-        # 删除工作项 = 「开工/完成」事实可能作废。先取受影响对、同步软删关联行，
-        # 再逐对重算 —— 不能等 Celery 级联：异步清理有时延且不回写阶段
-        affected_pairs = list(
-            RequirementIssue.objects.filter(issue_id=pk).values_list("requirement_id", "project_id")
-        )
+        # 同步软删关联行，保证需求侧工作项计数准确 —— 不能等 Celery 级联清理
         RequirementIssue.objects.filter(issue_id=pk).delete()
         issue.delete()
-        for requirement_id, link_project_id in affected_pairs:
-            recalculate_stage(
-                requirement_id,
-                link_project_id,
-                trigger={
-                    "type": "issue_deleted",
-                    "source": "external_api",
-                    "issue_id": str(pk),
-                    "issue_name": issue.name,
-                },
-                actor=request.user,
-            )
         issue_activity.delay(
             type="issue.activity.deleted",
             requested_data=json.dumps({"issue_id": str(pk)}),

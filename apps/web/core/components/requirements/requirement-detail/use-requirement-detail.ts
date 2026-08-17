@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   TRequirement,
   TRequirementBuiltinValues,
+  TRequirementItemStatus,
   TRequirementTrailEntry,
   TRequirementData,
 } from "@plane/types";
@@ -211,6 +212,50 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
     [sendPatch, t]
   );
 
+  /**
+   * 改需求级交付状态。走独立的状态端点（不带 version、不 bump version、评审中也能改）。
+   *
+   * 响应虽是整行，但**只合并 status / can_submit_review** 进当前行 —— 状态端点不 bump
+   * version，整行替换会把在飞的内容 PATCH 刚写回的 version 盖成旧值，下一次内容提交
+   * 必然 409。挂进同一条 queueRef 串行链：排在它前面的内容 PATCH 已经落进 ref，合并
+   * 时读到的就是最新一行。返回合并后的行，供抽屉回灌给网格 store。
+   */
+  const sendStatus = useCallback(
+    async (status: TRequirementItemStatus) => {
+      const current = requirementRef.current;
+      if (!workspaceSlug || !productId || !current) return null;
+      const response = await requirementService.updateRequirementStatus(workspaceSlug, productId, current.id, status);
+      const latest = requirementRef.current ?? current;
+      const merged: TRequirement = {
+        ...latest,
+        status: response.status,
+        can_submit_review: response.can_submit_review,
+      };
+      applyRow(merged);
+      return merged;
+    },
+    [applyRow, productId, workspaceSlug]
+  );
+
+  const updateStatus = useCallback(
+    (status: TRequirementItemStatus) => {
+      const next = queueRef.current.then(
+        () => sendStatus(status),
+        () => sendStatus(status)
+      );
+      queueRef.current = next.catch((error: unknown) => {
+        const payload = error as { error?: string } | null;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
+        });
+      });
+      return queueRef.current;
+    },
+    [sendStatus, t]
+  );
+
   const parentIds = useMemo(() => [requirement?.parent_id], [requirement?.parent_id]);
 
   return {
@@ -221,6 +266,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
     error,
     parentIds,
     submitPatch,
+    updateStatus,
     refresh: loadRequirement,
     refreshTrail: loadTrail,
   };

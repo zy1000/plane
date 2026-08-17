@@ -11,9 +11,9 @@ from plane.db.models import (
     RequirementApprovalPolicy,
     RequirementApprovalType,
     RequirementChangeStatus,
-    RequirementFieldCategory,
     RequirementFieldType,
     RequirementChangeRequest,
+    RequirementItemStatus,
     RequirementLibrary,
     RequirementPriority,
     User,
@@ -344,15 +344,9 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(required=False, default=True)
     config = serializers.DictField(required=False, default=dict)
     default_value = serializers.JSONField(required=False, allow_null=True)
-    # 分类没有默认值：根字段必须明确它进不进标准库，由 RequirementFieldNodeWriteSerializer
-    # 校验。表单子字段跟着父字段走，保存时强制继承，所以这里必须收得下 null ——
-    # 前端的字段树是整棵回传的，新建的子字段在草稿里就是 null。
-    field_category = serializers.ChoiceField(
-        choices=RequirementFieldCategory.choices,
-        required=False,
-        allow_null=True,
-        default=None,
-    )
+    # 表单子字段不单独设置，保存时强制继承所属表单（utils/requirement.py 的
+    # save_field），所以子字段这里传什么都不影响最终取值。
+    show_in_library = serializers.BooleanField(required=False, default=True)
 
     def validate_name(self, value):
         value = value.strip()
@@ -437,23 +431,19 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        if not attrs.get("field_category"):
-            raise serializers.ValidationError(
-                {"field_category": "Pick whether this field is a standard or data field."}
-            )
         field_type = attrs["field_type"]
         children = attrs.get("children") or []
 
-        # 数据字段不能设为必填。
+        # 不纳入标准库的字段不能设为必填。
         #
-        # 标准库只按标准字段校验（utils/requirement.py 的 get_library_field_specs），
-        # 数据字段压根不在库条目的契约里；而导入到产品需求时是按类型的**全集**校验的。
-        # 一旦某个数据字段被标成必填，库条目天生就缺它，导入只能跳过必填校验
+        # 标准库只按纳入库的字段校验（utils/requirement.py 的 get_library_field_specs），
+        # 库外字段压根不在库条目的契约里；而导入到产品需求时是按类型的**全集**校验的。
+        # 一旦某个库外字段被标成必填，库条目天生就缺它，导入只能跳过必填校验
         # （build_library_import_creates），落进来的行随后每一次单元格保存又会被
         # 同一条必填规则打回 —— 那一行从此存不进任何改动。
-        # 子字段的分类强制继承所属表单（utils/requirement.py 的 save_field），
-        # 所以这里用根字段的分类一并管住子字段。
-        if attrs["field_category"] == RequirementFieldCategory.DATA:
+        # 子字段强制继承所属表单（utils/requirement.py 的 save_field），所以这里用
+        # 根字段的取值一并管住子字段。
+        if not attrs["show_in_library"]:
             offenders = [
                 node["name"]
                 for node in [attrs, *children]
@@ -463,8 +453,8 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
                 raise serializers.ValidationError(
                     {
                         "is_required": (
-                            "A data field cannot be required, because standard library "
-                            "items never carry data fields: "
+                            "A field kept out of the standard library cannot be "
+                            "required, because library items never carry it: "
                             f"{', '.join(offenders)}"
                         )
                     }
@@ -725,8 +715,8 @@ class RequirementBuiltinWriteSerializer(serializers.Serializer):
     # 八个字段一律 required=False 且**不给 default**。
     #
     # 给了 default，DRF 会把没传的列也塞进 validated_data，于是「客户端真的提交了这一列」
-    # 与「DRF 补了个缺省值」再也分不开 —— 一个只改标题的 PATCH 会带着 status="draft" 到达
-    # 写入层，把已确认的行打回草稿。缺省值改由 builtin_values_from_payload（新增路径）
+    # 与「DRF 补了个缺省值」再也分不开 —— 一个只改标题的 PATCH 会带着其余列的缺省值到达
+    # 写入层，把已填的值清空。缺省值改由 builtin_values_from_payload（新增路径）
     # 与 current_row 回填（更新路径）各自负责。
     title = serializers.CharField(
         max_length=TITLE_MAX_LENGTH, allow_blank=True, required=False
@@ -734,9 +724,10 @@ class RequirementBuiltinWriteSerializer(serializers.Serializer):
     description_html = serializers.CharField(
         allow_blank=True, allow_null=True, required=False
     )
-    # status 不在这里 —— 它是**交付进度轴**，由系统写，客户端说了不算。
-    # 网格的批量保存 payload 恒带全部八个内置列，所以这里选择静默忽略而不是报 400，
-    # 值一律由 validate_requirement_builtin_values 从当前行/缺省值回填。
+    # status 不在这里 —— 它是**交付状态轴**，走独立的状态写入口
+    # （RequirementStatusWriteSerializer + utils/requirement_project.set_requirement_status），
+    # 不算内容。网格的批量保存 payload 恒带全部八个内置列，所以这里选择静默忽略而不是
+    # 报 400，值一律由 validate_requirement_builtin_values 从当前行/缺省值回填。
     priority = serializers.ChoiceField(
         choices=RequirementPriority.choices,
         required=False,
@@ -766,6 +757,13 @@ class RequirementBuiltinWriteSerializer(serializers.Serializer):
         return attrs
 
 
+class RequirementStatusWriteSerializer(serializers.Serializer):
+    """需求级交付状态的独立写入口。与内容 PATCH 分开：不带 version 乐观锁、不进
+    内容 diff、评审中的行也能改；closed 行改成任意非 closed 值即重开。"""
+
+    status = serializers.ChoiceField(choices=RequirementItemStatus.choices)
+
+
 def validate_requirement_builtin_values(
     *, owner, values, parent_queryset, row_id=None, current_row=None
 ):
@@ -779,7 +777,8 @@ def validate_requirement_builtin_values(
     未提交的列沿用行上的当前值。
 
     status 永远走这条回填路径 —— 写序列化器根本不收它，所以「客户端提交的 status」这个
-    概念不存在，行上是什么就还是什么。唯一改写它的地方是审批通过（draft→confirmed）。
+    概念不存在，行上是什么就还是什么。改写它的只有独立的状态写入口与两条自动推进
+    （utils/requirement_project）。内容写路径落库时也不写这一列。
     """
     values = dict(values or {})
     values.pop("status", None)
@@ -789,9 +788,7 @@ def validate_requirement_builtin_values(
             if column not in submitted:
                 values[column] = field_attr(current_row, column)
 
-    # 标准库条目永不走审批，四个执行期列在库里既不展示也不该存在。这里是唯一的执行点：
-    # 不挡的话一个带 status=confirmed 的 PATCH 会撞上 req_library_item_never_approved
-    # 约束，变成 500 而不是 400。
+    # 标准库条目永不走审批，四个执行期列在库里既不展示也不该存在。这里是唯一的执行点。
     if isinstance(owner, RequirementLibrary):
         for column in LIBRARY_HIDDEN_BUILTIN_COLUMNS:
             values[column] = BUILTIN_COLUMN_DEFAULTS[column]
@@ -814,13 +811,30 @@ def validate_requirement_builtin_values(
                 {"parent_id": "A requirement cannot be its own parent."}
             )
         # 一次取全这批行的父指针，逐级 get 会在深层级上退化成 N 次查询
-        parent_by_id = {
-            str(item_id): str(item_parent_id) if item_parent_id else None
-            for item_id, item_parent_id in parent_queryset.values_list("id", "parent_id")
-        }
+        parent_by_id = {}
+        status_by_id = {}
+        for item_id, item_parent_id, item_status in parent_queryset.values_list(
+            "id", "parent_id", "status"
+        ):
+            parent_by_id[str(item_id)] = str(item_parent_id) if item_parent_id else None
+            status_by_id[str(item_id)] = item_status
         if str(parent_id) not in parent_by_id:
             raise serializers.ValidationError(
                 {"parent_id": "The parent requirement was not found in this scope."}
+            )
+        # 已关闭的需求不进任何关联选择器，父项也不例外。只拦**新指派**：更新路径会从
+        # current_row 回填 parent_id，无条件拦会让已关闭父项下的所有子需求改不了任何内容
+        current_parent_id = (
+            str(field_attr(current_row, "parent_id"))
+            if current_row is not None and field_attr(current_row, "parent_id")
+            else None
+        )
+        if (
+            str(parent_id) != current_parent_id
+            and status_by_id.get(str(parent_id)) == RequirementItemStatus.CLOSED
+        ):
+            raise serializers.ValidationError(
+                {"parent_id": "A closed requirement cannot be selected as parent."}
             )
         if row_id:
             seen = set()
@@ -924,11 +938,8 @@ ROW_FIELDS = [
     "can_submit_review",
     "can_withdraw",
     # 这条需求被哪些项目引用（RequirementProject）。只有产品需求列表会注解它，
-    # 别处拿不到注解时返回 []，见 utils/requirement_project.annotate_project_links。
-    # project_ids 由 project_links 派生保留 —— 「所属项目」多选只要 id 列表，
-    # 阶段徽章要 (project_id, stage) 对。
+    # 别处拿不到注解时返回 []，见 utils/requirement_project.annotate_project_ids。
     "project_ids",
-    "project_links",
     "created_at",
     "updated_at",
     "created_by",
@@ -955,24 +966,16 @@ class RequirementSerializer(BaseSerializer):
     display_id = serializers.SerializerMethodField()
     source_display_id = serializers.SerializerMethodField()
     project_ids = serializers.SerializerMethodField()
-    project_links = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
         fields = ROW_FIELDS
         read_only_fields = fields
 
-    def get_project_links(self, obj):
+    def get_project_ids(self, obj):
         # 没注解就是 [] 而不是 None —— 前端直接 map，
         # 少一处 ?? [] 就少一处忘了写的机会
-        return [
-            {"project_id": str(item["project_id"]), "stage": item["stage"]}
-            for item in getattr(obj, "project_links", None) or []
-        ]
-
-    def get_project_ids(self, obj):
-        # 从 project_links 派生，两个字段永远一致
-        return [item["project_id"] for item in self.get_project_links(obj)]
+        return [str(item) for item in getattr(obj, "project_ids", None) or []]
 
     def get_display_id(self, obj):
         # 作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目/库
@@ -1004,8 +1007,13 @@ class RequirementSerializer(BaseSerializer):
         return bool(self.context.get("can_write"))
 
     def get_can_submit_review(self, obj):
-        # 标准库条目不走审批；在评审中的行也不能重复提交
-        if obj.library_id or obj.pending_change_item_id:
+        # 标准库条目不走审批；在评审中的行也不能重复提交；已关闭的行内容只读，
+        # 不能提内容评审（「申请删除」走行菜单，不看这个信号）
+        if (
+            obj.library_id
+            or obj.pending_change_item_id
+            or obj.status == RequirementItemStatus.CLOSED
+        ):
             return False
         return self._can_write() and obj.approval_state != "approved"
 

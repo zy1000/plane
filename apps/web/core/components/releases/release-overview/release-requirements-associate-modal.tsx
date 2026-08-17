@@ -6,8 +6,9 @@
  * （listProjectRequirements）带 exclude_release_id —— 已进本发布单的行由服务端排除，
  * 前端不再过滤一遍。
  *
- * 候选不再限制阶段（原「只有研发完毕能进发布单」的门槛已移除），任意阶段的需求
- * 都能被圈进发布范围，所以行上带阶段胶囊，方便区分。
+ * 候选不限制交付状态（原「只有研发完毕能进发布单」的门槛已移除），除已关闭外任意
+ * 状态的需求都能被圈进发布范围，所以行上带只读状态胶囊，方便区分；已关闭的需求由
+ * exclude_closed 在服务端排除。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@headlessui/react";
@@ -20,7 +21,7 @@ import type { TProjectRequirement } from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ProductChip } from "@/components/products/product-chip";
-import { REQUIREMENT_STAGE_PILL } from "@/components/projects/requirements/project-requirement-stage-cell";
+import { RequirementStatusCell } from "@/components/requirements";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import useDebounce from "@/hooks/use-debounce";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
@@ -93,6 +94,7 @@ export const ReleaseRequirementsAssociateModal = (props: TProps) => {
           perPage: PAGE_SIZE,
           cursor: `${PAGE_SIZE}:${nextPage}:0`,
           exclude_release_id: releaseId,
+          excludeClosed: true,
         });
         if (requestSequence !== requestSequenceRef.current) return;
 
@@ -240,15 +242,8 @@ export const ReleaseRequirementsAssociateModal = (props: TProps) => {
                     <Tooltip tooltipContent={row.title}>
                       <span className="min-w-0 flex-1 truncate">{row.title}</span>
                     </Tooltip>
-                    {/* 候选不再限制阶段，行上带阶段胶囊，方便区分挑的是哪一档 */}
-                    <span
-                      className={cn(
-                        "inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded px-1.5 text-11 font-medium",
-                        REQUIREMENT_STAGE_PILL[row.stage]
-                      )}
-                    >
-                      {t(`project_requirements.stage.${row.stage}`)}
-                    </span>
+                    {/* 候选不限制状态，行上带只读状态胶囊，方便区分挑的是哪一档 */}
+                    <RequirementStatusCell status={row.status} className="shrink-0" />
                     {/* 候选池横跨本项目引用的全部产品，同名需求靠标识徽标区分 */}
                     <ProductChip
                       identifier={row.product_identifier}

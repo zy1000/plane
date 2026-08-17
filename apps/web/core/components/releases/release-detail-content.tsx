@@ -187,8 +187,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
 
   /**
    * 关联需求列表已迁到「发布内容」页的需求子页，这里不再展示、也不再订阅。
-   * 但状态流转（发布/驳回）会让服务端重算需求阶段，所以仍要按 key 让那份缓存失效 ——
-   * 用全局 mutate 而不是再挂一个 hook，省掉概览页一次没人看的请求。
+   * 但发布成功会让服务端把关联需求的交付状态推到 released，所以仍要按 key 让那份
+   * 缓存失效 —— 用全局 mutate 而不是再挂一个 hook，省掉概览页一次没人看的请求。
    */
   const refreshReleaseRequirements = useCallback(() => {
     if (!workspaceSlugValue || !projectIdValue || !releaseId) return;

@@ -127,6 +127,12 @@ urlpatterns = [
         RequirementViewSet.as_view({"post": "rollback"}),
         name="product-requirement-rollback",
     ),
+    # 需求级交付状态的独立写入口（不走内容 PATCH：不带 version、评审中也能改）
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/status/",
+        RequirementViewSet.as_view({"patch": "set_status"}),
+        name="product-requirement-status",
+    ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/trail/",
         RequirementChangeTrailViewSet.as_view({"get": "list"}),
@@ -170,7 +176,7 @@ urlpatterns = [
         ProjectRequirementViewSet.as_view({"post": "submit_change"}),
         name="project-requirement-changes",
     ),
-    # --- 项目需求：迭代 / 发布关联（阶段派生的事实来源） -----------------
+    # --- 项目需求：迭代 / 发布关联（圈定范围） ---------------------------
     # URL kwarg 统一叫 container_id：两套端点共用 BaseRequirementContainerViewSet，
     # 方法签名一致；kwarg 名不出现在 URL 文本里，对客户端不可见
     path(

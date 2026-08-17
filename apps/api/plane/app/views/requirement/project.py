@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""项目侧的产品需求：引用、排序、提变更单。
+"""项目侧的产品需求：引用、排序、改状态、提变更单。
 
 项目对需求内容**只读**。属于项目的可写数据只有三样：关联关系本身、
-RequirementProject 上的 sort_order，以及研发段档位（in_progress / done，走
-utils.set_manual_stage，带降档锁与归一）。阶段的另外三档 linked / planned /
-released 仍由 recalculate_stage 按关联事实派生，手填不了。
+RequirementProject 上的 sort_order，以及需求级的交付状态（Requirement.status，
+跨项目共享一份，走 utils.set_requirement_status，与产品侧同一个写入口）。
 需求内容的唯一权威在产品 —— 项目成员想改内容只能提变更单，走产品现有的审批名单。
 
 因此这里刻意不复用 BaseRequirementRowViewSet：那套基类的每一个写端点都以
@@ -27,8 +26,7 @@ from plane.app.serializers.requirement_change import RequirementChangeRequestSer
 from plane.app.serializers.requirement_project import (
     MultiProductRequirementSerializer,
     ProjectRequirementSerializer,
-    RequirementProjectSerializer,
-    RequirementProjectStageWriteSerializer,
+    RequirementProjectLinkWriteSerializer,
 )
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.change import change_error_response
@@ -40,8 +38,8 @@ from plane.db.models import (
     Requirement,
     RequirementCycle,
     RequirementIssue,
+    RequirementItemStatus,
     RequirementProject,
-    RequirementProjectStage,
     RequirementRelease,
 )
 from plane.utils.requirement import (
@@ -63,11 +61,11 @@ from plane.utils.requirement_project import (
     linkable_requirements_queryset,
     linked_requirement_ids,
     linked_requirements_queryset,
-    recalculate_requirement_status,
+    promote_on_project_link,
     requirement_facets,
     resolve_linkable_requirements,
     resolve_policy_for_linked_requirement,
-    set_manual_stage,
+    set_requirement_status,
 )
 
 DEFAULT_PER_PAGE = 20
@@ -215,13 +213,18 @@ class ProjectRequirementViewSet(BaseViewSet):
         _, specs, by_requirement_type = self._requirement_type_specs(project_id)
         queryset = linked_requirements_queryset(slug=slug, project_id=project_id)
 
-        stage = request.query_params.get("stage")
-        if stage:
-            if stage not in RequirementProjectStage.values:
+        status_value = request.query_params.get("status")
+        if status_value:
+            if status_value not in RequirementItemStatus.values:
                 return Response(
-                    {"stage": "Unknown stage."}, status=status.HTTP_400_BAD_REQUEST
+                    {"status": "Unknown status."}, status=status.HTTP_400_BAD_REQUEST
                 )
-            queryset = queryset.filter(stage=stage)
+            queryset = queryset.filter(status=status_value)
+
+        # 关联选择器（迭代/发布关联需求弹窗）用：已关闭的需求不进任何选择器。
+        # 主列表默认不带 —— 项目页仍要看到已关闭的需求
+        if request.query_params.get("exclude_closed") in ("true", "1"):
+            queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
 
         # 迭代/发布的「关联需求」选择器用：排除已关联进该容器的行。
         # .order_by() 清默认排序，理由同 linked_requirement_ids。
@@ -345,41 +348,39 @@ class ProjectRequirementViewSet(BaseViewSet):
         except RequirementLinkError as exc:
             return _link_error_response(exc)
 
-        RequirementProject.objects.bulk_create(
-            [
-                RequirementProject(
-                    requirement_id=row.id,
-                    project_id=project_id,
-                    # bulk_create 不走 ProjectBaseModel.save()，workspace 不会被
-                    # 自动派生
-                    workspace_id=project.workspace_id,
-                    created_by_id=request.user.id,
-                    updated_by_id=request.user.id,
-                )
-                for row in rows
-            ],
-            batch_size=100,
-            ignore_conflicts=True,
-        )
-        # 新关联行默认 linked，无需重算 stage；但它改变了「全部已发布」的分母，
-        # 已 implemented 的需求要退回 confirmed
-        for row in rows:
-            recalculate_requirement_status(row.id)
+        with transaction.atomic():
+            RequirementProject.objects.bulk_create(
+                [
+                    RequirementProject(
+                        requirement_id=row.id,
+                        project_id=project_id,
+                        # bulk_create 不走 ProjectBaseModel.save()，workspace 不会被
+                        # 自动派生
+                        workspace_id=project.workspace_id,
+                        created_by_id=request.user.id,
+                        updated_by_id=request.user.id,
+                    )
+                    for row in rows
+                ],
+                batch_size=100,
+                ignore_conflicts=True,
+            )
+            # 关联进项目 = 只升不降的自动推进 (a)：not_started → projected
+            promote_on_project_link([row.id for row in rows])
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def partial_update(self, request, slug, project_id, requirement_id):
-        """改本项目内的排序，以及人工设置研发段档位。项目对需求唯一的行级写入口。
+        """改本项目内的排序，以及需求级交付状态。项目对需求唯一的行级写入口。
 
-        stage 与 sort_order 是两条独立的路：前者的锁、留痕与归一都在
-        utils.set_manual_stage 里（阶段不是普通字段，setattr 写下去会绕开地板规则
-        与降档锁）；后者仍走原来的 setattr。响应返回归一**之后**的行 —— 用户选了
-        「已排期」但需求没有迭代关联时会落成「已立项」，这件事必须当场可见。
+        sort_order 写在关联行上；status 写在需求本体上（跨项目共享一份，与产品侧
+        set_status 同一个 util）。响应返回该行的项目侧整行（与 list 同口径），前端
+        直接就地替换。
         """
-        serializer = RequirementProjectStageWriteSerializer(data=request.data)
+        serializer = RequirementProjectLinkWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = dict(serializer.validated_data)
-        stage = payload.pop("stage", None)
+        new_status = payload.pop("status", None)
 
         link = RequirementProject.objects.filter(
             workspace__slug=slug, project_id=project_id, requirement_id=requirement_id
@@ -396,25 +397,27 @@ class ProjectRequirementViewSet(BaseViewSet):
             link.updated_by_id = request.user.id
             link.save(update_fields=[*payload.keys(), "updated_by", "updated_at"])
 
-        if stage is not None:
-            try:
-                set_manual_stage(
-                    requirement_id, project_id, stage=stage, actor=request.user
-                )
-            except RequirementLinkError as exc:
-                return _link_error_response(exc)
-            link.refresh_from_db()
+        if new_status is not None:
+            set_requirement_status(
+                requirement_id, status=new_status, actor=request.user
+            )
 
-        return Response(
-            RequirementProjectSerializer(link).data, status=status.HTTP_200_OK
+        # 重读口径必须与 list 相同（annotate_pending + linked_requirements_queryset
+        # + _row_context），否则 display_id / approval_state / pending_* 缺失
+        row = (
+            annotate_pending(linked_requirements_queryset(slug=slug, project_id=project_id))
+            .filter(id=requirement_id)
+            .first()
         )
+        return Response(self._serialize_rows([row])[0], status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def destroy(self, request, slug, project_id, requirement_id):
         """解除关联。软删关联行 —— 需求本体、版本、审批历史一律不动。
 
         该 (需求, 项目) 下的迭代/发布/工作项关联一并软删：它们是项目关联的子事实，
-        项目都退出了还留着，重新关联进来会带着旧阶段复活。
+        项目都退出了还留着，重新关联进来会带着旧关联复活。解除关联不改需求状态
+        （只升不降）。
         """
         link = RequirementProject.objects.filter(
             workspace__slug=slug, project_id=project_id, requirement_id=requirement_id
@@ -434,8 +437,6 @@ class ProjectRequirementViewSet(BaseViewSet):
             requirement_id=requirement_id, project_id=project_id
         ).delete()
         link.delete()
-        # 解除关联改变「全部已发布」的分母 —— 剩下的关联行可能恰好全是已发布
-        recalculate_requirement_status(requirement_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     # --- 写：提变更单 ----------------------------------------------------
@@ -501,7 +502,6 @@ class RequirementProjectsViewSet(BaseViewSet):
     """
 
     model = RequirementProject
-    serializer_class = RequirementProjectSerializer
 
     def create(self, request, slug, product_id, requirement_id):
         from plane.utils.product import can_edit_product_requirements
@@ -536,6 +536,17 @@ class RequirementProjectsViewSet(BaseViewSet):
         projects = request.data.get("projects", [])
         removed_projects = request.data.get("removed_projects", [])
 
+        # 已关闭的需求不进任何关联选择器：只拦新增关联，仅移除的请求放行
+        if projects and requirement.status == RequirementItemStatus.CLOSED:
+            return Response(
+                {
+                    "error": "Closed requirements cannot be linked to a project.",
+                    "code": "REQUIREMENT_CLOSED",
+                    "requirement_ids": [str(requirement.id)],
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         if projects:
             # 目标项目必须已经关联了这个产品 —— 与项目侧关联走的是同一条规则，
             # 换个方向进来不该松一格
@@ -561,20 +572,24 @@ class RequirementProjectsViewSet(BaseViewSet):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            RequirementProject.objects.bulk_create(
-                [
-                    RequirementProject(
-                        requirement_id=requirement.id,
-                        project_id=project_id,
-                        workspace_id=product.workspace_id,
-                        created_by_id=request.user.id,
-                        updated_by_id=request.user.id,
-                    )
-                    for project_id in allowed
-                ],
-                batch_size=100,
-                ignore_conflicts=True,
-            )
+            with transaction.atomic():
+                RequirementProject.objects.bulk_create(
+                    [
+                        RequirementProject(
+                            requirement_id=requirement.id,
+                            project_id=project_id,
+                            workspace_id=product.workspace_id,
+                            created_by_id=request.user.id,
+                            updated_by_id=request.user.id,
+                        )
+                        for project_id in allowed
+                    ],
+                    batch_size=100,
+                    ignore_conflicts=True,
+                )
+                # 关联进项目 = 只升不降的自动推进 (a)：not_started → projected。
+                # 幂等：重复关联同一项目也算「关联事件」
+                promote_on_project_link([requirement.id])
 
         if removed_projects:
             removed_ids = [str(project) for project in removed_projects]
@@ -593,6 +608,4 @@ class RequirementProjectsViewSet(BaseViewSet):
                 project_id__in=removed_ids,
             ).delete()
 
-        # 增删都动了「全部已发布」的分母
-        recalculate_requirement_status(requirement.id)
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)

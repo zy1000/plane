@@ -7,14 +7,14 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { DueDatePropertyIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TProjectRequirement, TRequirementProjectStage, TRequirementTypeSchema } from "@plane/types";
+import type { TProjectRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader, Row } from "@plane/ui";
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { ProductChip } from "@/components/products/product-chip";
-import { ProjectRequirementStageCell } from "@/components/projects/requirements/project-requirement-stage-cell";
+import { RequirementStatusCell } from "@/components/requirements";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 
 /**
@@ -24,7 +24,7 @@ import { RequirementIdentifier } from "@/components/requirements/requirement-ide
  * （它带 `px-page-x`，就是工作项行的那套左右缩进），行高 min-h-11，右侧属性用
  * 工作项行同款的 dropdown 组件（border-with-text / border-without-text）。
  *
- * 属性只有阶段可写。需求内容（优先级 / 日期 / 负责人）的权威在产品，项目侧没有
+ * 属性只有需求级交付状态可写。需求内容（优先级 / 日期 / 负责人）的权威在产品，项目侧没有
  * 写入口，所以那几个 dropdown 一律 disabled —— 用它们而不是自己画胶囊，是为了
  * 空值占位、tooltip、头像堆叠这些细节跟工作项行完全一致。
  */
@@ -39,10 +39,10 @@ type TProps = {
   /** 无 PROJECT_REQUIREMENT_LINK_MANAGE 权限（或容器已归档）时隐藏解除入口、禁用空状态 CTA */
   canManage: boolean;
   unlinkingRequirementId: string | null;
-  updatingStageRequirementId: string | null;
+  updatingStatusRequirementId: string | null;
   onOpenLinkModal: () => void;
   onUnlink: (requirementId: string) => Promise<void>;
-  onStageChange: (requirementId: string, stage: TRequirementProjectStage) => void;
+  onStatusChange: (requirementId: string, status: TRequirementItemStatus) => void;
   onOpenDetail: (requirementId: string) => void;
 };
 
@@ -55,10 +55,10 @@ export const ScopeRequirementsSection = (props: TProps) => {
     error,
     canManage,
     unlinkingRequirementId,
-    updatingStageRequirementId,
+    updatingStatusRequirementId,
     onOpenLinkModal,
     onUnlink,
-    onStageChange,
+    onStatusChange,
     onOpenDetail,
   } = props;
   const { t } = useTranslation();
@@ -148,25 +148,15 @@ export const ScopeRequirementsSection = (props: TProps) => {
                   onFocus={stopRowActivation}
                 >
                   {/*
-                    研发段可人工设置，其余三档服务端派生。stage_locked = 挂在在途发布单上，
-                    此时整行阶段锁死；提交中的那一行也按锁定处理，避免连点发出两次写入。
-                    有关联工作项时研发段也改由任务状态派生，人工下拉关掉（不传 onChange
-                    即恒只读）—— 与项目需求网格同一判定，后端 409
-                    REQUIREMENT_STAGE_ISSUE_DERIVED 兜底。
+                    需求级交付状态，人工维护、跨项目共享一份，有 canManage 才是下拉（不传
+                    onChange 即恒只读）；提交中的那一行临时禁用，避免连点发出两次写入。
                   */}
                   <div className="h-5">
-                    <ProjectRequirementStageCell
+                    <RequirementStatusCell
                       variant="chip"
-                      stage={row.stage}
-                      latestCycleName={row.latest_cycle_name}
-                      latestReleaseName={row.latest_release_name}
-                      carryover={row.carryover}
-                      onChange={
-                        canManage && !row.issue_count ? (next) => onStageChange(row.id, next) : undefined
-                      }
-                      locked={
-                        row.stage_locked || row.stage === "released" || updatingStageRequirementId === row.id
-                      }
+                      status={row.status}
+                      onChange={canManage ? (next) => onStatusChange(row.id, next) : undefined}
+                      disabled={updatingStatusRequirementId === row.id}
                     />
                   </div>
 
@@ -219,7 +209,7 @@ export const ScopeRequirementsSection = (props: TProps) => {
                     </div>
                   )}
 
-                  {/* 目标发布：released 档的推导依据，也是研发之后的下一站。
+                  {/* 目标发布：最新在途/已发布的发布单，也是研发之后的下一站。
                       壳与工作项行 ReleaseDropdown（border-with-text）对齐。 */}
                   {row.latest_release_name && (
                     <div className="h-5">

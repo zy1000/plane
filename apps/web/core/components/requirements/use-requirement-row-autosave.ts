@@ -148,7 +148,10 @@ export const useRequirementRowAutosave = ({
         const reason = payload?.conflicts?.find((conflict) => conflict.id === requirementId)?.reason;
         /*
          * 冲突不静默吞掉，也不拿服务端值盖掉用户输入 —— 让改动留在格子里，把原因
-         * 摆出来由人决定。in_review 是这一行已经进了别的变更单，刷新也改不了。
+         * 摆出来由人决定。reason 目前有三种：version_conflict（别人先改了）、
+         * in_review（这一行已经进了别的变更单，刷新也改不了）、closed（需求已关闭，
+         * 内容只读 —— 网格本不该放行编辑，撞上说明列表里的 status 已过期，重拉即可）。
+         * 三者都按原样字符串展示，新增的 reason 不需要在这里登记。
          */
         setSaveState(requirementId, {
           isSaving: false,

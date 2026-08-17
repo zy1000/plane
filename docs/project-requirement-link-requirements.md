@@ -1,5 +1,7 @@
 # 需求进入项目（项目 ↔ 需求关联）需求说明
 
+> **2026-08-17 需求状态轴改造批注**：本文 §2 决策 2「阶段放在关联行上」与 §4.4 阶段派生规则已推翻——`RequirementProject.stage`、派生引擎（`recalculate_stage` / 地板规则 / 降档锁）、`RequirementProjectActivity` 全部删除，改为需求级人工维护的 `Requirement.status`（未开始 / 已立项 / 进行中 / 已发布 / 已关闭），只保留「关联进项目 → 已立项」「发布单发布成功 → 已发布」两条只升不降的自动推进。`RequirementProject` 只保留引用与项目内排序。以 `docs/domain-glossary.md` requirement 节为准；下文涉及阶段的部分仅作历史记录。
+
 ## 1. 背景
 
 目前「需求（Requirement）」只存在于 **产品（Product）** 作用域：创建、字段结构、变更单、审批、版本、基线全部闭环在 `workspaces/<slug>/products/<product_id>/...` 之下。

@@ -9,6 +9,7 @@ import type {
   TRequirementAssetRef,
   TRequirementBuiltinKey,
   TRequirementBuiltinValues,
+  TRequirementItemStatus,
   TRequirementTrailEntry,
   TRequirementData,
   TRequirementField,
@@ -20,10 +21,10 @@ import {
   BuiltinCellEditor,
   BuiltinCellValue,
   REQUIREMENT_BUILTIN_COLUMNS,
-  shouldShowRequirementStatus,
 } from "@/components/requirements/requirement-builtin-fields";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
 import {
   RequirementRichTextEditor,
   RequirementRichTextValue,
@@ -61,6 +62,12 @@ type TProps = {
   layout: "drawer" | "page";
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
+  /**
+   * 改需求级交付状态。走独立的状态端点、不经 onPatch；不传则状态格只读。
+   * 刻意与 readOnly 解耦：readOnly 是内容级（评审中 / 已关闭都为 true），而 closed
+   * 行必须还能把状态选回去（重开），所以由调用方按页面级写权限决定传不传。
+   */
+  onStatusChange?: (status: TRequirementItemStatus) => void;
   onOpenRequirement: (requirementId: string) => void;
   /** 回滚写的是活行而不是版本链，所以要让调用方重新拉一次这一行 */
   onRolledBack?: () => void;
@@ -174,6 +181,7 @@ const PropertyGrid = ({
   parentScope,
   resolveParentTitle,
   onPatch,
+  onStatusChange,
   leadingRow,
 }: {
   requirement: TRequirement;
@@ -181,6 +189,7 @@ const PropertyGrid = ({
   parentScope: { workspaceSlug: string; productId: string };
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
+  onStatusChange?: (status: TRequirementItemStatus) => void;
   leadingRow?: { label: string; value: React.ReactNode };
 }) => {
   const { t } = useTranslation();
@@ -195,14 +204,17 @@ const PropertyGrid = ({
       {PROPERTY_COLUMN_KEYS.map((columnKey) => {
         const column = REQUIREMENT_BUILTIN_COLUMNS.find((item) => item.key === columnKey);
         if (!column) return null;
-        if (columnKey === "status" && !shouldShowRequirementStatus(requirement.status)) {
-          return null;
-        }
         return (
           <div key={columnKey} className="contents">
             <span className="text-12 text-tertiary">{t(column.labelKey)}</span>
             <div className="min-w-0">
-              {readOnly ? (
+              {columnKey === "status" ? (
+                /*
+                 * 状态格白名单：绕开 readOnly（内容级只读）。closed 行内容只读但状态要能
+                 * 选回去重开，评审中也能改状态 —— 能不能改只看 onStatusChange 传没传。
+                 */
+                <RequirementStatusCell status={requirement.status} onChange={onStatusChange} />
+              ) : readOnly ? (
                 <BuiltinCellValue columnKey={columnKey} values={requirement} resolveParentTitle={resolveParentTitle} />
               ) : (
                 <BuiltinCellEditor
@@ -239,6 +251,7 @@ export const RequirementDetailContent = (props: TProps) => {
     layout,
     resolveParentTitle,
     onPatch,
+    onStatusChange,
     onOpenRequirement,
     onRolledBack,
     issuesSection,
@@ -273,8 +286,8 @@ export const RequirementDetailContent = (props: TProps) => {
     () => (requirementType?.fields ?? []).filter((field) => field.is_active),
     [requirementType]
   );
-  // 叶子字段按模板顺序排成单一字段流。field_category（标准/数据）是模板编辑器的
-  // 管理概念，详情页按它分区只会让用户猜「这个字段为什么归在这一类」。
+  // 叶子字段按模板顺序排成单一字段流。show_in_library 是模板编辑器的管理概念，
+  // 详情页按它分区只会让用户猜「这个字段为什么归在这一组」。
   const leafFields = useMemo(() => activeFields.filter((field) => field.field_type !== "form"), [activeFields]);
   const formFields = useMemo(() => activeFields.filter((field) => field.field_type === "form"), [activeFields]);
 
@@ -335,7 +348,7 @@ export const RequirementDetailContent = (props: TProps) => {
         )}
 
         {/* 审批态跟在标题下方，是这一屏第一个要回答的问题：我看到的这些值，是不是评审
-            通过的那一版。status（交付进度）退到属性区里去。 */}
+            通过的那一版。status（需求级交付状态，人工维护）是另一根轴，退到属性区里去。 */}
         <RequirementApprovalBadge requirement={requirement} />
 
         {/* 已通过后又改过时，把「你看的不是已通过的那一版」直接说出来，并给出查看差异与
@@ -359,6 +372,7 @@ export const RequirementDetailContent = (props: TProps) => {
             readOnly={readOnly}
             parentScope={parentScope}
             onPatch={onPatch}
+            onStatusChange={onStatusChange}
           />
         )}
 
@@ -476,19 +490,29 @@ export const RequirementDetailProperties = ({
   requirement,
   requirementTypeName,
   readOnly,
+  canEdit,
   workspaceSlug,
   productId,
   resolveParentTitle,
   onPatch,
+  onStatusChange,
   onProjectsChanged,
 }: {
   requirement: TRequirement;
   requirementTypeName: string | null;
+  /** 内容级只读：无写权限 / 评审中 / 已关闭 都为 true，管 PropertyGrid 里的内容列 */
   readOnly: boolean;
+  /**
+   * 页面级写权限，管「所属项目」多选：它写的是关联表而不是需求内容，closed / is_locked
+   * 都不禁用它 —— 解除关联仍允许，往 closed 行上新增关联由后端 409。
+   */
+  canEdit: boolean;
   workspaceSlug: string;
   productId: string;
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
+  /** 改需求级交付状态；不传则状态格只读（见 RequirementDetailContent 同名 prop） */
+  onStatusChange?: (status: TRequirementItemStatus) => void;
   /** project_ids 是服务端注解的，改完必须重新拉这一行才能回显 */
   onProjectsChanged?: () => void;
 }) => {
@@ -505,6 +529,7 @@ export const RequirementDetailProperties = ({
         parentScope={parentScope}
         resolveParentTitle={resolveParentTitle}
         onPatch={onPatch}
+        onStatusChange={onStatusChange}
         leadingRow={{
           label: t("requirement_detail.requirement_type"),
           value: requirementTypeName ?? "—",
@@ -522,7 +547,7 @@ export const RequirementDetailProperties = ({
           workspaceSlug={workspaceSlug}
           productId={productId}
           requirement={requirement}
-          readOnly={readOnly}
+          readOnly={!canEdit}
           onChanged={onProjectsChanged}
         />
       </div>

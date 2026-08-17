@@ -38,16 +38,24 @@
 - **change**（`RequirementChangeRequest` + `RequirementChangeItem`）— **唯一的审批载体**。一张单覆盖 1..N 条需求，同批通过 / 同批驳回。审批单位是**变更单**，不是条目。
 - **baseline**（`RequirementBaseline` + `Entry`）— 一组 (需求, 版本) 的不可变命名快照，**语义等同 git tag**。没有状态、不参与审批、创建后内容不可改（只有 name/description 能改）。
 
-### 三根正交的状态轴 —— 最容易搞混的地方
+### 两根正交的状态轴 —— 最容易搞混的地方
 
-**轴 A：`Requirement.status`（落库，交付进度）**
-`draft → confirmed → (implemented | obsolete)`
-- 整列**只由系统写**，写序列化器根本不收它。
-- 首次审批通过时置 `confirmed`，此后回不到 draft（CheckConstraint `req_draft_status_iff_never_approved` 钉死）。
-- `implemented` **对称派生**（`utils/requirement_project.py::recalculate_requirement_status`）：所有关联项目的 `RequirementProject.stage` 均为 `released` 且至少有一条关联行 → 置 `implemented`；条件失效 → 退回 `confirmed`。零关联行的需求不参与判定。`obsolete` 仍是人为动作，不派生。
-- `status` 不算内容，不触发评审、不被回滚倒推。
+> 2026-08-17 改造：原先的三根轴（系统写的 `Requirement.status` + 每 (需求,项目) 一份的派生阶段 `RequirementProject.stage` + 审批态）合并成两根。派生引擎（`recalculate_stage` / 地板规则 / 降档锁 / 双轨制）、`RequirementProject.stage`、`RequirementProjectActivity` 全部删除（迁移 `0334`）。`docs/project-requirement-link-requirements.md` §决策 2 / §4.4 与 `docs/requirement-issue-requirements.md` 描述的是改造**之前**的模型，以本节为准。
 
-**轴 B：`Requirement.approval_state`（不落库，派生 property，`requirement.py:667`）**
+**轴 A：`Requirement.status`（落库，需求级交付状态，跨项目共享一份，人工维护）**
+五值：`not_started`(未开始) → `projected`(已立项) → `in_progress`(进行中) → `released`(已发布)；`closed`(已关闭) 在阶梯之外。
+
+- **人工写**，任意方向可改。写入口两个，共用 `utils/requirement_project.py::set_requirement_status`（条件化 `.update()`，不 bump `version`、不碰 `approved_row_version`）：产品侧 `PATCH .../products/{pid}/requirements/{rid}/status/`（权限 `can_edit_product_requirements`）、项目侧 `PATCH .../projects/{pid}/requirements/{rid}/` 带 `{status}`（权限 `PROJECT_REQUIREMENT_LINK_MANAGE`）。同一条需求两侧权限不同：项目成员改了状态产品侧立刻可见（含置 closed 冻结产品成员的内容编辑，产品成员可重开）。
+- **只有两条只升不降的自动推进**（`promote_on_project_link` / `promote_to_released` / `promote_on_release_completed`）：
+  1. 需求被关联进项目 → `not_started → projected`（重复关联同一项目也算事件，曾人工降回 not_started 的会再升）；
+  2. 发布单变为 `completed` → 该单关联需求 `not_started/projected/in_progress → released`；把需求补挂进一张已 completed 的发布单只推**本批**。
+  发布单驳回/取消/删除/改回测试中、解除关联、删除项目、迭代任何变化、工作项任何变化——**一律不改状态**。重开后的需求也不会被补推（只在事件发生的那一刻推进一次）。
+- **不算内容**（`NON_CONTENT_BUILTIN_COLUMNS`）：内容 PATCH / bulk-save 的写集合是 `CONTENT_BUILTIN_COLUMNS`，根本不写这一列；不进变更单 diff、不被回滚倒推；审批中的行也能改状态（两根轴正交）。
+- **`closed`**：内容只读（后端 409 `REQUIREMENT_CLOSED`：内容 PATCH / bulk-save updates / 用户发起的回滚 / 提交**内容类**变更单 / 新指派为父项 / 新增项目-迭代-发布-工作项关联），从所有关联选择器过滤（`linkable_requirements_queryset`、列表 `?exclude_closed=true`）。已有关联保留、解除关联仍允许。**closed 保护内容不保护删除**：草稿直删；已通过的走删除评审，delete 类型变更单不拦（含父项删除时展开出的 closed 后代）。in_review 行的内容写入命中 `REQUIREMENT_IN_REVIEW`（锁优先于 closed）。行上唯一可写的是 `status`：改成任意非 closed 值即重开，不存「关闭前状态」。组合矩阵：`draft+closed` 可直删、可重开；`in_review+closed` 审批通过后仍 closed、驳回还原内容 closed 保留；`modified+closed` 提不了评审也回滚不了，只能重开；`approved+closed` 直接申请删除，删除评审被驳回则行留在原状态。
+- 标准库条目恒 `not_started`（`LIBRARY_HIDDEN_BUILTIN_COLUMNS`，不开状态写入口）；新建 / 导入恒 `not_started`。
+- 统计口径：项目需求页分面 `facets.by_status`、产品「关联项目」`status_counts`（同一条需求进了几个项目就在几个 bucket 各计一次——需求级状态在"某个项目下"不再有独立含义）。
+
+**轴 B：`Requirement.approval_state`（不落库，派生 property）**
 由 `approved_version` / `approved_row_version` / `pending_change_item` 三列派生，判定按序：
 
 1. `pending_change_item` 非空且 change_type=delete → `pending_deletion`
@@ -59,23 +67,7 @@
 > 设计动机（原注释）：「存成字符串就会多出第四个可以和这三列对不上的事实来源；派生则不可能不一致。」
 > **不要试图把 approval_state 落库或缓存。**
 
-**轴 C：`RequirementProject.stage`（落库在关联行上，每 (需求, 项目) 一份，两端派生、中间人工）**
-阶梯 `linked`(已立项) → `planned`(已排期) → `in_progress`(研发中) → `done`(研发完毕) → `released`(已发布)。零关联行时前端展示「未开始」，不落库。
-
-| 档位 | 来源 | 规则 |
-|---|---|---|
-| `linked` | 派生 | 关联到项目（基线） |
-| `planned` | 派生 | 关联该项目未取消的迭代（`RequirementCycle`） |
-| `in_progress` / `done` | **人工** | `utils.set_manual_stage`，无事实来源 |
-| `released` | 派生 | 关联的发布单已发布（`completed`） |
-
-- **关联发布单不产生任何档位** —— 它只圈定发版范围。曾经有过一档 `pending_verification`(待验证) 由「在途发布关联」产出，已于 2026-08-11 删除（迁移 `0331`）：把圈范围当成研发完成在语义上站不住，且发布单一取消阶段就回落，系统全程不记得需求做完没有。
-- **地板规则**（`recalculate_stage`）：派生结果不得把当前的人工档往下冲；`released` 回落时地板取 `done`。因此 `recalculate_stage` **幂等但不再顺序无关** —— 结果依赖 `link.stage` 当前值，这是人工档能存活的唯一机制。
-- **发布硬门槛已移除**（2026-08-12）：任意阶段的需求都能关联进发布单，不再要求先 `done`。**降档锁**仍在：挂在在途发布单上时禁止手动改档（409 `REQUIREMENT_IN_LIVE_RELEASE`）。因此「在发布单里 ⇒ 必然已研发完毕」的不变量不再成立，`recalculate_stage` 的地板规则（已发布回落取 `done`）现在是启发式默认而非可证明安全的推断。迭代侧无任何门槛。
-- 手动写入口：`PATCH .../projects/{pid}/requirements/{rid}/`，`stage` 白名单只有 `in_progress` / `done` / `planned`（后者是撤销键，写完立刻归一，无迭代关联时落回 `linked`）。响应返回归一**之后**的值。
-- 迭代完成不改阶段（时间盒到期不是进度事实，列表注解 `carryover` 做 UI 标记）；档位变化留痕写 `RequirementProjectActivity`。
-- 与轴 A 的唯一联动即上面 `implemented` 的对称派生；需求阶段**永不**进入迭代状态流转的门槛条件。
-- `docs/project-requirement-link-requirements.md` §4.4 是这套模型改造**之前**的版本，阶段部分已过时，以本节为准。
+关联表 `RequirementProject`（引用 + 项目内排序）/ `RequirementCycle` / `RequirementRelease` / `RequirementIssue` 只圈定范围、供工作项数与完成率统计，**不再是任何状态的事实来源**。
 
 ### 生命周期
 
@@ -85,8 +77,7 @@
               ┌───────────────────────────┼──────────────────────┐
            reject                       cancel                通过规则
       清指针，内容原样                清指针，内容原样        _apply_approved_items:
-   (revert=True 才退回上一版)                                 draft→confirmed
-                                                             写 RequirementVersion
+   (revert=True 才退回上一版)                                 写 RequirementVersion
                                                              回填 approved_version
                                                              + approved_row_version
                                                              清 pending_change_item
@@ -107,7 +98,7 @@
 - 提交时冻结三样东西进单：`schema_revision`（字段结构）、`approval_type`/`required_count`（规则快照）、`RequirementChangeApproval` 行（名单快照）。**在途的单不受后续配置修改影响。**
 - update 类型做字段级 diff，无实质变化的行直接跳过；全部无变化则删掉空单并抛 `REQUIREMENT_NO_CHANGES`。
 - **回滚 `rollback_requirement_to_version()` 不是撤销审批**：版本链一条不动，`approved_version` 也不变，它只是一次写在活行上的**普通编辑**（`version += 1`）。只恢复内容列（`parent_id` 不回滚，避免 FK 悬挂）。恢复的 `data` 必须按**当前**字段结构裁剪（`prune_requirement_data_to_fields`）。
-- **标准库条目是旁路**：`RequirementLibrary` 内的条目永不走审批，永远停在 `draft`，由 CheckConstraint `req_library_item_never_approved` 硬保证。
+- **标准库条目是旁路**：`RequirementLibrary` 内的条目永不走审批（approval_state 永远 `draft`，status 恒 `not_started`），由 CheckConstraint `req_library_item_never_approved` 硬保证。
 - 基线只收录 `approved_version` 非空的需求；评审中/已改动的按**上一个已通过版本**收录并标 `stale`；从未通过的 `skipped`。`collect_baseline_entries()` 不写库，**创建与 dry-run 预览共用同一份判定**。
 - `compare_baselines()` 产出的 diff item 形状**与 RequirementChangeItem 一致**，前端 diff 组件可直接复用。
 - **模型层 product / project 双作用域都建了约束，但 URL 层目前只暴露 product 作用域**的变更单 / 基线 / 配置入口。project 是模型预留，不要以为有对应 API。
@@ -117,10 +108,10 @@
 
 | 层 | 路径 |
 |---|---|
-| Model | `apps/api/plane/db/models/requirement.py`（单文件集中，含关联表 `RequirementProject` / `RequirementCycle` / `RequirementRelease` 与阶段留痕表 `RequirementProjectActivity`），导出在 `__init__.py` |
+| Model | `apps/api/plane/db/models/requirement.py`（单文件集中，含关联表 `RequirementProject` / `RequirementCycle` / `RequirementRelease` / `RequirementIssue`），导出在 `__init__.py` |
 | Views | `apps/api/plane/app/views/requirement/`：`base.py` / `row_base.py`（产品与库共享行读写基类） / `change.py`（变更单+版本+轨迹+基线+收件箱） / `type.py` / `library.py` / `library_item.py` / `mixins.py` / `project.py`（项目侧关联/排序） / `container.py`（迭代/发布关联需求） |
 | Serializers | `serializers/requirement.py`(1222行) / `requirement_change.py` / `requirement_type.py` / `requirement_library.py` / `requirement_project.py` |
-| Utils | `utils/requirement.py`(领域核心) / `requirement_change.py`(提交审批驳回撤回回滚) / `requirement_project.py`(阶段重算 + status 对称回写) / `requirement_baseline.py` / `requirement_schema.py` / `requirement_notification.py` |
+| Utils | `utils/requirement.py`(领域核心) / `requirement_change.py`(提交审批驳回撤回回滚) / `requirement_project.py`(项目侧关联 + 需求状态写入口与自动推进) / `requirement_baseline.py` / `requirement_schema.py` / `requirement_notification.py` |
 | URLs | `apps/api/plane/app/urls/requirement.py` |
 | 迁移 | `0302`–`0323`（`0319` drop baseline approval、`0320` 审批下沉到条目 是两次关键转向） |
 | 前端类型 | `packages/types/src/requirement.ts`、`requirement-type.ts` |
@@ -231,7 +222,7 @@ Project (原生)
 ```
 
 **已知的断链（不要以为有关联而去找）：**
-- **需求 ↔ Issue 仍无关联**（工作项派生留给 P3，`requirement.py` 里 grep 不到 Issue / Module）。需求 ↔ Cycle / Release 已由 `RequirementCycle` / `RequirementRelease` 关联表打通，驱动 `RequirementProject.stage` 推导（见 requirement 节轴 C）。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表仍无外键关系，只能人工对应。
+- 需求 ↔ Cycle / Release / Issue 已由 `RequirementCycle` / `RequirementRelease` / `RequirementIssue` 关联表打通，但它们只圈定范围、供计数，不派生需求状态（见 requirement 节轴 A）。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表仍无外键关系，只能人工对应。
 - **product 和 project 之间没有直接外键**，关系走 `ProductProject` 关联表（见上）。
 - milestone 与除 Issue / Project 外的一切无关联。
 - changelog 与所有模块零关联。

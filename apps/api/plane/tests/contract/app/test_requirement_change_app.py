@@ -2,7 +2,7 @@
 
 一条需求的生命周期：
 
-    draft ──提交──> in_review ──通过──> approved（写 v1，status=confirmed）
+    draft ──提交──> in_review ──通过──> approved（写 v1；status 是另一根轴，不动）
                               ──驳回/撤回──> draft（内容原样保留）
 
 最重要的一条是 test_reviewing_one_requirement_does_not_block_the_others：整个改造的
@@ -177,7 +177,7 @@ class RequirementApprovalHarness:
                     "field_type": "text",
                     "is_required": False,
                     "is_active": True,
-                    "field_category": "standard",
+                    "show_in_library": True,
                     "config": {},
                     "default_value": None,
                     "children": [],
@@ -225,7 +225,7 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
         self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "短信验证码登录")
         assert row["approval_state"] == "draft"
-        assert row["status"] == "draft"
+        assert row["status"] == "not_started"
 
         change_request = self.submit_ok(api_client, [row["id"]])
         assert change_request["requirement_count"] == 1
@@ -239,7 +239,7 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
 
         stored = Requirement.objects.get(id=row["id"])
         assert stored.approved_version == 1
-        assert stored.status == "confirmed"
+        assert stored.status == "not_started"
         assert stored.pending_change_item_id is None
         version = RequirementVersion.objects.get(target_id=row["id"], version=1)
         assert version.change_type == "create"
@@ -417,7 +417,7 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
                         "field_type": "text",
                         "is_required": False,
                         "is_active": True,
-                        "field_category": "standard",
+                        "show_in_library": True,
                         "config": {},
                         "default_value": None,
                         "children": [],
@@ -430,7 +430,7 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
 
         # 字段结构变更立即生效，但**不动**已确认需求的状态
         stored = Requirement.objects.get(id=approved["id"])
-        assert stored.status == "confirmed"
+        assert stored.status == "not_started"
         assert stored.approved_version == 1
 
         # 一次类型编辑只写**一行**修订，不给该类型下每条需求各写一行
@@ -894,9 +894,9 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestRequirementStatusAxisApp(RequirementApprovalHarness):
-    """status 是**交付进度轴**，不是内容。
+    """status 是**交付状态轴**，不是内容。
 
-    它由系统写（新建 draft、首次通过 confirmed），客户端写不进；它不进内容 diff，也不被
+    它走独立的状态写入口（PATCH .../status/），内容 PATCH 写不进；它不进内容 diff，也不被
     内容回滚倒推回去。这三条合起来保证「研发做完了」永远不会伪装成「内容改过了」。
     """
 
@@ -906,12 +906,12 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
         self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
 
-        response = self.patch_builtin(api_client, approved, status="implemented")
+        response = self.patch_builtin(api_client, approved, status="released")
 
         assert response.status_code == status.HTTP_200_OK, response.data
         # 静默忽略而不是 400：网格的批量保存 payload 恒带全部八个内置列
-        assert response.data["status"] == "confirmed"
-        assert Requirement.objects.get(id=approved["id"]).status == "confirmed"
+        assert response.data["status"] == "not_started"
+        assert Requirement.objects.get(id=approved["id"]).status == "not_started"
         # 内容一个字都没变，行不该被推进「已改动」
         assert self.fetch_requirement(api_client, approved["id"])["approval_state"] == "approved"
 
@@ -958,7 +958,7 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
         type_id = self.create_requirement_type(api_client)
         self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
-        self.patch_builtin(api_client, approved, title="改了标题", status="implemented")
+        self.patch_builtin(api_client, approved, title="改了标题", status="released")
 
         change_request = self.submit_ok(api_client, [approved["id"]])
 
@@ -969,8 +969,8 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
         type_id = self.create_requirement_type(api_client)
         self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
-        # 直接改库里的 status —— 模拟将来由派生规则写进来的「已实现」
-        Requirement.objects.filter(id=approved["id"]).update(status="implemented")
+        # 直接改库里的 status —— 模拟状态写入口写进来的「已发布」
+        Requirement.objects.filter(id=approved["id"]).update(status="released")
         current = self.fetch_requirement(api_client, approved["id"])
         self.patch_requirement(api_client, current, "第二版")
         self.act(api_client, self.submit_ok(api_client, [approved["id"]])["id"])
@@ -985,7 +985,7 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
         stored = Requirement.objects.get(id=approved["id"])
         assert stored.title == "第一版"
         # 内容退回那一版，研发进度不跟着倒退
-        assert stored.status == "implemented"
+        assert stored.status == "released"
 
 
 @pytest.mark.contract
@@ -1036,4 +1036,4 @@ class TestRequirementRejectRevertApp(RequirementApprovalHarness):
         stored = Requirement.objects.get(id=row["id"])
         assert stored.title == "全新的需求"
         assert stored.approved_version is None
-        assert stored.status == "draft"
+        assert stored.status == "not_started"
