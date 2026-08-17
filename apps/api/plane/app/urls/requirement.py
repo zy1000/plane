@@ -15,6 +15,7 @@ from plane.app.views.requirement import (
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
     RequirementProjectsViewSet,
+    RequirementTestCaseViewSet,
     RequirementTypeConfigurationAPIView,
     RequirementTypeViewSet,
     RequirementVersionViewSet,
@@ -215,6 +216,24 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/requirement-link/",
         RequirementIssueViewSet.as_view({"get": "requirement_link"}),
         name="project-issue-requirement-link",
+    ),
+    # --- 产品需求：测试用例关联 ------------------------------------------
+    # 产品作用域而非项目作用域：用例的 project 可空（共享用例库），且一条需求的关联
+    # 用例横跨它进过的所有项目 —— 按单个项目切开表达不出来。见 views/requirement/test_case.py
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/test-cases/",
+        RequirementTestCaseViewSet.as_view({"get": "list", "post": "create"}),
+        name="product-requirement-test-cases",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/test-cases/<uuid:case_id>/",
+        RequirementTestCaseViewSet.as_view({"delete": "destroy"}),
+        name="product-requirement-test-case-item",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/linkable-test-cases/",
+        RequirementTestCaseViewSet.as_view({"get": "linkable"}),
+        name="product-requirement-linkable-test-cases",
     ),
     # --- 产品需求：审批配置与变更单 -------------------------------------
     path(

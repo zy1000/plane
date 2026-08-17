@@ -24,6 +24,7 @@ from .library_item import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
 )
+from .test_case import RequirementTestCaseViewSet
 from .type import (
     RequirementTypeConfigurationAPIView,
     RequirementTypeViewSet,
@@ -44,6 +45,7 @@ __all__ = [
     "RequirementLibraryItemViewSet",
     "RequirementLibraryViewSet",
     "RequirementProjectsViewSet",
+    "RequirementTestCaseViewSet",
     "RequirementTypeConfigurationAPIView",
     "RequirementTypeViewSet",
     "RequirementVersionViewSet",

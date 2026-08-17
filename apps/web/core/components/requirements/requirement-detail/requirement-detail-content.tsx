@@ -77,6 +77,13 @@ type TProps = {
    * 作用域（projectId、link 管理权限、linked_cycle_ids 注解）都长在调用方的行数据上。
    */
   issuesSection?: React.ReactNode;
+  /**
+   * 「关联测试用例」区块，同样由调用方注入。与 issuesSection 不同的是它是**需求级**的
+   * （关联行不带 project，用例的作用域来自 repository 且可空），所以产品侧整页、产品侧
+   * 抽屉、项目侧抽屉都给可写变体 —— 项目侧走后端的第二道权限门。迭代 / 发布的范围抽屉
+   * 不传：那两处是纯范围清单，连关联工作项都不显示。
+   */
+  testCasesSection?: React.ReactNode;
 };
 
 /** 标签 + 值的两列排布，全部叶子字段（非 form）共用同一个网格，值列才有统一的 x 起点 */
@@ -255,6 +262,7 @@ export const RequirementDetailContent = (props: TProps) => {
     onOpenRequirement,
     onRolledBack,
     issuesSection,
+    testCasesSection,
   } = props;
   const { t } = useTranslation();
   const { uploadEditorAsset } = useEditorAsset();
@@ -457,6 +465,9 @@ export const RequirementDetailContent = (props: TProps) => {
 
       {/* 关联工作项与子需求并列 —— 都在回答「这条需求现在被拆成了什么」 */}
       {issuesSection}
+
+      {/* 关联测试用例紧跟其后 —— 回答「这条需求怎么验」，和「被拆成什么」是一组 */}
+      {testCasesSection}
 
       {/*
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。

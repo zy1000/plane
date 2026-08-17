@@ -25,7 +25,11 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { ProductChip } from "@/components/products/product-chip";
 import { isRequirementClosed } from "@/components/requirements";
-import { RequirementIssuesSection, RequirementPeekOverview } from "@/components/requirements/requirement-detail";
+import {
+  RequirementIssuesSection,
+  RequirementPeekOverview,
+  RequirementTestCasesSection,
+} from "@/components/requirements/requirement-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
@@ -414,6 +418,23 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               canManage={canManage && !isRequirementClosed(peekRow)}
               onChanged={() => void refreshRequirementRow(peekRow.id)}
             />
+          }
+          /*
+           * 关联测试用例走**产品**作用域的端点（关联行是需求级的，不带 project）。项目
+           * 成员不一定是产品成员，所以后端那个端点是「产品权限 或 该需求已关联项目的
+           * PROJECT_REQUIREMENT_LINK_* 」两道门 —— 项目侧靠第二道进。
+           * 与关联工作项一样按 canManage 给写权限；closed 行不再新增关联。
+           */
+          testCasesSection={
+            peekRow.product_id ? (
+              <RequirementTestCasesSection
+                workspaceSlug={slug}
+                productId={peekRow.product_id}
+                requirementId={peekRow.id}
+                canManage={canManage && !isRequirementClosed(peekRow)}
+                scopeProjectId={project}
+              />
+            ) : null
           }
         />
       )}

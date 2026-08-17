@@ -3,6 +3,7 @@ import type {
   TCreateRequirementLibraryPayload,
   TIssueRequirementLink,
   TLinkableRequirementsResponse,
+  TLinkableTestCasesResponse,
   TProductProject,
   TProjectRequirement,
   TProjectRequirementsResponse,
@@ -38,6 +39,7 @@ import type {
   TRequirementLibraryConfiguration,
   TRequirementsResponse,
   TRequirementSubmitReviewPayload,
+  TRequirementTestCase,
   TRequirementTrailResponse,
   TRequirementVersionsResponse,
   TUpdateRequirementLibraryPayload,
@@ -84,6 +86,15 @@ export class RequirementService extends APIService {
   /** 需求关联的工作项。方向与容器关联相反：需求是主语，工作项是宾语 */
   private requirementIssuesRoot(workspaceSlug: string, projectId: string, requirementId: string) {
     return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/requirements/${requirementId}/issues`;
+  }
+
+  /**
+   * 需求关联的测试用例。**产品作用域**，与工作项关联（项目作用域）不同 —— 用例的
+   * project 来自 repository 且可空（共享用例库），一条需求的关联用例横跨它进过的所有
+   * 项目，按单个项目切开表达不出来。用例侧的反向入口在 services/qa/case.service.ts。
+   */
+  private requirementTestCasesRoot(workspaceSlug: string, productId: string, requirementId: string) {
+    return `${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/test-cases`;
   }
 
   /** 变更单的作用域前缀。**始终是产品** —— 项目只是提单入口，审批权威不下放 */
@@ -1093,6 +1104,82 @@ export class RequirementService extends APIService {
     return this.get(
       `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/issues/${issueId}/requirement-link/`
     )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 需求 ↔ 测试用例（RequirementTestCase） ----------------------------- */
+
+  /** 需求已关联的用例列表。轻量行、无分页 —— 与关联工作项同取舍：人手挂的量级，一次给完 */
+  async listRequirementTestCases(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string
+  ): Promise<TRequirementTestCase[]> {
+    return this.get(`${this.requirementTestCasesRoot(workspaceSlug, productId, requirementId)}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 候选池：能挂到这条需求上、且尚未挂上的用例。范围 = 需求已关联项目下的用例库 +
+   * project 为空的共享库。需要写权限（会露出项目侧内容）。
+   */
+  async listLinkableTestCases(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    params: {
+      search?: string;
+      repository_id?: string;
+      /** 项目侧抽屉必传：把池子收窄到本项目 + 共享库，不露出需求其他项目的用例 */
+      project_id?: string;
+      cursor?: string;
+      perPage?: number;
+    } = {}
+  ): Promise<TLinkableTestCasesResponse> {
+    const { perPage, ...rest } = params;
+    return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/linkable-test-cases/`, {
+      params: { ...rest, per_page: perPage },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 批量关联已有用例。全有或全无 —— 任一条不在作用域内 → 409
+   * REQUIREMENT_TEST_CASE_LINK_REJECTED，conflicts[].reason 给出原因
+   * （NOT_FOUND / PROJECT_OUT_OF_SCOPE），调用方据此提示。
+   */
+  async linkTestCasesToRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    caseIds: string[]
+  ): Promise<{ message: string }> {
+    return this.post(`${this.requirementTestCasesRoot(workspaceSlug, productId, requirementId)}/`, {
+      test_cases: caseIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除用例与需求的关联。软删关联行；已关闭的需求同样可以解除（closed 保护内容不保护关联） */
+  async unlinkTestCaseFromRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    caseId: string
+  ): Promise<void> {
+    return this.delete(`${this.requirementTestCasesRoot(workspaceSlug, productId, requirementId)}/${caseId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

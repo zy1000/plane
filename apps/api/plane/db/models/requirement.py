@@ -1424,3 +1424,58 @@ class RequirementIssue(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.requirement_id} @ issue {self.issue_id}"
+
+
+class RequirementTestCase(BaseModel):
+    """需求 ↔ 测试用例的关联行。纯关联，不派生任何状态、不参与统计。
+
+    **不带 project**，这是与另外四张关联表唯一的结构差异：用例的作用域间接来自
+    TestCaseRepository.project，而那一列可空（跨项目共享用例库）。要么无 project
+    可填，要么得存一个「从哪个项目视角建立的关联」这种更糊的东西 —— 关联本身是
+    需求级的，两端只需 workspace 收窄，所以继承 BaseModel 而不是 ProjectBaseModel。
+    代价是 workspace_id 没有自动派生，写入口必须显式给（bulk_create 更是绕开 save）。
+
+    唯一性是 (requirement, case) 复合的，与 RequirementCycle 同构 —— 一条用例可以
+    验证多条需求，一条需求有多条用例，真多对多。不要照 RequirementIssue 的单列唯一。
+
+    配对规则（哪些用例能挂哪些需求）的唯一事实来源在 utils/requirement_test_case.py，
+    需求侧与用例侧两个方向的端点共用，不要在任何一端重写一份。
+    """
+
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="requirement_test_cases",
+        verbose_name="关联需求",
+    )
+    # 字符串引用：qa.py 从 db.models 包顶层 import 本模块的兄弟，直接 import
+    # TestCase 会成环。
+    case = models.ForeignKey(
+        "db.TestCase",
+        on_delete=models.CASCADE,
+        related_name="case_requirements",
+        verbose_name="关联测试用例",
+    )
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_%(class)s",
+        verbose_name="工作区",
+    )
+
+    class Meta:
+        unique_together = ["requirement", "case", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "case"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_test_case_unique_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Requirement Test Case"
+        verbose_name_plural = "Requirement Test Cases"
+        db_table = "requirement_test_cases"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.requirement_id} @ case {self.case_id}"

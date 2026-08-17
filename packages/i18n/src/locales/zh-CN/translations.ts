@@ -1652,6 +1652,26 @@ export default {
     untitled: "未命名需求",
     not_found: "找不到这条需求",
     sub_requirements: "子需求",
+    test_cases: {
+      section_title: "关联测试用例",
+      link_existing: "关联已有用例",
+      empty: "还没有关联测试用例",
+      search_placeholder: "搜索用例名称或编号",
+      /** 已选区的占位文案，count=0 时也要显示 */
+      selected: "已选 {count} 条",
+      submit: "关联",
+      /** repository.project 为空的跨项目共享用例库；关联列表横跨多个项目，不标出来无法解释来源 */
+      shared_repository: "共享用例库",
+      unlink: "解除关联",
+      unlink_confirm_title: "解除用例关联",
+      unlink_confirm_description: "解除后这条用例不再用于验证该需求。",
+      /** 409 conflicts[].reason === "PROJECT_OUT_OF_SCOPE" 的提示，要给出可行动的下一步 */
+      out_of_scope: "有用例不在这条需求已关联的项目范围内。请先把需求关联进该项目，或改选共享用例库里的用例。",
+      toast_linked: "已关联测试用例",
+      toast_unlinked: "已解除用例关联",
+      toast_link_failed: "关联测试用例失败",
+      toast_unlink_failed: "解除用例关联失败",
+    },
     change_trail: "变更轨迹",
     subform: {
       row_count: "{count} 行",

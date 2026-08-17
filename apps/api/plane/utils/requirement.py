@@ -1002,6 +1002,19 @@ def _sequence_allocator(scope):
     return allocate
 
 
+def requirement_display_id(requirement):
+    """需求编号（如 ECOM-12）。
+
+    product 可空（历史行 / 库内草稿）、sequence_id 也可空，此时给 None —— 与
+    MultiProductRequirementSerializer.get_display_id 的口径一致。轻量反查列表不走
+    序列化器，直接用它拼编号。
+    """
+    product = requirement.product
+    if product is None or requirement.sequence_id is None:
+        return None
+    return f"{product.identifier}-{requirement.sequence_id}"
+
+
 def source_library_identifier_map(rows):
     """这一批行引用到的标准库 -> identifier，用于拼来源编号（SEC-12）。
 

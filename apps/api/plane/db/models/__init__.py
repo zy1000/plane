@@ -175,6 +175,7 @@ from .requirement import (
     RequirementProject,
     RequirementRelease,
     RequirementScope,
+    RequirementTestCase,
     RequirementType,
     RequirementTypeSchemaRevision,
     RequirementVersion,

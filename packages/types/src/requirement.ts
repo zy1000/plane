@@ -473,6 +473,85 @@ export type TIssueRequirementLink = {
   product_id: string;
 };
 
+/* --- 需求 ↔ 测试用例（RequirementTestCase） -------------------------------- */
+
+/**
+ * 需求已关联的一条测试用例（轻量行，服务端 .values() 直出）。
+ *
+ * 刻意不带评审态（TestCase.review 是每行两次查询的 property，列表里就是 N+1），也不带
+ * 执行结果 —— 本期只做关联，覆盖率/执行统计留到下一期。
+ *
+ * type / test_type / priority 是后端的 IntegerChoices 数值（0/1/2…），不是字符串枚举 ——
+ * QA 域全部如此，展示映射沿用 components/qa/shared 的胶囊组件。
+ */
+export type TRequirementTestCase = {
+  id: string;
+  /** 用例编号，如 ECOM-12。后端按 repository 自增，可能为空串 */
+  code: string;
+  name: string;
+  type: number;
+  test_type: number;
+  priority: number;
+  repository_id: string;
+  repository_name: string | null;
+  module_id: string | null;
+  module_name: string | null;
+  /**
+   * 用例库所属项目；**为 null 表示跨项目共享用例库**。前端据此打标，也据此解释
+   * 「为什么别的项目也看得到这条用例」。
+   */
+  repository_project_id: string | null;
+  assignee_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * 用例侧反查：这条用例挂在哪些需求上。与工作项反查（TIssueRequirementLink，单个对象）
+ * 不同 —— 这里是数组，一条用例可以验证多条需求。
+ */
+export type TTestCaseRequirementLink = {
+  requirement_id: string;
+  /** 拼好的展示编号（如 ECOM-12）；product 或 sequence_id 缺失时为 null */
+  requirement_display_id: string | null;
+  requirement_name: string;
+  requirement_status: TRequirementItemStatus;
+  /** 跳转产品需求详情要它 */
+  product_id: string | null;
+};
+
+/**
+ * 用例侧候选池的一行需求（轻量，服务端手拼）。
+ *
+ * 刻意不是 TRequirement —— 用例侧的选择器只需要编号/标题/状态/所属产品，走完整需求
+ * 序列化器要带上全部自定义字段与审批派生列，选择器一条都用不上。
+ */
+export type TLinkableCaseRequirement = {
+  id: string;
+  display_id: string | null;
+  name: string;
+  status: TRequirementItemStatus;
+  product_id: string | null;
+  product_name: string | null;
+  product_identifier: string | null;
+};
+
+/** 用例侧的可关联需求候选池（分页） */
+export type TLinkableCaseRequirementsResponse = TPaginatedResponse<TLinkableCaseRequirement[]>;
+
+/** 需求侧的可关联用例候选池（分页）。没有分面 —— 本期不做覆盖率，也没有产品维度可分。 */
+export type TLinkableTestCasesResponse = TPaginatedResponse<TRequirementTestCase[]>;
+
+/** 需求侧批量关联用例（POST .../requirements/<rid>/test-cases/）。解除走 DELETE 单条。 */
+export type TRequirementTestCaseLinkPayload = {
+  test_cases: string[];
+};
+
+/** 用例侧批量关联需求（POST .../test/case/<cid>/requirements/）。 */
+export type TTestCaseRequirementLinkPayload = {
+  requirements: string[];
+};
+
 /* --- 从标准库导入 -------------------------------------------------------- */
 
 export type TRequirementImportPayload = {

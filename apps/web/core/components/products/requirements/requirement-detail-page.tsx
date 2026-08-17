@@ -14,6 +14,7 @@ import {
   RequirementDetailContent,
   RequirementDetailProperties,
   RequirementIssuesByProject,
+  RequirementTestCasesSection,
   useRequirementDetail,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
@@ -144,6 +145,16 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   onRolledBack={() => void detail.refresh()}
                   /* 产品侧只读：按项目分组看已拆工作项；「拆」必须先选项目，入口在项目侧 */
                   issuesSection={<RequirementIssuesByProject workspaceSlug={slug} requirement={requirement} />}
+                  /* 用例关联是需求级的、端点在产品作用域，所以产品侧整页才是可写主入口
+                     （关联工作项恰好相反）。测试人员那一侧的入口在用例详情弹窗 */
+                  testCasesSection={
+                    <RequirementTestCasesSection
+                      workspaceSlug={slug}
+                      productId={product}
+                      requirementId={requirement.id}
+                      canManage={canEdit}
+                    />
+                  }
                 />
                 {/* 窄屏没有右栏，属性回落到主列底部 —— 与工作项详情同款处理 */}
                 <div className="mt-8 border-t border-subtle pt-6 lg:hidden">

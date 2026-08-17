@@ -32,7 +32,10 @@ import {
   resolveRequirementDataView,
   type TRequirementDataView,
 } from "./requirement-data-views";
-import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
+import {
+  RequirementPeekOverview,
+  RequirementTestCasesSection,
+} from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 
 const TABS = ["data", "changes", "baselines"] as const;
@@ -440,6 +443,21 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         // 抽屉已经把改完的整行交回来了（内容 PATCH 与状态改动都走这条），直接合并进当前页；
         // 重拉会让后面的网格整张闪一下
         onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
+        /*
+         * 关联测试用例：权限语境与产品侧整页完全相同（都在 products/{productId} 下、
+         * 都用同一个 canEdit），所以抽屉与整页一样给可写变体。关联工作项恰好相反 ——
+         * 那个要项目语境，产品侧抽屉不注入。
+         */
+        testCasesSection={
+          peekRequirementId ? (
+            <RequirementTestCasesSection
+              workspaceSlug={workspaceSlug ?? ""}
+              productId={productId ?? ""}
+              requirementId={peekRequirementId}
+              canManage={canEdit}
+            />
+          ) : null
+        }
       />
 
       {/*

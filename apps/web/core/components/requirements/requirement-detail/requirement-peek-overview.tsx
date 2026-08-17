@@ -52,6 +52,11 @@ type TProps = {
    * 要项目语境与 link 管理权限，都长在那一页上）；产品侧抽屉不传则不渲染。
    */
   issuesSection?: ReactNode;
+  /**
+   * 透传给正文的「关联测试用例」区块。产品侧与项目侧的需求列表都注入；迭代 / 发布的
+   * 范围抽屉不传则不渲染。
+   */
+  testCasesSection?: ReactNode;
 };
 
 /**
@@ -76,6 +81,7 @@ export const RequirementPeekOverview = (props: TProps) => {
     showDetailAction = true,
     productChip,
     issuesSection,
+    testCasesSection,
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
@@ -257,6 +263,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void detail.refresh()}
                   issuesSection={issuesSection}
+                  testCasesSection={testCasesSection}
                 />
               )}
             </div>

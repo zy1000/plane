@@ -8,6 +8,8 @@ export * from "./requirement-modified-banner";
 export * from "./requirement-peek-overview";
 export * from "./requirement-projects-select";
 export * from "./requirement-subform-section";
+export * from "./requirement-testcase-link-modal";
+export * from "./requirement-testcases-section";
 export * from "./requirement-version-history";
 export * from "./use-requirement-detail";
 export * from "./use-requirement-versions";

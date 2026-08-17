@@ -692,11 +692,15 @@ class ProjectViewSet(BaseViewSet):
             RequirementIssue,
             RequirementProject,
             RequirementRelease,
+            RequirementTestCase,
         )
 
         RequirementCycle.objects.filter(project_id=pk).delete()
         RequirementRelease.objects.filter(project_id=pk).delete()
         RequirementIssue.objects.filter(project_id=pk).delete()
+        # 用例关联没有 project 列（用例的作用域来自 repository），按用例库的项目筛;
+        # 共享用例库(repository.project 为空)的关联行不属于本项目,保留
+        RequirementTestCase.objects.filter(case__repository__project_id=pk).delete()
         RequirementProject.objects.filter(project_id=pk).delete()
         project.delete()
         webhook_activity.delay(

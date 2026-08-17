@@ -24,6 +24,10 @@ from plane.app.views.qa.case import (
     CaseLabelAPIView,
     CaseModuleView,
 )
+from plane.app.views.qa.case_requirement import (
+    CaseLinkableRequirementAPIView,
+    CaseRequirementAPIView,
+)
 from plane.app.views.qa.case_version import (
     CaseVersionAPIView,
     CaseVersionCompareAPIView,
@@ -122,6 +126,19 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/",
         CaseAPIView.as_view(),
         name="test-case",
+    ),
+    # 用例侧的需求关联。项目作用域（而非 workspace 级的 CaseAPI）是为了吃现成的
+    # QA_CASE_* 权限 —— 另一扇门在产品侧要 can_edit_product_requirements，
+    # 这边裸奔就成了绕过口。见 views/qa/case_requirement.py
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/<uuid:case_id>/requirements/",
+        CaseRequirementAPIView.as_view(),
+        name="test-case-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/<uuid:case_id>/linkable-requirements/",
+        CaseLinkableRequirementAPIView.as_view(),
+        name="test-case-linkable-requirements",
     ),
     path(
         "workspaces/<str:slug>/test/case/mindmap/",

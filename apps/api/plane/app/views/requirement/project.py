@@ -67,6 +67,7 @@ from plane.utils.requirement_project import (
     resolve_policy_for_linked_requirement,
     set_requirement_status,
 )
+from plane.utils.requirement_test_case import unlink_test_cases_for_projects
 
 DEFAULT_PER_PAGE = 20
 MAX_PER_PAGE = 100
@@ -436,6 +437,11 @@ class ProjectRequirementViewSet(BaseViewSet):
         RequirementIssue.objects.filter(
             requirement_id=requirement_id, project_id=project_id
         ).delete()
+        # 用例关联没有 project 列（用例的作用域来自 repository），按用例库的项目筛；
+        # 共享用例库（repository.project 为空）的关联行保留
+        unlink_test_cases_for_projects(
+            requirement_id=requirement_id, project_ids=[project_id]
+        )
         link.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -603,6 +609,9 @@ class RequirementProjectsViewSet(BaseViewSet):
             RequirementIssue.objects.filter(
                 requirement_id=requirement.id, project_id__in=removed_ids
             ).delete()
+            unlink_test_cases_for_projects(
+                requirement_id=requirement.id, project_ids=removed_ids
+            )
             RequirementProject.objects.filter(
                 requirement_id=requirement.id,
                 project_id__in=removed_ids,
