@@ -67,6 +67,16 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
     NOT_FOUND = "Requirement library not found."
     FORBIDDEN = "You do not have permission to maintain this library."
 
+    #: 库是模板：内置列只出标题/描述/优先级/父项，也没有交付状态那一列
+    excel_is_library = True
+
+    def excel_filename_stem(self, owner, layer):
+        return owner.name or super().excel_filename_stem(owner, layer)
+
+    def excel_import_type_ids(self, owner, layer):
+        # 库固定绑一个需求类型，条目不能是别的类型 —— 这里不放开到工作区全量
+        return [owner.requirement_type_id]
+
     def resolve_owner(self, *, for_update=False):
         return get_scoped_library(
             slug=self.workspace_slug,

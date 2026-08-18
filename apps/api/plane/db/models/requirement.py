@@ -74,13 +74,20 @@ class RequirementApprovalState(models.TextChoices):
 
 
 class RequirementPriority(models.TextChoices):
-    """取值与 Issue.PRIORITY_CHOICES 对齐，前端可以直接复用工作项的优先级下拉。"""
+    """与 Issue.PRIORITY_CHOICES **取值和标签都对齐**，前端直接复用工作项的优先级下拉。
 
-    URGENT = "urgent", "紧急"
-    HIGH = "high", "高"
-    MEDIUM = "medium", "中"
-    LOW = "low", "低"
-    NONE = "none", "无"
+    标签保持英文不是疏忽：需求网格的优先级单元格与工作项的 PriorityDropdown 用的是同一份
+    词汇（前端常量 ISSUE_PRIORITIES，见 components/requirements/requirement-builtin-fields.tsx），
+    页面上显示的就是 Urgent / High / …。标签一旦翻成中文，凡是拿 label 当展示值的地方
+    （Excel 导出、admin、browsable API）就会和页面对不上。
+    这与 RequirementItemStatus 用中文标签并不矛盾 —— 那一轴前端本来就显示中文。
+    """
+
+    URGENT = "urgent", "Urgent"
+    HIGH = "high", "High"
+    MEDIUM = "medium", "Medium"
+    LOW = "low", "Low"
+    NONE = "none", "None"
 
 
 class RequirementApprovalType(models.TextChoices):

@@ -1803,6 +1803,66 @@ export default {
       page: "页",
     },
   },
+  /**
+   * 需求条目的 Excel 导入 / 导出。产品需求页与标准库条目页共用同一套文案 ——
+   * 两边走的是同一组后端端点，措辞不该分叉。
+   */
+  requirement_excel: {
+    menu: {
+      label: "Excel",
+      import: "导入 Excel",
+      export: "导出 Excel",
+      template: "下载导入模板",
+    },
+    export: {
+      failed: "导出失败，请稍后重试。",
+    },
+    template: {
+      failed: "下载模板失败，请稍后重试。",
+    },
+    modal: {
+      title: "导入需求",
+      back: "上一步",
+      next: "下一步",
+      confirm: "开始导入",
+    },
+    upload: {
+      template_title: "1. 准备表格",
+      template_hint: "表头就是需求类型的列名。已经有数据的话，先导出、改完直接导回来即可。",
+      file_title: "2. 选择文件",
+      file_hint: "仅支持 .xlsx，单次最多 5000 条，文件不超过 5 MB。",
+      file_action: "选择文件",
+      file_replace: "重新选择",
+      no_file: "还没有选择文件",
+      rules_title: "填写说明",
+      rule_sequence: "「编号」留空表示新增；填了编号就是更新那一条，编号必须属于当前范围。",
+      rule_member: "「负责人」填成员的显示名（导出时写的就是它）；有重名时改填邮箱。成员类型的自定义字段同理。",
+      rule_parent: "「父项」填父需求的编号（如 ECOM-12）；父需求也是本次新增、还没有编号时，填 #Excel行号（如 #5，只能指向同一个工作表）。留空表示不挂父项。",
+      rule_form: "表单字段是两行表头：一条需求有几条子记录就占几行，其余列纵向合并、续行留空即可。",
+      rule_skipped: "评审中、已关闭的需求内容只读，会被跳过；附件与图片列不参与导入导出。",
+    },
+    validate: {
+      summary: "新增 {create} 条，更新 {update} 条，未变化 {unchanged} 条，跳过 {skip} 条，{error} 条有问题。",
+      selected: "已勾选 {count} 行",
+      tab_all: "全部（{count}）",
+      tab_problem: "仅有问题（{count}）",
+      column_row: "位置",
+      column_title: "标题",
+      column_action: "处理",
+      column_message: "说明",
+      action_create: "新增",
+      action_update: "更新",
+      action_unchanged: "未变化",
+      action_skip: "跳过",
+      action_error: "有问题",
+      ignored_sheets: "以下工作表名对不上任何需求类型，已忽略：{names}",
+      ignored_headers: "以下列没有对应的字段，已忽略：{names}",
+      empty: "没有解析到任何数据行",
+    },
+    toast: {
+      imported: "已导入：新增 {created} 条，更新 {updated} 条",
+    },
+  },
   requirement_libraries: {
     title: "需求标准库",
     create: "新建标准库",

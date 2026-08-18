@@ -58,9 +58,10 @@ import { useRequirementTitles } from "@/components/requirements/use-requirement-
  * 要录入或改值就点进对应的类型视图。唯一例外是状态列 —— 它不是「内容」，走独立的
  * 状态端点，总览里就地可改。
  *
- * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：标题列左固定
- * 并吃掉容器剩余宽度、其余列定宽 144px、行高 44px、勾选框与行操作都折进标题格里悬停
- * 才显形。量化与样式常量都在 requirement-grid-shared.tsx，三个需求网格共用。
+ * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：编号、
+ * 标准库编号、标题三列左固定，标题列吃掉容器剩余宽度；其余列定宽 144px、行高 44px。
+ * 勾选框折进编号列，行操作折进标题格，悬停才显形。量化与样式常量都在
+ * requirement-grid-shared.tsx，三个需求网格共用。
  */
 type TProps = {
   /** 父项列要把 UUID 换成标题，跨页的父项得回头查接口 */
@@ -201,8 +202,8 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   // 与类型视图同一份内置列定义：列头、列序、列宽都不该在两个视图里各写一遍
   const builtinColumns = getBuiltinColumnsFor("product");
   /**
-   * 标题列单拎出来做左固定列（见下方 colgroup）：它是唯一能认出「这是哪一行」的列，
-   * 横滚时必须留在视野里。其余内置列跟着定宽的属性列走。
+   * 编号 / 标准库编号 / 标题三列左固定（见下方 colgroup）：横滚时编号还在，
+   * 才认得出「这是哪一行」。其余内置列跟着定宽的属性列走。
    */
   const titleColumn = builtinColumns.find((column) => column.key === "title");
   const propertyBuiltinColumns = builtinColumns.filter((column) => column.key !== "title");
@@ -239,6 +240,10 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     return snapshot;
   }, [defaultTitleColumnWidth, propertyBuiltinColumns]);
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
+  const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
+  const sourceDisplayIdWidth = getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
+  const sourceStickyLeft = displayIdWidth;
+  const titleStickyLeft = displayIdWidth + sourceDisplayIdWidth;
   const propertyColumnsWidth =
     getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) +
     getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) +
@@ -388,19 +393,19 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
         className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 min-w-0 flex-1 overflow-auto bg-surface-1"
       >
         {/*
-          列宽全部显式给定（table-fixed + colgroup），且照工作项电子表格的排法：
-          标题列左固定并吃掉容器剩余宽度，其余列一律定宽。这样表格恒好铺满容器
+          列宽全部显式给定（table-fixed + colgroup）：编号、标准库编号、标题三列
+          左固定，标题列吃掉容器剩余宽度，其余列一律定宽。这样表格恒好铺满容器
           —— 既不会短一截露出背景，也不会因为定宽相加超出而把最右边的列（「所属
-          类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，标题列留在原地。
+          类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，前三列留在原地。
         */}
         <table
           className="table-fixed border-collapse bg-surface-1 text-left text-13"
           style={{ width: tableWidth }}
         >
           <colgroup>
+            <col style={{ width: displayIdWidth }} />
+            <col style={{ width: sourceDisplayIdWidth }} />
             <col style={{ width: titleColumnWidth }} />
-            <col style={{ width: getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
-            <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
             {descriptionColumn && (
               <col style={{ width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)) }} />
             )}
@@ -415,20 +420,24 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
           </colgroup>
           <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
             <tr>
-              {/* 标题列：勾选框折进来，与工作项一样不单独占一列 */}
+              {/* 编号列最左固定，全选框折进来；标准库编号、标题依次左固定 */}
               <th
-                data-requirement-sticky-cell
                 className={cn(
                   "group/header relative",
                   REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
                   REQUIREMENT_GRID_STICKY_HEADER_CLASS
                 )}
-                style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+                style={{
+                  width: displayIdWidth,
+                  minWidth: displayIdWidth,
+                  maxWidth: displayIdWidth,
+                  left: 0,
+                }}
               >
                 <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
                   {/*
                     勾选框常驻占位、只在悬停（或已有选中）时显形 —— 与工作项一致。
-                    用 opacity 而不是条件渲染，标题才不会在鼠标进出时左右跳。
+                    用 opacity 而不是条件渲染，编号才不会在鼠标进出时左右跳。
                   */}
                   {!readOnly && (
                     <Checkbox
@@ -443,6 +452,50 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                       )}
                     />
                   )}
+                  <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+                </div>
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
+                />
+              </th>
+              <th
+                className={cn(
+                  "group/header relative",
+                  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                  REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                )}
+                style={{
+                  width: sourceDisplayIdWidth,
+                  minWidth: sourceDisplayIdWidth,
+                  maxWidth: sourceDisplayIdWidth,
+                  left: sourceStickyLeft,
+                }}
+              >
+                <div className="flex h-full w-full min-w-0 items-center px-page-x">
+                  <RequirementGridHeaderLabel
+                    icon={BookMarked}
+                    label={t("requirements.identifier.source_column")}
+                  />
+                </div>
+                <RequirementGridColumnResizer
+                  onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
+                />
+              </th>
+              <th
+                data-requirement-sticky-cell
+                className={cn(
+                  "group/header relative",
+                  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                  REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                )}
+                style={{
+                  width: titleColumnWidth,
+                  minWidth: titleColumnWidth,
+                  maxWidth: titleColumnWidth,
+                  left: titleStickyLeft,
+                }}
+              >
+                <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
                   <RequirementGridHeaderLabel
                     icon={titleColumn?.icon}
                     label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
@@ -450,21 +503,6 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                 </div>
                 <RequirementGridColumnResizer
                   onMouseDown={(event) => startResize("title", columnSnapshot, event)}
-                />
-              </th>
-              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
-                />
-              </th>
-              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                <RequirementGridHeaderLabel
-                  icon={BookMarked}
-                  label={t("requirements.identifier.source_column")}
-                />
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
                 />
               </th>
               {descriptionColumn && (
@@ -523,20 +561,17 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   )}
                 >
                   {/*
-                    标题格：勾选框 + 标题 + 详情入口 + 行操作菜单。除标题外都是悬停
-                    才显形，静息状态下这一格只有标题，和工作项一致。
-
-                    左固定列的底色必须不透明（否则横滚时下面的内容会透上来），所以
-                    选中/悬停的着色交给内层 div 铺，而不是像其余单元格那样挂在 <tr> 上。
+                    编号 / 标准库编号 / 标题三列左固定。勾选框折进编号列，行操作折进
+                    标题列。左固定列底色必须不透明，选中/悬停着色铺在内层 div。
                   */}
                   <td
-                    data-requirement-sticky-cell
-                    className={cn(
-                      "relative",
-                      REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
-                      REQUIREMENT_GRID_STICKY_BODY_CLASS
-                    )}
-                    style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+                    className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                    style={{
+                      width: displayIdWidth,
+                      minWidth: displayIdWidth,
+                      maxWidth: displayIdWidth,
+                      left: 0,
+                    }}
                   >
                     <div
                       className={cn(
@@ -557,6 +592,59 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                           )}
                         />
                       )}
+                      {requirement.display_id ? (
+                        <RequirementIdentifier displayId={requirement.display_id} />
+                      ) : (
+                        <span className="text-placeholder">—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td
+                    className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                    style={{
+                      width: sourceDisplayIdWidth,
+                      minWidth: sourceDisplayIdWidth,
+                      maxWidth: sourceDisplayIdWidth,
+                      left: sourceStickyLeft,
+                    }}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-full w-full min-w-0 items-center px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                        isSelected
+                          ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                          : "group-hover/requirement:bg-layer-transparent-hover"
+                      )}
+                    >
+                      {requirement.source_display_id ? (
+                        <RequirementIdentifier displayId={requirement.source_display_id} />
+                      ) : (
+                        <span className="text-placeholder">—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td
+                    data-requirement-sticky-cell
+                    className={cn(
+                      "relative",
+                      REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                      REQUIREMENT_GRID_STICKY_BODY_CLASS
+                    )}
+                    style={{
+                      width: titleColumnWidth,
+                      minWidth: titleColumnWidth,
+                      maxWidth: titleColumnWidth,
+                      left: titleStickyLeft,
+                    }}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                        isSelected
+                          ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                          : "group-hover/requirement:bg-layer-transparent-hover"
+                      )}
+                    >
                       <Tooltip tooltipContent={requirement.title}>
                         <button
                           type="button"
@@ -627,20 +715,6 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
-                    {requirement.display_id ? (
-                      <RequirementIdentifier displayId={requirement.display_id} />
-                    ) : (
-                      <span className="text-placeholder">—</span>
-                    )}
-                  </td>
-                  <td className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
-                    {requirement.source_display_id ? (
-                      <RequirementIdentifier displayId={requirement.source_display_id} />
-                    ) : (
-                      <span className="text-placeholder">—</span>
-                    )}
                   </td>
                   {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
                   {descriptionColumn && (

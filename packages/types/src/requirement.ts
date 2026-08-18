@@ -580,6 +580,58 @@ export type TRequirementImportResponse = {
   requirement_type_id: string;
 };
 
+/* --- Excel 导入 / 导出 ---------------------------------------------------- */
+
+/**
+ * 需求行的作用域。产品需求与标准库条目共用同一套 Excel 端点，只是路径前缀不同 ——
+ * 与 RequirementGrid 的 entityKind 取值保持一致，调用方不用再做一次映射。
+ */
+export type TRequirementExcelScope = "product" | "library";
+
+/** 一行的校验结果。行号是这条需求在工作表里的**主行**行号，子表续行归到它名下。 */
+export type TRequirementExcelRow = {
+  sheet: string;
+  row_number: number;
+  /** `工作表名!行号`。多工作表下光有行号会撞，勾选与回填都用它 */
+  row_key: string;
+  title: string;
+  display_id: string;
+  requirement_type_name: string;
+  /**
+   * create = 新增；update = 按编号更新（内容有变化，或只改了状态）；
+   * unchanged = 与现有行完全一致，什么都不做；skip = 命中只读闸门，整行不动
+   */
+  action: "create" | "update" | "unchanged" | "skip";
+  skip_reason: string;
+  passed: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+export type TRequirementExcelValidation = {
+  total_count: number;
+  create_count: number;
+  update_count: number;
+  unchanged_count: number;
+  skipped_count: number;
+  error_count: number;
+  all_passed: boolean;
+  /** 名字对不上任何需求类型、因而被跳过的工作表 */
+  ignored_sheets: string[];
+  /** 对不上任何列的表头，形如 `功能需求!我自己加的列` */
+  ignored_headers: string[];
+  results: TRequirementExcelRow[];
+};
+
+export type TRequirementExcelImportResponse = TRequirementExcelValidation & {
+  success_count: number;
+  created_count: number;
+  updated_count: number;
+  created_ids: string[];
+  /** 本次导入涉及的需求类型。新增可能引入此前没引用过的类型，前端据此重取配置 */
+  requirement_type_ids: string[];
+};
+
 /* --- 变更审批与版本 ------------------------------------------------------ */
 
 export type TRequirementChangeStatus = "pending" | "approved" | "rejected" | "cancelled";

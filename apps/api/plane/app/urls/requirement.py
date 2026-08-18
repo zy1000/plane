@@ -88,6 +88,23 @@ urlpatterns = [
         RequirementLibraryItemViewSet.as_view({"post": "bulk_save"}),
         name="requirement-library-item-bulk-save",
     ),
+    # Excel 导入 / 导出。`excel/` 前缀是为了避开产品侧已被「从标准库导入」占用的
+    # `.../requirements/import/`，两侧保持同名以便前端一套 service 分派
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/excel/",
+        RequirementLibraryItemViewSet.as_view({"get": "export_excel"}),
+        name="requirement-library-item-excel-export",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/excel/validate/",
+        RequirementLibraryItemViewSet.as_view({"post": "validate_excel_import"}),
+        name="requirement-library-item-excel-validate",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/excel/import/",
+        RequirementLibraryItemViewSet.as_view({"post": "import_excel"}),
+        name="requirement-library-item-excel-import",
+    ),
     path(
         "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/<uuid:pk>/",
         RequirementLibraryItemViewSet.as_view(
@@ -115,6 +132,21 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/import/",
         RequirementViewSet.as_view({"post": "import_from_library"}),
         name="product-requirement-import",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/excel/",
+        RequirementViewSet.as_view({"get": "export_excel"}),
+        name="product-requirement-excel-export",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/excel/validate/",
+        RequirementViewSet.as_view({"post": "validate_excel_import"}),
+        name="product-requirement-excel-validate",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/excel/import/",
+        RequirementViewSet.as_view({"post": "import_excel"}),
+        name="product-requirement-excel-import",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/",

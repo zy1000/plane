@@ -191,6 +191,9 @@ class RequirementViewSet(BaseRequirementRowViewSet):
             library_id=library_id,
         )
 
+    def excel_filename_stem(self, owner, layer):
+        return owner.product.name or super().excel_filename_stem(owner, layer)
+
     has_extra_annotations = True
 
     def annotate_extra(self, queryset):

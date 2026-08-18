@@ -10,6 +10,7 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { RequirementExcelMenu } from "@/components/requirements/excel";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
@@ -73,7 +74,20 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               </Breadcrumbs>
             </Header.LeftItem>
             <Header.RightItem className="shrink-0">
-              <div ref={setDataToolbarHost} className="flex min-w-0 items-center gap-2" />
+              <div className="flex min-w-0 items-center gap-2">
+                {/* 网格自己的工具栏（搜索 / 筛选 / 显示 / 新增）portal 进这里 */}
+                <div ref={setDataToolbarHost} className="flex min-w-0 items-center gap-2" />
+                <RequirementExcelMenu
+                  workspaceSlug={workspaceSlug}
+                  scope="library"
+                  entityId={libraryId ?? ""}
+                  search={store.search}
+                  filters={store.filters}
+                  onImported={() => {
+                    void store.fetchRequirements().catch(() => undefined);
+                  }}
+                />
+              </div>
             </Header.RightItem>
           </Header>
         }

@@ -372,8 +372,9 @@ export const RequirementGrid = observer(
   const showActionGutter = !readOnly;
 
   /**
-   * 列宽与列序照工作项电子表格排（见 requirement-grid-shared 的表格外壳）：
-   * 标题列左固定、吃掉容器剩余宽度，勾选框与行操作都折进它；其余列一律定宽。
+   * 列宽与列序：编号在最左并左固定，勾选框折进它；标题紧随其后、同样左固定
+   * （left 等于编号列宽），吃掉容器剩余宽度，行操作折进标题列。其余列一律定宽。
+   * 与项目需求网格一致。
    */
   const titleColumn = builtinColumns.find((column) => column.key === "title");
   const propertyBuiltinColumns = useMemo(
@@ -437,6 +438,8 @@ export const RequirementGrid = observer(
     visibleRootFields,
   ]);
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
+  const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
+  const titleStickyLeft = displayIdWidth;
   const gutterWidth = visibleRootFields.reduce((sum, field) => {
     if (field.field_type === "form" && field.children.length && showActionGutter) {
       return sum + FORM_GUTTER_COLUMN_WIDTH;
@@ -452,8 +455,8 @@ export const RequirementGrid = observer(
   // Column count for the trailing "add record" affordance row; mirrors the header's column math.
   const totalColumnCount = useMemo(
     () =>
-      1 + // 标题列（左固定，勾选框与行操作都在里面）
-      1 + // 编号
+      1 + // 编号列（最左固定，勾选框折在里面）
+      1 + // 标题列（左固定，行操作折在里面）
       (showSourceColumn ? 1 : 0) + // 标准库编号
       (showApprovalColumn ? 1 : 0) + // 审批态
       propertyBuiltinColumns.length +
@@ -699,21 +702,23 @@ export const RequirementGrid = observer(
               className={cn("group transition-colors duration-150 motion-reduce:transition-none", rowStateClass)}
             >
               {/*
-                标题格：左固定，勾选框 / 新增徽标 / 详情入口 / 行操作全折在里面。
-                左固定列的底色必须不透明（否则横滚时下面的内容会透上来），所以行态
-                着色由内层 div 铺，而不是靠挂在 <tr> 上的 rowStateClass。
+                编号格最左固定，勾选框折进来。标题格跟在后面、left 等于编号列宽，
+                横滚时两列一起钉住。左固定列底色必须不透明，行态着色铺在内层 div。
               */}
               {isFirstRow && (
                 <td
                   rowSpan={totalRows}
-                  data-requirement-sticky-cell
                   className={cn(
-                    "relative",
                     REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
                     REQUIREMENT_GRID_STICKY_BODY_CLASS,
-                    groupCellClass,
+                    groupCellClass
                   )}
-                  style={{ width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth }}
+                  style={{
+                    width: displayIdWidth,
+                    minWidth: displayIdWidth,
+                    maxWidth: displayIdWidth,
+                    left: 0,
+                  }}
                 >
                   <div className={cn("flex h-full w-full min-w-0 items-center gap-1.5 px-page-x", rowStateClass)}>
                     {!readOnly && (
@@ -734,7 +739,32 @@ export const RequirementGrid = observer(
                         )}
                       />
                     )}
-
+                    {requirement.display_id ? (
+                      <RequirementIdentifier displayId={requirement.display_id} />
+                    ) : (
+                      <span className="text-placeholder">—</span>
+                    )}
+                  </div>
+                </td>
+              )}
+              {isFirstRow && (
+                <td
+                  rowSpan={totalRows}
+                  data-requirement-sticky-cell
+                  className={cn(
+                    "relative",
+                    REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                    REQUIREMENT_GRID_STICKY_BODY_CLASS,
+                    groupCellClass
+                  )}
+                  style={{
+                    width: titleColumnWidth,
+                    minWidth: titleColumnWidth,
+                    maxWidth: titleColumnWidth,
+                    left: titleStickyLeft,
+                  }}
+                >
+                  <div className={cn("flex h-full w-full min-w-0 items-center gap-1.5 px-page-x", rowStateClass)}>
                     <span className="min-w-0 flex-1">
                       {isRowEditable ? (
                         <BuiltinCellEditor
@@ -791,19 +821,7 @@ export const RequirementGrid = observer(
                   </div>
                 </td>
               )}
-              {/* 编号 / 标准库编号：紧跟标题，单独成列，跟着整组行 rowSpan */}
-              {isFirstRow && (
-                <td
-                  rowSpan={totalRows}
-                  className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
-                >
-                  {requirement.display_id ? (
-                    <RequirementIdentifier displayId={requirement.display_id} />
-                  ) : (
-                    <span className="text-placeholder">—</span>
-                  )}
-                </td>
-              )}
+              {/* 标准库编号：产品需求才有，紧跟标题，跟着整组行 rowSpan */}
               {isFirstRow && showSourceColumn && (
                 <td
                   rowSpan={totalRows}
@@ -1412,8 +1430,8 @@ export const RequirementGrid = observer(
             style={{ width: tableWidth }}
           >
             <colgroup>
+              <col style={{ width: displayIdWidth }} />
               <col style={{ width: titleColumnWidth }} />
-              <col style={{ width: getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
               {showSourceColumn && (
                 <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
               )}
@@ -1451,54 +1469,80 @@ export const RequirementGrid = observer(
               rootFields={visibleRootFields}
               showActionGutter={showActionGutter}
               /*
-               * 标题列吃掉剩余宽度并左固定，全选框折进它 —— 与默认视图、与工作项一致。
-               * 原先「勾选框」和「操作」各占一列，两头各钉死一列窄格，中间的内容列反而
-               * 被挤到要横滚才看得全。
+               * 编号列最左固定，全选框折进它；标题列跟在后面并左固定。
+               * 与项目需求网格、与「编号在标题前面」的阅读顺序一致。
                */
-              leadingHeader={{
-                className: cn(
-                  "group/header relative",
-                  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                  REQUIREMENT_GRID_STICKY_HEADER_CLASS
-                ),
-                style: { width: titleColumnWidth, minWidth: titleColumnWidth, maxWidth: titleColumnWidth },
-                stickyCell: true,
-                onResize: (event) => startResize("title", columnSnapshot, event),
-                content: (
-                  <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
-                    {!readOnly && (
-                      <Checkbox
-                        checked={
-                          selectableRequirementIds.length > 0 &&
-                          selectableRequirementIds.every((requirementId) => selectedIds.includes(requirementId))
-                        }
-                        indeterminate={
-                          selectedIds.length > 0 && !selectableRequirementIds.every((id) => selectedIds.includes(id))
-                        }
-                        disabled={readOnly || !selectableRequirementIds.length}
-                        onChange={(event) => setSelectedIds(event.target.checked ? selectableRequirementIds : [])}
-                        aria-label={t("requirement_grid.data.select_all")}
-                        containerClassName={cn(
-                          "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
-                          selectedIds.length > 0 && "pointer-events-auto opacity-100"
-                        )}
-                      />
-                    )}
-                    <RequirementGridHeaderLabel
-                      icon={titleColumn?.icon}
-                      label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
-                    />
-                  </div>
-                ),
-              }}
-              builtinHeaders={[
+              leadingHeaders={[
                 {
                   key: "display-id",
-                  content: (
-                    <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+                  className: cn(
+                    "group/header relative",
+                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                    REQUIREMENT_GRID_STICKY_HEADER_CLASS
                   ),
+                  style: {
+                    width: displayIdWidth,
+                    minWidth: displayIdWidth,
+                    maxWidth: displayIdWidth,
+                    left: 0,
+                  },
                   onResize: (event) => startResize("display_id", columnSnapshot, event),
+                  content: (
+                    <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                      {!readOnly && (
+                        <Checkbox
+                          checked={
+                            selectableRequirementIds.length > 0 &&
+                            selectableRequirementIds.every((requirementId) => selectedIds.includes(requirementId))
+                          }
+                          indeterminate={
+                            selectedIds.length > 0 &&
+                            !selectableRequirementIds.every((id) => selectedIds.includes(id))
+                          }
+                          disabled={readOnly || !selectableRequirementIds.length}
+                          onChange={(event) =>
+                            setSelectedIds(event.target.checked ? selectableRequirementIds : [])
+                          }
+                          aria-label={t("requirement_grid.data.select_all")}
+                          containerClassName={cn(
+                            "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
+                            selectedIds.length > 0 && "pointer-events-auto opacity-100"
+                          )}
+                        />
+                      )}
+                      <RequirementGridHeaderLabel
+                        icon={Hash}
+                        label={t("requirements.identifier.column")}
+                      />
+                    </div>
+                  ),
                 },
+                {
+                  key: "title",
+                  className: cn(
+                    "group/header relative",
+                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                    REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                  ),
+                  style: {
+                    width: titleColumnWidth,
+                    minWidth: titleColumnWidth,
+                    maxWidth: titleColumnWidth,
+                    left: titleStickyLeft,
+                  },
+                  stickyCell: true,
+                  onResize: (event) => startResize("title", columnSnapshot, event),
+                  content: (
+                    <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                      <RequirementGridHeaderLabel
+                        icon={titleColumn?.icon}
+                        label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+              builtinHeaders={[
                 ...(showSourceColumn
                   ? [
                       {

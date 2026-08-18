@@ -579,6 +579,7 @@ export const RequirementGridHeader = ({
   rootFields,
   showActionGutter,
   leadingHeader,
+  leadingHeaders,
   builtinHeaders,
   extraHeaders,
   trailingHeader,
@@ -594,6 +595,15 @@ export const RequirementGridHeader = ({
     stickyCell?: boolean;
     onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
   };
+  /** 多列左固定（编号 + 标题）。有它时优先于 leadingHeader */
+  leadingHeaders?: {
+    key: string;
+    className: string;
+    content: React.ReactNode;
+    style?: React.CSSProperties;
+    stickyCell?: boolean;
+    onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  }[];
   /**
    * 内置列的表头，恒排在自定义字段列之前。内置列永远是单列，不参与表单字段的
    * 二级表头跨列逻辑，所以只跟着 spanRows 走。
@@ -619,21 +629,25 @@ export const RequirementGridHeader = ({
   const formFields = rootFields.filter((field) => field.field_type === "form");
   const hasFormFields = formFields.length > 0;
   const spanRows = hasFormFields ? 2 : 1;
+  const resolvedLeadingHeaders =
+    leadingHeaders ??
+    (leadingHeader ? [{ key: "leading", ...leadingHeader }] : []);
 
   return (
     <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
       <tr>
-        {leadingHeader && (
+        {resolvedLeadingHeaders.map((header) => (
           <th
+            key={header.key}
             rowSpan={spanRows}
-            className={leadingHeader.className}
-            style={leadingHeader.style}
-            data-requirement-sticky-cell={leadingHeader.stickyCell ? "" : undefined}
+            className={header.className}
+            style={header.style}
+            data-requirement-sticky-cell={header.stickyCell ? "" : undefined}
           >
-            {leadingHeader.content}
-            {leadingHeader.onResize && <RequirementGridColumnResizer onMouseDown={leadingHeader.onResize} />}
+            {header.content}
+            {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
           </th>
-        )}
+        ))}
         {builtinHeaders?.map((header) => (
           <th
             key={header.key}

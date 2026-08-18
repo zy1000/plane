@@ -522,7 +522,11 @@ def _canonical_asset_values(owner, value, *, image_only=False):
     return result
 
 
-def validate_requirement_leaf_value(*, owner, field, value, enforce_required=True):
+def validate_requirement_leaf_value(
+    *, owner, field, value, enforce_required=True, current_value=None
+):
+    """current_value 是这一格更新前的值。成员字段只在**换人**时校验成员资格 —— 已离开
+    工作区的人挂在旧行上不该让整行写不动，与内置列负责人 / 父项的「只拦新指派」一致。"""
     field_type = field_attr(field, "field_type")
     is_required = bool(field_attr(field, "is_required", False))
 
@@ -544,14 +548,18 @@ def validate_requirement_leaf_value(*, owner, field, value, enforce_required=Tru
                 member_id = serializers.UUIDField().run_validation(value)
             except serializers.ValidationError as exc:
                 raise serializers.ValidationError("Member values must be UUIDs.") from exc
-            eligible_ids = get_requirement_eligible_user_ids(
-                workspace_id=owner.workspace_id,
-                user_ids=[member_id],
+            unchanged = current_value not in ("", None) and str(member_id) == str(
+                current_value
             )
-            if member_id not in eligible_ids:
-                raise serializers.ValidationError(
-                    "The selected member is not active in this workspace."
+            if not unchanged:
+                eligible_ids = get_requirement_eligible_user_ids(
+                    workspace_id=owner.workspace_id,
+                    user_ids=[member_id],
                 )
+                if member_id not in eligible_ids:
+                    raise serializers.ValidationError(
+                        "The selected member is not active in this workspace."
+                    )
             value = str(member_id)
     elif field_type == RequirementFieldType.BOOLEAN:
         if value is not None and not isinstance(value, bool):
@@ -607,8 +615,11 @@ def validate_requirement_leaf_value(*, owner, field, value, enforce_required=Tru
     return value
 
 
-def validate_requirement_data(*, owner, data, fields):
+def validate_requirement_data(*, owner, data, fields, current_data=None):
     """校验并规范化一行需求数据（合并态，含内置字段）。
+
+    current_data 是更新路径上这一行当前的 data，只用于成员字段的「只拦新指派」判定
+    （见 validate_requirement_leaf_value）；新增路径不传。
 
     owner 是这行数据的归属（基线或标准库），只用于取 workspace_id 做资产与成员
     校验。fields 必须由调用方显式给出 —— 就是这一行所绑定的那个需求类型的字段。
@@ -632,6 +643,7 @@ def validate_requirement_data(*, owner, data, fields):
             {"data": f"Unknown root field ids: {', '.join(sorted(unknown_root_ids))}"}
         )
 
+    current_data = current_data or {}
     canonical = {}
     used_child_row_ids = set()
     for field in roots:
@@ -643,6 +655,7 @@ def validate_requirement_data(*, owner, data, fields):
                 field=field,
                 value=raw_value,
                 enforce_required=field.is_active,
+                current_value=current_data.get(field_key),
             )
             continue
 
@@ -658,6 +671,11 @@ def validate_requirement_data(*, owner, data, fields):
 
         child_fields = children_by_parent.get(field.id, [])
         child_ids = {str(child.id) for child in child_fields}
+        current_rows_by_id = {
+            str(item.get("id")): (item.get("values") or {})
+            for item in (current_data.get(field_key) or [])
+            if isinstance(item, dict) and item.get("id")
+        }
         canonical_rows = []
         for row in rows:
             if not isinstance(row, dict) or not row.get("id"):
@@ -691,6 +709,7 @@ def validate_requirement_data(*, owner, data, fields):
                     }
                 )
             canonical_values = {}
+            current_values = current_rows_by_id.get(row_id, {})
             for child in child_fields:
                 child_key = str(child.id)
                 canonical_values[child_key] = validate_requirement_leaf_value(
@@ -698,6 +717,7 @@ def validate_requirement_data(*, owner, data, fields):
                     field=child,
                     value=values.get(child_key, child.default_value),
                     enforce_required=field.is_active and child.is_active,
+                    current_value=current_values.get(child_key),
                 )
             canonical_rows.append({"id": row_id, "values": canonical_values})
         canonical[field_key] = canonical_rows
@@ -794,7 +814,14 @@ def validate_requirement_builtin_values(
             values[column] = BUILTIN_COLUMN_DEFAULTS[column]
 
     assignee_id = values.get("assignee_id")
-    if assignee_id:
+    # 与下面父项的规则同一个道理：只拦**新指派**。负责人离开工作区后，他名下的需求
+    # 仍然要能改标题、改描述 —— 回填出来的旧值不该让整行写不动
+    current_assignee_id = (
+        str(field_attr(current_row, "assignee_id"))
+        if current_row is not None and field_attr(current_row, "assignee_id")
+        else None
+    )
+    if assignee_id and str(assignee_id) != current_assignee_id:
         eligible_ids = get_requirement_eligible_user_ids(
             workspace_id=owner.workspace_id,
             user_ids=[assignee_id],
@@ -1099,10 +1126,12 @@ class RequirementUpdateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
     version = serializers.IntegerField(min_value=1)
 
     def validate_data(self, value):
+        current_row = self.context.get("current_row")
         return validate_requirement_data(
             owner=self.context["owner"],
             data=value,
             fields=self.context["fields"],
+            current_data=getattr(current_row, "data", None),
         )
 
     def validate(self, attrs):
@@ -1138,17 +1167,19 @@ class RequirementBatchUpdateSerializer(
             raise serializers.ValidationError(
                 {"id": "The requirement was not found."}
             )
+        current_row = (self.context.get("rows_by_id") or {}).get(attrs["id"])
         attrs["data"] = validate_requirement_data(
             owner=self.context["owner"],
             data=attrs["data"],
             fields=self.context["requirement_type_resolver"].specs(
                 requirement_type_id
             ),
+            current_data=getattr(current_row, "data", None),
         )
         attrs["builtin"] = self.resolve_builtin(
             attrs,
             row_id=attrs["id"],
-            current_row=(self.context.get("rows_by_id") or {}).get(attrs["id"]),
+            current_row=current_row,
         )
         return attrs
 

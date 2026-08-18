@@ -30,6 +30,9 @@ import type {
   TRequirementConfigurationPayload,
   TRequirementContainerLinkPayload,
   TRequirementData,
+  TRequirementExcelImportResponse,
+  TRequirementExcelScope,
+  TRequirementExcelValidation,
   TRequirementFilter,
   TRequirementImportPayload,
   TRequirementImportResponse,
@@ -45,6 +48,39 @@ import type {
   TUpdateRequirementLibraryPayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
+
+/**
+ * 从 Content-Disposition 解析下载文件名，支持 RFC5987 的 `filename*=UTF-8''...`。
+ * 与 services/issue/issue.service.ts 里那份同形 —— 后端也用的同一个响应头工具。
+ */
+function parseAttachmentFilename(disposition?: string): string | null {
+  if (!disposition) return null;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  return disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? null;
+}
+
+/**
+ * responseType 是 blob 时，出错的响应体也会被当成 blob 收下来。不解回文本的话，调用方
+ * 拿到的是一个没法读的 Blob，错误提示会变成一句「[object Blob]」。
+ */
+async function unwrapBlobError(error: any) {
+  const data = error?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      return JSON.parse(await data.text());
+    } catch {
+      return { error: "导出失败，请稍后重试。" };
+    }
+  }
+  return data;
+}
 
 /** 需求接口的作用域。product = 归属（可写），project = 引用（只读） */
 export type TRequirementScope = { kind: "product" | "project"; id: string };
@@ -105,6 +141,92 @@ export class RequirementService extends APIService {
   /** 基线快照的作用域前缀 */
   private baselinesRoot(workspaceSlug: string, productId: string) {
     return `${this.scopeRoot(workspaceSlug, { kind: "product", id: productId })}/requirement-baselines`;
+  }
+
+  /**
+   * Excel 导入 / 导出的作用域前缀。产品需求与标准库条目共用同一组 handler
+   * （后端挂在 BaseRequirementRowViewSet 上），这里只是把两条路径收敛成一个分派。
+   */
+  private excelRoot(workspaceSlug: string, scope: TRequirementExcelScope, entityId: string) {
+    return scope === "product"
+      ? `${this.requirementsRoot(workspaceSlug, entityId)}/excel`
+      : `/api/workspaces/${workspaceSlug}/requirement-libraries/${entityId}/items/excel`;
+  }
+
+  /* --- 需求 Excel 导入 / 导出 ------------------------------------------- */
+
+  /**
+   * 导出（或下载空模板）。
+   *
+   * 返回 blob 而不是让浏览器直接跳转：接口带鉴权头，`window.open` 拿不到；而且出错时
+   * 后端返回的是 JSON，需要在这里解回来（见下面的 catch）。
+   */
+  async exportRequirementsExcel(
+    workspaceSlug: string,
+    scope: TRequirementExcelScope,
+    entityId: string,
+    params?: {
+      search?: string;
+      filters?: TRequirementFilter[];
+      /** 类型视图导出单个 Sheet；默认视图不传，按需求类型分 Sheet 导全部 */
+      requirementTypeIds?: string[];
+      /** 只出表头的空模板 */
+      template?: boolean;
+    }
+  ): Promise<{ blob: Blob; filename: string }> {
+    return this.get(
+      `${this.excelRoot(workspaceSlug, scope, entityId)}/`,
+      {
+        params: {
+          ...(params?.search ? { search: params.search } : {}),
+          ...(params?.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
+          ...(params?.requirementTypeIds?.length
+            ? { requirement_type_id: params.requirementTypeIds.join(",") }
+            : {}),
+          ...(params?.template ? { template: "1" } : {}),
+        },
+      },
+      { responseType: "blob" }
+    )
+      .then((response) => ({
+        blob: response?.data as Blob,
+        filename: parseAttachmentFilename(response?.headers?.["content-disposition"]) ?? "需求.xlsx",
+      }))
+      .catch(async (error) => {
+        throw await unwrapBlobError(error);
+      });
+  }
+
+  /** 上传文件做逐行校验，不写库。返回的结果直接喂给预览表格 */
+  async validateRequirementExcelImport(
+    workspaceSlug: string,
+    scope: TRequirementExcelScope,
+    entityId: string,
+    formData: FormData
+  ): Promise<TRequirementExcelValidation> {
+    return this.post(`${this.excelRoot(workspaceSlug, scope, entityId)}/validate/`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 正式导入。row_keys 省略表示导入全部通过校验的行 */
+  async importRequirementsExcel(
+    workspaceSlug: string,
+    scope: TRequirementExcelScope,
+    entityId: string,
+    formData: FormData
+  ): Promise<TRequirementExcelImportResponse> {
+    return this.post(`${this.excelRoot(workspaceSlug, scope, entityId)}/import/`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
   }
 
   /* --- 需求标准库 ------------------------------------------------------- */

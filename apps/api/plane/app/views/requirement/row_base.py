@@ -10,6 +10,7 @@
 """
 
 import json
+from typing import NamedTuple
 
 from django.db import transaction
 from rest_framework import status
@@ -25,6 +26,7 @@ from plane.app.serializers.requirement import (
     RequirementUpdateSerializer,
 )
 from plane.app.views.base import BaseViewSet
+from plane.app.views.requirement.excel import RequirementExcelMixin
 from plane.db.models import Requirement, RequirementItemStatus
 from plane.utils.requirement import (
     CONTENT_BUILTIN_COLUMNS,
@@ -58,7 +60,38 @@ def annotate_pending(queryset):
     )
 
 
-class BaseRequirementRowViewSet(BaseViewSet):
+class RowQuery(NamedTuple):
+    """列表的三个查询维度：按类型切视图、搜索、字段筛选。
+
+    抽出来是因为 Excel 导出要跟随「当前视图看到的是什么」—— 所见即所得。两边共用同一份
+    解析与应用逻辑，筛选语义就不可能漂。
+    """
+
+    requirement_type_ids: list
+    search: str
+    filters: list
+
+    def apply(self, queryset, layer):
+        if self.requirement_type_ids:
+            queryset = queryset.filter(
+                requirement_type_id__in=self.requirement_type_ids
+            )
+        return self.apply_search(queryset, layer)
+
+    def apply_search(self, queryset, layer):
+        if not self.search.strip() and not self.filters:
+            return queryset
+        matching_ids = filter_requirement_row_ids(
+            fields=layer.fields,
+            rows=queryset,
+            search=self.search,
+            filters=self.filters,
+            fields_by_requirement_type=layer.fields_by_requirement_type,
+        )
+        return queryset.filter(id__in=matching_ids)
+
+
+class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
     model = Requirement
     serializer_class = RequirementSerializer
 
@@ -147,46 +180,63 @@ class BaseRequirementRowViewSet(BaseViewSet):
             status=status.HTTP_409_CONFLICT,
         )
 
-    def list(self, request, *args, **kwargs):
-        owner, error = self._owner_or_error(require_write=False)
-        if error is not None:
-            return error
-
+    def _row_query(self, request, owner, layer):
+        """解析列表/导出共用的三个查询维度，返回 (RowQuery, error_response)。"""
         raw_filters = request.query_params.get("filters", "[]")
         try:
             filter_payload = json.loads(raw_filters)
         except (TypeError, ValueError, json.JSONDecodeError):
-            return Response(
-                {"filters": "Filters must be a JSON array."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            filter_payload = None
         if not isinstance(filter_payload, list):
-            return Response(
+            return None, Response(
                 {"filters": "Filters must be a JSON array."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        layer = self.resolve_layer(owner)
         filter_serializer = RequirementFilterSerializer(
             data=filter_payload,
             many=True,
             context={"owner": owner, "fields": layer.fields},
         )
         filter_serializer.is_valid(raise_exception=True)
-        normalized_filters = [
-            {
-                "field_id": str(item["field_id"]),
-                "operator": item["operator"],
-                **({"value": item.get("value")} if "value" in item else {}),
-            }
-            for item in filter_serializer.validated_data
-        ]
+        return (
+            RowQuery(
+                # 按需求类型切视图必须在服务端过滤 —— 条目是游标分页的，前端拿到的只是一页
+                requirement_type_ids=[
+                    item
+                    for item in (
+                        request.query_params.get("requirement_type_id") or ""
+                    ).split(",")
+                    if item
+                ],
+                search=request.query_params.get("search", ""),
+                filters=[
+                    {
+                        "field_id": str(item["field_id"]),
+                        "operator": item["operator"],
+                        **({"value": item.get("value")} if "value" in item else {}),
+                    }
+                    for item in filter_serializer.validated_data
+                ],
+            ),
+            None,
+        )
+
+    def list(self, request, *args, **kwargs):
+        owner, error = self._owner_or_error(require_write=False)
+        if error is not None:
+            return error
+
+        layer = self.resolve_layer(owner)
+        query, error = self._row_query(request, owner, layer)
+        if error is not None:
+            return error
 
         queryset = layer.queryset
-        # 按需求类型切视图必须在服务端过滤 —— 条目是游标分页的，前端拿到的只是一页
-        requirement_type_id = request.query_params.get("requirement_type_id")
-        if requirement_type_id:
-            queryset = queryset.filter(requirement_type_id=requirement_type_id)
+        if query.requirement_type_ids:
+            queryset = queryset.filter(
+                requirement_type_id__in=query.requirement_type_ids
+            )
 
         # 按 id 直取：父项选择器要回显一个可能不在当前页、也不在搜索结果里的行，
         # 需求详情也走这条路（后端没有 retrieve 端点）。
@@ -204,16 +254,7 @@ class BaseRequirementRowViewSet(BaseViewSet):
             # 主列表默认不带；?ids= 回显豁免 —— 已指向已关闭父项的行仍要显示父项标题
             queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
 
-        search = request.query_params.get("search", "")
-        if search.strip() or normalized_filters:
-            matching_ids = filter_requirement_row_ids(
-                fields=layer.fields,
-                rows=queryset,
-                search=search,
-                filters=normalized_filters,
-                fields_by_requirement_type=layer.fields_by_requirement_type,
-            )
-            queryset = queryset.filter(id__in=matching_ids)
+        queryset = query.apply_search(queryset, layer)
 
         return self.paginate(
             request=request,

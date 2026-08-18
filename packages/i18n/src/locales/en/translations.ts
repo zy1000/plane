@@ -1629,6 +1629,68 @@ export default {
       page: "page",
     },
   },
+  requirement_excel: {
+    menu: {
+      label: "Excel",
+      import: "Import from Excel",
+      export: "Export to Excel",
+      template: "Download import template",
+    },
+    export: {
+      failed: "Export failed. Please try again.",
+    },
+    template: {
+      failed: "Could not download the template. Please try again.",
+    },
+    modal: {
+      title: "Import requirements",
+      back: "Back",
+      next: "Next",
+      confirm: "Start import",
+    },
+    upload: {
+      template_title: "1. Prepare the sheet",
+      template_hint:
+        "Column headers are the requirement type's own column names. If you already have data, export it, edit, and import it straight back.",
+      file_title: "2. Choose a file",
+      file_hint: "Only .xlsx, up to 5000 rows and 5 MB per file.",
+      file_action: "Choose file",
+      file_replace: "Choose another",
+      no_file: "No file selected yet",
+      rules_title: "How to fill it in",
+      rule_sequence:
+        "Leave the ID blank to create a new requirement. With an ID it updates that row, and the ID must belong to the current scope.",
+      rule_member:
+        "For the assignee, use the member's display name (that is what export writes). If two members share a name, use their email instead. The same applies to custom member fields.",
+      rule_parent:
+        "Put the parent requirement's ID in the parent column (e.g. ECOM-12). If the parent is also new in this file and has no ID yet, use #excelrow (e.g. #5) — same sheet only. Leave it blank for no parent.",
+      rule_form:
+        "Form fields use a two-row header: a requirement spans as many rows as it has sub-records, other columns are merged vertically, and continuation rows stay blank.",
+      rule_skipped:
+        "Requirements under review or closed are read-only and get skipped. Attachment and image columns are not exported or imported.",
+    },
+    validate: {
+      summary: "{create} to create, {update} to update, {unchanged} unchanged, {skip} skipped, {error} with problems.",
+      selected: "{count} rows selected",
+      tab_all: "All ({count})",
+      tab_problem: "Problems only ({count})",
+      column_row: "Location",
+      column_title: "Title",
+      column_action: "Action",
+      column_message: "Details",
+      action_create: "Create",
+      action_update: "Update",
+      action_unchanged: "Unchanged",
+      action_skip: "Skip",
+      action_error: "Problem",
+      ignored_sheets: "These sheets do not match any requirement type and were ignored: {names}",
+      ignored_headers: "These columns do not match any field and were ignored: {names}",
+      empty: "No data rows found",
+    },
+    toast: {
+      imported: "Imported: {created} created, {updated} updated",
+    },
+  },
   requirement_libraries: {
     title: "Standard libraries",
     create: "New library",

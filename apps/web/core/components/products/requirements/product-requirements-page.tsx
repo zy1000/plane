@@ -192,6 +192,26 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     void approvalInbox.fetchInbox({ silent: true }).catch(() => undefined);
   };
 
+  /**
+   * Excel 出入口的参数。导出跟随当前视图：类型视图导那一个类型的单 Sheet，默认视图按
+   * 需求类型分 Sheet 导全部，搜索与筛选一并带上 —— 所见即所得。
+   */
+  const excelArgs = useMemo(
+    () => ({
+      workspaceSlug: workspaceSlug ?? "",
+      productId: productId ?? "",
+      search: store.search,
+      filters: store.filters,
+      requirementTypeIds:
+        activeView.kind === "requirementType" ? [activeView.requirementTypeId] : undefined,
+    }),
+    [workspaceSlug, productId, store.search, store.filters, activeView]
+  );
+  // onImported 刻意不进 memo：refreshLayer 每次渲染都是新的，放进去要么让 memo 失效，
+  // 要么捕获一个过期的闭包。导入可能引入本产品此前没引用过的需求类型，配置不重取的话
+  // 视图切换器不会出现新 tab
+  const excelProps = { ...excelArgs, onImported: refreshLayer };
+
   const approvalActions = useRequirementApprovalActions({
     changesStore,
     onSettled: refreshLayer,
@@ -286,6 +306,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onManualEntry={() =>
                     activeView.kind === "requirementType" ? gridRef.current?.addRow() : setIsCreateOpen(true)
                   }
+                  excel={excelProps}
                 />
               )}
             </div>
@@ -343,6 +364,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                     onImportPrefetch={() => setShouldPrefetchImport(true)}
                     onImport={() => setIsImportOpen(true)}
                     onManualEntry={() => setIsCreateOpen(true)}
+                    excel={excelProps}
                   />
                 ) : undefined
               }
