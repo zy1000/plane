@@ -660,17 +660,10 @@ export const RequirementGridHeader = ({
         ))}
         {rootFields.map((field) =>
           field.field_type === "form" ? (
-            /*
-             * 分组表头比其它表头深一档（bg-layer-1-active），子表头则与普通表头同色。
-             * 原先这里是 bg-accent-subtle/30、子表头 bg-accent-subtle/15：cn 是 twMerge，
-             * 后写的 bg-* 会把 HEADER_CELL_BASE 里的 bg-layer-1 整个顶掉，而 accent-subtle
-             * 在浅色主题下比 layer-1 还浅、深色主题下又比它深，任何透明度都够不到表头灰。
-             * 结果就是表头右半边整块发白，像缺了一角。分组感交给深一档的色阶。
-             */
             <th
               key={field.id}
               colSpan={getFormColumnCount(field, showActionGutter)}
-              className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "bg-layer-1-active text-center")}
+              className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "text-center")}
             >
               <span className="truncate text-13 font-medium text-secondary">{field.name}</span>
             </th>
