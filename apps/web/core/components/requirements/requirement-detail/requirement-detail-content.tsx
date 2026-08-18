@@ -431,6 +431,7 @@ export const RequirementDetailContent = (props: TProps) => {
           entityId={requirement.id}
           readOnly={readOnly}
           defaultOpenCount={layout === "page" ? 2 : 1}
+          defaultOpenEmpty={!readOnly}
           storageKey={`requirement:subforms:${requirement.requirement_type_id}`}
           onChange={commitData}
           onUpload={uploadAsset}

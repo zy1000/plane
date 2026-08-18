@@ -1,13 +1,12 @@
 /**
  * 项目需求页（/:ws/projects/:pid/requirements）。
  *
- * 展示的是**产品需求被本项目引用的那一份**：内容只读，项目能改的只有关联关系本身
- * 与需求级交付状态（人工维护、跨项目共享一份），想改内容只能提变更单（走产品现有的
- * 审批名单）。这与同一路径下曾经的「按工作项类别过滤的列表」不是一回事 ——
- * 那个页面（研发需求 /dev-requirements）已下线。
+ * 展示的是**产品需求被本项目引用的那一份**：网格内容只读，项目能改的是关联关系
+ * 与需求级交付状态。详情抽屉打到产品端点上 —— 当前用户对该产品有 can_edit 时
+ * 可以在抽屉里改标题、字段和子表单，否则只读。
  *
- * 详情抽屉复用产品侧的 RequirementPeekOverview 并传 productId={row.product_id}：
- * 需求内容、版本、变更轨迹的权威都在产品，项目侧不该另开一套读路径。
+ * 这与同一路径下曾经的「按工作项类别过滤的列表」不是一回事 ——
+ * 那个页面（研发需求 /dev-requirements）已下线。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
@@ -26,15 +25,15 @@ import { ProductChip } from "@/components/products/product-chip";
 import { PageHead } from "@/components/core/page-title";
 import { isRequirementClosed } from "@/components/requirements";
 import {
-  RequirementIssuesSection,
   RequirementPeekOverview,
-  RequirementTestCasesSection,
+  RequirementProjectRelations,
 } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useProject } from "@/hooks/store/use-project";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
+import { useProductRequirementCanEdit } from "@/hooks/store/use-product-requirement-can-edit";
 import { useProjectRequirements } from "@/hooks/store/use-project-requirements";
 import { useUserPermissions } from "@/hooks/store/user";
 import { RequirementService } from "@/services/requirement.service";
@@ -203,6 +202,10 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
       (fetchedPeekRow?.id === peekRequirementId ? fetchedPeekRow : null),
     [fetchedPeekRow, peekRequirementId, rows]
   );
+  const canEditPeek = useProductRequirementCanEdit({
+    workspaceSlug: slug,
+    productId: peekRow?.product_id ?? undefined,
+  });
 
   useEffect(() => {
     if (!slug || !project || !peekRequirementId) return;
@@ -360,7 +363,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
 
       {/*
         详情抽屉打到**产品**的端点上：需求内容、版本、变更轨迹的权威都在产品。
-        canEdit 恒 false —— 项目侧对需求内容没有任何写入口。
+        canEdit 看的是该产品的 policy.can_edit，不是项目权限 —— 项目成员不一定
+        是产品成员，没权就继续只读，有权就能在抽屉里改字段和子表单。
         peekRow 作为 seed 传进去，抽屉就不必再为已经在页面上的行发一次请求。
       */}
       {peekRow && (
@@ -370,9 +374,10 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           requirementId={peekRequirementId}
           requirementTypes={store.requirementTypes}
           rows={rows}
-          canEdit={false}
+          canEdit={canEditPeek}
           onClose={() => setPeekRequirement(null)}
           onOpenRequirement={setPeekRequirement}
+          onRequirementUpdated={(requirement) => void refreshRequirementRow(requirement.id)}
           /*
            * 复制链接要指回本页的 ?peek=，而不是产品的整页 —— 分享出去的应该是收件人
            * 能看到的这个视图。「打开整页」直接隐藏：需求在项目里没有整页路由，跳去
@@ -384,38 +389,20 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             <ProductChip identifier={peekRow.product_identifier} name={peekRow.product_name} />
           }
           /*
-           * 关联工作项 Section 只在项目侧注入：拆分/关联/解除都要项目语境，产品侧
-           * 抽屉没有。预填取列表行 —— 项目侧看到的就是已通过评审的那一版内容，
-           * linked_cycle_ids 注解也只有它带。
-           * 已关闭的需求不再拆分/关联新工作项（section 只有一个 canManage 同时管
-           * 新增与解除，closed 行的解除靠服务端 409 兜底）。
+           * 项目侧把工作项 / 用例收进同一组关联区（快捷操作条 + 折叠列表）。
+           * 拆分/关联/解除都要项目语境，产品侧抽屉不注入这一块。
+           * 已关闭的需求不再拆分或新增关联（closed 行的解除靠服务端 409 兜底）。
            */
           issuesSection={
-            <RequirementIssuesSection
+            <RequirementProjectRelations
               workspaceSlug={slug}
               projectId={project}
+              productId={peekRow.product_id}
               requirementId={peekRow.id}
               requirement={peekRow}
               canManage={canManage && !isRequirementClosed(peekRow)}
               onChanged={() => void refreshRequirementRow(peekRow.id)}
             />
-          }
-          /*
-           * 关联测试用例走**产品**作用域的端点（关联行是需求级的，不带 project）。项目
-           * 成员不一定是产品成员，所以后端那个端点是「产品权限 或 该需求已关联项目的
-           * PROJECT_REQUIREMENT_LINK_* 」两道门 —— 项目侧靠第二道进。
-           * 与关联工作项一样按 canManage 给写权限；closed 行不再新增关联。
-           */
-          testCasesSection={
-            peekRow.product_id ? (
-              <RequirementTestCasesSection
-                workspaceSlug={slug}
-                productId={peekRow.product_id}
-                requirementId={peekRow.id}
-                canManage={canManage && !isRequirementClosed(peekRow)}
-                scopeProjectId={project}
-              />
-            ) : null
           }
         />
       )}

@@ -362,7 +362,7 @@ export type TLinkableRequirementsResponse = Omit<TPaginatedResponse<TRequirement
 
 /* --- 需求进项目（RequirementProject） -------------------------------------- */
 
-/** 项目侧看到的一条需求：需求内容（含需求级 status）+ 本项目内的关联信息。内容一律只读。 */
+/** 项目侧看到的一条需求：需求内容（含需求级 status）+ 本项目内的关联信息。网格只读，抽屉按产品 can_edit 决定能不能改内容。 */
 export type TProjectRequirement = TRequirement & {
   /** 关联行上的排序，与需求本体的 sort_order 是两个数 */
   link_sort_order: number | null;

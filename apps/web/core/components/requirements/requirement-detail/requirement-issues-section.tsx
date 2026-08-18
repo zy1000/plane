@@ -13,12 +13,11 @@ import { observer } from "mobx-react";
 import { Link2, Link2Off, Split } from "lucide-react";
 import { STATE_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
-import { IconButton } from "@plane/propel/icon-button";
+import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { ISearchIssueResponse, TIssue, TRequirement, TRequirementIssue } from "@plane/types";
-import { AlertModalCore, Loader } from "@plane/ui";
+import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn, generateWorkItemLink } from "@plane/utils";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
@@ -26,9 +25,10 @@ import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { useProject } from "@/hooks/store/use-project";
 import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
+import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 
 /**
- * 关联工作项的一行：编号 / 标题 / 状态胶囊 / 负责人 / 解除按钮。
+ * 关联工作项的一行：编号 / 标题 / 状态 / 负责人 / 解除按钮。
  *
  * 项目侧 Section 与产品侧按项目分组共用 —— 两侧的差别只有「能不能解除」，收在
  * onUnlink 是否传入里，不另开一套行渲染。
@@ -76,31 +76,38 @@ export const RequirementIssueRow = ({
           />
         </span>
       )}
-      <span className="min-w-0 flex-1 truncate text-primary group-hover:underline">{issue.name}</span>
+      <Tooltip tooltipContent={issue.name}>
+        <span className="min-w-0 flex-1 truncate text-13 text-primary">{issue.name}</span>
+      </Tooltip>
     </>
   );
 
   return (
     // 归档仍是事实（照常计入工作项数与完成率），只在展示上置灰
-    <div className={cn("flex items-center gap-2.5 px-3 py-2 text-12", isArchived && "opacity-60")}>
+    <div
+      className={cn(
+        "group relative flex min-h-11 w-full items-center gap-3 px-2.5 py-1 transition-colors hover:bg-surface-2",
+        isArchived && "opacity-60"
+      )}
+    >
       {workItemLink ? (
         <a
           href={workItemLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="group flex min-w-0 flex-1 items-center gap-2.5"
+          className="flex min-w-0 flex-1 items-center gap-3"
         >
           {heading}
         </a>
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-2.5">{heading}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-3">{heading}</span>
       )}
 
-      {/* 状态胶囊按 state_group 配色 —— 状态名是项目内自定义的，group 才是稳定的
+      {/* 状态按 state_group 配色 —— 状态名是项目内自定义的，group 才是稳定的
           跨项目语义轴（完成率也按它算），行内色点与之保持同一口径 */}
-      <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-sm bg-layer-2 px-1.5 text-11 font-medium text-secondary">
+      <span className="inline-flex h-5 shrink-0 items-center gap-1.5 text-13 text-secondary">
         <span
-          className="size-1.5 rounded-full"
+          className="size-2 rounded-full"
           style={{
             backgroundColor:
               (issue.state_group && STATE_GROUPS[issue.state_group]?.color) || issue.state_color || undefined,
@@ -117,15 +124,14 @@ export const RequirementIssueRow = ({
 
       {onUnlink && (
         <Tooltip tooltipContent={t("project_requirements.issues.unlink")}>
-          <span className="shrink-0">
-            <IconButton
-              variant="ghost"
-              size="sm"
-              icon={Link2Off}
-              aria-label={t("project_requirements.issues.unlink")}
-              onClick={() => onUnlink(issue)}
-            />
-          </span>
+          <button
+            type="button"
+            aria-label={t("project_requirements.issues.unlink")}
+            onClick={() => onUnlink(issue)}
+            className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+          >
+            <Link2Off className="size-3.5" />
+          </button>
         </Tooltip>
       )}
     </div>
@@ -150,10 +156,31 @@ type TProps = {
    * 网格与抽屉 seed 会停在旧值上。关联/解除不改需求状态（状态是人工维护的）。
    */
   onChanged?: () => void;
+  /** 外层已有快捷操作条时，空列表不再占一块折叠头 */
+  hideWhenEmpty?: boolean;
+  /** 外层工具条已经承担新增时，折叠头不再放 + */
+  hideAddActions?: boolean;
+  splitModalOpen?: boolean;
+  onSplitModalOpenChange?: (open: boolean) => void;
+  linkModalOpen?: boolean;
+  onLinkModalOpenChange?: (open: boolean) => void;
 };
 
 export const RequirementIssuesSection = observer(function RequirementIssuesSection(props: TProps) {
-  const { workspaceSlug, projectId, requirementId, requirement, canManage, onChanged } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    requirementId,
+    requirement,
+    canManage,
+    onChanged,
+    hideWhenEmpty = false,
+    hideAddActions = false,
+    splitModalOpen,
+    onSplitModalOpenChange,
+    linkModalOpen,
+    onLinkModalOpenChange,
+  } = props;
   const { t } = useTranslation();
   const { getProjectIdentifierById } = useProject();
   const { issues, isLoading, linkIssues, unlinkIssue } = useRequirementIssues({
@@ -162,14 +189,20 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
     requirementId,
   });
 
-  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
-  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [localSplitOpen, setLocalSplitOpen] = useState(false);
+  const [localLinkOpen, setLocalLinkOpen] = useState(false);
+  const isSplitModalOpen = splitModalOpen ?? localSplitOpen;
+  const setIsSplitModalOpen = onSplitModalOpenChange ?? setLocalSplitOpen;
+  const isLinkModalOpen = linkModalOpen ?? localLinkOpen;
+  const setIsLinkModalOpen = onLinkModalOpenChange ?? setLocalLinkOpen;
   /** 待确认解除的行；非空即弹确认框，与项目需求页解除关联同一交互口径 */
   const [issueToUnlink, setIssueToUnlink] = useState<TRequirementIssue | null>(null);
   const [isUnlinking, setIsUnlinking] = useState(false);
 
   const projectIdentifier = getProjectIdentifierById(projectId) || undefined;
   const linkedCycleIds = requirement.linked_cycle_ids ?? [];
+  const completedCount = issues.filter((issue) => issue.state_group === "completed").length;
+  const showList = issues.length > 0 || !hideWhenEmpty;
 
   const notifyLinkFailure = (error: unknown) => {
     const payload = error as
@@ -240,47 +273,62 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
 
   return (
     <>
-      <section className="flex flex-col gap-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-13 font-medium text-primary">
-            {t("project_requirements.issues.section_title")}
-          </span>
-          {canManage && (
-            <span className="flex shrink-0 items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setIsSplitModalOpen(true)}>
-                <Split className="size-3" />
-                {t("project_requirements.issues.split")}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setIsLinkModalOpen(true)}>
-                <Link2 className="size-3" />
-                {t("project_requirements.issues.link_existing")}
-              </Button>
-            </span>
+      {showList && (
+        <RequirementRelationCollapsible
+          title={t("project_requirements.issues.widget_title")}
+          progress={{
+            completed: completedCount,
+            total: issues.length,
+            doneLabel: t("common.done"),
+          }}
+          actions={
+            canManage && !hideAddActions ? (
+              <CustomMenu
+                customButton={<PlusIcon className="h-4 w-4" />}
+                customButtonClassName="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+                placement="bottom-end"
+                closeOnSelect
+              >
+                <CustomMenu.MenuItem onClick={() => setIsSplitModalOpen(true)}>
+                  <div className="flex items-center gap-2">
+                    <Split className="h-3 w-3" />
+                    <span>{t("project_requirements.issues.split")}</span>
+                  </div>
+                </CustomMenu.MenuItem>
+                <CustomMenu.MenuItem onClick={() => setIsLinkModalOpen(true)}>
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-3 w-3" />
+                    <span>{t("project_requirements.issues.link_existing")}</span>
+                  </div>
+                </CustomMenu.MenuItem>
+              </CustomMenu>
+            ) : undefined
+          }
+        >
+          {isLoading && !issues.length ? (
+            <div className="px-2.5 pb-2.5">
+              <Loader className="flex flex-col gap-1.5">
+                <Loader.Item height="36px" />
+                <Loader.Item height="36px" />
+              </Loader>
+            </div>
+          ) : issues.length ? (
+            <div className="pb-1">
+              {issues.map((issue) => (
+                <RequirementIssueRow
+                  key={issue.id}
+                  workspaceSlug={workspaceSlug}
+                  issue={issue}
+                  projectIdentifier={projectIdentifier}
+                  onUnlink={canManage ? setIssueToUnlink : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="px-2.5 pb-3 text-13 text-tertiary">{t("project_requirements.issues.empty")}</p>
           )}
-        </div>
-
-        {isLoading && !issues.length ? (
-          <Loader className="flex flex-col gap-1.5">
-            <Loader.Item height="32px" />
-            <Loader.Item height="32px" />
-          </Loader>
-        ) : issues.length ? (
-          // 一个外框 + 分隔线，而不是 N 张小卡片 —— 与子需求区同版式
-          <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
-            {issues.map((issue) => (
-              <RequirementIssueRow
-                key={issue.id}
-                workspaceSlug={workspaceSlug}
-                issue={issue}
-                projectIdentifier={projectIdentifier}
-                onUnlink={canManage ? setIssueToUnlink : undefined}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-12 text-placeholder">{t("project_requirements.issues.empty")}</p>
-        )}
-      </section>
+        </RequirementRelationCollapsible>
+      )}
 
       {/* 拆分：现成创建弹窗零改造，内容预填自需求行；项目选择锁死 —— 拆出去的工作项
           必须落在本项目，换了项目关联接口会按不变量拒绝 */}

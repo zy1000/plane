@@ -17,15 +17,15 @@
  * 渲染时那个 map 是空的 —— 详见 requirement-testcase-link-modal.tsx 的说明。
  */
 import { useState } from "react";
-import { Link2, Link2Off } from "lucide-react";
+import { Link2Off } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
-import { IconButton } from "@plane/propel/icon-button";
+import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirementTestCase } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
 import { useRequirementTestCases } from "@/hooks/store/use-requirement-test-cases";
+import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 import { RequirementTestCaseLinkModal } from "./requirement-testcase-link-modal";
 
 /**
@@ -49,31 +49,28 @@ export const RequirementTestCaseRow = ({
       : (testCase.repository_name ?? "");
 
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 text-12">
+    <div className="group relative flex min-h-11 w-full items-center gap-3 px-2.5 py-1 transition-colors hover:bg-surface-2">
       {testCase.code && (
-        <span className="shrink-0 rounded-sm bg-layer-2 px-1.5 py-0.5 text-11 font-medium text-secondary">
-          {testCase.code}
-        </span>
+        <span className="shrink-0 text-13 text-tertiary tabular-nums">{testCase.code}</span>
       )}
       <Tooltip tooltipContent={testCase.name}>
-        <span className="min-w-0 flex-1 truncate text-primary">{testCase.name}</span>
+        <span className="min-w-0 flex-1 truncate text-13 text-primary">{testCase.name}</span>
       </Tooltip>
 
       {/* 用例库 / 共享库标记 —— 关联列表横跨多个项目，不标出来无法解释来源 */}
-      {scopeLabel && <span className="shrink-0 text-11 text-secondary">{scopeLabel}</span>}
-      {testCase.module_name && <span className="shrink-0 text-11 text-placeholder">{testCase.module_name}</span>}
+      {scopeLabel && <span className="shrink-0 text-13 text-secondary">{scopeLabel}</span>}
+      {testCase.module_name && <span className="shrink-0 text-13 text-tertiary">{testCase.module_name}</span>}
 
       {onUnlink && (
         <Tooltip tooltipContent={t("requirement_detail.test_cases.unlink")}>
-          <span className="shrink-0">
-            <IconButton
-              variant="ghost"
-              size="sm"
-              icon={Link2Off}
-              aria-label={t("requirement_detail.test_cases.unlink")}
-              onClick={() => onUnlink(testCase)}
-            />
-          </span>
+          <button
+            type="button"
+            aria-label={t("requirement_detail.test_cases.unlink")}
+            onClick={() => onUnlink(testCase)}
+            className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+          >
+            <Link2Off className="size-3.5" />
+          </button>
         </Tooltip>
       )}
     </div>
@@ -90,10 +87,26 @@ type TProps = {
    * 不传（产品侧）则是需求关联的全部项目 —— 产品侧本来就该看到全貌。
    */
   scopeProjectId?: string;
+  /** 外层已有快捷操作条时，空列表不再占一块折叠头 */
+  hideWhenEmpty?: boolean;
+  /** 外层工具条已经承担新增时，折叠头不再放 + */
+  hideAddActions?: boolean;
+  linkModalOpen?: boolean;
+  onLinkModalOpenChange?: (open: boolean) => void;
 };
 
 export const RequirementTestCasesSection = (props: TProps) => {
-  const { workspaceSlug, productId, requirementId, canManage, scopeProjectId } = props;
+  const {
+    workspaceSlug,
+    productId,
+    requirementId,
+    canManage,
+    scopeProjectId,
+    hideWhenEmpty = false,
+    hideAddActions = false,
+    linkModalOpen,
+    onLinkModalOpenChange,
+  } = props;
   const { t } = useTranslation();
   const { testCases, isLoading, linkTestCases, unlinkTestCase } = useRequirementTestCases({
     workspaceSlug,
@@ -101,10 +114,13 @@ export const RequirementTestCasesSection = (props: TProps) => {
     requirementId,
   });
 
-  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [localLinkOpen, setLocalLinkOpen] = useState(false);
+  const isLinkModalOpen = linkModalOpen ?? localLinkOpen;
+  const setIsLinkModalOpen = onLinkModalOpenChange ?? setLocalLinkOpen;
   /** 待确认解除的行；非空即弹确认框，与关联工作项同一交互口径 */
   const [caseToUnlink, setCaseToUnlink] = useState<TRequirementTestCase | null>(null);
   const [isUnlinking, setIsUnlinking] = useState(false);
+  const showList = testCases.length > 0 || !hideWhenEmpty;
 
   /**
    * 409 冲突要说清是哪条、为什么 —— 「不能关联」不可行动，「这条用例不在本需求的项目
@@ -165,39 +181,46 @@ export const RequirementTestCasesSection = (props: TProps) => {
 
   return (
     <>
-      <section className="flex flex-col gap-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-13 font-medium text-primary">{t("requirement_detail.test_cases.section_title")}</span>
-          {canManage && (
-            <span className="flex shrink-0 items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setIsLinkModalOpen(true)}>
-                <Link2 className="size-3" />
-                {t("requirement_detail.test_cases.link_existing")}
-              </Button>
-            </span>
+      {showList && (
+        <RequirementRelationCollapsible
+          title={t("requirement_detail.test_cases.widget_title")}
+          count={testCases.length}
+          actions={
+            canManage && !hideAddActions ? (
+              <button
+                type="button"
+                aria-label={t("requirement_detail.test_cases.link_existing")}
+                title={t("requirement_detail.test_cases.link_existing")}
+                onClick={() => setIsLinkModalOpen(true)}
+                className="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+              >
+                <PlusIcon className="h-4 w-4" />
+              </button>
+            ) : undefined
+          }
+        >
+          {isLoading && !testCases.length ? (
+            <div className="px-2.5 pb-2.5">
+              <Loader className="flex flex-col gap-1.5">
+                <Loader.Item height="36px" />
+                <Loader.Item height="36px" />
+              </Loader>
+            </div>
+          ) : testCases.length ? (
+            <div className="pb-1">
+              {testCases.map((testCase) => (
+                <RequirementTestCaseRow
+                  key={testCase.id}
+                  testCase={testCase}
+                  onUnlink={canManage ? setCaseToUnlink : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="px-2.5 pb-3 text-13 text-tertiary">{t("requirement_detail.test_cases.empty")}</p>
           )}
-        </div>
-
-        {isLoading && !testCases.length ? (
-          <Loader className="flex flex-col gap-1.5">
-            <Loader.Item height="32px" />
-            <Loader.Item height="32px" />
-          </Loader>
-        ) : testCases.length ? (
-          // 一个外框 + 分隔线，而不是 N 张小卡片 —— 与子需求区、关联工作项区同版式
-          <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
-            {testCases.map((testCase) => (
-              <RequirementTestCaseRow
-                key={testCase.id}
-                testCase={testCase}
-                onUnlink={canManage ? setCaseToUnlink : undefined}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-12 text-placeholder">{t("requirement_detail.test_cases.empty")}</p>
-        )}
-      </section>
+        </RequirementRelationCollapsible>
+      )}
 
       <RequirementTestCaseLinkModal
         isOpen={isLinkModalOpen}

@@ -16,6 +16,7 @@ import { Loader } from "@plane/ui";
 import { useProductProjects } from "@/hooks/store/use-product-projects";
 import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
 import { RequirementIssueRow } from "./requirement-issues-section";
+import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 
 /** 单个项目分组：分组头（项目名）+ 该项目下已拆工作项的行列表 */
 const ProjectIssuesGroup = ({
@@ -40,21 +41,21 @@ const ProjectIssuesGroup = ({
   });
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 items-center gap-2 px-2.5">
         <span className="truncate text-12 font-medium text-primary">
           {projectName ?? t("project_requirements.hidden_project")}
         </span>
       </div>
       {error ? (
         // 无权查看该项目（403 等）时如实说明，不能把「看不到」误报成「没拆工作项」
-        <p className="text-12 text-placeholder">{t("project_requirements.hidden_project")}</p>
+        <p className="px-2.5 text-13 text-tertiary">{t("project_requirements.hidden_project")}</p>
       ) : isLoading && !issues.length ? (
-        <Loader className="flex flex-col gap-1.5">
+        <Loader className="flex flex-col gap-1.5 px-2.5">
           <Loader.Item height="32px" />
         </Loader>
       ) : issues.length ? (
-        <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
+        <div>
           {issues.map((issue) => (
             <RequirementIssueRow
               key={issue.id}
@@ -65,7 +66,7 @@ const ProjectIssuesGroup = ({
           ))}
         </div>
       ) : (
-        <p className="text-12 text-placeholder">{t("project_requirements.issues.group_empty")}</p>
+        <p className="px-2.5 text-13 text-tertiary">{t("project_requirements.issues.group_empty")}</p>
       )}
     </div>
   );
@@ -92,11 +93,8 @@ export const RequirementIssuesByProject = ({
   if (!projectIds.length) return null;
 
   return (
-    <section className="flex flex-col gap-2.5">
-      <span className="text-13 font-medium text-primary">
-        {t("project_requirements.issues.section_title")}
-      </span>
-      <div className="flex flex-col gap-4">
+    <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")}>
+      <div className="flex flex-col gap-3 pb-3">
         {projectIds.map((projectId) => {
           const detail = projectById.get(projectId);
           return (
@@ -111,6 +109,6 @@ export const RequirementIssuesByProject = ({
           );
         })}
       </div>
-    </section>
+    </RequirementRelationCollapsible>
   );
 };

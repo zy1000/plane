@@ -1654,6 +1654,7 @@ export default {
     sub_requirements: "子需求",
     test_cases: {
       section_title: "关联测试用例",
+      widget_title: "用例",
       link_existing: "关联已有用例",
       empty: "还没有关联测试用例",
       search_placeholder: "搜索用例名称或编号",
@@ -1677,6 +1678,7 @@ export default {
       row_count: "{count} 行",
       empty: "暂无数据",
       add_row: "添加行",
+      empty_add: "添加一行后即可填写",
       no_fields: "这个子表单还没有配置字段",
     },
     versions: {
@@ -2046,6 +2048,7 @@ export default {
     issues: {
       column: "工作项",
       section_title: "关联工作项",
+      widget_title: "工作项",
       split: "拆分工作项",
       link_existing: "关联已有工作项",
       empty: "暂无关联工作项",
@@ -2066,6 +2069,7 @@ export default {
       /** 拆分链路是「创建 + 关联」两步、非原子；兜第二步失败的补救提示 */
       toast_created_link_failed: "工作项已创建，但关联需求失败，可用「关联已有工作项」重试",
     },
+    relations_toolbar: "需求关联操作",
   },
   /** 项目关联的产品。它决定了项目能引用哪些产品的需求 */
   project_products: {

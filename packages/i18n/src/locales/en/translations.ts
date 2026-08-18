@@ -1482,6 +1482,7 @@ export default {
     sub_requirements: "Sub requirements",
     test_cases: {
       section_title: "Linked test cases",
+      widget_title: "Test cases",
       link_existing: "Link existing test cases",
       empty: "No linked test cases yet",
       search_placeholder: "Search by test case name or code",
@@ -1502,6 +1503,7 @@ export default {
       row_count: "{count} rows",
       empty: "No rows",
       add_row: "Add row",
+      empty_add: "Add a row to start editing",
       no_fields: "This sub form has no fields yet",
     },
     versions: {
@@ -1866,6 +1868,7 @@ export default {
     issues: {
       column: "Work items",
       section_title: "Linked work items",
+      widget_title: "Work items",
       split: "Split into work item",
       link_existing: "Link existing work items",
       empty: "No linked work items yet",
@@ -1881,6 +1884,7 @@ export default {
       toast_link_failed: "Failed to link work items",
       toast_created_link_failed: "Work item created but linking failed. Retry via \"Link existing work items\"",
     },
+    relations_toolbar: "Requirement relation actions",
   },
   project_products: {
     no_visible_products: "No product in this workspace is visible to you",

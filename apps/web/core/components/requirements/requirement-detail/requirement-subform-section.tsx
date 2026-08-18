@@ -33,8 +33,8 @@ type TProps = {
   /** 默认展开几块：抽屉 1、整页 2 —— 版面宽窄不同，能一眼看到的量也不同 */
   defaultOpenCount: number;
   /**
-   * 空表单是否也进默认展开。详情页关掉（展开一块「暂无数据」白占版面）；
-   * 建行弹窗要开 —— 新建时表单本来就是空的，折叠起来用户找不到「加一行」。
+   * 空表单是否也进默认展开。只读详情关掉（展开一块「暂无数据」白占版面）；
+   * 可编辑时要开 —— 没行也得看见表头和「添加行」，否则空表单等于没法填。
    */
   defaultOpenEmpty?: boolean;
   /** 折叠态的存储命名空间，按需求类型区分 */
@@ -68,7 +68,7 @@ export const RequirementSubformSection = (props: TProps) => {
 
   /**
    * 没存过折叠态时的缺省：按顺序展开前 N 块。
-   * 详情页空表单默认折叠；建行弹窗靠 defaultOpenEmpty 把空表单也展开。
+   * 只读空表单默认折叠；可编辑（含建行弹窗）靠 defaultOpenEmpty 把空表单也展开。
    */
   const defaultOpenIds = useMemo(() => {
     const candidates = defaultOpenEmpty
@@ -185,8 +185,9 @@ export const RequirementSubformSection = (props: TProps) => {
               )}
             </div>
 
-            {isOpen && columns.length > 0 && rows.length > 0 && (
+            {isOpen && columns.length > 0 && (rows.length > 0 || !readOnly) && (
               // 子字段多时单块表格自己横滚，页面本身永远不横滚
+              // 可编辑的空表也要把表头和「添加行」露出来，否则没数据就等于没入口
               <div className="overflow-x-auto">
                 <table className="w-full min-w-full border-collapse text-left">
                   <thead>
@@ -241,6 +242,26 @@ export const RequirementSubformSection = (props: TProps) => {
                         )}
                       </tr>
                     ))}
+                    {rows.length === 0 && !readOnly && (
+                      <tr>
+                        <td
+                          colSpan={columns.length + 1}
+                          className="px-2.5 py-3 text-center"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => addRow(form)}
+                            className="inline-flex items-center gap-1 text-12 text-accent-primary hover:text-accent-primary-hover"
+                          >
+                            <Plus className="size-3.5" />
+                            {t("requirement_detail.subform.add_row")}
+                          </button>
+                          <p className="mt-1 text-11 text-placeholder">
+                            {t("requirement_detail.subform.empty_add")}
+                          </p>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
