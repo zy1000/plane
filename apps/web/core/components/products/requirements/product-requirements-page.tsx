@@ -291,7 +291,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
 
         {/* 视图控制自成一行：左边选看哪一类，右边是导入/录入 + 网格工具栏（搜索等） */}
         {activeTab === "data" && requirementTypes.length > 0 && (
-          <div className="flex shrink-0 items-center gap-3 border-b border-subtle px-4 py-1.5 md:px-6">
+          <div className="relative z-20 flex shrink-0 items-center gap-3 border-b border-subtle px-4 py-1.5 md:px-6">
             <RequirementDataViewSwitcher
               requirementTypes={requirementTypes}
               activeKey={getViewKey(activeView)}
@@ -386,7 +386,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               error={store.requirementsError}
               readOnly={!canEdit}
               search={store.search}
+              filters={store.filters}
               onSearchChange={store.setSearch}
+              onFiltersChange={store.setFilters}
               onCursorChange={store.setCursor}
               onPerPageChange={store.setPerPage}
               onDelete={store.deleteRequirements}

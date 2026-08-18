@@ -33,7 +33,7 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
-import { CloseIcon, FilterAppliedIcon, FilterIcon, SearchIcon } from "@plane/propel/icons";
+import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirement,
@@ -47,7 +47,15 @@ import type {
 } from "@plane/types";
 import { AlertModalCore, Checkbox, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
+import {
+  collectRequirementGridFilterFields,
+  useRequirementGridFilter,
+  useRequirementGridFiltersConfig,
+} from "@/components/requirements/filters";
+import { RequirementDisplayProperties } from "@/components/requirements/requirement-display-properties";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import {
   BuiltinCellEditor,
   BuiltinCellValue,
@@ -79,7 +87,6 @@ import {
   useRequirementGridScrollContainer,
 } from "./requirement-grid-shared";
 import { RequirementIdentifier } from "./requirement-identifier";
-import { getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 import { canEditRequirementContent, isRequirementClosed, RequirementStatusCell } from "./requirement-status-cell";
 import { copyRequirementData, createEmptyRequirementData } from "./requirement-row-data";
 import { RequirementCreateModal, type TRequirementCreateSeed } from "./requirement-create-modal";
@@ -190,11 +197,6 @@ export const RequirementGrid = observer(
   const [searchInput, setSearchInput] = useState(search);
   const [isSearchOpen, setIsSearchOpen] = useState(() => search.trim().length > 0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isColumnsOpen, setIsColumnsOpen] = useState(false);
-  const [filterFieldId, setFilterFieldId] = useState("");
-  const [filterOperator, setFilterOperator] = useState<TRequirementFilter["operator"]>("contains");
-  const [filterValue, setFilterValue] = useState("");
   const storageKey = `requirement:columns:${workspaceSlug}:${entityId}${columnStorageId ? `:${columnStorageId}` : ""}`;
   // 标准库藏掉状态/负责人/起止日期四列 —— 模板里填了没意义，导入时也会被重置
   const builtinColumns = useMemo(() => getBuiltinColumnsFor(entityKind), [entityKind]);
@@ -243,7 +245,6 @@ export const RequirementGrid = observer(
   const [isCreatingRow, setIsCreatingRow] = useState(false);
   /** 待确认删除的行。删除是即时的，没有撤销，所以一律二次确认 */
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
-  const hasActiveFilters = filters.length > 0;
 
   /**
    * 有必填字段的类型建不出空行：后端在 validate_requirement_data 里按
@@ -367,6 +368,35 @@ export const RequirementGrid = observer(
         ),
     [activeFields, hiddenFieldIds]
   );
+  const customFilterFields = useMemo(() => collectRequirementGridFilterFields(activeFields), [activeFields]);
+  const { configs: filterConfigs, areAllConfigsInitialized } = useRequirementGridFiltersConfig({
+    workspaceSlug,
+    entityKind,
+    customFields: customFilterFields,
+  });
+  const filter = useRequirementGridFilter({
+    areAllConfigsInitialized,
+    configs: filterConfigs,
+    initialFilters: filters,
+    instanceKey: `${workspaceSlug}:${entityId}:${columnStorageId ?? entityKind}`,
+    onFiltersChange,
+  });
+  const displayColumns = useMemo(
+    () =>
+      activeFields.flatMap((field) =>
+        field.field_type === "form"
+          ? [
+              { id: field.id, name: field.name },
+              ...field.children
+                .filter((child) => child.is_active)
+                .map((child) => ({ id: child.id, name: `${field.name} / ${child.name}` })),
+            ]
+          : [{ id: field.id, name: field.name }]
+      ),
+    [activeFields]
+  );
+  const toggleDisplayColumn = (id: string) =>
+    setHiddenFieldIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   const formFields = visibleRootFields.filter((field) => field.field_type === "form");
   // 子表单每组末尾的操作沟槽：只读视图里没有可点的东西，收起来
   const showActionGutter = !readOnly;
@@ -467,17 +497,6 @@ export const RequirementGrid = observer(
       ),
     [propertyBuiltinColumns.length, showActionGutter, showApprovalColumn, showSourceColumn, visibleRootFields]
   );
-  const filterableFields = useMemo(
-    () =>
-      activeFields.flatMap((field) =>
-        field.field_type === "form" ? field.children.filter((child) => child.is_active) : [field]
-      ),
-    [activeFields]
-  );
-  const selectedFilterField = filterableFields.find((field) => field.id === filterFieldId);
-  const selectedFilterOptions =
-    selectedFilterField?.field_type === "select" ? getRequirementSelectOptions(selectedFilterField) : [];
-  const filterRequiresValue = !["is_empty", "is_not_empty"].includes(filterOperator);
 
   /*
    * 不登记「待提交资源」：单元格改动即时落库，传完就已经有归属了，没有「取消编辑
@@ -551,22 +570,6 @@ export const RequirementGrid = observer(
       });
       setIdsToDelete([]);
     }
-  };
-
-  const addFilter = () => {
-    if (!filterFieldId) return;
-    const nextFilter: TRequirementFilter = {
-      field_id: filterFieldId,
-      operator: filterOperator,
-      ...(!["is_empty", "is_not_empty"].includes(filterOperator)
-        ? {
-            value: selectedFilterField?.field_type === "boolean" ? filterValue === "true" : filterValue,
-          }
-        : {}),
-    };
-    onFiltersChange([...filters.filter((item) => item.field_id !== filterFieldId), nextFilter]);
-    setIsFilterOpen(false);
-    setFilterValue("");
   };
 
   /**
@@ -1139,195 +1142,14 @@ export const RequirementGrid = observer(
           )}
         </div>
       </div>
-      <div className="relative">
-        <IconButton
-          size="lg"
-          variant="secondary"
-          icon={hasActiveFilters ? FilterAppliedIcon : FilterIcon}
-          onClick={() => setIsFilterOpen((value) => !value)}
-          aria-label={t("requirement_grid.data.filter")}
-          className={cn({
-            "border-accent-subtle-1 hover:border-accent-subtle-1 focus:border-accent-subtle-1 active:border-accent-subtle-1 border bg-accent-subtle text-accent-primary hover:bg-accent-subtle hover:text-accent-primary focus:bg-accent-subtle focus:text-accent-primary active:bg-accent-subtle active:text-accent-primary":
-              hasActiveFilters,
-            "bg-accent-subtle-hover hover:bg-accent-subtle-hover focus:bg-accent-subtle-hover active:bg-accent-subtle-hover":
-              hasActiveFilters && isFilterOpen,
-          })}
-          iconClassName={cn({
-            "text-accent-primary [&_path]:fill-current": hasActiveFilters,
-          })}
+      <FiltersToggle filter={filter} />
+      <FiltersDropdown title={t("common.display")} placement="bottom-end">
+        <RequirementDisplayProperties
+          columns={displayColumns}
+          hiddenIds={hiddenFieldIds}
+          onToggle={toggleDisplayColumn}
         />
-        {isFilterOpen && (
-          <div className="absolute top-10 right-0 z-30 w-80 space-y-3 rounded-lg border border-subtle bg-surface-1 p-3 shadow-lg">
-            <select
-              value={filterFieldId}
-              onChange={(event) => {
-                setFilterFieldId(event.target.value);
-                const field = filterableFields.find((item) => item.id === event.target.value);
-                setFilterOperator(
-                  field?.field_type === "text" || field?.field_type === "rich_text"
-                    ? "contains"
-                    : field?.field_type === "select" && getRequirementSelectMode(field) === "multiple"
-                      ? "contains"
-                      : field?.field_type === "attachment" || field?.field_type === "image"
-                        ? "is_not_empty"
-                        : "equals"
-                );
-                setFilterValue(
-                  field?.field_type === "boolean"
-                    ? "true"
-                    : field?.field_type === "select"
-                      ? (getRequirementSelectOptions(field)[0]?.id ?? "")
-                      : ""
-                );
-              }}
-              className="h-8 w-full rounded-md border border-subtle bg-surface-1 px-2 text-12"
-            >
-              <option value="">{t("requirement_grid.data.select_field")}</option>
-              {filterableFields.map((field) => (
-                <option key={field.id} value={field.id}>
-                  {field.name}
-                </option>
-              ))}
-            </select>
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={filterOperator}
-                onChange={(event) => setFilterOperator(event.target.value as TRequirementFilter["operator"])}
-                className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
-              >
-                {(selectedFilterField?.field_type === "text" ||
-                  selectedFilterField?.field_type === "rich_text" ||
-                  (selectedFilterField?.field_type === "select" &&
-                    getRequirementSelectMode(selectedFilterField) === "multiple")) && (
-                  <option value="contains">{t("requirement_grid.filters.contains")}</option>
-                )}
-                {!["attachment", "image"].includes(selectedFilterField?.field_type ?? "") &&
-                  !(
-                    selectedFilterField?.field_type === "select" &&
-                    getRequirementSelectMode(selectedFilterField) === "multiple"
-                  ) && <option value="equals">{t("requirement_grid.filters.equals")}</option>}
-                <option value="is_empty">{t("requirement_grid.filters.is_empty")}</option>
-                <option value="is_not_empty">{t("requirement_grid.filters.is_not_empty")}</option>
-              </select>
-              {filterRequiresValue && selectedFilterField?.field_type === "select" ? (
-                <select
-                  value={filterValue}
-                  onChange={(event) => setFilterValue(event.target.value)}
-                  className="h-8 min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-12"
-                >
-                  {selectedFilterOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : filterRequiresValue && selectedFilterField?.field_type === "member" ? (
-                <MemberDropdown
-                  multiple={false}
-                  value={filterValue || null}
-                  onChange={(memberId) => setFilterValue(memberId ?? "")}
-                  buttonVariant="border-with-text"
-                  buttonClassName="h-8 min-w-0 border !border-subtle bg-surface-1"
-                  buttonContainerClassName="min-w-0"
-                  placeholder={t("requirement_grid.data.select_member")}
-                  showUserDetails
-                />
-              ) : filterRequiresValue && selectedFilterField?.field_type === "boolean" ? (
-                <select
-                  value={filterValue}
-                  onChange={(event) => setFilterValue(event.target.value)}
-                  className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12"
-                >
-                  <option value="true">{t("requirement_grid.data.yes")}</option>
-                  <option value="false">{t("requirement_grid.data.no")}</option>
-                </select>
-              ) : filterRequiresValue ? (
-                <input
-                  value={filterValue}
-                  onChange={(event) => setFilterValue(event.target.value)}
-                  className="focus:border-accent-primary h-8 rounded-md border border-subtle bg-surface-1 px-2 text-12 outline-none"
-                  placeholder={t("requirement_grid.data.filter_value")}
-                />
-              ) : null}
-            </div>
-            {filters.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {filters.map((filter) => (
-                  <button
-                    key={filter.field_id}
-                    type="button"
-                    onClick={() => onFiltersChange(filters.filter((item) => item.field_id !== filter.field_id))}
-                    className="rounded-md bg-layer-2 px-2 py-1 text-10 text-secondary"
-                  >
-                    {filterableFields.find((field) => field.id === filter.field_id)?.name ?? "—"} ×
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={() => onFiltersChange([])}>
-                {t("reset")}
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={addFilter}
-                disabled={!filterFieldId || (filterRequiresValue && !filterValue)}
-              >
-                {t("apply")}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="relative">
-        <Button variant="secondary" size="lg" onClick={() => setIsColumnsOpen((value) => !value)}>
-          {t("common.display")}
-        </Button>
-        {isColumnsOpen && (
-          <div className="absolute top-10 right-0 z-30 max-h-80 w-64 overflow-y-auto rounded-lg border border-subtle bg-surface-1 p-2 shadow-lg">
-            {activeFields.map((field) => (
-              <div key={field.id}>
-                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-12 hover:bg-layer-transparent-hover">
-                  <input
-                    type="checkbox"
-                    checked={!hiddenFieldIds.includes(field.id)}
-                    onChange={() =>
-                      setHiddenFieldIds((current) =>
-                        current.includes(field.id) ? current.filter((id) => id !== field.id) : [...current, field.id]
-                      )
-                    }
-                  />
-                  <span className="truncate">{field.name}</span>
-                </label>
-                {field.field_type === "form" &&
-                  !hiddenFieldIds.includes(field.id) &&
-                  field.children
-                    .filter((child) => child.is_active)
-                    .map((child) => (
-                      <label
-                        key={child.id}
-                        className="ml-5 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-11 text-secondary hover:bg-layer-transparent-hover"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!hiddenFieldIds.includes(child.id)}
-                          onChange={() =>
-                            setHiddenFieldIds((current) =>
-                              current.includes(child.id)
-                                ? current.filter((id) => id !== child.id)
-                                : [...current, child.id]
-                            )
-                          }
-                        />
-                        <span className="truncate">{child.name}</span>
-                      </label>
-                    ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </FiltersDropdown>
       {/* 单元格已经常驻可编辑，不再有「进入编辑态」这一步；这里改成新增入口 */}
       {!readOnly && (
         <Button variant="primary" size="lg" onClick={() => void addRow()} disabled={isLoading || isCreatingRow}>
@@ -1345,7 +1167,7 @@ export const RequirementGrid = observer(
         toolbarPortalEl &&
         createPortal(<div className="flex min-w-0 items-center gap-2">{toolbarActions}</div>, toolbarPortalEl)}
       {!useExternalToolbar && (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
+        <div className="relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-subtle bg-surface-1 px-4 py-2.5">
           <div
             className="ml-auto flex flex-wrap items-center gap-2"
           >
@@ -1354,20 +1176,7 @@ export const RequirementGrid = observer(
         </div>
       )}
 
-      {filters.length > 0 && (
-        <div className="flex gap-1 border-b border-subtle bg-surface-1 px-4 py-2">
-          {filters.map((filter) => (
-            <button
-              type="button"
-              key={filter.field_id}
-              onClick={() => onFiltersChange(filters.filter((item) => item.field_id !== filter.field_id))}
-              className="rounded-md bg-accent-subtle px-2 py-1 text-10 text-accent-primary disabled:cursor-default"
-            >
-              {filterableFields.find((field) => field.id === filter.field_id)?.name} ×
-            </button>
-          ))}
-        </div>
-      )}
+      <FiltersRow filter={filter} />
 
       <div
         ref={setScrollContainer}

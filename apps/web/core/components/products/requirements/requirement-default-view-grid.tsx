@@ -2,6 +2,7 @@
 
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { observer } from "mobx-react";
 import { Pagination } from "antd";
 import {
   BookMarked,
@@ -21,10 +22,26 @@ import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirement, TRequirementData, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
+import type {
+  TRequirement,
+  TRequirementData,
+  TRequirementField,
+  TRequirementFilter,
+  TRequirementItemStatus,
+  TRequirementTypeSchema,
+} from "@plane/types";
 import { AlertModalCore, Checkbox, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
+import {
+  collectRequirementGridFilterFields,
+  useRequirementGridFilter,
+  useRequirementGridFiltersConfig,
+} from "@/components/requirements/filters";
 import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
+import { RequirementDisplayProperties } from "@/components/requirements/requirement-display-properties";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { RequirementApprovalCell } from "./approval/requirement-approval-cell";
 import {
   getCurrentPageOffset,
@@ -80,7 +97,9 @@ type TProps = {
   error: string | null;
   readOnly?: boolean;
   search: string;
+  filters?: TRequirementFilter[];
   onSearchChange: (value: string) => void;
+  onFiltersChange?: (value: TRequirementFilter[]) => void;
   onCursorChange: (value: string | undefined) => void;
   onPerPageChange: (value: number) => void;
   onDelete: (ids: string[]) => Promise<unknown>;
@@ -103,7 +122,7 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
 };
 
-export const RequirementDefaultViewGrid = (props: TProps) => {
+export const RequirementDefaultViewGrid = observer(function RequirementDefaultViewGrid(props: TProps) {
   const {
     workspaceSlug,
     productId,
@@ -120,7 +139,9 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     error,
     readOnly = false,
     search,
+    filters = [],
     onSearchChange,
+    onFiltersChange,
     onCursorChange,
     onPerPageChange,
     onDelete,
@@ -146,6 +167,20 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
    * 下面几行的 sticky 格盖住（和工作项电子表格同一套修法）。
    */
   const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
+
+  const storageKey = `requirement:columns:${workspaceSlug}:${productId}:default`;
+  const [hiddenFieldIds, setHiddenFieldIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, JSON.stringify(hiddenFieldIds));
+  }, [hiddenFieldIds, storageKey]);
 
   // 与主网格一致的 300ms 防抖，避免每敲一个字就打一次接口
   const scheduleSearch = (value: string) => {
@@ -214,45 +249,111 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
     (column) => column.key !== "description_html" && column.key !== "status"
   );
 
+  const displayColumns = useMemo(
+    () => [
+      { id: "display_id", name: t("requirements.identifier.column") },
+      { id: "source_display_id", name: t("requirements.identifier.source_column") },
+      { id: "description_html", name: t("requirement_fields.builtin.description") },
+      { id: "approval", name: t("requirement_approval.column") },
+      { id: "status", name: t("requirement_fields.builtin.status") },
+      { id: "priority", name: t("requirement_fields.builtin.priority") },
+      { id: "assignee_id", name: t("requirement_fields.builtin.assignee") },
+      { id: "start_date", name: t("requirement_fields.builtin.start_date") },
+      { id: "target_date", name: t("requirement_fields.builtin.target_date") },
+      { id: "parent_id", name: t("requirement_fields.builtin.parent") },
+      { id: "requirement_type", name: t("workspace_products.requirements.data.views.requirement_type_column") },
+    ],
+    [t]
+  );
+
+  const isDisplayIdVisible = !hiddenFieldIds.includes("display_id");
+  const isSourceDisplayIdVisible = !hiddenFieldIds.includes("source_display_id");
+  const isDescriptionVisible = !hiddenFieldIds.includes("description_html");
+  const isApprovalVisible = !hiddenFieldIds.includes("approval");
+  const isStatusVisible = !hiddenFieldIds.includes("status");
+  const isRequirementTypeVisible = !hiddenFieldIds.includes("requirement_type");
+
+  const customFilterFields = useMemo(() => {
+    const seenFieldIds = new Set<string>();
+    const fields: TRequirementField[] = [];
+    for (const requirementType of requirementTypes) {
+      for (const field of collectRequirementGridFilterFields(requirementType.fields)) {
+        if (seenFieldIds.has(field.id)) continue;
+        seenFieldIds.add(field.id);
+        fields.push(field);
+      }
+    }
+    return fields;
+  }, [requirementTypes]);
+  const { configs: filterConfigs, areAllConfigsInitialized } = useRequirementGridFiltersConfig({
+    workspaceSlug,
+    entityKind: "product",
+    customFields: customFilterFields,
+  });
+  const filter = useRequirementGridFilter({
+    areAllConfigsInitialized,
+    configs: filterConfigs,
+    initialFilters: filters,
+    instanceKey: `${workspaceSlug}:${productId}:default`,
+    onFiltersChange,
+  });
+  const toggleDisplayColumn = (id: string) =>
+    setHiddenFieldIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+
   const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
   const { getWidth, startResize } = useRequirementGridColumnResize();
 
   /** 标题列之外的所有列默认宽，用来反推标题列该吃掉多少 */
   const defaultPropertyColumnsWidth =
-    // 编号 + 标准库编号 + 审批列 + 内置属性列（含描述与状态，状态列只是位置前提）+ 所属类型列
-    REQUIREMENT_GRID_COLUMN_WIDTH +
-    REQUIREMENT_GRID_COLUMN_WIDTH +
-    REQUIREMENT_GRID_COLUMN_WIDTH +
-    propertyBuiltinColumns.reduce((total, column) => total + getRequirementColumnWidth(column.key), 0) +
-    REQUIREMENT_GRID_COLUMN_WIDTH;
+    (isDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
+    (isSourceDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
+    (isApprovalVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
+    (isDescriptionVisible ? getRequirementColumnWidth("description_html") : 0) +
+    (!hiddenFieldIds.includes("status") ? getRequirementColumnWidth("status") : 0) +
+    propertyBuiltinColumns
+      .filter((column) => column.key !== "description_html" && column.key !== "status")
+      .reduce((total, column) => (!hiddenFieldIds.includes(column.key) ? total + getRequirementColumnWidth(column.key) : total), 0) +
+    (isRequirementTypeVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0);
+
   const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, defaultPropertyColumnsWidth);
   const columnSnapshot = useMemo(() => {
     const snapshot: Record<string, number> = {
       title: defaultTitleColumnWidth,
-      display_id: REQUIREMENT_GRID_COLUMN_WIDTH,
-      source_display_id: REQUIREMENT_GRID_COLUMN_WIDTH,
-      approval: REQUIREMENT_GRID_COLUMN_WIDTH,
-      requirement_type: REQUIREMENT_GRID_COLUMN_WIDTH,
     };
+    if (isDisplayIdVisible) snapshot.display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
+    if (isSourceDisplayIdVisible) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
+    if (isApprovalVisible) snapshot.approval = REQUIREMENT_GRID_COLUMN_WIDTH;
+    if (isRequirementTypeVisible) snapshot.requirement_type = REQUIREMENT_GRID_COLUMN_WIDTH;
     propertyBuiltinColumns.forEach((column) => {
-      snapshot[column.key] = getRequirementColumnWidth(column.key);
+      if (!hiddenFieldIds.includes(column.key)) {
+        snapshot[column.key] = getRequirementColumnWidth(column.key);
+      }
     });
     return snapshot;
-  }, [defaultTitleColumnWidth, propertyBuiltinColumns]);
+  }, [defaultTitleColumnWidth, hiddenFieldIds, isApprovalVisible, isDisplayIdVisible, isRequirementTypeVisible, isSourceDisplayIdVisible, propertyBuiltinColumns]);
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
   const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
   const sourceDisplayIdWidth = getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
-  const sourceStickyLeft = displayIdWidth;
-  const titleStickyLeft = displayIdWidth + sourceDisplayIdWidth;
+  const sourceStickyLeft = isDisplayIdVisible ? displayIdWidth : 0;
+  const titleStickyLeft = (isDisplayIdVisible ? displayIdWidth : 0) + (isSourceDisplayIdVisible ? sourceDisplayIdWidth : 0);
   const propertyColumnsWidth =
-    getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH) +
-    getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) +
-    getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) +
-    propertyBuiltinColumns.reduce(
-      (total, column) => total + getWidth(column.key, getRequirementColumnWidth(column.key)),
+    (isDisplayIdVisible ? displayIdWidth : 0) +
+    (isSourceDisplayIdVisible ? sourceDisplayIdWidth : 0) +
+    (isApprovalVisible ? getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) : 0) +
+    (isDescriptionVisible && descriptionColumn
+      ? getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key))
+      : 0) +
+    (!hiddenFieldIds.includes("status") && statusColumn
+      ? getWidth(statusColumn.key, getRequirementColumnWidth(statusColumn.key))
+      : 0) +
+    remainingBuiltinColumns.reduce(
+      (total, column) =>
+        !hiddenFieldIds.includes(column.key)
+          ? total + getWidth(column.key, getRequirementColumnWidth(column.key))
+          : total,
       0
     ) +
-    getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH);
+    (isRequirementTypeVisible ? getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) : 0);
   const tableWidth = titleColumnWidth + propertyColumnsWidth;
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
   const parentTitles = useRequirementTitles({
@@ -360,6 +461,14 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
           )}
         </div>
       </div>
+      <FiltersToggle filter={filter} />
+      <FiltersDropdown title={t("common.display")} placement="bottom-end">
+        <RequirementDisplayProperties
+          columns={displayColumns}
+          hiddenIds={hiddenFieldIds}
+          onToggle={toggleDisplayColumn}
+        />
+      </FiltersDropdown>
       {!readOnly && onSubmitReview && submittableSelectedIds.length > 0 && (
         <Button
           variant="primary"
@@ -381,7 +490,9 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div ref={setMenuPortalEl} className="requirement-grid-menu-portal" />
-      {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="px-4 py-2">{toolbar}</div>}
+      {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="relative z-20 px-4 py-2">{toolbar}</div>}
+
+      <FiltersRow filter={filter} />
 
       {/*
         min-w-0：列方向 flex 子项默认 min-width:auto，会被定宽表格撑到整表宽度，父级再
@@ -403,84 +514,90 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
           style={{ width: tableWidth }}
         >
           <colgroup>
-            <col style={{ width: displayIdWidth }} />
-            <col style={{ width: sourceDisplayIdWidth }} />
+            {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
+            {isSourceDisplayIdVisible && <col style={{ width: sourceDisplayIdWidth }} />}
             <col style={{ width: titleColumnWidth }} />
-            {descriptionColumn && (
+            {isDescriptionVisible && descriptionColumn && (
               <col style={{ width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)) }} />
             )}
-            <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
-            {statusColumn && (
+            {isApprovalVisible && (
+              <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
+            )}
+            {!hiddenFieldIds.includes("status") && statusColumn && (
               <col style={{ width: getWidth(statusColumn.key, getRequirementColumnWidth(statusColumn.key)) }} />
             )}
-            {remainingBuiltinColumns.map((column) => (
-              <col key={column.key} style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }} />
-            ))}
-            <col style={{ width: getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
+            {remainingBuiltinColumns.map((column) =>
+              !hiddenFieldIds.includes(column.key) ? (
+                <col key={column.key} style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }} />
+              ) : null
+            )}
+            {isRequirementTypeVisible && (
+              <col style={{ width: getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
+            )}
           </colgroup>
           <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
             <tr>
               {/* 编号列最左固定，全选框折进来；标准库编号、标题依次左固定 */}
-              <th
-                className={cn(
-                  "group/header relative",
-                  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                  REQUIREMENT_GRID_STICKY_HEADER_CLASS
-                )}
-                style={{
-                  width: displayIdWidth,
-                  minWidth: displayIdWidth,
-                  maxWidth: displayIdWidth,
-                  left: 0,
-                }}
-              >
-                <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
-                  {/*
-                    勾选框常驻占位、只在悬停（或已有选中）时显形 —— 与工作项一致。
-                    用 opacity 而不是条件渲染，编号才不会在鼠标进出时左右跳。
-                  */}
-                  {!readOnly && (
-                    <Checkbox
-                      checked={allSelected}
-                      indeterminate={!allSelected && selectedIds.length > 0}
-                      disabled={!visibleIds.length}
-                      onChange={toggleAll}
-                      aria-label={t("requirement_grid.data.select_row")}
-                      containerClassName={cn(
-                        "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
-                        selectedIds.length > 0 && "pointer-events-auto opacity-100"
-                      )}
-                    />
+              {isDisplayIdVisible && (
+                <th
+                  className={cn(
+                    "group/header relative",
+                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                    REQUIREMENT_GRID_STICKY_HEADER_CLASS
                   )}
-                  <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
-                </div>
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
-                />
-              </th>
-              <th
-                className={cn(
-                  "group/header relative",
-                  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                  REQUIREMENT_GRID_STICKY_HEADER_CLASS
-                )}
-                style={{
-                  width: sourceDisplayIdWidth,
-                  minWidth: sourceDisplayIdWidth,
-                  maxWidth: sourceDisplayIdWidth,
-                  left: sourceStickyLeft,
-                }}
-              >
-                <div className="flex h-full w-full min-w-0 items-center px-page-x">
-                  <RequirementGridHeaderLabel
-                    icon={BookMarked}
-                    label={t("requirements.identifier.source_column")}
+                  style={{
+                    width: displayIdWidth,
+                    minWidth: displayIdWidth,
+                    maxWidth: displayIdWidth,
+                    left: 0,
+                  }}
+                >
+                  <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                    {!readOnly && (
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={!allSelected && selectedIds.length > 0}
+                        disabled={!visibleIds.length}
+                        onChange={toggleAll}
+                        aria-label={t("requirement_grid.data.select_row")}
+                        containerClassName={cn(
+                          "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
+                          selectedIds.length > 0 && "pointer-events-auto opacity-100"
+                        )}
+                      />
+                    )}
+                    <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+                  </div>
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
                   />
-                </div>
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
-                />
-              </th>
+                </th>
+              )}
+              {isSourceDisplayIdVisible && (
+                <th
+                  className={cn(
+                    "group/header relative",
+                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                    REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                  )}
+                  style={{
+                    width: sourceDisplayIdWidth,
+                    minWidth: sourceDisplayIdWidth,
+                    maxWidth: sourceDisplayIdWidth,
+                    left: sourceStickyLeft,
+                  }}
+                >
+                  <div className="flex h-full w-full min-w-0 items-center px-page-x">
+                    <RequirementGridHeaderLabel
+                      icon={BookMarked}
+                      label={t("requirements.identifier.source_column")}
+                    />
+                  </div>
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
+                  />
+                </th>
+              )}
               <th
                 data-requirement-sticky-cell
                 className={cn(
@@ -496,6 +613,19 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                 }}
               >
                 <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                  {!readOnly && !isDisplayIdVisible && (
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={!allSelected && selectedIds.length > 0}
+                      disabled={!visibleIds.length}
+                      onChange={toggleAll}
+                      aria-label={t("requirement_grid.data.select_row")}
+                      containerClassName={cn(
+                        "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
+                        selectedIds.length > 0 && "pointer-events-auto opacity-100"
+                      )}
+                    />
+                  )}
                   <RequirementGridHeaderLabel
                     icon={titleColumn?.icon}
                     label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
@@ -505,7 +635,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   onMouseDown={(event) => startResize("title", columnSnapshot, event)}
                 />
               </th>
-              {descriptionColumn && (
+              {isDescriptionVisible && descriptionColumn && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={descriptionColumn.icon} label={t(descriptionColumn.labelKey)} />
                   <RequirementGridColumnResizer
@@ -514,14 +644,16 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                 </th>
               )}
               {/* 审批紧跟描述：每行都要扫一眼，不能放到要横滚才看得见的地方 */}
-              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("approval", columnSnapshot, event)}
-                />
-              </th>
+              {isApprovalVisible && (
+                <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                  <RequirementGridHeaderLabel icon={ShieldCheck} label={t("requirement_approval.column")} />
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize("approval", columnSnapshot, event)}
+                  />
+                </th>
+              )}
               {/* 状态紧跟审批：需求级交付状态（人工维护），同样是逐行要扫的信号 */}
-              {statusColumn && (
+              {!hiddenFieldIds.includes("status") && statusColumn && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel icon={statusColumn.icon} label={t(statusColumn.labelKey)} />
                   <RequirementGridColumnResizer
@@ -529,23 +661,27 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                   />
                 </th>
               )}
-              {remainingBuiltinColumns.map((column) => (
-                <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                  <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />
+              {remainingBuiltinColumns.map((column) =>
+                !hiddenFieldIds.includes(column.key) ? (
+                  <th key={column.key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                    <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />
+                    <RequirementGridColumnResizer
+                      onMouseDown={(event) => startResize(column.key, columnSnapshot, event)}
+                    />
+                  </th>
+                ) : null
+              )}
+              {isRequirementTypeVisible && (
+                <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                  <RequirementGridHeaderLabel
+                    icon={Layers}
+                    label={t("workspace_products.requirements.data.views.requirement_type_column")}
+                  />
                   <RequirementGridColumnResizer
-                    onMouseDown={(event) => startResize(column.key, columnSnapshot, event)}
+                    onMouseDown={(event) => startResize("requirement_type", columnSnapshot, event)}
                   />
                 </th>
-              ))}
-              <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                <RequirementGridHeaderLabel
-                  icon={Layers}
-                  label={t("workspace_products.requirements.data.views.requirement_type_column")}
-                />
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("requirement_type", columnSnapshot, event)}
-                />
-              </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -564,65 +700,69 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     编号 / 标准库编号 / 标题三列左固定。勾选框折进编号列，行操作折进
                     标题列。左固定列底色必须不透明，选中/悬停着色铺在内层 div。
                   */}
-                  <td
-                    className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
-                    style={{
-                      width: displayIdWidth,
-                      minWidth: displayIdWidth,
-                      maxWidth: displayIdWidth,
-                      left: 0,
-                    }}
-                  >
-                    <div
-                      className={cn(
-                        "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
-                        isSelected
-                          ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                          : "group-hover/requirement:bg-layer-transparent-hover"
-                      )}
+                  {isDisplayIdVisible && (
+                    <td
+                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                      style={{
+                        width: displayIdWidth,
+                        minWidth: displayIdWidth,
+                        maxWidth: displayIdWidth,
+                        left: 0,
+                      }}
                     >
-                      {!readOnly && (
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => toggleOne(requirement.id)}
-                          aria-label={t("requirement_grid.data.select_row")}
-                          containerClassName={cn(
-                            "pointer-events-none opacity-0 transition-opacity group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
-                            isSelected && "pointer-events-auto opacity-100"
-                          )}
-                        />
-                      )}
-                      {requirement.display_id ? (
-                        <RequirementIdentifier displayId={requirement.display_id} />
-                      ) : (
-                        <span className="text-placeholder">—</span>
-                      )}
-                    </div>
-                  </td>
-                  <td
-                    className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
-                    style={{
-                      width: sourceDisplayIdWidth,
-                      minWidth: sourceDisplayIdWidth,
-                      maxWidth: sourceDisplayIdWidth,
-                      left: sourceStickyLeft,
-                    }}
-                  >
-                    <div
-                      className={cn(
-                        "flex h-full w-full min-w-0 items-center px-page-x transition-colors duration-150 motion-reduce:transition-none",
-                        isSelected
-                          ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                          : "group-hover/requirement:bg-layer-transparent-hover"
-                      )}
+                      <div
+                        className={cn(
+                          "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                          isSelected
+                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                            : "group-hover/requirement:bg-layer-transparent-hover"
+                        )}
+                      >
+                        {!readOnly && (
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={() => toggleOne(requirement.id)}
+                            aria-label={t("requirement_grid.data.select_row")}
+                            containerClassName={cn(
+                              "pointer-events-none opacity-0 transition-opacity group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
+                              isSelected && "pointer-events-auto opacity-100"
+                            )}
+                          />
+                        )}
+                        {requirement.display_id ? (
+                          <RequirementIdentifier displayId={requirement.display_id} />
+                        ) : (
+                          <span className="text-placeholder">—</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                  {isSourceDisplayIdVisible && (
+                    <td
+                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                      style={{
+                        width: sourceDisplayIdWidth,
+                        minWidth: sourceDisplayIdWidth,
+                        maxWidth: sourceDisplayIdWidth,
+                        left: sourceStickyLeft,
+                      }}
                     >
-                      {requirement.source_display_id ? (
-                        <RequirementIdentifier displayId={requirement.source_display_id} />
-                      ) : (
-                        <span className="text-placeholder">—</span>
-                      )}
-                    </div>
-                  </td>
+                      <div
+                        className={cn(
+                          "flex h-full w-full min-w-0 items-center px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                          isSelected
+                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                            : "group-hover/requirement:bg-layer-transparent-hover"
+                        )}
+                      >
+                        {requirement.source_display_id ? (
+                          <RequirementIdentifier displayId={requirement.source_display_id} />
+                        ) : (
+                          <span className="text-placeholder">—</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td
                     data-requirement-sticky-cell
                     className={cn(
@@ -645,6 +785,17 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                           : "group-hover/requirement:bg-layer-transparent-hover"
                       )}
                     >
+                      {!readOnly && !isDisplayIdVisible && (
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={() => toggleOne(requirement.id)}
+                          aria-label={t("requirement_grid.data.select_row")}
+                          containerClassName={cn(
+                            "pointer-events-none opacity-0 transition-opacity group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
+                            isSelected && "pointer-events-auto opacity-100"
+                          )}
+                        />
+                      )}
                       <Tooltip tooltipContent={requirement.title}>
                         <button
                           type="button"
@@ -717,7 +868,7 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                     </div>
                   </td>
                   {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
-                  {descriptionColumn && (
+                  {isDescriptionVisible && descriptionColumn && (
                     <td className={cn("truncate text-secondary", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
                       <BuiltinCellValue
                         columnKey={descriptionColumn.key}
@@ -726,10 +877,12 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                       />
                     </td>
                   )}
-                  <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
-                    <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
-                  </td>
-                  {statusColumn && (
+                  {isApprovalVisible && (
+                    <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
+                      <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
+                    </td>
+                  )}
+                  {!hiddenFieldIds.includes("status") && statusColumn && (
                     <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
                       {/*
                         总览只读，状态格是唯一能改的格：它不跟行级 is_locked / closed 走
@@ -743,30 +896,34 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
                       />
                     </td>
                   )}
-                  {remainingBuiltinColumns.map((column) => (
-                    <td key={column.key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
-                      <BuiltinCellValue
-                        columnKey={column.key}
-                        values={requirement}
-                        resolveParentTitle={resolveParentTitle}
-                      />
+                  {remainingBuiltinColumns.map((column) =>
+                    !hiddenFieldIds.includes(column.key) ? (
+                      <td key={column.key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
+                        <BuiltinCellValue
+                          columnKey={column.key}
+                          values={requirement}
+                          resolveParentTitle={resolveParentTitle}
+                        />
+                      </td>
+                    ) : null
+                  )}
+                  {isRequirementTypeVisible && (
+                    <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
+                      <button
+                        type="button"
+                        onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
+                        title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
+                          name: requirementTypeNames[requirement.requirement_type_id] ?? "",
+                        })}
+                        className={cn(
+                          "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
+                          "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
+                        )}
+                      >
+                        <span className="truncate">{requirementTypeNames[requirement.requirement_type_id] ?? "—"}</span>
+                      </button>
                     </td>
-                  ))}
-                  <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
-                    <button
-                      type="button"
-                      onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
-                      title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
-                        name: requirementTypeNames[requirement.requirement_type_id] ?? "",
-                      })}
-                      className={cn(
-                        "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
-                        "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
-                      )}
-                    >
-                      <span className="truncate">{requirementTypeNames[requirement.requirement_type_id] ?? "—"}</span>
-                    </button>
-                  </td>
+                  )}
                 </tr>
               );
             })}
@@ -830,4 +987,4 @@ export const RequirementDefaultViewGrid = (props: TProps) => {
       />
     </div>
   );
-};
+});
