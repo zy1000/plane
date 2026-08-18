@@ -408,6 +408,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           ) : (
             <RequirementGrid
               ref={gridRef}
+              hideToolbarAdd
               // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
               key={activeView.requirementTypeId}
               workspaceSlug={workspaceSlug ?? ""}

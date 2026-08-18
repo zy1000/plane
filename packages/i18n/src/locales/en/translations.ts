@@ -1580,7 +1580,7 @@ export default {
         updated: "Modified",
       },
       last_changed_version: "Last changed in",
-      add: "Add record",
+      add: "Add requirement",
       title_placeholder: "Requirement title",
       description_placeholder: "Add context, acceptance criteria…",
       pick_type_hint: "Pick a requirement type and its fields will appear here",
@@ -2303,7 +2303,7 @@ export default {
         import_from_library: "Import requirements",
         import_from_library_full: "Import requirements",
         more_create_actions: "More ways to add",
-        manual_entry: "New requirement",
+        manual_entry: "Add requirement",
         empty: {
           title: "Start capturing structured product requirements",
           description:

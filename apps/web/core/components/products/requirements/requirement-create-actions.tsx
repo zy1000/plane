@@ -1,19 +1,14 @@
-import { ChevronDown } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
+import { Button, getButtonStyling } from "@plane/propel/button";
 import { CustomMenu } from "@plane/ui";
 import type { TRequirementExcelImportResponse, TRequirementFilter } from "@plane/types";
-import {
-  RequirementExcelImportModal,
-  RequirementExcelMenuItems,
-  useRequirementExcelActions,
-} from "@/components/requirements/excel";
+import { RequirementExcelImportModal, useRequirementExcelActions } from "@/components/requirements/excel";
 
 type TRequirementCreateActionsProps = {
   onManualEntry: () => void;
   onImport: () => void;
   onImportPrefetch?: () => void;
-  /** Excel 出入口。给了才渲染那三项 */
+  /** Excel 出入口。给了才渲染导入菜单里的 Excel 项，以及导出按钮 */
   excel?: {
     workspaceSlug: string;
     productId: string;
@@ -26,8 +21,8 @@ type TRequirementCreateActionsProps = {
 };
 
 /**
- * 「录入」为主操作；「从标准库导入」与 Excel 导入 / 导出收进右侧下拉，避免多个一级按钮
- * 抢注意力。
+ * 「添加需求」「导入」「导出」三个一级按钮，排布与标准库条目页一致。
+ * 导入有标准库 / Excel 两条路，收进同一个「导入」按钮，避免四个按钮并排。
  */
 export function RequirementCreateActions({
   onManualEntry,
@@ -47,45 +42,51 @@ export function RequirementCreateActions({
   });
 
   return (
-    <div className="inline-flex items-stretch" onMouseEnter={onImportPrefetch} onFocus={onImportPrefetch}>
-      <Button variant="primary" size="lg" className="rounded-r-none" onClick={onManualEntry}>
-        {t("workspace_products.requirements.data.manual_entry")}
+    <div className="flex items-center gap-2" onMouseEnter={onImportPrefetch} onFocus={onImportPrefetch}>
+      <Button variant="primary" size="lg" onClick={onManualEntry}>
+        {t("requirement_grid.data.add")}
       </Button>
-      <CustomMenu
-        placement="bottom-end"
-        closeOnSelect
-        maxHeight="lg"
-        customButtonClassName="flex h-7 items-center rounded-l-none rounded-r-md border-l border-white/20 bg-accent-primary px-1.5 text-on-color outline-none hover:bg-accent-primary-hover active:bg-accent-primary-active disabled:bg-layer-disabled"
-        customButton={
-          <span className="grid place-items-center">
-            <ChevronDown className="size-3.5" aria-hidden />
-          </span>
-        }
-        ariaLabel={t("workspace_products.requirements.data.more_create_actions")}
-      >
-        <CustomMenu.MenuItem onClick={onImport}>
-          {t("workspace_products.requirements.data.import_from_library_full")}
-        </CustomMenu.MenuItem>
-        {excel && (
-          <RequirementExcelMenuItems
-            isExporting={excelActions.isExporting}
-            isDownloadingTemplate={excelActions.isDownloadingTemplate}
-            onExport={() => void excelActions.handleExport()}
-            onImport={excelActions.openImport}
-            onDownloadTemplate={() => void excelActions.handleDownloadTemplate()}
-          />
-        )}
-      </CustomMenu>
+      {excel ? (
+        <CustomMenu
+          placement="bottom-end"
+          closeOnSelect
+          maxHeight="lg"
+          customButtonClassName={getButtonStyling("secondary", "lg")}
+          customButton={<span>{t("common.import")}</span>}
+          ariaLabel={t("common.import")}
+        >
+          <CustomMenu.MenuItem onClick={onImport}>
+            {t("workspace_products.requirements.data.import_from_library_full")}
+          </CustomMenu.MenuItem>
+          <CustomMenu.MenuItem onClick={excelActions.openImport}>
+            {t("requirement_excel.menu.import")}
+          </CustomMenu.MenuItem>
+        </CustomMenu>
+      ) : (
+        <Button variant="secondary" size="lg" onClick={onImport}>
+          {t("common.import")}
+        </Button>
+      )}
       {excel && (
-        <RequirementExcelImportModal
-          isOpen={excelActions.isImportOpen}
-          onClose={excelActions.closeImport}
-          workspaceSlug={excel.workspaceSlug}
-          scope="product"
-          entityId={excel.productId}
-          requirementTypeIds={excel.requirementTypeIds}
-          onImported={excel.onImported}
-        />
+        <>
+          <Button
+            variant="secondary"
+            size="lg"
+            disabled={excelActions.isExporting}
+            onClick={() => void excelActions.handleExport()}
+          >
+            {t("export")}
+          </Button>
+          <RequirementExcelImportModal
+            isOpen={excelActions.isImportOpen}
+            onClose={excelActions.closeImport}
+            workspaceSlug={excel.workspaceSlug}
+            scope="product"
+            entityId={excel.productId}
+            requirementTypeIds={excel.requirementTypeIds}
+            onImported={excel.onImported}
+          />
+        </>
       )}
     </div>
   );

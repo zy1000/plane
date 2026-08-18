@@ -1753,7 +1753,7 @@ export default {
         updated: "已修改",
       },
       last_changed_version: "最后变更于",
-      add: "新增记录",
+      add: "添加需求",
       /** 建行弹窗里标题与描述没有标签，占位文案就是它们的标签 */
       title_placeholder: "需求标题",
       description_placeholder: "补充背景、验收标准…",
@@ -2484,7 +2484,7 @@ export default {
         import_from_library: "导入需求",
         import_from_library_full: "导入需求",
         more_create_actions: "更多新建方式",
-        manual_entry: "新建需求",
+        manual_entry: "添加需求",
         empty: {
           title: "开始沉淀产品的结构化需求",
           description: "从标准库批量导入，或按需求类型新建条目。字段结构由需求类型维护，这里负责录入与评审。",

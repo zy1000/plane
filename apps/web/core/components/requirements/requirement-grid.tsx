@@ -151,6 +151,8 @@ type TProps = {
   onStatusChange?: (requirementId: string, status: TRequirementItemStatus) => void;
   /** When set, search/filter/display/edit (and bulk-edit actions) render into this host instead of the grid toolbar. */
   toolbarPortalEl?: HTMLElement | null;
+  /** 页头已有独立的「添加需求」时关掉工具栏这份，避免并排两个主按钮 */
+  hideToolbarAdd?: boolean;
 };
 
 
@@ -192,6 +194,7 @@ export const RequirementGrid = observer(
     onOpenDetail,
     onStatusChange,
     toolbarPortalEl,
+    hideToolbarAdd = false,
   } = props;
   const { t } = useTranslation();
   const [searchInput, setSearchInput] = useState(search);
@@ -1151,9 +1154,8 @@ export const RequirementGrid = observer(
         />
       </FiltersDropdown>
       {/* 单元格已经常驻可编辑，不再有「进入编辑态」这一步；这里改成新增入口 */}
-      {!readOnly && (
+      {!readOnly && !hideToolbarAdd && (
         <Button variant="primary" size="lg" onClick={() => void addRow()} disabled={isLoading || isCreatingRow}>
-          <Plus className="size-3.5" />
           {t("requirement_grid.data.add")}
         </Button>
       )}
