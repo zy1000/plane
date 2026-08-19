@@ -58,6 +58,8 @@ type TProps = {
   subRequirements: TRequirement[];
   trail: TRequirementTrailEntry[];
   readOnly: boolean;
+  /** 基线快照抽屉关掉变更轨迹和版本历史，避免再去打活接口 */
+  showHistory?: boolean;
   /** drawer 把属性排成属性条，page 把它交给右栏渲染 */
   layout: "drawer" | "page";
   resolveParentTitle?: (parentId: string) => string | undefined;
@@ -255,6 +257,7 @@ export const RequirementDetailContent = (props: TProps) => {
     subRequirements,
     trail,
     readOnly,
+    showHistory = true,
     layout,
     resolveParentTitle,
     onPatch,
@@ -474,25 +477,27 @@ export const RequirementDetailContent = (props: TProps) => {
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。
         这一整块讲的是「过去」，与上面的「现在」之间给一条分隔线，其余区块之间只用留白。
       */}
-      <div className="flex flex-col gap-6 border-t border-subtle pt-6">
-        {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}
-        <RequirementChangeTrail
-          entries={trail}
-          requirementType={requirementType}
-          onFocusVersion={focusVersion}
-        />
+      {showHistory && (
+        <div className="flex flex-col gap-6 border-t border-subtle pt-6">
+          {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}
+          <RequirementChangeTrail
+            entries={trail}
+            requirementType={requirementType}
+            onFocusVersion={focusVersion}
+          />
 
-        <RequirementVersionHistory
-          workspaceSlug={workspaceSlug}
-          productId={productId}
-          requirementId={requirement.id}
-          requirementType={requirementType}
-          approvedVersion={requirement.approved_version}
-          canRollback={!readOnly}
-          focusRequest={versionFocus}
-          onRolledBack={onRolledBack}
-        />
-      </div>
+          <RequirementVersionHistory
+            workspaceSlug={workspaceSlug}
+            productId={productId}
+            requirementId={requirement.id}
+            requirementType={requirementType}
+            approvedVersion={requirement.approved_version}
+            canRollback={!readOnly}
+            focusRequest={versionFocus}
+            onRolledBack={onRolledBack}
+          />
+        </div>
+      )}
     </div>
   );
 };

@@ -30,7 +30,9 @@ type TProps = {
   /** 打开的基线；`compareToId` 非空时进对比视图 */
   openedBaselineId: string | null;
   compareToId: string | null;
+  peekRequirementId: string | null;
   onOpenBaseline: (baselineId: string | null, compareToId?: string | null) => void;
+  onOpenPeek: (requirementId: string | null) => void;
 };
 
 export function RequirementBaselinesTab(props: TProps) {
@@ -45,7 +47,9 @@ export function RequirementBaselinesTab(props: TProps) {
     onCreateOpenChange,
     openedBaselineId,
     compareToId,
+    peekRequirementId,
     onOpenBaseline,
+    onOpenPeek,
   } = props;
   const { t } = useTranslation();
   const [baselineToDelete, setBaselineToDelete] = useState<TRequirementBaseline | null>(null);
@@ -125,6 +129,7 @@ export function RequirementBaselinesTab(props: TProps) {
     ) : openedBaselineId ? (
       <BaselineDetail
         workspaceSlug={workspaceSlug}
+        productId={productId}
         baseline={detail.baseline}
         entries={detail.entriesPage.results}
         totalCount={detail.entriesPage.total_count ?? 0}
@@ -138,9 +143,11 @@ export function RequirementBaselinesTab(props: TProps) {
         prevPageResults={detail.entriesPage.prev_page_results}
         requirementTypes={requirementTypes}
         activeRequirementTypeId={requirementTypeId}
+        peekRequirementId={peekRequirementId}
         onRequirementTypeChange={setRequirementTypeId}
         onPerPageChange={detail.setPerPage}
         onCursorChange={detail.setCursor}
+        onOpenPeek={onOpenPeek}
         onBack={() => onOpenBaseline(null)}
       />
     ) : (
@@ -167,7 +174,7 @@ export function RequirementBaselinesTab(props: TProps) {
 
   return (
     <>
-      {view}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{view}</div>
 
       <CreateBaselineModal
         isOpen={isCreateOpen}

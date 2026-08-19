@@ -131,6 +131,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     next.delete("cr");
     next.delete("bl");
     next.delete("cmp");
+    next.delete("peek");
+    setPeekRequirement(null);
     setSearchParams(next, { replace: true });
   };
 
@@ -181,6 +183,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     else next.delete("bl");
     if (compareToId) next.set("cmp", compareToId);
     else next.delete("cmp");
+    if (!baselineId || compareToId) {
+      next.delete("peek");
+      setPeekRequirement(null);
+    }
     setSearchParams(next, { replace: true });
   };
 
@@ -339,7 +345,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             onCreateOpenChange={setIsCreateBaselineOpen}
             openedBaselineId={openedBaselineId}
             compareToId={compareBaselineId}
+            peekRequirementId={peekRequirementId}
             onOpenBaseline={openBaseline}
+            onOpenPeek={setPeekRequirement}
           />
         ) : activeTab === "changes" ? (
           <RequirementChangesTab
@@ -459,7 +467,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
       <RequirementPeekOverview
         workspaceSlug={workspaceSlug ?? ""}
         productId={productId ?? ""}
-        requirementId={peekRequirementId}
+        requirementId={activeTab === "baselines" ? null : peekRequirementId}
         requirementTypes={requirementTypes}
         rows={store.requirementsPage.results}
         canEdit={canEdit}
@@ -474,7 +482,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
          * 那个要项目语境，产品侧抽屉不注入。
          */
         testCasesSection={
-          peekRequirementId ? (
+          peekRequirementId && activeTab !== "baselines" ? (
             <RequirementTestCasesSection
               workspaceSlug={workspaceSlug ?? ""}
               productId={productId ?? ""}

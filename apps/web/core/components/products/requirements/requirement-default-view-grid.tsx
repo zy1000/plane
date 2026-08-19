@@ -96,6 +96,11 @@ type TProps = {
   isMutating: boolean;
   error: string | null;
   readOnly?: boolean;
+  /** 基线快照没有搜索 / 筛选接口，整排工具栏都不渲染 */
+  hideToolbar?: boolean;
+  /** 父项标题只在当前页解析，不 ids= 去拉活需求 */
+  skipRemoteParentTitles?: boolean;
+  emptyText?: string;
   search: string;
   filters?: TRequirementFilter[];
   onSearchChange: (value: string) => void;
@@ -105,7 +110,8 @@ type TProps = {
   onDelete: (ids: string[]) => Promise<unknown>;
   /** 复制一行：新行绑定同一个类型，插在原行后面 */
   onDuplicate: (payload: { requirementTypeId: string; data: TRequirementData; afterId: string }) => Promise<unknown>;
-  onOpenRequirementTypeView: (requirementTypeId: string) => void;
+  /** 不传则类型列只显示名称，不跳进类型视图 */
+  onOpenRequirementTypeView?: (requirementTypeId: string) => void;
   /** 打开这一行的详情 */
   onOpenDetail: (requirementId: string) => void;
   /** 审批列上的待审胶囊点进去看那张变更单 */
@@ -138,6 +144,9 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     isMutating,
     error,
     readOnly = false,
+    hideToolbar = false,
+    skipRemoteParentTitles = false,
+    emptyText,
     search,
     filters = [],
     onSearchChange,
@@ -362,6 +371,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     entityId: productId,
     knownRows: requirements,
     parentIds: useMemo(() => requirements.map((requirement) => requirement.parent_id), [requirements]),
+    skipRemote: skipRemoteParentTitles,
   });
   const resolveParentTitle = useCallback((parentId: string) => parentTitles[parentId], [parentTitles]);
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
@@ -490,9 +500,14 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div ref={setMenuPortalEl} className="requirement-grid-menu-portal" />
-      {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="relative z-20 px-4 py-2">{toolbar}</div>}
+      {!hideToolbar &&
+        (toolbarPortalEl ? (
+          createPortal(toolbar, toolbarPortalEl)
+        ) : (
+          <div className="relative z-20 px-4 py-2">{toolbar}</div>
+        ))}
 
-      <FiltersRow filter={filter} />
+      {!hideToolbar && <FiltersRow filter={filter} />}
 
       {/*
         min-w-0：列方向 flex 子项默认 min-width:auto，会被定宽表格撑到整表宽度，父级再
@@ -909,19 +924,29 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   )}
                   {isRequirementTypeVisible && (
                     <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>
-                      <button
-                        type="button"
-                        onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
-                        title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
-                          name: requirementTypeNames[requirement.requirement_type_id] ?? "",
-                        })}
-                        className={cn(
-                          "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
-                          "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
-                        )}
-                      >
-                        <span className="truncate">{requirementTypeNames[requirement.requirement_type_id] ?? "—"}</span>
-                      </button>
+                      {onOpenRequirementTypeView ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenRequirementTypeView(requirement.requirement_type_id)}
+                          title={t("workspace_products.requirements.data.views.open_requirement_type_view", {
+                            name: requirementTypeNames[requirement.requirement_type_id] ?? "",
+                          })}
+                          className={cn(
+                            "inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12",
+                            "text-secondary transition-colors hover:bg-layer-3 hover:text-primary"
+                          )}
+                        >
+                          <span className="truncate">
+                            {requirementTypeNames[requirement.requirement_type_id] ?? "—"}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex max-w-full items-center rounded-md bg-layer-2 px-2 py-0.5 text-12 text-secondary">
+                          <span className="truncate">
+                            {requirementTypeNames[requirement.requirement_type_id] ?? "—"}
+                          </span>
+                        </span>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -931,7 +956,9 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
         </table>
         {!requirements.length && (
           <div className="grid place-items-center p-10 text-center">
-            <p className="text-13 text-secondary">{t("workspace_products.requirements.data.views.empty")}</p>
+            <p className="text-13 text-secondary">
+              {emptyText ?? t("workspace_products.requirements.data.views.empty")}
+            </p>
           </div>
         )}
       </div>

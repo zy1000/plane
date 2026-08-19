@@ -1,21 +1,23 @@
 /**
- * 一份基线的详情：头部信息 + 收录的需求。
+ * 一份基线的详情：头部信息 + 收录的需求表格。
  *
  * 内容不可改，能改的只有名字和说明 —— 想「更新基线」就再打一份新的，那正是快照该有的
- * 语义。展开一条才渲染它的完整快照，一页 20 条全渲染会把几百个字段一次铺出来。
+ * 语义。列表复用总览网格，点开抽屉也只渲染收录时的 snapshot。
  */
-import { useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
+import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirementBaseline, TRequirementBaselineEntry, TRequirementTypeSchema } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn, renderFormattedDate } from "@plane/utils";
-import { BaselineEntrySnapshot } from "./baseline-entry-snapshot";
-import { BaselinePagination } from "./baseline-pagination";
+import { RequirementDefaultViewGrid } from "../requirement-default-view-grid";
+import { baselineEntryToRequirement } from "./baseline-entry-adapter";
+import { BaselineRequirementPeek } from "./baseline-requirement-peek";
 
 type TProps = {
   workspaceSlug: string;
+  productId: string;
   baseline: TRequirementBaseline | null;
   entries: TRequirementBaselineEntry[];
   totalCount: number;
@@ -29,15 +31,18 @@ type TProps = {
   prevPageResults?: boolean;
   requirementTypes: TRequirementTypeSchema[];
   activeRequirementTypeId?: string;
+  peekRequirementId: string | null;
   onRequirementTypeChange: (requirementTypeId: string | undefined) => void;
   onPerPageChange: (value: number) => void;
   onCursorChange: (value: string | undefined) => void;
+  onOpenPeek: (requirementId: string | null) => void;
   onBack: () => void;
 };
 
 export function BaselineDetail(props: TProps) {
   const {
     workspaceSlug,
+    productId,
     baseline,
     entries,
     totalCount,
@@ -51,13 +56,18 @@ export function BaselineDetail(props: TProps) {
     prevPageResults,
     requirementTypes,
     activeRequirementTypeId,
+    peekRequirementId,
     onRequirementTypeChange,
     onPerPageChange,
     onCursorChange,
+    onOpenPeek,
     onBack,
   } = props;
   const { t } = useTranslation();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const requirements = useMemo(
+    () => entries.map((entry) => baselineEntryToRequirement(entry, productId)),
+    [entries, productId]
+  );
 
   if (isLoading && !baseline) {
     return (
@@ -126,61 +136,44 @@ export function BaselineDetail(props: TProps) {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-3 md:px-6">
-        {isEntriesLoading ? (
-          <Loader className="space-y-2">
-            {Array.from({ length: 6 }, (_, index) => (
-              <Loader.Item key={index} height="40px" />
-            ))}
-          </Loader>
-        ) : !entries.length ? (
-          <p className="py-16 text-center text-13 text-tertiary">
-            {t("workspace_products.requirements.baseline.detail.empty")}
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {entries.map((entry) => {
-              const isExpanded = expandedId === entry.id;
-              const typeName = requirementTypes.find((item) => item.id === entry.requirement_type_id)?.name;
-              return (
-                <li key={entry.id} className="rounded-md border border-subtle">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
-                    ) : (
-                      <ChevronRight className="size-3.5 shrink-0 text-tertiary" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-12 text-primary">
-                      {entry.snapshot.title || t("requirement_detail.untitled")}
-                    </span>
-                    {typeName && <span className="shrink-0 text-11 text-tertiary">{typeName}</span>}
-                    <span className="shrink-0 text-11 text-tertiary tabular-nums">v{entry.version_number}</span>
-                  </button>
-                  {isExpanded && (
-                    <div className="px-3 pb-3">
-                      <BaselineEntrySnapshot entry={entry} workspaceSlug={workspaceSlug} />
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      <BaselinePagination
-        label={t("workspace_products.requirements.baseline.entry_count", { count: totalCount })}
+      <RequirementDefaultViewGrid
+        workspaceSlug={workspaceSlug}
+        productId={productId}
+        requirementTypes={requirementTypes}
+        requirements={requirements}
+        totalCount={totalCount}
         perPage={perPage}
         nextCursor={nextCursor}
         prevCursor={prevCursor}
         nextPageResults={nextPageResults}
         prevPageResults={prevPageResults}
-        onPerPageChange={onPerPageChange}
+        isLoading={isEntriesLoading}
+        isMutating={false}
+        error={null}
+        readOnly
+        hideToolbar
+        skipRemoteParentTitles
+        emptyText={t("workspace_products.requirements.baseline.detail.empty")}
+        search=""
+        onSearchChange={() => undefined}
         onCursorChange={onCursorChange}
+        onPerPageChange={onPerPageChange}
+        onDelete={async () => undefined}
+        onDuplicate={async () => undefined}
+        onOpenDetail={onOpenPeek}
+      />
+
+      <BaselineRequirementPeek
+        workspaceSlug={workspaceSlug}
+        productId={productId}
+        requirementId={peekRequirementId}
+        entries={entries}
+        requirementTypes={requirementTypes}
+        onClose={() => onOpenPeek(null)}
+        onOpenRequirement={onOpenPeek}
+        shareHref={(requirementId) =>
+          `${workspaceSlug}/products/${productId}/requirements?tab=baselines&bl=${baseline.id}&peek=${requirementId}`
+        }
       />
     </div>
   );

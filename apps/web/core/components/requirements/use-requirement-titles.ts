@@ -12,6 +12,8 @@ type TArgs = {
   knownRows: { id: string; title: string }[];
   /** 要解析成标题的父项 ID */
   parentIds: (string | null | undefined)[];
+  /** 只读当前屏，不再 ids= 去拉活需求。基线快照用：父项标题必须是收录时的，不能漏出今天的名字 */
+  skipRemote?: boolean;
 };
 
 /**
@@ -24,7 +26,14 @@ type TArgs = {
  * 已请求过的 ID 记在 ref 里，所以翻页/重渲染不会重复拉；解析结果只增不减，翻回
  * 上一页时之前解析过的标题仍然在。
  */
-export const useRequirementTitles = ({ workspaceSlug, entityKind, entityId, knownRows, parentIds }: TArgs) => {
+export const useRequirementTitles = ({
+  workspaceSlug,
+  entityKind,
+  entityId,
+  knownRows,
+  parentIds,
+  skipRemote = false,
+}: TArgs) => {
   const [fetched, setFetched] = useState<Record<string, string>>({});
   const requestedRef = useRef<Set<string>>(new Set());
 
@@ -40,7 +49,7 @@ export const useRequirementTitles = ({ workspaceSlug, entityKind, entityId, know
   );
 
   useEffect(() => {
-    if (!parentIdKey || !entityId || !workspaceSlug) return;
+    if (skipRemote || !parentIdKey || !entityId || !workspaceSlug) return;
     const missing = parentIdKey
       .split(",")
       .filter((id) => !onScreen[id] && !requestedRef.current.has(id));
@@ -60,7 +69,7 @@ export const useRequirementTitles = ({ workspaceSlug, entityKind, entityId, know
         }))
       )
       .catch(() => undefined);
-  }, [parentIdKey, onScreen, entityKind, entityId, workspaceSlug]);
+  }, [parentIdKey, onScreen, entityKind, entityId, workspaceSlug, skipRemote]);
 
   // 页内的行优先：它是最新的，批量请求的结果可能已经过时
   return useMemo(() => ({ ...fetched, ...onScreen }), [fetched, onScreen]);
