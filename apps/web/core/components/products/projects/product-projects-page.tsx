@@ -187,11 +187,6 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
                           <span className="truncate text-13 font-medium text-primary group-hover:text-accent-primary">
                             {project?.name ?? link.project}
                           </span>
-                          {project?.identifier && (
-                            <span className="shrink-0 rounded bg-layer-2 px-1.5 py-0.5 text-11 text-secondary">
-                              {project.identifier}
-                            </span>
-                          )}
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-13 tabular-nums text-primary">
