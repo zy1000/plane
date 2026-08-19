@@ -114,7 +114,9 @@ export const CycleScopeRequirementsPane = observer(function CycleScopeRequiremen
           onClose={() => setPeekRequirementId(null)}
           onOpenRequirement={setPeekRequirementId}
           showDetailAction={false}
-          productChip={<ProductChip identifier={peekRow.product_identifier} name={peekRow.product_name} />}
+          productChip={
+            <ProductChip hideIdentifier identifier={peekRow.product_identifier} name={peekRow.product_name} />
+          }
         />
       )}
     </div>

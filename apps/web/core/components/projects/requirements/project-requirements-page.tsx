@@ -386,7 +386,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           shareHref={(requirementId) => `${slug}/projects/${project}/requirements?peek=${requirementId}`}
           showDetailAction={false}
           productChip={
-            <ProductChip identifier={peekRow.product_identifier} name={peekRow.product_name} />
+            <ProductChip hideIdentifier identifier={peekRow.product_identifier} name={peekRow.product_name} />
           }
           /*
            * 项目侧把工作项 / 用例收进同一组关联区（快捷操作条 + 折叠列表）。
