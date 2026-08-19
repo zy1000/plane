@@ -2115,8 +2115,10 @@ export default {
       unlink: "解除关联",
       unlink_confirm_title: "解除工作项关联",
       unlink_confirm_description: "解除后该工作项不再计入本需求的完成率。",
-      /** 工作项详情属性栏只读芯片的行标签 */
+      /** 工作项详情「结构」栏需求行标签 */
       source_requirement: "需求",
+      /** 工作项详情结构栏需求选择器空值 */
+      no_requirement: "无需求",
       /** 产品侧按项目分组展示时，该分组下还没有工作项 */
       group_empty: "该项目暂无已拆工作项",
       /** 产品侧「拆分工作项」的前置：工作项必须落在具体项目里 */

@@ -28,11 +28,9 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
-import { RequirementChip } from "@/components/requirements/requirement-chip";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
-import { useIssueRequirementLink } from "@/hooks/store/use-issue-requirement-link";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
@@ -50,6 +48,7 @@ import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import { IssueReleaseSelect } from "./release-select";
+import { IssueRequirementSelect } from "./requirement-select";
 import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "./root";
 import { FileText, Rocket, Type } from "lucide-react";
@@ -76,8 +75,6 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   const { getStateById } = useProjectState();
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug, projectId);
-  // 工作项侧反查所挂需求：无关联时「需求」行整行不渲染
-  const { link: requirementLink } = useIssueRequirementLink(workspaceSlug, projectId, issueId);
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
 
@@ -329,22 +326,19 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               />
             </div>
 
-            {/* 来源需求：只读芯片，改关联回需求侧的「关联工作项」section 操作 */}
-            {requirementLink && (
-              <div className="flex h-8 items-center gap-1">
-                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
-                  <FileText className="h-4 w-4 flex-shrink-0" />
-                  <span>{t("project_requirements.issues.source_requirement")}</span>
-                </div>
-                <div className="flex w-2/3 min-w-0 flex-grow items-center rounded px-2 py-0.5">
-                  <RequirementChip
-                    displayId={requirementLink.requirement_display_id}
-                    name={requirementLink.requirement_name}
-                    href={`/${workspaceSlug}/products/${requirementLink.product_id}/requirements/${requirementLink.requirement_id}`}
-                  />
-                </div>
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
+                <FileText className="h-4 w-4 flex-shrink-0" />
+                <span>{t("project_requirements.issues.source_requirement")}</span>
               </div>
-            )}
+              <IssueRequirementSelect
+                className="w-2/3 flex-grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                disabled={!isEditable}
+              />
+            </div>
 
             <div className="flex h-8 items-center gap-1">
               <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">

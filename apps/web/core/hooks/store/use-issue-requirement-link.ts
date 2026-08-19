@@ -1,26 +1,66 @@
 /**
- * 工作项侧反查所挂需求（一条工作项至多挂一条需求，所以是单个对象而非列表）。
+ * 工作项侧反查所挂需求（一条工作项至多挂一条）。
  *
- * 只服务详情侧栏 / peek 属性栏的只读芯片：端点在无关联时返回 null，消费方据此
- * 整行不渲染（不占位）。改关联回需求侧的「关联工作项」section 操作，所以这里
- * 不暴露任何 mutation —— 与 use-requirement-issues 的读写 hook 刻意区分。
+ * 详情「结构」栏的需求选择器读写都走这里。改挂先解后挂，避免
+ * 409 ISSUE_ALREADY_LINKED。成功后失效本 key，并失效涉及的
+ * requirement-issues 列表（需求侧「关联工作项」section）。
  */
-import useSWR from "swr";
+import { useCallback } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import { RequirementService } from "@/services/requirement.service";
+import { getRequirementIssuesKey } from "@/hooks/store/use-requirement-issues";
 
 const requirementService = new RequirementService();
 
+export const getIssueRequirementLinkKey = (workspaceSlug: string, projectId: string, issueId: string) =>
+  `issue-requirement-link-${workspaceSlug}-${projectId}-${issueId}`;
+
 export const useIssueRequirementLink = (workspaceSlug: string, projectId: string, issueId: string) => {
-  const { data, isLoading } = useSWR(
+  const { data, isLoading, mutate } = useSWR(
     workspaceSlug && projectId && issueId
-      ? `issue-requirement-link-${workspaceSlug}-${projectId}-${issueId}`
+      ? getIssueRequirementLinkKey(workspaceSlug, projectId, issueId)
       : null,
     () => requirementService.getIssueRequirementLink(workspaceSlug, projectId, issueId)
   );
 
+  const invalidateRequirementIssues = useCallback(
+    (requirementId: string) => {
+      if (!workspaceSlug || !projectId || !requirementId) return;
+      void globalMutate(getRequirementIssuesKey(workspaceSlug, projectId, requirementId));
+    },
+    [projectId, workspaceSlug]
+  );
+
+  /**
+   * 把工作项挂到 nextId；传 null 只解除。已挂同一条则 noop。
+   * unlink 成功而 link 失败时仍会刷新本 key，UI 落到「无需求」。
+   */
+  const setRequirement = useCallback(
+    async (nextId: string | null) => {
+      if (!workspaceSlug || !projectId || !issueId) return;
+      const currentId = data?.requirement_id ?? null;
+      if (currentId === nextId) return;
+
+      try {
+        if (currentId) {
+          await requirementService.unlinkIssueFromRequirement(workspaceSlug, projectId, currentId, issueId);
+          invalidateRequirementIssues(currentId);
+        }
+        if (nextId) {
+          await requirementService.linkIssuesToRequirement(workspaceSlug, projectId, nextId, [issueId]);
+          invalidateRequirementIssues(nextId);
+        }
+      } finally {
+        await mutate();
+      }
+    },
+    [data?.requirement_id, invalidateRequirementIssues, issueId, mutate, projectId, workspaceSlug]
+  );
+
   return {
-    /** null = 未挂任何需求（或还没加载完）—— 两种情况芯片行都不渲染 */
     link: data ?? null,
     isLoading,
+    mutate,
+    setRequirement,
   };
 };

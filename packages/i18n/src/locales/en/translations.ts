@@ -1938,6 +1938,7 @@ export default {
       unlink_confirm_title: "Unlink work item",
       unlink_confirm_description: "Once unlinked, this work item no longer counts toward this requirement's completion rate.",
       source_requirement: "Requirement",
+      no_requirement: "No requirement",
       group_empty: "No work items in this project yet",
       select_project_first: "Select a project first",
       already_linked: "Work item is already linked to requirement {display_id}",
