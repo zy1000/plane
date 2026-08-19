@@ -12,33 +12,37 @@
  * 测试人员那一侧还有第三个入口：用例详情弹窗
  * （components/qa/cases/requirement-display-panel.tsx），写的是同一张表、用 QA 权限。
  *
- * 行上只渲染自解释的字段（编号 / 标题 / 用例库·模块）：用例的 type / priority 是后端
- * IntegerChoices 数值，标签映射在 testhub 路由的 globalEnums 可变单例里，需求详情页先
- * 渲染时那个 map 是空的 —— 详见 requirement-testcase-link-modal.tsx 的说明。
+ * 行几何对齐工作项详情的用例绑定：左缩进 + 箭头占位，标题可点开详情，属性收在右侧胶囊。
+ * 用例的 type / priority 是后端 IntegerChoices 数值，标签映射在 testhub 的 globalEnums
+ * 里，需求页先渲染时那个 map 是空的 —— 详见 requirement-testcase-link-modal.tsx。
  */
 import { useState } from "react";
-import { Link2Off } from "lucide-react";
+import { CalendarDays, Link2Off } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirementTestCase } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
+import { renderFormattedDate } from "@plane/utils";
+import UpdateModal from "@/components/qa/cases/update-modal";
 import { useRequirementTestCases } from "@/hooks/store/use-requirement-test-cases";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 import { RequirementTestCaseLinkModal } from "./requirement-testcase-link-modal";
 
 /**
- * 关联用例的一行：编号 / 标题 / 用例库·模块 / 解除按钮。
+ * 关联用例的一行。版式对齐工作项详情 QaCasesCollapsibleContent。
  *
- * 导出以备只读变体复用 —— 两侧的差别只有「能不能解除」，收在 onUnlink 是否传入里，
- * 与 RequirementIssueRow 同一取舍。
+ * 导出以备只读变体复用 —— 两侧的差别只有「能不能解除 / 能不能点开」，
+ * 收在 onUnlink / onOpen 是否传入里。
  */
 export const RequirementTestCaseRow = ({
   testCase,
+  onOpen,
   onUnlink,
 }: {
   testCase: TRequirementTestCase;
+  onOpen?: (testCase: TRequirementTestCase) => void;
   /** 传了才渲染行尾的解除按钮；只读场景不传 */
   onUnlink?: (testCase: TRequirementTestCase) => void;
 }) => {
@@ -47,32 +51,53 @@ export const RequirementTestCaseRow = ({
     testCase.repository_project_id === null
       ? t("requirement_detail.test_cases.shared_repository")
       : (testCase.repository_name ?? "");
+  const title = testCase.name || testCase.code || "—";
 
   return (
-    <div className="group relative flex min-h-11 w-full items-center gap-3 px-2.5 py-1 transition-colors hover:bg-surface-2">
-      {testCase.code && (
-        <span className="shrink-0 text-13 text-tertiary tabular-nums">{testCase.code}</span>
-      )}
-      <Tooltip tooltipContent={testCase.name}>
-        <span className="min-w-0 flex-1 truncate text-13 text-primary">{testCase.name}</span>
-      </Tooltip>
-
-      {/* 用例库 / 共享库标记 —— 关联列表横跨多个项目，不标出来无法解释来源 */}
-      {scopeLabel && <span className="shrink-0 text-13 text-secondary">{scopeLabel}</span>}
-      {testCase.module_name && <span className="shrink-0 text-13 text-tertiary">{testCase.module_name}</span>}
-
-      {onUnlink && (
-        <Tooltip tooltipContent={t("requirement_detail.test_cases.unlink")}>
-          <button
-            type="button"
-            aria-label={t("requirement_detail.test_cases.unlink")}
-            onClick={() => onUnlink(testCase)}
-            className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
-          >
-            <Link2Off className="size-3.5" />
-          </button>
+    <div
+      className="group relative flex h-full min-h-11 w-full items-center py-1 pr-2 transition-all hover:bg-surface-2"
+      style={{ paddingLeft: 6 }}
+    >
+      {/* 对齐折叠头的展开箭头占位，标题与工作项用例行同一竖线 */}
+      <div className="flex size-5 shrink-0" aria-hidden />
+      <div className="flex min-w-0 flex-1 items-center">
+        <Tooltip tooltipContent={title} position="top">
+          {onOpen ? (
+            <button
+              type="button"
+              className="min-w-0 max-w-full truncate text-left text-13 text-primary"
+              onClick={() => onOpen(testCase)}
+            >
+              {title}
+            </button>
+          ) : (
+            <span className="min-w-0 max-w-full truncate text-13 text-primary">{title}</span>
+          )}
         </Tooltip>
-      )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {scopeLabel && (
+          <span className="inline-flex h-5 items-center justify-center whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-md-medium text-secondary">
+            {scopeLabel}
+          </span>
+        )}
+        <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-11 text-secondary">
+          <CalendarDays className="h-3 w-3 shrink-0" />
+          {testCase.created_at ? renderFormattedDate(testCase.created_at) : "—"}
+        </span>
+        {onUnlink && (
+          <Tooltip tooltipContent={t("requirement_detail.test_cases.unlink")}>
+            <button
+              type="button"
+              aria-label={t("requirement_detail.test_cases.unlink")}
+              onClick={() => onUnlink(testCase)}
+              className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+            >
+              <Link2Off className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
+      </div>
     </div>
   );
 };
@@ -117,6 +142,7 @@ export const RequirementTestCasesSection = (props: TProps) => {
   const [localLinkOpen, setLocalLinkOpen] = useState(false);
   const isLinkModalOpen = linkModalOpen ?? localLinkOpen;
   const setIsLinkModalOpen = onLinkModalOpenChange ?? setLocalLinkOpen;
+  const [activeCase, setActiveCase] = useState<TRequirementTestCase | null>(null);
   /** 待确认解除的行；非空即弹确认框，与关联工作项同一交互口径 */
   const [caseToUnlink, setCaseToUnlink] = useState<TRequirementTestCase | null>(null);
   const [isUnlinking, setIsUnlinking] = useState(false);
@@ -212,6 +238,7 @@ export const RequirementTestCasesSection = (props: TProps) => {
                 <RequirementTestCaseRow
                   key={testCase.id}
                   testCase={testCase}
+                  onOpen={setActiveCase}
                   onUnlink={canManage ? setCaseToUnlink : undefined}
                 />
               ))}
@@ -221,6 +248,14 @@ export const RequirementTestCasesSection = (props: TProps) => {
           )}
         </RequirementRelationCollapsible>
       )}
+
+      <UpdateModal
+        open={Boolean(activeCase)}
+        onClose={() => setActiveCase(null)}
+        caseId={activeCase?.id}
+        workspaceSlug={workspaceSlug}
+        projectId={activeCase?.repository_project_id ?? scopeProjectId}
+      />
 
       <RequirementTestCaseLinkModal
         isOpen={isLinkModalOpen}

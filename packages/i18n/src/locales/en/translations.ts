@@ -1939,6 +1939,8 @@ export default {
       unlink_confirm_description: "Once unlinked, this work item no longer counts toward this requirement's completion rate.",
       group_empty: "No work items in this project yet",
       select_project_first: "Select a project first",
+      link_project_first: "Link this requirement to a project before splitting or linking work items",
+      pick_project: "Choose a project",
       toast_linked: "Work items linked",
       toast_unlinked: "Work item unlinked",
       toast_link_failed: "Failed to link work items",

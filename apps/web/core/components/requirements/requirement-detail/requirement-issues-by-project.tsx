@@ -13,6 +13,7 @@ import { useMemo } from "react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirement } from "@plane/types";
 import { Loader } from "@plane/ui";
+import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { useProductProjects } from "@/hooks/store/use-product-projects";
 import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
 import { RequirementIssueRow } from "./requirement-issues-section";
@@ -93,22 +94,25 @@ export const RequirementIssuesByProject = ({
   if (!projectIds.length) return null;
 
   return (
-    <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")}>
-      <div className="flex flex-col gap-3 pb-3">
-        {projectIds.map((projectId) => {
-          const detail = projectById.get(projectId);
-          return (
-            <ProjectIssuesGroup
-              key={projectId}
-              workspaceSlug={workspaceSlug}
-              requirementId={requirement.id}
-              projectId={projectId}
-              projectName={detail?.name}
-              projectIdentifier={detail?.identifier}
-            />
-          );
-        })}
-      </div>
-    </RequirementRelationCollapsible>
+    <>
+      <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")}>
+        <div className="flex flex-col gap-3 pb-3">
+          {projectIds.map((projectId) => {
+            const detail = projectById.get(projectId);
+            return (
+              <ProjectIssuesGroup
+                key={projectId}
+                workspaceSlug={workspaceSlug}
+                requirementId={requirement.id}
+                projectId={projectId}
+                projectName={detail?.name}
+                projectIdentifier={detail?.identifier}
+              />
+            );
+          })}
+        </div>
+      </RequirementRelationCollapsible>
+      <IssuePeekOverview />
+    </>
   );
 };

@@ -17,18 +17,21 @@ import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { ISearchIssueResponse, TIssue, TRequirement, TRequirementIssue } from "@plane/types";
-import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
+import { AlertModalCore, ControlLink, CustomMenu, Loader } from "@plane/ui";
 import { cn, generateWorkItemLink } from "@plane/utils";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
+import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { useProject } from "@/hooks/store/use-project";
 import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
+import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-redirection";
+import { usePlatformOS } from "@/hooks/use-platform-os";
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 
 /**
- * 关联工作项的一行：编号 / 标题 / 状态 / 负责人 / 解除按钮。
+ * 关联工作项的一行。版式对齐工作项详情子工作项：左缩进 + 箭头占位，属性收在右侧。
  *
  * 项目侧 Section 与产品侧按项目分组共用 —— 两侧的差别只有「能不能解除」，收在
  * onUnlink 是否传入里，不另开一套行渲染。
@@ -47,9 +50,11 @@ export const RequirementIssueRow = ({
   onUnlink?: (issue: TRequirementIssue) => void;
 }) => {
   const { t } = useTranslation();
+  const { isMobile } = usePlatformOS();
+  const { handleRedirection } = useIssuePeekOverviewRedirection();
   const isArchived = Boolean(issue.archived_at);
   // 归档行走 /archives/ 路由（只要 id），普通行走 /browse/IDENT-seq（要 identifier）。
-  // 新开标签页 —— 详情抽屉还开着，原地跳走会把用户静默弹出需求语境
+  // 单击在当前页开工作项抽屉，和用例行开详情弹窗同一手感；Ctrl/⌘+单击才新开标签。
   const workItemLink =
     isArchived || projectIdentifier
       ? generateWorkItemLink({
@@ -61,6 +66,20 @@ export const RequirementIssueRow = ({
           isArchived,
         })
       : null;
+
+  const openIssue = () => {
+    if (!workItemLink) return;
+    handleRedirection(
+      workspaceSlug,
+      {
+        id: issue.id,
+        project_id: issue.project_id,
+        sequence_id: issue.sequence_id,
+        archived_at: issue.archived_at,
+      } as TIssue,
+      isMobile
+    );
+  };
 
   const heading = (
     <>
@@ -76,8 +95,8 @@ export const RequirementIssueRow = ({
           />
         </span>
       )}
-      <Tooltip tooltipContent={issue.name}>
-        <span className="min-w-0 flex-1 truncate text-13 text-primary">{issue.name}</span>
+      <Tooltip tooltipContent={issue.name} position="top">
+        <span className="min-w-0 max-w-full truncate text-13 text-primary">{issue.name}</span>
       </Tooltip>
     </>
   );
@@ -86,54 +105,60 @@ export const RequirementIssueRow = ({
     // 归档仍是事实（照常计入工作项数与完成率），只在展示上置灰
     <div
       className={cn(
-        "group relative flex min-h-11 w-full items-center gap-3 px-2.5 py-1 transition-colors hover:bg-surface-2",
+        "group relative flex h-full min-h-11 w-full items-center py-1 pr-2 transition-all hover:bg-surface-2",
         isArchived && "opacity-60"
       )}
+      style={{ paddingLeft: 6 }}
     >
+      {/* 对齐折叠头的展开箭头占位，编号与子工作项 CULTER-xxx 同一竖线 */}
+      <div className="flex size-5 shrink-0" aria-hidden />
       {workItemLink ? (
-        <a
+        <ControlLink
           href={workItemLink}
-          target="_blank"
-          rel="noopener noreferrer"
+          onClick={openIssue}
           className="flex min-w-0 flex-1 items-center gap-3"
         >
           {heading}
-        </a>
+        </ControlLink>
       ) : (
         <span className="flex min-w-0 flex-1 items-center gap-3">{heading}</span>
       )}
 
-      {/* 状态按 state_group 配色 —— 状态名是项目内自定义的，group 才是稳定的
-          跨项目语义轴（完成率也按它算），行内色点与之保持同一口径 */}
-      <span className="inline-flex h-5 shrink-0 items-center gap-1.5 text-13 text-secondary">
-        <span
-          className="size-2 rounded-full"
-          style={{
-            backgroundColor:
-              (issue.state_group && STATE_GROUPS[issue.state_group]?.color) || issue.state_color || undefined,
-          }}
-        />
-        {issue.state_name}
-      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        {/* 状态按 state_group 配色 —— 状态名是项目内自定义的，group 才是稳定的
+            跨项目语义轴（完成率也按它算），行内色点与之保持同一口径 */}
+        {issue.state_name && (
+          <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-11 text-secondary">
+            <span
+              className="size-2 rounded-full"
+              style={{
+                backgroundColor:
+                  (issue.state_group && STATE_GROUPS[issue.state_group]?.color) || issue.state_color || undefined,
+              }}
+            />
+            {issue.state_name}
+          </span>
+        )}
 
-      {issue.assignee_ids.length > 0 && (
-        <span className="shrink-0">
-          <ButtonAvatars showTooltip userIds={issue.assignee_ids} />
-        </span>
-      )}
+        {issue.assignee_ids.length > 0 && (
+          <span className="shrink-0">
+            <ButtonAvatars showTooltip userIds={issue.assignee_ids} />
+          </span>
+        )}
 
-      {onUnlink && (
-        <Tooltip tooltipContent={t("project_requirements.issues.unlink")}>
-          <button
-            type="button"
-            aria-label={t("project_requirements.issues.unlink")}
-            onClick={() => onUnlink(issue)}
-            className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
-          >
-            <Link2Off className="size-3.5" />
-          </button>
-        </Tooltip>
-      )}
+        {onUnlink && (
+          <Tooltip tooltipContent={t("project_requirements.issues.unlink")}>
+            <button
+              type="button"
+              aria-label={t("project_requirements.issues.unlink")}
+              onClick={() => onUnlink(issue)}
+              className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+            >
+              <Link2Off className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
+      </div>
     </div>
   );
 };
@@ -164,6 +189,8 @@ type TProps = {
   onSplitModalOpenChange?: (open: boolean) => void;
   linkModalOpen?: boolean;
   onLinkModalOpenChange?: (open: boolean) => void;
+  /** 只挂弹窗（产品侧列表已经按项目分组渲染过了，避免再画一份） */
+  hideList?: boolean;
 };
 
 export const RequirementIssuesSection = observer(function RequirementIssuesSection(props: TProps) {
@@ -180,6 +207,7 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
     onSplitModalOpenChange,
     linkModalOpen,
     onLinkModalOpenChange,
+    hideList = false,
   } = props;
   const { t } = useTranslation();
   const { getProjectIdentifierById } = useProject();
@@ -202,7 +230,7 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
   const projectIdentifier = getProjectIdentifierById(projectId) || undefined;
   const linkedCycleIds = requirement.linked_cycle_ids ?? [];
   const completedCount = issues.filter((issue) => issue.state_group === "completed").length;
-  const showList = issues.length > 0 || !hideWhenEmpty;
+  const showList = !hideList && (issues.length > 0 || !hideWhenEmpty);
 
   const notifyLinkFailure = (error: unknown) => {
     const payload = error as { error?: string } | null;
@@ -354,6 +382,8 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
         primaryButtonText={{ default: t("project_requirements.issues.unlink"), loading: t("loading") }}
         secondaryButtonText={t("cancel")}
       />
+
+      {!hideList && <IssuePeekOverview />}
     </>
   );
 });

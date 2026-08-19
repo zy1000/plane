@@ -34,7 +34,7 @@ import {
 } from "./requirement-data-views";
 import {
   RequirementPeekOverview,
-  RequirementTestCasesSection,
+  RequirementProductRelations,
 } from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 
@@ -82,6 +82,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
    */
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
+  const peekRow = useMemo(
+    () => store.requirementsPage.results.find((row) => row.id === peekRequirementId) ?? null,
+    [peekRequirementId, store.requirementsPage.results]
+  );
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
   const canEdit = Boolean(policy?.can_edit);
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
@@ -477,16 +481,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         // 重拉会让后面的网格整张闪一下
         onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
         /*
-         * 关联测试用例：权限语境与产品侧整页完全相同（都在 products/{productId} 下、
-         * 都用同一个 canEdit），所以抽屉与整页一样给可写变体。关联工作项恰好相反 ——
-         * 那个要项目语境，产品侧抽屉不注入。
+         * 产品侧抽屉补上与项目侧同一组关联操作。拆分/挂工作项要先落到具体项目
+         * （需求未进项目时按钮会提示）；用例关联仍是需求级，不需要项目。
          */
-        testCasesSection={
-          peekRequirementId && activeTab !== "baselines" ? (
-            <RequirementTestCasesSection
+        issuesSection={
+          peekRow && activeTab !== "baselines" ? (
+            <RequirementProductRelations
               workspaceSlug={workspaceSlug ?? ""}
               productId={productId ?? ""}
-              requirementId={peekRequirementId}
+              requirement={peekRow}
               canManage={canEdit}
             />
           ) : null

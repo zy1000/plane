@@ -2119,6 +2119,8 @@ export default {
       group_empty: "该项目暂无已拆工作项",
       /** 产品侧「拆分工作项」的前置：工作项必须落在具体项目里 */
       select_project_first: "请先选择项目",
+      link_project_first: "请先把需求关联到项目，才能拆分或关联工作项",
+      pick_project: "选择项目",
       toast_linked: "已关联工作项",
       toast_unlinked: "已解除关联",
       toast_link_failed: "关联失败",

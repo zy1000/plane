@@ -12,6 +12,7 @@ import { Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
 import { canEditRequirementContent } from "@/components/requirements/requirement-status-cell";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
 import { RequirementDetailContent } from "./requirement-detail-content";
@@ -88,6 +89,7 @@ export const RequirementPeekOverview = (props: TProps) => {
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
+  const issueDetail = useIssueDetail();
   const isOpen = Boolean(requirementId);
 
   /**
@@ -155,6 +157,8 @@ export const RequirementPeekOverview = (props: TProps) => {
   );
 
   useKeypress("Escape", () => {
+    // 工作项抽屉叠在需求抽屉上时，Esc 先关工作项，别把需求一起带走
+    if (issueDetail.peekIssue) return;
     if (isOpen) onClose();
   });
 
@@ -181,7 +185,13 @@ export const RequirementPeekOverview = (props: TProps) => {
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+          <div
+            className="absolute inset-0 bg-black/20"
+            onClick={() => {
+              if (issueDetail.peekIssue) return;
+              onClose();
+            }}
+          />
         </Transition.Child>
 
         <Transition.Child

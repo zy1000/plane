@@ -779,13 +779,13 @@ export const FIELD_DROPDOWN_CLASS = {
     "h-[38px] w-full min-w-0 border-[0.5px] !border-subtle-1 bg-layer-2 px-3 transition-colors duration-150 hover:!border-strong focus:!border-accent-primary motion-reduce:transition-none",
 } as const;
 
-/** MultiSelectDropdown 走 buttonContainerClassName，没有 ! 之争 */
+/** MultiSelectDropdown 走 buttonContainerClassName，没有 ! 之争。原生 button 默认居中，必须显式 text-left。 */
 const MULTI_SELECT_CLASS = {
-  grid: "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  grid: "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
-    "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
-    "h-[38px] w-full min-w-0 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
+    "flex h-[38px] w-full min-w-0 items-center rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 text-left transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
 } as const;
 
 /**
