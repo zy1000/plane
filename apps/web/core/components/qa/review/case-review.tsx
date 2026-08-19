@@ -22,6 +22,7 @@ import { useUser } from "@/hooks/store/user";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 import { RichTextEditor } from "../cases/util";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
+import { workItemTypeName } from "../cases/work-item-category";
 import { ReviewRecordsPanel } from "./review-records";
 import { ReviewCaseFilterBar, useReviewCaseFilter } from "./review-case-filter";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
@@ -81,9 +82,9 @@ export default function CaseReview() {
     plan_case_result?: Record<string, string>;
   }>({});
   const [attachments, setAttachments] = React.useState<any[]>([]);
-  const [activeTab, setActiveTab] = React.useState<
-    "basic" | "requirement" | "work" | "defect" | "attachment" | "history"
-  >("basic");
+  const [activeTab, setActiveTab] = React.useState<"basic" | "work" | "defect" | "attachment" | "history">(
+    "basic"
+  );
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<"通过" | "不通过" | "建议" | null>("通过");
   const [reason, setReason] = React.useState<string>("");
@@ -409,9 +410,8 @@ export default function CaseReview() {
 
   React.useEffect(() => {
     const map: Record<string, string> = {
-      requirement: "史诗,特性,用户故事",
-      work: "任务",
-      defect: "缺陷",
+      work: workItemTypeName("Task"),
+      defect: workItemTypeName("Bug"),
     };
     const type_name = map[activeTab];
     if (!type_name || !workspaceSlug || !selectedCaseId) {
@@ -1020,18 +1020,6 @@ export default function CaseReview() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setActiveTab("requirement")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
-                        activeTab === "requirement"
-                          ? "text-accent-primary border-accent-strong"
-                          : "text-primary border-transparent hover:text-accent-primary"
-                      }`}
-                    >
-                      <LucideIcons.FileText size={16} aria-hidden="true" />
-                      需求
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setActiveTab("work")}
                       className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
                         activeTab === "work"
@@ -1206,22 +1194,6 @@ export default function CaseReview() {
                           />
                         </div>
 
-                      </div>
-                    )}
-                  </Transition>
-
-                  <Transition
-                    show={activeTab === "requirement"}
-                    enter="transition duration-150 ease-out"
-                    enterFrom="transform scale-95 opacity-0"
-                    enterTo="transform scale-100 opacity-100"
-                    leave="transition duration-100 ease-in"
-                    leaveFrom="transform scale-100 opacity-100"
-                    leaveTo="transform scale-95 opacity-0"
-                  >
-                    {activeTab === "requirement" && selectedCaseId && (
-                      <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
-                        <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
                       </div>
                     )}
                   </Transition>

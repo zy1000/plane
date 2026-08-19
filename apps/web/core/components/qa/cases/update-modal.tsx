@@ -20,6 +20,7 @@ import { WorkItemDisplayModal } from "./work-item-display-modal";
 import { RequirementDisplayPanel } from "./requirement-display-panel";
 import { RequirementSelectModal } from "./requirement-select-modal";
 import { WorkItemSelectModal } from "./work-item-select-modal";
+import { workItemTypeName, type TWorkItemType } from "./work-item-category";
 import { PlusOutlined } from "@ant-design/icons";
 import type { TIssue } from "@plane/types";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -59,7 +60,7 @@ function UpdateModalBody({
   const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<string>("basic");
-  /** 「关联需求」tab（requirement 域的真需求）的选择器开关与刷新令牌 */
+  /** 「需求」tab（requirement 域的真需求）的选择器开关与刷新令牌 */
   const [isRequirementModalOpen, setIsRequirementModalOpen] = useState(false);
   const [requirementReloadToken, setRequirementReloadToken] = useState(0);
   // 增加：本地状态与失焦更新逻辑
@@ -169,7 +170,7 @@ function UpdateModalBody({
 
   const [reloadToken, setReloadToken] = React.useState<number>(0);
   const [isWorkItemModalOpen, setIsWorkItemModalOpen] = React.useState<boolean>(false);
-  const [forceTypeName, setForceTypeName] = React.useState<"Requirement" | "Task" | "Bug" | undefined>(undefined);
+  const [forceTypeName, setForceTypeName] = React.useState<TWorkItemType | undefined>(undefined);
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [currentLabel, setCurrentLabel] = React.useState<string>("");
   const [preselectedIssues, setPreselectedIssues] = React.useState<TIssue[]>([]);
@@ -258,15 +259,14 @@ function UpdateModalBody({
     }
   };
 
-  const handleOpenSelectModal = async (type: "Requirement" | "Task" | "Bug") => {
+  const handleOpenSelectModal = async (type: TWorkItemType) => {
     if (!canEditCase) return;
     setForceTypeName(type);
     if (workspaceSlug && caseId) {
       try {
-        const typeName = type === "Requirement" ? "需求" : type === "Task" ? "任务" : "缺陷";
         const res = await caseService.issueList(String(workspaceSlug), {
           case_id: caseId,
-          type_name: typeName,
+          type_name: workItemTypeName(type),
         });
         const resolved: TIssue[] = Array.isArray((res as any)?.data)
           ? ((res as any).data as TIssue[])
@@ -282,7 +282,7 @@ function UpdateModalBody({
   };
 
   /**
-   * 关联需求（requirement 域）。失败往上抛 —— 409 的差异化提示由选择器按
+   * 关联需求（requirement 域，「需求」tab）。失败往上抛 —— 409 的差异化提示由选择器按
    * conflicts[].reason 展示，弹窗也据此决定不关闭，让用户改选。
    */
   const handleRequirementConfirm = async (requirementIds: string[]) => {
@@ -953,17 +953,6 @@ function UpdateModalBody({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("requirement")}
-                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
-                      activeTab === "requirement"
-                        ? "border-accent-strong text-accent-primary"
-                        : "border-transparent text-secondary hover:text-accent-primary"
-                    }`}
-                  >
-                    需求
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setActiveTab("req-link")}
                     className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "req-link"
@@ -971,7 +960,7 @@ function UpdateModalBody({
                         : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
-                    关联需求
+                    需求
                   </button>
                   <button
                     type="button"
@@ -1030,16 +1019,6 @@ function UpdateModalBody({
                   </button>
                 </nav>
                 <div className="flex-shrink-0 pt-2">
-                  {activeTab === "requirement" && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSelectModal("Requirement")}
-                      disabled={!canEditCase}
-                      className="rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      添加需求
-                    </button>
-                  )}
                   {activeTab === "req-link" && (
                     <button
                       type="button"
@@ -1299,14 +1278,6 @@ function UpdateModalBody({
                 </div>
               </div>
             )}
-            {activeTab === "requirement" && caseId && (
-              <WorkItemDisplayModal
-                caseId={String(caseId)}
-                defaultType="Requirement"
-                reloadToken={reloadToken}
-                onCountChange={(n) => setCurrentCount(n)}
-              />
-            )}
             {activeTab === "req-link" && caseId && (
               <RequirementDisplayPanel
                 caseId={String(caseId)}
@@ -1378,7 +1349,7 @@ function UpdateModalBody({
         caseId={String(caseId ?? "")}
       />
 
-      {/* 关联需求（requirement 域）的选择器。与上面的工作项选择器是两套数据，别合并 */}
+      {/* 「需求」tab（requirement 域）的选择器。与上面的工作项选择器是两套数据，别合并 */}
       <RequirementSelectModal
         isOpen={isRequirementModalOpen}
         caseId={String(caseId ?? "")}

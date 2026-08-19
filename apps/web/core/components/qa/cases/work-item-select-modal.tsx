@@ -11,6 +11,7 @@ import type { TableProps, InputRef, TableColumnType } from "antd";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useParams } from "next/navigation";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
+import { workItemTypeName, type TWorkItemType } from "./work-item-category";
 
 type Props = {
   isOpen: boolean;
@@ -18,7 +19,7 @@ type Props = {
   onClose: () => void;
   onConfirm: (issues: TIssue[]) => void;
   initialSelectedIssues?: TIssue[];
-  forceTypeName?: "Requirement" | "Task" | "Bug";
+  forceTypeName?: TWorkItemType;
   caseId?: string;
 };
 
@@ -380,13 +381,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
           project_id: currentProjectId,
         };
         if (forceTypeName) {
-          if (forceTypeName === "Requirement") {
-            queries.type_name = "需求";
-          } else if (forceTypeName === "Task") {
-            queries.type_name = "任务";
-          } else if (forceTypeName === "Bug") {
-            queries.type_name = "缺陷";
-          }
+          queries.type_name = workItemTypeName(forceTypeName);
         }
         res = await caseService.unselectIssueList(workspaceSlug, queries);
         // 新接口返回结构: { results: TIssue[], count: number } (假设 list_response 格式)
@@ -400,13 +395,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
         const pageIndex = page - 1;
         const queries: any = { per_page: perPage, cursor: `${perPage}:${pageIndex}:0` };
         if (forceTypeName) {
-          if (forceTypeName === "Requirement") {
-            queries.type__category__name__in = "需求";
-          } else if (forceTypeName === "Task") {
-            queries.type__category__name = "任务";
-          } else if (forceTypeName === "Bug") {
-            queries.type__category__name = "缺陷";
-          }
+          queries.type__category__name__in = workItemTypeName(forceTypeName);
         }
         res = await issueService.getIssues(workspaceSlug, currentProjectId, queries);
       }
