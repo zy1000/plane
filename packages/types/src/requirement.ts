@@ -468,19 +468,6 @@ export type TRequirementIssue = {
   updated_at: string;
 };
 
-/**
- * 工作项侧反查：这条工作项挂在哪条需求上。一条工作项至多挂一条需求，所以是
- * 单个对象；端点在无关联时返回 null —— 详情属性栏的只读芯片整行不渲染。
- */
-export type TIssueRequirementLink = {
-  requirement_id: string;
-  /** 拼好的展示编号（如 ECOM-12），芯片文案直接用 */
-  requirement_display_id: string;
-  requirement_name: string;
-  /** 芯片跳转产品需求详情要它 */
-  product_id: string;
-};
-
 /* --- 需求 ↔ 测试用例（RequirementTestCase） -------------------------------- */
 
 /**
@@ -515,8 +502,7 @@ export type TRequirementTestCase = {
 };
 
 /**
- * 用例侧反查：这条用例挂在哪些需求上。与工作项反查（TIssueRequirementLink，单个对象）
- * 不同 —— 这里是数组，一条用例可以验证多条需求。
+ * 用例侧反查：这条用例挂在哪些需求上。数组 —— 一条用例可以验证多条需求。
  */
 export type TTestCaseRequirementLink = {
   requirement_id: string;

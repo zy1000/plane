@@ -467,7 +467,9 @@ def status_counts_by_project(*, product_id, project_ids):
             bucket[row["requirement__status"]] = row["count"]
 
     # 工作项聚合同样一次分组覆盖所有项目。issue__/requirement__deleted_at 显式
-    # 过滤理由同上：FK 穿透不走软删 manager，窗口期里已删行不能再计进完成率
+    # 过滤理由同上：FK 穿透不走软删 manager，窗口期里已删行不能再计进完成率。
+    # 按 issue_id 去重：需求 ↔ 工作项是多对多，一条工作项挂本产品下多条需求时
+    # 只算一个工作项（一条工作项只有一个 state，落在唯一一个分组桶里）
     issue_rows = (
         RequirementIssue.objects.filter(
             project_id__in=project_ids,
@@ -477,7 +479,7 @@ def status_counts_by_project(*, product_id, project_ids):
         )
         .order_by()
         .values("project_id", "issue__state__group")
-        .annotate(count=Count("id"))
+        .annotate(count=Count("issue_id", distinct=True))
     )
     for row in issue_rows:
         bucket = counts.get(str(row["project_id"]))

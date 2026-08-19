@@ -150,7 +150,7 @@ export const SubIssuesListItem = observer(function SubIssuesListItem(props: Prop
               )}
             </div>
 
-            <div className="flex w-full cursor-pointer items-center gap-3 truncate">
+            <div className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 truncate">
               <WithDisplayPropertiesHOC displayProperties={displayProperties || {}} displayPropertyKey="key">
                 <div className="flex-shrink-0">
                   {projectDetail && (
@@ -165,8 +165,8 @@ export const SubIssuesListItem = observer(function SubIssuesListItem(props: Prop
                   )}
                 </div>
               </WithDisplayPropertiesHOC>
-              <Tooltip tooltipContent={issue.name} isMobile={isMobile}>
-                <span className="w-0 flex-1 truncate text-13 text-primary">{issue.name}</span>
+              <Tooltip tooltipContent={issue.name} isMobile={isMobile} position="top">
+                <span className="min-w-0 max-w-full truncate text-13 text-primary">{issue.name}</span>
               </Tooltip>
             </div>
 

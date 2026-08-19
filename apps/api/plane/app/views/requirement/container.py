@@ -16,7 +16,8 @@
 
 迭代与发布两套端点几乎同构，共用一个私有基类 —— 关联校验、错误码的行为必须
 逐字一致，分开写迟早漂移。两者唯一的差异走 _after_link 钩子，不要为它覆盖整个
-create。
+create。工作项侧的需求关联（views/requirement/issue.py IssueRequirementViewSet）
+方向也是 container→requirements，同样继承这个基类。
 """
 
 from rest_framework import status
@@ -48,11 +49,11 @@ MAX_PER_PAGE = 100
 
 
 class BaseRequirementContainerViewSet(BaseViewSet):
-    """迭代/发布共用的「容器 ↔ 需求」关联骨架。子类只声明四个类属性。"""
+    """迭代/发布/工作项共用的「容器 ↔ 需求」关联骨架。子类只声明四个类属性。"""
 
-    container_model = None  # Cycle | Release
-    link_model = None  # RequirementCycle | RequirementRelease
-    container_attr = ""  # 关联行上的外键名："cycle" | "release"
+    container_model = None  # Cycle | Release | Issue
+    link_model = None  # RequirementCycle | RequirementRelease | RequirementIssue
+    container_attr = ""  # 关联行上的外键名："cycle" | "release" | "issue"
 
     def _get_container(self, slug, project_id, container_id):
         return self.container_model.objects.filter(

@@ -50,7 +50,7 @@ export const useRequirementIssues = ({
 
   const issues: TRequirementIssue[] = useMemo(() => data ?? [], [data]);
 
-  /** 批量关联已有工作项。失败往上抛 —— 409 ISSUE_ALREADY_LINKED 要由调用方展示冲突需求编号 */
+  /** 批量关联已有工作项。失败往上抛，由调用方就地提示 */
   const linkIssues = useCallback(
     async (issueIds: string[]) => {
       if (!workspaceSlug || !projectId || !requirementId || issueIds.length === 0) return;

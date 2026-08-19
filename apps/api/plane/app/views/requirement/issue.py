@@ -2,16 +2,19 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""需求 ↔ 工作项的关联端点（项目侧）。
+"""需求 ↔ 工作项的关联端点（项目侧），同一张 RequirementIssue 表的两个方向。
 
 这张关联表供项目侧的工作项数 / 完成率统计，不影响需求状态（状态是需求级的
-人工字段，见 RequirementItemStatus）。
+人工字段，见 RequirementItemStatus）。真多对多：一条工作项可以同时挂多条需求，
+分别计入各自的完成率。
 
-**不复用 BaseRequirementContainerViewSet** —— 容器基类的方向是
-container→requirements（list 返回需求行），这里方向相反（requirement→issues，
-list 返回工作项行），409 语义也不同（冲突主语是「工作项已挂别的需求」，不是
-「需求没进项目」），强套基类每个方法都要覆盖。校验顺序借鉴它，bulk_create
-范式借鉴 ReleaseIssueViewSet。
+- RequirementIssueViewSet：需求 → 工作项（list 返回工作项行）。**不复用
+  BaseRequirementContainerViewSet** —— 容器基类的方向是 container→requirements，
+  这里方向相反，强套基类每个方法都要覆盖。校验顺序借鉴它，bulk_create 范式借鉴
+  ReleaseIssueViewSet。
+- IssueRequirementViewSet：工作项 → 需求（list 返回需求行）。方向与容器基类恰好
+  一致（Issue 就是容器），直接继承，四个类属性搞定，校验与错误码和迭代/发布
+  逐字一致。
 
 公共前置校验两条，报 409：需求必须已关联进本项目（先进项目，再挂项目下的
 事实 —— 反过来会绕开候选池的评审门槛）；已关闭（closed）的需求不能新挂工作项。
@@ -25,7 +28,9 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.serializers.requirement_project import ProjectRequirementSerializer
 from plane.app.views.base import BaseViewSet
+from plane.app.views.requirement.container import BaseRequirementContainerViewSet
 from plane.db.models import (
     Issue,
     IssueAssignee,
@@ -34,15 +39,6 @@ from plane.db.models import (
     RequirementItemStatus,
     RequirementProject,
 )
-
-
-def _requirement_display_id(requirement):
-    """需求编号（如 ECOM-12）。product 可空（历史行 / 库内草稿），此时给 None ——
-    与 MultiProductRequirementSerializer.get_display_id 的口径一致。"""
-    product = requirement.product
-    if product is None or requirement.sequence_id is None:
-        return None
-    return f"{product.identifier}-{requirement.sequence_id}"
 
 
 class RequirementIssueViewSet(BaseViewSet):
@@ -60,8 +56,8 @@ class RequirementIssueViewSet(BaseViewSet):
             Issue.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
-                issue_requirement__requirement_id=requirement_id,
-                issue_requirement__deleted_at__isnull=True,
+                issue_requirements__requirement_id=requirement_id,
+                issue_requirements__deleted_at__isnull=True,
             )
             .annotate(
                 assignee_ids=Coalesce(
@@ -157,33 +153,8 @@ class RequirementIssueViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ③ 一条工作项至多挂一条需求：已挂**其他**需求 → 409 带对方编号，
-        # 让前端能提示「先去解除」。已挂本需求的行不算冲突 —— 交给条件唯一索引
-        # 静默吸收（幂等），并发竞态同样由 DB 唯一索引裁决
-        conflict_rows = (
-            RequirementIssue.objects.filter(issue_id__in=requested)
-            .exclude(requirement_id=requirement_id)
-            .select_related("requirement__product")
-        )
-        conflicts = [
-            {
-                "issue_id": str(row.issue_id),
-                "requirement_id": str(row.requirement_id),
-                "requirement_display_id": _requirement_display_id(row.requirement),
-                "requirement_name": row.requirement.title,
-            }
-            for row in conflict_rows
-        ]
-        if conflicts:
-            return Response(
-                {
-                    "error": "Some work items are already linked to another requirement.",
-                    "code": "ISSUE_ALREADY_LINKED",
-                    "conflicts": conflicts,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
+        # 已挂本需求的行交给条件唯一索引静默吸收（幂等），并发竞态同样由 DB 唯一索引
+        # 裁决。工作项已挂**其他**需求不是冲突 —— 多对多。
         RequirementIssue.objects.bulk_create(
             [
                 RequirementIssue(
@@ -218,33 +189,17 @@ class RequirementIssueViewSet(BaseViewSet):
         link.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
-    def requirement_link(self, request, slug, project_id, issue_id):
-        """工作项侧反查：这条工作项挂在哪条需求上（live 行至多一条）。
 
-        给工作项详情属性栏的只读芯片供数 —— 刻意**不动 Issue 主序列化器热路径**，
-        绝大多数工作项没挂需求，塞进主序列化器是全站为少数行买单。无关联时
-        返回 200 null，前端整行不渲染。"""
-        link = (
-            RequirementIssue.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                issue_id=issue_id,
-            )
-            .select_related("requirement__product")
-            .first()
-        )
-        if link is None:
-            return Response(None, status=status.HTTP_200_OK)
-        requirement = link.requirement
-        return Response(
-            {
-                "requirement_id": str(requirement.id),
-                "requirement_display_id": _requirement_display_id(requirement),
-                "requirement_name": requirement.title,
-                "product_id": str(requirement.product_id)
-                if requirement.product_id
-                else None,
-            },
-            status=status.HTTP_200_OK,
-        )
+class IssueRequirementViewSet(BaseRequirementContainerViewSet):
+    """工作项 ↔ 需求（工作项侧）。给工作项详情的「关联需求」区块供数与写入。
+
+    刻意**不动 Issue 主序列化器热路径** —— 绝大多数工作项没挂需求，塞进主序列化器
+    是全站为少数行买单。list 返回的是 ProjectRequirementSerializer 行（与迭代 /
+    发布的关联需求列表同形），一条工作项挂的需求是个位数，分页信封一页拉完。
+    """
+
+    model = RequirementIssue
+    serializer_class = ProjectRequirementSerializer
+    container_model = Issue
+    link_model = RequirementIssue
+    container_attr = "issue"

@@ -207,8 +207,8 @@ export type TProjectIssuesSearchParams = {
   issue_relation?: boolean;
   cycle?: boolean;
   release?: boolean;
-  /** 排除已挂需求的工作项（任何 live 关联行，含已挂本需求的） */
-  requirement?: boolean;
+  /** 排除已挂**该**需求的工作项（需求 ↔ 工作项是多对多，挂过别的需求不算） */
+  exclude_requirement_id?: string;
   module?: string;
   sub_issue?: boolean;
   issue_id?: string;

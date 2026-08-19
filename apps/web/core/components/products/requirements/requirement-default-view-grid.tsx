@@ -75,8 +75,8 @@ import { useRequirementTitles } from "@/components/requirements/use-requirement-
  * 要录入或改值就点进对应的类型视图。唯一例外是状态列 —— 它不是「内容」，走独立的
  * 状态端点，总览里就地可改。
  *
- * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：编号、
- * 标准库编号、标题三列左固定，标题列吃掉容器剩余宽度；其余列定宽 144px、行高 44px。
+ * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：编号、标题
+ * 两列左固定，标题列吃掉容器剩余宽度；其余列定宽 144px、行高 44px。
  * 勾选框折进编号列，行操作折进标题格，悬停才显形。量化与样式常量都在
  * requirement-grid-shared.tsx，三个需求网格共用。
  */
@@ -246,8 +246,8 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   // 与类型视图同一份内置列定义：列头、列序、列宽都不该在两个视图里各写一遍
   const builtinColumns = getBuiltinColumnsFor("product");
   /**
-   * 编号 / 标准库编号 / 标题三列左固定（见下方 colgroup）：横滚时编号还在，
-   * 才认得出「这是哪一行」。其余内置列跟着定宽的属性列走。
+   * 编号 / 标题两列左固定（见下方 colgroup）：横滚时编号还在，才认得出
+   * 「这是哪一行」。其余内置列跟着定宽的属性列走。
    */
   const titleColumn = builtinColumns.find((column) => column.key === "title");
   const propertyBuiltinColumns = builtinColumns.filter((column) => column.key !== "title");
@@ -261,7 +261,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const displayColumns = useMemo(
     () => [
       { id: "display_id", name: t("requirements.identifier.column") },
-      { id: "source_display_id", name: t("requirements.identifier.source_column") },
       { id: "description_html", name: t("requirement_fields.builtin.description") },
       { id: "approval", name: t("requirement_approval.column") },
       { id: "status", name: t("requirement_fields.builtin.status") },
@@ -270,6 +269,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
       { id: "start_date", name: t("requirement_fields.builtin.start_date") },
       { id: "target_date", name: t("requirement_fields.builtin.target_date") },
       { id: "parent_id", name: t("requirement_fields.builtin.parent") },
+      { id: "source_display_id", name: t("requirements.identifier.source_column") },
       { id: "requirement_type", name: t("workspace_products.requirements.data.views.requirement_type_column") },
     ],
     [t]
@@ -343,8 +343,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
   const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
   const sourceDisplayIdWidth = getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
-  const sourceStickyLeft = isDisplayIdVisible ? displayIdWidth : 0;
-  const titleStickyLeft = (isDisplayIdVisible ? displayIdWidth : 0) + (isSourceDisplayIdVisible ? sourceDisplayIdWidth : 0);
+  const titleStickyLeft = isDisplayIdVisible ? displayIdWidth : 0;
   const propertyColumnsWidth =
     (isDisplayIdVisible ? displayIdWidth : 0) +
     (isSourceDisplayIdVisible ? sourceDisplayIdWidth : 0) +
@@ -519,10 +518,10 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
         className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 min-w-0 flex-1 overflow-auto bg-surface-1"
       >
         {/*
-          列宽全部显式给定（table-fixed + colgroup）：编号、标准库编号、标题三列
-          左固定，标题列吃掉容器剩余宽度，其余列一律定宽。这样表格恒好铺满容器
+          列宽全部显式给定（table-fixed + colgroup）：编号、标题两列左固定，
+          标题列吃掉容器剩余宽度，其余列一律定宽。这样表格恒好铺满容器
           —— 既不会短一截露出背景，也不会因为定宽相加超出而把最右边的列（「所属
-          类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，前三列留在原地。
+          类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，前两列留在原地。
         */}
         <table
           className="table-fixed border-collapse bg-surface-1 text-left text-13"
@@ -530,7 +529,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
         >
           <colgroup>
             {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
-            {isSourceDisplayIdVisible && <col style={{ width: sourceDisplayIdWidth }} />}
             <col style={{ width: titleColumnWidth }} />
             {isDescriptionVisible && descriptionColumn && (
               <col style={{ width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)) }} />
@@ -546,13 +544,14 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                 <col key={column.key} style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }} />
               ) : null
             )}
+            {isSourceDisplayIdVisible && <col style={{ width: sourceDisplayIdWidth }} />}
             {isRequirementTypeVisible && (
               <col style={{ width: getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
             )}
           </colgroup>
           <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
             <tr>
-              {/* 编号列最左固定，全选框折进来；标准库编号、标题依次左固定 */}
+              {/* 编号列最左固定，全选框折进来；标题列紧跟其后同样左固定 */}
               {isDisplayIdVisible && (
                 <th
                   className={cn(
@@ -585,31 +584,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   </div>
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
-                  />
-                </th>
-              )}
-              {isSourceDisplayIdVisible && (
-                <th
-                  className={cn(
-                    "group/header relative",
-                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                    REQUIREMENT_GRID_STICKY_HEADER_CLASS
-                  )}
-                  style={{
-                    width: sourceDisplayIdWidth,
-                    minWidth: sourceDisplayIdWidth,
-                    maxWidth: sourceDisplayIdWidth,
-                    left: sourceStickyLeft,
-                  }}
-                >
-                  <div className="flex h-full w-full min-w-0 items-center px-page-x">
-                    <RequirementGridHeaderLabel
-                      icon={BookMarked}
-                      label={t("requirements.identifier.source_column")}
-                    />
-                  </div>
-                  <RequirementGridColumnResizer
-                    onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
                   />
                 </th>
               )}
@@ -686,6 +660,15 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   </th>
                 ) : null
               )}
+              {/* 标准库编号排在末尾：只在追溯标准库来源时才看，不该占着靠前的位置 */}
+              {isSourceDisplayIdVisible && (
+                <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+                  <RequirementGridHeaderLabel icon={BookMarked} label={t("requirements.identifier.source_column")} />
+                  <RequirementGridColumnResizer
+                    onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
+                  />
+                </th>
+              )}
               {isRequirementTypeVisible && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                   <RequirementGridHeaderLabel
@@ -712,8 +695,8 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   )}
                 >
                   {/*
-                    编号 / 标准库编号 / 标题三列左固定。勾选框折进编号列，行操作折进
-                    标题列。左固定列底色必须不透明，选中/悬停着色铺在内层 div。
+                    编号 / 标题两列左固定。勾选框折进编号列，行操作折进标题列。
+                    左固定列底色必须不透明，选中/悬停着色铺在内层 div。
                   */}
                   {isDisplayIdVisible && (
                     <td
@@ -746,32 +729,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                         )}
                         {requirement.display_id ? (
                           <RequirementIdentifier displayId={requirement.display_id} />
-                        ) : (
-                          <span className="text-placeholder">—</span>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                  {isSourceDisplayIdVisible && (
-                    <td
-                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
-                      style={{
-                        width: sourceDisplayIdWidth,
-                        minWidth: sourceDisplayIdWidth,
-                        maxWidth: sourceDisplayIdWidth,
-                        left: sourceStickyLeft,
-                      }}
-                    >
-                      <div
-                        className={cn(
-                          "flex h-full w-full min-w-0 items-center px-page-x transition-colors duration-150 motion-reduce:transition-none",
-                          isSelected
-                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                            : "group-hover/requirement:bg-layer-transparent-hover"
-                        )}
-                      >
-                        {requirement.source_display_id ? (
-                          <RequirementIdentifier displayId={requirement.source_display_id} />
                         ) : (
                           <span className="text-placeholder">—</span>
                         )}
@@ -921,6 +878,15 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                         />
                       </td>
                     ) : null
+                  )}
+                  {isSourceDisplayIdVisible && (
+                    <td className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
+                      {requirement.source_display_id ? (
+                        <RequirementIdentifier displayId={requirement.source_display_id} />
+                      ) : (
+                        <span className="text-placeholder">—</span>
+                      )}
+                    </td>
                   )}
                   {isRequirementTypeVisible && (
                     <td className={REQUIREMENT_GRID_BODY_CELL_CLASS}>

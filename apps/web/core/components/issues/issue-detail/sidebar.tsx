@@ -48,10 +48,9 @@ import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import { IssueReleaseSelect } from "./release-select";
-import { IssueRequirementSelect } from "./requirement-select";
 import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "./root";
-import { FileText, Rocket, Type } from "lucide-react";
+import { Rocket, Type } from "lucide-react";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 type Props = {
@@ -322,20 +321,6 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 projectId={projectId}
                 issueId={issueId}
                 issueOperations={issueOperations}
-                disabled={!isEditable}
-              />
-            </div>
-
-            <div className="flex h-8 items-center gap-1">
-              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
-                <FileText className="h-4 w-4 flex-shrink-0" />
-                <span>{t("project_requirements.issues.source_requirement")}</span>
-              </div>
-              <IssueRequirementSelect
-                className="w-2/3 flex-grow"
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                issueId={issueId}
                 disabled={!isEditable}
               />
             </div>

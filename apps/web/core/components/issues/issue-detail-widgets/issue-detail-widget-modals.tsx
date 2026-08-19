@@ -13,8 +13,10 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse, TIssue, TIssueServiceType, TWorkItemWidgets } from "@plane/types";
 // components
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useWorkItemRequirements } from "@/hooks/store/use-work-item-requirements";
 // plane web imports
 import { WorkItemAdditionalWidgetModals } from "@/plane-web/components/issues/issue-detail-widgets/modals";
 // local imports
@@ -40,6 +42,8 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
     isIssueLinkModalOpen,
     toggleIssueLinkModal: toggleIssueLinkModalStore,
     setIssueLinkData,
+    isWorkItemRequirementLinkModalOpen,
+    toggleWorkItemRequirementLinkModal,
     isCreateIssueModalOpen,
     toggleCreateIssueModal,
     isSubIssuesModalOpen,
@@ -57,6 +61,8 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
   // helper hooks
   const subIssueOperations = useSubIssueOperations(issueServiceType);
   const handleLinkOperations = useLinkOperations(workspaceSlug, projectId, issueId, issueServiceType);
+  // 与「关联需求」折叠区块共用同一个 SWR key，这里 link 成功后区块自动刷新
+  const { linkRequirements } = useWorkItemRequirements(workspaceSlug, projectId, issueId);
 
   // handlers
   const handleIssueCrudState = (
@@ -104,6 +110,17 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
     toggleIssueLinkModalStore(false);
     setLastWidgetAction("links");
     setIssueLinkData(null);
+  };
+
+  /** 弹窗内失败提示由弹窗自己兜（读 payload.error），这里只管成功后的 toast 与展开区块 */
+  const handleWorkItemRequirementLinkSubmit = async (requirementIds: string[]) => {
+    await linkRequirements(requirementIds);
+    setToast({
+      type: TOAST_TYPE.SUCCESS,
+      title: t("project_requirements.container.toast_linked"),
+      message: t("project_requirements.toast.linked", { count: requirementIds.length }),
+    });
+    setLastWidgetAction("requirements");
   };
 
   const handleRelationOnClose = () => {
@@ -185,6 +202,17 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
           handleOnClose={handleIssueLinkModalOnClose}
           linkOperations={handleLinkOperations}
           issueServiceType={issueServiceType}
+        />
+      )}
+
+      {!hideWidgets?.includes("requirements") && (
+        <ProjectRequirementLinkModal
+          isOpen={isWorkItemRequirementLinkModalOpen}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          excludeIssueId={issueId}
+          handleClose={() => toggleWorkItemRequirementLinkModal(false)}
+          onSubmit={handleWorkItemRequirementLinkSubmit}
         />
       )}
 

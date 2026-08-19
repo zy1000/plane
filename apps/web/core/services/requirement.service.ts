@@ -1,7 +1,6 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateRequirementLibraryPayload,
-  TIssueRequirementLink,
   TLinkableRequirementsResponse,
   TLinkableTestCasesResponse,
   TProductProject,
@@ -122,6 +121,11 @@ export class RequirementService extends APIService {
   /** 需求关联的工作项。方向与容器关联相反：需求是主语，工作项是宾语 */
   private requirementIssuesRoot(workspaceSlug: string, projectId: string, requirementId: string) {
     return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/requirements/${requirementId}/issues`;
+  }
+
+  /** 工作项关联的需求。同一张 RequirementIssue 表的另一个方向，服务端复用容器关联基类 */
+  private issueRequirementsRoot(workspaceSlug: string, projectId: string, issueId: string) {
+    return `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/issues/${issueId}/requirements`;
   }
 
   /**
@@ -949,6 +953,8 @@ export class RequirementService extends APIService {
       exclude_cycle_id?: string;
       /** 关联选择器用：排除已关联到该发布单的行 */
       exclude_release_id?: string;
+      /** 关联选择器用：排除已关联到该工作项的行 */
+      exclude_issue_id?: string;
       /** 关联选择器用：排除已关闭的需求（主列表不带 —— 项目页仍要看到已关闭需求） */
       excludeClosed?: boolean;
     } = {}
@@ -975,6 +981,7 @@ export class RequirementService extends APIService {
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
         ...(params.exclude_cycle_id ? { exclude_cycle_id: params.exclude_cycle_id } : {}),
         ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),
+        ...(params.exclude_issue_id ? { exclude_issue_id: params.exclude_issue_id } : {}),
         ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
       },
     })
@@ -1207,8 +1214,8 @@ export class RequirementService extends APIService {
 
   /**
    * 批量关联已有工作项。需求必须先关联本项目，否则 409 REQUIREMENT_NOT_LINKED_TO_PROJECT；
-   * 任一工作项已挂其他需求 → 409 ISSUE_ALREADY_LINKED（conflicts 带已挂需求编号，调用方
-   * 据此提示）。研发段阶段升档由服务端重算。
+   * 已关闭的需求 409 REQUIREMENT_CLOSED。多对多：工作项已挂别的需求不算冲突，已挂本需求
+   * 的由服务端幂等吸收。
    */
   async linkIssuesToRequirement(
     workspaceSlug: string,
@@ -1237,15 +1244,49 @@ export class RequirementService extends APIService {
       });
   }
 
-  /** 工作项侧反查所挂需求。无关联时服务端返回 null，属性栏只读芯片据此整行不渲染 */
-  async getIssueRequirementLink(
+  /* --- 工作项 ↔ 需求（RequirementIssue 的工作项侧） ------------------------ */
+
+  /** 工作项已关联的需求列表。行形状与迭代关联需求列表一致（分页信封，一条工作项挂的需求是个位数） */
+  async listIssueRequirements(
     workspaceSlug: string,
     projectId: string,
-    issueId: string
-  ): Promise<TIssueRequirementLink | null> {
-    return this.get(
-      `${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/issues/${issueId}/requirement-link/`
-    )
+    issueId: string,
+    params: { cursor?: string; perPage?: number } = {}
+  ): Promise<TProjectRequirementsResponse> {
+    return this.get(`${this.issueRequirementsRoot(workspaceSlug, projectId, issueId)}/`, {
+      params: {
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.perPage ? { per_page: params.perPage } : {}),
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量把需求挂到工作项上。需求必须先关联本项目（409 REQUIREMENT_NOT_LINKED_TO_PROJECT）、非已关闭（409 REQUIREMENT_CLOSED） */
+  async linkRequirementsToIssue(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    payload: TRequirementContainerLinkPayload
+  ): Promise<{ message: string }> {
+    return this.post(`${this.issueRequirementsRoot(workspaceSlug, projectId, issueId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除工作项与某条需求的关联。软删关联行，不影响需求状态 */
+  async unlinkRequirementFromIssue(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    requirementId: string
+  ): Promise<void> {
+    return this.delete(`${this.issueRequirementsRoot(workspaceSlug, projectId, issueId)}/${requirementId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

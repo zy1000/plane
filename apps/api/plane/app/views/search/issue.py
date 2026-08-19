@@ -13,7 +13,7 @@ from rest_framework.response import Response
 
 # Module imports
 from .base import BaseAPIView
-from plane.db.models import Issue, ProjectMember, IssueRelation, IssueType
+from plane.db.models import Issue, ProjectMember, IssueRelation, IssueType, RequirementIssue
 from plane.utils.issue_search import search_issues
 
 
@@ -115,12 +115,19 @@ class IssueSearchEndpoint(BaseAPIView):
 
         return issues
 
-    def exclude_issues_linked_to_requirements(self, issues: QuerySet) -> QuerySet:
+    def exclude_issues_linked_to_requirement(self, issues: QuerySet, requirement_id: str) -> QuerySet:
         """
-        Exclude issues already linked to requirements
+        排除已挂**这条**需求的工作项（需求 ↔ 工作项是多对多，挂过别的需求不算）。
+
+        用 id__in 子查询而不是 exclude(Q(a__x) & Q(a__y))：后者会被编成两个独立的
+        NOT EXISTS，条件不落在同一行关联行上，多对多 + 软删下会把「曾挂本需求已解除、
+        现挂别的需求」的工作项错误排除。RequirementIssue.objects 是软删 manager，只看 live 行。
         """
         issues = issues.exclude(
-            Q(issue_requirement__isnull=False) & Q(issue_requirement__deleted_at__isnull=True))
+            id__in=RequirementIssue.objects.filter(requirement_id=requirement_id)
+            .order_by()
+            .values_list("issue_id", flat=True)
+        )
 
         return issues
 
@@ -187,7 +194,7 @@ class IssueSearchEndpoint(BaseAPIView):
         issue_relation = request.query_params.get("issue_relation", "false")
         cycle = request.query_params.get("cycle", "false")
         release = request.query_params.get("release", "false")
-        requirement = request.query_params.get("requirement", "false")
+        exclude_requirement_id = request.query_params.get("exclude_requirement_id")
         module = request.query_params.get("module", False)
         sub_issue = request.query_params.get("sub_issue", "false")
         target_date = request.query_params.get("target_date", True)
@@ -241,8 +248,8 @@ class IssueSearchEndpoint(BaseAPIView):
         if release == "true":
             issues = self.exclude_issues_in_releases(issues)
 
-        if requirement == "true":
-            issues = self.exclude_issues_linked_to_requirements(issues)
+        if exclude_requirement_id:
+            issues = self.exclude_issues_linked_to_requirement(issues, exclude_requirement_id)
 
         if module:
             issues = self.exclude_issues_in_module(issues, module)

@@ -1396,10 +1396,12 @@ class RequirementRelease(ProjectBaseModel):
 class RequirementIssue(ProjectBaseModel):
     """需求 ↔ 工作项的关联行，供工作项数 / 完成率统计；不影响需求状态。
 
-    一条工作项至多挂一条需求：唯一约束落在 issue **单列**（软删条件唯一）——
-    与 RequirementCycle 的 (requirement, cycle) 复合唯一不同，这里唯一性的主语
-    是工作项本身。project 冗余自 issue.project（写入口校验二者一致），按
-    (requirement, project) 聚合时不穿透 issue 表。不遍历父子树：只认关联行。
+    真多对多：一条需求拆出多条工作项，一条工作项也可以同时服务多条需求。唯一性是
+    (requirement, issue) 复合的（软删条件唯一），与 RequirementCycle 同构。一条工作项
+    分别计入它所挂每条需求的完成率；跨需求汇总工作项数时要按 issue_id 去重
+    （utils/requirement_project.status_counts_by_project）。project 冗余自
+    issue.project（写入口校验二者一致），按 (requirement, project) 聚合时不穿透
+    issue 表。不遍历父子树：只认关联行。
     """
 
     requirement = models.ForeignKey(
@@ -1411,17 +1413,17 @@ class RequirementIssue(ProjectBaseModel):
     issue = models.ForeignKey(
         "db.Issue",
         on_delete=models.CASCADE,
-        related_name="issue_requirement",
+        related_name="issue_requirements",
         verbose_name="关联工作项",
     )
 
     class Meta:
-        unique_together = ["issue", "deleted_at"]
+        unique_together = ["requirement", "issue", "deleted_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["issue"],
+                fields=["requirement", "issue"],
                 condition=Q(deleted_at__isnull=True),
-                name="requirement_issue_unique_issue_when_deleted_at_null",
+                name="requirement_issue_unique_when_deleted_at_null",
             )
         ]
         verbose_name = "Requirement Issue"
@@ -1443,7 +1445,7 @@ class RequirementTestCase(BaseModel):
     代价是 workspace_id 没有自动派生，写入口必须显式给（bulk_create 更是绕开 save）。
 
     唯一性是 (requirement, case) 复合的，与 RequirementCycle 同构 —— 一条用例可以
-    验证多条需求，一条需求有多条用例，真多对多。不要照 RequirementIssue 的单列唯一。
+    验证多条需求，一条需求有多条用例，真多对多。
 
     配对规则（哪些用例能挂哪些需求）的唯一事实来源在 utils/requirement_test_case.py，
     需求侧与用例侧两个方向的端点共用，不要在任何一端重写一份。

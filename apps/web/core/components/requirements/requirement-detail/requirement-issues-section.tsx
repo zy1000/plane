@@ -205,20 +205,7 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
   const showList = issues.length > 0 || !hideWhenEmpty;
 
   const notifyLinkFailure = (error: unknown) => {
-    const payload = error as
-      | { code?: string; error?: string; conflicts?: { requirement_display_id?: string }[] }
-      | null;
-    // 409 冲突要报出已挂需求的编号 —— 「不能关联」不可行动，「已挂在 ECOM-12 上」才可
-    if (payload?.code === "ISSUE_ALREADY_LINKED" && payload.conflicts?.length) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("project_requirements.issues.already_linked", {
-          display_id: payload.conflicts[0].requirement_display_id ?? "",
-        }),
-      });
-      return;
-    }
+    const payload = error as { error?: string } | null;
     setToast({
       type: TOAST_TYPE.ERROR,
       title: t("error"),
@@ -346,13 +333,13 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
         onSubmit={handleSplitSubmit}
       />
 
-      {/* 候选池由服务端排除一切已挂需求的工作项（含挂本需求的 —— 再选一遍没有意义） */}
+      {/* 候选池由服务端只排除已挂**本**需求的工作项 —— 多对多，挂过别的需求的仍可再挂到这条上 */}
       <ExistingIssuesListModal
         workspaceSlug={workspaceSlug}
         projectId={projectId}
         isOpen={isLinkModalOpen}
         handleClose={() => setIsLinkModalOpen(false)}
-        searchParams={{ requirement: true }}
+        searchParams={{ exclude_requirement_id: requirementId }}
         handleOnSubmit={handleLinkExisting}
       />
 

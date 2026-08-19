@@ -2104,7 +2104,7 @@ export default {
       status_updated: "状态已更新为「{status}」",
       failed: "操作失败，请稍后重试",
     },
-    /** 需求 ↔ 工作项关联：拆分 / 关联已有 / 解除，只供工作项数与完成率统计，不影响需求状态 */
+    /** 需求 ↔ 工作项关联（多对多）：拆分 / 关联已有 / 解除，只供工作项数与完成率统计，不影响需求状态。工作项侧的区块/弹窗文案复用 container.* */
     issues: {
       column: "工作项",
       section_title: "关联工作项",
@@ -2115,16 +2115,10 @@ export default {
       unlink: "解除关联",
       unlink_confirm_title: "解除工作项关联",
       unlink_confirm_description: "解除后该工作项不再计入本需求的完成率。",
-      /** 工作项详情「结构」栏需求行标签 */
-      source_requirement: "需求",
-      /** 工作项详情结构栏需求选择器空值 */
-      no_requirement: "无需求",
       /** 产品侧按项目分组展示时，该分组下还没有工作项 */
       group_empty: "该项目暂无已拆工作项",
       /** 产品侧「拆分工作项」的前置：工作项必须落在具体项目里 */
       select_project_first: "请先选择项目",
-      /** 409 ISSUE_ALREADY_LINKED 的冲突提示，{display_id} 是已挂需求的编号 */
-      already_linked: "工作项已关联需求 {display_id}",
       toast_linked: "已关联工作项",
       toast_unlinked: "已解除关联",
       toast_link_failed: "关联失败",

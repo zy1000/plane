@@ -1,7 +1,7 @@
 /**
  * 需求侧「关联测试用例」弹窗：从候选池里挑一批用例挂到需求上。
  *
- * 结构照搬 cycles/cycle-overview/cycle-requirement-link-modal.tsx（Combobox 多选 +
+ * 结构照搬 requirements/project-requirement-link-modal.tsx（Combobox 多选 +
  * 防抖搜索 + 无限滚动 + 请求序号防串台），只换候选池与行渲染。
  *
  * **刻意不复用 QA 侧那三个用例选择器**（qa/review/TestCaseSelectionModal、

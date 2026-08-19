@@ -22,7 +22,7 @@ import {
 import { PageHead } from "@/components/core/page-title";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import { CycleDetailsSidebar } from "@/components/cycles/analytics-sidebar";
-import { CycleRequirementLinkModal } from "@/components/cycles/cycle-overview/cycle-requirement-link-modal";
+import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
 import { useCycleRequirements } from "@/components/cycles/cycle-overview/use-cycle-requirements";
 import { CycleScopeRequirementsPane } from "@/components/cycles/cycle-scope-requirements-pane";
 import { CycleLayoutRoot } from "@/components/issues/issue-layouts/roots/cycle-layout-root";
@@ -172,11 +172,11 @@ function CycleDetailPage({ params }: Route.ComponentProps) {
             无论从哪边关联，列表都会刷新。这比为了共用一份状态在两棵渲染树之间
             搭一条通道便宜得多。
           */}
-          <CycleRequirementLinkModal
+          <ProjectRequirementLinkModal
             isOpen={linkModalOpen}
             workspaceSlug={workspaceSlug}
             projectId={projectId}
-            cycleId={cycleId}
+            excludeCycleId={cycleId}
             handleClose={closeLinkModal}
             onSubmit={linkRequirements}
           />

@@ -68,10 +68,19 @@ type TProps = {
   /** 提交中等临时禁用 */
   disabled?: boolean;
   variant?: TRequirementStatusVariant;
+  /** chip 变体默认带色点；工作项详情「关联需求」与用例 tag 对齐时关掉 */
+  showDot?: boolean;
   className?: string;
 };
 
-export const RequirementStatusCell = ({ status, onChange, disabled = false, variant = "pill", className }: TProps) => {
+export const RequirementStatusCell = ({
+  status,
+  onChange,
+  disabled = false,
+  variant = "pill",
+  showDot = true,
+  className,
+}: TProps) => {
   const { t } = useTranslation();
   const style = getRequirementStatusStyle(status);
   const isKnown = (REQUIREMENT_STATUSES as string[]).includes(status);
@@ -82,11 +91,12 @@ export const RequirementStatusCell = ({ status, onChange, disabled = false, vari
     variant === "chip" ? (
       <span
         className={cn(
-          "inline-flex h-5 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-md-medium text-secondary",
+          "inline-flex h-5 min-w-0 max-w-full items-center whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-md-medium text-secondary",
+          showDot ? "gap-1.5" : "justify-center",
           className
         )}
       >
-        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", style.dot)} />
+        {showDot && <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", style.dot)} />}
         <span className={cn("truncate", isRequirementClosed({ status }) && "line-through text-tertiary")}>{label}</span>
       </span>
     ) : (

@@ -1,11 +1,14 @@
 /**
- * 迭代侧「关联需求」弹窗：从本项目已关联的需求里挑一批进迭代。
+ * 「关联需求」弹窗：从本项目已关联的需求里挑一批挂到某个容器上（迭代 / 工作项）。
  *
  * 结构照搬 projects/requirements/existing-requirements-modal.tsx（Combobox 多选 +
  * 防抖搜索 + 无限滚动 + 请求序号防串台），但候选池不同：这里是**项目需求列表**
- * （exclude_cycle_id 排除已在本迭代的行，exclude_closed 排除已关闭的需求），不是产品
+ * （exclude_* 排除已挂在该容器上的行，exclude_closed 排除已关闭的需求），不是产品
  * 下的可关联候选池，且行上自带 product_identifier，不需要外部传产品清单，所以没有
  * 直接复用那个组件。
+ *
+ * 容器只体现在候选池的排除参数上（excludeCycleId / excludeIssueId），其余交互完全一样，
+ * 所以是一个组件而不是每种容器复制一份。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@headlessui/react";
@@ -30,14 +33,17 @@ type TProps = {
   isOpen: boolean;
   workspaceSlug: string;
   projectId: string;
-  cycleId: string;
+  /** 候选池排除已在该迭代里的需求 */
+  excludeCycleId?: string;
+  /** 候选池排除已挂在该工作项上的需求 */
+  excludeIssueId?: string;
   handleClose: () => void;
-  /** 返回后由调用方负责刷新迭代关联需求列表 */
+  /** 返回后由调用方负责刷新容器的关联需求列表 */
   onSubmit: (requirementIds: string[]) => Promise<void>;
 };
 
-export const CycleRequirementLinkModal = (props: TProps) => {
-  const { isOpen, workspaceSlug, projectId, cycleId, handleClose: onClose, onSubmit } = props;
+export const ProjectRequirementLinkModal = (props: TProps) => {
+  const { isOpen, workspaceSlug, projectId, excludeCycleId, excludeIssueId, handleClose: onClose, onSubmit } = props;
   const { t } = useTranslation();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -74,7 +80,7 @@ export const CycleRequirementLinkModal = (props: TProps) => {
     // nextPage 是**页序号**，不是行偏移。后端游标的形状是 "limit:page:is_prev"
     // （见 utils/paginator.py 的 Cursor），第 0 页就是 "50:0:0"。
     async ({ reset, nextPage }: { reset: boolean; nextPage: number }) => {
-      if (!isOpen || !workspaceSlug || !projectId || !cycleId) return;
+      if (!isOpen || !workspaceSlug || !projectId) return;
       const requestSequence = ++requestSequenceRef.current;
 
       if (reset) {
@@ -89,7 +95,8 @@ export const CycleRequirementLinkModal = (props: TProps) => {
           search: debouncedSearchTerm,
           perPage: PAGE_SIZE,
           cursor: `${PAGE_SIZE}:${nextPage}:0`,
-          exclude_cycle_id: cycleId,
+          exclude_cycle_id: excludeCycleId,
+          exclude_issue_id: excludeIssueId,
           excludeClosed: true,
         });
         if (requestSequence !== requestSequenceRef.current) return;
@@ -109,7 +116,7 @@ export const CycleRequirementLinkModal = (props: TProps) => {
         }
       }
     },
-    [cycleId, debouncedSearchTerm, isOpen, projectId, workspaceSlug]
+    [debouncedSearchTerm, excludeCycleId, excludeIssueId, isOpen, projectId, workspaceSlug]
   );
 
   useEffect(() => {

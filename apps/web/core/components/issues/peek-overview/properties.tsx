@@ -6,7 +6,7 @@
 
 import { type ComponentType, type ReactNode, useState } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, CalendarPlus, FileText, Rocket, UserRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
@@ -28,7 +28,6 @@ import { IssueExtraFieldsSection } from "../issue-detail/extra-fields-section";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
-import { IssueRequirementSelect } from "../issue-detail/requirement-select";
 
 interface IPeekOverviewProperties {
   workspaceSlug: string;
@@ -215,16 +214,6 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               />
             </StructureFieldValue>
 
-            <StructureFieldLabel icon={FileText} label={t("project_requirements.issues.source_requirement")} />
-            <StructureFieldValue>
-              <IssueRequirementSelect
-                className="h-7.5 w-full grow"
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                issueId={issueId}
-                disabled={disabled}
-              />
-            </StructureFieldValue>
           </div>
         </PropertyGroupSection>
 

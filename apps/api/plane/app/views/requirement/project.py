@@ -228,7 +228,7 @@ class ProjectRequirementViewSet(BaseViewSet):
         if request.query_params.get("exclude_closed") in ("true", "1"):
             queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
 
-        # 迭代/发布的「关联需求」选择器用：排除已关联进该容器的行。
+        # 迭代/发布/工作项的「关联需求」选择器用：排除已关联进该容器的行。
         # .order_by() 清默认排序，理由同 linked_requirement_ids。
         # project_id 收窄是必须的：需求可被多个项目引用，不带它，别的项目里的
         # 关联会错误排除本项目的行，还能被用来探测跨项目的排期事实
@@ -246,6 +246,16 @@ class ProjectRequirementViewSet(BaseViewSet):
             queryset = queryset.exclude(
                 id__in=RequirementRelease.objects.filter(
                     release_id=exclude_release_id, project_id=project_id
+                )
+                .order_by()
+                .values_list("requirement_id", flat=True)
+            )
+        # 工作项只属于一个项目，这里的 project_id 只是与兄弟参数形状一致
+        exclude_issue_id = request.query_params.get("exclude_issue_id")
+        if exclude_issue_id:
+            queryset = queryset.exclude(
+                id__in=RequirementIssue.objects.filter(
+                    issue_id=exclude_issue_id, project_id=project_id
                 )
                 .order_by()
                 .values_list("requirement_id", flat=True)

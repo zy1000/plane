@@ -14,7 +14,7 @@ from .container import (
     CycleRequirementViewSet,
     ReleaseRequirementViewSet,
 )
-from .issue import RequirementIssueViewSet
+from .issue import IssueRequirementViewSet, RequirementIssueViewSet
 from .library import RequirementLibraryViewSet
 from .project import (
     ProjectRequirementViewSet,
@@ -32,6 +32,7 @@ from .type import (
 
 __all__ = [
     "CycleRequirementViewSet",
+    "IssueRequirementViewSet",
     "ProjectRequirementViewSet",
     "ReleaseRequirementViewSet",
     "RequirementApprovalInboxAPIView",

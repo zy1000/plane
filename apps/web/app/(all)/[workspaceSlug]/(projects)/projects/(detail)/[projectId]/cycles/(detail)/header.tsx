@@ -42,7 +42,7 @@ import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
-import { CycleRequirementLinkModal } from "@/components/cycles/cycle-overview/cycle-requirement-link-modal";
+import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
 import { useCycleRequirements } from "@/components/cycles/cycle-overview/use-cycle-requirements";
 import { CycleQuickActions } from "@/components/cycles/quick-actions";
 import {
@@ -503,11 +503,11 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
 
       {/* 详见页面里那份同款弹窗的注释：两份互不影响，提交后走同一个 SWR key */}
       {workspaceSlugValue && projectIdValue && cycleId && (
-        <CycleRequirementLinkModal
+        <ProjectRequirementLinkModal
           isOpen={requirementLinkModalOpen}
           workspaceSlug={workspaceSlugValue}
           projectId={projectIdValue}
-          cycleId={cycleId.toString()}
+          excludeCycleId={cycleId.toString()}
           handleClose={() => setRequirementLinkModalOpen(false)}
           onSubmit={linkRequirements}
         />

@@ -1,5 +1,7 @@
 # 需求关联工作项（RequirementIssue）需求说明
 
+> **2026-08-19 多对多改造批注**：需求 ↔ 工作项已从「一对多」（issue 单列唯一）放宽为**多对多**（(requirement, issue) 复合唯一，迁移 `0338_requirement_issue_many_to_many`，`related_name` 改为 `issue_requirements`）。随之：① `POST .../requirements/<rid>/issues/` 不再有 409 `ISSUE_ALREADY_LINKED`，工作项已挂别的需求不算冲突；② 工作项侧反查端点 `.../issues/<id>/requirement-link/`（单值）删除，改为 `.../issues/<id>/requirements/`（GET list / POST `{"requirements":[...]}` / DELETE `<requirement_id>/`），由 `IssueRequirementViewSet` 继承 `BaseRequirementContainerViewSet` 实现，返回 `ProjectRequirementSerializer` 行；③ 工作项搜索的排除参数由 `requirement=true`（排除挂过任何需求的）改为 `exclude_requirement_id=<uuid>`（只排除已挂**该**需求的），项目需求列表新增 `exclude_issue_id`；④ 产品页项目分布的工作项数按 `issue_id` 去重（`status_counts_by_project`）；⑤ 前端工作项详情的「需求」单选属性行（侧栏 + peek）删除，改为详情页 widgets 区的「关联需求」折叠区块（`issue-detail-widgets/work-item-requirements/`）+ 快捷操作条 / 折叠头 + 号打开 `ProjectRequirementLinkModal`（由迭代侧弹窗泛化而来）；hook `use-work-item-requirements`；`TIssueRequirementLink` 类型删除。下文所有「至多一条」「单列唯一」「ISSUE_ALREADY_LINKED」「requirement-link」「只读芯片」的表述均为历史记录。
+>
 > **2026-08-17 需求状态轴改造批注**：本文描述的「工作项派生研发段阶段（双轨制）」已推翻——`RequirementProject.stage` 与 `recalculate_stage` 派生引擎已删除，需求状态改为需求级人工维护的 `Requirement.status`（未开始 / 已立项 / 进行中 / 已发布 / 已关闭）。需求 ↔ 工作项关联表 `RequirementIssue` 保留，但只供工作项数 / 完成率统计，工作项的任何变化不再影响需求状态；已关闭的需求不再出现在关联选择器中。以 `docs/domain-glossary.md` requirement 节为准；下文涉及阶段派生的部分仅作历史记录。
 
 ## 1. 背景与定位
@@ -20,7 +22,7 @@
 
 ### 1.2 关系形状
 
-**基数**：一条需求 → 多条工作项；一条工作项 → **至多一条**需求。拆任务是主路径，一条任务同时实现两条需求会让完成率无法定义。因此唯一约束落在 `issue` **单列**上（软删条件唯一），不是 (requirement, issue) 的多对多。
+**基数**（2026-08-19 已改）：多对多。一条需求 → 多条工作项；一条工作项也可以挂多条需求，分别计入各自的完成率。唯一约束是 (requirement, issue) 复合（软删条件唯一）。跨需求汇总工作项数时按 `issue_id` 去重。~~原设计：一条工作项至多一条需求，唯一约束落在 `issue` 单列。~~
 
 **作用域**：工作项必须落在「已经引用了这条需求」的项目里。产品不能直接拥有 Issue；从产品详情拆工作项，先选项目。项目换了，关联行删掉，不跟着搬家。
 
@@ -29,7 +31,7 @@
 | 前置 | 需求已关联进该项目（已通过评审，现有候选池规则不变） |
 | 项目一致 | `RequirementIssue.project` = `Issue.project` = `RequirementProject.project` |
 | 删除 | 删工作项或解除项目关联 → 级联软删关联行，然后重算阶段 |
-| 重复关联 | 工作项已挂别的需求 → 409，给出已挂的需求编号 |
+| 重复关联 | 已挂**本**需求 → 条件唯一索引幂等吸收；已挂**别的**需求不是冲突（多对多，2026-08-19 已改；原为 409 `ISSUE_ALREADY_LINKED`） |
 
 ### 1.3 内容不同步
 
@@ -56,7 +58,7 @@
 
 ### 2.1 RequirementIssue 模型
 
-位置：`apps/api/plane/db/models/requirement.py`，插在 `RequirementRelease` 之后、`RequirementProjectActivity` 之前。照 `RequirementCycle`（同文件 :1382-1418）模板，**唯一差异是约束从复合改 issue 单列**：
+位置：`apps/api/plane/db/models/requirement.py`，插在 `RequirementRelease` 之后、`RequirementProjectActivity` 之前。照 `RequirementCycle`（同文件 :1382-1418）模板。**下方代码块是 0333 时的原始形态（issue 单列唯一）；2026-08-19 起已改为 (requirement, issue) 复合唯一、`related_name="issue_requirements"`，以模型文件为准**：
 
 ```python
 class RequirementIssue(ProjectBaseModel):
@@ -94,8 +96,8 @@ class RequirementIssue(ProjectBaseModel):
 
 要点：
 
-- `related_name="issue_requirement"` 对齐 `issue_cycle`（cycle.py）/ `issue_release`（release.py）命名族，搜索排除与 list 查询都靠它。
-- `unique_together=["issue","deleted_at"]` 管历史行；真正保证 live 行唯一的是条件 UniqueConstraint（Postgres 下 NULL 不互斥）。
+- `related_name` 现为 `issue_requirements`（复数，多对多语义），搜索排除与 list 查询都靠它。
+- `unique_together=["requirement","issue","deleted_at"]` 管历史行；真正保证 live 行唯一的是条件 UniqueConstraint `requirement_issue_unique_when_deleted_at_null`（Postgres 下 NULL 不互斥）。
 - 两端 CASCADE 即可：`soft_delete_related_objects` 的异步级联天然生效；同步清理由 §4 的删除钩子负责。**不适用**「不追随删除用裸 UUID」规则（`requirement.py:153-156`）——关联行恰恰应该跟随删除。
 
 ### 2.2 导出与迁移
@@ -290,15 +292,17 @@ trigger 约定：状态变更 `{"type": "issue_state_changed", "source": ...}`�
 
 ### 5.1 RequirementIssueViewSet
 
-新文件 `app/views/requirement/issue.py`，**独立实现，不复用 `BaseRequirementContainerViewSet`**——容器基类的方向是 container→requirements（list 返回需求行），这里方向相反（requirement→issues，list 返回工作项行）、409 语义不同，强套基类每个方法都要覆盖。可借鉴它的校验顺序与 `ReleaseIssueViewSet` 的 bulk_create 范式。导出补 `app/views/requirement/__init__.py`。
+新文件 `app/views/requirement/issue.py`。需求→工作项方向（`RequirementIssueViewSet`）**独立实现，不复用 `BaseRequirementContainerViewSet`**——容器基类的方向是 container→requirements（list 返回需求行），这里方向相反（requirement→issues，list 返回工作项行），强套基类每个方法都要覆盖。可借鉴它的校验顺序与 `ReleaseIssueViewSet` 的 bulk_create 范式。工作项→需求方向（`IssueRequirementViewSet`，2026-08-19 新增）方向与容器基类一致，直接继承。导出补 `app/views/requirement/__init__.py`。
 
 URL（`app/urls/requirement.py`，发布容器条目之后）：
 
 ```
 GET/POST  workspaces/<slug>/projects/<pid>/requirements/<rid>/issues/
 DELETE    workspaces/<slug>/projects/<pid>/requirements/<rid>/issues/<issue_id>/
-GET       workspaces/<slug>/projects/<pid>/issues/<issue_id>/requirement-link/   ← 工作项侧反查
+GET/POST  workspaces/<slug>/projects/<pid>/issues/<issue_id>/requirements/                 ← 工作项侧（2026-08-19）
+DELETE    workspaces/<slug>/projects/<pid>/issues/<issue_id>/requirements/<requirement_id>/
 ```
+（原 `.../issues/<issue_id>/requirement-link/` 单值反查已删除。）
 
 权限：list / 反查用 `PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW`，增删用 `PROJECT_REQUIREMENT_LINK_MANAGE`（keys.py:63-64）。**不新造 key**；拆新工作项本身走弹窗的标准创建链路，按 IssueType 的动态创建权限在那条链路上天然校验。
 
@@ -329,20 +333,7 @@ issues = (
 
 1. `RequirementProject` 不存在 → 409 `REQUIREMENT_NOT_LINKED_TO_PROJECT`（形状照 `container.py:137-146`，先进项目再挂事实）。
 2. issue 未全部落在本项目 → 400（保证 `RequirementIssue.project = Issue.project` 不变量）。
-3. 任一 issue 已挂**其他**需求 → 409：
-
-```json
-{
-  "error": "Some work items are already linked to another requirement.",
-  "code": "ISSUE_ALREADY_LINKED",
-  "conflicts": [{
-    "issue_id": "...",
-    "requirement_id": "...",
-    "requirement_display_id": "ECOM-12",   // product.identifier + sequence_id
-    "requirement_name": "..."
-  }]
-}
-```
+3. ~~任一 issue 已挂**其他**需求 → 409 `ISSUE_ALREADY_LINKED`~~（2026-08-19 已删：多对多，已挂别的需求不是冲突）。
 
 4. `bulk_create(ignore_conflicts=True, batch_size=100)`，逐行显式 `workspace_id`（bulk_create 不走 `ProjectBaseModel.save()`，同 `container.py:156` 注释）。已挂**本**需求的行被条件唯一索引静默吸收 → 幂等；并发竞态由 DB 唯一索引裁决。
 5. 一次 `recalculate_stage(requirement_id, project_id, trigger={"type": "issue_linked", ...}, actor=request.user)`（同一 (需求,项目)，不必逐条）。
@@ -364,15 +355,15 @@ issues = (
 
 实现用 Subquery Count / ArrayAgg 范式（照同文件 `annotate_project_links`）。`ProjectRequirementSerializer` 对应加四个字段，getter 统一 `getattr(obj, ..., 缺省)`——缺注解场景安全回落。完成率 = `completed / (issue_count − cancelled)` **由前端算**，后端只给分子分母。
 
-### 5.5 工作项搜索排除已挂需求的
+### 5.5 工作项搜索排除已挂本需求的（2026-08-19 已改口径）
 
-`app/views/search/issue.py` `IssueSearchEndpoint` 三处插入（逐字照 `exclude_issues_in_releases` 范式）：
+`app/views/search/issue.py` `IssueSearchEndpoint`：
 
-1. helper `exclude_issues_linked_to_requirements(issues)`：`exclude(Q(issue_requirement__isnull=False) & Q(issue_requirement__deleted_at__isnull=True))`。
-2. 读参 `requirement = request.query_params.get("requirement", "false")`。
+1. helper `exclude_issues_linked_to_requirement(issues, requirement_id)`：`exclude(id__in=RequirementIssue.objects.filter(requirement_id=...).order_by().values_list("issue_id", flat=True))`。**必须用 id__in 子查询**，不要照 `exclude_issues_in_releases` 的 `exclude(Q(a__x) & Q(a__y))`——Django 4.2 会把它编成两个独立 NOT EXISTS，多对多 + 软删下会把「曾挂本需求已解除、现挂别的需求」的工作项错误排除。
+2. 读参 `exclude_requirement_id = request.query_params.get("exclude_requirement_id")`。
 3. release 分支后应用。
 
-排除口径是「任何 live 关联行」——包括已挂本需求的（弹窗里再选一遍没有意义）。该端点走 `issue_objects`（排除 triage/draft/归档），符合候选语义。
+排除口径是「已挂**本**需求的 live 关联行」；挂过别的需求的工作项仍可选（多对多）。该端点走 `issue_objects`（排除 triage/draft/归档），符合候选语义。~~原口径：`requirement=true` 排除挂过任何需求的。~~
 
 ---
 
@@ -385,8 +376,8 @@ issues = (
 | 入口 | 做什么 |
 |---|---|
 | 项目需求列表 / 详情抽屉 | 「拆分工作项」打开现有创建弹窗，预填标题描述，提交后写关联行 |
-| 同一处 | 「关联已有工作项」复用 `ExistingIssuesListModal`，排除已挂需求的 |
-| 工作项详情属性栏 | 只读芯片：链到需求（ECOM-12）。改关联用需求侧，避免和模块/迭代选择器抢成第三个多选 |
+| 同一处 | 「关联已有工作项」复用 `ExistingIssuesListModal`，只排除已挂本需求的（`exclude_requirement_id`） |
+| 工作项详情 widgets 区（2026-08-19 已改） | 「关联需求」折叠区块（`issue-detail-widgets/work-item-requirements/`）：列出所挂需求，行尾解绑（AlertModalCore 确认）；快捷操作条与折叠头 + 号打开 `ProjectRequirementLinkModal` 多选关联。~~原：属性栏只读芯片。~~ |
 | 产品需求详情 | 按项目分组展示已拆工作项；要点「拆」必须先选项目 |
 | 项目需求网格新列 | 工作项数 + 完成率（completed / 非 cancelled） |
 
@@ -416,7 +407,7 @@ issues = (
 
 ### 6.3 关联已有工作项
 
-`ExistingIssuesListModal`（`core/components/core/modals/existing-issues-list-modal.tsx`）+ `searchParams={{ requirement: true }}`；`handleOnSubmit` 调关联接口，409 `ISSUE_ALREADY_LINKED` 时 toast 展示冲突的需求编号。`TProjectIssuesSearchParams`（`packages/types/src/project/projects.ts`）补 `requirement?: boolean`。
+`ExistingIssuesListModal`（`core/components/core/modals/existing-issues-list-modal.tsx`）+ `searchParams={{ exclude_requirement_id: requirementId }}`；`handleOnSubmit` 调关联接口，失败 toast 读 `payload.error`。`TProjectIssuesSearchParams`（`packages/types/src/project/projects.ts`）的参数是 `exclude_requirement_id?: string`（2026-08-19 由 `requirement?: boolean` 改来）。
 
 ### 6.4 阶段下拉关闭
 
@@ -437,17 +428,17 @@ onChange={canManage && !requirement.issue_count
 - **项目侧**（抽屉/详情）：Section 头部带「拆分工作项」「关联已有」两个操作按钮；行内展示 编号 / 标题 / 状态胶囊（state__group 配色）/ 负责人 / 解除关联；归档行置灰。
 - **产品侧**（整页详情）：按项目分组只读展示，分组头 = 项目名 + 阶段徽章（复用 `RequirementProjectStageBadges`）；「拆」入口要求先选项目。
 
-### 6.6 工作项侧只读芯片
+### 6.6 工作项侧「关联需求」区块（2026-08-19 已改）
 
-照 `product-chip.tsx` 复制 `RequirementChip`（`appearance="property"` 同款壳：`h-5 rounded-sm border-[0.5px] border-strong`），挂 `issue-detail/sidebar.tsx` 现有版式（`w-1/3` 图标+标签、`w-2/3` 内容行），peek 属性栏同步。数据走反查端点（SWR），无关联时整行不渲染。只读——改关联回需求侧操作。
+~~原设计：属性栏只读芯片。~~ 现为详情页 widgets 区的折叠区块 `issue-detail-widgets/work-item-requirements/`（root / title / content / quick-action-button，风格照 `links/*`，形态照 `qa-cases`）：无行时整块不渲染；行 = `RequirementIdentifier` 编号 + 标题 + `ProductChip`，`canManage`（`!disabled && requirement_link.manage`）时行尾解绑图标 → `AlertModalCore` 确认。新增入口两处：快捷操作条按钮 + 折叠头 + 号，都调 `toggleWorkItemRequirementLinkModal(true)`（issue-detail store），弹窗 `ProjectRequirementLinkModal excludeIssueId` 在 `issue-detail-widget-modals.tsx` 渲染，成功后 `setLastWidgetAction("requirements")` 自动展开。数据走 `use-work-item-requirements`（SWR，`shouldRetryOnError: false`，无 view 权限静默）。
 
 ### 6.7 service / hook / 类型 / i18n 落点
 
 | 层 | 落点 |
 |---|---|
-| service | `core/services/requirement.service.ts` 加 `requirementIssuesRoot` 私有方法 + `listRequirementIssues` / `linkIssuesToRequirement` / `unlinkIssueFromRequirement` / `getIssueRequirementLink` 四方法（照 cycle 三方法模板） |
+| service | `core/services/requirement.service.ts` 加 `requirementIssuesRoot` 私有方法 + `listRequirementIssues` / `linkIssuesToRequirement` / `unlinkIssueFromRequirement`；工作项侧 `issueRequirementsRoot` + `listIssueRequirements` / `linkRequirementsToIssue` / `unlinkRequirementFromIssue`（2026-08-19，替代原 `getIssueRequirementLink`）；`listProjectRequirements` 加 `exclude_issue_id` |
 | hook | 新建 `use-requirement-issues`（SWR key `requirement-issues-${ws}-${pid}-${rid}`）；mutation 后**同步 mutate 需求行**——阶段可能被服务端重算，落地值以响应/重拉为准（同 `useProjectRequirements.updateStage` 的口径） |
-| 类型 | `packages/types/src/requirement.ts` 加 `TRequirementIssue` / `TRequirementIssueLink`；`TProjectRequirement` 补 `issue_count` / `completed_issue_count` / `cancelled_issue_count` / `linked_cycle_ids` |
+| 类型 | `packages/types/src/requirement.ts` 加 `TRequirementIssue`（~~`TIssueRequirementLink`~~ 已删，工作项侧行直接用 `TProjectRequirement`）；`TProjectRequirement` 补 `issue_count` / `completed_issue_count` / `cancelled_issue_count` / `linked_cycle_ids` |
 | 网格列 | `project-requirements-columns.ts`（union + TOGGLEABLE_COLUMNS + COLUMN_LABEL_KEYS）+ `project-requirements-grid.tsx` `renderCell` 加 `issues` case：`3/5 · 60%`，零工作项显示 `—` |
 | i18n | `project_requirements.issues.*` + `toast.*` 追加，en / zh-CN 同步，zh 侧按惯例带块注释 |
 | 完成率口径 | `product-project-stage-bar.tsx`：有工作项的行按任务完成率、零工作项沿用阶段口径（P4） |

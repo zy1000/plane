@@ -2,6 +2,7 @@ from django.urls import path
 
 from plane.app.views.requirement import (
     CycleRequirementViewSet,
+    IssueRequirementViewSet,
     ProjectRequirementViewSet,
     ReleaseRequirementViewSet,
     RequirementApprovalInboxAPIView,
@@ -243,11 +244,16 @@ urlpatterns = [
         RequirementIssueViewSet.as_view({"delete": "destroy"}),
         name="project-requirement-issue-item",
     ),
-    # 工作项侧反查：详情属性栏的只读需求芯片供数
+    # 工作项侧：详情页「关联需求」区块的读写（复用容器基类，参数名必须是 container_id）
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/requirement-link/",
-        RequirementIssueViewSet.as_view({"get": "requirement_link"}),
-        name="project-issue-requirement-link",
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:container_id>/requirements/",
+        IssueRequirementViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-issue-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:container_id>/requirements/<uuid:requirement_id>/",
+        IssueRequirementViewSet.as_view({"delete": "destroy"}),
+        name="project-issue-requirement-item",
     ),
     # --- 产品需求：测试用例关联 ------------------------------------------
     # 产品作用域而非项目作用域：用例的 project 可空（共享用例库），且一条需求的关联

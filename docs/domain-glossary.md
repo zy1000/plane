@@ -53,7 +53,7 @@
 - **不算内容**（`NON_CONTENT_BUILTIN_COLUMNS`）：内容 PATCH / bulk-save 的写集合是 `CONTENT_BUILTIN_COLUMNS`，根本不写这一列；不进变更单 diff、不被回滚倒推；审批中的行也能改状态（两根轴正交）。
 - **`closed`**：内容只读（后端 409 `REQUIREMENT_CLOSED`：内容 PATCH / bulk-save updates / 用户发起的回滚 / 提交**内容类**变更单 / 新指派为父项 / 新增项目-迭代-发布-工作项关联），从所有关联选择器过滤（`linkable_requirements_queryset`、列表 `?exclude_closed=true`）。已有关联保留、解除关联仍允许。**closed 保护内容不保护删除**：草稿直删；已通过的走删除评审，delete 类型变更单不拦（含父项删除时展开出的 closed 后代）。in_review 行的内容写入命中 `REQUIREMENT_IN_REVIEW`（锁优先于 closed）。行上唯一可写的是 `status`：改成任意非 closed 值即重开，不存「关闭前状态」。组合矩阵：`draft+closed` 可直删、可重开；`in_review+closed` 审批通过后仍 closed、驳回还原内容 closed 保留；`modified+closed` 提不了评审也回滚不了，只能重开；`approved+closed` 直接申请删除，删除评审被驳回则行留在原状态。
 - 标准库条目恒 `not_started`（`LIBRARY_HIDDEN_BUILTIN_COLUMNS`，不开状态写入口）；新建 / 导入恒 `not_started`。
-- 统计口径：项目需求页分面 `facets.by_status`、产品「关联项目」`status_counts`（同一条需求进了几个项目就在几个 bucket 各计一次——需求级状态在"某个项目下"不再有独立含义）。
+- 统计口径：项目需求页分面 `facets.by_status`、产品「关联项目」`status_counts`（同一条需求进了几个项目就在几个 bucket 各计一次——需求级状态在"某个项目下"不再有独立含义）。需求 ↔ 工作项是**多对多**（`RequirementIssue` (requirement, issue) 复合唯一）：一条工作项分别计入它所挂每条需求的完成率（`issue_count / completed_issue_count / cancelled_issue_count` 按单条需求算，不重复）；产品「关联项目」的 `issue_total / issue_completed / issue_cancelled` 按 `issue_id` 去重，一条工作项挂同产品多条需求只算一个。
 
 **轴 B：`Requirement.approval_state`（不落库，派生 property）**
 由 `approved_version` / `approved_row_version` / `pending_change_item` 三列派生，判定按序：
