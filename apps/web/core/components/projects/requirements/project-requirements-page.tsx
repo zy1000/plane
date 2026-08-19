@@ -379,12 +379,11 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           onOpenRequirement={setPeekRequirement}
           onRequirementUpdated={(requirement) => void refreshRequirementRow(requirement.id)}
           /*
-           * 复制链接要指回本页的 ?peek=，而不是产品的整页 —— 分享出去的应该是收件人
-           * 能看到的这个视图。「打开整页」直接隐藏：需求在项目里没有整页路由，跳去
-           * 产品整页会把人弹出项目上下文。
+           * 复制链接仍指回本页 ?peek=。放大跳到产品需求整页 —— 项目里没有独立整页路由。
+           * 没有所属产品时不渲染按钮，避免跳到空地址。
            */
           shareHref={(requirementId) => `${slug}/projects/${project}/requirements?peek=${requirementId}`}
-          showDetailAction={false}
+          showDetailAction={Boolean(peekRow.product_id)}
           productChip={
             <ProductChip hideIdentifier identifier={peekRow.product_identifier} name={peekRow.product_name} />
           }

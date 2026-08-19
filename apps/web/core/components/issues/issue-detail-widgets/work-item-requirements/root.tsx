@@ -59,6 +59,8 @@ export const WorkItemRequirementsCollapsible = observer(function WorkItemRequire
       buttonClassName="w-full"
     >
       <WorkItemRequirementsCollapsibleContent
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
         requirements={requirements}
         onUnlink={canManage ? unlinkRequirement : undefined}
       />

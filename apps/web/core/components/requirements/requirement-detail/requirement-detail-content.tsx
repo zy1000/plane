@@ -50,9 +50,14 @@ const PROPERTY_COLUMN_KEYS: TRequirementBuiltinKey[] = [
 
 type TPatch = { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData };
 
+type TParentScope = { workspaceSlug: string; productId?: string; libraryId?: string };
+
 type TProps = {
   workspaceSlug: string;
-  productId: string;
+  /** 产品需求详情；与 libraryId 二选一 */
+  productId?: string;
+  /** 标准库条目详情 */
+  libraryId?: string;
   requirement: TRequirement;
   requirementType: TRequirementTypeSchema | null;
   subRequirements: TRequirement[];
@@ -195,7 +200,7 @@ const PropertyGrid = ({
 }: {
   requirement: TRequirement;
   readOnly: boolean;
-  parentScope: { workspaceSlug: string; productId: string };
+  parentScope: TParentScope;
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
   onStatusChange?: (status: TRequirementItemStatus) => void;
@@ -252,6 +257,7 @@ export const RequirementDetailContent = (props: TProps) => {
   const {
     workspaceSlug,
     productId,
+    libraryId,
     requirement,
     requirementType,
     subRequirements,
@@ -279,18 +285,21 @@ export const RequirementDetailContent = (props: TProps) => {
     []
   );
 
+  const isLibrary = Boolean(libraryId) && !productId;
+  const scopeEntityId = productId ?? libraryId ?? "";
+
   const uploadAsset = useCallback(
     async (file: globalThis.File, imageOnly: boolean) => {
       if (imageOnly && !file.type.startsWith("image/")) throw new Error("Only images are supported.");
       const response = await uploadEditorAsset({
         blockId: uuidv4(),
-        data: { entity_identifier: productId, entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT },
+        data: { entity_identifier: scopeEntityId, entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT },
         file,
         workspaceSlug,
       });
       return { asset_id: response.asset_id, name: file.name, type: file.type, size: file.size };
     },
-    [productId, uploadEditorAsset, workspaceSlug]
+    [scopeEntityId, uploadEditorAsset, workspaceSlug]
   );
 
   const activeFields = useMemo(
@@ -302,7 +311,10 @@ export const RequirementDetailContent = (props: TProps) => {
   const leafFields = useMemo(() => activeFields.filter((field) => field.field_type !== "form"), [activeFields]);
   const formFields = useMemo(() => activeFields.filter((field) => field.field_type === "form"), [activeFields]);
 
-  const parentScope = useMemo(() => ({ workspaceSlug, productId }), [productId, workspaceSlug]);
+  const parentScope = useMemo(
+    () => ({ workspaceSlug, productId, libraryId }),
+    [libraryId, productId, workspaceSlug]
+  );
   const commitData = (data: TRequirementData) => void onPatch({ data });
 
   const isDrawer = layout === "drawer";
@@ -360,19 +372,21 @@ export const RequirementDetailContent = (props: TProps) => {
 
         {/* 审批态跟在标题下方，是这一屏第一个要回答的问题：我看到的这些值，是不是评审
             通过的那一版。status（需求级交付状态，人工维护）是另一根轴，退到属性区里去。 */}
-        <RequirementApprovalBadge requirement={requirement} />
+        {!isLibrary && <RequirementApprovalBadge requirement={requirement} />}
 
         {/* 已通过后又改过时，把「你看的不是已通过的那一版」直接说出来，并给出查看差异与
-            放弃改动两个出口 —— 这两件事用户过去在系统里都找不到 */}
-        <RequirementModifiedBanner
-          workspaceSlug={workspaceSlug}
-          productId={productId}
-          requirement={requirement}
-          requirementTypeName={requirementType?.name ?? ""}
-          fields={activeFields}
-          readOnly={readOnly}
-          onDiscarded={onRolledBack}
-        />
+            放弃改动两个出口 —— 这两件事用户过去在系统里都找不到。标准库不走审批，没有这层。 */}
+        {!isLibrary && productId && (
+          <RequirementModifiedBanner
+            workspaceSlug={workspaceSlug}
+            productId={productId}
+            requirement={requirement}
+            requirementTypeName={requirementType?.name ?? ""}
+            fields={activeFields}
+            readOnly={readOnly}
+            onDiscarded={onRolledBack}
+          />
+        )}
 
         {/* 抽屉没有右栏，属性条压在标题下、描述之上 —— 与工作项 peek 的属性条同位；
             整页交给右栏（见 RequirementDetailProperties） */}
@@ -452,15 +466,19 @@ export const RequirementDetailContent = (props: TProps) => {
                 onClick={() => onOpenRequirement(child.id)}
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-12 transition-colors hover:bg-layer-1"
               >
-                <span className="shrink-0">
-                  <BuiltinCellValue columnKey="status" values={child} />
-                </span>
+                {!isLibrary && (
+                  <span className="shrink-0">
+                    <BuiltinCellValue columnKey="status" values={child} />
+                  </span>
+                )}
                 <span className="min-w-0 flex-1 truncate text-primary">
                   {child.title || t("requirement_detail.untitled")}
                 </span>
-                <span className="shrink-0">
-                  <BuiltinCellValue columnKey="assignee_id" values={child} />
-                </span>
+                {!isLibrary && (
+                  <span className="shrink-0">
+                    <BuiltinCellValue columnKey="assignee_id" values={child} />
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -477,7 +495,7 @@ export const RequirementDetailContent = (props: TProps) => {
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。
         这一整块讲的是「过去」，与上面的「现在」之间给一条分隔线，其余区块之间只用留白。
       */}
-      {showHistory && (
+      {showHistory && !isLibrary && productId && (
         <div className="flex flex-col gap-6 border-t border-subtle pt-6">
           {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}
           <RequirementChangeTrail

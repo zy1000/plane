@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { AlertCircle, Info, Library } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Tooltip } from "@plane/propel/tooltip";
+import type { TRequirementTypeSchema } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { RequirementExcelMenu } from "@/components/requirements/excel";
+import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
@@ -26,12 +28,44 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
   const { t } = useTranslation();
   const { libraryId } = useParams();
   const { workspaceSlug, libraries } = useRequirementLibrariesContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const store = useLibraryItems({ workspaceSlug, libraryId });
 
   // 列表缓存能让刷新前的首屏不闪空标题，接口回来后以 store 为准
   const library = store.library ?? libraries.find((item) => item.id === libraryId) ?? null;
   const pageTitle = library?.name ?? t("requirement_libraries.title");
+
+  const urlPeekRequirementId = searchParams.get("peek");
+  const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
+  const syncedPeekRef = useRef(urlPeekRequirementId);
+
+  useEffect(() => {
+    if (urlPeekRequirementId === syncedPeekRef.current) return;
+    syncedPeekRef.current = urlPeekRequirementId;
+    setPeekRequirement(urlPeekRequirementId);
+  }, [urlPeekRequirementId]);
+
+  useEffect(() => {
+    if (urlPeekRequirementId === peekRequirementId) return;
+    syncedPeekRef.current = peekRequirementId;
+    const next = new URLSearchParams(searchParams);
+    if (peekRequirementId) next.set("peek", peekRequirementId);
+    else next.delete("peek");
+    setSearchParams(next, { replace: true });
+  }, [peekRequirementId, urlPeekRequirementId, searchParams, setSearchParams]);
+
+  const requirementTypes = useMemo<TRequirementTypeSchema[]>(() => {
+    if (!library) return [];
+    return [
+      {
+        id: library.requirement_type_id,
+        name: library.requirement_type_detail?.name ?? "",
+        logo_props: library.requirement_type_detail?.logo_props,
+        fields: store.configuration?.fields ?? [],
+      },
+    ];
+  }, [library, store.configuration?.fields]);
 
   return (
     <>
@@ -152,11 +186,25 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               onCursorChange={store.setCursor}
               onRefresh={store.fetchRequirements}
               onBulkSave={store.saveRequirementBatch}
+              onOpenDetail={setPeekRequirement}
               toolbarPortalEl={dataToolbarHost}
             />
           </>
         )}
       </ContentWrapper>
+      <RequirementPeekOverview
+        workspaceSlug={workspaceSlug}
+        libraryId={libraryId ?? ""}
+        requirementId={peekRequirementId}
+        requirementTypes={requirementTypes}
+        rows={store.requirementsPage.results}
+        canEdit
+        showDetailAction={false}
+        onClose={() => setPeekRequirement(null)}
+        onOpenRequirement={setPeekRequirement}
+        onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
+        shareHref={(requirementId) => `${workspaceSlug}/templates/libraries/${libraryId}?peek=${requirementId}`}
+      />
     </>
   );
 });

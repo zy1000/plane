@@ -26,7 +26,10 @@ const CHILDREN_PAGE_SIZE = 50;
 
 type TArgs = {
   workspaceSlug: string;
-  productId: string;
+  /** 产品需求详情；与 libraryId 二选一 */
+  productId?: string;
+  /** 标准库条目详情；与 productId 二选一 */
+  libraryId?: string;
   requirementId: string | null;
   /**
    * 网格里已经有这一行时直接传进来，省掉一次请求。
@@ -40,8 +43,9 @@ type TArgs = {
  *
  * 后端没有 retrieve 端点，取单行走列表的 `?ids=` —— 这是它自带的用法，草稿层与
  * 作用域解析都由列表那条链路统一处理，比另开一个 retrieve 少一处分叉。
+ * 标准库条目走同一套列表/PATCH，只是归属换成 library。
  */
-export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, seed }: TArgs) => {
+export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requirementId, seed }: TArgs) => {
   const { t } = useTranslation();
   const [fetched, setFetched] = useState<TRequirement | null>(null);
   const [children, setChildren] = useState<TRequirement[]>([]);
@@ -51,7 +55,9 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
 
   // seed 只是初值，之后以本地状态为准 —— 抽屉里改一个字段不该被上层的旧行覆盖回去
   const requirement = fetched ?? seed ?? null;
-  const canQuery = Boolean(workspaceSlug && productId && requirementId);
+  const entityKind = libraryId && !productId ? "library" : "product";
+  const entityId = (entityKind === "library" ? libraryId : productId) ?? "";
+  const canQuery = Boolean(workspaceSlug && entityId && requirementId);
 
   /**
    * 提交时读 ref 而不是闭包里的 requirement。
@@ -67,12 +73,20 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
     setFetched(row);
   }, []);
 
+  const listRows = useCallback(
+    (params: { ids?: string[]; filters?: { field_id: string; operator: "equals"; value: string }[]; perPage: number }) =>
+      entityKind === "library"
+        ? requirementService.listLibraryItems(workspaceSlug, entityId, params)
+        : requirementService.listRequirements(workspaceSlug, entityId, params),
+    [entityId, entityKind, workspaceSlug]
+  );
+
   const loadRequirement = useCallback(async () => {
     if (!canQuery || !requirementId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await requirementService.listRequirements(workspaceSlug, productId, {
+      const response = await listRows({
         ids: [requirementId],
         perPage: 1,
       });
@@ -84,12 +98,12 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
     } finally {
       setIsLoading(false);
     }
-  }, [canQuery, productId, requirementId, workspaceSlug]);
+  }, [canQuery, listRows, requirementId]);
 
   const loadChildren = useCallback(async () => {
     if (!canQuery || !requirementId) return;
     try {
-      const response = await requirementService.listRequirements(workspaceSlug, productId, {
+      const response = await listRows({
         // parent_id 是可筛选的内置列，子需求不需要额外的后端支持
         filters: [{ field_id: "parent_id", operator: "equals", value: requirementId }],
         perPage: CHILDREN_PAGE_SIZE,
@@ -98,12 +112,13 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
     } catch {
       setChildren([]);
     }
-  }, [canQuery, productId, requirementId, workspaceSlug]);
+  }, [canQuery, listRows, requirementId]);
 
   const loadTrail = useCallback(async () => {
-    if (!canQuery || !requirementId) return;
+    // 标准库不走审批，没有变更轨迹端点
+    if (entityKind === "library" || !canQuery || !requirementId) return;
     try {
-      const response = await requirementService.listRequirementTrail(workspaceSlug, productId, requirementId, {
+      const response = await requirementService.listRequirementTrail(workspaceSlug, entityId, requirementId, {
         perPage: TRAIL_PAGE_SIZE,
       });
       setTrail(response?.results ?? []);
@@ -111,7 +126,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
       // 变更轨迹是附加信息，取不到就空着，不该把整个详情打成错误态
       setTrail([]);
     }
-  }, [canQuery, productId, requirementId, workspaceSlug]);
+  }, [canQuery, entityId, entityKind, requirementId, workspaceSlug]);
 
   // 换一条需求时先清干净，否则新行渲染出来之前会闪一下上一条的子需求与轨迹
   useEffect(() => {
@@ -132,10 +147,10 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
   /** 单独取一行，供版本冲突后重放用（后端没有 retrieve，走列表的 ?ids=） */
   const fetchRow = useCallback(
     async (id: string) => {
-      const response = await requirementService.listRequirements(workspaceSlug, productId, { ids: [id], perPage: 1 });
+      const response = await listRows({ ids: [id], perPage: 1 });
       return response?.results?.[0] ?? null;
     },
-    [productId, workspaceSlug]
+    [listRows]
   );
 
   /**
@@ -148,7 +163,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
   const sendPatch = useCallback(
     async (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData }) => {
       const current = requirementRef.current;
-      if (!workspaceSlug || !productId || !current) return null;
+      if (!workspaceSlug || !entityId || !current) return null;
 
       const payloadFor = (row: TRequirement) => ({
         data: patch.data ?? row.data,
@@ -156,13 +171,13 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
         version: row.version,
       });
 
+      const persist = (id: string, payload: ReturnType<typeof payloadFor>) =>
+        entityKind === "library"
+          ? requirementService.updateLibraryItem(workspaceSlug, entityId, id, payload)
+          : requirementService.updateRequirement(workspaceSlug, entityId, id, payload);
+
       try {
-        const response = await requirementService.updateRequirement(
-          workspaceSlug,
-          productId,
-          current.id,
-          payloadFor(current)
-        );
+        const response = await persist(current.id, payloadFor(current));
         applyRow(response);
         return response;
       } catch (error) {
@@ -171,17 +186,12 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
         const latest = await fetchRow(current.id);
         if (!latest) throw error;
         applyRow(latest);
-        const replayed = await requirementService.updateRequirement(
-          workspaceSlug,
-          productId,
-          latest.id,
-          payloadFor(latest)
-        );
+        const replayed = await persist(latest.id, payloadFor(latest));
         applyRow(replayed);
         return replayed;
       }
     },
-    [applyRow, fetchRow, productId, workspaceSlug]
+    [applyRow, entityId, entityKind, fetchRow, workspaceSlug]
   );
 
   /**
@@ -223,8 +233,8 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
   const sendStatus = useCallback(
     async (status: TRequirementItemStatus) => {
       const current = requirementRef.current;
-      if (!workspaceSlug || !productId || !current) return null;
-      const response = await requirementService.updateRequirementStatus(workspaceSlug, productId, current.id, status);
+      if (!workspaceSlug || entityKind !== "product" || !entityId || !current) return null;
+      const response = await requirementService.updateRequirementStatus(workspaceSlug, entityId, current.id, status);
       const latest = requirementRef.current ?? current;
       const merged: TRequirement = {
         ...latest,
@@ -234,7 +244,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, requirementId, 
       applyRow(merged);
       return merged;
     },
-    [applyRow, productId, workspaceSlug]
+    [applyRow, entityId, entityKind, workspaceSlug]
   );
 
   const updateStatus = useCallback(

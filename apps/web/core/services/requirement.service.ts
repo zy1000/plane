@@ -337,7 +337,7 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     libraryId: string,
     itemId: string,
-    payload: { data: TRequirementData; version: number }
+    payload: { data: TRequirementData; builtin?: TRequirementBuiltinValues; version: number }
   ): Promise<TRequirement> {
     return this.patch(
       `/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/${itemId}/`,

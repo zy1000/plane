@@ -348,6 +348,19 @@ export const LeafValue = ({
 export const REQUIREMENT_GRID_COLUMN_WIDTH = 144;
 
 /**
+ * 勾选列。只要装下一颗 Checkbox，不和编号挤在同一格。
+ * 不参与列宽拖拽，也不进「显示」开关。
+ */
+export const REQUIREMENT_GRID_SELECT_COLUMN_WIDTH = 36;
+
+export const REQUIREMENT_GRID_SELECT_COLUMN_STYLE = {
+  width: REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
+  minWidth: REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
+  maxWidth: REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
+  left: 0,
+} as const;
+
+/**
  * 描述列例外地宽一档。它装的是富文本摘要，144px 下基本只能看到前几个字；
  * 工作项表格没有这一列，所以这里没有可抄的量。
  */
@@ -484,6 +497,9 @@ export const REQUIREMENT_GRID_BODY_CELL_CLASS = `${CELL_BORDER_BASE} h-11 px-pag
 /** 左固定列。z 值要压过普通单元格，否则横滚时被盖住 */
 export const REQUIREMENT_GRID_STICKY_HEADER_CLASS = "left-0 z-[15] md:sticky";
 export const REQUIREMENT_GRID_STICKY_BODY_CLASS = "left-0 z-10 bg-surface-1 md:sticky";
+/** 勾选列钉在更左边，z 略高，避免被编号/标题列盖住 */
+export const REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS = "z-[16] md:sticky";
+export const REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS = "z-[11] bg-surface-1 md:sticky";
 
 /** 行底色。选中 / 悬停都不能撞上表头的 bg-layer-1，否则 sticky 表头会和行糊在一起 */
 export const REQUIREMENT_GRID_ROW_CLASS =

@@ -10,7 +10,6 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
-import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { canEditRequirementContent } from "@/components/requirements/requirement-status-cell";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -20,7 +19,10 @@ import { useRequirementDetail } from "./use-requirement-detail";
 
 type TProps = {
   workspaceSlug: string;
-  productId: string;
+  /** 产品需求详情；与 libraryId 二选一 */
+  productId?: string;
+  /** 标准库条目详情。库没有整页路由，抽屉就是详情入口 */
+  libraryId?: string;
   /** 打开哪一条；null = 关闭。上层会把它同步到 URL 的 ?peek=，刷新和分享都能还原 */
   requirementId: string | null;
   requirementTypes: TRequirementTypeSchema[];
@@ -70,6 +72,7 @@ export const RequirementPeekOverview = (props: TProps) => {
   const {
     workspaceSlug,
     productId,
+    libraryId,
     requirementId,
     requirementTypes,
     rows,
@@ -106,14 +109,23 @@ export const RequirementPeekOverview = (props: TProps) => {
    */
   const [isBodyMounted, setIsBodyMounted] = useState(isOpen);
 
+  const entityKind = libraryId && !productId ? "library" : "product";
+  const entityId = (entityKind === "library" ? libraryId : productId) ?? "";
+
   const seed = useMemo(() => rows.find((row) => row.id === activeId) ?? null, [activeId, rows]);
-  const detail = useRequirementDetail({ workspaceSlug, productId, requirementId: activeId, seed });
+  const detail = useRequirementDetail({
+    workspaceSlug,
+    productId: entityKind === "product" ? entityId : undefined,
+    libraryId: entityKind === "library" ? entityId : undefined,
+    requirementId: activeId,
+    seed,
+  });
   const { requirement } = detail;
 
   const parentTitles = useRequirementTitles({
     workspaceSlug,
-    entityKind: "product",
-    entityId: productId,
+    entityKind,
+    entityId,
     knownRows: rows,
     parentIds: detail.parentIds,
   });
@@ -195,26 +207,6 @@ export const RequirementPeekOverview = (props: TProps) => {
                 aria-label={t("requirement_detail.close")}
                 onClick={onClose}
               />
-              {showDetailAction && (
-                <IconButton
-                  variant="ghost"
-                  size="base"
-                  icon={Maximize2}
-                  aria-label={t("requirement_detail.open_full_page")}
-                  onClick={() => {
-                    if (!activeId) return;
-                    onClose();
-                    router.push(`/${workspaceSlug}/products/${productId}/requirements/${activeId}`);
-                  }}
-                />
-              )}
-              {/* 抽屉里唯一能稳定引用这条需求的东西 —— 这里默认开点击复制 */}
-              <RequirementIdentifier
-                displayId={requirement?.display_id}
-                sourceDisplayId={requirement?.source_display_id}
-                size="sm"
-                enableClickToCopy
-              />
               {productChip}
               <span className="ml-auto flex items-center gap-1.5">
                 {detail.isLoading && <LoaderIcon className="size-3.5 animate-spin text-tertiary" />}
@@ -226,12 +218,28 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onClick={() => {
                     if (!activeId) return;
                     void copyUrlToClipboard(
-                      shareHref?.(activeId) ?? `${workspaceSlug}/products/${productId}/requirements/${activeId}`
+                      shareHref?.(activeId) ??
+                        (entityKind === "library"
+                          ? `${workspaceSlug}/templates/libraries/${entityId}?peek=${activeId}`
+                          : `${workspaceSlug}/products/${entityId}/requirements/${activeId}`)
                     ).then(() =>
                       setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
                     );
                   }}
                 />
+                {showDetailAction && entityKind === "product" && entityId && (
+                  <IconButton
+                    variant="ghost"
+                    size="base"
+                    icon={Maximize2}
+                    aria-label={t("requirement_detail.open_full_page")}
+                    onClick={() => {
+                      if (!activeId) return;
+                      onClose();
+                      router.push(`/${workspaceSlug}/products/${entityId}/requirements/${activeId}`);
+                    }}
+                  />
+                )}
               </span>
             </div>
 
@@ -249,7 +257,8 @@ export const RequirementPeekOverview = (props: TProps) => {
               ) : (
                 <RequirementDetailContent
                   workspaceSlug={workspaceSlug}
-                  productId={productId}
+                  productId={entityKind === "product" ? entityId : undefined}
+                  libraryId={entityKind === "library" ? entityId : undefined}
                   requirement={requirement}
                   requirementType={requirementType}
                   subRequirements={detail.children}
@@ -259,7 +268,9 @@ export const RequirementPeekOverview = (props: TProps) => {
                   resolveParentTitle={resolveParentTitle}
                   onPatch={handlePatch}
                   // 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态
-                  onStatusChange={canEdit ? (status) => void handleStatusChange(status) : undefined}
+                  onStatusChange={
+                    canEdit && entityKind === "product" ? (status) => void handleStatusChange(status) : undefined
+                  }
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void detail.refresh()}
                   issuesSection={issuesSection}

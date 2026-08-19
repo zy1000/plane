@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  TRequirement,
   TRequirementBatchSavePayload,
   TRequirementData,
   TRequirementFilter,
@@ -118,6 +119,19 @@ export const useLibraryItems = ({
     [fetchRequirements, libraryId, workspaceSlug]
   );
 
+  /**
+   * 把服务端返回的整行合并回当前页，不重拉列表。
+   * 详情抽屉改完走这条，避免骨架屏顶掉表格。
+   */
+  const syncRequirements = useCallback((rows: TRequirement[]) => {
+    if (!rows.length) return;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    setRequirementsPage((current) => ({
+      ...current,
+      results: current.results.map((item) => byId.get(item.id) ?? item),
+    }));
+  }, []);
+
   const updateRequirement = useCallback(
     async (itemId: string, data: TRequirementData, version: number) => {
       if (!workspaceSlug || !libraryId) throw new Error("Library is required.");
@@ -226,5 +240,6 @@ export const useLibraryItems = ({
     updateRequirement,
     deleteRequirements,
     saveRequirementBatch,
+    syncRequirements,
   };
 };

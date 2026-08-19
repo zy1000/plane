@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { CalendarDays, Link2Off } from "lucide-react";
+import { Link } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -18,9 +19,18 @@ import { RequirementIdentifier } from "@/components/requirements/requirement-ide
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
 
 type Props = {
+  workspaceSlug: string;
+  projectId: string;
   requirements: TProjectRequirement[];
   /** 传了才渲染行尾的解除按钮（canManage） */
   onUnlink?: (requirementId: string) => Promise<void>;
+};
+
+const getRequirementDetailHref = (workspaceSlug: string, projectId: string, requirement: TProjectRequirement) => {
+  if (requirement.product_id) {
+    return `/${workspaceSlug}/products/${requirement.product_id}/requirements/${requirement.id}`;
+  }
+  return `/${workspaceSlug}/projects/${projectId}/requirements?peek=${requirement.id}`;
 };
 
 /**
@@ -28,7 +38,7 @@ type Props = {
  * 行尾解绑直接执行，不再二次确认。
  */
 export const WorkItemRequirementsCollapsibleContent = (props: Props) => {
-  const { requirements, onUnlink } = props;
+  const { workspaceSlug, projectId, requirements, onUnlink } = props;
   const { t } = useTranslation();
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
 
@@ -63,12 +73,15 @@ export const WorkItemRequirementsCollapsibleContent = (props: Props) => {
           style={{ paddingLeft: 6 }}
         >
           <div className="flex size-5 shrink-0" aria-hidden />
-          <span className="flex min-w-0 flex-1 items-center gap-3">
+          <Link
+            to={getRequirementDetailHref(workspaceSlug, projectId, requirement)}
+            className="flex min-w-0 flex-1 items-center gap-3 hover:text-accent-primary"
+          >
             {requirement.display_id && <RequirementIdentifier displayId={requirement.display_id} />}
             <Tooltip tooltipContent={requirement.title} position="top">
               <span className="min-w-0 max-w-full truncate text-13 text-primary">{requirement.title}</span>
             </Tooltip>
-          </span>
+          </Link>
           <div className="flex shrink-0 items-center gap-2">
             <RequirementStatusCell variant="chip" showDot={false} status={requirement.status} />
             <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-11 text-secondary">
