@@ -1017,28 +1017,57 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       >
         新建用例
       </button>
-      <button
-        type="button"
-        onClick={() => {
-          if (!repositoryId || !canImportExportCase) return;
-          setIsImportModalOpen(true);
-        }}
-        disabled={!repositoryId || !canImportExportCase}
-        className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        导入
-      </button>
-      {!isTemplateMode && (
+      {!isTemplateMode ? (
+        <div className="inline-flex items-stretch">
+          <button
+            type="button"
+            onClick={() => {
+              if (!repositoryId || !canCreateCase) return;
+              setIsTemplateImportOpen(true);
+            }}
+            disabled={!repositoryId || !canCreateCase}
+            className="flex items-center justify-center gap-1.5 rounded-l border border-r-0 border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            导入
+          </button>
+          <Dropdown
+            trigger={["click"]}
+            placement="bottomRight"
+            menu={{
+              items: [
+                {
+                  key: "from-file",
+                  label: "从文件导入",
+                  disabled: !repositoryId || !canImportExportCase,
+                  onClick: () => {
+                    if (!repositoryId || !canImportExportCase) return;
+                    setIsImportModalOpen(true);
+                  },
+                },
+              ],
+            }}
+          >
+            <button
+              type="button"
+              disabled={!repositoryId}
+              className="flex items-center justify-center rounded-r border border-accent-strong bg-transparent px-1.5 text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="更多导入方式"
+            >
+              <ChevronDownIcon className="size-3.5" strokeWidth={2.5} />
+            </button>
+          </Dropdown>
+        </div>
+      ) : (
         <button
           type="button"
           onClick={() => {
-            if (!repositoryId || !canCreateCase) return;
-            setIsTemplateImportOpen(true);
+            if (!repositoryId || !canImportExportCase) return;
+            setIsImportModalOpen(true);
           }}
-          disabled={!repositoryId || !canCreateCase}
+          disabled={!repositoryId || !canImportExportCase}
           className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          从模板导入
+          导入
         </button>
       )}
       <button

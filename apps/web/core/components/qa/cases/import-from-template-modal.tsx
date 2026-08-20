@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Pagination, Spin, Table, Tooltip, Tree, message } from "antd";
 import type { TableProps, TreeProps } from "antd";
-import { ChevronDown, FolderInput, Layers, Library, Search, X } from "lucide-react";
+import { ChevronDown, FolderInput, Layers, Search, X } from "lucide-react";
 import { CaseService } from "@/services/qa/case.service";
 import type { ModuleCountResponse } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
@@ -107,7 +107,6 @@ const buildLeftTreeData = (repos: TemplateRepo[], repoCounts: Record<string, Par
     return {
       title: (
         <span className="flex min-w-0 items-center gap-2">
-          <Library size={14} className="shrink-0 text-secondary" />
           <span className="truncate font-medium">{repo.name}</span>
           {isEmptyRepo && <span className="shrink-0 text-xs text-tertiary">（空）</span>}
         </span>
@@ -712,9 +711,6 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-primary">从模板导入</h3>
-              <p className="text-xs text-tertiary">
-                复制模板用例到当前用例库；按模板中的模块归属自动放入同名模块，无则自动创建
-              </p>
             </div>
           </div>
           <button
@@ -733,9 +729,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
           <div className="flex w-[300px] shrink-0 flex-col border-r border-subtle bg-layer-1/40">
             <div className="flex items-center justify-between px-4 pb-2 pt-4">
               <span className="text-sm text-secondary">模板用例库</span>
-              <span className="text-xs text-tertiary">
-                {pendingCheckKeys.size > 0 ? "正在载入勾选范围…" : "勾选库或模块 = 全选其下用例"}
-              </span>
+              {pendingCheckKeys.size > 0 && <span className="text-xs text-tertiary">正在载入勾选范围…</span>}
             </div>
             <div className="px-3 pb-2">
               <Input
@@ -838,9 +832,6 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                 清空
               </button>
             )}
-            <span className="truncate text-xs text-tertiary">
-              导入后按模板中的模块归属自动放入同名模块，无则自动创建
-            </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
@@ -854,10 +845,9 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
               type="button"
               onClick={handleSubmit}
               disabled={submitting || selectedCount === 0}
-              className="flex items-center gap-1.5 rounded-lg bg-accent-primary px-3.5 py-1.5 text-sm font-medium text-on-color transition-colors hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-accent-primary px-3.5 py-1.5 text-sm font-medium text-on-color transition-colors hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <FolderInput size={14} />
-              {submitting ? "导入中..." : "开始导入"}
+              {submitting ? "导入中..." : "导入"}
             </button>
           </div>
         </div>
