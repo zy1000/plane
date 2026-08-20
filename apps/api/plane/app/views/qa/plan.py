@@ -1646,6 +1646,15 @@ class EnumDataAPIView(BaseAPIView):
 
 # 新增：测试用例附件 V2 端点，复用 Issue 附件逻辑
 class CaseAttachmentV2Endpoint(BaseAPIView):
+    """用例附件下载端点。
+
+    ⚠️ 本类只有 GET（带 pk 的下载分支）有 URL 注册（urls/qa.py 的
+    ``workspaces/<slug>/cases/<case_id>/attachments/<pk>/``）。
+    post/patch/delete 以及 GET 的 pk=None 列表分支均无路由、前端也未调用，
+    属遗留死代码，仅作三段式上传的参考实现保留。真实上传链路走
+    /api/assets/v2 的 workspace/project 端点（见 views/asset/v2.py）。
+    """
+
     serializer_class = CaseAttachmentSerializer
     model = FileAsset
 
@@ -1694,6 +1703,7 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
         case_attachment.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @allow_workspace_member
     def get(self, request, slug, case_id, pk=None):
         if pk:
             asset = FileAsset.objects.get(id=pk, workspace__slug=slug)
@@ -1729,6 +1739,7 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
             entity_type=FileAsset.EntityTypeContext.CASE_ATTACHMENT,
             workspace__slug=slug,
             is_uploaded=True,
+            is_deleted=False,
         )
         serializer = CaseAttachmentSerializer(case_attachments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

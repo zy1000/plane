@@ -300,6 +300,11 @@ export class CaseService extends APIService {
 
   private fileUploadService: FileUploadService = new FileUploadService();
 
+  // ⚠️ 下面四个 `*CaseAttachment*` 方法（updateCaseAttachmentUploadStatus / uploadCaseAttachment /
+  // getCaseAttachments / deleteCaseAttachment）指向的 `projects/{pid}/cases/{caseId}/attachments/`
+  // 后端并无路由，且前端无调用方，属遗留死代码。真实附件链路：
+  // 上传走 /api/assets/v2 的 workspace/project 端点，列表 getCaseAssetList，下载 getCaseAsset，
+  // 删除 deleteWorkspaceAsset。保留仅作参考。
   private async updateCaseAttachmentUploadStatus(
     workspaceSlug: string,
     projectId: string,

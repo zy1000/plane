@@ -339,7 +339,9 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
             return {"page_id": entity_id}
         if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:
-            return {"case_id": entity_id}
+            # entity_identifier 可能是 ""/False（先传后绑、模板贴图不绑 case），
+            # 必须归一为 None，否则 UUIDField 会把 False 变成 UUID(int=0)
+            return {"case_id": entity_id or None}
 
         if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
             return {"entity_identifier": str(entity_id)}
@@ -1162,6 +1164,10 @@ class DuplicateAssetEndpoint(BaseAPIView):
 
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
+
+        # 测试用例附件/模板用例富文本贴图（entity_id 为空表示不绑 case）
+        if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:
+            return {"case_id": entity_id or None}
 
         if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
             return {"product_id": entity_id}

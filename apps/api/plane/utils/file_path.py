@@ -33,6 +33,7 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
 - ``DRAFT_ISSUE_*``                 → ``Workspace -> Project -> 草稿 -> DraftIssue``
 - ``CASE_ATTACHMENT`` / ``TEST_CASE_COMMENT_DESCRIPTION``
                                     → ``Workspace -> Project -> 测试用例 -> TestCase``
+                                      （模板库用例无 project：``Workspace -> 测试用例 -> TestCase``）
 - ``CYCLE_FILE``                    → ``Workspace -> Project -> 迭代 -> Cycle``
 - ``RELEASE_FILE`` / ``RELEASE_COMMENT_DESCRIPTION``
                                     → ``Workspace -> Project -> 发布 -> Release``
@@ -219,6 +220,31 @@ class _Resolver:
                 display_name=getattr(owner, "name", "") or "",
             )
 
+        if et == "CASE_ATTACHMENT":
+            # 模板库用例（repository.is_template=True）没有 project：退化为
+            # Workspace -> 测试用例 -> TESTCASE({case})；有 project 时维持原层级
+            # Workspace -> Project -> 测试用例 -> TESTCASE({case})，与旧分支逐位等价。
+            # （模板富文本贴图 case 恒空 → 永驻 workspace 级 _temp，属既定决策。）
+            case_project = self._get_related(asset, "project")
+            case_parent = ws_node
+            if case_project is not None:
+                case_parent = self._get_or_create_node(
+                    parent=ws_node,
+                    entity_type="PROJECT",
+                    entity_id=case_project.pk,
+                    display_name=getattr(case_project, "name", "") or "",
+                )
+            case = self._get_related(asset, "case")
+            if case is None:
+                return self._temp_node(parent_for_category=case_parent, asset=asset)
+            case_cat_node = self._category_node(parent=case_parent, entity_type=et)
+            return self._get_or_create_node(
+                parent=case_cat_node,
+                entity_type="TESTCASE",
+                entity_id=case.pk,
+                display_name=getattr(case, "name", "") or "",
+            )
+
         project = self._get_related(asset, "project")
         if project is None:
             # 业务对项目缺失的容忍度因 entity_type 而异：
@@ -291,17 +317,6 @@ class _Resolver:
                 entity_type="DRAFT_ISSUE",
                 entity_id=draft.pk,
                 display_name=getattr(draft, "name", "") or "",
-            )
-
-        if et == "CASE_ATTACHMENT":
-            case = self._get_related(asset, "case")
-            if case is None:
-                return self._temp_node(parent_for_category=proj_node, asset=asset)
-            return self._get_or_create_node(
-                parent=cat_node,
-                entity_type="TESTCASE",
-                entity_id=case.pk,
-                display_name=getattr(case, "name", "") or "",
             )
 
         if et == "CYCLE_FILE":

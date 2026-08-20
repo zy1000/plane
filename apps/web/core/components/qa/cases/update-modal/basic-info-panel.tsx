@@ -14,6 +14,8 @@ import { WorkspaceService } from "@/services/workspace.service";
 type BasicInfoPanelProps = {
   caseId?: string;
   canEdit?: boolean;
+  /** 模板库模式：路由无 projectId，富文本贴图走 workspace 级上传（CASE_ATTACHMENT，不绑 case） */
+  templateMode?: boolean;
   preconditionValue: string;
   stepsValue: { description?: string; result?: string }[];
   modeValue: number;
@@ -35,6 +37,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const {
     caseId,
     canEdit = true,
+    templateMode = false,
     preconditionValue,
     stepsValue,
     modeValue,
@@ -61,8 +64,21 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const workspaceService = React.useMemo(() => new WorkspaceService(), []);
 
   const handleUploadFile = async (blockId: string | undefined, file: File) => {
-    if (!workspaceSlug || !projectId || !caseId) throw new Error("Missing context");
+    if (!workspaceSlug || !caseId || (!templateMode && !projectId)) throw new Error("Missing context");
     try {
+      if (templateMode) {
+        // workspace 级上传：CASE_ATTACHMENT + 空 entity_identifier（不绑 case，避免混入附件列表）
+        const { asset_id } = await uploadEditorAsset({
+          blockId: blockId ?? "",
+          data: {
+            entity_identifier: "",
+            entity_type: EFileAssetType.CASE_ATTACHMENT,
+          },
+          file,
+          workspaceSlug,
+        });
+        return asset_id;
+      }
       const { asset_id } = await uploadEditorAsset({
         blockId: blockId ?? "",
         data: {
@@ -81,8 +97,17 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   };
 
   const handleDuplicateFile = async (assetId: string) => {
-    if (!workspaceSlug || !projectId || !caseId) throw new Error("Missing context");
+    if (!workspaceSlug || !caseId || (!templateMode && !projectId)) throw new Error("Missing context");
     try {
+      if (templateMode) {
+        const { asset_id } = await duplicateEditorAsset({
+          assetId,
+          entityId: "",
+          entityType: EFileAssetType.CASE_ATTACHMENT,
+          workspaceSlug,
+        });
+        return asset_id;
+      }
       const { asset_id } = await duplicateEditorAsset({
         assetId,
         entityId: projectId,

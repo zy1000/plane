@@ -30,6 +30,7 @@ def get_entity_id_field(entity_type, entity_id):
         FileAsset.EntityTypeContext.PAGE_DESCRIPTION: {"page_id": entity_id},
         FileAsset.EntityTypeContext.COMMENT_DESCRIPTION: {"comment_id": entity_id},
         FileAsset.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION: {"draft_issue_id": entity_id},
+        FileAsset.EntityTypeContext.CASE_ATTACHMENT: {"case_id": entity_id},
     }
     return entity_mapping.get(entity_type, {})
 

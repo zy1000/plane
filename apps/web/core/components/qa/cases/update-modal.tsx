@@ -16,13 +16,14 @@ import { BasicInfoPanel } from "./update-modal/basic-info-panel";
 import { AttachmentsPanel } from "./update-modal/attachments-panel";
 import { SideInfoPanel } from "./update-modal/side-info-panel";
 import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
+import { FileService } from "@/services/file.service";
 import { WorkItemDisplayModal } from "./work-item-display-modal";
 import { RequirementDisplayPanel } from "./requirement-display-panel";
 import { RequirementSelectModal } from "./requirement-select-modal";
 import { WorkItemSelectModal } from "./work-item-select-modal";
 import { workItemTypeName, type TWorkItemType } from "./work-item-category";
 import { PlusOutlined } from "@ant-design/icons";
-import type { TIssue } from "@plane/types";
+import { EFileAssetType, type TIssue } from "@plane/types";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { formatCNDateTime } from "./util";
@@ -347,6 +348,7 @@ function UpdateModalBody({
   };
 
   const fileUploadService = useMemo(() => new FileUploadService(), []);
+  const fileService = useMemo(() => new FileService(), []);
   const [attachmentAssetIds, setAttachmentAssetIds] = useState<string[]>([]);
   const [attachmentAssetMap, setAttachmentAssetMap] = useState<Record<string, string>>({});
 
@@ -384,40 +386,53 @@ function UpdateModalBody({
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
     if (!canEditCase) return;
     try {
-      if (!workspaceSlug || !projectIdStr) {
+      if (!workspaceSlug || (!templateMode && !projectIdStr)) {
         qaCaseSetToastWarning("缺少必要参数(workspaceSlug, projectId)，无法上传附件");
         return;
       }
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       setAttachmentUploading((prev) => ({ ...prev, [key]: true }));
 
-      // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
-      const meta = await getFileMetaDataForUpload(file);
-      const presignResp = await caseService.post(
-        `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/`,
-        {
-          ...meta,
-          entity_type: "CASE_ATTACHMENT",
-          entity_identifier: "",
-        }
-      );
-      const signed = presignResp?.data ?? presignResp;
+      let assetId: string;
+      if (templateMode) {
+        // 模板库：workspace 级一条龙（presign→S3→PATCH）；编辑态 case 已存在，
+        // entity_identifier 直接绑 caseId，presign 即落正式路径，免 rebind 与 putAssetCaseId
+        const signed = await fileService.uploadWorkspaceAsset(
+          String(workspaceSlug),
+          { entity_type: EFileAssetType.CASE_ATTACHMENT, entity_identifier: String(caseId) },
+          file
+        );
+        assetId = String(signed.asset_id);
+      } else {
+        // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
+        const meta = await getFileMetaDataForUpload(file);
+        const presignResp = await caseService.post(
+          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/`,
+          {
+            ...meta,
+            entity_type: "CASE_ATTACHMENT",
+            entity_identifier: "",
+          }
+        );
+        const signed = presignResp?.data ?? presignResp;
 
-      // 2. 直传到对象存储
-      const payload = generateFileUploadPayload(signed, file);
-      await fileUploadService.uploadFile(signed.upload_data.url, payload);
+        // 2. 直传到对象存储
+        const payload = generateFileUploadPayload(signed, file);
+        await fileUploadService.uploadFile(signed.upload_data.url, payload);
 
-      // 3. 标记已上传
-      await caseService.patch(
-        `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/${signed.asset_id}/`
-      );
-      // 4. 记录case_id
-      await caseService.putAssetCaseId(String(workspaceSlug), String(signed.asset_id), {
-        case_id: String(caseId),
-      });
+        // 3. 标记已上传
+        await caseService.patch(
+          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/${signed.asset_id}/`
+        );
+        // 4. 记录case_id
+        await caseService.putAssetCaseId(String(workspaceSlug), String(signed.asset_id), {
+          case_id: String(caseId),
+        });
+        assetId = String(signed.asset_id);
+      }
       // 记录 assetId，用于提交与删除
-      setAttachmentAssetIds((prev) => [...prev, String(signed.asset_id)]);
-      setAttachmentAssetMap((prev) => ({ ...prev, [key]: String(signed.asset_id) }));
+      setAttachmentAssetIds((prev) => [...prev, assetId]);
+      setAttachmentAssetMap((prev) => ({ ...prev, [key]: assetId }));
       // 记录文件信息，便于展示
       // file.id = String(signed.asset_id);
       setAttachmentFiles((prev) => [...prev, file]);
@@ -667,12 +682,12 @@ function UpdateModalBody({
     setInitialReady(false);
     setInitialLoading(true);
 
-    // 模板库模式只有「基本信息」：附件/版本/评审/执行等项目语境数据不拉取
+    // 模板库模式：附件已放开（workspace 级）；版本/评审/执行等项目语境数据仍不拉取
     Promise.allSettled([
       fetchCaseData(seq),
       fetchEnums(seq),
       ...(templateMode
-        ? []
+        ? [fetchAttachments(seq)]
         : [fetchAttachments(seq), fetchCaseVersions(seq), fetchReviewEnums(seq), fetchLatestExec(seq)]),
     ]).finally(() => {
       if (seq !== loadSeqRef.current) return;
@@ -1022,6 +1037,9 @@ function UpdateModalBody({
                   >
                     评审历史
                   </button>
+                    </>
+                  )}
+                  {/* 附件走 workspace 级链路，模板库模式同样可用 */}
                   <button
                     type="button"
                     onClick={() => setActiveTab("attachments")}
@@ -1033,8 +1051,6 @@ function UpdateModalBody({
                   >
                     附件
                   </button>
-                    </>
-                  )}
                 </nav>
                 <div className="flex-shrink-0 pt-2">
                   {activeTab === "req-link" && (
@@ -1077,6 +1093,7 @@ function UpdateModalBody({
               <BasicInfoPanel
                 caseId={caseId}
                 canEdit={canEditCase}
+                templateMode={templateMode}
                 preconditionValue={preconditionValue ?? ""}
                 stepsValue={stepsValue}
                 modeValue={modeValue}

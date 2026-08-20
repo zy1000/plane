@@ -33,7 +33,9 @@ from plane.app.views.qa.utils import expand_module_subtree_ids
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
     CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
+from plane.bgtasks.copy_case_assets_task import copy_case_assets
 from plane.bgtasks.test_case_activities_task import test_case_activity
+from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -57,8 +59,16 @@ class CaseAssetAPIView(BaseAPIView):
     queryset = FileAsset.objects.all()
     serializer_class = CaseAttachmentSerializer
 
+    @allow_workspace_member
     def get(self, request, slug, case_id: str):
-        case = self.queryset.filter(case_id=case_id, is_uploaded=True)
+        # 锁 workspace + entity_type，排除软删；模板用例（无 project）同样适用
+        case = self.queryset.filter(
+            case_id=case_id,
+            workspace__slug=slug,
+            entity_type=FileAsset.EntityTypeContext.CASE_ATTACHMENT,
+            is_uploaded=True,
+            is_deleted=False,
+        )
         serializer = self.serializer_class(instance=case, many=True)
         return Response(data=serializer.data)
 
@@ -1499,6 +1509,7 @@ class CaseAPI(BaseViewSet):
             return Response({"error": "Invalid source case repository"}, status=status.HTTP_400_BAD_REQUEST)
 
         created = []
+        copied_pairs = []
         target_repository_id = target_module.repository_id
         for source_case in source_cases:
             base_fields = dict(
@@ -1539,6 +1550,14 @@ class CaseAPI(BaseViewSet):
             new_case.issues.set(list(source_case.issues.all()))
 
             created.append(new_case)
+            copied_pairs.append((str(source_case.id), str(new_case.id)))
+
+        # 附件与富文本图片异步跟随复制；broker 不可用时降级为“复制成功但资产不跟随”
+        try:
+            for src_id, new_id in copied_pairs:
+                copy_case_assets.delay(src_id, new_id, str(request.user.id))
+        except Exception as e:
+            log_exception(e)
 
         serializer = CaseListSerializer(created, many=True)
         return list_response(data=serializer.data, count=len(created))
@@ -1653,6 +1672,7 @@ class CaseModuleView(BaseViewSet):
                 )
                 _sync_labels(sc, new_case, repo_id)
                 new_case.issues.set(list(sc.issues.all()))
+                copied_pairs.append((str(sc.id), str(new_case.id)))
 
         def _copy_module_recursive(source_mod, parent_mod, repo_id):
             new_mod = CaseModule.objects.create(
@@ -1666,8 +1686,21 @@ class CaseModuleView(BaseViewSet):
                 _copy_module_recursive(child, new_mod, repo_id)
             return new_mod
 
+        def _enqueue_asset_copy(pairs, actor_id):
+            # 附件与富文本图片异步跟随复制；broker 不可用时降级为“复制成功但资产不跟随”
+            try:
+                for src_id, new_id in pairs:
+                    copy_case_assets.delay(src_id, new_id, actor_id)
+            except Exception as e:
+                log_exception(e)
+
+        copied_pairs = []
         with transaction.atomic():
             new_root = _copy_module_recursive(source_module, target_parent, str(target_repository_id))
+            # on_commit 保证 worker 读到的是已提交的新用例行
+            transaction.on_commit(
+                lambda: _enqueue_asset_copy(list(copied_pairs), str(request.user.id))
+            )
 
         return Response(
             {"id": str(new_root.id), "name": new_root.name},
