@@ -1,14 +1,19 @@
 "use client";
 
-// 从模板导入：把工作区级模板用例库（is_template=true）中的用例/模块复制进当前项目用例库。
-// 复制即快照，不留溯源；后端负责重新生成用例编号、按名同步标签、维护人改为当前用户。
+// 从模板导入：把工作区级模板用例库（is_template=true）中的用例复制进当前项目用例库。
+// 复制即快照，不留溯源；后端负责重新生成用例编号、按名同步标签、维护人改为当前用户，
+// 并按源用例在模板库中的模块路径在目标库自动匹配/创建同名模块链（无模块 → 落库根）。
+//
+// 选中模型：唯一事实源是全局选中用例集合 `selected`；左树（库/模块节点）与右表的
+// 勾选态全部由集合派生——勾树节点 = 拉取该子树全部用例 id 并入集合，右表可单个取消，
+// 树节点据「子树内选中数 vs 子树用例总数」自动呈现全选/半选。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Empty, Input, Modal, Pagination, Spin, Table, Tooltip, Tree, TreeSelect, message } from "antd";
+import { Empty, Input, Modal, Pagination, Spin, Table, Tooltip, Tree, message } from "antd";
 import type { TableProps, TreeProps } from "antd";
 import { ChevronDown, FolderInput, Layers, Library, Search, X } from "lucide-react";
 import { CaseService } from "@/services/qa/case.service";
-import { CaseModuleService } from "@/services/qa/case-module.service";
+import type { ModuleCountResponse } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
 import {
   CASE_PICKER_MODAL_CLASS,
@@ -35,13 +40,12 @@ type TemplateCase = {
   priority?: number;
 };
 
-// 勾选的「整模块导入」项
-type CheckedModule = { key: string; moduleId: string; name: string };
-
 type CaseScope = { repositoryId: string; moduleId: string | null };
 
+/** 选中用例的归属信息（用于树节点全选/半选统计） */
+type TSelectedCaseInfo = { repositoryId: string; moduleId: string | null };
+
 const caseService = new CaseService();
-const caseModuleService = new CaseModuleService();
 const repositoryService = new RepositoryService();
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -59,7 +63,7 @@ const extractErrMsg = (e: unknown, fallback: string): string => {
 
 const normalizeListResponse = (res: any): any[] => (Array.isArray(res) ? res : res?.data || res?.results || []);
 
-// 递归构建左树的模块节点；同时收集每个节点的祖先/后代 key，用于整模块勾选去重
+// 递归构建左树的模块节点；ancestorKeys/descendantKeys 用于半选归属回溯与反勾子树移除
 const buildLeftModuleNodes = (
   list: any[],
   repositoryId: string,
@@ -94,33 +98,31 @@ const buildLeftModuleNodes = (
   return { nodes, keys };
 };
 
-const buildLeftTreeData = (repos: TemplateRepo[]): any[] =>
+const buildLeftTreeData = (repos: TemplateRepo[], repoCounts: Record<string, Partial<ModuleCountResponse>>): any[] =>
   repos.map((repo) => {
-    const { nodes } = buildLeftModuleNodes(repo.modules, repo.id, []);
+    const repoKey = `repo:${repo.id}`;
+    const { nodes, keys } = buildLeftModuleNodes(repo.modules, repo.id, [repoKey]);
+    const total = repoCounts[repo.id]?.total;
+    const isEmptyRepo = typeof total === "number" && total === 0;
     return {
       title: (
         <span className="flex min-w-0 items-center gap-2">
           <Library size={14} className="shrink-0 text-secondary" />
           <span className="truncate font-medium">{repo.name}</span>
-          {nodes.length === 0 && <span className="shrink-0 text-xs text-tertiary">（空）</span>}
+          {isEmptyRepo && <span className="shrink-0 text-xs text-tertiary">（空）</span>}
         </span>
       ),
-      key: `repo:${repo.id}`,
+      key: repoKey,
       kind: "repository",
       repositoryId: repo.id,
       name: repo.name,
-      checkable: false,
+      checkable: true,
+      // counts 已到且确认库内无用例时禁用勾选（避免“点了没反应”）
+      disableCheckbox: isEmptyRepo,
+      descendantKeys: keys,
       children: nodes,
     };
   });
-
-// 目标库模块树 -> TreeSelect 数据（title 用纯字符串，保证可搜索）
-const buildTargetTreeData = (modules: any[]): any[] =>
-  (Array.isArray(modules) ? modules : []).map((mod: any) => ({
-    title: String(mod?.name ?? "-"),
-    value: String(mod?.id ?? ""),
-    children: buildTargetTreeData(mod?.children || []),
-  }));
 
 // 防抖调用器：组件卸载时自动清理定时器
 const useDebouncedInvoke = () => {
@@ -152,7 +154,19 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
   const [repoSearchInput, setRepoSearchInput] = useState<string>("");
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
-  const [checkedModules, setCheckedModules] = useState<CheckedModule[]>([]);
+
+  // 唯一事实源：全局选中用例集合（caseId -> 归属信息）
+  const [selected, setSelected] = useState<Record<string, TSelectedCaseInfo>>({});
+  // 每库一次 getModulesCount 的缓存：{ total, [moduleId]: 子树递归计数 }
+  const [repoCounts, setRepoCounts] = useState<Record<string, Partial<ModuleCountResponse>>>({});
+  // 勾选后 ids 请求在途的节点 key（防重入 + 顶部 loading 提示）
+  const [pendingCheckKeys, setPendingCheckKeys] = useState<Set<string>>(new Set());
+  // 节点 key -> 该节点子树全部用例 {id, module_id} 的缓存（二次勾选零延迟）
+  const nodeIdsCacheRef = useRef<Record<string, { id: string; module_id: string | null }[]>>({});
+  // 反勾/清空/重置时 +1，作废在途的 ids 合并（防“反勾后选择复活”）
+  const selectionEpochRef = useRef<number>(0);
+  // 已发起 counts 请求的库（去重）
+  const fetchedCountsRef = useRef<Set<string>>(new Set());
 
   // 右侧：模板用例
   const [scope, setScope] = useState<CaseScope | null>(null);
@@ -162,12 +176,6 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [caseSearchInput, setCaseSearchInput] = useState<string>("");
-  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
-
-  // 底部：目标位置
-  const [targetModules, setTargetModules] = useState<any[]>([]);
-  const [targetLoading, setTargetLoading] = useState<boolean>(false);
-  const [targetModuleId, setTargetModuleId] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -216,6 +224,25 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
     [fetchCases]
   );
 
+  // 每库一次拉取用例计数（树节点全选/半选判定的“总数”来源）；失败静默降级为只显示半选
+  const fetchRepoCounts = useCallback(
+    (repoIds: string[]) => {
+      if (!workspaceSlug) return;
+      repoIds.forEach((repoId) => {
+        if (fetchedCountsRef.current.has(repoId)) return;
+        fetchedCountsRef.current.add(repoId);
+        caseService
+          .getModulesCount(workspaceSlug, repoId)
+          .then((counts) => setRepoCounts((prev) => ({ ...prev, [repoId]: counts || {} })))
+          .catch(() => {
+            // 静默降级：该库节点将永远只显示半选，不阻塞勾选
+            fetchedCountsRef.current.delete(repoId);
+          });
+      });
+    },
+    [workspaceSlug]
+  );
+
   // 拉取模板库列表，并用 repository_id__in 一次性批量拉取所有模板库的模块树（防 N+1）
   const fetchTemplateRepos = useCallback(
     async (search: string, autoSelectFirst: boolean) => {
@@ -251,6 +278,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
           modules: modulesByRepo[String(repo?.id)] || [],
         }));
         setRepos(rows);
+        fetchRepoCounts(rows.map((r) => r.id));
         // 搜索时展开全部命中库，便于直接看到模块；默认保持折叠
         setExpandedKeys(search ? rows.map((r) => `repo:${r.id}`) : []);
         setAutoExpandParent(true);
@@ -262,49 +290,98 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
         setRepoLoading(false);
       }
     },
-    [workspaceSlug, selectScope]
+    [workspaceSlug, selectScope, fetchRepoCounts]
   );
-
-  const fetchTargetModules = useCallback(async () => {
-    if (!workspaceSlug || !targetRepositoryId) return;
-    setTargetLoading(true);
-    try {
-      const list = await caseModuleService.getModulesByRepositories(workspaceSlug, [targetRepositoryId]);
-      setTargetModules(Array.isArray(list) ? list : []);
-    } catch (e) {
-      console.error("获取目标用例库模块失败:", e);
-      message.error(extractErrMsg(e, "获取目标用例库模块失败"));
-      setTargetModules([]);
-    } finally {
-      setTargetLoading(false);
-    }
-  }, [workspaceSlug, targetRepositoryId]);
 
   // 弹窗打开时才发请求；打开即重置全部状态
   useEffect(() => {
     if (!isOpen) return;
+    selectionEpochRef.current += 1;
     setRepos([]);
     setRepoSearchInput("");
     setExpandedKeys([]);
-    setCheckedModules([]);
+    setSelected({});
+    setRepoCounts({});
+    setPendingCheckKeys(new Set());
+    nodeIdsCacheRef.current = {};
+    fetchedCountsRef.current = new Set();
     setScope(null);
     setCases([]);
     setCasesTotal(0);
     setPage(1);
     setPageSize(DEFAULT_PAGE_SIZE);
     setCaseSearchInput("");
-    setSelectedCaseIds([]);
-    setTargetModules([]);
-    setTargetModuleId(null);
     if (!workspaceSlug || !targetRepositoryId) return;
     fetchTemplateRepos("", true);
-    fetchTargetModules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // ---- 左树交互 ----
+  // ---- 左树派生 ----
 
-  const leftTreeData = useMemo(() => buildLeftTreeData(repos), [repos]);
+  const leftTreeData = useMemo(() => buildLeftTreeData(repos, repoCounts), [repos, repoCounts]);
+
+  // moduleId -> { repositoryId, 祖先模块 id 链 }（半选归属回溯用）
+  const moduleMeta = useMemo(() => {
+    const meta: Record<string, { repositoryId: string; ancestorModuleIds: string[] }> = {};
+    const walk = (nodes: any[]) => {
+      for (const node of nodes || []) {
+        if (node.kind === "module" && node.moduleId) {
+          meta[String(node.moduleId)] = {
+            repositoryId: String(node.repositoryId),
+            ancestorModuleIds: (node.ancestorKeys || [])
+              .filter((k: string) => k.startsWith("module:"))
+              .map((k: string) => k.slice("module:".length)),
+          };
+        }
+        walk(node.children || []);
+      }
+    };
+    walk(leftTreeData);
+    return meta;
+  }, [leftTreeData]);
+
+  // 每库/每模块（含子树）的选中数：直属模块与各级祖先各 +1
+  const selectionStats = useMemo(() => {
+    const byRepo: Record<string, number> = {};
+    const byModule: Record<string, number> = {};
+    for (const info of Object.values(selected)) {
+      byRepo[info.repositoryId] = (byRepo[info.repositoryId] ?? 0) + 1;
+      if (info.moduleId) {
+        byModule[info.moduleId] = (byModule[info.moduleId] ?? 0) + 1;
+        const meta = moduleMeta[info.moduleId];
+        (meta?.ancestorModuleIds ?? []).forEach((aid) => {
+          byModule[aid] = (byModule[aid] ?? 0) + 1;
+        });
+      }
+    }
+    return { byRepo, byModule };
+  }, [selected, moduleMeta]);
+
+  // 树勾选态全量派生：选中数 == 子树总数 → 全选；>0 → 半选。
+  // counts 未到（undefined）时只允许半选，避免误判全选。checked/halfChecked 不相交。
+  const treeCheckedState = useMemo(() => {
+    const checked: string[] = [];
+    const halfChecked: string[] = [];
+    const walk = (nodes: any[]) => {
+      for (const node of nodes || []) {
+        if (node.kind === "repository") {
+          const repoId = String(node.repositoryId);
+          const total = repoCounts[repoId]?.total;
+          const sel = selectionStats.byRepo[repoId] ?? 0;
+          if (typeof total === "number" && total > 0 && sel >= total) checked.push(String(node.key));
+          else if (sel > 0) halfChecked.push(String(node.key));
+        } else if (node.kind === "module" && node.moduleId) {
+          const total = repoCounts[String(node.repositoryId)]?.[String(node.moduleId)] as number | undefined;
+          const sel = selectionStats.byModule[String(node.moduleId)] ?? 0;
+          if (typeof total === "number" && total > 0 && sel >= total) checked.push(String(node.key));
+          else if (sel > 0) halfChecked.push(String(node.key));
+        }
+        walk(node.children || []);
+      }
+    };
+    walk(leftTreeData);
+    return { checked, halfChecked };
+  }, [leftTreeData, repoCounts, selectionStats]);
 
   const selectedTreeKeys = useMemo(() => {
     if (!scope) return [];
@@ -329,24 +406,88 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
     }
   };
 
-  // 整模块勾选（checkStrictly）：勾父模块自动覆盖子模块，勾选彼此独立、提交时逐个 copyModule
-  const onModuleCheck: TreeProps["onCheck"] = (_keys, info: any) => {
+  // 拉取某节点子树的全部用例 {id, module_id}（按 node key 缓存）
+  const getNodeCaseIds = useCallback(
+    async (node: any): Promise<{ id: string; module_id: string | null }[]> => {
+      const key = String(node.key);
+      if (nodeIdsCacheRef.current[key]) return nodeIdsCacheRef.current[key];
+      const queries: { repository_id: string; module_id?: string } = {
+        repository_id: String(node.repositoryId),
+      };
+      if (node.kind === "module") queries.module_id = String(node.moduleId);
+      const res = await caseService.getTemplateCaseIds(workspaceSlug, queries);
+      const rows = (res?.data ?? []).map((r) => ({
+        id: String(r.id),
+        module_id: r.module_id ? String(r.module_id) : null,
+      }));
+      nodeIdsCacheRef.current[key] = rows;
+      return rows;
+    },
+    [workspaceSlug]
+  );
+
+  // 树勾选（checkStrictly，树全受控，忽略第一参）：
+  // 勾（含点半选节点，rc-tree 语义为 checked=true）= 拉子树全部用例并入集合；
+  // 反勾 = 纯同步按归属移除，并作废在途合并。
+  const onTreeCheck: TreeProps["onCheck"] = (_keys, info: any) => {
     const node = info?.node;
-    if (!node || node.kind !== "module" || !node.moduleId) return;
-    const key = String(node.key);
+    if (!node) return;
+    const nodeKey = String(node.key);
+
     if (info.checked) {
-      const ancestorKeys: string[] = node.ancestorKeys || [];
-      if (checkedModules.some((m) => ancestorKeys.includes(m.key))) {
-        message.info("已勾选其上级模块，无需重复勾选");
-        return;
+      if (pendingCheckKeys.has(nodeKey)) return;
+      const epoch = selectionEpochRef.current;
+      setPendingCheckKeys((prev) => new Set(prev).add(nodeKey));
+      if (node.kind === "repository") {
+        setExpandedKeys((prev) => (prev.includes(node.key) ? prev : [...prev, node.key]));
       }
-      const descendantKeys: string[] = node.descendantKeys || [];
-      setCheckedModules((prev) => [
-        ...prev.filter((m) => !descendantKeys.includes(m.key)),
-        { key, moduleId: String(node.moduleId), name: String(node.name || "-") },
+      void getNodeCaseIds(node)
+        .then((rows) => {
+          if (selectionEpochRef.current !== epoch) return; // 在途期间发生过反勾/清空，丢弃
+          setSelected((prev) => {
+            const next = { ...prev };
+            rows.forEach((row) => {
+              next[row.id] = { repositoryId: String(node.repositoryId), moduleId: row.module_id };
+            });
+            return next;
+          });
+        })
+        .catch((e) => message.error(extractErrMsg(e, "获取勾选范围失败")))
+        .finally(() =>
+          setPendingCheckKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(nodeKey);
+            return next;
+          })
+        );
+      return;
+    }
+
+    // 反勾：作废在途合并后按归属同步移除
+    selectionEpochRef.current += 1;
+    if (node.kind === "repository") {
+      const repoId = String(node.repositoryId);
+      setSelected((prev) => {
+        const next: Record<string, TSelectedCaseInfo> = {};
+        for (const [id, infoItem] of Object.entries(prev)) {
+          if (infoItem.repositoryId !== repoId) next[id] = infoItem;
+        }
+        return next;
+      });
+      return;
+    }
+    if (node.kind === "module" && node.moduleId) {
+      const subtreeModuleIds = new Set<string>([
+        String(node.moduleId),
+        ...((node.descendantKeys || []) as string[]).map((k) => k.slice("module:".length)),
       ]);
-    } else {
-      setCheckedModules((prev) => prev.filter((m) => m.key !== key));
+      setSelected((prev) => {
+        const next: Record<string, TSelectedCaseInfo> = {};
+        for (const [id, infoItem] of Object.entries(prev)) {
+          if (!(infoItem.moduleId && subtreeModuleIds.has(infoItem.moduleId))) next[id] = infoItem;
+        }
+        return next;
+      });
     }
   };
 
@@ -419,68 +560,40 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
     },
   ];
 
-  // ---- 底部与提交 ----
+  // 本页选中行 = 本页 ∩ 全局选中集合（翻页/切 scope 后由此自动恢复）
+  const pageSelectedKeys = useMemo(
+    () => cases.filter((c) => selected[String(c.id)]).map((c) => String(c.id)),
+    [cases, selected]
+  );
 
-  const targetTreeData = useMemo(() => buildTargetTreeData(targetModules), [targetModules]);
+  // ---- 提交 ----
 
-  const selectedCaseCount = selectedCaseIds.length;
-  const checkedModuleCount = checkedModules.length;
-  const nothingSelected = selectedCaseCount === 0 && checkedModuleCount === 0;
+  const selectedCount = useMemo(() => Object.keys(selected).length, [selected]);
 
   const handleClearSelection = () => {
-    setSelectedCaseIds([]);
-    setCheckedModules([]);
+    selectionEpochRef.current += 1;
+    setSelected({});
   };
 
   const handleSubmit = async () => {
     if (submitting) return;
-    if (nothingSelected) {
-      message.warning("请先选择要导入的用例或模块");
+    const casesId = Object.keys(selected);
+    if (casesId.length === 0) {
+      message.warning("请先选择要导入的用例");
       return;
     }
-    // copyCase 要求目标 module_id 必填；整模块导入允许留空（= 复制到目标库根级）
-    if (selectedCaseCount > 0 && !targetModuleId) {
-      message.warning("逐条导入用例时必须选择目标模块");
-      return;
-    }
-
     setSubmitting(true);
-    const errors: string[] = [];
-    let successCount = 0;
     try {
-      // 散装用例：一次 copyCase 调用
-      if (selectedCaseCount > 0 && targetModuleId) {
-        try {
-          await caseService.copyCase(workspaceSlug, selectedCaseIds, targetModuleId);
-          successCount += 1;
-        } catch (e) {
-          errors.push(extractErrMsg(e, `${selectedCaseCount} 条用例导入失败`));
-        }
-      }
-      // 整模块：逐个 copyModule（串行），失败收集错误继续
-      for (const mod of checkedModules) {
-        try {
-          await caseModuleService.copyModule(
-            workspaceSlug,
-            targetModuleId
-              ? { module_id: mod.moduleId, target_module_id: targetModuleId }
-              : { module_id: mod.moduleId, repository_id: targetRepositoryId }
-          );
-          successCount += 1;
-        } catch (e) {
-          errors.push(`模块「${mod.name}」导入失败：${extractErrMsg(e, "未知错误")}`);
-        }
-      }
-
-      if (errors.length === 0) {
-        message.success("导入成功");
-        onSuccess?.();
-        handleClose();
-        return;
-      }
-      // 部分成功也让调用方刷新，弹窗保留以便重试失败项
-      if (successCount > 0) onSuccess?.();
-      message.error(`部分导入失败：${errors.join("；")}`);
+      await caseService.importTemplateCases(workspaceSlug, {
+        cases_id: casesId,
+        repository_id: targetRepositoryId,
+      });
+      message.success("导入成功");
+      onSuccess?.();
+      handleClose();
+    } catch (e) {
+      // 失败保留弹窗（选择集未动），用户可修正后重试
+      message.error(extractErrMsg(e, "导入失败"));
     } finally {
       setSubmitting(false);
     }
@@ -523,9 +636,29 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
             tableLayout="fixed"
             pagination={false}
             rowSelection={{
-              selectedRowKeys: selectedCaseIds,
-              onChange: (keys) => setSelectedCaseIds(keys as string[]),
-              preserveSelectedRowKeys: true,
+              selectedRowKeys: pageSelectedKeys,
+              onChange: (keys) => {
+                // 全受控：只 diff 本页（不 preserve 时 antd 的 keys 仅含当前 dataSource 内选中项），
+                // 跨页/跨 scope 的选择由全局集合持有
+                const keySet = new Set((keys as React.Key[]).map(String));
+                setSelected((prev) => {
+                  const next = { ...prev };
+                  cases.forEach((c) => {
+                    const id = String(c.id);
+                    if (keySet.has(id)) {
+                      if (!next[id]) {
+                        next[id] = {
+                          repositoryId: scope.repositoryId,
+                          moduleId: c.module?.id ? String(c.module.id) : null,
+                        };
+                      }
+                    } else if (next[id]) {
+                      delete next[id];
+                    }
+                  });
+                  return next;
+                });
+              },
             }}
           />
         </div>
@@ -579,7 +712,9 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-primary">从模板导入</h3>
-              <p className="text-xs text-tertiary">从模板用例库复制用例到当前用例库，复制后与模板不再关联</p>
+              <p className="text-xs text-tertiary">
+                复制模板用例到当前用例库；按模板中的模块归属自动放入同名模块，无则自动创建
+              </p>
             </div>
           </div>
           <button
@@ -598,7 +733,9 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
           <div className="flex w-[300px] shrink-0 flex-col border-r border-subtle bg-layer-1/40">
             <div className="flex items-center justify-between px-4 pb-2 pt-4">
               <span className="text-sm text-secondary">模板用例库</span>
-              <span className="text-xs text-tertiary">勾选模块 = 整模块导入</span>
+              <span className="text-xs text-tertiary">
+                {pendingCheckKeys.size > 0 ? "正在载入勾选范围…" : "勾选库或模块 = 全选其下用例"}
+              </span>
             </div>
             <div className="px-3 pb-2">
               <Input
@@ -628,6 +765,8 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                   <Tree
                     blockNode
                     checkable
+                    // 树勾选态由选中集合全量派生（checked/halfChecked 受控），
+                    // checkStrictly 下 rc-tree 不做父子 conduction，对象形态 checkedKeys 原样生效
                     checkStrictly
                     expandAction="click"
                     switcherIcon={({ expanded, isLeaf }: any) =>
@@ -643,9 +782,9 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                     autoExpandParent={autoExpandParent}
                     onExpand={onExpand}
                     onSelect={onTreeSelect}
-                    onCheck={onModuleCheck}
+                    onCheck={onTreeCheck}
                     selectedKeys={selectedTreeKeys}
-                    checkedKeys={{ checked: checkedModules.map((m) => m.key), halfChecked: [] }}
+                    checkedKeys={{ checked: treeCheckedState.checked, halfChecked: treeCheckedState.halfChecked }}
                     className="custom-tree-indent"
                   />
                 )}
@@ -665,9 +804,9 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                 className="w-56 shrink-0"
                 disabled={!scope}
               />
-              {selectedCaseCount > 0 && (
+              {selectedCount > 0 && (
                 <span className="shrink-0 text-sm text-secondary">
-                  已选 <span className="font-medium text-accent-primary">{selectedCaseCount}</span> 条用例
+                  已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 条用例
                 </span>
               )}
             </div>
@@ -687,34 +826,10 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
         {/* Footer */}
         <div className="flex items-center justify-between gap-4 border-t border-subtle bg-surface-1 px-6 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="shrink-0 text-sm text-secondary">
-              目标位置
-              {selectedCaseCount > 0 && <span className="text-danger-primary">*</span>}
-            </span>
-            <TreeSelect
-              allowClear
-              showSearch
-              treeDefaultExpandAll
-              treeNodeFilterProp="title"
-              placeholder="选择目标模块（留空 = 库根，仅整模块可导入到库根）"
-              treeData={targetTreeData}
-              value={targetModuleId ?? undefined}
-              onChange={(v) => setTargetModuleId(v ? String(v) : null)}
-              notFoundContent={
-                <span className="text-xs text-tertiary">{targetLoading ? "加载中..." : "目标用例库暂无模块"}</span>
-              }
-              style={{ width: 320 }}
-              dropdownStyle={{ maxHeight: 320, overflow: "auto" }}
-            />
             <span className="truncate text-sm text-secondary">
-              已选 <span className="font-medium text-accent-primary">{selectedCaseCount}</span> 条用例
-              {checkedModuleCount > 0 && (
-                <>
-                  ，<span className="font-medium text-accent-primary">{checkedModuleCount}</span> 个整模块
-                </>
-              )}
+              已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 条用例
             </span>
-            {!nothingSelected && (
+            {selectedCount > 0 && (
               <button
                 type="button"
                 onClick={handleClearSelection}
@@ -723,6 +838,9 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                 清空
               </button>
             )}
+            <span className="truncate text-xs text-tertiary">
+              导入后按模板中的模块归属自动放入同名模块，无则自动创建
+            </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
@@ -735,7 +853,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting || nothingSelected}
+              disabled={submitting || selectedCount === 0}
               className="flex items-center gap-1.5 rounded-lg bg-accent-primary px-3.5 py-1.5 text-sm font-medium text-on-color transition-colors hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FolderInput size={14} />

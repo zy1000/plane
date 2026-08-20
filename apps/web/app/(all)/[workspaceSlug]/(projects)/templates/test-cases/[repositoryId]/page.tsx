@@ -25,6 +25,7 @@ export default function TemplateCaseRepositoryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [repositoryName, setRepositoryName] = useState<string>("");
+  const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
 
   // 初始化全局枚举
   useEffect(() => {
@@ -84,6 +85,9 @@ export default function TemplateCaseRepositoryPage() {
                 />
               </Breadcrumbs>
             </Header.LeftItem>
+            <Header.RightItem className="shrink-0">
+              <div ref={setToolbarHost} className="flex min-w-0 items-center gap-2" />
+            </Header.RightItem>
           </Header>
         }
       />
@@ -93,6 +97,7 @@ export default function TemplateCaseRepositoryPage() {
           repositoryId={repositoryId}
           repositoryName={repositoryName}
           mode="template"
+          toolbarPortalEl={toolbarHost}
         />
       </div>
     </>

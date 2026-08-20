@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { PageHead } from "@/components/core/page-title";
 import { Button, Col, Dropdown, Input, Modal, Pagination, Row, Tag, Tree } from "antd";
 import { AppstoreOutlined, EllipsisOutlined, PlusOutlined, ShareAltOutlined } from "@ant-design/icons";
@@ -138,10 +139,11 @@ export type TRepositoryCasesViewProps = {
   repositoryName?: string;
   mode?: "project" | "template"; // 本次只实现 "project"（默认），类型先预留
   headerLeft?: ReactNode; // 工具栏左侧的页面级内容（面包屑 + 库切换器），由壳层传入
+  toolbarPortalEl?: HTMLElement | null; // 传入后搜索/筛选/操作按钮挂到页头右侧
 };
 
 export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
-  const { workspaceSlug, repositoryId, repositoryName, headerLeft, mode = "project" } = props;
+  const { workspaceSlug, repositoryId, repositoryName, headerLeft, toolbarPortalEl, mode = "project" } = props;
   // 模板模式：workspace 级模板库，无项目语境（权限=工作区成员，走 template-case 接口）
   const isTemplateMode = mode === "template";
   // project 模式必传；模板模式恒为 undefined
@@ -961,6 +963,98 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
   }
 
+  const useExternalToolbar = Boolean(toolbarPortalEl);
+  const toolbarActions = (
+    <div className="flex items-center gap-2">
+      <CasesSearchInput
+        disabled={!repositoryId}
+        value={filters.search ?? ""}
+        onSearch={(query) => {
+          const nextFilters = { ...filters, search: query.trim() || undefined };
+          setFilters(nextFilters);
+          fetchCases(1, pageSize, nextFilters);
+        }}
+      />
+      {repositoryId && (
+        <FiltersToggle filter={casesFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+      )}
+      {repositoryId && (
+        <CasesDisplayFilters
+          displayProperties={caseDisplayProperties}
+          ordering={ordering}
+          onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+          onOrderByChange={handleSortChange}
+          hiddenPropertyKeys={isTemplateMode ? ["review", "last_execution_result"] : undefined}
+        />
+      )}
+      {!isTemplateMode && (
+        <button
+          type="button"
+          onClick={() => {
+            if (!repositoryId) return;
+            const ws = String(workspaceSlug || "");
+            const pid = String(projectId || "");
+            const params = new URLSearchParams();
+            params.set("repositoryId", String(repositoryId));
+            if (selectedModuleId) params.set("moduleId", String(selectedModuleId));
+            router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+          }}
+          disabled={!repositoryId}
+          className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-secondary hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="脑图视图"
+        >
+          <ShareAltOutlined />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          if (!repositoryId || !canCreateCase) return;
+          setIsCreateModalOpen(true);
+        }}
+        disabled={!repositoryId || !canCreateCase}
+        className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        新建用例
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!repositoryId || !canImportExportCase) return;
+          setIsImportModalOpen(true);
+        }}
+        disabled={!repositoryId || !canImportExportCase}
+        className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        导入
+      </button>
+      {!isTemplateMode && (
+        <button
+          type="button"
+          onClick={() => {
+            if (!repositoryId || !canCreateCase) return;
+            setIsTemplateImportOpen(true);
+          }}
+          disabled={!repositoryId || !canCreateCase}
+          className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          从模板导入
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          if (!repositoryId || !canImportExportCase) return;
+          setIsExportModalOpen(true);
+        }}
+        disabled={!repositoryId || !canImportExportCase}
+        className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        导出
+      </button>
+    </div>
+  );
+
   return (
     <>
       {/* 页面标题 */}
@@ -1020,102 +1114,14 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
             {/* 右侧表格 */}
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="flex h-full flex-col">
-                <div className="flex flex-shrink-0 items-center justify-between px-3 pt-2 pb-2 sm:pt-2">
-                  <div>{headerLeft}</div>
-                  <div className="flex items-center gap-2">
-                    <CasesSearchInput
-                      disabled={!repositoryId}
-                      value={filters.search ?? ""}
-                      onSearch={(query) => {
-                        const nextFilters = { ...filters, search: query.trim() || undefined };
-                        setFilters(nextFilters);
-                        fetchCases(1, pageSize, nextFilters);
-                      }}
-                    />
-                    {repositoryId && (
-                      <FiltersToggle filter={casesFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
-                    )}
-                    {repositoryId && (
-                      <CasesDisplayFilters
-                        displayProperties={caseDisplayProperties}
-                        ordering={ordering}
-                        onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
-                        onOrderByChange={handleSortChange}
-                        hiddenPropertyKeys={isTemplateMode ? ["review", "last_execution_result"] : undefined}
-                      />
-                    )}
-                    {!isTemplateMode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!repositoryId) return;
-                          const ws = String(workspaceSlug || "");
-                          const pid = String(projectId || "");
-                          const params = new URLSearchParams();
-                          params.set("repositoryId", String(repositoryId));
-                          if (selectedModuleId) params.set("moduleId", String(selectedModuleId));
-                          router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
-                        }}
-                        disabled={!repositoryId}
-                        className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-secondary hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label="脑图视图"
-                      >
-                        <ShareAltOutlined />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!repositoryId || !canCreateCase) return;
-                        setIsCreateModalOpen(true);
-                      }}
-                      disabled={!repositoryId || !canCreateCase}
-                      className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      新建用例
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!repositoryId || !canImportExportCase) return;
-                        setIsImportModalOpen(true);
-                      }}
-                      disabled={!repositoryId || !canImportExportCase}
-                      className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      导入
-                    </button>
-                    {!isTemplateMode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!repositoryId || !canCreateCase) return;
-                          setIsTemplateImportOpen(true);
-                        }}
-                        disabled={!repositoryId || !canCreateCase}
-                        className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        从模板导入
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!repositoryId || !canImportExportCase) return;
-                        setIsExportModalOpen(true);
-                      }}
-                      disabled={!repositoryId || !canImportExportCase}
-                      className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      导出
-                    </button>
-                  </div>
-                </div>
-                {repositoryId && (
-                  <div className="flex-shrink-0 px-3 pb-2">
-                    <FiltersRow filter={casesFilter} />
+                {useExternalToolbar && toolbarPortalEl && createPortal(toolbarActions, toolbarPortalEl)}
+                {(headerLeft || !useExternalToolbar) && (
+                  <div className="flex flex-shrink-0 items-center justify-between px-3 pt-2 pb-2 sm:pt-2">
+                    <div>{headerLeft}</div>
+                    {!useExternalToolbar && toolbarActions}
                   </div>
                 )}
+                {repositoryId && <FiltersRow filter={casesFilter} />}
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {/* 加载/错误/空状态 */}
                   {loading && (

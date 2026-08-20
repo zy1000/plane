@@ -40,6 +40,25 @@ from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
 
+def sync_case_labels_by_name(source_case, new_case, target_repository_id):
+    """把源用例的标签按名称同步到目标库：已有同名标签复用，缺失则在目标库新建。
+
+    供 copy_case / 模块复制 / 从模板导入三处复制路径共用。
+    """
+    label_names = list(source_case.labels.values_list("name", flat=True))
+    if not label_names:
+        return
+    existing = CaseLabel.objects.filter(
+        repository_id=target_repository_id, name__in=label_names, deleted_at__isnull=True
+    )
+    existing_by_name = {lb.name: lb for lb in existing}
+    labels = list(existing_by_name.values())
+    for name in label_names:
+        if name not in existing_by_name:
+            labels.append(CaseLabel.objects.create(repository_id=target_repository_id, name=name))
+    new_case.labels.set(labels)
+
+
 def get_or_create_case_module(repository_id, name, parent):
     lookup = {
         "repository_id": repository_id,
@@ -1533,19 +1552,7 @@ class CaseAPI(BaseViewSet):
 
             new_case = TestCase.objects.create(code="", **base_fields)
 
-            label_names = list(source_case.labels.values_list("name", flat=True))
-            target_labels = []
-            if label_names:
-                existing_labels = CaseLabel.objects.filter(
-                    repository_id=target_repository_id, name__in=label_names, deleted_at__isnull=True
-                )
-                existing_by_name = {label.name: label for label in existing_labels}
-                missing_names = [name for name in label_names if name not in existing_by_name]
-                for name in missing_names:
-                    target_labels.append(CaseLabel.objects.create(repository_id=target_repository_id, name=name))
-                target_labels.extend(list(existing_by_name.values()))
-
-            new_case.labels.set(target_labels)
+            sync_case_labels_by_name(source_case, new_case, target_repository_id)
             # 不复制评审与执行记录；问题关联保持原样
             new_case.issues.set(list(source_case.issues.all()))
 
@@ -1634,20 +1641,6 @@ class CaseModuleView(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        def _sync_labels(source_case, new_case, repo_id):
-            label_names = list(source_case.labels.values_list("name", flat=True))
-            if not label_names:
-                return
-            existing = CaseLabel.objects.filter(
-                repository_id=repo_id, name__in=label_names, deleted_at__isnull=True
-            )
-            existing_by_name = {lb.name: lb for lb in existing}
-            labels = list(existing_by_name.values())
-            for name in label_names:
-                if name not in existing_by_name:
-                    labels.append(CaseLabel.objects.create(repository_id=repo_id, name=name))
-            new_case.labels.set(labels)
-
         def _copy_cases(source_mod, new_mod, repo_id):
             source_cases = (
                 TestCase.objects.filter(module=source_mod, deleted_at__isnull=True)
@@ -1670,7 +1663,7 @@ class CaseModuleView(BaseViewSet):
                     module=new_mod,
                     assignee_id=getattr(request.user, "id", None),
                 )
-                _sync_labels(sc, new_case, repo_id)
+                sync_case_labels_by_name(sc, new_case, repo_id)
                 new_case.issues.set(list(sc.issues.all()))
                 copied_pairs.append((str(sc.id), str(new_case.id)))
 

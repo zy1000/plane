@@ -257,6 +257,36 @@ export class CaseService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  /** 某模板库（可按模块子树收窄）下全部用例的 {id, module_id}，不分页；供导入弹窗树勾选拉全量 */
+  async getTemplateCaseIds(
+    workspaceSlug: string,
+    queries: { repository_id: string; module_id?: string }
+  ): Promise<{ data: { id: string; module_id: string | null }[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/template-case-ids/`, { params: queries })
+      .then((response) => ({
+        data: response?.data?.data ?? [],
+        count: Number(response?.data?.count || 0),
+      }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 从模板导入：复制用例进目标库，按源模块路径自动匹配/创建目标模块链 */
+  async importTemplateCases(
+    workspaceSlug: string,
+    data: { cases_id: string[]; repository_id: string }
+  ): Promise<{ data: string[]; count: number }> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/template-case/import/`, data)
+      .then((response) => ({
+        data: response?.data?.data ?? [],
+        count: Number(response?.data?.count || 0),
+      }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
   async getCaseExecuteRecord(workspaceSlug: string, caseId: string): Promise<any> {
     const query = {case_id:caseId}
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/execute-record/`,{params:query})
