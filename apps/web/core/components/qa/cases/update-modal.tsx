@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
+import { cn } from "@plane/utils";
 import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
 import { Tag, Spin, Tooltip, Input, Table, Select, Button } from "antd";
@@ -50,6 +51,10 @@ type UpdateModalProps = {
   projectId?: string;
   // 模板库模式：保存走 workspace 级模板用例接口，只保留「基本信息」tab，隐藏项目语境区块
   templateMode?: boolean;
+  // 渲染形态：drawer = 抽屉（默认，portal + 遮罩）；page = 独立页面（直接平铺，无头部/底部操作条）
+  variant?: "drawer" | "page";
+  // 用例数据加载/更新后回调（独立页面用它取用例名、所属用例库渲染面包屑）
+  onCaseDataChange?: (caseData: any) => void;
 };
 
 function UpdateModalBody({
@@ -60,10 +65,13 @@ function UpdateModalBody({
   workspaceSlug: propWorkspaceSlug,
   projectId: propProjectId,
   templateMode = false,
+  variant = "drawer",
+  onCaseDataChange,
 }: UpdateModalProps) {
   const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<string>("basic");
+  const isPage = variant === "page";
   /** 「需求」tab（requirement 域的真需求）的选择器开关与刷新令牌 */
   const [isRequirementModalOpen, setIsRequirementModalOpen] = useState(false);
   const [requirementReloadToken, setRequirementReloadToken] = useState(0);
@@ -93,6 +101,11 @@ function UpdateModalBody({
 
   // 新增：用例数据状态
   const [caseData, setCaseData] = React.useState<any>(null);
+
+  // 用例数据变化时通知外部（首次加载与失焦保存后的本地合并都会触发）
+  React.useEffect(() => {
+    if (caseData) onCaseDataChange?.(caseData);
+  }, [caseData, onCaseDataChange]);
   const [labelList, setLabelList] = React.useState<any[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
 
@@ -900,50 +913,63 @@ function UpdateModalBody({
     }
   };
 
+  const peekShellClassName = cn(
+    "absolute z-10 flex flex-col overflow-hidden bg-surface-1 shadow-[0_4px_16px_rgba(16,24,40,0.12)] transition-all duration-300",
+    "inset-y-0 right-0 w-full border-l border-subtle md:w-[72%]"
+  );
+
+  // 全屏（独立页面）链接：与工作项的 MoveDiagonal 跳转独立详情页保持一致
+  const fullScreenUrl =
+    workspaceSlug && caseId
+      ? templateMode
+        ? `/${workspaceSlug}/templates/test-cases/case/${caseId}`
+        : projectIdStr
+          ? `/${workspaceSlug}/projects/${projectIdStr}/testhub/cases/${caseId}`
+          : undefined
+      : undefined;
+
   // 渲染加载状态（等所有数据请求完成后再展示内容）
   if (!initialReady || initialLoading || !caseData) {
-    return createPortal(
-      <div
-        className="fixed inset-0 z-[1100] flex items-center justify-center"
-        aria-modal="true"
-        role="dialog"
-        data-prevent-outside-click="true"
-      >
-        <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-        <div className="relative z-10 flex h-[90vh] max-h-[90vh] w-[85vw] items-center justify-center overflow-hidden rounded-lg bg-white shadow-lg">
-          {!initialReady || initialLoading ? (
-            <Spin size="large" />
-          ) : (
-            <div className="text-gray-500 text-sm">暂无数据或加载失败</div>
-          )}
+    const loadingContent =
+      !initialReady || initialLoading ? (
+        <Spin size="large" />
+      ) : (
+        <div className="text-sm text-secondary">暂无数据或加载失败</div>
+      );
+    if (isPage) {
+      return (
+        <div className="flex h-full min-h-0 w-full flex-col items-center justify-center bg-surface-1">
+          {loadingContent}
         </div>
+      );
+    }
+    return createPortal(
+      <div className="fixed inset-0 z-[1100]" aria-modal="true" role="dialog" data-prevent-outside-click="true">
+        <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+        <div className={`${peekShellClassName} items-center justify-center`}>{loadingContent}</div>
       </div>,
       document.body
     );
   }
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center"
-      aria-modal="true"
-      role="dialog"
-      data-prevent-outside-click="true"
-    >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 flex h-[90vh] max-h-[90vh] w-[85vw] flex-col overflow-hidden rounded-lg bg-white shadow-lg">
-        <ModalHeader onClose={onClose} caseId={String(caseId ?? "")} />
-        {/* 内容区域：左右布局 */}
+  // 内容区域：左右布局（抽屉与独立页共用同一结构）
+  const detailContent = (
         <div className="flex min-h-0 flex-1">
           {/* 左侧：2/3宽度 */}
           <div className="h-full w-[73%] overflow-y-auto px-6 py-4">
-            <TitleInput disabled={!canEditCase} value={title} onChange={setTitle} onBlur={handleBlurTitle} />
+            <TitleInput
+              disabled={!canEditCase}
+              value={title}
+              onChange={setTitle}
+              onBlur={handleBlurTitle}
+              code={codeValue}
+              onCodeChange={setCodeValue}
+              onCodeBlur={handleBlurCode}
+            />
             <CaseMetaForm
               disabled={!canEditCase}
               // 模板库模式无项目语境：不传 projectId，成员下拉走工作区成员
               projectId={!templateMode && projectId ? String(projectId) : undefined}
-              code={codeValue}
-              onCodeChange={setCodeValue}
-              onCodeBlur={handleBlurCode}
               assignee={assignee}
               onAssigneeChange={(v) => handleUpdateAssine(v)}
               onAssigneeBlur={handleBlurAssignee}
@@ -1363,20 +1389,11 @@ function UpdateModalBody({
             hideProjectSections={templateMode}
           />
         </div>
+  );
 
-        {/* 底部操作区 */}
-        <div className="flex justify-end gap-2 border-t px-4 py-3">
-          <button
-            type="button"
-            className="bg-gray-100 text-gray-700 hover:bg-gray-200 rounded px-3 py-1.5 text-sm"
-            onClick={onClose}
-          >
-            关闭
-          </button>
-          {/* 暂不实现保存功能 */}
-        </div>
-      </div>
-      {/* 工作项/需求选择器均为项目语境，模板库模式不渲染 */}
+  // 工作项/需求选择器均为项目语境，模板库模式不渲染
+  const selectorModals = (
+    <>
       {!templateMode && (
         <WorkItemSelectModal
           isOpen={isWorkItemModalOpen}
@@ -1399,6 +1416,39 @@ function UpdateModalBody({
           onConfirm={handleRequirementConfirm}
         />
       )}
+    </>
+  );
+
+  // 独立页面形态：不走 portal、无遮罩/头部/底部操作条，直接平铺同一套内容结构
+  if (isPage) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface-1">
+        {detailContent}
+        {selectorModals}
+      </div>
+    );
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1100]" aria-modal="true" role="dialog" data-prevent-outside-click="true">
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div className={peekShellClassName}>
+        <ModalHeader onClose={onClose} caseId={String(caseId ?? "")} fullScreenUrl={fullScreenUrl} />
+        {detailContent}
+
+        {/* 底部操作区 */}
+        <div className="flex justify-end gap-2 border-t px-4 py-3">
+          <button
+            type="button"
+            className="bg-gray-100 text-gray-700 hover:bg-gray-200 rounded px-3 py-1.5 text-sm"
+            onClick={onClose}
+          >
+            关闭
+          </button>
+          {/* 暂不实现保存功能 */}
+        </div>
+      </div>
+      {selectorModals}
     </div>,
     document.body
   );

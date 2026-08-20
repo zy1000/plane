@@ -168,6 +168,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/templates/test-cases/:repositoryId",
             "./(all)/[workspaceSlug]/(projects)/templates/test-cases/[repositoryId]/page.tsx"
           ),
+          route(
+            ":workspaceSlug/templates/test-cases/case/:caseId",
+            "./(all)/[workspaceSlug]/(projects)/templates/test-cases/case/[caseId]/page.tsx"
+          ),
         ]),
 
         // Workspace Views
@@ -380,6 +384,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             route(
               ":workspaceSlug/projects/:projectId/testhub/cases/compare",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/cases/compare/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/cases/:caseId",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/cases/[caseId]/page.tsx"
             ),
             route(
               ":workspaceSlug/projects/:projectId/testhub/plans",
