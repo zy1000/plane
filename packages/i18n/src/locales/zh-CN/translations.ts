@@ -1938,12 +1938,17 @@ export default {
     navigation: {
       requirement_types: "需求类型",
       libraries: "标准库",
-      work_items: "工作项",
-      workflow: "工作流",
+      test_cases: "测试用例",
     },
-    placeholder: {
-      title: "{section}功能待开发",
-      description: "该页面正在建设中，敬请期待。",
+    test_cases: {
+      title: "模板用例库",
+      create: "新建模板库",
+      search_placeholder: "搜索模板库",
+      error_title: "模板库加载失败",
+      empty: {
+        title: "还没有模板库",
+        description: "沉淀一批可复用的测试用例，项目里的测试用例可以直接从模板导入。",
+      },
     },
     requirement_types: {
       title: "需求类型",
@@ -3251,7 +3256,7 @@ export default {
         title: "权限",
       },
       templates: {
-        title: "模板",
+        title: "角色",
       },
       exports: {
         title: "导出",

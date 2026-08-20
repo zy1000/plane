@@ -48,6 +48,7 @@ from plane.app.views.qa.review import (
 )
 from plane.app.views.qa.execution_file import PlanCaseRecordFileAPI
 from plane.app.views.qa.report import TestReportAPIView, ReportView
+from plane.app.views.qa.template import TemplateCaseAPIView
 
 router = SimpleRouter()
 router.register("review", CaseReviewView, basename="review")
@@ -179,6 +180,11 @@ urlpatterns = [
         "workspaces/<str:slug>/test/repository/",
         RepositoryAPIView.as_view(),
         name="test-repository",
+    ),
+    path(
+        "workspaces/<str:slug>/test/template-case/",
+        TemplateCaseAPIView.as_view(),
+        name="test-template-case",
     ),
     path(
         "workspaces/<str:slug>/test/enums/",

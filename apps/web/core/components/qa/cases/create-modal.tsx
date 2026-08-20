@@ -92,6 +92,10 @@ type Props = {
   isOpen: boolean;
   handleClose: () => void;
   workspaceSlug: string;
+  // 项目 ID（可选）：不传时回退到路由参数
+  projectId?: string;
+  // 模板库模式：提交走 workspace 级模板用例接口，隐藏工作项/附件等项目语境区块
+  templateMode?: boolean;
   // 只读展示字段
   repositoryId: string;
   repositoryName: string;
@@ -516,10 +520,25 @@ const StepsEditor: React.FC<{
 };
 
 export const CreateCaseModal: React.FC<Props> = (props) => {
-  const { isOpen, handleClose, workspaceSlug, repositoryId, repositoryName, initialModuleId, onSuccess } = props;
+  const {
+    isOpen,
+    handleClose,
+    workspaceSlug,
+    projectId: propProjectId,
+    templateMode = false,
+    repositoryId,
+    repositoryName,
+    initialModuleId,
+    onSuccess,
+  } = props;
 
   const [form] = Form.useForm();
-  const { projectId } = useParams();
+  const { projectId: routeProjectId } = useParams();
+  // 模板库模式下没有项目语境，统一将 projectId 归一为 undefined，
+  // 下游（成员下拉、项目成员拉取、附件 presign）据此自然走 workspace 侧或跳过
+  const projectId: string | undefined = templateMode
+    ? undefined
+    : (propProjectId ?? (routeProjectId ? String(routeProjectId) : undefined));
   const [submitting, setSubmitting] = useState<boolean>(false);
   const title = useMemo(() => "新建测试用例", []);
   const [isWorkItemModalOpen, setIsWorkItemModalOpen] = useState<boolean>(false);
@@ -830,14 +849,14 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     }
   };
 
-  // 加载项目列表用于“项目”列显示名称与 Logo
+  // 加载项目列表用于“项目”列显示名称与 Logo（模板库模式隐藏工作项区块，无需加载）
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || templateMode) return;
     projectService
       .getProjectsLite(workspaceSlug)
       .then((data) => setProjects(data || []))
       .catch(() => void 0);
-  }, [isOpen, workspaceSlug, projectService]);
+  }, [isOpen, templateMode, workspaceSlug, projectService]);
 
   useEffect(() => {
     const map = Object.fromEntries((projects || []).map((p) => [String(p.id), p]));
@@ -983,9 +1002,11 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
   useEffect(() => {
     if (!isOpen) return;
+    // 模板库模式：维护人下拉走工作区成员（MemberDropdown 不传 projectId 时的默认行为），无需拉取项目成员
+    if (templateMode) return;
     if (!workspaceSlug || !projectId) return;
     fetchProjectMembers(workspaceSlug.toString(), String(projectId));
-  }, [isOpen, workspaceSlug, projectId, fetchProjectMembers]);
+  }, [isOpen, templateMode, workspaceSlug, projectId, fetchProjectMembers]);
 
   const handleSubmit = async () => {
     try {
@@ -1040,13 +1061,17 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         return;
       }
 
-      if (!projectId) {
+      // 模板库模式走 workspace 级模板用例接口；项目模式维持原有项目级接口
+      let createdCase: any;
+      if (templateMode) {
+        createdCase = await caseService.createTemplateCase(workspaceSlug, payload);
+      } else if (!projectId) {
         message.warning("缺少项目上下文");
         setSubmitting(false);
         return;
+      } else {
+        createdCase = await caseService.createCase(workspaceSlug, projectId, payload);
       }
-
-      const createdCase = await caseService.createCase(workspaceSlug, String(projectId), payload);
       message.success("测试用例创建成功");
 
       const caseId: string | undefined = createdCase?.id ?? createdCase?.case?.id;
@@ -1298,6 +1323,8 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               <Input />
             </Form.Item>
 
+            {/* 模板用例没有工作项关联：模板库模式隐藏该区块 */}
+            {!templateMode && (
             <Form.Item
               label={
                 <div style={{ display: "flex", alignItems: "center" }}>
@@ -1329,8 +1356,10 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 </div>
               )}
             </Form.Item>
+            )}
 
-            {/* 新增：附件属性（位于“工作项”下面） */}
+            {/* 新增：附件属性（位于“工作项”下面）；模板库模式隐藏（其上传走项目级 presign，一期不开） */}
+            {!templateMode && (
             <Form.Item label={<span className="font-bold">附件</span>}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Button type="default" icon={<PlusOutlined />} onClick={handlePickAttachments}>
@@ -1374,6 +1403,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 </div>
               )}
             </Form.Item>
+            )}
           </div>
 
           {/* 右侧区域 */}
@@ -1504,15 +1534,17 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         </div>
       </Form>
 
-      {/* 新增：选择工作项独立模态组件调用 */}
-      <WorkItemSelectModal
-        isOpen={isWorkItemModalOpen}
-        workspaceSlug={workspaceSlug}
-        onClose={() => setIsWorkItemModalOpen(false)}
-        onConfirm={handleWorkItemConfirm}
-        // 新增：传入父组件的已选项实现回显
-        initialSelectedIssues={selectedIssues}
-      />
+      {/* 新增：选择工作项独立模态组件调用（模板库模式不渲染） */}
+      {!templateMode && (
+        <WorkItemSelectModal
+          isOpen={isWorkItemModalOpen}
+          workspaceSlug={workspaceSlug}
+          onClose={() => setIsWorkItemModalOpen(false)}
+          onConfirm={handleWorkItemConfirm}
+          // 新增：传入父组件的已选项实现回显
+          initialSelectedIssues={selectedIssues}
+        />
+      )}
     </Modal>
   );
 };

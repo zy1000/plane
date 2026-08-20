@@ -28,6 +28,8 @@ type SideInfoPanelProps = {
     created_at?: string;
   } | null;
   onChangeTestType: (v: string) => void | Promise<void>;
+  /** 隐藏项目语境区块（工时/变更/最近执行）。模板用例库使用；不传时行为不变 */
+  hideProjectSections?: boolean;
 };
 
 export function SideInfoPanel({
@@ -38,6 +40,7 @@ export function SideInfoPanel({
   reviewEnums,
   latestExec,
   onChangeTestType,
+  hideProjectSections = false,
 }: SideInfoPanelProps) {
   const { workspaceSlug } = useParams() as { workspaceSlug?: string };
 
@@ -143,6 +146,7 @@ export function SideInfoPanel({
         </div>
       </div>
 
+      {!hideProjectSections && (
       <div className="py-5">
         <div className="text-xs text-tertiary mb-4">工时</div>
         <div className="space-y-4">
@@ -156,7 +160,9 @@ export function SideInfoPanel({
           </div>
         </div>
       </div>
+      )}
 
+      {!hideProjectSections && (
       <div className="py-5">
         <div className="text-xs text-tertiary mb-4">变更</div>
         <div className="space-y-4">
@@ -193,7 +199,9 @@ export function SideInfoPanel({
           </div>
         </div>
       </div>
+      )}
 
+      {!hideProjectSections && (
       <div className="py-5">
         <div className="text-xs text-tertiary mb-4">最近执行</div>
         <div className="space-y-4">
@@ -241,6 +249,7 @@ export function SideInfoPanel({
           </div>
         </div>
       </div>
+      )}
 
       <div className="py-5">
         <div className="text-xs text-tertiary mb-4">基础信息</div>

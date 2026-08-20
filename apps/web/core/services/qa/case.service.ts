@@ -217,6 +217,46 @@ export class CaseService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  // ---- 模板用例（工作区级，只作用于 is_template=true 的模板库）----
+
+  async getTemplateCases(workspaceSlug: string, queries?: any): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/template-case/`, {
+      params: queries,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createTemplateCase(workspaceSlug: string, data: any): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/template-case/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateTemplateCase(workspaceSlug: string, data: any): Promise<any> {
+    return this.put(`/api/workspaces/${workspaceSlug}/test/template-case/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteTemplateCases(workspaceSlug: string, caseId: string | string[]): Promise<any> {
+    const ids = Array.isArray(caseId) ? caseId.join(",") : caseId;
+    const query = { id__in: ids };
+    return this.delete(
+      `/api/workspaces/${workspaceSlug}/test/template-case/?${new URLSearchParams(query).toString()}`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
   async getCaseExecuteRecord(workspaceSlug: string, caseId: string): Promise<any> {
     const query = {case_id:caseId}
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/execute-record/`,{params:query})

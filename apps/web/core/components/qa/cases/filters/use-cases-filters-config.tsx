@@ -27,7 +27,8 @@ type TUseCasesFiltersConfigProps = {
   casePriorityEnums: Record<string, string>;
   caseTypeEnums: Record<string, string>;
   workspaceSlug: string;
-  projectId: string;
+  /** 项目 ID；为空时（如工作区级模板场景）维护人筛选来源切换为工作区成员 */
+  projectId?: string;
   reviewEnums: TReviewEnums;
 };
 
@@ -72,10 +73,13 @@ export const useCasesFiltersConfig = ({
   const {
     getUserDetails,
     project: { getProjectMemberIds },
+    workspace: { getWorkspaceMemberIds },
   } = useMember();
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
 
-  const memberIds = getProjectMemberIds(projectId, false) ?? [];
+  // projectId 有值时用项目成员；为空（模板等无项目语境）时回退到工作区成员
+  const memberIds =
+    (projectId ? getProjectMemberIds(projectId, false) : getWorkspaceMemberIds(workspaceSlug)) ?? [];
   const members = useMemo(
     () => memberIds.map((memberId) => getUserDetails(memberId)).filter((member) => member) as IUserLite[],
     [getUserDetails, memberIds]

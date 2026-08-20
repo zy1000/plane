@@ -8,6 +8,49 @@ from io import BytesIO
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from openpyxl import load_workbook
 
+from plane.db.models import CaseModule
+
+
+def expand_module_subtree_ids(module_id):
+    """把模块 id 展开为含全部后代模块的 id 列表（BFS），与模块树计数口径一致。
+
+    供用例列表按模块过滤、导出、模板用例列表共用。
+    """
+    expanded = {str(module_id)}
+    frontier = [str(module_id)]
+    while frontier:
+        children = list(
+            CaseModule.objects.filter(
+                parent_id__in=frontier, deleted_at__isnull=True
+            ).values_list("id", flat=True)
+        )
+        new_children = [str(c) for c in children if str(c) not in expanded]
+        if not new_children:
+            break
+        expanded.update(new_children)
+        frontier = new_children
+    return list(expanded)
+
+
+def build_case_activity_snapshot(case):
+    """更新前的用例快照（JSON 字符串），供活动流 diff 使用。
+
+    与 CaseAPIView.put / TemplateCaseAPIView.put 共用。
+    """
+    return json.dumps({
+        "name": case.name,
+        "type": case.type,
+        "test_type": case.test_type,
+        "priority": case.priority,
+        "assignee_id": str(case.assignee_id) if case.assignee_id else None,
+        "module_id": str(case.module_id) if case.module_id else None,
+        "labels": [str(l) for l in case.labels.values_list("id", flat=True)],
+        "precondition": case.precondition,
+        "text_description": case.text_description,
+        "text_result": case.text_result,
+        "remark": case.remark,
+    })
+
 
 def split_by_numbering(text):
     # 按照 "1. xxx", "2. xxx" 分割文本，但只匹配纯数字+点开头的行首

@@ -36,6 +36,9 @@ class TestCaseRepository(BaseModel):
     project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
                                 related_name="project_%(class)s")
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="workspace_%(class)s")
+    # 模板库：工作区级的模板用例容器（is_template=True 时 project 必为空）。
+    # 注意不能拿 project 为空当模板语义——存量“跨项目共享库”同样 project 为空。
+    is_template = models.BooleanField(default=False, verbose_name="Is Template Repository")
 
     class Meta:
         db_table = "test_repository"

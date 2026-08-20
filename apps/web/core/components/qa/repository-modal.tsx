@@ -18,6 +18,8 @@ type Props = {
     project?: { id: string; name: string } | string | null;
   } | null;
   projectId?: string;
+  /** 模板库模式：隐藏项目关联，创建时固定 is_template=true、project=null */
+  templateMode?: boolean;
   onCancel: () => void;
   onSuccess: () => void;
 };
@@ -27,6 +29,7 @@ export const RepositoryModal: React.FC<Props> = ({
   workspaceSlug,
   initialValues,
   projectId,
+  templateMode = false,
   onCancel,
   onSuccess,
 }) => {
@@ -49,6 +52,7 @@ export const RepositoryModal: React.FC<Props> = ({
         setWorkspaceId(null);
       }
 
+      if (templateMode) return;
       try {
         const list = await projectService.getProjectsLite(workspaceSlug);
         const mapped = Array.isArray(list)
@@ -60,7 +64,7 @@ export const RepositoryModal: React.FC<Props> = ({
       }
     };
     init();
-  }, [workspaceSlug, workspaceService, projectService]);
+  }, [workspaceSlug, workspaceService, projectService, templateMode]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -125,16 +129,18 @@ export const RepositoryModal: React.FC<Props> = ({
       const payload: any = {
         name: values.name,
         description: values.description || "",
-        project: values.project || null,
+        project: templateMode ? null : values.project || null,
         workspace: workspaceId,
       };
+      if (templateMode) payload.is_template = true;
 
+      const entityLabel = templateMode ? "模板库" : "用例库";
       if (initialValues?.id) {
         await repositoryService.updateRepository(String(workspaceSlug), { id: initialValues.id, ...payload });
-        message.success("用例库已更新");
+        message.success(`${entityLabel}已更新`);
       } else {
         await repositoryService.createRepository(String(workspaceSlug), payload);
-        message.success("用例库已创建");
+        message.success(`${entityLabel}已创建`);
       }
       onSuccess();
       onCancel();
@@ -161,18 +167,30 @@ export const RepositoryModal: React.FC<Props> = ({
     <Modal
       open={open}
       onCancel={onCancel}
-      title={initialValues?.id ? "编辑用例库" : "新增用例库"}
+      title={
+        templateMode
+          ? initialValues?.id
+            ? "编辑模板库"
+            : "新建模板库"
+          : initialValues?.id
+            ? "编辑用例库"
+            : "新增用例库"
+      }
       footer={footer}
       destroyOnHidden
     >
       <Form form={form} layout="vertical">
-        <Form.Item name="name" label="用例库名称" rules={[{ required: true, message: "请输入用例库名称" }]}>
+        <Form.Item
+          name="name"
+          label={templateMode ? "模板库名称" : "用例库名称"}
+          rules={[{ required: true, message: templateMode ? "请输入模板库名称" : "请输入用例库名称" }]}
+        >
           <Input placeholder="请输入名称" maxLength={255} />
         </Form.Item>
         <Form.Item name="description" label="描述">
           <Input.TextArea placeholder="可填写简单描述" autoSize={{ minRows: 3, maxRows: 6 }} />
         </Form.Item>
-        <Form.Item name="project" label="关联项目">
+        <Form.Item name="project" label="关联项目" hidden={templateMode}>
           <Select
             allowClear
             placeholder="可选，关联到某个项目"

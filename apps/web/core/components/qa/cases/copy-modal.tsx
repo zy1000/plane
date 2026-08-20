@@ -28,6 +28,10 @@ type Props = {
   projectId?: string;
   selectedCaseIds: string[];
   onSuccess: () => void;
+  /** 额外合并进用例库列表请求的查询参数（如模板场景传 { is_template: true }）；不传时请求与现状一致 */
+  repositoryQuery?: Record<string, any>;
+  /** project 为空的用例库分组标签（如模板场景传「模板库」）；默认「未关联项目」 */
+  emptyProjectGroupLabel?: string;
 };
 
 type RepoRow = { id: string; name: string; modules: any[] };
@@ -47,6 +51,8 @@ export const CopyCaseModal: React.FC<Props> = ({
   projectId,
   selectedCaseIds,
   onSuccess,
+  repositoryQuery,
+  emptyProjectGroupLabel,
 }) => {
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [selectedModuleName, setSelectedModuleName] = useState<string>("");
@@ -67,6 +73,9 @@ export const CopyCaseModal: React.FC<Props> = ({
     setAutoExpandParent(false);
   };
 
+  // 序列化后作为依赖，避免调用方内联对象字面量导致 fetchData 身份变化引发重复请求
+  const repositoryQueryKey = JSON.stringify(repositoryQuery ?? null);
+
   // 服务端分页拉取用例库，并用 repository_id__in 一次性批量拉取当前页所有用例库的模块树
   const fetchData = useCallback(
     async (opts: { page: number; pageSize: number; search: string }) => {
@@ -78,6 +87,8 @@ export const CopyCaseModal: React.FC<Props> = ({
           page_size: opts.pageSize,
           // 限定当前工作空间，支持跨项目复制，同时避免跨工作空间越权
           workspace__slug: workspaceSlug,
+          // 调用方附加的查询参数（如模板场景 { is_template: true }）
+          ...(repositoryQuery ?? {}),
         };
         // search 在后端对「用例库名称」与「所属项目名称」做 OR 匹配
         if (opts.search) params.search = opts.search;
@@ -110,7 +121,7 @@ export const CopyCaseModal: React.FC<Props> = ({
               ? String(proj.name || projId)
               : typeof proj === "string"
                 ? proj
-                : "未关联项目";
+                : emptyProjectGroupLabel || "未关联项目";
           const repoRow: RepoRow = {
             id: String(repo?.id),
             name: String(repo?.name || "-"),
@@ -142,7 +153,9 @@ export const CopyCaseModal: React.FC<Props> = ({
         setFetching(false);
       }
     },
-    [workspaceSlug]
+    // repositoryQuery 以序列化 key 参与依赖，避免对象字面量身份抖动
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workspaceSlug, repositoryQueryKey, emptyProjectGroupLabel]
   );
 
   useEffect(() => {

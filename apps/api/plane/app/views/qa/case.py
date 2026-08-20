@@ -18,12 +18,18 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from plane.app.permissions import allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    allow_fine_permission,
+    allow_fine_permission_or_template,
+    allow_workspace_member,
+    PermissionKey,
+)
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, TestCaseActivitySerializer, PlanCaseRecordSerializer, CaseListSerializer, \
     CaseLabelListSerializer, IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
+from plane.app.views.qa.utils import expand_module_subtree_ids
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
     CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
@@ -249,7 +255,7 @@ class CaseAPI(BaseViewSet):
         return list_response(data=result, count=len(result))
 
     @action(detail=False, methods=['post'], url_path='export')
-    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def export(self, request, slug):
         fields = request.data.get('fields') or []
         if not isinstance(fields, list) or not fields:
@@ -294,19 +300,7 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             qs = qs.filter(repository_id=repository_id)
         if module_id:
-            expanded = {str(module_id)}
-            frontier = [str(module_id)]
-            while frontier:
-                children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id",
-                                                                                                           flat=True)
-                )
-                new_children = [str(c) for c in children if str(c) not in expanded]
-                if not new_children:
-                    break
-                expanded.update(new_children)
-                frontier = new_children
-            qs = qs.filter(module_id__in=list(expanded))
+            qs = qs.filter(module_id__in=expand_module_subtree_ids(module_id))
 
         header = [allowed[f] for f in fields]
         buffer = io.StringIO()
@@ -1259,7 +1253,7 @@ class CaseAPI(BaseViewSet):
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='import-case')
-    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1367,7 +1361,7 @@ class CaseAPI(BaseViewSet):
                         status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='validate-import-case')
-    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def validate_import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1477,6 +1471,7 @@ class CaseAPI(BaseViewSet):
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='copy-case')
+    @allow_workspace_member
     def copy_case(self, request, slug):
         cases_id = request.data.get('cases_id') or []
         module_id = request.data.get('module_id')
@@ -1510,6 +1505,10 @@ class CaseAPI(BaseViewSet):
                 name=source_case.name,
                 precondition=source_case.precondition,
                 steps=source_case.steps,
+                # 文本模式三件套必须一并复制，否则 mode=TEXT 的用例复制后丢正文
+                mode=source_case.mode,
+                text_description=source_case.text_description,
+                text_result=source_case.text_result,
                 remark=source_case.remark,
                 state=getattr(source_case, "state", None),
                 type=source_case.type,
@@ -1567,6 +1566,7 @@ class CaseMindmapAPIView(BaseAPIView):
 
 class CaseModuleView(BaseViewSet):
 
+    @allow_workspace_member
     def copy(self, request, slug):
         case_module_id = request.data.get('module_id')
         target_module_id = request.data.get('target_module_id')

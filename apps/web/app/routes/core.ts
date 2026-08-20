@@ -161,10 +161,13 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
           route(
-            ":workspaceSlug/templates/work-items",
-            "./(all)/[workspaceSlug]/(projects)/templates/work-items/page.tsx"
+            ":workspaceSlug/templates/test-cases",
+            "./(all)/[workspaceSlug]/(projects)/templates/test-cases/page.tsx"
           ),
-          route(":workspaceSlug/templates/workflow", "./(all)/[workspaceSlug]/(projects)/templates/workflow/page.tsx"),
+          route(
+            ":workspaceSlug/templates/test-cases/:repositoryId",
+            "./(all)/[workspaceSlug]/(projects)/templates/test-cases/[repositoryId]/page.tsx"
+          ),
         ]),
 
         // Workspace Views

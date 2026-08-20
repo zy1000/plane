@@ -61,8 +61,8 @@ export class CaseModuleService extends APIService {
       });
   }
 
-  async getUserModuleTree(): Promise<any[]> {
-    return this.get("/api/users/me/test/module-tree/")
+  async getUserModuleTree(queries?: Record<string, any>): Promise<any[]> {
+    return this.get("/api/users/me/test/module-tree/", { params: queries })
       .then((response) => response?.data ?? [])
       .catch((error) => {
         throw error?.response?.data;

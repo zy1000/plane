@@ -1766,12 +1766,17 @@ export default {
     navigation: {
       requirement_types: "Requirement types",
       libraries: "Standard libraries",
-      work_items: "Work items",
-      workflow: "Workflow",
+      test_cases: "Test cases",
     },
-    placeholder: {
-      title: "{section} is under development",
-      description: "This page is currently being built. Stay tuned.",
+    test_cases: {
+      title: "Template case repositories",
+      create: "New template repository",
+      search_placeholder: "Search template repositories",
+      error_title: "Failed to load template repositories",
+      empty: {
+        title: "No template repositories yet",
+        description: "Build a set of reusable test cases that projects can import directly.",
+      },
     },
     requirement_types: {
       title: "Requirement types",
@@ -3083,6 +3088,9 @@ export default {
       },
       roles: {
         title: "Permissions",
+      },
+      templates: {
+        title: "Roles",
       },
       exports: {
         heading: "Exports",

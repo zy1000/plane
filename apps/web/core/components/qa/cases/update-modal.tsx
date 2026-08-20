@@ -47,6 +47,8 @@ type UpdateModalProps = {
   caseId?: string; // 改为传入case ID而不是完整数据
   workspaceSlug?: string;
   projectId?: string;
+  // 模板库模式：保存走 workspace 级模板用例接口，只保留「基本信息」tab，隐藏项目语境区块
+  templateMode?: boolean;
 };
 
 function UpdateModalBody({
@@ -56,6 +58,7 @@ function UpdateModalBody({
   caseId,
   workspaceSlug: propWorkspaceSlug,
   projectId: propProjectId,
+  templateMode = false,
 }: UpdateModalProps) {
   const { t } = useTranslation();
 
@@ -74,6 +77,15 @@ function UpdateModalBody({
     allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlug ? String(workspaceSlug) : "", projectIdStr);
   const caseService = React.useMemo(() => new CaseService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
+
+  /**
+   * 单点保存：所有用例字段更新统一走这里。
+   * 模板库模式走 workspace 级模板用例接口（payload 含 id）；项目模式维持原 updateCase 调用。
+   */
+  const persistCase = async (payload: any) => {
+    if (templateMode) return caseService.updateTemplateCase(String(workspaceSlug), payload);
+    return caseService.updateCase(String(workspaceSlug), projectIdStr, payload);
+  };
   const loadSeqRef = React.useRef<number>(0);
   const [initialLoading, setInitialLoading] = React.useState<boolean>(false);
   const [initialReady, setInitialReady] = React.useState<boolean>(false);
@@ -90,10 +102,10 @@ function UpdateModalBody({
     if (!canEditCase) return;
     const newName = title?.trim();
     const oldName = (caseData?.name ?? "").trim();
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     if (newName === oldName) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, name: newName });
+      await persistCase({ id: caseId, name: newName });
       // 本地 optimistic 更新，避免再次请求导致闪动
       setCaseData((prev: any) => (prev ? { ...prev, name: newName } : prev));
     } catch (e) {
@@ -105,10 +117,10 @@ function UpdateModalBody({
     if (!canEditCase) return;
     const newCode = (codeValue ?? "").trim();
     const oldCode = String(caseData?.code ?? "");
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     if (newCode === oldCode) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, code: newCode });
+      await persistCase({ id: caseId, code: newCode });
       setCaseData((prev: any) => (prev ? { ...prev, code: newCode } : prev));
     } catch (e) {
       qaCaseSetToastError(e, t, "更新编号失败");
@@ -298,7 +310,7 @@ function UpdateModalBody({
     try {
       if (!workspaceSlug || !caseId || !projectIdStr) return;
       const issueIds = (issues || []).map((i) => i.id);
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, issues: issueIds });
+      await persistCase({ id: caseId, issues: issueIds });
       setIsWorkItemModalOpen(false);
       setReloadToken((t) => t + 1);
       await fetchCaseData();
@@ -591,10 +603,10 @@ function UpdateModalBody({
   };
 
   const handleChangeTestType = async (v: string) => {
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     setCaseData((prev: any) => (prev ? { ...prev, test_type: Number(v) } : prev));
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: String(caseId), test_type: Number(v) });
+      await persistCase({ id: String(caseId), test_type: Number(v) });
     } catch (e) {
       qaCaseSetToastError(e, t, "更新测试类型失败");
     }
@@ -655,32 +667,32 @@ function UpdateModalBody({
     setInitialReady(false);
     setInitialLoading(true);
 
+    // 模板库模式只有「基本信息」：附件/版本/评审/执行等项目语境数据不拉取
     Promise.allSettled([
       fetchCaseData(seq),
       fetchEnums(seq),
-      fetchAttachments(seq),
-      fetchCaseVersions(seq),
-      fetchReviewEnums(seq),
-      fetchLatestExec(seq),
+      ...(templateMode
+        ? []
+        : [fetchAttachments(seq), fetchCaseVersions(seq), fetchReviewEnums(seq), fetchLatestExec(seq)]),
     ]).finally(() => {
       if (seq !== loadSeqRef.current) return;
       setInitialLoading(false);
       setInitialReady(true);
     });
-  }, [open, caseId, workspaceSlug]);
+  }, [open, caseId, workspaceSlug, templateMode]);
 
-  // 切换到“执行”页时自动拉取执行记录
+  // 切换到“执行”页时自动拉取执行记录（模板库模式无该 tab，不拉取）
   React.useEffect(() => {
-    if (activeTab === "execution") {
+    if (!templateMode && activeTab === "execution") {
       fetchExecRecords();
     }
-  }, [activeTab, workspaceSlug, caseId]);
+  }, [activeTab, workspaceSlug, caseId, templateMode]);
 
   React.useEffect(() => {
-    if (activeTab === "review") {
+    if (!templateMode && activeTab === "review") {
       fetchReviewRecords();
     }
-  }, [activeTab, workspaceSlug, caseId]);
+  }, [activeTab, workspaceSlug, caseId, templateMode]);
 
   // 生成选项（参考 create-modal）
   const caseTypeOptions = React.useMemo(
@@ -746,10 +758,10 @@ function UpdateModalBody({
   // 新增：失焦更新（各字段）
   const handleBlurAssignee = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     if (assignee === normalizeId(caseData?.assignee)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, assignee });
+      await persistCase({ id: caseId, assignee });
       setCaseData((prev: any) => (prev ? { ...prev, assignee } : prev));
     } catch (e) {
       qaCaseSetToastError(e, t, "更新负责人失败");
@@ -758,11 +770,11 @@ function UpdateModalBody({
 
   const handleUpdateAssine = async (v: any) => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
 
     if (v === normalizeId(caseData?.assignee)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, assignee: v });
+      await persistCase({ id: caseId, assignee: v });
       setCaseData((prev: any) => (prev ? { ...prev, assignee: normalizeId(v) } : prev));
       setAssignee(normalizeId(v));
     } catch (e) {
@@ -772,10 +784,10 @@ function UpdateModalBody({
 
   const handleBlurState = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     if (stateValue === normalizeId(caseData?.state)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, state: stateValue });
+      await persistCase({ id: caseId, state: stateValue });
       setCaseData((prev: any) => (prev ? { ...prev, state: stateValue } : prev));
     } catch (e) {
       qaCaseSetToastError(e, t, "更新状态失败");
@@ -784,10 +796,10 @@ function UpdateModalBody({
 
   const handleBlurType = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     if (typeValue === normalizeId(caseData?.type)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, type: typeValue });
+      await persistCase({ id: caseId, type: typeValue });
       setCaseData((prev: any) => (prev ? { ...prev, type: typeValue } : prev));
     } catch (e) {
       qaCaseSetToastError(e, t, "更新类型失败");
@@ -796,10 +808,10 @@ function UpdateModalBody({
 
   const handleBlurPriority = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
     if (priorityValue === normalizeId(caseData?.priority)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, priority: priorityValue });
+      await persistCase({ id: caseId, priority: priorityValue });
       setCaseData((prev: any) => (prev ? { ...prev, priority: priorityValue } : prev));
     } catch (e) {
       qaCaseSetToastError(e, t, "更新优先级失败");
@@ -815,7 +827,7 @@ function UpdateModalBody({
     remark: string;
   }) => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
 
     const payload: any = {};
     let hasChange = false;
@@ -865,7 +877,7 @@ function UpdateModalBody({
     if (!hasChange) return;
 
     try {
-      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, ...payload });
+      await persistCase({ id: caseId, ...payload });
       setCaseData((prev: any) => (prev ? { ...prev, ...payload } : prev));
       qaCaseSetToastSuccess("保存成功");
     } catch (e: any) {
@@ -912,7 +924,8 @@ function UpdateModalBody({
             <TitleInput disabled={!canEditCase} value={title} onChange={setTitle} onBlur={handleBlurTitle} />
             <CaseMetaForm
               disabled={!canEditCase}
-              projectId={projectId ? String(projectId) : undefined}
+              // 模板库模式无项目语境：不传 projectId，成员下拉走工作区成员
+              projectId={!templateMode && projectId ? String(projectId) : undefined}
               code={codeValue}
               onCodeChange={setCodeValue}
               onCodeBlur={handleBlurCode}
@@ -951,6 +964,9 @@ function UpdateModalBody({
                   >
                     基本信息
                   </button>
+                  {/* 模板用例只有「基本信息」：其余 tab 均为项目语境，模板库模式不渲染 */}
+                  {!templateMode && (
+                    <>
                   <button
                     type="button"
                     onClick={() => setActiveTab("req-link")}
@@ -1017,6 +1033,8 @@ function UpdateModalBody({
                   >
                     附件
                   </button>
+                    </>
+                  )}
                 </nav>
                 <div className="flex-shrink-0 pt-2">
                   {activeTab === "req-link" && (
@@ -1067,7 +1085,8 @@ function UpdateModalBody({
                 remarkValue={remarkValue ?? ""}
                 onSave={handleSaveBasicInfo}
                 activityContent={
-                  caseId && workspaceSlug && projectIdStr ? (
+                  // 活动 feed 依赖项目语境（projectId），模板库模式隐藏
+                  !templateMode && caseId && workspaceSlug && projectIdStr ? (
                     <TestCaseActivityTab
                       workspaceSlug={String(workspaceSlug)}
                       projectId={projectIdStr}
@@ -1324,6 +1343,7 @@ function UpdateModalBody({
             reviewEnums={reviewEnums}
             latestExec={latestExec}
             onChangeTestType={handleChangeTestType}
+            hideProjectSections={templateMode}
           />
         </div>
 
@@ -1339,24 +1359,29 @@ function UpdateModalBody({
           {/* 暂不实现保存功能 */}
         </div>
       </div>
-      <WorkItemSelectModal
-        isOpen={isWorkItemModalOpen}
-        workspaceSlug={String(workspaceSlug ?? "")}
-        onClose={() => setIsWorkItemModalOpen(false)}
-        onConfirm={handleWorkItemConfirm}
-        forceTypeName={forceTypeName}
-        initialSelectedIssues={preselectedIssues}
-        caseId={String(caseId ?? "")}
-      />
+      {/* 工作项/需求选择器均为项目语境，模板库模式不渲染 */}
+      {!templateMode && (
+        <WorkItemSelectModal
+          isOpen={isWorkItemModalOpen}
+          workspaceSlug={String(workspaceSlug ?? "")}
+          onClose={() => setIsWorkItemModalOpen(false)}
+          onConfirm={handleWorkItemConfirm}
+          forceTypeName={forceTypeName}
+          initialSelectedIssues={preselectedIssues}
+          caseId={String(caseId ?? "")}
+        />
+      )}
 
       {/* 「需求」tab（requirement 域）的选择器。与上面的工作项选择器是两套数据，别合并 */}
-      <RequirementSelectModal
-        isOpen={isRequirementModalOpen}
-        caseId={String(caseId ?? "")}
-        projectId={projectIdStr}
-        onClose={() => setIsRequirementModalOpen(false)}
-        onConfirm={handleRequirementConfirm}
-      />
+      {!templateMode && (
+        <RequirementSelectModal
+          isOpen={isRequirementModalOpen}
+          caseId={String(caseId ?? "")}
+          projectId={projectIdStr}
+          onClose={() => setIsRequirementModalOpen(false)}
+          onConfirm={handleRequirementConfirm}
+        />
+      )}
     </div>,
     document.body
   );
