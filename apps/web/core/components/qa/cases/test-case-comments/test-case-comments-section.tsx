@@ -43,7 +43,7 @@ export const TestCaseCommentsSection = observer(function TestCaseCommentsSection
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-2 py-5">
         {isLoading && comments.length === 0 ? (
           <Loader className="space-y-3">
             <Loader.Item height="60px" />
@@ -75,7 +75,7 @@ export const TestCaseCommentsSection = observer(function TestCaseCommentsSection
       </div>
 
       {!disabled && (
-        <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-6 py-3">
+        <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-2 py-3">
           <TestCaseCommentCreate
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}

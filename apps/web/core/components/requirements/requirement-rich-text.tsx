@@ -7,8 +7,6 @@
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { Maximize2 } from "lucide-react";
-import { Modal } from "antd";
 import { useTranslation } from "@plane/i18n";
 import { EFileAssetType } from "@plane/types";
 import { cn, stripAndTruncateHTML } from "@plane/utils";
@@ -16,6 +14,13 @@ import { RichTextEditor } from "@/components/editor/rich-text";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
+import { DraftInput } from "./draft-input";
+import {
+  EXPANDABLE_CELL_INPUT_CLASS,
+  ExpandableCell,
+  ExpandableCellModal,
+  type TExpandableCellVariant,
+} from "./expandable-cell";
 
 const workspaceService = new WorkspaceService();
 const EMPTY_RICH_TEXT_HTML = "<p></p>";
@@ -30,6 +35,34 @@ const normalizeRichText = (value: string | null | undefined) => (value?.trim() ?
  */
 const hasRichTextChanged = (next: string, current: string | null | undefined) =>
   normalizeRichText(next) !== normalizeRichText(current);
+
+/**
+ * 「简单内容」= 空，或只有一段、段内没有任何标签的 HTML。编辑器吐出的 <p> 带 class，
+ * 后端 nh3 也留着它，所以起始标签要允许属性。
+ */
+const SIMPLE_PARAGRAPH_RE = /^\s*(?:<p(?:\s[^>]*)?>([^<]*)<\/p>)?\s*$/;
+const NAMED_ENTITIES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+const decodeEntities = (text: string) =>
+  text
+    .replace(/&#(\d+);/g, (_match, decimal) => String.fromCodePoint(Number(decimal)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&(nbsp|amp|lt|gt|quot|apos);/g, (match, name) => NAMED_ENTITIES[name] ?? match);
+
+const escapeHtml = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * 单段纯文本的 HTML → 单元格输入框里的文本；带格式、图片或多段的返回 null，交给弹窗。
+ * 不 trim：text → html → text 必须恒等，否则受控输入框每敲一下都会被回流值改写，光标跟着跳。
+ */
+const toInlineText = (html: string | null | undefined) => {
+  const match = SIMPLE_PARAGRAPH_RE.exec(html ?? "");
+  return match ? decodeEntities(match[1] ?? "") : null;
+};
+
+/** 输入框里的文本 → 存库的单段 HTML。空串就是空串，hasRichTextChanged 把它和 <p></p> 判等 */
+const fromInlineText = (text: string) => (text ? `<p>${escapeHtml(text)}</p>` : "");
 
 /**
  * workspaceId 解析 + 编辑器的上传/复制回调。
@@ -221,10 +254,11 @@ export const RequirementRichTextEditor = observer(function RequirementRichTextEd
 });
 
 /**
- * 网格单元格：平时是纯文本摘要，点展开按钮进弹窗用完整编辑器改。
+ * 网格单元格：简单内容（空或一段纯文本）直接在单元格里用普通输入框改，存成 <p>…</p>；
+ * 带格式、图片或多段的复杂内容仍是只读摘要，点展开按钮进弹窗用完整编辑器改。
  *
  * 列的最小宽度只有 160px，内嵌完整编辑器（气泡菜单、斜杠命令、拖拽）会把行高撑爆，
- * 所以网格里只给摘要 —— 与 diff、基线快照的呈现也就保持了一致。
+ * 所以网格里不放它 —— 与 diff、基线快照的呈现也就保持了一致。
  */
 export const RequirementRichTextCell = observer(function RequirementRichTextCell({
   label,
@@ -233,56 +267,63 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
   placeholder,
   editorId,
   variant = "grid",
+  deferCommit = false,
   ...rest
 }: TFieldProps & {
   /** 弹窗标题里的字段名 */ label: string;
-  /** 静息底色的配方，与 FIELD_INPUT_CLASS 同名同义 */
-  variant?: "grid" | "detail" | "modal";
+  variant?: TExpandableCellVariant;
+  /** 内联输入框失焦 / 回车才提交，给「onChange 即一次 PATCH」的场景用；与文本字段的 deferTextCommit 同义 */
+  deferCommit?: boolean;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<string | null>(null);
   // 同一个字段在网格里有几十行，editorId 得再加一层实例后缀才唯一。
   // useId 带的冒号会落进 DOM 的 id 属性里，顺手去掉免得将来谁拿它做选择器。
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const inlineText = toInlineText(value);
   const preview = value ? stripAndTruncateHTML(value, CELL_PREVIEW_LENGTH) : "";
+  // 网格单元格旁边就是列头，空值不必再占一行提示；弹窗没有列头，才回落到占位文案
+  const emptyHint = variant === "modal" ? (placeholder || t("requirement_grid.data.expand_rich_text")) : "";
+  const openModal = () => setDraft(value ?? "");
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setDraft(value ?? "")}
-        title={t("requirement_grid.data.expand_rich_text")}
-        className={cn(
-          "focus-visible:border-accent-primary group flex min-h-8 w-full min-w-0 items-start gap-1 rounded-md border px-2 py-1.5 text-left transition-colors duration-150 outline-none motion-reduce:transition-none",
-          // 弹窗里字段密集且没有相邻单元格衬托，静息就得看得出是个可点的输入框
-          variant === "modal"
-            ? "border-subtle bg-surface-1 hover:border-strong"
-            : "border-transparent bg-transparent hover:border-subtle hover:bg-layer-1 focus-visible:bg-surface-1"
+      <ExpandableCell variant={variant} onExpand={openModal}>
+        {inlineText === null ? (
+          <button
+            type="button"
+            onClick={openModal}
+            title={t("requirement_grid.data.expand_rich_text")}
+            className="min-w-0 flex-1 text-left outline-none"
+          >
+            <span className={cn("block leading-5", preview ? "line-clamp-3 text-primary" : "truncate text-placeholder")}>
+              {preview || emptyHint}
+            </span>
+          </button>
+        ) : deferCommit ? (
+          <DraftInput
+            value={inlineText}
+            onCommit={(next) => onChange(fromInlineText(next))}
+            className={EXPANDABLE_CELL_INPUT_CLASS}
+            placeholder={emptyHint}
+          />
+        ) : (
+          <input
+            value={inlineText}
+            onChange={(event) => onChange(fromInlineText(event.target.value))}
+            className={EXPANDABLE_CELL_INPUT_CLASS}
+            placeholder={emptyHint}
+          />
         )}
-      >
-        <span
-          className={cn(
-            "min-w-0 flex-1 text-14 leading-5",
-            preview ? "line-clamp-3 text-primary" : "truncate text-placeholder"
-          )}
-        >
-          {preview || placeholder || t("requirement_grid.data.expand_rich_text")}
-        </span>
-        <Maximize2 className="mt-0.5 size-3.5 shrink-0 text-tertiary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
-      </button>
-      <Modal
+      </ExpandableCell>
+      <ExpandableCellModal
         open={draft !== null}
-        title={t("requirement_grid.data.edit_rich_text", { field: label })}
+        label={label}
         onCancel={() => setDraft(null)}
         onOk={() => {
           if (draft !== null && hasRichTextChanged(draft, value)) onChange(draft);
           setDraft(null);
         }}
-        okText={t("confirm")}
-        cancelText={t("cancel")}
-        width={720}
-        modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
-        destroyOnHidden
       >
         <div className="vertical-scrollbar scrollbar-sm max-h-[52vh] min-h-[240px] overflow-y-auto rounded-md border border-subtle bg-surface-1">
           <RequirementRichTextField
@@ -295,7 +336,7 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
             containerClassName="min-h-[240px] pt-3 pr-3 text-13"
           />
         </div>
-      </Modal>
+      </ExpandableCellModal>
     </>
   );
 });

@@ -123,7 +123,8 @@ function ToastRender({ id, toast }: { id: React.Key; toast: BaseToast.Root.Toast
       className={cn(
         // Base layout and positioning
         "group flex w-[350px] items-center rounded-lg border shadow-raised-200",
-        "absolute right-3 bottom-3 z-[calc(1000-var(--toast-index))]",
+        // z 基准 2000：需高于业务侧 z-[1100] 的全屏抽屉（如测试用例详情），否则 toast 会被盖住
+        "absolute right-3 bottom-3 z-[calc(2000-var(--toast-index))]",
         "ease-&lsqb;cubic-bezier(0.22,1,0.36,1)&rsqb; transition-[opacity,transform] duration-500 select-none",
 
         // Default transform with stacking and scaling

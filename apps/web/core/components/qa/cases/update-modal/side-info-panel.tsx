@@ -115,7 +115,7 @@ export function SideInfoPanel({
         />
       ) : null}
       <div className="py-5">
-        <div className="text-xs text-tertiary mb-4">属性</div>
+        <div className="mb-4 text-sm leading-5 font-medium text-secondary">属性</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm font-medium text-secondary shrink-0 basis-28 md:basis-32">测试类型</span>
@@ -126,7 +126,7 @@ export function SideInfoPanel({
                 }
               >
                 <Select
-                  className="w-full"
+                  className="w-full [&_.ant-select-selector]:!px-0"
                   bordered={false}
                   suffixIcon={null}
                   options={caseTestTypeOptions}
@@ -148,7 +148,7 @@ export function SideInfoPanel({
 
       {!hideProjectSections && (
       <div className="py-5">
-        <div className="text-xs text-tertiary mb-4">工时</div>
+        <div className="mb-4 text-sm leading-5 font-medium text-secondary">工时</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">登记工时</span>
@@ -164,7 +164,7 @@ export function SideInfoPanel({
 
       {!hideProjectSections && (
       <div className="py-5">
-        <div className="text-xs text-tertiary mb-4">变更</div>
+        <div className="mb-4 text-sm leading-5 font-medium text-secondary">变更</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">版本</span>
@@ -203,7 +203,7 @@ export function SideInfoPanel({
 
       {!hideProjectSections && (
       <div className="py-5">
-        <div className="text-xs text-tertiary mb-4">最近执行</div>
+        <div className="mb-4 text-sm leading-5 font-medium text-secondary">最近执行</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">计划</span>
@@ -252,7 +252,7 @@ export function SideInfoPanel({
       )}
 
       <div className="py-5">
-        <div className="text-xs text-tertiary mb-4">基础信息</div>
+        <div className="mb-4 text-sm leading-5 font-medium text-secondary">基础信息</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">用例库</span>
@@ -279,9 +279,9 @@ export function SideInfoPanel({
                   disabled={true}
                   placeholder="请选择维护人"
                   className="w-full text-sm"
-                  buttonContainerClassName="w-full text-left"
+                  buttonContainerClassName="w-full text-left p-0 cursor-default"
                   buttonVariant="transparent-with-text"
-                  buttonClassName="text-sm"
+                  buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                   showUserDetails={true}
                   optionsClassName="z-[1200]"
                 />
@@ -305,9 +305,9 @@ export function SideInfoPanel({
                   disabled={true}
                   placeholder="请选择维护人"
                   className="w-full text-sm"
-                  buttonContainerClassName="w-full text-left"
+                  buttonContainerClassName="w-full text-left p-0 cursor-default"
                   buttonVariant="transparent-with-text"
-                  buttonClassName="text-sm"
+                  buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                   showUserDetails={true}
                   optionsClassName="z-[1200]"
                 />

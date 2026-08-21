@@ -178,7 +178,7 @@ type TBuiltinEditorProps = {
    */
   variant?: "grid" | "detail" | "modal" | "headline" | "chip";
   /**
-   * 标题是否延后到失焦再提交。网格里必须开 —— 那里的 onChange 会直接打接口保存这一行，
+   * 标题 / 描述是否延后到失焦再提交。网格里必须开 —— 那里的 onChange 会直接打接口保存这一行，
    * 逐字符提交等于每敲一个字发一次请求。建行弹窗里 onChange 只写本地 state，不用开
    * （开了反而会让「标题为空则禁用确定」的判断慢一拍）。
    */
@@ -208,6 +208,8 @@ export const BuiltinCellEditor = ({
   // 详情页跟着工作项侧栏走透明下拉；网格保留边框按钮，否则单元格看不出能点
   const dropdownVariant = base === "detail" ? "transparent-with-text" : "border-with-text";
   const inputClass = variant === "headline" ? FIELD_HEADLINE_INPUT_CLASS : FIELD_INPUT_CLASS[base];
+  // 网格有列头，空值不必再写「选择成员」「开始日期」这类提示；详情页与建行弹窗没有列头，才保留
+  const isGrid = base === "grid";
   // 属性条上的胶囊与工作项 IssueDefaultProperties 同高（h-7），别跟着字段行的 38px 跑
   const isChip = variant === "chip";
   const dropdownClass = cn(
@@ -250,6 +252,7 @@ export const BuiltinCellEditor = ({
         onChange={(html) => onChange({ description_html: html })}
         onAssetUpload={onAssetUpload}
         variant={base}
+        deferCommit={deferTextCommit}
       />
     );
   }
@@ -268,7 +271,10 @@ export const BuiltinCellEditor = ({
   if (columnKey === "priority") {
     return (
       <PriorityDropdown
-        value={values.priority}
+        // none 在 ISSUE_PRIORITIES 里有自己的标题「None」和占位图标，网格列头已经说明是优先级，空值保持空白
+        value={isGrid && values.priority === "none" ? null : values.priority}
+        placeholder={isGrid ? "" : undefined}
+        hideIcon={isGrid && (!values.priority || values.priority === "none")}
         onChange={(next) => onChange({ priority: next as TRequirementPriority })}
         buttonVariant={dropdownVariant}
         buttonClassName={dropdownClass}
@@ -286,7 +292,7 @@ export const BuiltinCellEditor = ({
         buttonVariant={dropdownVariant}
         buttonClassName={cn(dropdownClass, "text-14")}
         buttonContainerClassName={containerClass}
-        placeholder={t("requirement_grid.data.select_member")}
+        placeholder={isGrid ? "" : t("requirement_grid.data.select_member")}
         showUserDetails
       />
     );
@@ -301,7 +307,7 @@ export const BuiltinCellEditor = ({
         onChange={(date) => onChange({ [columnKey]: renderFormattedPayloadDate(date) ?? null })}
         minDate={!isStart && values.start_date ? new Date(values.start_date) : undefined}
         maxDate={isStart && values.target_date ? new Date(values.target_date) : undefined}
-        placeholder={t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)}
+        placeholder={isGrid ? "" : t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)}
         buttonVariant={dropdownVariant}
         buttonClassName={dropdownClass}
         buttonContainerClassName={containerClass}
@@ -314,6 +320,7 @@ export const BuiltinCellEditor = ({
       value={values.parent_id}
       onChange={(parentId) => onChange({ parent_id: parentId })}
       excludeId={rowId}
+      placeholder={isGrid ? "" : undefined}
       buttonClassName={cn(dropdownClass, isChip && "gap-1.5")}
       // 胶囊上没有字段名，图标就是它的标签 —— 其余几个下拉自带图标，这个得显式给
       icon={isChip ? GitBranch : undefined}

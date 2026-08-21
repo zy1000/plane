@@ -3,10 +3,12 @@
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
-import { Link2, Loader as LoaderIcon, Maximize2, MoveRight } from "lucide-react";
+import { Loader as LoaderIcon, MoveDiagonal, MoveRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
+import { CopyLinkIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
@@ -221,48 +223,53 @@ export const RequirementPeekOverview = (props: TProps) => {
               "md:w-[80%] 2xl:w-[55%]"
             )}
           >
-            <div className="flex flex-shrink-0 items-center gap-2 px-4 py-2.5">
-              <IconButton
-                variant="ghost"
-                size="base"
-                icon={MoveRight}
-                aria-label={t("requirement_detail.close")}
-                onClick={onClose}
-              />
-              {productChip}
-              <span className="ml-auto flex items-center gap-1.5">
-                {detail.isLoading && <LoaderIcon className="size-3.5 animate-spin text-tertiary" />}
-                <IconButton
-                  variant="ghost"
-                  size="base"
-                  icon={Link2}
-                  aria-label={t("requirement_detail.copy_link")}
-                  onClick={() => {
-                    if (!activeId) return;
-                    void copyUrlToClipboard(
-                      shareHref?.(activeId) ??
-                        (entityKind === "library"
-                          ? `${workspaceSlug}/templates/libraries/${entityId}?peek=${activeId}`
-                          : `${workspaceSlug}/products/${entityId}/requirements/${activeId}`)
-                    ).then(() =>
-                      setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
-                    );
-                  }}
-                />
+            {/* 头部按钮的位置与形式对齐工作项 peek header：左侧 关闭(MoveRight) + 整页(MoveDiagonal)，右侧 复制链接(IconButton secondary) */}
+            <div className="relative flex flex-shrink-0 items-center justify-between p-4">
+              <div className="flex items-center gap-4">
+                <Tooltip tooltipContent={t("requirement_detail.close")}>
+                  <button type="button" onClick={onClose} aria-label={t("requirement_detail.close")}>
+                    <MoveRight className="h-4 w-4 text-tertiary hover:text-secondary" />
+                  </button>
+                </Tooltip>
                 {showDetailAction && entityKind === "product" && entityId && (
+                  <Tooltip tooltipContent={t("requirement_detail.open_full_page")}>
+                    <button
+                      type="button"
+                      aria-label={t("requirement_detail.open_full_page")}
+                      onClick={() => {
+                        if (!activeId) return;
+                        onClose();
+                        router.push(`/${workspaceSlug}/products/${entityId}/requirements/${activeId}`);
+                      }}
+                    >
+                      <MoveDiagonal className="h-4 w-4 text-tertiary hover:text-secondary" />
+                    </button>
+                  </Tooltip>
+                )}
+                {productChip}
+              </div>
+              <div className="flex items-center gap-2">
+                {detail.isLoading && <LoaderIcon className="size-3.5 animate-spin text-tertiary" />}
+                <Tooltip tooltipContent={t("requirement_detail.copy_link")}>
                   <IconButton
-                    variant="ghost"
-                    size="base"
-                    icon={Maximize2}
-                    aria-label={t("requirement_detail.open_full_page")}
+                    variant="secondary"
+                    size="lg"
+                    icon={CopyLinkIcon}
+                    aria-label={t("requirement_detail.copy_link")}
                     onClick={() => {
                       if (!activeId) return;
-                      onClose();
-                      router.push(`/${workspaceSlug}/products/${entityId}/requirements/${activeId}`);
+                      void copyUrlToClipboard(
+                        shareHref?.(activeId) ??
+                          (entityKind === "library"
+                            ? `${workspaceSlug}/templates/libraries/${entityId}?peek=${activeId}`
+                            : `${workspaceSlug}/products/${entityId}/requirements/${activeId}`)
+                      ).then(() =>
+                        setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
+                      );
                     }}
                   />
-                )}
-              </span>
+                </Tooltip>
+              </div>
             </div>
 
             <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-6 pt-1 pb-12">

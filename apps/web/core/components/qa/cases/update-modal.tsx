@@ -992,7 +992,7 @@ function UpdateModalBody({
             />
             {/* Menu 导航 */}
             <div className="mt-3">
-              <div className="border-gray-200 mx-2 flex items-center justify-between border-b">
+              <div className="border-gray-200 flex items-center justify-between border-b pr-2">
                 <nav className="flex gap-4">
                   <button
                     type="button"
@@ -1061,7 +1061,7 @@ function UpdateModalBody({
                         : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
-                    评审历史
+                    评审
                   </button>
                     </>
                   )}
@@ -1435,18 +1435,6 @@ function UpdateModalBody({
       <div className={peekShellClassName}>
         <ModalHeader onClose={onClose} caseId={String(caseId ?? "")} fullScreenUrl={fullScreenUrl} />
         {detailContent}
-
-        {/* 底部操作区 */}
-        <div className="flex justify-end gap-2 border-t px-4 py-3">
-          <button
-            type="button"
-            className="bg-gray-100 text-gray-700 hover:bg-gray-200 rounded px-3 py-1.5 text-sm"
-            onClick={onClose}
-          >
-            关闭
-          </button>
-          {/* 暂不实现保存功能 */}
-        </div>
       </div>
       {selectorModals}
     </div>,

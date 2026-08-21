@@ -33,6 +33,8 @@ type Props = {
   buttonTextClassName?: string;
   /** 按钮前置图标。属性条里用它表意，网格单元格里没有位置给图标 */
   icon?: LucideIcon;
+  /** 空值时的按钮文字。网格有列头，传空串不再写「选择父项」 */
+  placeholder?: string;
   disabled?: boolean;
 };
 
@@ -55,6 +57,7 @@ export const RequirementParentDropdown = ({
   containerClassName,
   buttonTextClassName,
   icon: Icon,
+  placeholder,
   disabled = false,
 }: Props) => {
   const { t } = useTranslation();
@@ -144,7 +147,7 @@ export const RequirementParentDropdown = ({
               : cn("truncate text-14", selectedRow ? "text-primary" : "text-placeholder")
           }
         >
-          {selectedRow?.title || t("requirement_fields.builtin.select_parent")}
+          {selectedRow?.title || (placeholder ?? t("requirement_fields.builtin.select_parent"))}
         </span>
       </button>
 

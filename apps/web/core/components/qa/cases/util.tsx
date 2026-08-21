@@ -510,7 +510,7 @@ export const StepsEditor: React.FC<{
     color: "#6b7280",
     textAlign: "left",
     fontWeight: 500,
-    fontSize: "12px",
+    fontSize: "14px",
   };
   const tdStyle: React.CSSProperties = {
     padding: 10,

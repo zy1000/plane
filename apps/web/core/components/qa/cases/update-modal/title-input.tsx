@@ -22,6 +22,19 @@ export function TitleInput({
 }: TitleInputProps) {
   return (
     <div className="mb-3">
+      {/* 编号放在标题上方，样式对齐工作项抽屉的 ID 行（IssueParentDetail + IdentifierText size="xs" variant="secondary"） */}
+      <div className="mb-5 flex min-h-5 items-center">
+        <input
+          type="text"
+          value={code ?? ""}
+          onChange={(e) => onCodeChange?.(e.target.value)}
+          onBlur={onCodeBlur}
+          disabled={disabled}
+          placeholder="用例编号"
+          aria-label="用例编号"
+          className="w-full bg-transparent px-2 text-caption-sm-regular font-medium whitespace-nowrap text-secondary outline-none disabled:cursor-not-allowed"
+        />
+      </div>
       <input
         type="text"
         className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-xl font-semibold text-primary outline-none transition-colors hover:border-subtle focus:border-accent-strong disabled:cursor-not-allowed disabled:text-secondary disabled:hover:border-transparent"
@@ -30,16 +43,6 @@ export function TitleInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
-      />
-      <input
-        type="text"
-        value={code ?? ""}
-        onChange={(e) => onCodeChange?.(e.target.value)}
-        onBlur={onCodeBlur}
-        disabled={disabled}
-        placeholder="用例编号"
-        aria-label="用例编号"
-        className="w-full bg-transparent px-2 text-xs text-tertiary outline-none disabled:cursor-not-allowed"
       />
     </div>
   );

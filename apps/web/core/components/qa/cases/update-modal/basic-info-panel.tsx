@@ -163,10 +163,10 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   };
 
   return (
-    <div className="space-y-8 rounded-b-md border-subtle px-6 py-6 ring-1 ring-transparent transition-colors">
+    <div className="space-y-8 rounded-b-md border-subtle px-2 py-6 ring-1 ring-transparent transition-colors">
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm font-semibold text-secondary">前置条件</label>
+          <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">前置条件</label>
           {!isEditing && (
             <Button
               type="link"
@@ -176,10 +176,10 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 setIsEditing(true);
               }}
               className="transition-all"
-            >
-              <EditOutlined />
-              编辑用例
-            </Button>
+              icon={<EditOutlined />}
+              aria-label="编辑用例"
+              title="编辑用例"
+            />
           )}
         </div>
         <RichTextEditor
@@ -200,7 +200,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               project_id: projectId?.toString() ?? "",
             })
           }
-          containerClassName="min-h-[100px] rounded-md"
+          containerClassName="-ml-3 min-h-[100px] rounded-md"
         />
       </div>
       <div>
@@ -208,7 +208,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
           <div className="space-y-8">
             <div>
               <div className="mb-3 flex items-center justify-between gap-6">
-                <label className="flex items-center gap-2 text-sm font-semibold text-secondary">文本描述</label>
+                <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">文本描述</label>
                 <Dropdown
                   trigger={["click"]}
                   disabled={!canEdit}
@@ -253,11 +253,11 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                     project_id: projectId?.toString() ?? "",
                   })
                 }
-                containerClassName="min-h-[100px] rounded-md"
+                containerClassName="-ml-3 min-h-[100px] rounded-md"
               />
             </div>
             <div>
-              <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">预期结果</label>
+              <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">预期结果</label>
               <RichTextEditor
                 id="qa-text-result-editor"
                 editable={isEditing && canEdit}
@@ -276,14 +276,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                     project_id: projectId?.toString() ?? "",
                   })
                 }
-                containerClassName="min-h-[100px] rounded-md"
+                containerClassName="-ml-3 min-h-[100px] rounded-md"
               />
             </div>
           </div>
         ) : (
           <>
             <div className="mb-3 flex items-center justify-between gap-6">
-              <label className="flex items-center gap-2 text-sm font-semibold text-secondary">测试步骤</label>
+              <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">测试步骤</label>
               <Dropdown
                 trigger={["click"]}
                 disabled={!canEdit}
@@ -310,17 +310,20 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 </Button>
               </Dropdown>
             </div>
-            <StepsEditor
-              value={localSteps}
-              onChange={setLocalSteps}
-              editable={isEditing && canEdit}
-              aria-label="测试步骤"
-            />
+            {/* -mx-2.5 抵消表格单元格 10px 内边距，使步骤文字与标题左对齐 */}
+            <div className="-mx-2.5">
+              <StepsEditor
+                value={localSteps}
+                onChange={setLocalSteps}
+                editable={isEditing && canEdit}
+                aria-label="测试步骤"
+              />
+            </div>
           </>
         )}
       </div>
       <div>
-        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">备注</label>
+        <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">备注</label>
         <RichTextEditor
           id="qa-remark-editor"
           editable={isEditing && canEdit}
@@ -339,7 +342,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               project_id: projectId?.toString() ?? "",
             })
           }
-          containerClassName="min-h-[100px] rounded-md"
+          containerClassName="-ml-3 min-h-[100px] rounded-md"
         />
         {isEditing && (
           <div className="mt-4 flex justify-end gap-2">
@@ -350,7 +353,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
           </div>
         )}
       </div>
-      {activityContent && <section className="transition-colors">{activityContent}</section>}
+      {activityContent && <section className="-mx-2 transition-colors">{activityContent}</section>}
     </div>
   );
 }

@@ -128,7 +128,7 @@ export const TestCaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, p
 
   return (
     <section className={`${SECTION_CARD} flex min-h-[440px] flex-col`}>
-      <div className="flex items-center justify-between gap-2 border-b border-subtle px-5">
+      <div className="flex items-center justify-between gap-2 border-b border-subtle pr-2">
         <div className="flex items-center gap-1" role="tablist" aria-label="用例动态筛选">
           {SUB_TABS.map((tab) => {
             const isTabActive = tab.key === active;
@@ -163,7 +163,7 @@ export const TestCaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, p
         {active === "comment" ? (
           <TestCaseCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} caseId={caseId} />
         ) : (
-          <div className="px-6 py-5">
+          <div className="px-2 py-5">
             <ActivityFeedCollapsible
               resetKey={`${caseId}:${active}:${sortOrder}`}
               listLength={feedListLength}

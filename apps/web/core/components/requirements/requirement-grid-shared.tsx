@@ -18,18 +18,18 @@ import type {
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
-import { Avatar, CustomSelect, Input, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
+import { Avatar, CustomSelect, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useMember } from "@/hooks/store/use-member";
-import { DraftInput } from "./draft-input";
 import {
   RequirementRichTextCell,
   RequirementRichTextEditor,
   RequirementRichTextValue,
 } from "./requirement-rich-text";
 import { getRequirementSelectLabel, getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
+import { RequirementTextCell } from "./requirement-text-cell";
 
 export const getFormRows = (data: TRequirementData, fieldId: string): TRequirementFormRow[] => {
   const value = data[fieldId];
@@ -842,7 +842,7 @@ export const LeafEditor = ({
   onRemoveAsset?: (assetId: string) => void;
   /** 网格草稿把富文本里上传的资源登记为待提交，取消编辑时统一清理 */
   onAssetUpload?: (assetId: string) => void;
-  /** detail 直接内联完整编辑器；grid 只有 160px 列宽，走摘要 + 弹窗 */
+  /** detail 直接内联完整编辑器；grid 只有 160px 列宽，简单内容内联改、复杂内容走弹窗 */
   variant?: "grid" | "detail" | "modal";
   /**
    * 文本字段是否延后到失焦再提交。默认跟随 variant，但两者不是一回事：
@@ -865,6 +865,8 @@ export const LeafEditor = ({
     const placeholder = field.config.placeholder ?? t("requirement_grid.data.select_option");
     // 建行弹窗跟工作项 ExtraFieldControl（compact=false）走同一套下拉皮
     const isModal = variant === "modal";
+    // 网格有列头，空值不必再写「请选择」；弹窗没有列头，才回落到占位文案
+    const emptyLabel = isModal ? placeholder : "";
     if (getRequirementSelectMode(field) === "multiple") {
       const currentValue = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
       const dropdownOptions: TDropdownOption[] = options.map((option) => ({
@@ -899,7 +901,7 @@ export const LeafEditor = ({
                   empty ? (isModal ? "text-tertiary" : "text-placeholder") : "text-primary"
                 )}
               >
-                {empty ? placeholder : labels.join(", ")}
+                {empty ? emptyLabel : labels.join(", ")}
               </span>
             );
           }}
@@ -928,12 +930,13 @@ export const LeafEditor = ({
               selectedOption ? "text-primary" : isModal ? "text-tertiary" : "text-placeholder"
             )}
           >
-            {selectedOption?.label ?? placeholder}
+            {selectedOption?.label ?? emptyLabel}
           </span>
         }
         // modal 不盖自定义边框，沿用 CustomSelect input 默认皮（与 ExtraFieldControl 一致）
         buttonClassName={isModal ? "w-full" : FIELD_DROPDOWN_CLASS[variant]}
         optionsClassName="w-60"
+        noChevron={!isModal && !selectedOption}
         input
       >
         {!field.is_required && (
@@ -963,7 +966,8 @@ export const LeafEditor = ({
             : cn(FIELD_DROPDOWN_CLASS[variant], "text-14")
         }
         buttonContainerClassName="w-full min-w-0"
-        placeholder={field.config.placeholder ?? t("requirement_grid.data.select_member")}
+        // 网格有列头，空值不必再写「选择成员」；与上面选择器的 emptyLabel 同一口径
+        placeholder={variant === "grid" ? "" : (field.config.placeholder ?? t("requirement_grid.data.select_member"))}
         showUserDetails
       />
     );
@@ -1060,37 +1064,18 @@ export const LeafEditor = ({
         containerClassName="min-h-20 rounded-md border border-subtle bg-surface-1 pt-2 pr-2 text-13"
       />
     ) : (
-      <RequirementRichTextCell {...richTextProps} label={field.name} />
+      <RequirementRichTextCell {...richTextProps} label={field.name} variant={variant} deferCommit={deferTextCommit} />
     );
   }
-  const text = typeof value === "string" ? value : "";
-  const textPlaceholder = field.config.placeholder ?? field.name;
-  // 建行弹窗文本框直接用 @plane/ui Input，与工作项 ExtraFieldControl 同皮
-  if (variant === "modal") {
-    return (
-      <Input
-        type="text"
-        value={text}
-        onChange={(event) => onChange(event.target.value)}
-        // 显式 text-13，避免父级字号把 Input 默认 13 顶掉（与 ExtraFieldControl 一致）
-        className="w-full text-13"
-        placeholder={textPlaceholder}
-      />
-    );
-  }
-  return (deferTextCommit ?? variant === "detail") ? (
-    <DraftInput
-      value={text}
-      onCommit={onChange}
-      className={FIELD_INPUT_CLASS[variant]}
-      placeholder={textPlaceholder}
-    />
-  ) : (
-    <input
-      value={text}
-      onChange={(event) => onChange(event.target.value)}
-      className={FIELD_INPUT_CLASS[variant]}
-      placeholder={textPlaceholder}
+  // 单行文本也带展开按钮：160px 列宽下一句稍长的话就看不全，与富文本单元格同一套外壳
+  return (
+    <RequirementTextCell
+      value={typeof value === "string" ? value : ""}
+      onChange={onChange}
+      label={field.name}
+      placeholder={variant === "grid" ? undefined : (field.config.placeholder ?? field.name)}
+      variant={variant}
+      deferCommit={deferTextCommit ?? variant === "detail"}
     />
   );
 };

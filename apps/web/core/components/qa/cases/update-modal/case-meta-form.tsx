@@ -37,10 +37,15 @@ type CaseMetaFormProps = {
 };
 
 const fieldShell = (index: number) =>
-  cn("flex min-h-7 min-w-0 flex-1 items-center", index > 0 && "border-l border-subtle pl-2.5", "pr-2.5");
+  cn("flex min-h-7 min-w-0 flex-1 items-center gap-1.5", index > 0 ? "border-l border-subtle pl-2.5" : "pl-2", "pr-2.5");
 
+// 根节点 !h-7：antd 单选根节点默认 32px 高，若只压缩内部选择器，文字会比同行图标偏高 2px
 const selectClassName =
-  "w-full min-w-0 text-body-xs-medium [&_.ant-select-selector]:!h-7 [&_.ant-select-selector]:!px-0 [&_.ant-select-selection-item]:!text-body-xs-medium [&_.ant-select-selection-item]:!leading-5 [&_.ant-select-selection-item]:!text-secondary [&_.ant-select-selection-placeholder]:!text-placeholder";
+  "!h-7 w-full min-w-0 text-body-xs-medium [&_.ant-select-selector]:!h-7 [&_.ant-select-selector]:!px-0 [&_.ant-select-selection-item]:!text-body-xs-medium [&_.ant-select-selection-item]:!leading-5 [&_.ant-select-selection-item]:!text-secondary [&_.ant-select-selection-placeholder]:!text-placeholder";
+
+// showSearch 会让 antd 选择器和内部搜索框变成文本光标，这里是选项选择，可用时应显示小手
+const selectPointerClassName =
+  "[&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-search-input]:!cursor-pointer";
 
 const priorityDotClass = (label: string) => {
   if (label.includes("高")) return "bg-danger-primary";
@@ -130,7 +135,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
           showSearch
           suffixIcon={null}
           variant="borderless"
-          className={selectClassName}
+          className={cn(selectClassName, !disabled && selectPointerClassName)}
           popupMatchSelectWidth={false}
           dropdownStyle={{ zIndex: 1200 }}
           filterOption={(input, option) =>
@@ -157,7 +162,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
           showSearch
           suffixIcon={null}
           variant="borderless"
-          className={selectClassName}
+          className={cn(selectClassName, !disabled && selectPointerClassName)}
           popupMatchSelectWidth={false}
           dropdownStyle={{ zIndex: 1200 }}
           filterOption={(input, option) =>

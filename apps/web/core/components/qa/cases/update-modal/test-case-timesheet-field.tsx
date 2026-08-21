@@ -69,7 +69,7 @@ export function TestCaseTimesheetField(props: TTestCaseTimesheetFieldProps) {
         ref={setReferenceElement}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="w-full rounded-md border-0 bg-transparent px-3 py-1.5 text-left text-sm text-primary transition-colors hover:bg-accent-primary/5"
+        className="w-full rounded-md border-0 bg-transparent px-0 py-1.5 text-left text-sm text-primary transition-colors hover:bg-accent-primary/5"
       >
         {formatTotalHours(totalHours)}
       </button>
