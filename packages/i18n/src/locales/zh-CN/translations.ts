@@ -1533,6 +1533,9 @@ export default {
     validation: {
       field_name: "每个字段都需要填写名称。",
       selector_options: "选择器选项不能为空，且名称不能重复。",
+      bulk_options_empty: "请至少输入一个选项。",
+      bulk_options_duplicate: "选项名重复：{label}",
+      bulk_options_too_long: "选项名不能超过 255 个字符：{label}",
     },
     builder: {
       field_library: "字段库",
@@ -1582,6 +1585,11 @@ export default {
       option_label: "选项 {index}",
       add_option: "添加选项",
       delete_option: "删除选项",
+      bulk_edit_options: "批量编辑",
+      bulk_edit_title: "批量编辑选项",
+      bulk_edit_description: "一行一个选项名。删除某行即删除该选项；名称未改动的选项会保留已录入的数据。",
+      bulk_edit_placeholder: "高\n中\n低",
+      bulk_edit_count: "共 {count} 个选项",
     },
     preview: {
       title: "字段预览",
@@ -2492,8 +2500,8 @@ export default {
         },
       },
       data: {
-        import_from_library: "导入需求",
-        import_from_library_full: "导入需求",
+        import_from_library: "导入标准需求",
+        import_from_library_full: "导入标准需求",
         more_create_actions: "更多新建方式",
         manual_entry: "添加需求",
         empty: {

@@ -1368,6 +1368,9 @@ export default {
     validation: {
       field_name: "Every field needs a name.",
       selector_options: "Selector options must be named and unique.",
+      bulk_options_empty: "Enter at least one option.",
+      bulk_options_duplicate: "Duplicate option name: {label}",
+      bulk_options_too_long: "Option names must be 255 characters or fewer: {label}",
     },
     builder: {
       field_library: "Field library",
@@ -1417,6 +1420,12 @@ export default {
       option_label: "Option {index}",
       add_option: "Add option",
       delete_option: "Delete option",
+      bulk_edit_options: "Bulk edit",
+      bulk_edit_title: "Bulk edit options",
+      bulk_edit_description:
+        "One option per line. Removing a line deletes that option; options whose name is unchanged keep their saved values.",
+      bulk_edit_placeholder: "High\nMedium\nLow",
+      bulk_edit_count: "{count} options",
     },
     preview: {
       title: "Field preview",
@@ -2315,8 +2324,8 @@ export default {
         },
       },
       data: {
-        import_from_library: "Import requirements",
-        import_from_library_full: "Import requirements",
+        import_from_library: "Import standard requirements",
+        import_from_library_full: "Import standard requirements",
         more_create_actions: "More ways to add",
         manual_entry: "Add requirement",
         empty: {

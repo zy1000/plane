@@ -9,6 +9,7 @@ import {
   FormInput,
   GripVertical,
   ListChecks,
+  ListPlus,
   MoreHorizontal,
   Paperclip,
   Plus,
@@ -36,6 +37,7 @@ import {
   getRequirementSelectOptions,
   hasValidRequirementSelectOptions,
 } from "@/components/requirements/requirement-select";
+import { RequirementSelectOptionsBulkModal } from "@/components/requirements/requirement-select-options-bulk-modal";
 
 const MenuRowLabel = ({
   icon: Icon,
@@ -470,6 +472,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
   const { field, isChild, effectiveShowInLibrary, onChange, onCancel, onDone } = props;
   const { t } = useTranslation();
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
+  const [isBulkOptionsModalOpen, setIsBulkOptionsModalOpen] = useState(false);
   /*
    * 不进标准库的字段不能设必填 —— 标准库只按纳入库的字段校验，库条目天生不带它们，
    * 导入进来的行会卡在必填上再也存不动。后端在
@@ -717,14 +720,30 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
                     {t("requirement_fields.validation.selector_options")}
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick={addSelectOption}
-                  className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary transition-colors hover:border-accent-subtle hover:bg-accent-subtle"
-                >
-                  <Plus className="size-3.5" />
-                  {t("requirement_fields.builder.add_option")}
-                </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={addSelectOption}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary transition-colors hover:border-accent-subtle hover:bg-accent-subtle"
+                  >
+                    <Plus className="size-3.5" />
+                    {t("requirement_fields.builder.add_option")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsBulkOptionsModalOpen(true)}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary transition-colors hover:border-accent-subtle hover:bg-accent-subtle"
+                  >
+                    <ListPlus className="size-3.5" />
+                    {t("requirement_fields.builder.bulk_edit_options")}
+                  </button>
+                </div>
+                <RequirementSelectOptionsBulkModal
+                  isOpen={isBulkOptionsModalOpen}
+                  onClose={() => setIsBulkOptionsModalOpen(false)}
+                  options={selectOptions}
+                  onApply={updateSelectOptions}
+                />
               </div>
             </section>
           )}
