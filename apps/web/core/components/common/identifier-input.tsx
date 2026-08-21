@@ -34,16 +34,21 @@ type TProps = {
   autoFocus?: boolean;
   label?: string;
   hint?: string;
+  /** 必填标记：label 后追加红色星号 */
+  required?: boolean;
+  /** 隐藏 hint 与错误文案（错误描边保留），用于由外部统一展示提示行的紧凑布局 */
+  hideMessages?: boolean;
 };
 
 export const IdentifierInput = (props: TProps) => {
-  const { id, value, onChange, editable = true, error, autoFocus, label, hint } = props;
+  const { id, value, onChange, editable = true, error, autoFocus, label, hint, required, hideMessages } = props;
   const { t } = useTranslation();
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-12 font-medium text-secondary">
+      <label htmlFor={id} className="mb-1.5 flex items-center gap-0.5 text-12 font-medium text-secondary">
         {label ?? t("common.identifier.label")}
+        {required && <span className="text-danger-primary">*</span>}
       </label>
       {editable ? (
         <input
@@ -61,11 +66,12 @@ export const IdentifierInput = (props: TProps) => {
       ) : (
         <p className="text-13 text-primary">{value || "—"}</p>
       )}
-      {error ? (
-        <p className="mt-1.5 text-11 text-danger-primary">{error}</p>
-      ) : (
-        <p className="mt-1.5 text-11 text-tertiary">{hint ?? t("common.identifier.hint")}</p>
-      )}
+      {!hideMessages &&
+        (error ? (
+          <p className="mt-1.5 text-11 text-danger-primary">{error}</p>
+        ) : (
+          <p className="mt-1.5 text-11 text-tertiary">{hint ?? t("common.identifier.hint")}</p>
+        ))}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { AlertCircle, ChevronLeft, ChevronRight, Library, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Library, Trash2 } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -258,7 +258,6 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                 </div>
               </div>
               <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
-                <Plus className="size-3.5" />
                 {t("requirement_libraries.create")}
               </Button>
             </Header.RightItem>
