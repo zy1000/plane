@@ -505,6 +505,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         isOpen={isImportOpen}
         shouldPrefetch={shouldPrefetchImport}
         workspaceSlug={workspaceSlug ?? ""}
+        productId={productId ?? ""}
         isMutating={store.isMutating}
         onClose={() => setIsImportOpen(false)}
         onImport={async (payloads) => {

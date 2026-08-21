@@ -2344,10 +2344,10 @@ export default {
       },
       import_modal: {
         title: "Import from a standard library",
-        description:
-          "Pick a library on the left, then select items on the right. Switching libraries keeps your selection, so you can import across several at once.",
         search_libraries: "Search libraries",
-        library_meta: "{requirement_type} · {count} items",
+        library_meta_empty: "{requirement_type} · no items",
+        library_meta_importable: "{requirement_type} · {count} available",
+        library_meta_drained: "{requirement_type} · all imported",
         library_empty_hint: "This library has no items",
         empty_libraries: "No standard libraries yet",
         empty_items: "This library has no items yet",
@@ -2355,6 +2355,8 @@ export default {
         selected_count: "{count} selected",
         selected_summary: "{count} selected across {libraries} libraries",
         select_all_page: "Select all items on this page",
+        select_all_library: "Select every available item in {library}",
+        all_imported: "Every item in this library has already been imported",
         confirm: "Import",
         error_title: "Unable to load library items",
       },

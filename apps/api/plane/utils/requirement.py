@@ -1366,7 +1366,9 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
                 "builtin": builtin,
                 "requirement_type_id": library.requirement_type_id,
                 # 溯源：目标行记住自己来自 SEC-12。库条目侧不写任何东西 ——
-                # 一条库条目可以被导入无数次，反向指针没有单值可存。
+                # 数据模型上一条库条目可以被导入多次，反向指针没有单值可存。
+                # 「同一条不许重复导进同一个作用域」是**端点层**的闸门，见
+                # BaseRequirementRowViewSet.import_from_library；这个函数本身不判重。
                 "source": RequirementSource(
                     library_id=library.id, sequence_id=item.sequence_id
                 ),

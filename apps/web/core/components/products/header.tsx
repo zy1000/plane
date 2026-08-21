@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { PackageOpen, Plus, Search } from "lucide-react";
+import { PackageOpen, Search } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EUserWorkspaceRoles } from "@plane/types";
@@ -48,8 +48,7 @@ export const ProductsHeader = observer(function ProductsHeader() {
         </label>
         {canCreate && (
           <Button variant="primary" size="lg" onClick={() => openProductModal("create")}>
-            <Plus className="size-3.5" />
-            <span className="hidden sm:inline">{t("workspace_products.create_product")}</span>
+            {t("workspace_products.create_product")}
           </Button>
         )}
       </Header.RightItem>

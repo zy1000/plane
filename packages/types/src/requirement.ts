@@ -555,6 +555,17 @@ export type TRequirementImportPayload = {
   after_id?: string;
 };
 
+/**
+ * 某个产品「还没导过」的库条目，按库分组。
+ *
+ * 导入弹窗靠它算出每个库的可导条数与三态勾选，以及「勾整库」要提交的那批 id ——
+ * 条目列表是分页的，凑不出全量。库里条目全导完时 item_ids 是空数组（库本身仍在）。
+ */
+export type TRequirementImportableLibrary = {
+  library_id: string;
+  item_ids: string[];
+};
+
 export type TRequirementImportResponse = {
   created: {
     client_id: string;

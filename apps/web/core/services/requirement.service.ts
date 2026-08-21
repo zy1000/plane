@@ -33,6 +33,7 @@ import type {
   TRequirementExcelScope,
   TRequirementExcelValidation,
   TRequirementFilter,
+  TRequirementImportableLibrary,
   TRequirementImportPayload,
   TRequirementImportResponse,
   TRequirementIssue,
@@ -300,6 +301,8 @@ export class RequirementService extends APIService {
       filters?: TRequirementFilter[];
       /** 按 id 直取，供父项选择器回显不在当前页的行 */
       ids?: string[];
+      /** 藏掉已经导进该产品的条目 —— 导入弹窗的候选池用，必须在服务端剔除才能保住分页 */
+      excludeImportedIntoProduct?: string;
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/`, {
@@ -309,6 +312,9 @@ export class RequirementService extends APIService {
         ...(params.search ? { search: params.search } : {}),
         ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
+        ...(params.excludeImportedIntoProduct
+          ? { exclude_imported_into_product: params.excludeImportedIntoProduct }
+          : {}),
       },
     })
       .then((response) => response?.data)
@@ -456,6 +462,18 @@ export class RequirementService extends APIService {
     }
   ): Promise<TRequirement> {
     return this.post(`${this.requirementsRoot(workspaceSlug, productId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 本产品还没导过的库条目 id，按库分组。导入弹窗的可导条数、三态与「勾整库」都靠它 */
+  async listImportableLibraryItems(
+    workspaceSlug: string,
+    productId: string
+  ): Promise<TRequirementImportableLibrary[]> {
+    return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/importable-library-items/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

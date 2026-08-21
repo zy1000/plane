@@ -135,6 +135,11 @@ urlpatterns = [
         name="product-requirement-import",
     ),
     path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/importable-library-items/",
+        RequirementViewSet.as_view({"get": "importable_library_items"}),
+        name="product-requirement-importable-library-items",
+    ),
+    path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/excel/",
         RequirementViewSet.as_view({"get": "export_excel"}),
         name="product-requirement-excel-export",

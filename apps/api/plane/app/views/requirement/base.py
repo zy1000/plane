@@ -281,3 +281,45 @@ class RequirementViewSet(BaseRequirementRowViewSet):
             ).data,
             status=status.HTTP_200_OK,
         )
+
+    def importable_library_items(self, request, *args, **kwargs):
+        """本产品「还没导过」的标准库条目 id，按库分组。
+
+        导入弹窗要三样东西：每个库还剩多少可导、勾整库时那一批 id、以及据此算出的
+        三态。它们都要在弹窗打开的一瞬间就位（条目列表是分页的，凑不出全量），所以
+        一次把全工作区的库都算出来，而不是每个库发一次请求。
+
+        只吐 id，不序列化整行 —— 行的内容由条目列表接口分页给出。
+        """
+        owner, error = self._owner_or_error(require_write=False)
+        if error is not None:
+            return error
+
+        # 已导入的 (库, 库内序号)。产品需求指不回条目 UUID，只有这对逻辑编号
+        imported = set(
+            Requirement.objects.filter(
+                product_id=owner.product_id,
+                source_library_id__isnull=False,
+            ).values_list("source_library_id", "source_sequence_id")
+        )
+        grouped = {}
+        for library_id, item_id, sequence_id in (
+            Requirement.objects.filter(
+                library__isnull=False,
+                library__workspace__slug=self.workspace_slug,
+            )
+            .order_by("library_id", "sort_order", "created_at", "id")
+            .values_list("library_id", "id", "sequence_id")
+        ):
+            item_ids = grouped.setdefault(str(library_id), [])
+            if (library_id, sequence_id) in imported:
+                continue
+            item_ids.append(str(item_id))
+
+        return Response(
+            [
+                {"library_id": library_id, "item_ids": item_ids}
+                for library_id, item_ids in grouped.items()
+            ],
+            status=status.HTTP_200_OK,
+        )

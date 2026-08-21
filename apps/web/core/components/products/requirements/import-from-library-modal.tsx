@@ -1,24 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pagination } from "antd";
 import { Check, Library, Search, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TRequirement, TRequirementImportPayload } from "@plane/types";
-import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import type { TRequirementImportPayload } from "@plane/types";
+import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
-import { LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { getCurrentPageOffset, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { useImportableLibraryItems } from "@/hooks/store/use-importable-library-items";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
+import { getSelectionState, useLibraryImportSelection } from "./use-library-import-selection";
 
 /**
  * 从标准库导入条目到产品需求。
  *
- * 左侧常驻标准库列表，右侧是所选库的条目；勾选按条目 ID 存在一个 Map 里，切库时不清空，
- * 所以可以跨库攒一批再一次性导入。接口一次只收一个 library_id，跨库的部分由调用方按库
- * 分组后顺序调用（见 useProductRequirements.importFromLibraries）。
+ * 左侧常驻标准库列表，右侧是所选库的条目；勾选按 `库 -> 条目 ID` 存在
+ * useLibraryImportSelection 里，切库不清空，所以可以跨库攒一批再一次性导入。接口一次
+ * 只收一个 library_id，跨库的部分由调用方按库分组后顺序调用（见
+ * useProductRequirements.importFromLibraries）。
+ *
+ * 已经导进本产品的条目不进候选池：右侧列表由服务端剔除（条目是分页的，前端就地过滤
+ * 会让某一页只剩几行、总数也偏大），左侧的可导条数与「勾整库」则来自
+ * useImportableLibraryItems。
  *
  * 刻意不复用 RequirementGrid：它的勾选是接删除的，还自带编辑工具栏与 bulk-save
  * 契约。这里只复用它的展示部件（内置列 BuiltinCellValue + 自定义列 LeafValue），
@@ -36,6 +44,7 @@ const PREVIEW_BUILTIN_COLUMNS = getBuiltinColumnsFor("library").filter(
 type TProps = {
   isOpen: boolean;
   workspaceSlug: string;
+  productId: string;
   isMutating: boolean;
   /**
    * 预热开关。本组件常驻挂载（不是 isOpen && 才渲染），所以标准库列表在进页面时就
@@ -50,6 +59,7 @@ type TProps = {
 export const RequirementImportFromLibraryModal = ({
   isOpen,
   workspaceSlug,
+  productId,
   isMutating,
   shouldPrefetch = false,
   onClose,
@@ -58,19 +68,46 @@ export const RequirementImportFromLibraryModal = ({
   const { t } = useTranslation();
   const [libraryId, setLibraryId] = useState<string | null>(null);
   const [librarySearch, setLibrarySearch] = useState("");
-  // 存整行而不只是 ID：跨库、跨分页之后还要按 library_id 分组提交
-  const [selected, setSelected] = useState<Map<string, TRequirement>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const { libraries, isLoading: isLibrariesLoading } = useRequirementLibraries(workspaceSlug);
-  const itemsStore = useLibraryItems({ workspaceSlug, libraryId: libraryId ?? undefined });
+  // 可导条数与「勾整库」的 id 都来自这里；跟条目列表一样只在有意打开时才拉
+  const { itemIdsByLibrary, isLoading: isImportableLoading, refetch: refetchImportable } =
+    useImportableLibraryItems({
+      workspaceSlug,
+      productId,
+      enabled: isOpen || shouldPrefetch,
+    });
+  const itemsStore = useLibraryItems({
+    workspaceSlug,
+    libraryId: libraryId ?? undefined,
+    excludeImportedIntoProduct: productId,
+  });
+  const selection = useLibraryImportSelection(itemIdsByLibrary);
 
   useEffect(() => {
     if (isOpen) return;
     // 刻意不重置 libraryId：留着它，下次打开就不用重新拉一遍条目，也保留了上次看到哪个库
     setLibrarySearch("");
-    setSelected(new Map());
+    selection.clear();
     setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  /**
+   * 每次打开都重算候选池。
+   *
+   * 本组件常驻挂载，两个 hook 的依赖都不会因为「又被打开了一次」而变化 ——
+   * shouldPrefetch 更是 hover 过一次就永久为 true。不在这里主动失效的话，看到的
+   * 一直是第一次预热时的快照：期间在需求页删掉的行不会重新变得可导，别人刚导进来的
+   * 也不会消失。
+   */
+  useEffect(() => {
+    if (!isOpen) return;
+    void refetchImportable().catch(() => undefined);
+    void itemsStore.fetchRequirements().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const filteredLibraries = useMemo(() => {
@@ -83,20 +120,15 @@ export const RequirementImportFromLibraryModal = ({
     );
   }, [libraries, librarySearch]);
 
-  // 自动选中第一个非空的库，省掉一次点击；预热时就选，这样条目也能提前拉好
+  const importableCountOf = (id: string) => itemIdsByLibrary.get(id)?.length ?? 0;
+
+  // 自动选中第一个还有东西可导的库，省掉一次点击；预热时就选，这样条目也能提前拉好
   useEffect(() => {
     if (!(isOpen || shouldPrefetch) || libraryId || !libraries.length) return;
-    setLibraryId((libraries.find((library) => library.item_count > 0) ?? libraries[0]).id);
-  }, [isOpen, shouldPrefetch, libraries, libraryId]);
-
-  /** 每个库已勾选多少条 —— 左侧列表要显示这个，跨库勾选才看得见 */
-  const selectedCountByLibrary = useMemo(() => {
-    const counts = new Map<string, number>();
-    selected.forEach((item) => {
-      if (item.library_id) counts.set(item.library_id, (counts.get(item.library_id) ?? 0) + 1);
-    });
-    return counts;
-  }, [selected]);
+    setLibraryId(
+      (libraries.find((library) => (itemIdsByLibrary.get(library.id)?.length ?? 0) > 0) ?? libraries[0]).id
+    );
+  }, [isOpen, shouldPrefetch, libraries, libraryId, itemIdsByLibrary]);
 
   /**
    * 「还在自动选库的路上」：库还在加载，或者已经加载出来但自动选中的 effect 还没跑。
@@ -109,23 +141,22 @@ export const RequirementImportFromLibraryModal = ({
   // 标题现在是行上的内置列，不在 data 里 —— 预览必须单独出这一列，否则认不出是哪条需求
   const visibleFields = useMemo(() => fields.filter((field) => field.is_active).slice(0, 2), [fields]);
   const items = itemsStore.requirementsPage.results;
-  const allOnPageSelected = items.length > 0 && items.every((item) => selected.has(item.id));
+  const totalCount = itemsStore.requirementsPage.total_count ?? 0;
+  const currentPageOffset = getCurrentPageOffset(
+    itemsStore.requirementsPage.prev_cursor,
+    itemsStore.requirementsPage.next_cursor,
+    itemsStore.requirementsPage.prev_page_results,
+    itemsStore.requirementsPage.next_page_results
+  );
+  const pickedOnPage = libraryId ? items.filter((item) => selection.isPicked(libraryId, item.id)).length : 0;
+  const pageState = getSelectionState(pickedOnPage, items.length);
+  /** 该库有条目、但全都导进本产品了 —— 与「本来就是空库」是两回事，右侧文案要分开 */
+  const isActiveLibraryDrained =
+    !isImportableLoading && (activeLibrary?.item_count ?? 0) > 0 && importableCountOf(libraryId ?? "") === 0;
 
-  const toggleItem = (item: TRequirement) =>
-    setSelected((current) => {
-      const next = new Map(current);
-      if (next.has(item.id)) next.delete(item.id);
-      else next.set(item.id, item);
-      return next;
-    });
-
-  const toggleAllOnPage = () =>
-    setSelected((current) => {
-      const next = new Map(current);
-      if (allOnPageSelected) items.forEach((item) => next.delete(item.id));
-      else items.forEach((item) => next.set(item.id, item));
-      return next;
-    });
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: 0 });
+  }, [itemsStore.cursor]);
 
   const switchLibrary = (nextId: string) => {
     if (nextId === libraryId) return;
@@ -136,20 +167,23 @@ export const RequirementImportFromLibraryModal = ({
   };
 
   const handleImport = async () => {
-    if (!selected.size) return;
+    const payloads = selection.toPayloads();
+    if (!payloads.length) return;
     setError(null);
-    // 按库分组：接口一次只收一个 library_id
-    const byLibrary = new Map<string, string[]>();
-    selected.forEach((item, itemId) => {
-      if (!item.library_id) return;
-      byLibrary.set(item.library_id, [...(byLibrary.get(item.library_id) ?? []), itemId]);
-    });
     try {
-      await onImport([...byLibrary].map(([library_id, item_ids]) => ({ library_id, item_ids })));
+      await onImport(payloads);
+      // 候选池的失效统一交给「打开时重拉」那条路径，这里只管关掉
       onClose();
     } catch (requestError) {
-      const payload = requestError as { error?: string };
+      const payload = requestError as { error?: string; code?: string };
       setError(payload?.error ?? t("workspace_products.requirements.import_modal.error_title"));
+      // 撞上「已经有人导过了」时，候选池就是过期的：立刻重算，把那几行从列表里拿掉，
+      // 否则用户只能反复点确认、反复报同一个错
+      if (payload?.code === "REQUIREMENT_ALREADY_IMPORTED") {
+        selection.clear();
+        void refetchImportable().catch(() => undefined);
+        void itemsStore.fetchRequirements().catch(() => undefined);
+      }
     }
   };
 
@@ -164,7 +198,6 @@ export const RequirementImportFromLibraryModal = ({
             <h2 className="text-14 font-medium text-primary">
               {t("workspace_products.requirements.import_modal.title")}
             </h2>
-            <p className="text-11 text-secondary">{t("workspace_products.requirements.import_modal.description")}</p>
           </div>
         </div>
         <button
@@ -208,20 +241,44 @@ export const RequirementImportFromLibraryModal = ({
               <ul className="space-y-0.5">
                 {filteredLibraries.map((library) => {
                   const isActive = library.id === libraryId;
-                  const pickedCount = selectedCountByLibrary.get(library.id) ?? 0;
+                  const importableCount = importableCountOf(library.id);
+                  const pickedCount = selection.pickedCountOf(library.id);
+                  const libraryState = getSelectionState(pickedCount, importableCount);
+                  // 「空库」和「都导完了」都是 0 条可导，但对用户是两回事
+                  const metaKey =
+                    library.item_count === 0
+                      ? "library_meta_empty"
+                      : importableCount === 0
+                        ? "library_meta_drained"
+                        : "library_meta_importable";
                   return (
-                    <li key={library.id}>
+                    /* 勾选框与切库按钮必须是兄弟节点：套进 <button> 里是 interactive
+                       content 嵌套，点勾选会连带触发切库，各浏览器行为还不一致 */
+                    <li
+                      key={library.id}
+                      className={cn(
+                        "relative flex items-start gap-2 rounded-md px-2.5 py-2 transition-colors",
+                        isActive ? "bg-layer-2" : "hover:bg-layer-1"
+                      )}
+                    >
+                      {isActive && (
+                        <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent-primary" />
+                      )}
+                      <Checkbox
+                        containerClassName="mt-0.5"
+                        checked={libraryState === "checked"}
+                        indeterminate={libraryState === "indeterminate"}
+                        disabled={importableCount === 0}
+                        onChange={() => selection.toggleLibrary(library.id)}
+                        aria-label={t("workspace_products.requirements.import_modal.select_all_library", {
+                          library: library.name,
+                        })}
+                      />
                       <button
                         type="button"
                         onClick={() => switchLibrary(library.id)}
-                        className={cn(
-                          "relative w-full rounded-md px-2.5 py-2 text-left transition-colors",
-                          isActive ? "bg-layer-2" : "hover:bg-layer-1"
-                        )}
+                        className="min-w-0 flex-1 text-left"
                       >
-                        {isActive && (
-                          <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent-primary" />
-                        )}
                         <div className="flex items-center gap-1.5">
                           <span
                             className={cn(
@@ -238,9 +295,9 @@ export const RequirementImportFromLibraryModal = ({
                           )}
                         </div>
                         <span className="mt-0.5 block truncate text-10 text-tertiary">
-                          {t("workspace_products.requirements.import_modal.library_meta", {
+                          {t(`workspace_products.requirements.import_modal.${metaKey}`, {
                             requirement_type: library.requirement_type_detail?.name ?? "",
-                            count: library.item_count,
+                            count: importableCount,
                           })}
                         </span>
                       </button>
@@ -294,7 +351,7 @@ export const RequirementImportFromLibraryModal = ({
                 </div>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
                 {itemsStore.isRequirementsLoading && !items.length ? (
                   <div className="p-4">
                     <Loader>
@@ -303,18 +360,26 @@ export const RequirementImportFromLibraryModal = ({
                   </div>
                 ) : !items.length ? (
                   <p className="grid h-full place-items-center text-12 text-secondary">
-                    {t("workspace_products.requirements.import_modal.empty_items")}
+                    {/* 「本来就是空库」和「都已经导进本产品了」是两回事，别用同一句话打发 */}
+                    {isActiveLibraryDrained && !itemsStore.search
+                      ? t("workspace_products.requirements.import_modal.all_imported")
+                      : t("workspace_products.requirements.import_modal.empty_items")}
                   </p>
                 ) : (
                   <table className="w-full border-collapse text-13">
                     <thead className="sticky top-0 z-10 bg-surface-1">
                       <tr className="border-b border-subtle text-left text-11 font-medium text-secondary">
                         <th className="w-9 px-3 py-2">
-                          <input
-                            type="checkbox"
-                            className="size-3.5 cursor-pointer"
-                            checked={allOnPageSelected}
-                            onChange={toggleAllOnPage}
+                          {/* 表头只管当前这一页（且已被搜索过滤）；整库全选在左栏 */}
+                          <Checkbox
+                            checked={pageState === "checked"}
+                            indeterminate={pageState === "indeterminate"}
+                            onChange={() =>
+                              selection.toggleItems(
+                                libraryId,
+                                items.map((item) => item.id)
+                              )
+                            }
                             aria-label={t("workspace_products.requirements.import_modal.select_all_page")}
                           />
                         </th>
@@ -337,22 +402,20 @@ export const RequirementImportFromLibraryModal = ({
                     </thead>
                     <tbody>
                       {items.map((item) => {
-                        const isPicked = selected.has(item.id);
+                        const isPicked = selection.isPicked(libraryId, item.id);
                         return (
                           <tr
                             key={item.id}
-                            onClick={() => toggleItem(item)}
+                            onClick={() => selection.toggleItem(libraryId, item.id)}
                             className={cn(
                               "cursor-pointer border-b border-subtle transition-colors",
                               isPicked ? "bg-accent-subtle/40" : "hover:bg-layer-1"
                             )}
                           >
                             <td className="px-3 py-2 align-top">
-                              <input
-                                type="checkbox"
-                                className="size-3.5 cursor-pointer"
+                              <Checkbox
                                 checked={isPicked}
-                                onChange={() => toggleItem(item)}
+                                onChange={() => selection.toggleItem(libraryId, item.id)}
                                 onClick={(event) => event.stopPropagation()}
                               />
                             </td>
@@ -376,6 +439,34 @@ export const RequirementImportFromLibraryModal = ({
                   </table>
                 )}
               </div>
+              {totalCount > 0 && (
+                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-subtle px-4 py-2">
+                  <span className="text-11 text-secondary">
+                    {t("requirement_grid.data.range", {
+                      start: currentPageOffset * itemsStore.perPage + 1,
+                      end: Math.min(currentPageOffset * itemsStore.perPage + items.length, totalCount),
+                      total: totalCount,
+                    })}
+                  </span>
+                  <Pagination
+                    simple
+                    size="small"
+                    current={currentPageOffset + 1}
+                    pageSize={itemsStore.perPage}
+                    total={totalCount}
+                    showSizeChanger
+                    pageSizeOptions={["20", "50", "100"]}
+                    onChange={(page, pageSize) => {
+                      if (pageSize !== itemsStore.perPage) {
+                        itemsStore.setPerPage(pageSize);
+                        return;
+                      }
+                      itemsStore.setCursor(page <= 1 ? undefined : `${pageSize}:${page - 1}:0`);
+                    }}
+                    onShowSizeChange={(_page, pageSize) => itemsStore.setPerPage(pageSize)}
+                  />
+                </div>
+              )}
             </>
           )}
         </section>
@@ -385,12 +476,12 @@ export const RequirementImportFromLibraryModal = ({
         <span className="min-w-0 truncate text-12 text-tertiary">
           {error ? (
             <span className="text-danger-primary">{error}</span>
-          ) : selected.size > 0 ? (
+          ) : selection.totalCount > 0 ? (
             <span className="inline-flex items-center gap-1.5 text-secondary">
               <Check className="size-3.5 text-accent-primary" />
               {t("workspace_products.requirements.import_modal.selected_summary", {
-                count: selected.size,
-                libraries: selectedCountByLibrary.size,
+                count: selection.totalCount,
+                libraries: selection.libraryCount,
               })}
             </span>
           ) : (
@@ -405,7 +496,7 @@ export const RequirementImportFromLibraryModal = ({
             variant="primary"
             onClick={() => void handleImport()}
             loading={isMutating}
-            disabled={!selected.size || isMutating}
+            disabled={!selection.totalCount || isMutating}
           >
             {t("workspace_products.requirements.import_modal.confirm")}
           </Button>

@@ -37,9 +37,15 @@ const EMPTY_PAGE: TRequirementsResponse = {
 export const useLibraryItems = ({
   workspaceSlug,
   libraryId,
+  excludeImportedIntoProduct,
 }: {
   workspaceSlug: string | undefined;
   libraryId: string | undefined;
+  /**
+   * 传产品 ID 时，已经导进该产品的条目不出现在列表里（导入弹窗的候选池用）。
+   * 标准库管理页不传，行为不变。
+   */
+  excludeImportedIntoProduct?: string;
 }) => {
   const [configuration, setConfiguration] = useState<TRequirementLibraryConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TRequirementsResponse>(EMPTY_PAGE);
@@ -79,6 +85,7 @@ export const useLibraryItems = ({
         perPage,
         search,
         filters,
+        excludeImportedIntoProduct,
       });
       setRequirementsPage(response);
       return response;
@@ -88,7 +95,7 @@ export const useLibraryItems = ({
     } finally {
       setIsRequirementsLoading(false);
     }
-  }, [cursor, filters, libraryId, perPage, search, workspaceSlug]);
+  }, [cursor, excludeImportedIntoProduct, filters, libraryId, perPage, search, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);

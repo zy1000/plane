@@ -44,6 +44,10 @@ CLOSED_MESSAGE = "This requirement is closed and is read-only. Reopen it to edit
 DELETE_NEEDS_APPROVAL_MESSAGE = (
     "Deleting an approved requirement needs approval. Submit a delete review instead."
 )
+ALREADY_IMPORTED_MESSAGE = (
+    "One or more of these library items are already in this product. "
+    "Reopen the import dialog to refresh the list."
+)
 
 
 def annotate_pending(queryset):
@@ -170,6 +174,18 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         )
 
     @staticmethod
+    def _already_imported_response(item_ids):
+        return Response(
+            {
+                "error": ALREADY_IMPORTED_MESSAGE,
+                "code": "REQUIREMENT_ALREADY_IMPORTED",
+                # 库条目的 ID，不是需求行的 ID —— 前端要拿它去标记候选列表里的行
+                "item_ids": [str(item_id) for item_id in item_ids],
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    @staticmethod
     def _delete_needs_approval_response(row_ids):
         return Response(
             {
@@ -254,6 +270,9 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             # 主列表默认不带；?ids= 回显豁免 —— 已指向已关闭父项的行仍要显示父项标题
             queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
 
+        # 必须排在 apply_search 之前：搜索/筛选走的是 filter_requirement_row_ids，
+        # 它会把整个 queryset 拉进 Python 逐行判定，先缩小范围能直接省下那部分扫描
+        queryset = self.apply_scope_filters(request, queryset)
         queryset = query.apply_search(queryset, layer)
 
         return self.paginate(
@@ -265,6 +284,14 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             default_per_page=20,
             max_per_page=100,
         )
+
+    def apply_scope_filters(self, request, queryset):
+        """列表的作用域专属过滤。默认什么也不过滤。
+
+        三个作用域共用这一个 list()，但有些筛选只对其中一支有意义（标准库条目的
+        「藏掉已导进某产品的条目」就是），塞进公共分支会让另外两支背上无关的查询参数。
+        """
+        return queryset
 
     #: 子类是否会在 annotate_extra 里加注解。为 True 时写操作的响应要重读一次补上，
     #: 见 reload_with_extra。
@@ -588,8 +615,41 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
+    def _already_imported_item_ids(self, layer, library, item_ids):
+        """这一批里已经在本作用域、且还没被删掉的库条目，保持请求里的顺序。
+
+        目标行指不回库条目的 UUID（一条库条目可以被导入无数次，反向指针没有单值可存），
+        只留了 (source_library_id, source_sequence_id) 这对逻辑编号，所以要先把选中的
+        条目翻成库内序号再比。软删的行不算数 —— 产品里删掉之后就该能重新导。
+        """
+        imported = set(
+            layer.queryset.filter(source_library_id=library.id).values_list(
+                "source_sequence_id", flat=True
+            )
+        )
+        if not imported:
+            return []
+        sequence_by_item = dict(
+            Requirement.objects.filter(library=library, id__in=item_ids).values_list(
+                "id", "sequence_id"
+            )
+        )
+        return [
+            item_id
+            for item_id in item_ids
+            if sequence_by_item.get(item_id) in imported
+        ]
+
     def import_from_library(self, request, *args, **kwargs):
-        """把标准库里的条目导入成本作用域的需求行。只有新增，不设闸门。"""
+        """把标准库里的条目导入成本作用域的需求行。只有新增。
+
+        唯一的闸门是「不许重复导入」：本批里只要有一条已经在本作用域（且没被删掉），
+        整个请求报 409，一条都不落库。全有或全无 —— 部分成功会让用户分不清哪些进了、
+        哪些没进，而这个端点本来就是一次点击对应一批。
+
+        闸门在拿到作用域写锁之后、落库之前判，所以两个人同时导同一批时后一个会看到
+        前一个的结果，不会双双落库。弹窗侧的候选池过滤只是读时快照，挡不住并发。
+        """
         with transaction.atomic():
             owner, error = self._owner_or_error(for_update=True)
             if error is not None:
@@ -605,6 +665,12 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                     {"error": "Requirement library not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+
+            duplicates = self._already_imported_item_ids(
+                layer, library, serializer.validated_data["item_ids"]
+            )
+            if duplicates:
+                return self._already_imported_response(duplicates)
 
             try:
                 created, _, _ = layer.import_items(

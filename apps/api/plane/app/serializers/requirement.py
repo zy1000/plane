@@ -1197,8 +1197,11 @@ class RequirementImportSerializer(serializers.Serializer):
     """
 
     library_id = serializers.UUIDField()
+    # 一次收完，调用方**不要**自己切批：remap_imported_parents 只在本批内部重接父项，
+    # 分批会让跨批的父子对静默丢掉层级。弹窗支持「勾整库」之后这个上限是会被摸到的，
+    # 所以放宽而不是让前端切片（单次事务本来就已经锁了整个作用域，收多点不多锁什么）。
     item_ids = serializers.ListField(
-        child=serializers.UUIDField(), allow_empty=False, max_length=500
+        child=serializers.UUIDField(), allow_empty=False, max_length=2000
     )
     before_id = serializers.UUIDField(required=False, allow_null=True)
     after_id = serializers.UUIDField(required=False, allow_null=True)
