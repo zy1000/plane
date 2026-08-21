@@ -65,6 +65,7 @@ import {
 } from "./requirement-builtin-fields";
 import {
   FORM_GUTTER_COLUMN_WIDTH,
+  FORM_ROW_NUMBER_COLUMN_WIDTH,
   getCurrentPageOffset,
   getRequirementColumnWidth,
   getRequirementRowKey,
@@ -97,6 +98,8 @@ import { RequirementCreateModal, type TRequirementCreateSeed } from "./requireme
 import { useRequirementAssetUpload } from "./use-requirement-asset-upload";
 import { useRequirementRowAutosave } from "./use-requirement-row-autosave";
 import { useRequirementTitles } from "./use-requirement-titles";
+import { SubformRowHandle } from "./subform-row-handle";
+import { getSubformDropEdgeClass, moveFormRow, useSubformRowDnd } from "./use-subform-row-dnd";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
 
@@ -444,7 +447,7 @@ export const RequirementGrid = observer(
         return (
           sum +
           field.children.length * REQUIREMENT_GRID_COLUMN_WIDTH +
-          (showActionGutter ? FORM_GUTTER_COLUMN_WIDTH : 0)
+          (showActionGutter ? FORM_GUTTER_COLUMN_WIDTH + FORM_ROW_NUMBER_COLUMN_WIDTH : 0)
         );
       }, 0),
     [propertyBuiltinColumns, selectColumnWidth, showActionGutter, showApprovalColumn, showSourceColumn, visibleRootFields]
@@ -483,7 +486,7 @@ export const RequirementGrid = observer(
   const titleStickyLeft = selectColumnWidth + displayIdWidth;
   const gutterWidth = visibleRootFields.reduce((sum, field) => {
     if (field.field_type === "form" && field.children.length && showActionGutter) {
-      return sum + FORM_GUTTER_COLUMN_WIDTH;
+      return sum + FORM_GUTTER_COLUMN_WIDTH + FORM_ROW_NUMBER_COLUMN_WIDTH;
     }
     return sum;
   }, 0);
@@ -504,7 +507,7 @@ export const RequirementGrid = observer(
       propertyBuiltinColumns.length +
       visibleRootFields.reduce(
         (sum, field) =>
-          sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter) : 1),
+          sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter, showActionGutter) : 1),
         0
       ),
     [propertyBuiltinColumns.length, showActionGutter, showApprovalColumn, showSelectColumn, showSourceColumn, visibleRootFields]
@@ -555,6 +558,24 @@ export const RequirementGrid = observer(
       };
     });
   };
+
+  /**
+   * 子表单行拖拽重排。groupId 是 `${需求id}:${子表单id}` —— 网格里多个子表单并排共用同一批
+   * <tr>，拖的是「某个子表单在这一带里的第几行」，不是整行，所以作用域必须带上需求 id。
+   */
+  const { getRowRef, getDropRef, isDragging, dropEdgeOf } = useSubformRowDnd({
+    onReorder: ({ groupId, sourceRowId, targetRowId, edge }) => {
+      const [requirementId, formId] = groupId.split(":");
+      const current = autosave.getRow(requirementId);
+      if (!current) return;
+      const rows = getFormRows(current.data, formId);
+      const next = moveFormRow(rows, sourceRowId, targetRowId, edge);
+      // 落在相邻那条边上等于没动。moveFormRow 原样返回，这里就别发保存了 —— 一次空保存
+      // 也会 bump version，还可能跟并发编辑撞 409
+      if (next === rows) return;
+      autosave.updateData(requirementId, (data) => ({ ...data, [formId]: next }));
+    },
+  });
 
   /**
    * 删除是即时的、没有撤销（原先是暂存 + 保存更改，有反悔余地），所以一律二次确认。
@@ -986,12 +1007,26 @@ export const RequirementGrid = observer(
                 const row = formRows[rowIndex];
                 // 「新增子行」挂在本组末行的沟槽上。组是空的时候末行就是第 0 行
                 const isLastFormRow = rowIndex === Math.max(0, formRows.length - 1);
+                const isRowDraggable = Boolean(row) && isRowEditable && showActionGutter;
+                const dragGroupId = `${key}:${form.id}`;
+                const dragRowKey = `${dragGroupId}:${row?.id ?? ""}`;
+                // 指示线画在本组每一格上：拖的是这一组的行，不是整条 <tr>
+                const dragCellClass = isRowDraggable
+                  ? cn(getSubformDropEdgeClass(dropEdgeOf(dragRowKey)), isDragging(dragRowKey) && "opacity-40")
+                  : "";
+                const dragPayload = { groupId: dragGroupId, rowId: row?.id ?? "", rowKey: dragRowKey };
                 const childCells = form.children.map((child) => {
                   const currentValue = row?.values[child.id];
                   return (
                     <td
                       key={`${form.id}-${child.id}`}
-                      className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                      /* 整组单元格都接放置，落点范围跟测试步骤那张表一样是整行，不是编号那一格 */
+                      ref={
+                        isRowDraggable
+                          ? getDropRef(`${dragRowKey}#${child.id}`, dragPayload)
+                          : undefined
+                      }
+                      className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass, dragCellClass)}
                     >
                       {row ? (
                         isRowEditable ? (
@@ -1012,10 +1047,37 @@ export const RequirementGrid = observer(
                   );
                 });
                 if (!showActionGutter) return childCells;
+                const handleCell = (
+                  <td
+                    key={`${form.id}-row-number`}
+                    ref={isRowDraggable ? getRowRef(dragRowKey, dragPayload) : undefined}
+                    /*
+                     * 用 FLUSH 变体自己给内边距：带 px-page-x 的那个常量在这么窄的格子里会把
+                     * 内容盒挤没（左右各 1.35rem），编号被顶出去再被 overflow-hidden 切掉。
+                     * twMerge 认不出 px-page-x 属于 px 组，后面补 px-1 也盖不住它。
+                     */
+                    className={cn(
+                      REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                      "relative px-1 text-center tabular-nums",
+                      isRowDraggable && "cursor-grab active:cursor-grabbing",
+                      groupCellClass,
+                      dragCellClass
+                    )}
+                  >
+                    {row && (
+                      <SubformRowHandle
+                        index={rowIndex + 1}
+                        label={t("requirement_grid.data.reorder_child")}
+                        draggable={isRowDraggable}
+                      />
+                    )}
+                  </td>
+                );
                 const gutterCell = (
                   <td
                     key={`${form.id}-gutter`}
-                    className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, "px-0.5 text-center", groupCellClass)}
+                    ref={isRowDraggable ? getDropRef(`${dragRowKey}#gutter`, dragPayload) : undefined}
+                    className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, "px-0.5 text-center", groupCellClass, dragCellClass)}
                   >
                     {isRowEditable ? (
                       <div className="flex items-center justify-center gap-0.5">
@@ -1068,7 +1130,7 @@ export const RequirementGrid = observer(
                     ) : null}
                   </td>
                 );
-                return [...childCells, gutterCell];
+                return [handleCell, ...childCells, gutterCell];
               })}
               {/* 行操作与撤销删除都折进了标题格，不再单独占一列 */}
             </tr>
@@ -1295,6 +1357,9 @@ export const RequirementGrid = observer(
                 field.field_type !== "form" || !field.children.length
                   ? [<col key={field.id} style={{ width: getWidth(field.id, REQUIREMENT_GRID_COLUMN_WIDTH) }} />]
                   : [
+                      ...(showActionGutter
+                        ? [<col key={`${field.id}-row-number`} style={{ width: FORM_ROW_NUMBER_COLUMN_WIDTH }} />]
+                        : []),
                       ...field.children.map((child) => (
                         <col
                           key={child.id}
@@ -1310,6 +1375,7 @@ export const RequirementGrid = observer(
             <RequirementGridHeader
               rootFields={visibleRootFields}
               showActionGutter={showActionGutter}
+              showFormRowNumber={showActionGutter}
               /*
                * 勾选列最左固定；编号 / 标题依次钉在后面。
                * 与项目需求网格、与「编号在标题前面」的阅读顺序一致。

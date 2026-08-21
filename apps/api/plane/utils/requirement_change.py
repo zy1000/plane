@@ -94,18 +94,25 @@ def requirement_row_snapshot(row):
     }
 
 
-def _normalize_form_rows(rows):
-    """子表单行按 row id 建索引，让「行内顺序变化」不被误判成内容变化。"""
-    normalized = {}
-    for row in rows if isinstance(rows, list) else []:
-        if isinstance(row, dict) and row.get("id"):
-            normalized[str(row["id"])] = row.get("values") or {}
-    return normalized
+def _form_rows_signature(rows):
+    """子表单值 -> 参与比较的形状：按现有顺序排开的 (行 id, values) 序列。
+
+    **顺序参与比较**：行顺序可以在界面上拖着改，它就是内容的一部分 —— 只调了顺序也要
+    能判成变化、能提审、能落进版本快照。相应地，回滚会把顺序一起带回去。
+
+    只取 id 与 values 两样：行上的其它键（历史遗留、客户端临时字段）不该影响判定；
+    没有 id 的行进不了按 id 对齐的 diff 视图，这里一并丢掉。
+    """
+    return [
+        (str(row["id"]), row.get("values") or {})
+        for row in (rows if isinstance(rows, list) else [])
+        if isinstance(row, dict) and row.get("id")
+    ]
 
 
 def _root_field_changed(before_value, after_value, field_type):
     if field_type == RequirementFieldType.FORM:
-        return _normalize_form_rows(before_value) != _normalize_form_rows(after_value)
+        return _form_rows_signature(before_value) != _form_rows_signature(after_value)
     return before_value != after_value
 
 

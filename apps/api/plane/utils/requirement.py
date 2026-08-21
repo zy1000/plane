@@ -229,7 +229,11 @@ def serialize_builtin_values(row):
 
 
 def requirement_content_values(row):
-    """行 -> 参与「内容变了没有」判定的值。与提交评审时的内容 diff 用同一套列。"""
+    """行 -> 参与「内容变了没有」判定的值。与提交评审时的内容 diff 用同一套列。
+
+    整份 data 原样比对，**包括子表单的行顺序** —— 顺序是用户能拖着排的数据，改了就该
+    判成内容变化。提交评审那侧的 diff（_root_field_changed）用的是同一口径。
+    """
     values = serialize_builtin_values(row)
     return (
         tuple(values[column] for column in CONTENT_BUILTIN_COLUMNS),

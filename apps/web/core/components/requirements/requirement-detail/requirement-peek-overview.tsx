@@ -147,6 +147,18 @@ export const RequirementPeekOverview = (props: TProps) => {
     [detail, onRequirementUpdated]
   );
 
+  /**
+   * 回滚（版本历史里的「回滚到这一版」与提示条上的「放弃改动」）之后要把新行回灌给列表。
+   *
+   * 抽屉重开时用的是列表传下来的 seed —— fetched 会随 requirementId 清空，而有 seed 就不再
+   * 去取（见 use-requirement-detail 的加载 effect）。不回灌的话列表里还是回滚前那一行，
+   * 关掉再打开看到的就是「已回滚的内容又变回去了、状态还是已改动」，其实服务端早就回滚好了。
+   */
+  const handleRolledBack = useCallback(async () => {
+    const row = await detail.refresh();
+    if (row) onRequirementUpdated?.(row);
+  }, [detail, onRequirementUpdated]);
+
   /** 改状态走独立端点；返回的是只合并了 status / can_submit_review 的行，同样回灌给网格 */
   const handleStatusChange = useCallback(
     async (status: TRequirementItemStatus) => {
@@ -282,7 +294,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                     canEdit && entityKind === "product" ? (status) => void handleStatusChange(status) : undefined
                   }
                   onOpenRequirement={onOpenRequirement}
-                  onRolledBack={() => void detail.refresh()}
+                  onRolledBack={() => void handleRolledBack()}
                   issuesSection={issuesSection}
                   testCasesSection={testCasesSection}
                 />

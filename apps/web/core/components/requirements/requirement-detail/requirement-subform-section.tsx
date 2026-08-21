@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -12,8 +12,15 @@ import type {
   TRequirementFormRow,
   TRequirementValue,
 } from "@plane/types";
+import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { getFormRows, LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { getFormRows, LeafEditor, LeafValue, MenuRowLabel } from "@/components/requirements/requirement-grid-shared";
+import { SubformRowHandle } from "@/components/requirements/subform-row-handle";
+import {
+  getSubformDropEdgeClass,
+  moveFormRow,
+  useSubformRowDnd,
+} from "@/components/requirements/use-subform-row-dnd";
 
 /**
  * 子表单区：一个需求类型可以定义任意多个 form 字段。
@@ -58,6 +65,8 @@ export const RequirementSubformSection = (props: TProps) => {
   } = props;
   const { t } = useTranslation();
   const { storedValue: openIds, setValue: setOpenIds } = useLocalStorage<string[] | null>(storageKey, null);
+  /** 行菜单 portal 宿主：表格自己会横滚，菜单挂在滚动容器里会被裁掉 */
+  const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
   /** 点索引胶囊后要滚过去，滚动容器由调用方决定，所以只记 id 让 ref 回调去做 */
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
 
@@ -99,6 +108,13 @@ export const RequirementSubformSection = (props: TProps) => {
     if (!effectiveOpenIds.includes(form.id)) setOpenIds([...effectiveOpenIds, form.id]);
   };
 
+  /** 在指定位置插入空行。addRow 是它的「插到末尾」特例，但还要负责展开本块，所以分开写 */
+  const insertRow = (form: TRequirementField, index: number) => {
+    const rows = [...(rowsByForm[form.id] ?? [])];
+    rows.splice(index, 0, { id: uuidv4(), values: {} });
+    writeRows(form.id, rows);
+  };
+
   const removeRow = (form: TRequirementField, rowId: string) =>
     writeRows(
       form.id,
@@ -113,10 +129,27 @@ export const RequirementSubformSection = (props: TProps) => {
       )
     );
 
+  /**
+   * 拖拽只重排数组，写回复用 writeRows —— 保存链路与增删行完全一致。
+   *
+   * 作用域带上 entityId：建行弹窗盖在详情页上时，同一个需求类型的两份子表单区会同时挂着，
+   * 只用 form.id 划范围的话两边的行会互为放置目标，一拖就写错记录。
+   */
+  const { getRowRef, getDropRef, isDragging, dropEdgeOf } = useSubformRowDnd({
+    onReorder: ({ groupId, sourceRowId, targetRowId, edge }) => {
+      const formId = groupId.slice(entityId.length + 1);
+      const rows = rowsByForm[formId] ?? [];
+      const next = moveFormRow(rows, sourceRowId, targetRowId, edge);
+      // 落在相邻那条边上等于没动，别白发一次 PATCH
+      if (next !== rows) writeRows(formId, next);
+    },
+  });
+
   if (!forms.length) return null;
 
   return (
     <div className="flex flex-col gap-2">
+      <div ref={setMenuPortalEl} />
       {forms.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           {forms.map((form) => {
@@ -192,6 +225,9 @@ export const RequirementSubformSection = (props: TProps) => {
                 <table className="w-full min-w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-subtle">
+                      <th className="w-12 border-r border-subtle px-2.5 py-1.5 text-11 font-medium text-secondary">
+                        {t("requirement_detail.subform.row_number")}
+                      </th>
                       {columns.map((child) => (
                         <th
                           key={child.id}
@@ -205,47 +241,98 @@ export const RequirementSubformSection = (props: TProps) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id} className="border-b border-subtle last:border-b-0">
-                        {columns.map((child) => (
-                          <td key={child.id} className="border-r border-subtle px-2.5 py-1.5 align-top">
-                            {readOnly ? (
-                              <LeafValue
-                                field={child}
-                                value={row.values?.[child.id]}
-                                workspaceSlug={workspaceSlug}
-                              />
-                            ) : (
-                              <LeafEditor
-                                field={child}
-                                value={row.values?.[child.id]}
-                                workspaceSlug={workspaceSlug}
-                                entityId={entityId}
-                                onChange={(value) => setCell(form, row.id, child.id, value)}
-                                onUpload={onUpload}
-                                deferTextCommit
-                              />
+                    {rows.map((row, index) => {
+                      const rowKey = `${form.id}:${row.id}`;
+                      // 指示线与拖动态画在每个单元格上：<tr> 在 border-collapse 下吃不住阴影
+                      const dragClass = readOnly
+                        ? ""
+                        : cn(getSubformDropEdgeClass(dropEdgeOf(rowKey)), isDragging(rowKey) && "opacity-40");
+                      const dragPayload = { groupId: `${entityId}:${form.id}`, rowId: row.id, rowKey };
+                      return (
+                        <tr key={row.id} className="group border-b border-subtle last:border-b-0">
+                          <td
+                            /*
+                             * 可拖的是编号格本身，不是整条 <tr> —— 与网格保持同一套结构。
+                             * 其余单元格只注册成放置目标，于是落点范围仍然是整行。
+                             */
+                            ref={readOnly ? undefined : getRowRef(rowKey, dragPayload)}
+                            className={cn(
+                              "relative border-r border-subtle px-2.5 py-1.5 text-center align-top text-12 text-tertiary tabular-nums",
+                              !readOnly && "cursor-grab active:cursor-grabbing",
+                              dragClass
                             )}
+                          >
+                            <SubformRowHandle
+                              index={index + 1}
+                              label={t("requirement_detail.subform.reorder_row")}
+                              draggable={!readOnly}
+                            />
                           </td>
-                        ))}
-                        {!readOnly && (
-                          <td className="px-1 py-1.5 text-center align-top">
-                            <button
-                              type="button"
-                              onClick={() => removeRow(form, row.id)}
-                              className="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-transparent-hover hover:text-danger-primary"
-                              aria-label={t("delete")}
+                          {columns.map((child) => (
+                            <td
+                              key={child.id}
+                              ref={readOnly ? undefined : getDropRef(`${rowKey}#${child.id}`, dragPayload)}
+                              className={cn("border-r border-subtle px-2.5 py-1.5 align-top", dragClass)}
                             >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+                              {readOnly ? (
+                                <LeafValue
+                                  field={child}
+                                  value={row.values?.[child.id]}
+                                  workspaceSlug={workspaceSlug}
+                                />
+                              ) : (
+                                <LeafEditor
+                                  field={child}
+                                  value={row.values?.[child.id]}
+                                  workspaceSlug={workspaceSlug}
+                                  entityId={entityId}
+                                  onChange={(value) => setCell(form, row.id, child.id, value)}
+                                  onUpload={onUpload}
+                                  deferTextCommit
+                                />
+                              )}
+                            </td>
+                          ))}
+                          {!readOnly && (
+                            <td
+                              ref={getDropRef(`${rowKey}#actions`, dragPayload)}
+                              className={cn("px-1 py-1.5 text-center align-top", dragClass)}
+                            >
+                              <CustomMenu
+                                ariaLabel={t("requirement_detail.subform.row_actions")}
+                                customButton={
+                                  <span className="grid size-6 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 hover:bg-layer-transparent-hover hover:text-primary">
+                                    <MoreHorizontal className="size-3.5" />
+                                  </span>
+                                }
+                                placement="bottom-end"
+                                portalElement={menuPortalEl}
+                              >
+                                <CustomMenu.MenuItem onClick={() => insertRow(form, index)}>
+                                  <MenuRowLabel
+                                    icon={ArrowUpToLine}
+                                    label={t("requirement_detail.subform.insert_above")}
+                                  />
+                                </CustomMenu.MenuItem>
+                                <CustomMenu.MenuItem onClick={() => insertRow(form, index + 1)}>
+                                  <MenuRowLabel
+                                    icon={ArrowDownToLine}
+                                    label={t("requirement_detail.subform.insert_below")}
+                                  />
+                                </CustomMenu.MenuItem>
+                                <CustomMenu.MenuItem onClick={() => removeRow(form, row.id)}>
+                                  <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
+                                </CustomMenu.MenuItem>
+                              </CustomMenu>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                     {rows.length === 0 && !readOnly && (
                       <tr>
                         <td
-                          colSpan={columns.length + 1}
+                          colSpan={columns.length + 2}
                           className="px-2.5 py-3 text-center"
                         >
                           <button

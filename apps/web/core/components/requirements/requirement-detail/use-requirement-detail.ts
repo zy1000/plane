@@ -81,8 +81,9 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
     [entityId, entityKind, workspaceSlug]
   );
 
+  /** 返回取到的行 —— 回滚之后调用方要拿它回灌列表，见 requirement-peek-overview 的 handleRolledBack */
   const loadRequirement = useCallback(async () => {
-    if (!canQuery || !requirementId) return;
+    if (!canQuery || !requirementId) return null;
     setIsLoading(true);
     setError(null);
     try {
@@ -91,14 +92,19 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
         perPage: 1,
       });
       const row = response?.results?.[0] ?? null;
-      setFetched(row);
-      if (!row) setError("Requirement not found.");
+      if (row) applyRow(row);
+      else {
+        setFetched(null);
+        setError("Requirement not found.");
+      }
+      return row;
     } catch {
       setError("Unable to load this requirement.");
+      return null;
     } finally {
       setIsLoading(false);
     }
-  }, [canQuery, listRows, requirementId]);
+  }, [applyRow, canQuery, listRows, requirementId]);
 
   const loadChildren = useCallback(async () => {
     if (!canQuery || !requirementId) return;

@@ -39,9 +39,12 @@ export const getFormRows = (data: TRequirementData, fieldId: string): TRequireme
 export const getMaxFormRows = (data: TRequirementData, formFields: TRequirementField[]) =>
   formFields.reduce((max, field) => Math.max(max, getFormRows(data, field.id).length), 0);
 
-/** Number of table columns a repeatable form occupies: one per visible child, plus a trailing action gutter. */
-export const getFormColumnCount = (form: TRequirementField, withGutter: boolean) =>
-  form.children.length ? form.children.length + (withGutter ? 1 : 0) : 1;
+/**
+ * Number of table columns a repeatable form occupies: one per visible child, plus a leading row
+ * number column and a trailing action gutter.
+ */
+export const getFormColumnCount = (form: TRequirementField, withGutter: boolean, withRowNumber = false) =>
+  form.children.length ? form.children.length + (withGutter ? 1 : 0) + (withRowNumber ? 1 : 0) : 1;
 
 export const getRequirementRowKey = (
   rowKey: string,
@@ -376,6 +379,12 @@ export const REQUIREMENT_GRID_TITLE_MIN_WIDTH = 280;
  */
 export const FORM_GUTTER_COLUMN_WIDTH = 56;
 
+/**
+ * 子表单每组开头那列行号。照着测试用例详情的「测试步骤」表：编号本身就是拖拽把手。
+ * 32px 装得下三位数加两侧 px-1，不参与列宽拖拽。
+ */
+export const FORM_ROW_NUMBER_COLUMN_WIDTH = 48;
+
 /** border-collapse 下最右侧单元格的外边框会多撑出约 1px，自动填充时要预留 */
 const COLLAPSED_BORDER_WIDTH = 1;
 
@@ -475,7 +484,7 @@ export const RequirementGridColumnResizer = ({
  * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
  */
 const HEADER_CELL_BASE =
-  "group/header relative h-11 border-r border-subtle bg-layer-1 text-left align-middle text-13 font-medium";
+  "group/header relative h-11 border-r border-strong bg-layer-1 text-left align-middle text-13 font-medium";
 export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
 export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
 
@@ -594,6 +603,7 @@ export const useRequirementGridScrollContainer = () => {
 export const RequirementGridHeader = ({
   rootFields,
   showActionGutter,
+  showFormRowNumber = false,
   leadingHeader,
   leadingHeaders,
   builtinHeaders,
@@ -603,6 +613,12 @@ export const RequirementGridHeader = ({
 }: {
   rootFields: TRequirementField[];
   showActionGutter: boolean;
+  /**
+   * 子表单每组开头是否留一列行号（它同时是拖拽把手）。
+   * 刻意与 showActionGutter 分开：变更 diff 网格也开着沟槽（借那道格子放增删改标记），
+   * 但它的表体没有行号格，跟着长一列就会整片错位。
+   */
+  showFormRowNumber?: boolean;
   /** 首列。stickyCell 让它参与左固定列的滚动投影（见 useRequirementGridScrollContainer） */
   leadingHeader?: {
     className: string;
@@ -650,7 +666,7 @@ export const RequirementGridHeader = ({
     (leadingHeader ? [{ key: "leading", ...leadingHeader }] : []);
 
   return (
-    <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
+    <thead className="sticky top-0 z-[12] border-b border-strong text-13 font-medium">
       <tr>
         {resolvedLeadingHeaders.map((header) => (
           <th
@@ -678,8 +694,8 @@ export const RequirementGridHeader = ({
           field.field_type === "form" ? (
             <th
               key={field.id}
-              colSpan={getFormColumnCount(field, showActionGutter)}
-              className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "text-center")}
+              colSpan={getFormColumnCount(field, showActionGutter, showFormRowNumber)}
+              className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "border-b border-strong text-center")}
             >
               <span className="truncate text-13 font-medium text-secondary">{field.name}</span>
             </th>
@@ -709,6 +725,16 @@ export const RequirementGridHeader = ({
           {formFields.map((field) =>
             field.children.length ? (
               <Fragment key={field.id}>
+                {showFormRowNumber && (
+                  <th
+                    className={cn(
+                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                      "px-1 text-center font-medium text-secondary"
+                    )}
+                  >
+                    {t("requirement_grid.data.row_number")}
+                  </th>
+                )}
                 {field.children.map((child) => (
                   <th
                     key={child.id}

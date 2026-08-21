@@ -75,7 +75,10 @@ export const useRequirementApprovalActions = ({
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
-          message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
+          message:
+            payload?.code === "REQUIREMENT_APPROVER_REQUIRED"
+              ? t("workspace_products.requirements.state.errors.REQUIREMENT_APPROVER_REQUIRED")
+              : (payload?.error ?? t("workspace_products.requirements.toast.failed")),
         });
       }
     },

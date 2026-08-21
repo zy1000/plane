@@ -45,7 +45,8 @@ import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, CHANGE_TYPE_ROW, DIFF_NEW_VALUE, D
 const PER_PAGE_OPTIONS = [20, 50, 100];
 const SEGMENTS: (TRequirementChangeType | undefined)[] = [undefined, "create", "update", "delete"];
 
-type TSubRowState = "same" | "created" | "updated" | "deleted";
+/** moved = 值没动、只换了位置。值和位置一起变的仍归 updated —— 这张网格一格只放得下一个记号 */
+type TSubRowState = "same" | "created" | "updated" | "deleted" | "moved";
 
 type TAlignedSubRow = {
   key: string;
@@ -59,6 +60,7 @@ const SUB_ROW_MARKER: Record<TSubRowState, string> = {
   created: "+",
   updated: "~",
   deleted: "−",
+  moved: "↕",
 };
 
 const SUB_ROW_TONE: Record<TSubRowState, string> = {
@@ -66,6 +68,7 @@ const SUB_ROW_TONE: Record<TSubRowState, string> = {
   created: "bg-success-subtle/40",
   updated: "",
   deleted: "bg-danger-subtle/40",
+  moved: "",
 };
 
 const SUB_ROW_MARKER_TONE: Record<TSubRowState, string> = {
@@ -73,9 +76,13 @@ const SUB_ROW_MARKER_TONE: Record<TSubRowState, string> = {
   created: "text-success-primary",
   updated: "text-warning-primary",
   deleted: "text-danger-primary",
+  moved: "text-warning-primary",
 };
 
-/** 子表单行按 row id 并集对齐：两侧都有的配对，只在一侧的算增/删 */
+/**
+ * 子表单行按 row id 并集对齐：两侧都有的配对，只在一侧的算增/删。
+ * 行顺序算内容，所以位置换了但值没动的记成 moved，不能算「未变」。
+ */
 const alignSubRows = (
   beforeData: TRequirementData,
   afterData: TRequirementData,
@@ -84,16 +91,19 @@ const alignSubRows = (
   const beforeRows = getFormRows(beforeData, formId);
   const afterRows = getFormRows(afterData, formId);
   const beforeById = new Map(beforeRows.map((row) => [row.id, row]));
+  const beforeIndexById = new Map(beforeRows.map((row, index) => [row.id, index]));
   const afterIds = new Set(afterRows.map((row) => row.id));
 
-  const aligned: TAlignedSubRow[] = afterRows.map((row) => {
+  const aligned: TAlignedSubRow[] = afterRows.map((row, index) => {
     const previous = beforeById.get(row.id);
     if (!previous) return { key: row.id, after: row.values, state: "created" };
+    const changed = !isEqual(previous.values, row.values);
+    const moved = (beforeIndexById.get(row.id) ?? index) !== index;
     return {
       key: row.id,
       before: previous.values,
       after: row.values,
-      state: isEqual(previous.values, row.values) ? "same" : "updated",
+      state: changed ? "updated" : moved ? "moved" : "same",
     };
   });
   beforeRows.forEach((row) => {

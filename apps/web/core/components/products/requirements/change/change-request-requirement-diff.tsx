@@ -87,30 +87,46 @@ const readValue = (snapshot: TRequirementChangeSnapshot | null, key: string, isB
   return (snapshot.data ?? {})[key];
 };
 
-/** 子表单按行 id 对齐：两侧都有的配对比较，只在一侧的算增/删 */
+/**
+ * 子表单按行 id 对齐：两侧都有的配对比较，只在一侧的算增/删。
+ *
+ * 行顺序算内容（能拖着排，改了要走变更），所以位置变了也得看得见：值没动只挪了位置的
+ * 记成 moved，值和位置一起变的仍记 updated，另外一律带上前后序号供界面标出「n → m」。
+ */
 const alignFormRows = (before: TRequirementData, after: TRequirementData, formId: string) => {
   const beforeRows = getFormRows(before, formId);
   const afterRows = getFormRows(after, formId);
   const beforeById = new Map(beforeRows.map((row) => [row.id, row]));
+  const beforeIndexById = new Map(beforeRows.map((row, index) => [row.id, index]));
   const afterIds = new Set(afterRows.map((row) => row.id));
   const aligned: {
     key: string;
-    state: "created" | "updated" | "deleted" | "same";
+    state: "created" | "updated" | "deleted" | "moved" | "same";
     before?: TRequirementFormRow["values"];
     after?: TRequirementFormRow["values"];
-  }[] = afterRows.map((row) => {
+    /** 只挪了位置也要显形；值同时变了的仍归 updated，位置照样标出来 */
+    moved?: boolean;
+    beforeIndex?: number;
+    afterIndex?: number;
+  }[] = afterRows.map((row, index) => {
     const previous = beforeById.get(row.id);
-    if (!previous) return { key: row.id, state: "created" as const, after: row.values };
+    if (!previous) return { key: row.id, state: "created" as const, after: row.values, afterIndex: index };
+    const beforeIndex = beforeIndexById.get(row.id) ?? index;
+    const moved = beforeIndex !== index;
+    const changed = !isEqual(previous.values, row.values);
     return {
       key: row.id,
-      state: isEqual(previous.values, row.values) ? ("same" as const) : ("updated" as const),
+      state: changed ? ("updated" as const) : moved ? ("moved" as const) : ("same" as const),
       before: previous.values,
       after: row.values,
+      moved,
+      beforeIndex,
+      afterIndex: index,
     };
   });
-  beforeRows.forEach((row) => {
+  beforeRows.forEach((row, index) => {
     if (afterIds.has(row.id)) return;
-    aligned.push({ key: row.id, state: "deleted", before: row.values });
+    aligned.push({ key: row.id, state: "deleted", before: row.values, beforeIndex: index });
   });
   return aligned;
 };
@@ -300,6 +316,14 @@ export function ChangeRequestRequirementDiff({ item, fields, workspaceSlug }: TP
                     <tr key={row.key} className="border-b border-subtle last:border-b-0">
                       <td className="px-2 py-1.5 align-top text-10 text-tertiary">
                         {t(`workspace_products.requirements.change.subform_state.${row.state}`)}
+                        {row.moved && (
+                          <span className="mt-0.5 block text-warning-primary tabular-nums">
+                            {t("workspace_products.requirements.change.subform_row_moved", {
+                              from: (row.beforeIndex ?? 0) + 1,
+                              to: (row.afterIndex ?? 0) + 1,
+                            })}
+                          </span>
+                        )}
                       </td>
                       {children.map((child) => {
                         const beforeValue = row.before?.[child.id];
