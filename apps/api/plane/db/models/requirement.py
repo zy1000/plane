@@ -611,11 +611,6 @@ class RequirementField(BaseModel):
                 raise ValidationError(
                     {"field_type": "表单子字段不能继续使用表单类型。"}
                 )
-            # 子字段跟着所属表单走，不单独设置 —— 保存路径会强制继承，这里兜底
-            if self.show_in_library != parent_field.show_in_library:
-                raise ValidationError(
-                    {"show_in_library": "表单子字段是否纳入标准库必须与所属表单一致。"}
-                )
 
         if (
             not self._state.adding

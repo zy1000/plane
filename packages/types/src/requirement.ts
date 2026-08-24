@@ -216,7 +216,7 @@ export type TRequirementField = {
   is_required: boolean;
   is_active: boolean;
   sort_order: number;
-  /** 进不进标准库。默认进；表单子字段跟随所属表单，后端保存时强制继承 */
+  /** 进不进标准库。默认进；表单与子字段各自独立设置 */
   show_in_library: boolean;
   /** 定义该字段的需求类型 */
   requirement_type_id?: string | null;

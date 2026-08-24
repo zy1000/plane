@@ -1398,7 +1398,6 @@ export default {
       required_library_only_hint:
         "A field kept out of the standard library cannot be required: the library never stores it, so requirements imported from a library would be missing this value and could no longer be saved.",
       library_title: "Include in standard library",
-      library_inherited_hint: "Library inclusion follows the parent form; child fields are not set individually.",
       enabled_title: "Available for use",
       enabled_description: "Disabled fields are retained but hidden from data entry.",
       duplicate_field: "Duplicate field",

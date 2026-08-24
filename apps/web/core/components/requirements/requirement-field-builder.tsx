@@ -102,8 +102,6 @@ type TFieldRowProps = {
 type TFieldInlineFormProps = {
   field: TRequirementFieldDraft;
   isChild: boolean;
-  /** 这个字段实际进不进标准库：子字段跟着所属表单。不进库的字段不允许设必填 */
-  effectiveShowInLibrary: boolean;
   onChange: (field: TRequirementFieldDraft) => void;
   /** 还原成展开时的样子 */
   onCancel: () => void;
@@ -469,7 +467,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
  * 「取消」还原到展开时的样子，「完成」只是收起。
  */
 function FieldInlineForm(props: TFieldInlineFormProps) {
-  const { field, isChild, effectiveShowInLibrary, onChange, onCancel, onDone } = props;
+  const { field, isChild, onChange, onCancel, onDone } = props;
   const { t } = useTranslation();
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
   const [isBulkOptionsModalOpen, setIsBulkOptionsModalOpen] = useState(false);
@@ -478,7 +476,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
    * 导入进来的行会卡在必填上再也存不动。后端在
    * RequirementFieldNodeWriteSerializer 里也拦一道，这里只是提前给出反馈。
    */
-  const canBeRequired = effectiveShowInLibrary;
+  const canBeRequired = field.show_in_library;
   const selectOptions = field.field_type === "select" ? getRequirementSelectOptions(field) : [];
   const hasValidSelectOptions = field.field_type !== "select" || hasValidRequirementSelectOptions(field);
 
@@ -487,17 +485,12 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
     t("requirement_fields.builder.default_option", { index: 2 }),
   ];
 
-  /** 移出标准库时把必填一并摘掉，连同子字段 —— 子字段跟着所属表单走 */
+  /** 移出标准库时只摘掉当前字段的必填，子字段各自独立 */
   const toggleShowInLibrary = (next: boolean) => {
     onChange({
       ...field,
       show_in_library: next,
-      ...(next
-        ? {}
-        : {
-            is_required: false,
-            children: field.children.map((child) => ({ ...child, is_required: false })),
-          }),
+      ...(next ? {} : { is_required: false }),
     });
   };
 
@@ -563,13 +556,12 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
           placeholder={t("requirement_fields.builder.description_example")}
         />
         <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-subtle pt-3 text-12 text-secondary">
-          <label className={cn("flex items-center gap-2", isChild && "cursor-not-allowed text-disabled")}>
+          <label className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={effectiveShowInLibrary}
-              disabled={isChild}
+              checked={field.show_in_library}
               onChange={(event) => toggleShowInLibrary(event.target.checked)}
-              className="size-3.5 rounded border border-subtle accent-accent-primary disabled:cursor-not-allowed"
+              className="size-3.5 rounded border border-subtle accent-accent-primary"
             />
             {t("requirement_fields.builder.library_title")}
           </label>
@@ -592,11 +584,6 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
             />
             {t("requirement_fields.builder.enabled_title")}
           </label>
-          {isChild && (
-            <span className="basis-full text-11 leading-4 text-tertiary">
-              {t("requirement_fields.builder.library_inherited_hint")}
-            </span>
-          )}
           {!canBeRequired && (
             <span className="basis-full text-11 leading-4 text-tertiary">
               {t("requirement_fields.builder.required_library_only_hint")}
@@ -840,21 +827,15 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     closeEditor();
   };
 
-  const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => {
-    // 子字段跟着所属表单走，「能不能设必填」也就得看根字段进不进标准库
-    const root = fields.find((item) => fieldKey(item) === target.rootKey);
-    const effectiveShowInLibrary = target.childKey ? (root?.show_in_library ?? true) : field.show_in_library;
-    return (
-      <FieldInlineForm
-        field={field}
-        isChild={Boolean(target.childKey)}
-        effectiveShowInLibrary={effectiveShowInLibrary}
-        onChange={updateSelectedField}
-        onCancel={cancelEditing}
-        onDone={closeEditor}
-      />
-    );
-  };
+  const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => (
+    <FieldInlineForm
+      field={field}
+      isChild={Boolean(target.childKey)}
+      onChange={updateSelectedField}
+      onCancel={cancelEditing}
+      onDone={closeEditor}
+    />
+  );
 
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(

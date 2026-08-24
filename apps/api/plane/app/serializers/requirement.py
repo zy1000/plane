@@ -346,8 +346,6 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(required=False, default=True)
     config = serializers.DictField(required=False, default=dict)
     default_value = serializers.JSONField(required=False, allow_null=True)
-    # 表单子字段不单独设置，保存时强制继承所属表单（utils/requirement.py 的
-    # save_field），所以子字段这里传什么都不影响最终取值。
     show_in_library = serializers.BooleanField(required=False, default=True)
 
     def validate_name(self, value):
@@ -436,31 +434,28 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
         field_type = attrs["field_type"]
         children = attrs.get("children") or []
 
-        # 不纳入标准库的字段不能设为必填。
+        # 不纳入标准库的字段不能设为必填。表单与子字段各自独立判断。
         #
         # 标准库只按纳入库的字段校验（utils/requirement.py 的 get_library_field_specs），
         # 库外字段压根不在库条目的契约里；而导入到产品需求时是按类型的**全集**校验的。
         # 一旦某个库外字段被标成必填，库条目天生就缺它，导入只能跳过必填校验
         # （build_library_import_creates），落进来的行随后每一次单元格保存又会被
         # 同一条必填规则打回 —— 那一行从此存不进任何改动。
-        # 子字段强制继承所属表单（utils/requirement.py 的 save_field），所以这里用
-        # 根字段的取值一并管住子字段。
-        if not attrs["show_in_library"]:
-            offenders = [
-                node["name"]
-                for node in [attrs, *children]
-                if node.get("is_required")
-            ]
-            if offenders:
-                raise serializers.ValidationError(
-                    {
-                        "is_required": (
-                            "A field kept out of the standard library cannot be "
-                            "required, because library items never carry it: "
-                            f"{', '.join(offenders)}"
-                        )
-                    }
-                )
+        offenders = [
+            node["name"]
+            for node in [attrs, *children]
+            if not node.get("show_in_library", True) and node.get("is_required")
+        ]
+        if offenders:
+            raise serializers.ValidationError(
+                {
+                    "is_required": (
+                        "A field kept out of the standard library cannot be "
+                        "required, because library items never carry it: "
+                        f"{', '.join(offenders)}"
+                    )
+                }
+            )
         if field_type != RequirementFieldType.FORM and children:
             raise serializers.ValidationError(
                 {"children": "Only form fields can contain child fields."}

@@ -471,11 +471,21 @@ def get_library_field_specs(library):
     只取 show_in_library 的字段 —— 关掉这个开关的字段是产品需求录入/导入时才填的
     东西，标准库不展示它，这里是这条规则的唯一执行点（网格表头与写入校验都走
     specs）。八个内置字段不受影响，标准库照样有。
+
+    表单本身未纳入、但某个子字段纳入时，仍保留该表单作为容器，避免
+    field_tree_from_specs 把子字段变成孤儿。
     """
+    specs = get_requirement_type_field_specs(library.requirement_type)
+    included_ids = {spec.id for spec in specs if spec.show_in_library}
+    parent_ids = {
+        spec.parent_field_id
+        for spec in specs
+        if spec.parent_field_id and spec.id in included_ids
+    }
     return [
         spec
-        for spec in get_requirement_type_field_specs(library.requirement_type)
-        if spec.show_in_library
+        for spec in specs
+        if spec.id in included_ids or spec.id in parent_ids
     ]
 
 
@@ -734,10 +744,7 @@ def sync_requirement_type_fields(
         field.sort_order = (index + 1) * SORT_ORDER_STEP
         field.config = deepcopy(payload.get("config") or {})
         field.default_value = deepcopy(payload.get("default_value"))
-        # 子字段跟着所属表单走，不单独提交
-        field.show_in_library = (
-            parent.show_in_library if parent else payload["show_in_library"]
-        )
+        field.show_in_library = payload["show_in_library"]
         field.full_clean(exclude=["created_by", "updated_by"])
         if field._state.adding and actor is not None:
             field.created_by = actor

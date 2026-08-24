@@ -1563,7 +1563,6 @@ export default {
       required_library_only_hint:
         "未纳入标准库的字段不能设为必填：标准库不收录它，从库里导入的需求会因为缺这一项而无法再保存。",
       library_title: "纳入标准库",
-      library_inherited_hint: "是否纳入标准库跟随所属表单，子字段不单独设置。",
       enabled_title: "允许使用",
       enabled_description: "停用后保留字段，但不再显示于数据录入。",
       duplicate_field: "复制字段",
