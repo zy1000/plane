@@ -1109,6 +1109,16 @@ function UpdateModalBody({
                       添加缺陷
                     </button>
                   )}
+                  {activeTab === "attachments" && (
+                    <button
+                      type="button"
+                      onClick={handlePickAttachments}
+                      disabled={!canEditCase}
+                      className="rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      添加附件
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1371,7 +1381,6 @@ function UpdateModalBody({
                 canEdit={canEditCase}
                 caseAttachments={caseAttachments}
                 fileInputRef={fileInputRef}
-                onPickAttachments={handlePickAttachments}
                 onFilesChosen={handleFilesChosen}
                 onDownloadAttachment={handleDownloadAttachment}
                 onRemoveCaseAttachment={(id) => handleRemoveCaseAttachment(id)}

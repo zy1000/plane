@@ -10,7 +10,6 @@ type AttachmentsPanelProps = {
   canEdit?: boolean;
   caseAttachments: any[];
   fileInputRef: React.RefObject<HTMLInputElement>;
-  onPickAttachments: () => void;
   onFilesChosen: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDownloadAttachment: (attachment: any) => void;
   onRemoveCaseAttachment: (id: string) => void;
@@ -22,7 +21,6 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
     canEdit = true,
     caseAttachments,
     fileInputRef,
-    onPickAttachments,
     onFilesChosen,
     onDownloadAttachment,
     onRemoveCaseAttachment,
@@ -30,27 +28,11 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
 
   return (
     <section
-      aria-labelledby="attachments-title"
+      aria-label="附件"
       aria-busy={attachmentsLoading}
-      className="rounded-b-md border-subtle px-6 py-6 ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle"
+      className="rounded-b-md border-subtle ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle"
       role="group"
     >
-      <div className="mb-3 flex items-center justify-between">
-        <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-secondary">
-          附件
-        </span>
-        <Tooltip title="上传文件">
-          <Button
-            type="text"
-            aria-label="上传附件"
-            disabled={!canEdit}
-            icon={
-              <LucideIcons.Upload size={16} className="text-secondary hover:text-accent-primary" aria-hidden="true" />
-            }
-            onClick={onPickAttachments}
-          />
-        </Tooltip>
-      </div>
       <input
         ref={fileInputRef}
         type="file"
@@ -59,8 +41,7 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
         aria-hidden="true"
         onChange={onFilesChosen}
       />
-      <div className="mt-2">
-        <Table
+      <Table
           size="small"
           loading={attachmentsLoading}
           rowKey={(r: any) => String(r?.id ?? "")}
@@ -203,7 +184,6 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
             },
           ]}
         />
-      </div>
     </section>
   );
 }
