@@ -46,7 +46,7 @@ import type {
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
-import { AlertModalCore, Checkbox, CustomMenu, Loader } from "@plane/ui";
+import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import {
@@ -80,13 +80,11 @@ import {
   REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
   REQUIREMENT_GRID_COLUMN_WIDTH,
   REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-  REQUIREMENT_GRID_SELECT_COLUMN_STYLE,
-  REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
+  REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
-  REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS,
-  REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS,
   RequirementGridHeader,
+  RequirementGridHoverSelect,
   RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
   useRequirementGridColumnResize,
@@ -447,10 +445,8 @@ export const RequirementGrid = observer(
     const showSourceColumn = entityKind === "product";
 
     const showSelectColumn = !readOnly;
-    const selectColumnWidth = showSelectColumn ? REQUIREMENT_GRID_SELECT_COLUMN_WIDTH : 0;
     const defaultNonTitleColumnsWidth = useMemo(
       () =>
-        selectColumnWidth +
         REQUIREMENT_GRID_COLUMN_WIDTH + // 编号
         REQUIREMENT_GRID_COLUMN_WIDTH + // 模块（紧跟编号，同为左固定）
         (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
@@ -466,7 +462,6 @@ export const RequirementGrid = observer(
         }, 0),
       [
         propertyBuiltinColumns,
-        selectColumnWidth,
         showActionGutter,
         showApprovalColumn,
         showSourceColumn,
@@ -499,10 +494,10 @@ export const RequirementGrid = observer(
     const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
     const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
     const moduleColumnWidth = getWidth("module_name", REQUIREMENT_GRID_COLUMN_WIDTH);
-    const displayIdStickyLeft = selectColumnWidth;
+    const displayIdStickyLeft = 0;
     // 模块列插在编号与标题之间，三列同属左固定簇，offset 逐列累加
-    const moduleStickyLeft = selectColumnWidth + displayIdWidth;
-    const titleStickyLeft = selectColumnWidth + displayIdWidth + moduleColumnWidth;
+    const moduleStickyLeft = displayIdWidth;
+    const titleStickyLeft = displayIdWidth + moduleColumnWidth;
     const gutterWidth = visibleRootFields.reduce((sum, field) => {
       if (field.field_type === "form" && field.children.length && showActionGutter) {
         return sum + FORM_GUTTER_COLUMN_WIDTH + FORM_ROW_NUMBER_COLUMN_WIDTH;
@@ -513,12 +508,11 @@ export const RequirementGrid = observer(
       Object.entries(columnSnapshot)
         .filter(([key]) => key !== "title")
         .reduce((sum, [key, defaultWidth]) => sum + getWidth(key, defaultWidth), 0) + gutterWidth;
-    const tableWidth = selectColumnWidth + titleColumnWidth + nonTitleColumnsWidth;
+    const tableWidth = titleColumnWidth + nonTitleColumnsWidth;
 
     // Column count for the trailing "add record" affordance row; mirrors the header's column math.
     const totalColumnCount = useMemo(
       () =>
-        (showSelectColumn ? 1 : 0) + // 勾选列
         1 + // 编号列
         1 + // 模块列
         1 + // 标题列（左固定，行操作折在里面）
@@ -534,7 +528,6 @@ export const RequirementGrid = observer(
         propertyBuiltinColumns.length,
         showActionGutter,
         showApprovalColumn,
-        showSelectColumn,
         showSourceColumn,
         visibleRootFields,
       ]
@@ -757,42 +750,14 @@ export const RequirementGrid = observer(
                 className={cn("group transition-colors duration-150 motion-reduce:transition-none", rowStateClass)}
               >
                 {/*
-                勾选列最左固定。编号格跟在后面，标题格 left 等于勾选 + 编号列宽，
-                横滚时三列一起钉住。左固定列底色必须不透明，行态着色铺在内层 div。
+                编号 / 标题左固定。勾选叠在编号格上，不占独立格子。
+                左固定列底色必须不透明，行态着色铺在内层 div。
               */}
-                {isFirstRow && showSelectColumn && (
-                  <td
-                    rowSpan={totalRows}
-                    className={cn(
-                      REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
-                      REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS,
-                      groupCellClass
-                    )}
-                    style={REQUIREMENT_GRID_SELECT_COLUMN_STYLE}
-                  >
-                    <div className={cn("flex h-full w-full items-center justify-center", rowStateClass)}>
-                      <Checkbox
-                        checked={selectedIds.includes(requirement.id)}
-                        onChange={(event) =>
-                          setSelectedIds((current) =>
-                            event.target.checked
-                              ? [...current, requirement.id]
-                              : current.filter((id) => id !== requirement.id)
-                          )
-                        }
-                        aria-label={t("requirement_grid.data.select_row")}
-                        containerClassName={cn(
-                          "pointer-events-none opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
-                          selectedIds.includes(requirement.id) && "pointer-events-auto opacity-100"
-                        )}
-                      />
-                    </div>
-                  </td>
-                )}
                 {isFirstRow && (
                   <td
                     rowSpan={totalRows}
                     className={cn(
+                      "relative",
                       REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
                       REQUIREMENT_GRID_STICKY_BODY_CLASS,
                       groupCellClass
@@ -804,7 +769,13 @@ export const RequirementGrid = observer(
                       left: displayIdStickyLeft,
                     }}
                   >
-                    <div className={cn("flex h-full w-full min-w-0 items-center gap-1.5 px-page-x", rowStateClass)}>
+                    <div
+                      className={cn(
+                        "flex h-full w-full min-w-0 items-center gap-1.5",
+                        showSelectColumn ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
+                        rowStateClass
+                      )}
+                    >
                       {entityKind === "library" && isRowEditable ? (
                         // 库条目编号手填可改：blur/回车提交自动保存，空值还原；
                         // 重复由服务端查重后走行级 saveState 错误展示。开详情走标题旁图标
@@ -830,6 +801,20 @@ export const RequirementGrid = observer(
                         <span className="text-placeholder">—</span>
                       )}
                     </div>
+                    {showSelectColumn && (
+                      <RequirementGridHoverSelect
+                        checked={selectedIds.includes(requirement.id)}
+                        onChange={() =>
+                          setSelectedIds((current) =>
+                            current.includes(requirement.id)
+                              ? current.filter((id) => id !== requirement.id)
+                              : [...current, requirement.id]
+                          )
+                        }
+                        ariaLabel={t("requirement_grid.data.select_row")}
+                        hoverGroup="requirement"
+                      />
+                    )}
                   </td>
                 )}
                 {/* 模块列：紧跟编号，只读展示（挂靠走左侧树 / 批量移动，不在网格里改） */}
@@ -1364,7 +1349,6 @@ export const RequirementGrid = observer(
           ) : (
             <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
               <colgroup>
-                {showSelectColumn && <col style={{ width: selectColumnWidth }} />}
                 <col style={{ width: displayIdWidth }} />
                 <col style={{ width: moduleColumnWidth }} />
                 <col style={{ width: titleColumnWidth }} />
@@ -1406,46 +1390,10 @@ export const RequirementGrid = observer(
                 showActionGutter={showActionGutter}
                 showFormRowNumber={showActionGutter}
                 /*
-                 * 勾选列最左固定；编号 / 标题依次钉在后面。
+                 * 编号 / 标题依次左固定。勾选叠在编号列上。
                  * 与项目需求网格、与「编号在标题前面」的阅读顺序一致。
                  */
                 leadingHeaders={[
-                  ...(showSelectColumn
-                    ? [
-                        {
-                          key: "select",
-                          className: cn(
-                            "group/header relative",
-                            REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                            REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS
-                          ),
-                          style: REQUIREMENT_GRID_SELECT_COLUMN_STYLE,
-                          content: (
-                            <div className="flex h-full w-full items-center justify-center">
-                              <Checkbox
-                                checked={
-                                  selectableRequirementIds.length > 0 &&
-                                  selectableRequirementIds.every((requirementId) => selectedIds.includes(requirementId))
-                                }
-                                indeterminate={
-                                  selectedIds.length > 0 &&
-                                  !selectableRequirementIds.every((id) => selectedIds.includes(id))
-                                }
-                                disabled={!selectableRequirementIds.length}
-                                onChange={(event) =>
-                                  setSelectedIds(event.target.checked ? selectableRequirementIds : [])
-                                }
-                                aria-label={t("requirement_grid.data.select_all")}
-                                containerClassName={cn(
-                                  "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
-                                  selectedIds.length > 0 && "pointer-events-auto opacity-100"
-                                )}
-                              />
-                            </div>
-                          ),
-                        },
-                      ]
-                    : []),
                   {
                     key: "display-id",
                     className: cn(
@@ -1461,9 +1409,40 @@ export const RequirementGrid = observer(
                     },
                     onResize: (event) => startResize("display_id", columnSnapshot, event),
                     content: (
-                      <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
-                        <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
-                      </div>
+                      <>
+                        <div
+                          className={cn(
+                            "flex h-full w-full min-w-0 items-center gap-1.5",
+                            showSelectColumn ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                          )}
+                        >
+                          <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
+                        </div>
+                        {showSelectColumn && (
+                          <RequirementGridHoverSelect
+                            checked={
+                              selectableRequirementIds.length > 0 &&
+                              selectableRequirementIds.every((requirementId) => selectedIds.includes(requirementId))
+                            }
+                            indeterminate={
+                              selectedIds.length > 0 &&
+                              !selectableRequirementIds.every((id) => selectedIds.includes(id))
+                            }
+                            disabled={!selectableRequirementIds.length}
+                            onChange={() =>
+                              setSelectedIds((current) =>
+                                selectableRequirementIds.length > 0 &&
+                                selectableRequirementIds.every((id) => current.includes(id))
+                                  ? []
+                                  : selectableRequirementIds
+                              )
+                            }
+                            ariaLabel={t("requirement_grid.data.select_all")}
+                            hoverGroup="header"
+                            forceVisible={selectedIds.length > 0}
+                          />
+                        )}
+                      </>
                     ),
                   },
                   {

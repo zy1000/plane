@@ -6,8 +6,8 @@
  * 一张表」的可编辑录入界面，整套暂存/批量保存/乐观锁机制在项目侧全无用武之地。
  *
  * 表格骨架与量化常量取自 requirement-grid-shared，与另外两个需求网格共用一套：
- * 勾选列独占最左窄列并左固定，编号 / 标题列依次左固定，标题列吃掉容器剩余宽度、
- * 其余列定宽、行高 44px。勾选框悬停显形。
+ * 编号 / 标题列依次左固定，标题列吃掉容器剩余宽度、其余列定宽、行高 44px。
+ * 勾选叠在首列上，不占独立格子，悬停才显形。
  *
  * 列不再全铺：默认 9 列（约 1152px 固定宽），其余靠「显示」勾回，偏好按项目存
  * localStorage。见 project-requirements-columns.ts。
@@ -23,7 +23,7 @@ import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProjectRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
-import { Checkbox, Loader } from "@plane/ui";
+import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
@@ -40,13 +40,11 @@ import {
   REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
   REQUIREMENT_GRID_ROW_CLASS,
   REQUIREMENT_GRID_ROW_SELECTED_CLASS,
-  REQUIREMENT_GRID_SELECT_COLUMN_STYLE,
-  REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
+  REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
-  REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS,
-  REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS,
   RequirementGridColumnResizer,
+  RequirementGridHoverSelect,
   RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
   useRequirementGridColumnResize,
@@ -258,10 +256,16 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   const defaultDisplayIdWidth = isDisplayIdVisible ? defaultColumnWidth("display_id") : 0;
   const defaultModuleWidth = isModuleVisible ? defaultColumnWidth("module") : 0;
   const showSelectColumn = canManage;
-  const selectColumnWidth = showSelectColumn ? REQUIREMENT_GRID_SELECT_COLUMN_WIDTH : 0;
+  const selectHost = !showSelectColumn
+    ? null
+    : isDisplayIdVisible
+      ? "display_id"
+      : isModuleVisible
+        ? "module"
+        : "title";
   const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(
     containerWidth,
-    defaultPropertyColumnsWidth + defaultDisplayIdWidth + defaultModuleWidth + selectColumnWidth
+    defaultPropertyColumnsWidth + defaultDisplayIdWidth + defaultModuleWidth
   );
   const columnSnapshot = useMemo(() => {
     const snapshot: Record<string, number> = { title: defaultTitleColumnWidth };
@@ -287,11 +291,11 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     (total, key) => total + getWidth(key, defaultColumnWidth(key)),
     0
   );
-  const tableWidth = selectColumnWidth + displayIdWidth + moduleWidth + titleColumnWidth + propertyColumnsWidth;
-  const displayIdStickyLeft = selectColumnWidth;
+  const tableWidth = displayIdWidth + moduleWidth + titleColumnWidth + propertyColumnsWidth;
+  const displayIdStickyLeft = 0;
   // 模块列插在编号与标题之间，左固定簇 offset 逐列累加
-  const moduleStickyLeft = selectColumnWidth + displayIdWidth;
-  const titleStickyLeft = selectColumnWidth + displayIdWidth + moduleWidth;
+  const moduleStickyLeft = displayIdWidth;
+  const titleStickyLeft = displayIdWidth + moduleWidth;
 
   /**
    * 父项标题只从**本页已有的行**里解析，不额外发请求。
@@ -314,7 +318,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   const toggleOne = (id: string) =>
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
 
-  const renderSelectCheckbox = ({
+  const renderHoverSelect = ({
     checked,
     hoverGroup,
     indeterminate,
@@ -325,19 +329,14 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     indeterminate?: boolean;
     onChange: () => void;
   }) => (
-    <Checkbox
+    <RequirementGridHoverSelect
       checked={checked}
       indeterminate={indeterminate}
       disabled={hoverGroup === "header" && !visibleIds.length}
       onChange={onChange}
-      aria-label={t("requirement_grid.data.select_row")}
-      containerClassName={cn(
-        "pointer-events-none opacity-0 transition-opacity",
-        hoverGroup === "header"
-          ? "group-hover/header:pointer-events-auto group-hover/header:opacity-100"
-          : "group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
-        (checked || (hoverGroup === "header" && selectedIds.length > 0)) && "pointer-events-auto opacity-100"
-      )}
+      ariaLabel={t("requirement_grid.data.select_row")}
+      hoverGroup={hoverGroup}
+      forceVisible={hoverGroup === "header" && selectedIds.length > 0}
     />
   );
 
@@ -562,7 +561,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         ) : (
           <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
             <colgroup>
-              {showSelectColumn && <col style={{ width: selectColumnWidth }} />}
               {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
               {isModuleVisible && <col style={{ width: moduleWidth }} />}
               <col style={{ width: titleColumnWidth }} />
@@ -572,25 +570,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             </colgroup>
             <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
               <tr>
-                {showSelectColumn && (
-                  <th
-                    className={cn(
-                      "group/header relative",
-                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                      REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS
-                    )}
-                    style={REQUIREMENT_GRID_SELECT_COLUMN_STYLE}
-                  >
-                    <div className="flex h-full w-full items-center justify-center">
-                      {renderSelectCheckbox({
-                        checked: allSelected,
-                        hoverGroup: "header",
-                        indeterminate: !allSelected && selectedIds.length > 0,
-                        onChange: toggleAll,
-                      })}
-                    </div>
-                  </th>
-                )}
                 {isDisplayIdVisible && (
                   <th
                     className={cn(
@@ -605,9 +584,21 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       left: displayIdStickyLeft,
                     }}
                   >
-                    <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                    <div
+                      className={cn(
+                        "flex h-full w-full min-w-0 items-center gap-1.5",
+                        selectHost === "display_id" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                      )}
+                    >
                       <RequirementGridHeaderLabel icon={columnIcon("display_id")} label={columnLabel("display_id")} />
                     </div>
+                    {selectHost === "display_id" &&
+                      renderHoverSelect({
+                        checked: allSelected,
+                        hoverGroup: "header",
+                        indeterminate: !allSelected && selectedIds.length > 0,
+                        onChange: toggleAll,
+                      })}
                     <RequirementGridColumnResizer
                       onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
                     />
@@ -627,9 +618,21 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       left: moduleStickyLeft,
                     }}
                   >
-                    <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                    <div
+                      className={cn(
+                        "flex h-full w-full min-w-0 items-center gap-1.5",
+                        selectHost === "module" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                      )}
+                    >
                       <RequirementGridHeaderLabel icon={columnIcon("module")} label={columnLabel("module")} />
                     </div>
+                    {selectHost === "module" &&
+                      renderHoverSelect({
+                        checked: allSelected,
+                        hoverGroup: "header",
+                        indeterminate: !allSelected && selectedIds.length > 0,
+                        onChange: toggleAll,
+                      })}
                     <RequirementGridColumnResizer
                       onMouseDown={(event) => startResize("module", columnSnapshot, event)}
                     />
@@ -649,12 +652,24 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                     left: titleStickyLeft,
                   }}
                 >
-                  <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                  <div
+                    className={cn(
+                      "flex h-full w-full min-w-0 items-center gap-1.5",
+                      selectHost === "title" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                    )}
+                  >
                     <RequirementGridHeaderLabel
                       icon={titleColumn?.icon}
                       label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                     />
                   </div>
+                  {selectHost === "title" &&
+                    renderHoverSelect({
+                      checked: allSelected,
+                      hoverGroup: "header",
+                      indeterminate: !allSelected && selectedIds.length > 0,
+                      onChange: toggleAll,
+                    })}
                   <RequirementGridColumnResizer onMouseDown={(event) => startResize("title", columnSnapshot, event)} />
                 </th>
                 {propertyColumns.map((key) => (
@@ -677,33 +692,13 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       isSelected && REQUIREMENT_GRID_ROW_SELECTED_CLASS
                     )}
                   >
-                    {showSelectColumn && (
-                      <td
-                        className={cn(
-                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
-                          REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS
-                        )}
-                        style={REQUIREMENT_GRID_SELECT_COLUMN_STYLE}
-                      >
-                        <div
-                          className={cn(
-                            "flex h-full w-full items-center justify-center transition-colors duration-150 motion-reduce:transition-none",
-                            isSelected
-                              ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                              : "group-hover/requirement:bg-layer-transparent-hover"
-                          )}
-                        >
-                          {renderSelectCheckbox({
-                            checked: isSelected,
-                            hoverGroup: "requirement",
-                            onChange: () => toggleOne(requirement.id),
-                          })}
-                        </div>
-                      </td>
-                    )}
                     {isDisplayIdVisible && (
                       <td
-                        className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                        className={cn(
+                          "relative",
+                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          REQUIREMENT_GRID_STICKY_BODY_CLASS
+                        )}
                         style={{
                           width: displayIdWidth,
                           minWidth: displayIdWidth,
@@ -713,7 +708,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       >
                         <div
                           className={cn(
-                            "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                            "flex h-full w-full min-w-0 items-center gap-1.5 transition-colors duration-150 motion-reduce:transition-none",
+                            selectHost === "display_id" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
                             isSelected
                               ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
                               : "group-hover/requirement:bg-layer-transparent-hover"
@@ -721,11 +717,21 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                         >
                           {renderCell("display_id", requirement)}
                         </div>
+                        {selectHost === "display_id" &&
+                          renderHoverSelect({
+                            checked: isSelected,
+                            hoverGroup: "requirement",
+                            onChange: () => toggleOne(requirement.id),
+                          })}
                       </td>
                     )}
                     {isModuleVisible && (
                       <td
-                        className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                        className={cn(
+                          "relative",
+                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          REQUIREMENT_GRID_STICKY_BODY_CLASS
+                        )}
                         style={{
                           width: moduleWidth,
                           minWidth: moduleWidth,
@@ -735,7 +741,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       >
                         <div
                           className={cn(
-                            "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                            "flex h-full w-full min-w-0 items-center gap-1.5 transition-colors duration-150 motion-reduce:transition-none",
+                            selectHost === "module" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
                             isSelected
                               ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
                               : "group-hover/requirement:bg-layer-transparent-hover"
@@ -743,6 +750,12 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                         >
                           {renderCell("module", requirement)}
                         </div>
+                        {selectHost === "module" &&
+                          renderHoverSelect({
+                            checked: isSelected,
+                            hoverGroup: "requirement",
+                            onChange: () => toggleOne(requirement.id),
+                          })}
                       </td>
                     )}
                     <td
@@ -762,12 +775,19 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       {/* 左固定列的底色必须不透明，所以着色铺在内层 div 而不是 <tr> 上 */}
                       <div
                         className={cn(
-                          "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
-                          isSelected
-                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                            : "group-hover/requirement:bg-layer-transparent-hover"
-                        )}
-                      >
+                            "flex h-full w-full min-w-0 items-center gap-1.5 transition-colors duration-150 motion-reduce:transition-none",
+                            selectHost === "title" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
+                            isSelected
+                              ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                              : "group-hover/requirement:bg-layer-transparent-hover"
+                          )}
+                        >
+                        {selectHost === "title" &&
+                          renderHoverSelect({
+                            checked: isSelected,
+                            hoverGroup: "requirement",
+                            onChange: () => toggleOne(requirement.id),
+                          })}
                         <Tooltip tooltipContent={requirement.title}>
                           <button
                             type="button"

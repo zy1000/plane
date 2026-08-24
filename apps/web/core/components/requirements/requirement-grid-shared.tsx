@@ -18,7 +18,7 @@ import type {
   TRequirementField,
   TRequirementFormRow,
 } from "@plane/types";
-import { Avatar, CustomSelect, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
+import { Avatar, Checkbox, CustomSelect, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -351,17 +351,50 @@ export const LeafValue = ({
 export const REQUIREMENT_GRID_COLUMN_WIDTH = 144;
 
 /**
- * 勾选列。只要装下一颗 Checkbox，不和编号挤在同一格。
- * 不参与列宽拖拽，也不进「显示」开关。
+ * 勾选叠在首列上，不占独立格子。和工作项电子表格同一套路：
+ * absolute left-1，默认隐身，行/表头 hover 或已选中才显形。
+ * 宿主列用 REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS，避免文字贴上复选框。
  */
-export const REQUIREMENT_GRID_SELECT_COLUMN_WIDTH = 36;
+export const REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS = "pr-page-x pl-10";
 
-export const REQUIREMENT_GRID_SELECT_COLUMN_STYLE = {
-  width: REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
-  minWidth: REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
-  maxWidth: REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
-  left: 0,
-} as const;
+export const RequirementGridHoverSelect = ({
+  checked,
+  onChange,
+  ariaLabel,
+  hoverGroup,
+  indeterminate,
+  disabled,
+  forceVisible = false,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  ariaLabel: string;
+  hoverGroup: "header" | "requirement";
+  indeterminate?: boolean;
+  disabled?: boolean;
+  forceVisible?: boolean;
+}) => (
+  <div
+    className="absolute inset-y-0 left-1 z-[1] grid w-3.5 place-items-center"
+    onClick={(event) => event.stopPropagation()}
+  >
+    <Checkbox
+      className="size-3.5 !outline-none"
+      iconClassName="size-3"
+      checked={checked}
+      indeterminate={indeterminate}
+      disabled={disabled}
+      onChange={onChange}
+      aria-label={ariaLabel}
+      containerClassName={cn(
+        "pointer-events-none opacity-0 transition-opacity",
+        hoverGroup === "header" && "group-hover/header:pointer-events-auto group-hover/header:opacity-100",
+        hoverGroup === "requirement" && "group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
+        (forceVisible || checked) && "pointer-events-auto opacity-100"
+      )}
+    />
+  </div>
+);
 
 /**
  * 描述列例外地宽一档。它装的是富文本摘要，144px 下基本只能看到前几个字；
@@ -506,9 +539,6 @@ export const REQUIREMENT_GRID_BODY_CELL_CLASS = `${CELL_BORDER_BASE} h-11 px-pag
 /** 左固定列。z 值要压过普通单元格，否则横滚时被盖住 */
 export const REQUIREMENT_GRID_STICKY_HEADER_CLASS = "left-0 z-[15] md:sticky";
 export const REQUIREMENT_GRID_STICKY_BODY_CLASS = "left-0 z-10 bg-surface-1 md:sticky";
-/** 勾选列钉在更左边，z 略高，避免被编号/标题列盖住 */
-export const REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS = "z-[16] md:sticky";
-export const REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS = "z-[11] bg-surface-1 md:sticky";
 
 /** 行底色。选中 / 悬停都不能撞上表头的 bg-layer-1，否则 sticky 表头会和行糊在一起 */
 export const REQUIREMENT_GRID_ROW_CLASS =
@@ -598,7 +628,7 @@ export const useRequirementGridScrollContainer = () => {
 
 /**
  * 二级表头：非表单根字段 rowSpan=2，表单字段作分组表头、子字段排在第二行。
- * 首列与末列由调用方给（编辑态给「勾选框」与「操作」，diff 模式给「变更」且没有末列）。
+ * 首列与末列由调用方给（编辑态给编号等左固定列与「操作」，diff 模式给「变更」且没有末列）。
  */
 export const RequirementGridHeader = ({
   rootFields,

@@ -31,7 +31,7 @@ import type {
   TRequirementItemStatus,
   TRequirementTypeSchema,
 } from "@plane/types";
-import { AlertModalCore, Checkbox, CustomMenu, Loader } from "@plane/ui";
+import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import {
@@ -55,13 +55,11 @@ import {
   REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
   REQUIREMENT_GRID_ROW_CLASS,
   REQUIREMENT_GRID_ROW_SELECTED_CLASS,
-  REQUIREMENT_GRID_SELECT_COLUMN_STYLE,
-  REQUIREMENT_GRID_SELECT_COLUMN_WIDTH,
+  REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
-  REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS,
-  REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS,
   RequirementGridColumnResizer,
+  RequirementGridHoverSelect,
   RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
   useRequirementGridColumnResize,
@@ -80,9 +78,9 @@ import { useRequirementTitles } from "@/components/requirements/use-requirement-
  * 要录入或改值就点进对应的类型视图。唯一例外是状态列 —— 它不是「内容」，走独立的
  * 状态端点，总览里就地可改。
  *
- * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：勾选列、
+ * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：
  * 编号、标题依次左固定，标题列吃掉容器剩余宽度；其余列定宽 144px、行高 44px。
- * 勾选框独占最左窄列，行操作折进标题格，悬停才显形。量化与样式常量都在
+ * 勾选叠在首列上，不占独立格子，行操作折进标题格，悬停才显形。量化与样式常量都在
  * requirement-grid-shared.tsx，三个需求网格共用。
  */
 type TProps = {
@@ -320,10 +318,15 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const { getWidth, startResize } = useRequirementGridColumnResize();
 
   const showSelectColumn = !readOnly;
-  const selectColumnWidth = showSelectColumn ? REQUIREMENT_GRID_SELECT_COLUMN_WIDTH : 0;
+  const selectHost = !showSelectColumn
+    ? null
+    : isDisplayIdVisible
+      ? "display_id"
+      : isModuleVisible
+        ? "module"
+        : "title";
   /** 标题列之外的所有列默认宽，用来反推标题列该吃掉多少 */
   const defaultPropertyColumnsWidth =
-    selectColumnWidth +
     (isDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isModuleVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isSourceDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
@@ -369,11 +372,10 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
   const moduleWidth = getWidth("module", REQUIREMENT_GRID_COLUMN_WIDTH);
   const sourceDisplayIdWidth = getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
-  const displayIdStickyLeft = selectColumnWidth;
+  const displayIdStickyLeft = 0;
   // 模块列插在编号与标题之间，同为左固定，offset 逐列累加
-  const moduleStickyLeft = selectColumnWidth + (isDisplayIdVisible ? displayIdWidth : 0);
-  const titleStickyLeft =
-    selectColumnWidth + (isDisplayIdVisible ? displayIdWidth : 0) + (isModuleVisible ? moduleWidth : 0);
+  const moduleStickyLeft = isDisplayIdVisible ? displayIdWidth : 0;
+  const titleStickyLeft = (isDisplayIdVisible ? displayIdWidth : 0) + (isModuleVisible ? moduleWidth : 0);
   const propertyColumnsWidth =
     (isDisplayIdVisible ? displayIdWidth : 0) +
     (isModuleVisible ? moduleWidth : 0) +
@@ -393,7 +395,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
       0
     ) +
     (isRequirementTypeVisible ? getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) : 0);
-  const tableWidth = selectColumnWidth + titleColumnWidth + propertyColumnsWidth;
+  const tableWidth = titleColumnWidth + propertyColumnsWidth;
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
   const parentTitles = useRequirementTitles({
     workspaceSlug,
@@ -557,7 +559,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
         */}
         <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
           <colgroup>
-            {showSelectColumn && <col style={{ width: selectColumnWidth }} />}
             {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
             {isModuleVisible && <col style={{ width: moduleWidth }} />}
             <col style={{ width: titleColumnWidth }} />
@@ -582,31 +583,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           </colgroup>
           <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
             <tr>
-              {/* 勾选列最左固定；编号 / 标题依次钉在后面 */}
-              {showSelectColumn && (
-                <th
-                  className={cn(
-                    "group/header relative",
-                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                    REQUIREMENT_GRID_STICKY_SELECT_HEADER_CLASS
-                  )}
-                  style={REQUIREMENT_GRID_SELECT_COLUMN_STYLE}
-                >
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Checkbox
-                      checked={allSelected}
-                      indeterminate={!allSelected && selectedIds.length > 0}
-                      disabled={!visibleIds.length}
-                      onChange={toggleAll}
-                      aria-label={t("requirement_grid.data.select_row")}
-                      containerClassName={cn(
-                        "pointer-events-none opacity-0 transition-opacity group-hover/header:pointer-events-auto group-hover/header:opacity-100",
-                        selectedIds.length > 0 && "pointer-events-auto opacity-100"
-                      )}
-                    />
-                  </div>
-                </th>
-              )}
               {isDisplayIdVisible && (
                 <th
                   className={cn(
@@ -621,9 +597,25 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     left: displayIdStickyLeft,
                   }}
                 >
-                  <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                  <div
+                    className={cn(
+                      "flex h-full w-full min-w-0 items-center gap-1.5",
+                      selectHost === "display_id" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                    )}
+                  >
                     <RequirementGridHeaderLabel icon={Hash} label={t("requirements.identifier.column")} />
                   </div>
+                  {selectHost === "display_id" && (
+                    <RequirementGridHoverSelect
+                      checked={allSelected}
+                      indeterminate={!allSelected && selectedIds.length > 0}
+                      disabled={!visibleIds.length}
+                      onChange={toggleAll}
+                      ariaLabel={t("requirement_grid.data.select_row")}
+                      hoverGroup="header"
+                      forceVisible={selectedIds.length > 0}
+                    />
+                  )}
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
                   />
@@ -643,9 +635,25 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     left: moduleStickyLeft,
                   }}
                 >
-                  <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                  <div
+                    className={cn(
+                      "flex h-full w-full min-w-0 items-center gap-1.5",
+                      selectHost === "module" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                    )}
+                  >
                     <RequirementGridHeaderLabel icon={FolderOpenDot} label={t("requirement_modules.column")} />
                   </div>
+                  {selectHost === "module" && (
+                    <RequirementGridHoverSelect
+                      checked={allSelected}
+                      indeterminate={!allSelected && selectedIds.length > 0}
+                      disabled={!visibleIds.length}
+                      onChange={toggleAll}
+                      ariaLabel={t("requirement_grid.data.select_row")}
+                      hoverGroup="header"
+                      forceVisible={selectedIds.length > 0}
+                    />
+                  )}
                   <RequirementGridColumnResizer onMouseDown={(event) => startResize("module", columnSnapshot, event)} />
                 </th>
               )}
@@ -663,12 +671,28 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   left: titleStickyLeft,
                 }}
               >
-                <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                <div
+                  className={cn(
+                    "flex h-full w-full min-w-0 items-center gap-1.5",
+                    selectHost === "title" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
+                  )}
+                >
                   <RequirementGridHeaderLabel
                     icon={titleColumn?.icon}
                     label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                   />
                 </div>
+                {selectHost === "title" && (
+                  <RequirementGridHoverSelect
+                    checked={allSelected}
+                    indeterminate={!allSelected && selectedIds.length > 0}
+                    disabled={!visibleIds.length}
+                    onChange={toggleAll}
+                    ariaLabel={t("requirement_grid.data.select_row")}
+                    hoverGroup="header"
+                    forceVisible={selectedIds.length > 0}
+                  />
+                )}
                 <RequirementGridColumnResizer onMouseDown={(event) => startResize("title", columnSnapshot, event)} />
               </th>
               {isDescriptionVisible && descriptionColumn && (
@@ -742,37 +766,16 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   )}
                 >
                   {/*
-                    勾选 / 编号 / 标题依次左固定。行操作仍折进标题列。
+                    编号 / 标题依次左固定。勾选叠在首列，行操作仍折进标题列。
                     左固定列底色必须不透明，选中/悬停着色铺在内层 div。
                   */}
-                  {showSelectColumn && (
-                    <td
-                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS)}
-                      style={REQUIREMENT_GRID_SELECT_COLUMN_STYLE}
-                    >
-                      <div
-                        className={cn(
-                          "flex h-full w-full items-center justify-center transition-colors duration-150 motion-reduce:transition-none",
-                          isSelected
-                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                            : "group-hover/requirement:bg-layer-transparent-hover"
-                        )}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => toggleOne(requirement.id)}
-                          aria-label={t("requirement_grid.data.select_row")}
-                          containerClassName={cn(
-                            "pointer-events-none opacity-0 transition-opacity group-hover/requirement:pointer-events-auto group-hover/requirement:opacity-100",
-                            isSelected && "pointer-events-auto opacity-100"
-                          )}
-                        />
-                      </div>
-                    </td>
-                  )}
                   {isDisplayIdVisible && (
                     <td
-                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                      className={cn(
+                        "relative",
+                        REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                        REQUIREMENT_GRID_STICKY_BODY_CLASS
+                      )}
                       style={{
                         width: displayIdWidth,
                         minWidth: displayIdWidth,
@@ -782,7 +785,8 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     >
                       <div
                         className={cn(
-                          "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                          "flex h-full w-full min-w-0 items-center gap-1.5 transition-colors duration-150 motion-reduce:transition-none",
+                          selectHost === "display_id" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
                           isSelected
                             ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
                             : "group-hover/requirement:bg-layer-transparent-hover"
@@ -800,12 +804,24 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                           <span className="text-placeholder">—</span>
                         )}
                       </div>
+                      {selectHost === "display_id" && (
+                        <RequirementGridHoverSelect
+                          checked={isSelected}
+                          onChange={() => toggleOne(requirement.id)}
+                          ariaLabel={t("requirement_grid.data.select_row")}
+                          hoverGroup="requirement"
+                        />
+                      )}
                     </td>
                   )}
                   {/* 模块列：紧跟编号，只读展示（挂靠走左侧树 / 批量移动） */}
                   {isModuleVisible && (
                     <td
-                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                      className={cn(
+                        "relative",
+                        REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                        REQUIREMENT_GRID_STICKY_BODY_CLASS
+                      )}
                       style={{
                         width: moduleWidth,
                         minWidth: moduleWidth,
@@ -815,7 +831,8 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     >
                       <div
                         className={cn(
-                          "flex h-full w-full min-w-0 items-center px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                          "flex h-full w-full min-w-0 items-center transition-colors duration-150 motion-reduce:transition-none",
+                          selectHost === "module" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
                           isSelected
                             ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
                             : "group-hover/requirement:bg-layer-transparent-hover"
@@ -829,6 +846,14 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                           <span className="text-placeholder">—</span>
                         )}
                       </div>
+                      {selectHost === "module" && (
+                        <RequirementGridHoverSelect
+                          checked={isSelected}
+                          onChange={() => toggleOne(requirement.id)}
+                          ariaLabel={t("requirement_grid.data.select_row")}
+                          hoverGroup="requirement"
+                        />
+                      )}
                     </td>
                   )}
                   <td
@@ -847,12 +872,21 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   >
                     <div
                       className={cn(
-                        "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
-                        isSelected
-                          ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
-                          : "group-hover/requirement:bg-layer-transparent-hover"
+                          "flex h-full w-full min-w-0 items-center gap-1.5 transition-colors duration-150 motion-reduce:transition-none",
+                          selectHost === "title" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x",
+                          isSelected
+                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                            : "group-hover/requirement:bg-layer-transparent-hover"
+                        )}
+                      >
+                      {selectHost === "title" && (
+                        <RequirementGridHoverSelect
+                          checked={isSelected}
+                          onChange={() => toggleOne(requirement.id)}
+                          ariaLabel={t("requirement_grid.data.select_row")}
+                          hoverGroup="requirement"
+                        />
                       )}
-                    >
                       <Tooltip tooltipContent={requirement.title}>
                         <button
                           type="button"
