@@ -164,6 +164,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   <RequirementDetailProperties
                     requirement={requirement}
                     requirementTypeName={requirementType?.name ?? null}
+                    builtinLayout={requirementType?.builtin_fields ?? null}
                     readOnly={!isEditable}
                     canEdit={canEdit}
                     workspaceSlug={slug}
@@ -193,6 +194,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               <RequirementDetailProperties
                 requirement={requirement}
                 requirementTypeName={requirementType?.name ?? null}
+                builtinLayout={requirementType?.builtin_fields ?? null}
                 readOnly={!isEditable}
                 canEdit={canEdit}
                 workspaceSlug={slug}

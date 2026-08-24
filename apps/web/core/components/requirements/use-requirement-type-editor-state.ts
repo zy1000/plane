@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
+  TRequirementBuiltinFieldConfig,
+  TRequirementBuiltinSortableKey,
   TRequirementField,
   TRequirementFieldDraft,
   TRequirementType,
   TRequirementTypeConfiguration,
 } from "@plane/types";
 import { useRequirementTypeDetails } from "@/hooks/store/use-requirement-type-details";
+import { mergeBuiltinAndFields } from "./requirement-builtin-layout";
 import { countRequirementColumns } from "./requirement-fields-preview";
 import { hasValidRequirementSelectOptions } from "./requirement-select";
 
@@ -15,6 +18,18 @@ export type TRequirementTypeMetadataDraft = Pick<
   TRequirementType,
   "name" | "description" | "is_active" | "logo_props"
 >;
+
+/**
+ * 字段结构页的统一混排列表项：内置字段与自定义字段在同一个 Sortable 里交叉排序。
+ * 内置项只有两个可变量 —— 位置（由数组下标表达）与「纳入标准库」；定义本身不可改。
+ * 编号与标题不在这里 —— 它们锁定在列表最前，静态渲染、不参与排序。
+ */
+export type TRequirementBuilderItem =
+  | { kind: "builtin"; key: TRequirementBuiltinSortableKey; show_in_library: boolean }
+  | { kind: "custom"; field: TRequirementFieldDraft };
+
+export const builderItemKey = (item: TRequirementBuilderItem) =>
+  item.kind === "builtin" ? `builtin:${item.key}` : (item.field.id ?? item.field.client_id ?? "");
 
 const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   id: field.id,
@@ -29,8 +44,30 @@ const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   children: field.children.map(toDraftField),
 });
 
-const serializeDraft = (metadata: TRequirementTypeMetadataDraft, fields: TRequirementFieldDraft[]) =>
-  JSON.stringify({ metadata, fields });
+/**
+ * 配置 -> 统一混排草稿。内置项与自定义字段按 sort_order 归并（相等内置在前），
+ * builtin_fields 缺失（旧缓存/新建类型）时回退为「内置在前」的现状顺序。
+ * baseline 与草稿都必须经这里归一化，否则后端补齐布局后一进页面就判脏。
+ */
+const buildItems = (
+  builtinConfigs: TRequirementBuiltinFieldConfig[] | null | undefined,
+  fields: TRequirementField[]
+): TRequirementBuilderItem[] =>
+  mergeBuiltinAndFields("product", builtinConfigs ?? null, fields).map((descriptor) =>
+    descriptor.kind === "builtin"
+      ? {
+          kind: "builtin" as const,
+          key: descriptor.entry.key,
+          show_in_library: descriptor.entry.show_in_library,
+        }
+      : { kind: "custom" as const, field: toDraftField(descriptor.field) }
+  );
+
+const serializeDraft = (metadata: TRequirementTypeMetadataDraft, items: TRequirementBuilderItem[]) =>
+  JSON.stringify({ metadata, items });
+
+const customFieldsOf = (items: TRequirementBuilderItem[]): TRequirementFieldDraft[] =>
+  items.flatMap((item) => (item.kind === "custom" ? [item.field] : []));
 
 type TArgs = {
   workspaceSlug: string | undefined;
@@ -54,8 +91,8 @@ export type TRequirementTypeEditorState = {
   requirementType: TRequirementType | undefined;
   metadata: TRequirementTypeMetadataDraft | null;
   setMetadata: (next: TRequirementTypeMetadataDraft) => void;
-  fields: TRequirementFieldDraft[];
-  setFields: (next: TRequirementFieldDraft[]) => void;
+  items: TRequirementBuilderItem[];
+  setItems: (next: TRequirementBuilderItem[]) => void;
   isDirty: boolean;
   fieldSummary: { topLevel: number; columns: number };
   isLoading: boolean;
@@ -84,7 +121,7 @@ export const useRequirementTypeEditorState = ({
     onRequirementTypeUpdate,
   });
   const [metadata, setMetadata] = useState<TRequirementTypeMetadataDraft | null>(null);
-  const [fields, setFields] = useState<TRequirementFieldDraft[]>([]);
+  const [items, setItems] = useState<TRequirementBuilderItem[]>([]);
   const [baseline, setBaseline] = useState("");
 
   useEffect(() => {
@@ -96,22 +133,22 @@ export const useRequirementTypeEditorState = ({
       is_active: configuration.requirement_type.is_active,
       logo_props: configuration.requirement_type.logo_props ?? {},
     };
-    const nextFields = configuration.fields.map(toDraftField);
+    const nextItems = buildItems(configuration.builtin_fields, configuration.fields);
     setMetadata(nextMetadata);
-    setFields(nextFields);
-    setBaseline(serializeDraft(nextMetadata, nextFields));
+    setItems(nextItems);
+    setBaseline(serializeDraft(nextMetadata, nextItems));
   }, [detailsStore.configuration]);
 
   const isDirty = useMemo(
-    () => Boolean(metadata && baseline && serializeDraft(metadata, fields) !== baseline),
-    [baseline, fields, metadata]
+    () => Boolean(metadata && baseline && serializeDraft(metadata, items) !== baseline),
+    [baseline, items, metadata]
   );
 
-  // 用草稿算而不是用后端的 field_count，未保存的增删也要反映出来
-  const fieldSummary = useMemo(
-    () => ({ topLevel: fields.length, columns: countRequirementColumns(fields) }),
-    [fields]
-  );
+  // 用草稿算而不是用后端的 field_count，未保存的增删也要反映出来。只数自定义字段
+  const fieldSummary = useMemo(() => {
+    const customFields = customFieldsOf(items);
+    return { topLevel: customFields.length, columns: countRequirementColumns(customFields) };
+  }, [items]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -146,7 +183,12 @@ export const useRequirementTypeEditorState = ({
         onNameInvalid?.();
         return false;
       }
-      if (fields.some((field) => !field.name.trim() || field.children.some((child) => !child.name.trim()))) {
+      const customFields = customFieldsOf(items);
+      if (
+        customFields.some(
+          (field) => !field.name.trim() || field.children.some((child) => !child.name.trim())
+        )
+      ) {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
@@ -154,7 +196,7 @@ export const useRequirementTypeEditorState = ({
         });
         return false;
       }
-      const allFields = fields.flatMap((field) => [field, ...field.children]);
+      const allFields = customFields.flatMap((field) => [field, ...field.children]);
       if (allFields.some((field) => field.field_type === "select" && !hasValidRequirementSelectOptions(field))) {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -171,7 +213,13 @@ export const useRequirementTypeEditorState = ({
             ...metadata,
             name: metadata.name.trim(),
           },
-          fields,
+          fields: customFields,
+          // position = 统一列表下标；恒发送，回退顺序合成的载荷也幂等
+          builtin_fields: items.flatMap((item, index) =>
+            item.kind === "builtin"
+              ? [{ key: item.key, show_in_library: item.show_in_library, position: index }]
+              : []
+          ),
           confirm_data_loss: confirmDataLoss,
         });
         const nextMetadata: TRequirementTypeMetadataDraft = {
@@ -180,10 +228,10 @@ export const useRequirementTypeEditorState = ({
           is_active: response.requirement_type.is_active,
           logo_props: response.requirement_type.logo_props ?? {},
         };
-        const nextFields = response.fields.map(toDraftField);
+        const nextItems = buildItems(response.builtin_fields, response.fields);
         setMetadata(nextMetadata);
-        setFields(nextFields);
-        setBaseline(serializeDraft(nextMetadata, nextFields));
+        setItems(nextItems);
+        setBaseline(serializeDraft(nextMetadata, nextItems));
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("success"),
@@ -225,7 +273,7 @@ export const useRequirementTypeEditorState = ({
         return false;
       }
     },
-    [detailsStore, fields, metadata, t]
+    [detailsStore, items, metadata, t]
   );
 
   return {
@@ -233,8 +281,8 @@ export const useRequirementTypeEditorState = ({
     requirementType: detailsStore.configuration?.requirement_type,
     metadata,
     setMetadata,
-    fields,
-    setFields,
+    items,
+    setItems,
     isDirty,
     fieldSummary,
     isLoading: detailsStore.isConfigurationLoading || !metadata,

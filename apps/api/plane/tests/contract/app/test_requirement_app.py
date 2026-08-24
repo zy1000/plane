@@ -23,6 +23,7 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.tests.factories import UserFactory, WorkspaceFactory
+from plane.utils.requirement import ORDERABLE_BUILTIN_COLUMNS
 
 
 FIELD_PAYLOAD_KEYS = (
@@ -507,3 +508,276 @@ class TestRequirementApp:
             {"id": str(locked["id"]), "reason": "in_review"}
         ]
         assert Requirement.objects.get(id=locked["id"]).title == "评审中"
+
+    # --- 内置字段布局 ---------------------------------------------------
+
+    def builtin_fields_payload(self, *, positions=None, show_in_library=None):
+        """缺省即现状：canonical 顺序、描述/优先级/父项纳入库、其余不纳入。"""
+        overrides = show_in_library or {}
+        return [
+            {
+                "key": key,
+                "show_in_library": overrides.get(
+                    key, key in ("description_html", "priority", "parent_id")
+                ),
+                "position": (positions or {}).get(key, index),
+            }
+            for index, key in enumerate(ORDERABLE_BUILTIN_COLUMNS)
+        ]
+
+    def put_type_configuration(self, api_client, type_id, *, builtin_fields=None):
+        payload = {
+            "expected_updated_at": RequirementType.objects.get(
+                id=type_id
+            ).updated_at.isoformat(),
+            "fields": writable_fields(self.type_fields(api_client, type_id)),
+        }
+        if builtin_fields is not None:
+            payload["builtin_fields"] = builtin_fields
+        return api_client.put(
+            self.url("requirement-type-configuration", pk=type_id),
+            payload,
+            format="json",
+        )
+
+    def test_builtin_layout_defaults_keep_builtin_before_custom(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+
+        response = api_client.get(
+            self.url("requirement-type-configuration", pk=type_id)
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        entries = response.data["builtin_fields"]
+        assert [entry["key"] for entry in entries] == list(ORDERABLE_BUILTIN_COLUMNS)
+        assert [entry["show_in_library"] for entry in entries] == [
+            True, False, True, False, False, False, True,
+        ]
+        # 缺省 sort_order 恒小于第一个自定义字段的 (0+1)*1000 —— 内置在前
+        assert all(entry["sort_order"] < 1000 for entry in entries)
+
+    def test_builtin_layout_interleaves_and_survives_old_payloads(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        self.add_custom_field(api_client, type_id)
+        revision_before = RequirementType.objects.get(
+            id=type_id
+        ).current_schema_revision
+
+        # 自定义字段占统一列表第 0 位，内置项依次 1..7
+        positions = {
+            key: index + 1 for index, key in enumerate(ORDERABLE_BUILTIN_COLUMNS)
+        }
+        response = self.put_type_configuration(
+            api_client,
+            type_id,
+            builtin_fields=self.builtin_fields_payload(positions=positions),
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        # 双方 sort_order 出自同一套槽位公式，读侧归并即还原统一顺序
+        assert response.data["fields"][0]["sort_order"] == 1000
+        assert [entry["sort_order"] for entry in response.data["builtin_fields"]] == [
+            (position + 1) * 1000 for position in range(1, 8)
+        ]
+        # 仅动内置布局不产字段结构修订
+        assert (
+            RequirementType.objects.get(id=type_id).current_schema_revision
+            == revision_before
+        )
+
+        # 旧客户端载荷（不带 builtin_fields）不清空既有布局
+        old_payload = self.put_type_configuration(api_client, type_id)
+        assert old_payload.status_code == status.HTTP_200_OK, old_payload.data
+        assert old_payload.data["builtin_fields"][0]["key"] == "description_html"
+        assert old_payload.data["builtin_fields"][0]["sort_order"] == 2000
+
+    def test_builtin_layout_validation_rejects_bad_payloads(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+
+        missing_key = self.builtin_fields_payload()[:-1]
+        with_title = self.builtin_fields_payload()
+        with_title[0] = {**with_title[0], "key": "title"}
+        with_code = self.builtin_fields_payload()
+        with_code[0] = {**with_code[0], "key": "code"}
+        duplicated_position = self.builtin_fields_payload()
+        duplicated_position[1] = {**duplicated_position[1], "position": 0}
+        # 零个自定义字段时统一列表只有 7 槽，position 7 越界
+        out_of_range = self.builtin_fields_payload()
+        out_of_range[-1] = {**out_of_range[-1], "position": 7}
+        status_in_library = self.builtin_fields_payload(
+            show_in_library={"status": True}
+        )
+
+        for payload in (
+            missing_key,
+            with_title,
+            with_code,
+            duplicated_position,
+            out_of_range,
+            status_in_library,
+        ):
+            response = self.put_type_configuration(
+                api_client, type_id, builtin_fields=payload
+            )
+            assert (
+                response.status_code == status.HTTP_400_BAD_REQUEST
+            ), response.data
+
+    def test_builtin_show_in_library_flip_controls_library_and_import(
+        self, api_client
+    ):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        # 勾上「负责人」纳入标准库
+        response = self.put_type_configuration(
+            api_client,
+            type_id,
+            builtin_fields=self.builtin_fields_payload(
+                show_in_library={"assignee_id": True}
+            ),
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+
+        library = RequirementLibrary.objects.create(
+            workspace=self.workspace,
+            requirement_type_id=type_id,
+            name=f"Library {uuid4()}",
+            identifier=f"L{uuid4().hex[:7].upper()}",
+        )
+        library_kwargs = {"slug": self.workspace.slug, "library_id": library.id}
+        created = api_client.post(
+            reverse("requirement-library-items", kwargs=library_kwargs),
+            {
+                "data": {},
+                "builtin": {
+                    "title": "带负责人的模板",
+                    "assignee_id": str(self.approver.id),
+                },
+                "code": "LIB-001",
+            },
+            format="json",
+        )
+        assert created.status_code == status.HTTP_201_CREATED, created.data
+        item = Requirement.objects.get(id=created.data["id"])
+        # 已纳入库的内置列不再被拍回缺省；status 恒不纳入
+        assert item.assignee_id == self.approver.id
+        assert item.status == "not_started"
+
+        # 库配置出口发完整 7 项，show_in_library 标志由前端过滤；status 恒为 False
+        config = api_client.get(
+            reverse("requirement-library-configuration", kwargs=library_kwargs)
+        )
+        assert config.status_code == status.HTTP_200_OK, config.data
+        library_visibility = {
+            entry["key"]: entry["show_in_library"]
+            for entry in config.data["builtin_fields"]
+        }
+        assert len(library_visibility) == 7
+        assert library_visibility["assignee_id"] is True
+        assert library_visibility["status"] is False
+
+        # 导入产品：负责人跟着落地
+        imported = api_client.post(
+            f"{self.requirements_url()}import/",
+            {"library_id": str(library.id), "item_ids": [str(item.id)]},
+            format="json",
+        )
+        assert imported.status_code == status.HTTP_201_CREATED, imported.data
+        copy = Requirement.objects.get(product=self.product)
+        assert copy.assignee_id == self.approver.id
+
+        # 翻回不纳入：存量值不回溯清洗，下一次库写入才拍回缺省
+        response = self.put_type_configuration(
+            api_client, type_id, builtin_fields=self.builtin_fields_payload()
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        item.refresh_from_db()
+        assert item.assignee_id == self.approver.id
+
+        saved = api_client.post(
+            reverse("requirement-library-item-bulk-save", kwargs=library_kwargs),
+            {
+                "creates": [],
+                "updates": [
+                    {
+                        "id": str(item.id),
+                        "version": item.version,
+                        "data": {},
+                        "builtin": {"title": "改个标题"},
+                    }
+                ],
+                "deletes": [],
+            },
+            format="json",
+        )
+        assert saved.status_code == status.HTTP_200_OK, saved.data
+        item.refresh_from_db()
+        assert item.title == "改个标题"
+        assert item.assignee_id is None
+
+    def test_excel_sheet_spec_follows_builtin_layout(self):
+        from plane.utils import requirement_excel as xl
+        from plane.utils.requirement import RequirementFieldSpec
+
+        custom = RequirementFieldSpec(
+            id=str(uuid4()),
+            parent_field_id=None,
+            name="自定义",
+            field_type="text",
+            is_required=False,
+            is_active=True,
+            sort_order=1000,
+            config={},
+        )
+        # priority 与自定义字段撞在 1000 上 —— 归并规则：相等时内置在前
+        layout = [
+            {"key": "priority", "show_in_library": True, "sort_order": 1000},
+            {"key": "description_html", "show_in_library": True, "sort_order": 3000},
+            {"key": "status", "show_in_library": False, "sort_order": 4000},
+            {"key": "assignee_id", "show_in_library": False, "sort_order": 5000},
+            {"key": "start_date", "show_in_library": False, "sort_order": 6000},
+            {"key": "target_date", "show_in_library": False, "sort_order": 7000},
+            {"key": "parent_id", "show_in_library": True, "sort_order": 8000},
+        ]
+
+        product_sheet = xl.build_sheet_spec(
+            requirement_type_id=str(uuid4()),
+            requirement_type_name="类型",
+            field_specs=[custom],
+            is_library=False,
+            sheet_name="类型",
+            builtin_layout=layout,
+        )
+        assert [column.key for column in product_sheet.columns] == [
+            xl.SEQUENCE_COLUMN_KEY,
+            "title",
+            "priority",
+            custom.id,
+            "description_html",
+            "status",
+            "assignee_id",
+            "start_date",
+            "target_date",
+            "parent_id",
+        ]
+
+        library_sheet = xl.build_sheet_spec(
+            requirement_type_id=str(uuid4()),
+            requirement_type_name="类型",
+            field_specs=[custom],
+            is_library=True,
+            sheet_name="类型",
+            builtin_layout=layout,
+        )
+        # 库剔除未纳入的内置列；编号 / 标题恒锁定最前
+        assert [column.key for column in library_sheet.columns] == [
+            xl.SEQUENCE_COLUMN_KEY,
+            "title",
+            "priority",
+            custom.id,
+            "description_html",
+            "parent_id",
+        ]

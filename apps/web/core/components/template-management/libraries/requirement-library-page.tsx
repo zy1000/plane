@@ -220,6 +220,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 entityId={libraryId ?? ""}
                 entityKind="library"
                 createRequirementTypeId={store.requirementTypeId ?? undefined}
+                builtinLayout={store.configuration?.builtin_fields ?? null}
                 fields={store.configuration?.fields ?? []}
                 requirements={store.requirementsPage.results}
                 totalCount={store.requirementsPage.total_count ?? 0}

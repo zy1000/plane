@@ -630,6 +630,18 @@ export const useRequirementGridScrollContainer = () => {
  * 二级表头：非表单根字段 rowSpan=2，表单字段作分组表头、子字段排在第二行。
  * 首列与末列由调用方给（编辑态给编号等左固定列与「操作」，diff 模式给「变更」且没有末列）。
  */
+type TRequirementGridBuiltinHeader = {
+  key: string;
+  className?: string;
+  content: React.ReactNode;
+  onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
+};
+
+/** 统一列流里的一列：内置属性列或自定义根字段，顺序由调用方按类型布局归并好 */
+export type TRequirementGridOrderedColumn =
+  | { kind: "builtin"; header: TRequirementGridBuiltinHeader }
+  | { kind: "field"; field: TRequirementField };
+
 export const RequirementGridHeader = ({
   rootFields,
   showActionGutter,
@@ -637,6 +649,7 @@ export const RequirementGridHeader = ({
   leadingHeader,
   leadingHeaders,
   builtinHeaders,
+  orderedColumns,
   extraHeaders,
   trailingHeader,
   onFieldResize,
@@ -667,15 +680,16 @@ export const RequirementGridHeader = ({
     onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
   }[];
   /**
-   * 内置列的表头，恒排在自定义字段列之前。内置列永远是单列，不参与表单字段的
-   * 二级表头跨列逻辑，所以只跟着 spanRows 走。
+   * 结构性单列表头（来源编号、审批态这类不参与布局排序的列），恒排在统一列流之前。
+   * 内置列永远是单列，不参与表单字段的二级表头跨列逻辑，所以只跟着 spanRows 走。
    */
-  builtinHeaders?: {
-    key: string;
-    className?: string;
-    content: React.ReactNode;
-    onResize?: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  }[];
+  builtinHeaders?: TRequirementGridBuiltinHeader[];
+  /**
+   * 统一列流：内置属性列与自定义字段列按类型布局交叉排序。提供时替代 rootFields
+   * 的第一行渲染，二级表头的表单对位也按它的顺序取。不提供则保持旧行为
+   * （builtinHeaders 全在前、rootFields 在后）。
+   */
+  orderedColumns?: TRequirementGridOrderedColumn[];
   /** 字段列之后、操作列之前的附加列（产品需求的「变更 / 最后变更于」） */
   extraHeaders?: {
     key: string;
@@ -688,12 +702,43 @@ export const RequirementGridHeader = ({
   onFieldResize?: (fieldId: string, event: ReactMouseEvent<HTMLDivElement>) => void;
 }) => {
   const { t } = useTranslation();
-  const formFields = rootFields.filter((field) => field.field_type === "form");
+  const orderedRootFields = orderedColumns
+    ? orderedColumns.flatMap((column) => (column.kind === "field" ? [column.field] : []))
+    : rootFields;
+  const formFields = orderedRootFields.filter((field) => field.field_type === "form");
   const hasFormFields = formFields.length > 0;
   const spanRows = hasFormFields ? 2 : 1;
   const resolvedLeadingHeaders =
     leadingHeaders ??
     (leadingHeader ? [{ key: "leading", ...leadingHeader }] : []);
+
+  const renderBuiltinHeader = (header: TRequirementGridBuiltinHeader) => (
+    <th
+      key={header.key}
+      rowSpan={spanRows}
+      className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, header.className)}
+    >
+      {header.content}
+      {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
+    </th>
+  );
+  const renderFieldHeader = (field: TRequirementField) =>
+    field.field_type === "form" ? (
+      <th
+        key={field.id}
+        colSpan={getFormColumnCount(field, showActionGutter, showFormRowNumber)}
+        className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "border-b border-strong text-center")}
+      >
+        <span className="truncate text-13 font-medium text-secondary">{field.name}</span>
+      </th>
+    ) : (
+      <th key={field.id} rowSpan={spanRows} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
+        <RequirementGridHeaderLabel label={field.name} isRequired={field.is_required} />
+        {onFieldResize && (
+          <RequirementGridColumnResizer onMouseDown={(event) => onFieldResize(field.id, event)} />
+        )}
+      </th>
+    );
 
   return (
     <thead className="sticky top-0 z-[12] border-b border-strong text-13 font-medium">
@@ -710,34 +755,12 @@ export const RequirementGridHeader = ({
             {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
           </th>
         ))}
-        {builtinHeaders?.map((header) => (
-          <th
-            key={header.key}
-            rowSpan={spanRows}
-            className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, header.className)}
-          >
-            {header.content}
-            {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
-          </th>
-        ))}
-        {rootFields.map((field) =>
-          field.field_type === "form" ? (
-            <th
-              key={field.id}
-              colSpan={getFormColumnCount(field, showActionGutter, showFormRowNumber)}
-              className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "border-b border-strong text-center")}
-            >
-              <span className="truncate text-13 font-medium text-secondary">{field.name}</span>
-            </th>
-          ) : (
-            <th key={field.id} rowSpan={spanRows} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-              <RequirementGridHeaderLabel label={field.name} isRequired={field.is_required} />
-              {onFieldResize && (
-                <RequirementGridColumnResizer onMouseDown={(event) => onFieldResize(field.id, event)} />
-              )}
-            </th>
-          )
-        )}
+        {builtinHeaders?.map(renderBuiltinHeader)}
+        {orderedColumns
+          ? orderedColumns.map((column) =>
+              column.kind === "builtin" ? renderBuiltinHeader(column.header) : renderFieldHeader(column.field)
+            )
+          : rootFields.map(renderFieldHeader)}
         {extraHeaders?.map((header) => (
           <th key={header.key} rowSpan={spanRows} className={header.className}>
             {header.content}

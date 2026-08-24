@@ -10,7 +10,10 @@ import type {
   TRequirementTrailEntry,
   TRequirementTypeSchema,
 } from "@plane/types";
-import { REQUIREMENT_CONTENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
+import {
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+  resolveBuiltinLayout,
+} from "@/components/requirements/requirement-builtin-layout";
 import {
   HistoryEmpty,
   HistoryEntry,
@@ -38,7 +41,12 @@ export const diffSnapshotFieldNames = (
   if (!before || !after) return [];
 
   const names: string[] = [];
-  for (const column of REQUIREMENT_CONTENT_BUILTIN_COLUMNS) {
+  // 字段名列举顺序与类型布局一致（标题恒在最前）；只看内容列，status 不进 diff
+  const contentColumns = [
+    REQUIREMENT_BUILTIN_TITLE_COLUMN,
+    ...resolveBuiltinLayout(requirementType?.builtin_fields).map((entry) => entry.column),
+  ].filter((column) => column.isContent);
+  for (const column of contentColumns) {
     const key = column.key as keyof TRequirementChangeSnapshot;
     if (JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) names.push(labelOf(column.labelKey));
   }

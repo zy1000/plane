@@ -168,7 +168,7 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
         }
       >
         <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
-          <RequirementFieldBuilder fields={editor.fields} onChange={editor.setFields} />
+          <RequirementFieldBuilder items={editor.items} onChange={editor.setItems} />
         </div>
       </SettingsFullBleedContentWrapper>
       <RequirementTypeSettingsModal

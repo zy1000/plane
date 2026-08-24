@@ -11,7 +11,12 @@ import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirementApprovalAction, TRequirementField, IUserLite } from "@plane/types";
+import type {
+  TRequirementApprovalAction,
+  TRequirementField,
+  TRequirementTypeSchema,
+  IUserLite,
+} from "@plane/types";
 import { AlertModalCore, Avatar, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { useRequirementChangeRequestDetail } from "@/hooks/store/use-requirement-changes";
@@ -28,6 +33,8 @@ type TProps = {
   productId: string;
   changeRequestId: string;
   fields: TRequirementField[];
+  /** 引用到的需求类型（含各自的内置字段布局），diff 列序按当前类型的布局排 */
+  requirementTypes?: TRequirementTypeSchema[];
   members: IUserLite[];
   onBack: () => void;
   /** 审批 / 撤回之后需求状态会变，通知外层刷新 */
@@ -35,7 +42,7 @@ type TProps = {
 };
 
 export function ChangeRequestDetail(props: TProps) {
-  const { workspaceSlug, productId, changeRequestId, fields, members, onBack, onSettled } = props;
+  const { workspaceSlug, productId, changeRequestId, fields, requirementTypes, members, onBack, onSettled } = props;
   const { t } = useTranslation();
   const {
     changeType,
@@ -69,6 +76,10 @@ export function ChangeRequestDetail(props: TProps) {
     () => (activeRequirementTypeId ? fields.filter((field) => field.requirement_type_id === activeRequirementTypeId) : fields),
     [activeRequirementTypeId, fields]
   );
+  /** 某个类型的内置字段布局；查不到（旧缓存）回退 null = 现状顺序 */
+  const builtinLayoutOfType = (requirementTypeId?: string | null) =>
+    requirementTypes?.find((schema) => schema.id === requirementTypeId)?.builtin_fields ?? null;
+  const gridBuiltinLayout = builtinLayoutOfType(activeRequirementTypeId ?? requirementTypeStats[0]?.id);
 
   /**
    * 内联条目；requirement_items 为 null 说明超过阈值，走分页网格。
@@ -227,6 +238,7 @@ export function ChangeRequestDetail(props: TProps) {
               <ChangeRequestRequirementDiff
                 item={inlineItems[0]}
                 fields={activeItemFields}
+                builtinLayout={builtinLayoutOfType(inlineItems[0].requirement_type_id)}
                 workspaceSlug={workspaceSlug}
               />
             </div>
@@ -271,6 +283,7 @@ export function ChangeRequestDetail(props: TProps) {
                   <ChangeRequestRequirementDiff
                     item={activeItem}
                     fields={activeItemFields}
+                    builtinLayout={builtinLayoutOfType(activeItem.requirement_type_id)}
                     workspaceSlug={workspaceSlug}
                   />
                 )}
@@ -282,6 +295,7 @@ export function ChangeRequestDetail(props: TProps) {
           <RequirementDiffGrid
             workspaceSlug={workspaceSlug}
             fields={requirementTypeFields}
+            builtinLayout={gridBuiltinLayout}
             changedFieldIds={changeRequest.changed_field_ids}
             requirementTypes={requirementTypeStats}
             activeRequirementTypeId={activeRequirementTypeId}

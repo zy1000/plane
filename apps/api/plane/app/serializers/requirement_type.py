@@ -4,6 +4,8 @@ from rest_framework import serializers
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import RequirementField, RequirementFieldType, RequirementType, User
 from plane.utils.requirement import (
+    LIBRARY_LOCKED_HIDDEN_BUILTIN_COLUMNS,
+    ORDERABLE_BUILTIN_COLUMNS,
     get_requirement_eligible_user_ids,
     sync_requirement_type_fields,
 )
@@ -126,17 +128,61 @@ class RequirementTypeSerializer(BaseSerializer):
         return instance
 
 
+class RequirementBuiltinFieldLayoutWriteSerializer(serializers.Serializer):
+    """内置字段布局的一项。key 只收 7 个可排序内置列 —— title 锁定最前、code 不是
+    内置列，客户端把它们发上来直接 400，而不是静默丢弃。"""
+
+    key = serializers.ChoiceField(choices=ORDERABLE_BUILTIN_COLUMNS)
+    show_in_library = serializers.BooleanField()
+    position = serializers.IntegerField(min_value=0)
+
+
 class RequirementTypeConfigurationWriteSerializer(serializers.Serializer):
     """需求类型的字段编辑入口。
 
     名称/描述与字段在同一次请求、同一把乐观锁下保存 —— 拆成两次请求会出现改名
     成功而字段保存 409 的半截状态。
+
+    builtin_fields 可选（旧客户端不带，此时不改已存布局）；position 是
+    「7 个可排序内置列 + 自定义根字段」统一列表里的 0 基下标。
     """
 
     expected_updated_at = serializers.DateTimeField()
     requirement_type = serializers.DictField(required=False)
     fields = RequirementFieldNodeWriteSerializer(many=True)
+    builtin_fields = RequirementBuiltinFieldLayoutWriteSerializer(
+        many=True, required=False
+    )
     confirm_data_loss = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        builtin_fields = attrs.get("builtin_fields")
+        if builtin_fields is None:
+            return attrs
+
+        keys = [entry["key"] for entry in builtin_fields]
+        if len(keys) != len(set(keys)) or set(keys) != set(ORDERABLE_BUILTIN_COLUMNS):
+            raise serializers.ValidationError(
+                {"builtin_fields": "Exactly the seven orderable builtin fields are required."}
+            )
+        for entry in builtin_fields:
+            # 显式报错而不是静默改写 —— 勾选框在前端就该是禁用的，走到这里是前端 bug
+            if (
+                entry["key"] in LIBRARY_LOCKED_HIDDEN_BUILTIN_COLUMNS
+                and entry["show_in_library"]
+            ):
+                raise serializers.ValidationError(
+                    {"builtin_fields": "The status field can never be shown in libraries."}
+                )
+        positions = [entry["position"] for entry in builtin_fields]
+        total = len(builtin_fields) + len(attrs["fields"])
+        if len(positions) != len(set(positions)) or any(
+            position >= total for position in positions
+        ):
+            raise serializers.ValidationError(
+                {"builtin_fields": "Builtin field positions must be unique slots in the merged list."}
+            )
+        return attrs
 
     def validate_fields(self, value):
         names = [item["name"].casefold() for item in value]
@@ -220,6 +266,7 @@ class RequirementTypeConfigurationWriteSerializer(serializers.Serializer):
         created_field_ids = sync_requirement_type_fields(
             requirement_type=requirement_type,
             field_payloads=self.validated_data["fields"],
+            builtin_layout=self.validated_data.get("builtin_fields"),
             actor=getattr(request, "user", None),
             confirm_data_loss=self.validated_data["confirm_data_loss"],
         )

@@ -7,6 +7,7 @@ import { useTranslation } from "@plane/i18n";
 import type {
   TRequirement,
   TRequirementAssetRef,
+  TRequirementBuiltinFieldConfig,
   TRequirementBuiltinKey,
   TRequirementBuiltinValues,
   TRequirementItemStatus,
@@ -22,6 +23,7 @@ import {
   BuiltinCellValue,
   REQUIREMENT_BUILTIN_COLUMNS,
 } from "@/components/requirements/requirement-builtin-fields";
+import { resolveBuiltinLayout } from "@/components/requirements/requirement-builtin-layout";
 import { RequirementModuleDropdown } from "@/components/requirements/module-tree/requirement-module-dropdown";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementCodeInput } from "@/components/requirements/requirement-code-input";
@@ -37,7 +39,10 @@ import { RequirementPropertyBar } from "./requirement-property-bar";
 import { RequirementSubformSection } from "./requirement-subform-section";
 import { RequirementVersionHistory } from "./requirement-version-history";
 
-/** 标题与描述在主区自成一段，其余六个内置列走属性区（抽屉的属性条 / 整页的右栏） */
+/**
+ * 标题与描述在主区自成一段，其余六个内置列走属性区（抽屉的属性条 / 整页的右栏）。
+ * 这是拿不到类型布局时的回退顺序；整页右栏按类型布局重排（见 RequirementDetailProperties）。
+ */
 const PROPERTY_COLUMN_KEYS: TRequirementBuiltinKey[] = [
   "status",
   "priority",
@@ -203,6 +208,7 @@ const PropertyGrid = ({
   onStatusChange,
   onModuleChange,
   leadingRow,
+  propertyColumnKeys = PROPERTY_COLUMN_KEYS,
 }: {
   requirement: TRequirement;
   readOnly: boolean;
@@ -213,6 +219,8 @@ const PropertyGrid = ({
   /** 改模块挂靠（set-module 旁路，不经 onPatch）；不传则模块行只读 */
   onModuleChange?: (moduleId: string | null, moduleName: string | null) => void;
   leadingRow?: { label: string; value: React.ReactNode };
+  /** 属性行顺序（按类型布局解析后的键序）；不传回退 PROPERTY_COLUMN_KEYS */
+  propertyColumnKeys?: TRequirementBuiltinKey[];
 }) => {
   const { t } = useTranslation();
   return (
@@ -248,7 +256,7 @@ const PropertyGrid = ({
           {requirement.module_name ?? "—"}
         </span>
       )}
-      {PROPERTY_COLUMN_KEYS.map((columnKey) => {
+      {propertyColumnKeys.map((columnKey) => {
         const column = REQUIREMENT_BUILTIN_COLUMNS.find((item) => item.key === columnKey);
         if (!column) return null;
         return (
@@ -429,6 +437,7 @@ export const RequirementDetailContent = (props: TProps) => {
             requirement={requirement}
             requirementTypeName={requirementType?.name ?? ""}
             fields={activeFields}
+            builtinLayout={requirementType?.builtin_fields ?? null}
             readOnly={readOnly}
             onDiscarded={onRolledBack}
           />
@@ -563,10 +572,11 @@ export const RequirementDetailContent = (props: TProps) => {
   );
 };
 
-/** 整页右栏的属性区：六个内置列竖排 + 创建/更新元信息 */
+/** 整页右栏的属性区：六个内置列竖排（按类型布局排序）+ 创建/更新元信息 */
 export const RequirementDetailProperties = ({
   requirement,
   requirementTypeName,
+  builtinLayout = null,
   readOnly,
   canEdit,
   workspaceSlug,
@@ -579,6 +589,8 @@ export const RequirementDetailProperties = ({
 }: {
   requirement: TRequirement;
   requirementTypeName: string | null;
+  /** 该需求类型的内置字段布局；null 回退 PROPERTY_COLUMN_KEYS 的现状顺序 */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
   /** 内容级只读：无写权限 / 评审中 / 已关闭 都为 true，管 PropertyGrid 里的内容列 */
   readOnly: boolean;
   /**
@@ -599,6 +611,14 @@ export const RequirementDetailProperties = ({
 }) => {
   const { t } = useTranslation();
   const parentScope = useMemo(() => ({ workspaceSlug, productId }), [productId, workspaceSlug]);
+  // 属性行顺序跟类型布局走（描述在主区，不进属性行）；拿不到布局时解析层回退现状顺序
+  const propertyColumnKeys = useMemo(
+    () =>
+      resolveBuiltinLayout(builtinLayout)
+        .filter((entry) => entry.key !== "description_html")
+        .map((entry) => entry.key as TRequirementBuiltinKey),
+    [builtinLayout]
+  );
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -612,6 +632,7 @@ export const RequirementDetailProperties = ({
         onPatch={onPatch}
         onStatusChange={onStatusChange}
         onModuleChange={onModuleChange}
+        propertyColumnKeys={propertyColumnKeys}
         leadingRow={{
           label: t("requirement_detail.requirement_type"),
           value: requirementTypeName ?? "—",

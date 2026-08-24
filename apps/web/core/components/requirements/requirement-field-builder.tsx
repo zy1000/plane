@@ -31,13 +31,17 @@ import type {
 } from "@plane/types";
 import { CustomMenu, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { RequirementBuiltinFieldSection } from "@/components/requirements/requirement-builtin-field-section";
+import { RequirementBuiltinFieldRow } from "@/components/requirements/requirement-builtin-field-row";
 import {
   getRequirementSelectMode,
   getRequirementSelectOptions,
   hasValidRequirementSelectOptions,
 } from "@/components/requirements/requirement-select";
 import { RequirementSelectOptionsBulkModal } from "@/components/requirements/requirement-select-options-bulk-modal";
+import {
+  builderItemKey,
+  type TRequirementBuilderItem,
+} from "@/components/requirements/use-requirement-type-editor-state";
 
 const MenuRowLabel = ({
   icon: Icon,
@@ -69,8 +73,9 @@ type TFieldDropTarget =
     };
 
 type TRequirementFieldBuilderProps = {
-  fields: TRequirementFieldDraft[];
-  onChange: (fields: TRequirementFieldDraft[]) => void;
+  /** 统一混排列表：7 个可排序内置字段 + 自定义字段，顺序即列序。编号/标题不在其中（锁定最前） */
+  items: TRequirementBuilderItem[];
+  onChange: (items: TRequirementBuilderItem[]) => void;
   sidebarHeader?: React.ReactNode;
   compactLayout?: boolean;
   title?: string;
@@ -763,16 +768,33 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
 }
 
 export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
-  const { fields, onChange, sidebarHeader, compactLayout = false, title, description } = props;
+  const { items, onChange, sidebarHeader, compactLayout = false, title, description } = props;
   const { t } = useTranslation();
-  // selection = 当前原地展开成表单的那个字段，同时只能有一个
+  // selection = 当前原地展开成表单的那个字段，同时只能有一个。内置行不可展开，不进 selection
   const [selection, setSelection] = useState<TFieldSelection | null>(null);
   // 展开那一刻的字段快照，「取消」还原用；isNew 的字段直接撤销掉这次新增
   const [editSnapshot, setEditSnapshot] = useState<{ field: TRequirementFieldDraft; isNew: boolean } | null>(null);
   const [draggedLibraryFieldType, setDraggedLibraryFieldType] = useState<TRequirementFieldType | null>(null);
   const [dropTarget, setDropTarget] = useState<TFieldDropTarget | null>(null);
 
-  const selectedRoot = selection ? fields.find((field) => fieldKey(field) === selection.rootKey) : undefined;
+  const customFieldCount = items.reduce((count, item) => (item.kind === "custom" ? count + 1 : count), 0);
+  const findCustomField = (rootKey: string) =>
+    items.find(
+      (item): item is Extract<TRequirementBuilderItem, { kind: "custom" }> =>
+        item.kind === "custom" && fieldKey(item.field) === rootKey
+    )?.field;
+  /** 只改匹配 rootKey 的自定义项，内置项原样透传 */
+  const mapCustomItem = (
+    rootKey: string,
+    update: (field: TRequirementFieldDraft) => TRequirementFieldDraft
+  ): TRequirementBuilderItem[] =>
+    items.map((item) =>
+      item.kind === "custom" && fieldKey(item.field) === rootKey
+        ? { ...item, field: update(item.field) }
+        : item
+    );
+
+  const selectedRoot = selection ? findCustomField(selection.rootKey) : undefined;
   const selectedField =
     selectedRoot && selection?.childKey
       ? selectedRoot.children.find((field) => fieldKey(field) === selection.childKey)
@@ -802,8 +824,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
 
   const writeField = (target: TFieldSelection, nextField: TRequirementFieldDraft) => {
     onChange(
-      fields.map((field) => {
-        if (fieldKey(field) !== target.rootKey) return field;
+      mapCustomItem(target.rootKey, (field) => {
         if (!target.childKey) return nextField;
         return {
           ...field,
@@ -837,15 +858,16 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     />
   );
 
+  /** index 是统一混排列表（items）里的下标 —— 新字段可以插在内置字段之间 */
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(
       type,
       t(`requirement_fields.field_types.${type}`),
       defaultSelectOptionLabels
     );
-    const nextFields = [...fields];
-    nextFields.splice(index, 0, nextField);
-    onChange(nextFields);
+    const nextItems = [...items];
+    nextItems.splice(index, 0, { kind: "custom", field: nextField });
+    onChange(nextItems);
     openEditor({ rootKey: fieldKey(nextField) }, nextField, true);
   };
 
@@ -856,8 +878,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       defaultSelectOptionLabels
     );
     onChange(
-      fields.map((field) => {
-        if (fieldKey(field) !== rootKey) return field;
+      mapCustomItem(rootKey, (field) => {
         const children = [...field.children];
         children.splice(index, 0, nextField);
         return { ...field, children };
@@ -895,14 +916,17 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
 
   const duplicateSelection = (targetSelection = selection) => {
     if (!targetSelection) return;
-    const rootIndex = fields.findIndex((field) => fieldKey(field) === targetSelection.rootKey);
+    const rootIndex = items.findIndex(
+      (item) => item.kind === "custom" && fieldKey(item.field) === targetSelection.rootKey
+    );
     if (rootIndex === -1) return;
-    const root = fields[rootIndex];
+    const rootItem = items[rootIndex] as Extract<TRequirementBuilderItem, { kind: "custom" }>;
+    const root = rootItem.field;
     if (!targetSelection.childKey) {
       const duplicate = duplicateField(root, t("requirement_fields.builder.copy_suffix"));
-      const nextFields = [...fields];
-      nextFields.splice(rootIndex + 1, 0, duplicate);
-      onChange(nextFields);
+      const nextItems = [...items];
+      nextItems.splice(rootIndex + 1, 0, { kind: "custom", field: duplicate });
+      onChange(nextItems);
       openEditor({ rootKey: fieldKey(duplicate) }, duplicate, true);
       return;
     }
@@ -914,30 +938,23 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     );
     const nextChildren = [...root.children];
     nextChildren.splice(childIndex + 1, 0, duplicate);
-    onChange(
-      fields.map((field) =>
-        fieldKey(field) === targetSelection.rootKey ? { ...field, children: nextChildren } : field
-      )
-    );
+    onChange(mapCustomItem(targetSelection.rootKey, (field) => ({ ...field, children: nextChildren })));
     openEditor({ rootKey: targetSelection.rootKey, childKey: fieldKey(duplicate) }, duplicate, true);
   };
 
   const removeSelection = (targetSelection = selection) => {
     if (!targetSelection) return;
-    const rootIndex = fields.findIndex((field) => fieldKey(field) === targetSelection.rootKey);
-    if (rootIndex === -1) return;
-    const root = fields[rootIndex];
+    const root = findCustomField(targetSelection.rootKey);
+    if (!root) return;
     if (targetSelection.childKey) {
       const nextChildren = root.children.filter((field) => fieldKey(field) !== targetSelection.childKey);
-      onChange(
-        fields.map((field) =>
-          fieldKey(field) === targetSelection.rootKey ? { ...field, children: nextChildren } : field
-        )
-      );
+      onChange(mapCustomItem(targetSelection.rootKey, (field) => ({ ...field, children: nextChildren })));
       closeEditor();
       return;
     }
-    onChange(fields.filter((field) => fieldKey(field) !== targetSelection.rootKey));
+    onChange(
+      items.filter((item) => item.kind !== "custom" || fieldKey(item.field) !== targetSelection.rootKey)
+    );
     closeEditor();
   };
 
@@ -982,9 +999,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 data={field.children}
                 keyExtractor={fieldKey}
                 containerClassName="mb-2 last:mb-0"
-                onChange={(children) =>
-                  onChange(fields.map((item) => (fieldKey(item) === rootKey ? { ...item, children } : item)))
-                }
+                onChange={(children) => onChange(mapCustomItem(rootKey, (item) => ({ ...item, children })))}
                 render={(child, childIndex) => {
                   const childKey = fieldKey(child);
                   const isChildEditing = selection?.rootKey === rootKey && selection.childKey === childKey;
@@ -1063,7 +1078,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       {ROOT_FIELD_TYPES.map((type) => {
         const Icon = FIELD_ICONS[type];
         return (
-          <CustomMenu.MenuItem key={type} onClick={() => insertRootField(fields.length, type)}>
+          <CustomMenu.MenuItem key={type} onClick={() => insertRootField(items.length, type)}>
             <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
           </CustomMenu.MenuItem>
         );
@@ -1104,7 +1119,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 {title ?? t("requirement_fields.builder.field_structure")}
               </h1>
               <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
-                {fields.length}
+                {customFieldCount}
               </span>
             </div>
             <p className="mt-0.5 truncate text-11 text-secondary">
@@ -1130,44 +1145,54 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
             const fieldType = event.dataTransfer.getData(FIELD_LIBRARY_DRAG_TYPE) as TRequirementFieldType;
             if (!ROOT_FIELD_TYPES.includes(fieldType)) return;
             event.preventDefault();
-            insertRootField(fields.length, fieldType);
+            insertRootField(items.length, fieldType);
             resetLibraryDrag();
           }}
         >
           <div className={cn("mx-auto w-full", compactLayout ? "max-w-3xl" : "max-w-4xl")}>
-            {/* 内置列排在自定义字段之前，与网格的列序一致 */}
-            <RequirementBuiltinFieldSection />
-            {fields.length === 0 ? (
-              <div
-                className={cn(
-                  "flex min-h-80 items-center justify-center rounded-lg border border-dashed bg-surface-1 px-6 text-center transition-colors",
-                  dropTarget?.kind === "root" ? "border-accent-strong bg-accent-subtle/20" : "border-subtle"
-                )}
-              >
-                <div>
-                  <span className="mx-auto grid size-11 place-items-center rounded-lg border border-subtle bg-layer-1 text-secondary">
-                    <Plus className="size-5" />
-                  </span>
-                  <p className="mt-3 text-13 font-medium text-primary">
-                    {t("requirement_fields.fields.empty")}
-                  </p>
-                  <p className="mt-1 text-11 leading-4 text-secondary">
-                    {t("requirement_fields.builder.empty_description")}
-                  </p>
-                  <div className="mt-4 inline-flex xl:hidden">{libraryMenu}</div>
-                </div>
+            {/* 编号 / 标题是必填的结构列（网格里左固定），锁定在最前：
+                放在 Sortable 之外 ⇒ 天然不可拖动、也不可能成为落点 */}
+            <div className="mb-3 space-y-3">
+              <RequirementBuiltinFieldRow columnKey="code" pinned />
+              <RequirementBuiltinFieldRow columnKey="title" pinned />
+            </div>
+            {/* 统一混排列表：内置字段与自定义字段交叉拖拽，顺序即网格列序 */}
+            <Sortable
+              id="requirement-root-fields"
+              data={items}
+              keyExtractor={builderItemKey}
+              containerClassName="mb-3 last:mb-0"
+              onChange={onChange}
+              render={(item, index) =>
+                item.kind === "builtin" ? (
+                  <RequirementBuiltinFieldRow
+                    columnKey={item.key}
+                    showInLibrary={item.show_in_library}
+                    onToggleShowInLibrary={(next) =>
+                      onChange(
+                        items.map((candidate) =>
+                          candidate.kind === "builtin" && candidate.key === item.key
+                            ? { ...candidate, show_in_library: next }
+                            : candidate
+                        )
+                      )
+                    }
+                  />
+                ) : (
+                  renderRootField(item.field, index)
+                )
+              }
+            />
+            {customFieldCount === 0 && !draggedLibraryFieldType && (
+              <div className="mt-3 flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-subtle bg-surface-1 px-6 py-5 text-center">
+                <p className="text-13 font-medium text-primary">{t("requirement_fields.fields.empty")}</p>
+                <p className="text-11 leading-4 text-secondary">
+                  {t("requirement_fields.builder.empty_description")}
+                </p>
+                <div className="mt-2 inline-flex xl:hidden">{libraryMenu}</div>
               </div>
-            ) : (
-              <Sortable
-                id="requirement-root-fields"
-                data={fields}
-                keyExtractor={fieldKey}
-                containerClassName="mb-3 last:mb-0"
-                onChange={onChange}
-                render={renderRootField}
-              />
             )}
-            {draggedLibraryFieldType && fields.length > 0 && (
+            {draggedLibraryFieldType && (
               <div
                 className={cn(
                   "mt-3 flex h-12 items-center justify-center rounded-lg border border-dashed text-11 font-medium transition-colors",

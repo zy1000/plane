@@ -226,7 +226,7 @@ export const TemplateCaseRepositoryList = ({ workspaceSlug }: Props) => {
             </div>
           </div>
         ) : (
-          <div className="template-case-repository-table min-h-0 flex-1 overflow-auto p-4">
+          <div className="template-case-repository-table min-h-0 flex-1 overflow-auto">
             <style
               dangerouslySetInnerHTML={{
                 __html: `

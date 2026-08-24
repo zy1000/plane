@@ -106,6 +106,33 @@ export type TRequirementBuiltinValues = {
 export type TRequirementBuiltinKey = keyof TRequirementBuiltinValues;
 
 /**
+ * 可排序的内置字段键。title 是结构列（网格左固定，与编号一起锁定在最前），
+ * 不入 builtin_fields 布局；code 不是内置列（见 TRequirement.code 的注释）。
+ */
+export type TRequirementBuiltinSortableKey = Exclude<TRequirementBuiltinKey, "title">;
+
+/**
+ * 读侧：一个需求类型的内置字段布局项，来自各配置接口的 builtin_fields。
+ * sort_order 与自定义字段的 sort_order 同一个排序空间，消费端按 sort_order 归并出
+ * 统一列序（相等时内置在前）。status 的 show_in_library 恒为 false（服务端强制）。
+ */
+export type TRequirementBuiltinFieldConfig = {
+  key: TRequirementBuiltinSortableKey;
+  show_in_library: boolean;
+  sort_order: number;
+};
+
+/**
+ * 写侧：PUT 需求类型配置时的内置字段布局项。position 是「7 个可排序内置列 +
+ * 自定义根字段」统一列表里的 0 基下标，服务端按统一槽位给两边重算 sort_order。
+ */
+export type TRequirementBuiltinFieldPayload = {
+  key: TRequirementBuiltinSortableKey;
+  show_in_library: boolean;
+  position: number;
+};
+
+/**
  * 一条需求。product_id / project_id / library_id 恒有且仅有一个非空。
  *
  * 八个内置字段平铺在行上，data 只装自定义字段（key 是字段 UUID）。两组值在接口层
@@ -244,6 +271,8 @@ export type TRequirementTypeSchema = {
   /** 图标配置，与工作项类型同形状；字段结构会随版本冻结，图标不会 */
   logo_props?: Partial<TLogoProps>;
   fields: TRequirementField[];
+  /** 内置字段布局。与图标同规则：不冻结、实时取自类型。旧缓存可能没有，缺省=内置在前 */
+  builtin_fields?: TRequirementBuiltinFieldConfig[];
 };
 
 export type TRequirementConfiguration = {
@@ -353,6 +382,8 @@ export type TUpdateRequirementLibraryPayload = Partial<
 export type TRequirementLibraryConfiguration = {
   library: TRequirementLibrary;
   fields: TRequirementField[];
+  /** 内置字段布局，完整 7 项（带 show_in_library 标志），库场景由前端解析层过滤 */
+  builtin_fields?: TRequirementBuiltinFieldConfig[];
   /** 乐观锁基准，取的是需求类型的 updated_at——改字段动的是类型 */
   expected_updated_at: string;
 };

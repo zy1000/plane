@@ -27,7 +27,11 @@ import {
   getSingleSelectConfig,
   getTextInputConfig,
 } from "@plane/utils";
-import { getBuiltinColumnsFor, REQUIREMENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
+import {
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+  resolveBuiltinColumns,
+  type TResolvedBuiltinEntry,
+} from "@/components/requirements/requirement-builtin-layout";
 import { getRequirementSelectMode, getRequirementSelectOptions } from "@/components/requirements/requirement-select";
 import { useMember } from "@/hooks/store/use-member";
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
@@ -137,10 +141,13 @@ const getEmptyOperatorConfigs = (options: TSelectOption[], params: TOperatorPara
 export const useRequirementGridFiltersConfig = ({
   workspaceSlug,
   entityKind,
+  builtinColumns,
   customFields,
 }: {
   workspaceSlug: string;
   entityKind: "product" | "library";
+  /** 已按类型布局解析并按 entityKind 过滤的内置属性列（不含 title）。缺省回退现状顺序 */
+  builtinColumns?: TResolvedBuiltinEntry[];
   customFields: TRequirementField[];
 }) => {
   const { t } = useTranslation();
@@ -211,10 +218,14 @@ export const useRequirementGridFiltersConfig = ({
 
   const configs = useMemo(() => {
     const nextConfigs: TFilterConfig<TRequirementGridFilterProperty>[] = [];
-    const builtinByKey = Object.fromEntries(REQUIREMENT_BUILTIN_COLUMNS.map((column) => [column.key, column]));
+    // 标题恒在最前，其余内置列按类型布局顺序（与网格列序一致）
+    const orderedBuiltinColumns = [
+      REQUIREMENT_BUILTIN_TITLE_COLUMN,
+      ...(builtinColumns ?? resolveBuiltinColumns(entityKind, null)).map((entry) => entry.column),
+    ];
 
-    for (const column of getBuiltinColumnsFor(entityKind)) {
-      const icon = builtinByKey[column.key]?.icon;
+    for (const column of orderedBuiltinColumns) {
+      const icon = column.icon;
       const label = t(column.labelKey);
 
       if (column.key === "status") {
@@ -406,6 +417,7 @@ export const useRequirementGridFiltersConfig = ({
     return nextConfigs;
   }, [
     booleanOptions,
+    builtinColumns,
     customFields,
     emptyOptions,
     entityKind,

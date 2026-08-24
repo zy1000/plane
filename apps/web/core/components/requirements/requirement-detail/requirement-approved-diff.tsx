@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirement,
+  TRequirementBuiltinFieldConfig,
   TRequirementDiffItem,
   TRequirementField,
   TRequirementVersion,
@@ -28,12 +29,15 @@ export const RequirementApprovedDiff = ({
   requirement,
   requirementTypeName,
   fields,
+  builtinLayout = null,
 }: {
   workspaceSlug: string;
   productId: string;
   requirement: TRequirement;
   requirementTypeName: string;
   fields: TRequirementField[];
+  /** 该需求类型的内置字段布局；null 回退现状顺序 */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
 }) => {
   const { t } = useTranslation();
   const [approved, setApproved] = useState<TRequirementVersion | null>(null);
@@ -102,5 +106,7 @@ export const RequirementApprovedDiff = ({
     return <p className="text-12 text-secondary">{t("requirement_detail.approved_diff.unavailable")}</p>;
   }
 
-  return <ChangeRequestRequirementDiff item={item} fields={fields} workspaceSlug={workspaceSlug} />;
+  return (
+    <ChangeRequestRequirementDiff item={item} fields={fields} builtinLayout={builtinLayout} workspaceSlug={workspaceSlug} />
+  );
 };

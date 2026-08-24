@@ -17,6 +17,7 @@ from plane.db.models import (
 )
 from plane.utils.requirement import (
     RequirementDataLossError,
+    resolve_builtin_field_layout,
     serialize_requirement_type_field_tree,
 )
 
@@ -189,6 +190,7 @@ class RequirementTypeConfigurationAPIView(BaseAPIView):
                 },
             ).data,
             "fields": serialize_requirement_type_field_tree(requirement_type),
+            "builtin_fields": resolve_builtin_field_layout(requirement_type),
             "created_field_ids": created_field_ids or {},
         }
 

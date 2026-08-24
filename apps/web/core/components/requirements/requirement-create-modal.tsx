@@ -9,6 +9,7 @@ import { Button } from "@plane/propel/button";
 import type {
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
+  TRequirementBuiltinFieldConfig,
   TRequirementBuiltinValues,
   TRequirementData,
   TRequirementField,
@@ -19,11 +20,8 @@ import { cn } from "@plane/utils";
 import { useRequirementTypeFields } from "@/hooks/store/use-requirement-type-fields";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { FileService } from "@/services/file.service";
-import {
-  BuiltinCellEditor,
-  createEmptyBuiltinValues,
-  getBuiltinColumnsFor,
-} from "./requirement-builtin-fields";
+import { BuiltinCellEditor, createEmptyBuiltinValues } from "./requirement-builtin-fields";
+import { resolveBuiltinColumns } from "./requirement-builtin-layout";
 import { FIELD_ICONS } from "./requirement-field-builder";
 import { RequirementSubformSection } from "./requirement-detail/requirement-subform-section";
 import { createEmptyRequirementData } from "./requirement-row-data";
@@ -79,6 +77,8 @@ type TProps = {
   allowTypeSelection?: boolean;
   /** 类型固定时这一行的字段。allowTypeSelection 时不用它 */
   fields?: TRequirementField[];
+  /** 类型固定时该类型的内置字段布局；allowTypeSelection 时随选中类型自取，不用它 */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
   seed?: TRequirementCreateSeed;
   /** 左侧模块树的当前选中：弹窗建出的行自动挂进该模块 */
   moduleId?: string | null;
@@ -95,6 +95,7 @@ export const RequirementCreateModal = ({
   requirementTypeId,
   allowTypeSelection = false,
   fields = EMPTY_FIELDS,
+  builtinLayout = null,
   seed,
   moduleId = null,
   onClose,
@@ -129,24 +130,26 @@ export const RequirementCreateModal = ({
     () => requirementTypes.filter((requirementType) => requirementType.is_active),
     [requirementTypes]
   );
-  const { fields: selectedTypeFields, isLoading: isFieldsLoading } = useRequirementTypeFields(
-    workspaceSlug,
-    allowTypeSelection ? typeId : undefined
-  );
+  const {
+    fields: selectedTypeFields,
+    builtinFields: selectedTypeBuiltinFields,
+    isLoading: isFieldsLoading,
+  } = useRequirementTypeFields(workspaceSlug, allowTypeSelection ? typeId : undefined);
 
   /**
-   * 底部属性条上的内置列 = 内置列去掉标题、描述与状态。
+   * 底部属性条上的内置列 = 内置列去掉标题、描述与状态，顺序按类型布局。
    *
    * 标题和描述在上面占主区，是这条需求的内容本身；状态不走内容载荷（BuiltinCellEditor
    * 对它只渲染只读值），后端建行时一律落 not_started，之后在网格 / 详情里单独改 ——
    * 摆一个改不动的字段是噪音。剩下的优先级/负责人/起止日期/父项才是「元数据」，归到底部。
    */
+  const effectiveBuiltinLayout = allowTypeSelection ? selectedTypeBuiltinFields : builtinLayout;
   const propertyColumns = useMemo(
     () =>
-      getBuiltinColumnsFor(entityKind).filter(
-        (column) => !["title", "description_html", "status"].includes(column.key)
+      resolveBuiltinColumns(entityKind, effectiveBuiltinLayout).filter(
+        (entry) => !["description_html", "status"].includes(entry.key)
       ),
-    [entityKind]
+    [entityKind, effectiveBuiltinLayout]
   );
   const visibleFields = useMemo(
     () => (allowTypeSelection ? selectedTypeFields : fields).filter((field) => field.is_active),

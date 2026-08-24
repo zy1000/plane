@@ -8,7 +8,8 @@ import { Button } from "@plane/propel/button";
 import type { TRequirementImportPayload } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
+import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
+import { REQUIREMENT_BUILTIN_TITLE_COLUMN, resolveBuiltinColumns } from "@/components/requirements/requirement-builtin-layout";
 import { getCurrentPageOffset, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useImportableLibraryItems } from "@/hooks/store/use-importable-library-items";
@@ -33,13 +34,6 @@ import { getSelectionState, useLibraryImportSelection } from "./use-library-impo
  * 让列的呈现和标准库页保持一致。
  */
 
-/**
- * 预览只出最能认人的两列内置字段，其余靠自定义字段补 —— 弹窗宽度有限。
- * 取值范围限定在库里真实存在的那几列（状态/负责人/起止日期在库里根本不展示）。
- */
-const PREVIEW_BUILTIN_COLUMNS = getBuiltinColumnsFor("library").filter(
-  (column) => column.key === "title" || column.key === "priority"
-);
 
 type TProps = {
   isOpen: boolean;
@@ -138,6 +132,20 @@ export const RequirementImportFromLibraryModal = ({
 
   const activeLibrary = libraries.find((library) => library.id === libraryId);
   const fields = itemsStore.configuration?.fields ?? [];
+  const libraryBuiltinFields = itemsStore.configuration?.builtin_fields;
+  /**
+   * 预览只出最能认人的两列内置字段（标题 + 优先级），其余靠自定义字段补 —— 弹窗宽度
+   * 有限。标题恒在（锁定纳入库）；优先级被该库的需求类型配置为不纳入时剔除。
+   */
+  const previewBuiltinColumns = useMemo(
+    () => [
+      REQUIREMENT_BUILTIN_TITLE_COLUMN,
+      ...resolveBuiltinColumns("library", libraryBuiltinFields)
+        .filter((entry) => entry.key === "priority")
+        .map((entry) => entry.column),
+    ],
+    [libraryBuiltinFields]
+  );
   // 标题现在是行上的内置列，不在 data 里 —— 预览必须单独出这一列，否则认不出是哪条需求
   const visibleFields = useMemo(() => fields.filter((field) => field.is_active).slice(0, 2), [fields]);
   const items = itemsStore.requirementsPage.results;
@@ -388,7 +396,7 @@ export const RequirementImportFromLibraryModal = ({
                         <th className="min-w-[88px] px-3 py-2">
                           <span className="truncate">{t("requirements.identifier.column")}</span>
                         </th>
-                        {PREVIEW_BUILTIN_COLUMNS.map((column) => (
+                        {previewBuiltinColumns.map((column) => (
                           <th key={column.key} className="min-w-[130px] px-3 py-2">
                             <span className="truncate">{t(column.labelKey)}</span>
                           </th>
@@ -422,7 +430,7 @@ export const RequirementImportFromLibraryModal = ({
                             <td className="px-3 py-2 align-top">
                               <RequirementIdentifier displayId={item.display_id} />
                             </td>
-                            {PREVIEW_BUILTIN_COLUMNS.map((column) => (
+                            {previewBuiltinColumns.map((column) => (
                               <td key={column.key} className="px-3 py-2 align-top">
                                 <BuiltinCellValue columnKey={column.key} values={item} />
                               </td>

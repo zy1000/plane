@@ -1321,8 +1321,6 @@ export default {
       target_date: "Due date",
       parent: "Parent",
       select_parent: "Select parent",
-      group_label: "Built-in fields",
-      count: "{count} fields",
       locked_hint: "Provided by the system, not editable",
       product_only: "Product only",
       parent_unresolved: "Unknown requirement",

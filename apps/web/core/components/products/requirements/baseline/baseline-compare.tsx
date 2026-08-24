@@ -7,7 +7,11 @@
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TRequirementBaselineCompareResponse, TRequirementField } from "@plane/types";
+import type {
+  TRequirementBaselineCompareResponse,
+  TRequirementField,
+  TRequirementTypeSchema,
+} from "@plane/types";
 import { Loader } from "@plane/ui";
 import { ChangeRequestRequirementDiff } from "../change/change-request-requirement-diff";
 import { BaselinePagination } from "./baseline-pagination";
@@ -17,6 +21,8 @@ type TProps = {
   comparison: TRequirementBaselineCompareResponse | null;
   /** 全部需求类型字段的扁平并集，按条目所属类型裁一次再传给 diff */
   fields: TRequirementField[];
+  /** 引用到的需求类型（含各自的内置字段布局），diff 行序按条目所属类型的布局排 */
+  requirementTypes?: TRequirementTypeSchema[];
   isLoading: boolean;
   error: string | null;
   perPage: number;
@@ -26,8 +32,18 @@ type TProps = {
 };
 
 export function BaselineCompare(props: TProps) {
-  const { workspaceSlug, comparison, fields, isLoading, error, perPage, onPerPageChange, onCursorChange, onBack } =
-    props;
+  const {
+    workspaceSlug,
+    comparison,
+    fields,
+    requirementTypes,
+    isLoading,
+    error,
+    perPage,
+    onPerPageChange,
+    onCursorChange,
+    onBack,
+  } = props;
   const { t } = useTranslation();
 
   if (isLoading) {
@@ -93,6 +109,9 @@ export function BaselineCompare(props: TProps) {
                 key={item.id}
                 item={item}
                 fields={fields.filter((field) => field.requirement_type_id === item.requirement_type_id)}
+                builtinLayout={
+                  requirementTypes?.find((schema) => schema.id === item.requirement_type_id)?.builtin_fields ?? null
+                }
                 workspaceSlug={workspaceSlug}
               />
             ))}

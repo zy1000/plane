@@ -29,21 +29,25 @@ import { RequirementRichTextCell } from "./requirement-rich-text";
 import { RequirementStatusCell } from "./requirement-status-cell";
 
 /**
- * 八个内置字段。它们不是 RequirementField，而是需求行上的列，所以网格、diff、
- * 版本快照、需求类型的字段结构页都从这张表拿列头与列序，而不是从字段树里找。
+ * 八个内置字段的**展示元数据注册表**：labelKey / icon / width / isContent。
+ * 它们不是 RequirementField，而是需求行上的列，网格、diff、版本快照的列头都从
+ * 这张表拿元数据。
  *
- * 顺序即列序：内置列恒定排在自定义字段之前，不可拖动、不可删除、不可停用。
+ * 顺序与库可见性**不再由这张表决定**：每个需求类型有自己的 builtin_field_layout
+ * （可与自定义字段交叉排序、可勾选纳入标准库），由 requirement-builtin-layout.ts
+ * 的 resolveBuiltinLayout 解析；这里的数组顺序只是拿不到配置时的回退（canonical
+ * 序 = 内置在前），showInLibrary 只是缺省值。
+ *
+ * libraryLock 是不可配置的两端：title 恒纳入库（必填、锁定最前）；status 恒不纳入
+ * （库条目状态恒 not_started 是 DB 硬约束，模板没有交付状态）。
  * typeLabelKey 只用于展示 —— 内置列没有 field_type，它们的形状是写死在列上的。
- *
- * showInLibrary=false 的四列是纯执行期属性：标准库是模板，模板不可能知道某个产品里
- * 谁负责、什么时候做，「已发布」这种交付状态放在模板上更是自相矛盾。它们在库的表单与
- * 网格里不渲染，导入时也会被重置回缺省值（见 build_library_import_creates）。
  */
-export const REQUIREMENT_BUILTIN_COLUMNS = [
+export const REQUIREMENT_BUILTIN_COLUMNS: readonly TRequirementBuiltinColumnDef[] = [
   {
     key: "title",
     isContent: true,
     showInLibrary: true,
+    libraryLock: "in",
     labelKey: "requirement_fields.builtin.title",
     typeLabelKey: "requirement_fields.field_types.text",
     icon: Type,
@@ -64,6 +68,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
     // 写入口是独立的状态端点（RequirementStatusCell 的 onChange），不走内置列编辑器。
     isContent: false,
     showInLibrary: false,
+    libraryLock: "out",
     labelKey: "requirement_fields.builtin.status",
     typeLabelKey: "requirement_fields.field_types.select",
     icon: CircleDot,
@@ -114,32 +119,21 @@ export const REQUIREMENT_BUILTIN_COLUMNS = [
     icon: GitBranch,
     width: "w-48",
   },
-] as const satisfies readonly {
+];
+
+export type TRequirementBuiltinColumnDef = {
   key: TRequirementBuiltinKey;
   /** 算不算「内容」。false 的列不进 diff、不触发评审、不被内容回滚倒推 */
   isContent: boolean;
+  /** 「纳入标准库」的缺省值（布局未配置该键时生效） */
   showInLibrary: boolean;
+  /** 纳入标准库的硬锁："in" 恒纳入、"out" 恒不纳入；缺省 = 可配置 */
+  libraryLock?: "in" | "out";
   labelKey: string;
   typeLabelKey: string;
   icon: LucideIcon;
   width: string;
-}[];
-
-/**
- * 参与「内容变了没有」比对的内置列。
- *
- * 服务端的 changed_field_ids 管不到前端自己用 isEqual 算 diff 的那几处，所以那些地方要
- * 显式切到这个子集，否则「改了状态」会在变更单里渲染成一行需要审批人签字的改动。
- */
-export const REQUIREMENT_CONTENT_BUILTIN_COLUMNS = REQUIREMENT_BUILTIN_COLUMNS.filter(
-  (column) => column.isContent
-);
-
-/** 这批需求行该显示哪些内置列。标准库藏掉执行期四列，产品需求八列全出 */
-export const getBuiltinColumnsFor = (entityKind: "product" | "library") =>
-  entityKind === "library"
-    ? REQUIREMENT_BUILTIN_COLUMNS.filter((column) => column.showInLibrary)
-    : REQUIREMENT_BUILTIN_COLUMNS;
+};
 
 /** 后端的列缺省值，新建行与「清空」都用它 */
 export const createEmptyBuiltinValues = (): TRequirementBuiltinValues => ({

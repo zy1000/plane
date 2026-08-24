@@ -187,6 +187,17 @@ class RequirementType(BaseModel):
         default=0,
         verbose_name="当前字段结构修订号（0 表示尚未产生修订）",
     )
+    # 内置字段布局：[{key, show_in_library, sort_order}] × 7（ORDERABLE_BUILTIN_COLUMNS，
+    # 即 BUILTIN_COLUMNS 去掉 title）。sort_order 与 RequirementField.sort_order 同一个
+    # 排序空间，读侧把两边归并出统一列序（相等时内置在前）。空列表 = 沿用缺省：内置
+    # 恒在自定义之前、LIBRARY_HIDDEN_BUILTIN_COLUMNS 不纳入标准库。
+    # title 恒定排最前且恒纳入库、code 不是内置列（见 utils/requirement.py 头注），都不入布局。
+    # 布局不进 RequirementTypeSchemaRevision —— 与 logo_props 同规则：不属于冻结内容，
+    # 历史版本按当前布局渲染。
+    # blank=True 必需：serializer 会 full_clean()，同 logo_props。
+    builtin_field_layout = models.JSONField(
+        default=list, blank=True, verbose_name="内置字段布局"
+    )
 
     class Meta:
         db_table = "requirement_types"

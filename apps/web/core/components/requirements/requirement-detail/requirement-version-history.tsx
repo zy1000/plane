@@ -7,7 +7,11 @@ import type { TRequirementTypeSchema, TRequirementVersion } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { BuiltinCellValue, REQUIREMENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
+import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
+import {
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+  resolveBuiltinLayout,
+} from "@/components/requirements/requirement-builtin-layout";
 import { LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { diffSnapshotFieldNames } from "./requirement-change-trail";
@@ -225,6 +229,16 @@ const VersionRow = ({
     () => (version.fields_snapshot ?? []).filter((field) => field.field_type !== "form"),
     [version.fields_snapshot]
   );
+  // 内置行顺序按**当前**类型布局（布局与图标同规则不冻结，修订里没有当年那份）；描述不进快照行
+  const builtinColumns = useMemo(
+    () => [
+      REQUIREMENT_BUILTIN_TITLE_COLUMN,
+      ...resolveBuiltinLayout(requirementType?.builtin_fields)
+        .filter((entry) => entry.key !== "description_html")
+        .map((entry) => entry.column),
+    ],
+    [requirementType?.builtin_fields]
+  );
 
   const changed = useMemo(
     () => diffSnapshotFieldNames(previous?.snapshot, version.snapshot, requirementType, t),
@@ -268,7 +282,7 @@ const VersionRow = ({
                   </span>
                 </div>
               )}
-              {REQUIREMENT_BUILTIN_COLUMNS.filter((column) => column.key !== "description_html").map((column) => (
+              {builtinColumns.map((column) => (
                 <div key={column.key} className="contents">
                   <span className="text-tertiary">{t(column.labelKey)}</span>
                   <span className="min-w-0">

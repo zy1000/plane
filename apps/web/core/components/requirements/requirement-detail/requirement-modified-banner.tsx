@@ -11,7 +11,7 @@ import { useState } from "react";
 import { GitCompareArrows, Undo2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirement, TRequirementField } from "@plane/types";
+import type { TRequirement, TRequirementBuiltinFieldConfig, TRequirementField } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { RequirementService } from "@/services/requirement.service";
 import { RequirementApprovedDiff } from "./requirement-approved-diff";
@@ -24,6 +24,7 @@ export const RequirementModifiedBanner = ({
   requirement,
   requirementTypeName,
   fields,
+  builtinLayout = null,
   readOnly,
   onDiscarded,
 }: {
@@ -32,6 +33,8 @@ export const RequirementModifiedBanner = ({
   requirement: TRequirement;
   requirementTypeName: string;
   fields: TRequirementField[];
+  /** 该需求类型的内置字段布局；null 回退现状顺序 */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
   /** 行在评审中或没有写权限时不给「放弃改动」—— 服务端也会再拦一道 */
   readOnly: boolean;
   onDiscarded?: () => void;
@@ -105,6 +108,7 @@ export const RequirementModifiedBanner = ({
             requirement={requirement}
             requirementTypeName={requirementTypeName}
             fields={fields}
+            builtinLayout={builtinLayout}
           />
         </div>
       )}

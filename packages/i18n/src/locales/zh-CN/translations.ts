@@ -1486,8 +1486,6 @@ export default {
       target_date: "截止日期",
       parent: "父项",
       select_parent: "选择父项",
-      group_label: "内置字段",
-      count: "{count} 个字段",
       locked_hint: "系统提供，不可修改",
       product_only: "仅产品需求",
       parent_unresolved: "未知需求",

@@ -11,6 +11,8 @@ import { Fragment, useMemo, useState } from "react";
 import { isEqual } from "lodash-es";
 import { useTranslation } from "@plane/i18n";
 import type {
+  TRequirementBuiltinFieldConfig,
+  TRequirementBuiltinKey,
   TRequirementDiffItem,
   TRequirementChangeSnapshot,
   TRequirementData,
@@ -19,11 +21,12 @@ import type {
   TRequirementValue,
 } from "@plane/types";
 import { cn } from "@plane/utils";
+import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
 import {
-  BuiltinCellValue,
-  REQUIREMENT_BUILTIN_COLUMNS,
-  REQUIREMENT_CONTENT_BUILTIN_COLUMNS,
-} from "@/components/requirements/requirement-builtin-fields";
+  mergeBuiltinAndFields,
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+  type TBuiltinColumnMeta,
+} from "@/components/requirements/requirement-builtin-layout";
 import { getFormRows, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
@@ -32,6 +35,8 @@ type TProps = {
   item: TRequirementDiffItem;
   /** 该需求类型的字段树（不是全部类型的并集，否则会多出一堆空洞行） */
   fields: TRequirementField[];
+  /** 该需求类型的内置字段布局；null 回退现状顺序（内置在前） */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
   workspaceSlug: string;
 };
 
@@ -53,7 +58,7 @@ const SideValue = ({
   tone,
 }: {
   field?: TRequirementField;
-  columnKey?: (typeof REQUIREMENT_BUILTIN_COLUMNS)[number]["key"];
+  columnKey?: TRequirementBuiltinKey;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
   tone?: "old" | "new";
@@ -78,7 +83,7 @@ type TRow = {
   before: TRequirementValue | undefined;
   after: TRequirementValue | undefined;
   field?: TRequirementField;
-  columnKey?: (typeof REQUIREMENT_BUILTIN_COLUMNS)[number]["key"];
+  columnKey?: TRequirementBuiltinKey;
 };
 
 const readValue = (snapshot: TRequirementChangeSnapshot | null, key: string, isBuiltin: boolean) => {
@@ -131,7 +136,7 @@ const alignFormRows = (before: TRequirementData, after: TRequirementData, formId
   return aligned;
 };
 
-export function ChangeRequestRequirementDiff({ item, fields, workspaceSlug }: TProps) {
+export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = null, workspaceSlug }: TProps) {
   const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
 
@@ -151,7 +156,7 @@ export function ChangeRequestRequirementDiff({ item, fields, workspaceSlug }: TP
   );
 
   const rows = useMemo<TRow[]>(() => {
-    const builtinRows: TRow[] = REQUIREMENT_CONTENT_BUILTIN_COLUMNS.map((column) => {
+    const builtinRow = (column: TBuiltinColumnMeta): TRow => {
       const beforeValue = readValue(before, column.key, true);
       const afterValue = readValue(after, column.key, true);
       return {
@@ -162,8 +167,8 @@ export function ChangeRequestRequirementDiff({ item, fields, workspaceSlug }: TP
         after: afterValue,
         columnKey: column.key,
       };
-    });
-    const customRows: TRow[] = scalarFields.map((field) => {
+    };
+    const customRow = (field: TRequirementField): TRow => {
       const beforeValue = readValue(before, field.id, false);
       const afterValue = readValue(after, field.id, false);
       return {
@@ -174,9 +179,18 @@ export function ChangeRequestRequirementDiff({ item, fields, workspaceSlug }: TP
         after: afterValue,
         field,
       };
-    });
-    return [...builtinRows, ...customRows];
-  }, [after, before, scalarFields, t]);
+    };
+    // 标题锁定最前，其余内置内容行与自定义标量行按类型布局交叉；
+    // status 不算内容不进 diff（isContent=false），子表单行在下方单独渲染
+    const merged = mergeBuiltinAndFields("product", builtinLayout, scalarFields).flatMap((descriptor) =>
+      descriptor.kind === "builtin"
+        ? descriptor.entry.column.isContent
+          ? [builtinRow(descriptor.entry.column)]
+          : []
+        : [customRow(descriptor.field)]
+    );
+    return [builtinRow(REQUIREMENT_BUILTIN_TITLE_COLUMN), ...merged];
+  }, [after, before, builtinLayout, scalarFields, t]);
 
   const changedCount = rows.filter((row) => row.changed).length;
   const visibleRows = showAll ? rows : rows.filter((row) => row.changed);

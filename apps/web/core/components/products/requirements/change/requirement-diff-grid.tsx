@@ -14,6 +14,7 @@ import { useParams } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
+  TRequirementBuiltinFieldConfig,
   TRequirementBuiltinKey,
   TRequirementChangeItem,
   TRequirementChangeType,
@@ -24,10 +25,11 @@ import type {
 } from "@plane/types";
 import { CustomSelect, Loader, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
 import {
-  BuiltinCellValue,
-  REQUIREMENT_CONTENT_BUILTIN_COLUMNS,
-} from "@/components/requirements/requirement-builtin-fields";
+  mergeBuiltinAndFields,
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+} from "@/components/requirements/requirement-builtin-layout";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import {
@@ -225,6 +227,8 @@ function BuiltinDiffCell({
 type TProps = {
   workspaceSlug: string;
   fields: TRequirementField[];
+  /** 当前需求类型的内置字段布局；null 回退现状顺序（内置在前） */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
   /** 本次变更涉及的根字段 ID，「仅显示变化列」按它裁列 */
   changedFieldIds: string[];
   items: TRequirementChangeItem[];
@@ -254,6 +258,7 @@ export function RequirementDiffGrid(props: TProps) {
   const {
     workspaceSlug,
     fields,
+    builtinLayout = null,
     changedFieldIds,
     items,
     totalCount,
@@ -308,12 +313,23 @@ export function RequirementDiffGrid(props: TProps) {
     parentIds: useMemo(() => snapshots.map((snapshot) => snapshot.parent_id), [snapshots]),
   });
   const resolveParentTitle = useCallback((parentId: string) => parentTitles[parentId], [parentTitles]);
-  // 内置列的 field_id 就是列名，与自定义字段共用 changedFieldIds 这一个维度
-  const visibleBuiltinColumns = useMemo(() => {
-    // 只列内容列：status 是交付进度，不该在变更单里被当成一处需要签字的改动
-    if (!changedColumnsOnly || !changedFieldIds.length) return REQUIREMENT_CONTENT_BUILTIN_COLUMNS;
-    return REQUIREMENT_CONTENT_BUILTIN_COLUMNS.filter((column) => changedFieldIds.includes(column.key));
-  }, [changedColumnsOnly, changedFieldIds]);
+  // 内置列的 field_id 就是列名，与自定义字段共用 changedFieldIds 这一个维度。
+  // 列序 = 标题锁定最前，随后内置列与自定义列按类型布局交叉（与明细网格同一套归并）。
+  // 只列内容列：status 是交付进度，不该在变更单里被当成一处需要签字的改动。
+  const orderedColumns = useMemo(() => {
+    const showBuiltin = (key: string) =>
+      !changedColumnsOnly || !changedFieldIds.length || changedFieldIds.includes(key);
+    const merged = mergeBuiltinAndFields("product", builtinLayout, rootFields).flatMap((descriptor) =>
+      descriptor.kind === "builtin"
+        ? descriptor.entry.column.isContent && showBuiltin(descriptor.entry.key)
+          ? [{ kind: "builtin" as const, column: descriptor.entry.column }]
+          : []
+        : [{ kind: "field" as const, field: descriptor.field }]
+    );
+    return showBuiltin("title")
+      ? [{ kind: "builtin" as const, column: REQUIREMENT_BUILTIN_TITLE_COLUMN }, ...merged]
+      : merged;
+  }, [builtinLayout, changedColumnsOnly, changedFieldIds, rootFields]);
 
   const currentPage = Number(prevCursor?.split(":")[1] ?? -1) + 2;
   const pageStart = (Math.max(currentPage, 1) - 1) * perPage + 1;
@@ -357,11 +373,13 @@ export function RequirementDiffGrid(props: TProps) {
                   )}
                 </td>
               )}
-              {isFirstRow &&
-                visibleBuiltinColumns.map((column) => {
+              {orderedColumns.flatMap((orderedColumn) => {
+                if (orderedColumn.kind === "builtin") {
+                  if (!isFirstRow) return [];
+                  const column = orderedColumn.column;
                   const hasChanged =
                     item.change_type === "update" && !isEqual(before?.[column.key], after?.[column.key]);
-                  return (
+                  return [
                     <td
                       key={column.key}
                       rowSpan={totalRows}
@@ -381,10 +399,10 @@ export function RequirementDiffGrid(props: TProps) {
                         resolveParentTitle={resolveParentTitle}
                       />
                       {hasChanged && <ChangedFieldCorner />}
-                    </td>
-                  );
-                })}
-              {rootFields.flatMap((field) => {
+                    </td>,
+                  ];
+                }
+                const field = orderedColumn.field;
                 if (field.field_type !== "form") {
                   if (!isFirstRow) return [];
                   const hasChanged =
@@ -597,11 +615,23 @@ export function RequirementDiffGrid(props: TProps) {
                   </span>
                 ),
               }}
-              builtinHeaders={visibleBuiltinColumns.map((column) => ({
-                key: column.key,
-                className: column.width,
-                content: <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />,
-              }))}
+              orderedColumns={orderedColumns.map((orderedColumn) =>
+                orderedColumn.kind === "builtin"
+                  ? {
+                      kind: "builtin" as const,
+                      header: {
+                        key: orderedColumn.column.key,
+                        className: orderedColumn.column.width,
+                        content: (
+                          <RequirementGridHeaderLabel
+                            icon={orderedColumn.column.icon}
+                            label={t(orderedColumn.column.labelKey)}
+                          />
+                        ),
+                      },
+                    }
+                  : orderedColumn
+              )}
             />
             {items.map(renderChangeItem)}
           </table>

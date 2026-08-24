@@ -24,7 +24,6 @@ from plane.utils.product import can_edit_product_requirements, can_manage_produc
 from plane.utils.requirement import (
     BUILTIN_COLUMN_DEFAULTS,
     BUILTIN_COLUMNS,
-    LIBRARY_HIDDEN_BUILTIN_COLUMNS,
     TITLE_MAX_LENGTH,
     builtin_filter_specs,
     builtin_values_from_payload,
@@ -32,6 +31,7 @@ from plane.utils.requirement import (
     get_requirement_eligible_user_ids,
     get_requirement_select_mode,
     get_requirement_select_options,
+    library_hidden_builtin_columns,
     replace_requirement_approvers,
 )
 from plane.utils.requirement_module import module_scope_filter
@@ -805,9 +805,10 @@ def validate_requirement_builtin_values(
             if column not in submitted:
                 values[column] = field_attr(current_row, column)
 
-    # 标准库条目永不走审批，四个执行期列在库里既不展示也不该存在。这里是唯一的执行点。
+    # 未纳入标准库的内置列在库里既不展示也不该存在（集合按需求类型布局解析，status
+    # 恒在其中）。这里是库写入路径的唯一执行点。
     if isinstance(owner, RequirementLibrary):
-        for column in LIBRARY_HIDDEN_BUILTIN_COLUMNS:
+        for column in library_hidden_builtin_columns(owner.requirement_type):
             values[column] = BUILTIN_COLUMN_DEFAULTS[column]
 
     assignee_id = values.get("assignee_id")

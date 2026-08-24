@@ -2,8 +2,9 @@
 
 与产品需求相比少了两件事 —— 不走审批、没有产品级权限；字段来自库所选的需求类型，
 只能在需求类型页改。「库条目永不走审批」由 Requirement 上的
-req_library_item_never_approved 约束硬保证；status 等四个执行期列在库里既不展示
-也不开写入口（见 LIBRARY_HIDDEN_BUILTIN_COLUMNS，库条目的 status 恒为默认值）。
+req_library_item_never_approved 约束硬保证；未纳入标准库的内置列在库里既不展示
+也不开写入口（集合按需求类型布局解析，见 library_hidden_builtin_columns；status
+恒不纳入，库条目的 status 恒为默认值）。
 """
 
 from django.db.models import Exists, OuterRef
@@ -23,6 +24,7 @@ from plane.db.models import Requirement, RequirementLibrary
 from plane.utils.requirement import (
     get_library_field_specs,
     insert_library_item,
+    resolve_builtin_field_layout,
     save_library_item_batch,
     serialize_library_field_tree,
 )
@@ -58,6 +60,9 @@ class RequirementLibraryConfigurationAPIView(BaseAPIView):
                     context={"request": request, "workspace": library.workspace},
                 ).data,
                 "fields": serialize_library_field_tree(library),
+                # 完整 7 项（带 show_in_library 标志），由前端解析层统一过滤 ——
+                # 只发已纳入的子集会让前端对「默认纳入但被取消」的键误补回缺省值
+                "builtin_fields": resolve_builtin_field_layout(library.requirement_type),
                 # 乐观锁基准取需求类型而不是库：改字段动的是类型行，库行的 updated_at
                 # 不会变，用库的值会让「字段被人改了」这种冲突漏过去。
                 "expected_updated_at": library.requirement_type.updated_at,
@@ -70,7 +75,7 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
     NOT_FOUND = "Requirement library not found."
     FORBIDDEN = "You do not have permission to maintain this library."
 
-    #: 库是模板：内置列只出标题/描述/优先级/父项，也没有交付状态那一列
+    #: 库是模板：未纳入标准库的内置列不出列（按类型布局解析，status 恒不出）
     excel_is_library = True
 
     def excel_filename_stem(self, owner, layer):

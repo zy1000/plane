@@ -39,7 +39,11 @@ import {
   useRequirementGridFilter,
   useRequirementGridFiltersConfig,
 } from "@/components/requirements/filters";
-import { BuiltinCellValue, getBuiltinColumnsFor } from "@/components/requirements/requirement-builtin-fields";
+import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
+import {
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+  resolveBuiltinColumns,
+} from "@/components/requirements/requirement-builtin-layout";
 import { RequirementDisplayProperties } from "@/components/requirements/requirement-display-properties";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
@@ -246,8 +250,13 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     () => Object.fromEntries(requirementTypes.map((requirementType) => [requirementType.id, requirementType.name])),
     [requirementTypes]
   );
-  // 与类型视图同一份内置列定义：列头、列序、列宽都不该在两个视图里各写一遍
-  const builtinColumns = getBuiltinColumnsFor("product");
+  // 与类型视图同一份内置列定义：列头、列序、列宽都不该在两个视图里各写一遍。
+  // 一张表混多个需求类型，无法同时满足多份内置字段布局 —— 显式传 null 走 canonical
+  // 回退顺序（内置在前），只有单类型视图（RequirementGrid）吃各自类型的布局。
+  const builtinColumns = [
+    REQUIREMENT_BUILTIN_TITLE_COLUMN,
+    ...resolveBuiltinColumns("product", null).map((entry) => entry.column),
+  ];
   /**
    * 编号 / 标题两列左固定（见下方 colgroup）：横滚时编号还在，才认得出
    * 「这是哪一行」。其余内置列跟着定宽的属性列走。

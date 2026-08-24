@@ -43,15 +43,14 @@ from plane.db.models import (
     RequirementPriority,
 )
 from plane.utils.requirement import (
-    BUILTIN_COLUMNS,
     CONTENT_BUILTIN_COLUMNS,
-    LIBRARY_HIDDEN_BUILTIN_COLUMNS,
     TITLE_MAX_LENGTH,
     builtin_filter_specs,
     builtin_values_from_row,
     field_attr,
     get_requirement_select_mode,
     get_requirement_select_options,
+    resolve_builtin_field_layout,
 )
 
 
@@ -83,9 +82,6 @@ SEQUENCE_COLUMN_LABEL = "编号"
 
 #: 内置列的中文名直接取筛选那份定义，避免两处各写一遍然后慢慢漂移。
 _BUILTIN_LABELS = {spec["id"]: spec["name"] for spec in builtin_filter_specs()}
-
-#: 导出时内置列的顺序。编号提到最前（表格惯例：key 列在前），其余跟随 BUILTIN_COLUMNS。
-BUILTIN_EXPORT_ORDER = tuple(BUILTIN_COLUMNS)
 
 #: 不出列的字段类型。见模块头注释第 3 条。
 UNSUPPORTED_FIELD_TYPES = frozenset(
@@ -275,24 +271,33 @@ def _is_exportable(spec):
 
 
 def build_sheet_spec(
-    *, requirement_type_id, requirement_type_name, field_specs, is_library, sheet_name
+    *,
+    requirement_type_id,
+    requirement_type_name,
+    field_specs,
+    is_library,
+    sheet_name,
+    builtin_layout=None,
 ):
-    """把一个需求类型的字段定义摊成 Excel 的列清单。"""
+    """把一个需求类型的字段定义摊成 Excel 的列清单。
+
+    列序与前端网格同一套规则：编号、标题锁定最前，随后内置列与自定义根字段按
+    builtin_field_layout 的 sort_order 归并（相等时内置在前 —— 旧客户端保存过的
+    自定义 sort_order 可能与内置撞值）。builtin_layout 不传即缺省布局（内置在前）。
+    """
     columns = [
         ExcelColumn(
             key=SEQUENCE_COLUMN_KEY, kind="sequence", label=SEQUENCE_COLUMN_LABEL
-        )
+        ),
+        # 标题与编号一样锁定在最前，不参与归并
+        ExcelColumn(key="title", kind="builtin", label=_BUILTIN_LABELS.get("title", "title")),
     ]
 
-    hidden = set(LIBRARY_HIDDEN_BUILTIN_COLUMNS) if is_library else set()
-    for column in BUILTIN_EXPORT_ORDER:
-        if column in hidden:
-            continue
-        columns.append(
-            ExcelColumn(
-                key=column, kind="builtin", label=_BUILTIN_LABELS.get(column, column)
-            )
-        )
+    builtin_entries = [
+        entry
+        for entry in resolve_builtin_field_layout(builtin_layout)
+        if not is_library or entry["show_in_library"]
+    ]
 
     specs = list(field_specs)
     children_by_parent = {}
@@ -303,9 +308,16 @@ def build_sheet_spec(
 
     form_groups = []
     required_unsupported = []
-    for spec in specs:
-        if field_attr(spec, "parent_field_id"):
-            continue
+
+    def append_builtin_column(entry):
+        column = entry["key"]
+        columns.append(
+            ExcelColumn(
+                key=column, kind="builtin", label=_BUILTIN_LABELS.get(column, column)
+            )
+        )
+
+    def append_field_columns(spec):
         if not _is_exportable(spec):
             if (
                 field_attr(spec, "is_active", True)
@@ -313,14 +325,14 @@ def build_sheet_spec(
                 and field_attr(spec, "field_type") in UNSUPPORTED_FIELD_TYPES
             ):
                 required_unsupported.append(field_attr(spec, "name") or "")
-            continue
+            return
         field_id = str(field_attr(spec, "id"))
         name = field_attr(spec, "name") or ""
         if field_attr(spec, "field_type") != RequirementFieldType.FORM:
             columns.append(
                 ExcelColumn(key=field_id, kind="field", label=name, spec=spec)
             )
-            continue
+            return
 
         child_columns = tuple(
             ExcelColumn(
@@ -336,11 +348,27 @@ def build_sheet_spec(
         # 一个子列都没有的表单在 Excel 里没有落点（子字段全是附件，或者压根没配）——
         # 整组跳过，而不是留一个空的跨列表头让导入端去猜。
         if not child_columns:
-            continue
+            return
         form_groups.append(
             FormGroup(field_id=field_id, label=name, columns=child_columns, spec=spec)
         )
         columns.extend(child_columns)
+
+    # 双指针归并：builtin_entries 已按 sort_order 升序，根 specs 由调用方按
+    # (sort_order, created_at, id) 排好；相等时内置在前
+    root_specs = [spec for spec in specs if not field_attr(spec, "parent_field_id")]
+    builtin_index = 0
+    for spec in root_specs:
+        spec_sort_order = field_attr(spec, "sort_order") or 0
+        while (
+            builtin_index < len(builtin_entries)
+            and builtin_entries[builtin_index]["sort_order"] <= spec_sort_order
+        ):
+            append_builtin_column(builtin_entries[builtin_index])
+            builtin_index += 1
+        append_field_columns(spec)
+    for entry in builtin_entries[builtin_index:]:
+        append_builtin_column(entry)
 
     return SheetSpec(
         requirement_type_id=str(requirement_type_id),
@@ -353,13 +381,17 @@ def build_sheet_spec(
     )
 
 
-def build_sheet_specs(*, requirement_types, fields_by_type, is_library):
+def build_sheet_specs(
+    *, requirement_types, fields_by_type, is_library, builtin_layout_by_type=None
+):
     """requirement_types 是 [(id, name)]，顺序即 Sheet 顺序。
 
     `fields_by_type` 必须是**已经按作用域筛过**的字段：标准库要传
     `get_library_field_specs(library)` 的结果（它是 show_in_library 规则的唯一执行点），
     产品传 `field_specs_for_requirement_types()` 的分组。这里不再筛一遍 —— 多一个执行点
     就多一处将来会和它对不上的地方。
+
+    `builtin_layout_by_type` 是 {类型 id(str): builtin_field_layout JSON}，缺项走缺省布局。
     """
     used = {}
     specs = []
@@ -376,6 +408,9 @@ def build_sheet_specs(*, requirement_types, fields_by_type, is_library):
                 field_specs=fields_by_type.get(str(requirement_type_id), []),
                 is_library=is_library,
                 sheet_name=sheet_name,
+                builtin_layout=(builtin_layout_by_type or {}).get(
+                    str(requirement_type_id)
+                ),
             )
         )
     return specs

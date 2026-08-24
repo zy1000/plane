@@ -1,5 +1,5 @@
 /** 「变更记录」Tab：列表与对比页共用一个 Tab，靠 URL 上的变更单 ID 切换。 */
-import type { TRequirementField, IUserLite } from "@plane/types";
+import type { TRequirementField, TRequirementTypeSchema, IUserLite } from "@plane/types";
 import type { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { ChangeRequestDetail } from "./change-request-detail";
 import { ChangeRequestList } from "./change-request-list";
@@ -8,6 +8,8 @@ type TProps = {
   workspaceSlug: string;
   productId: string;
   fields: TRequirementField[];
+  /** 引用到的需求类型（含各自的内置字段布局），diff 网格按它排列序 */
+  requirementTypes?: TRequirementTypeSchema[];
   members: IUserLite[];
   store: ReturnType<typeof useRequirementChangeRequests>;
   openedChangeRequestId: string | null;
@@ -20,6 +22,7 @@ export function RequirementChangesTab(props: TProps) {
     workspaceSlug,
     productId,
     fields,
+    requirementTypes,
     members,
     store,
     openedChangeRequestId,
@@ -34,6 +37,7 @@ export function RequirementChangesTab(props: TProps) {
         productId={productId}
         changeRequestId={openedChangeRequestId}
         fields={fields}
+        requirementTypes={requirementTypes}
         members={members}
         onBack={() => onOpenChangeRequest(null)}
         onSettled={onSettled}

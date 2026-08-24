@@ -75,12 +75,25 @@ CONTENT_BUILTIN_COLUMNS = tuple(
 # 父项在批量拷贝（导入、物化）时需要重映射，单独拎出来
 BUILTIN_PARENT_COLUMN = "parent_id"
 
-# 标准库不展示、导入也不带过去的四列。
+# 标准库缺省不展示、导入也不带过去的四列 —— **这只是布局为空时的缺省**，真正的
+# hidden 集合按需求类型的 builtin_field_layout 解析（见 library_hidden_builtin_columns），
+# 除 status 外的三列可以在需求类型配置页勾回「纳入标准库」。
 #
 # 标准库是模板：模板不可能知道某个产品里谁负责、什么时候做，「已实现」这种状态放在
 # 模板上更是自相矛盾。真正的麻烦在导入 —— 一旦库条目上留了负责人或截止日期，每一个
 # 从这个库导入的产品需求都会带着它落地，然后要人工一条条清掉。
 LIBRARY_HIDDEN_BUILTIN_COLUMNS = ("status", "assignee_id", "start_date", "target_date")
+
+# 无论布局怎么配都不纳入标准库的内置列：库条目的状态恒为 not_started（模板没有交付
+# 状态，req_library_item_never_approved 之外库作用域也不开状态写入口），配置页对它的
+# 勾选框恒置灰。
+LIBRARY_LOCKED_HIDDEN_BUILTIN_COLUMNS = ("status",)
+
+# 参与排序的内置列：title 恒定排最前（网格左固定列），不入 builtin_field_layout；
+# code（编号）不是内置列（见 BUILTIN_COLUMN_DEFAULTS 头注），同样只在配置页锁定展示。
+ORDERABLE_BUILTIN_COLUMNS = tuple(
+    column for column in BUILTIN_COLUMNS if column != "title"
+)
 
 TITLE_MAX_LENGTH = 255
 
@@ -330,6 +343,68 @@ def builtin_filter_specs():
     ]
 
 
+def _default_builtin_layout_entry(canonical_index, column):
+    """空布局的缺省项。sort_order 取 (i+1)*STEP/8（125…875），恒小于第一个自定义
+    字段的 (0+1)*STEP=1000 —— 缺省顺序就是现状「内置在前、自定义在后」，不需要特判。"""
+    return {
+        "key": column,
+        "show_in_library": column not in LIBRARY_HIDDEN_BUILTIN_COLUMNS,
+        "sort_order": (canonical_index + 1) * SORT_ORDER_STEP / 8,
+    }
+
+
+def resolve_builtin_field_layout(source):
+    """需求类型的内置字段布局 -> 归一化的有序 [{key, show_in_library, sort_order}]。
+
+    这是布局的**唯一解析点**：四个配置读出口、库 hidden 集合、Excel 列序都从这里
+    拿，多一个执行点就多一处将来会和它对不上的地方（build_sheet_specs 同款理由）。
+
+    source 可以是 RequirementType，也可以是布局 JSON 本身。归一化规则：
+    - 恒返回 ORDERABLE_BUILTIN_COLUMNS 全部 7 项：未知 key 丢弃、缺失 key 按缺省补齐
+    - LIBRARY_LOCKED_HIDDEN_BUILTIN_COLUMNS（status）的 show_in_library 强制 False
+    - 按 sort_order 升序；与自定义字段归并时 sort_order 相等**内置在前**（旧客户端
+      不带布局保存后自定义会被重写成 (index+1)*STEP，可能与内置撞值）
+
+    布局不冻结、不进 schema revision：与 logo_props 同规则，历史版本按当前布局渲染。
+    """
+    if isinstance(source, RequirementType):
+        source = source.builtin_field_layout
+    stored = {}
+    for entry in source or []:
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        if key in ORDERABLE_BUILTIN_COLUMNS and key not in stored:
+            stored[key] = entry
+    resolved = []
+    for index, column in enumerate(ORDERABLE_BUILTIN_COLUMNS):
+        default = _default_builtin_layout_entry(index, column)
+        entry = stored.get(column)
+        if entry is not None:
+            try:
+                default["sort_order"] = float(entry.get("sort_order"))
+            except (TypeError, ValueError):
+                pass
+            default["show_in_library"] = bool(
+                entry.get("show_in_library", default["show_in_library"])
+            )
+        if column in LIBRARY_LOCKED_HIDDEN_BUILTIN_COLUMNS:
+            default["show_in_library"] = False
+        resolved.append(default)
+    # 同 sort_order 时保持 canonical 序，排序稳定即可
+    resolved.sort(key=lambda item: item["sort_order"])
+    return resolved
+
+
+def library_hidden_builtin_columns(requirement_type):
+    """这个需求类型下，标准库不展示、写入拍回缺省、导入不带过去的内置列集合。"""
+    return tuple(
+        entry["key"]
+        for entry in resolve_builtin_field_layout(requirement_type)
+        if not entry["show_in_library"]
+    )
+
+
 class RequirementDataLossError(Exception):
     def __init__(self, affected_row_count):
         self.affected_row_count = affected_row_count
@@ -554,21 +629,25 @@ def requirement_types_field_payload_from_specs(requirement_type_ids, specs_by_ty
         return []
 
     identities = {
-        str(key): (name, logo_props)
-        for key, name, logo_props in RequirementType.objects.filter(
+        str(key): (name, logo_props, builtin_field_layout)
+        for key, name, logo_props, builtin_field_layout in RequirementType.objects.filter(
             id__in=requirement_type_ids
-        ).values_list("id", "name", "logo_props")
+        ).values_list("id", "name", "logo_props", "builtin_field_layout")
     }
     payload = []
     for requirement_type_id in requirement_type_ids:
         specs = specs_by_type.get(requirement_type_id, [])
-        name, logo_props = identities.get(requirement_type_id, ("", {}))
+        name, logo_props, builtin_field_layout = identities.get(
+            requirement_type_id, ("", {}, [])
+        )
         payload.append(
             {
                 "id": requirement_type_id,
                 "name": name,
                 "logo_props": logo_props or {},
                 "fields": field_tree_from_specs(specs),
+                # 布局与 logo_props 同类：不属于冻结内容，实时取自类型
+                "builtin_fields": resolve_builtin_field_layout(builtin_field_layout),
             }
         )
     return payload
@@ -699,9 +778,17 @@ def sync_requirement_type_fields(
     *,
     requirement_type,
     field_payloads,
+    builtin_layout=None,
     actor=None,
     confirm_data_loss=False,
 ):
+    """builtin_layout 是可选的内置字段布局 [{key, show_in_library, position}]，
+    position 是「7 个可排序内置列 + 自定义根字段」统一列表里的 0 基下标。有布局时
+    根字段落到内置项占位之外的互补槽位，两边共用同一个 (slot+1)*STEP 公式，读侧按
+    sort_order 归并即还原统一顺序。不传（旧客户端）时保持原行为：根字段按数组下标
+    连续占槽，**不清空**已存布局 —— 此时自定义 sort_order 可能与内置撞值，读侧归并
+    以「相等内置在前」兜底。
+    """
     existing_fields = {
         field.id: field
         for field in RequirementField.objects.filter(
@@ -758,8 +845,15 @@ def sync_requirement_type_fields(
             save_field(child_payload, parent=field, index=child_index)
         return field
 
+    if builtin_layout is not None:
+        taken = {entry["position"] for entry in builtin_layout}
+        total = len(field_payloads) + len(builtin_layout)
+        custom_slots = [slot for slot in range(total) if slot not in taken]
+    else:
+        custom_slots = list(range(len(field_payloads)))
+
     for root_index, root_payload in enumerate(field_payloads):
-        save_field(root_payload, index=root_index)
+        save_field(root_payload, index=custom_slots[root_index])
 
     deleted_fields = [
         field for field_id, field in existing_fields.items() if field_id not in submitted_ids
@@ -794,7 +888,18 @@ def sync_requirement_type_fields(
         )
 
     requirement_type.updated_by = actor
-    requirement_type.save(update_fields=["updated_at", "updated_by"])
+    type_update_fields = ["updated_at", "updated_by"]
+    if builtin_layout is not None:
+        requirement_type.builtin_field_layout = [
+            {
+                "key": entry["key"],
+                "show_in_library": entry["show_in_library"],
+                "sort_order": (entry["position"] + 1) * SORT_ORDER_STEP,
+            }
+            for entry in sorted(builtin_layout, key=lambda entry: entry["position"])
+        ]
+        type_update_fields.append("builtin_field_layout")
+    requirement_type.save(update_fields=type_update_fields)
 
     # 字段树真的变了才写修订 —— 只改类型名也走到这里，无条件写会往这个类型下每条
     # 需求的变更轨迹里塞一条空变更。
@@ -1416,8 +1521,8 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
 
     data 直接深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全一致，
     不做任何重映射；只顺手裁掉不属于当前字段集的残留 key（字段后来被删过）。
-    内置列里只带标题、描述、优先级 —— 执行期四列（状态/负责人/起止日期）拍回缺省
-    值，标准库根本不展示它们，历史数据里若有残留也不该跟着漏进产品需求。父项先置空，
+    内置列里未纳入标准库的（按类型布局解析，status 恒在其中）拍回缺省值 ——
+    标准库不展示它们，历史数据里若有残留也不该跟着漏进产品需求。父项先置空，
     等新行落库后再按 client_id 重映射。
     这里**不重跑必填校验**：库条目本来就允许留空，导入不该因此失败。
 
@@ -1434,6 +1539,7 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
         raise ValueError("One or more library items were not found.")
 
     specs = get_library_field_specs(library)
+    hidden_columns = library_hidden_builtin_columns(library.requirement_type)
     creates = []
     parent_by_client_id = {}
     module_by_client_id = {}
@@ -1443,7 +1549,7 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
         parent_by_client_id[item_id] = builtin[BUILTIN_PARENT_COLUMN]
         module_by_client_id[item_id] = item.module_id
         builtin[BUILTIN_PARENT_COLUMN] = None
-        for column in LIBRARY_HIDDEN_BUILTIN_COLUMNS:
+        for column in hidden_columns:
             builtin[column] = BUILTIN_COLUMN_DEFAULTS[column]
         creates.append(
             {

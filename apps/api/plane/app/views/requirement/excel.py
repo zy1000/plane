@@ -121,12 +121,14 @@ class RequirementExcelMixin:
                 id__in=type_ids, workspace_id=owner.workspace_id
             )
             .order_by("sort_order", "created_at", "id")
-            .values_list("id", "name")
+            .values_list("id", "name", "builtin_field_layout")
         )
+        rows = [(str(item), name, layout) for item, name, layout in ordered]
         return xl.build_sheet_specs(
-            requirement_types=[(str(item), name) for item, name in ordered],
+            requirement_types=[(item_id, name) for item_id, name, _ in rows],
             fields_by_type=fields_by_type,
             is_library=self.excel_is_library,
+            builtin_layout_by_type={item_id: layout for item_id, _, layout in rows},
         )
 
     def _excel_export_context(self, owner, layer):

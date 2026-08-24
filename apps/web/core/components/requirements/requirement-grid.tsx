@@ -1,6 +1,7 @@
 import {
   forwardRef,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -40,6 +41,7 @@ import type {
   TRequirement,
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
+  TRequirementBuiltinFieldConfig,
   TRequirementFilter,
   TRequirementItemStatus,
   TRequirementValue,
@@ -61,9 +63,13 @@ import {
   BuiltinCellEditor,
   BuiltinCellValue,
   createEmptyBuiltinValues,
-  getBuiltinColumnsFor,
   pickBuiltinValues,
 } from "./requirement-builtin-fields";
+import {
+  mergeBuiltinAndFields,
+  REQUIREMENT_BUILTIN_TITLE_COLUMN,
+  resolveBuiltinColumns,
+} from "./requirement-builtin-layout";
 import {
   FORM_GUTTER_COLUMN_WIDTH,
   FORM_ROW_NUMBER_COLUMN_WIDTH,
@@ -130,6 +136,11 @@ type TProps = {
    * 列显隐的存储命名空间后缀。产品需求按视图区分，否则不同类型视图会互相覆盖列配置。
    */
   columnStorageId?: string;
+  /**
+   * 当前需求类型的内置字段布局（顺序 + 纳入标准库），来自配置接口的 builtin_fields。
+   * 不传/为 null 回退现状顺序（内置在前）。内置列与自定义列按它交叉排列。
+   */
+  builtinLayout?: TRequirementBuiltinFieldConfig[] | null;
   fields: TRequirementField[];
   requirements: TRequirement[];
   totalCount: number;
@@ -183,6 +194,7 @@ export const RequirementGrid = observer(
       readOnly = false,
       createRequirementTypeId,
       columnStorageId,
+      builtinLayout = null,
       fields,
       requirements,
       totalCount,
@@ -214,8 +226,11 @@ export const RequirementGrid = observer(
     const [isSearchOpen, setIsSearchOpen] = useState(() => search.trim().length > 0);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const storageKey = `requirement:columns:${workspaceSlug}:${entityId}${columnStorageId ? `:${columnStorageId}` : ""}`;
-    // 标准库藏掉状态/负责人/起止日期四列 —— 模板里填了没意义，导入时也会被重置
-    const builtinColumns = useMemo(() => getBuiltinColumnsFor(entityKind), [entityKind]);
+    // 内置属性列（不含 title）：顺序与库可见性按类型布局解析；标准库藏掉未纳入的列
+    const builtinEntries = useMemo(
+      () => resolveBuiltinColumns(entityKind, builtinLayout),
+      [entityKind, builtinLayout]
+    );
     // 父项列存的是 UUID，只读态要换成标题；页内命中不发请求，跨页父项攒成一次批量取
     const parentTitles = useRequirementTitles({
       workspaceSlug,
@@ -393,6 +408,7 @@ export const RequirementGrid = observer(
     const { configs: filterConfigs, areAllConfigsInitialized } = useRequirementGridFiltersConfig({
       workspaceSlug,
       entityKind,
+      builtinColumns: builtinEntries,
       customFields: customFilterFields,
     });
     const filter = useRequirementGridFilter({
@@ -423,20 +439,15 @@ export const RequirementGrid = observer(
     const showActionGutter = !readOnly;
 
     /**
-     * 列宽与列序：编号在最左并左固定，勾选框折进它；标题紧随其后、同样左固定
-     * （left 等于编号列宽），吃掉容器剩余宽度，行操作折进标题列。其余列一律定宽。
-     * 与项目需求网格一致。
+     * 列宽与列序：编号在最左并左固定，勾选框折进它；模块、标题依次左固定，标题
+     * 吃掉容器剩余宽度，行操作折进标题列；来源编号与审批是结构列紧随其后。
+     * 之后是**统一列流**：内置属性列与自定义字段列按类型布局的 sort_order 交叉排列
+     * （描述不再特殊置顶 —— 它跟着布局走，缺省布局下仍紧跟审批列）。
      */
-    const titleColumn = builtinColumns.find((column) => column.key === "title");
-    const propertyBuiltinColumns = useMemo(
-      () => builtinColumns.filter((column) => column.key !== "title"),
-      [builtinColumns]
-    );
-    /** 描述紧跟标题；审批插在描述之后，其余内置列跟在审批后面 */
-    const descriptionColumn = propertyBuiltinColumns.find((column) => column.key === "description_html");
-    const remainingBuiltinColumns = useMemo(
-      () => propertyBuiltinColumns.filter((column) => column.key !== "description_html"),
-      [propertyBuiltinColumns]
+    const titleColumn = REQUIREMENT_BUILTIN_TITLE_COLUMN;
+    const orderedColumns = useMemo(
+      () => mergeBuiltinAndFields(entityKind, builtinLayout, visibleRootFields),
+      [entityKind, builtinLayout, visibleRootFields]
     );
     const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
     const { getWidth, startResize } = useRequirementGridColumnResize();
@@ -451,7 +462,7 @@ export const RequirementGrid = observer(
         REQUIREMENT_GRID_COLUMN_WIDTH + // 模块（紧跟编号，同为左固定）
         (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         (showApprovalColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
-        propertyBuiltinColumns.reduce((sum, column) => sum + getRequirementColumnWidth(column.key), 0) +
+        builtinEntries.reduce((sum, entry) => sum + getRequirementColumnWidth(entry.key), 0) +
         visibleRootFields.reduce((sum, field) => {
           if (field.field_type !== "form" || !field.children.length) return sum + REQUIREMENT_GRID_COLUMN_WIDTH;
           return (
@@ -461,7 +472,7 @@ export const RequirementGrid = observer(
           );
         }, 0),
       [
-        propertyBuiltinColumns,
+        builtinEntries,
         showActionGutter,
         showApprovalColumn,
         showSourceColumn,
@@ -477,8 +488,8 @@ export const RequirementGrid = observer(
       };
       if (showSourceColumn) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
       if (showApprovalColumn) snapshot.approval = REQUIREMENT_GRID_COLUMN_WIDTH;
-      propertyBuiltinColumns.forEach((column) => {
-        snapshot[column.key] = getRequirementColumnWidth(column.key);
+      builtinEntries.forEach((entry) => {
+        snapshot[entry.key] = getRequirementColumnWidth(entry.key);
       });
       visibleRootFields.forEach((field) => {
         if (field.field_type !== "form" || !field.children.length) {
@@ -490,7 +501,7 @@ export const RequirementGrid = observer(
         });
       });
       return snapshot;
-    }, [defaultTitleColumnWidth, propertyBuiltinColumns, showApprovalColumn, showSourceColumn, visibleRootFields]);
+    }, [builtinEntries, defaultTitleColumnWidth, showApprovalColumn, showSourceColumn, visibleRootFields]);
     const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
     const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
     const moduleColumnWidth = getWidth("module_name", REQUIREMENT_GRID_COLUMN_WIDTH);
@@ -518,14 +529,14 @@ export const RequirementGrid = observer(
         1 + // 标题列（左固定，行操作折在里面）
         (showSourceColumn ? 1 : 0) + // 标准库编号
         (showApprovalColumn ? 1 : 0) + // 审批态
-        propertyBuiltinColumns.length +
+        builtinEntries.length +
         visibleRootFields.reduce(
           (sum, field) =>
             sum + (field.field_type === "form" ? getFormColumnCount(field, showActionGutter, showActionGutter) : 1),
           0
         ),
       [
-        propertyBuiltinColumns.length,
+        builtinEntries.length,
         showActionGutter,
         showApprovalColumn,
         showSourceColumn,
@@ -925,75 +936,57 @@ export const RequirementGrid = observer(
                     )}
                   </td>
                 )}
-                {/* 内置列恒排在自定义字段之前，且永远是单列，跟着整组行 rowSpan */}
-                {isFirstRow && descriptionColumn && (
-                  <td
-                    key={descriptionColumn.key}
-                    rowSpan={totalRows}
-                    className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
-                  >
-                    {isRowEditable ? (
-                      <BuiltinCellEditor
-                        columnKey={descriptionColumn.key}
-                        values={builtin}
-                        onChange={(patch) => autosave.updateBuiltin(key, patch)}
-                        parentScope={parentScope}
-                        rowId={key}
-                        deferTextCommit
-                      />
-                    ) : (
-                      <BuiltinCellValue
-                        columnKey={descriptionColumn.key}
-                        values={builtin}
-                        resolveParentTitle={resolveParentTitle}
-                      />
-                    )}
-                  </td>
-                )}
                 {isFirstRow && showApprovalColumn && (
                   <td rowSpan={totalRows} className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}>
                     <RequirementApprovalCell requirement={requirement} onOpenChangeRequest={onOpenChangeRequest} />
                   </td>
                 )}
-                {isFirstRow &&
-                  remainingBuiltinColumns.map((column) => (
-                    <td
-                      key={column.key}
-                      rowSpan={totalRows}
-                      className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
-                    >
-                      {column.key === "status" ? (
-                        /*
-                         * 状态格绕开 readOnly/is_locked/closed 的行级只读判定：closed 行要能
-                         * 重开、评审中也能改状态，只看页面级写权限（onStatusChange 有没有传）。
-                         * 读 requirement.status 而不是 autosave 的 builtin.status —— dirty 行的
-                         * 本地副本会停在旧值上，状态端点的结果只回灌到 requirements。
-                         */
-                        <RequirementStatusCell
-                          status={requirement.status}
-                          onChange={
-                            !readOnly && onStatusChange ? (status) => onStatusChange(requirement.id, status) : undefined
-                          }
-                        />
-                      ) : isRowEditable ? (
-                        <BuiltinCellEditor
-                          columnKey={column.key}
-                          values={builtin}
-                          onChange={(patch) => autosave.updateBuiltin(key, patch)}
-                          parentScope={parentScope}
-                          rowId={key}
-                          deferTextCommit
-                        />
-                      ) : (
-                        <BuiltinCellValue
-                          columnKey={column.key}
-                          values={builtin}
-                          resolveParentTitle={resolveParentTitle}
-                        />
-                      )}
-                    </td>
-                  ))}
-                {visibleRootFields.flatMap((field) => {
+                {/* 统一列流：内置属性列与自定义字段列按类型布局交叉；内置列永远是单列，跟着整组行 rowSpan */}
+                {orderedColumns.flatMap((orderedColumn) => {
+                  if (orderedColumn.kind === "builtin") {
+                    if (!isFirstRow) return [];
+                    const column = orderedColumn.entry;
+                    return [
+                      <td
+                        key={column.key}
+                        rowSpan={totalRows}
+                        className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                      >
+                        {column.key === "status" ? (
+                          /*
+                           * 状态格绕开 readOnly/is_locked/closed 的行级只读判定：closed 行要能
+                           * 重开、评审中也能改状态，只看页面级写权限（onStatusChange 有没有传）。
+                           * 读 requirement.status 而不是 autosave 的 builtin.status —— dirty 行的
+                           * 本地副本会停在旧值上，状态端点的结果只回灌到 requirements。
+                           */
+                          <RequirementStatusCell
+                            status={requirement.status}
+                            onChange={
+                              !readOnly && onStatusChange
+                                ? (status) => onStatusChange(requirement.id, status)
+                                : undefined
+                            }
+                          />
+                        ) : isRowEditable ? (
+                          <BuiltinCellEditor
+                            columnKey={column.key}
+                            values={builtin}
+                            onChange={(patch) => autosave.updateBuiltin(key, patch)}
+                            parentScope={parentScope}
+                            rowId={key}
+                            deferTextCommit
+                          />
+                        ) : (
+                          <BuiltinCellValue
+                            columnKey={column.key}
+                            values={builtin}
+                            resolveParentTitle={resolveParentTitle}
+                          />
+                        )}
+                      </td>,
+                    ];
+                  }
+                  const field = orderedColumn.field;
                   if (field.field_type !== "form") {
                     if (!isFirstRow) return [];
                     return [
@@ -1355,22 +1348,19 @@ export const RequirementGrid = observer(
                 {showSourceColumn && (
                   <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
                 )}
-                {descriptionColumn && (
-                  <col
-                    style={{
-                      width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)),
-                    }}
-                  />
-                )}
                 {showApprovalColumn && <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />}
-                {remainingBuiltinColumns.map((column) => (
-                  <col
-                    key={column.key}
-                    style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }}
-                  />
-                ))}
-                {visibleRootFields.flatMap((field) =>
-                  field.field_type !== "form" || !field.children.length
+                {orderedColumns.flatMap((orderedColumn) => {
+                  if (orderedColumn.kind === "builtin") {
+                    const column = orderedColumn.entry;
+                    return [
+                      <col
+                        key={column.key}
+                        style={{ width: getWidth(column.key, getRequirementColumnWidth(column.key)) }}
+                      />,
+                    ];
+                  }
+                  const field = orderedColumn.field;
+                  return field.field_type !== "form" || !field.children.length
                     ? [<col key={field.id} style={{ width: getWidth(field.id, REQUIREMENT_GRID_COLUMN_WIDTH) }} />]
                     : [
                         ...(showActionGutter
@@ -1382,8 +1372,8 @@ export const RequirementGrid = observer(
                         ...(showActionGutter
                           ? [<col key={`${field.id}-gutter`} style={{ width: FORM_GUTTER_COLUMN_WIDTH }} />]
                           : []),
-                      ]
-                )}
+                      ];
+                })}
               </colgroup>
               <RequirementGridHeader
                 rootFields={visibleRootFields}
@@ -1505,21 +1495,7 @@ export const RequirementGrid = observer(
                         },
                       ]
                     : []),
-                  ...(descriptionColumn
-                    ? [
-                        {
-                          key: descriptionColumn.key,
-                          content: (
-                            <RequirementGridHeaderLabel
-                              icon={descriptionColumn.icon}
-                              label={t(descriptionColumn.labelKey)}
-                            />
-                          ),
-                          onResize: (event) => startResize(descriptionColumn.key, columnSnapshot, event),
-                        },
-                      ]
-                    : []),
-                  // 审批紧跟描述 —— 每行都要扫一眼，不能放到要横滚才看得见的地方
+                  // 审批紧跟标题簇 —— 每行都要扫一眼，不能放到要横滚才看得见的地方
                   ...(showApprovalColumn
                     ? [
                         {
@@ -1532,12 +1508,25 @@ export const RequirementGrid = observer(
                         },
                       ]
                     : []),
-                  ...remainingBuiltinColumns.map((column) => ({
-                    key: column.key,
-                    content: <RequirementGridHeaderLabel icon={column.icon} label={t(column.labelKey)} />,
-                    onResize: (event) => startResize(column.key, columnSnapshot, event),
-                  })),
                 ]}
+                orderedColumns={orderedColumns.map((orderedColumn) =>
+                  orderedColumn.kind === "builtin"
+                    ? {
+                        kind: "builtin" as const,
+                        header: {
+                          key: orderedColumn.entry.key,
+                          content: (
+                            <RequirementGridHeaderLabel
+                              icon={orderedColumn.entry.column.icon}
+                              label={t(orderedColumn.entry.column.labelKey)}
+                            />
+                          ),
+                          onResize: (event: ReactMouseEvent<HTMLDivElement>) =>
+                            startResize(orderedColumn.entry.key, columnSnapshot, event),
+                        },
+                      }
+                    : orderedColumn
+                )}
                 onFieldResize={(fieldId, event) => startResize(fieldId, columnSnapshot, event)}
               />
               {rowGroups}
@@ -1603,6 +1592,7 @@ export const RequirementGrid = observer(
           entityId={entityId}
           entityKind={entityKind}
           requirementTypeId={createRequirementTypeId}
+          builtinLayout={builtinLayout}
           fields={activeFields}
           seed={createSeed ?? undefined}
           moduleId={createModuleId}

@@ -1,6 +1,11 @@
 import type { TLogoProps } from "./common";
 import type { IUserLite } from "./users";
-import type { TRequirementField, TRequirementFieldDraft } from "./requirement";
+import type {
+  TRequirementBuiltinFieldConfig,
+  TRequirementBuiltinFieldPayload,
+  TRequirementField,
+  TRequirementFieldDraft,
+} from "./requirement";
 
 /**
  * 需求类型：工作区级的字段定义源。
@@ -43,6 +48,8 @@ export type TUpdateRequirementTypePayload = Partial<
 export type TRequirementTypeConfiguration = {
   requirement_type: TRequirementType;
   fields: TRequirementField[];
+  /** 内置字段布局（服务端已归一化，恒 7 项）。旧后端/旧缓存可能没有 */
+  builtin_fields?: TRequirementBuiltinFieldConfig[];
   /** 新建字段的 client_id -> 服务端 id */
   created_field_ids: Record<string, string>;
 };
@@ -53,6 +60,8 @@ export type TRequirementTypeConfigurationPayload = {
   /** 名称、描述与图标跟字段在同一次请求里保存，共用同一把锁 */
   requirement_type?: Partial<Pick<TRequirementType, "name" | "description" | "is_active" | "logo_props">>;
   fields: TRequirementFieldDraft[];
+  /** 内置字段布局；position 是与 fields 根字段合并后的统一下标。编辑器恒发送 */
+  builtin_fields?: TRequirementBuiltinFieldPayload[];
   /** 删字段会清掉引用该类型的明细行里的数据，需二次确认 */
   confirm_data_loss?: boolean;
 };

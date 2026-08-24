@@ -119,6 +119,7 @@ export function RequirementBaselinesTab(props: TProps) {
         workspaceSlug={workspaceSlug}
         comparison={comparison.comparison}
         fields={fields}
+        requirementTypes={requirementTypes}
         isLoading={comparison.isLoading}
         error={comparison.error}
         perPage={comparison.perPage}

@@ -406,6 +406,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             workspaceSlug={workspaceSlug ?? ""}
             productId={productId ?? ""}
             fields={store.configuration?.fields ?? []}
+            requirementTypes={requirementTypes}
             members={memberOptions}
             store={changesStore}
             openedChangeRequestId={openedChangeRequestId}
@@ -488,6 +489,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   readOnly={!canEdit}
                   createRequirementTypeId={activeView.requirementTypeId}
                   columnStorageId={activeView.requirementTypeId}
+                  builtinLayout={activeType?.builtin_fields ?? null}
                   fields={activeType?.fields ?? []}
                   /*
                    * 列已经换成新类型了，行还得等 requirementTypeFilter 同步过去（那是个
