@@ -1465,7 +1465,6 @@ export default {
     projects: {
       label: "Projects",
       placeholder: "Not in any project",
-      needs_approval: "Only approved requirements can enter a project",
       no_candidates: "No project available (a project must link this product first)",
     },
     open: "Open detail",
@@ -1929,7 +1928,7 @@ export default {
     all_statuses: "All statuses",
     empty: {
       title: "No requirements linked yet",
-      description: "Link approved requirements from a product to track their delivery progress in this project.",
+      description: "Link requirements from a product to track their delivery progress in this project.",
     },
     no_products: {
       title: "No product linked to this project",
@@ -1937,11 +1936,11 @@ export default {
     },
     linkable: {
       title: "Link requirements",
-      subtitle: "Pick approved requirements from linked products",
+      subtitle: "Pick requirements from linked products",
       search_placeholder: "Search by ID or title",
       products_label: "Products",
       total_count: "{count, plural, one{# requirement} other{# requirements}}",
-      empty: "No requirements available to link (link a product first; only approved requirements qualify, and closed ones are hidden)",
+      empty: "No requirements available to link (link a product first; requirements already in this project are hidden)",
       load_failed: "Failed to load requirements",
       selected: "{count} selected",
       selected_panel: "Selected",
@@ -2011,7 +2010,7 @@ export default {
     empty: "No product linked yet",
     manage: "Manage products",
     manage_subtitle:
-      "Select products to link to this project. You can then reference their approved requirements.",
+      "Select products to link to this project. You can then reference their requirements.",
     linked_meta: "Linked · {count} requirements",
     unlinked_meta: "Not linked",
     has_linked_requirements:

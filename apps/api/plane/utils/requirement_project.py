@@ -223,18 +223,15 @@ def linked_requirement_ids(project_id):
 
 
 def linkable_requirements_queryset(*, slug, project_id):
-    """候选池：本项目关联产品下、已通过评审、未关闭、且尚未关联进来的需求。
+    """候选池：本项目关联产品下、且尚未关联进来的需求。
 
-    只放 approved_version 非空的行（决策 3）：未过评审的需求不进入交付链路。
-    已关闭（closed）的需求不进任何关联选择器（见 RequirementItemStatus）。
+    唯一的排除条件是「已关联进本项目」：评审状态、closed 都不设门槛。
     """
     return (
         Requirement.objects.filter(
             workspace__slug=slug,
             product_id__in=linked_product_ids(project_id),
-            approved_version__isnull=False,
         )
-        .exclude(status=RequirementItemStatus.CLOSED)
         .exclude(id__in=linked_requirement_ids(project_id))
         # module 供行序列化的 module_name 用；这条 queryset 只读、从不加锁，
         # 可空外键的 OUTER JOIN 在这里没有 select_for_update 的问题
@@ -513,7 +510,7 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
     """把一批需求 id 解析成可关联的需求行；任一条不合格就整批拒绝。
 
     全有或全无 —— 与 row_base.bulk_destroy 同样的取舍：部分成功会让前端拿不准哪些
-    生效了，而这里的失败原因（未过评审 / 产品没关联进本项目）都是用户可以自己修的。
+    生效了，而这里的失败原因（产品没关联进本项目）都是用户可以自己修的。
     """
     requested = list(dict.fromkeys(str(item) for item in requirement_ids))
     if not requested:
@@ -523,7 +520,7 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
 
     rows = list(
         Requirement.objects.filter(id__in=requested, workspace__slug=slug).only(
-            "id", "product_id", "approved_version", "status"
+            "id", "product_id"
         )
     )
     found = {str(row.id): row for row in rows}
@@ -540,10 +537,6 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
             conflicts.append({"id": requirement_id, "reason": "NOT_PRODUCT_SCOPED"})
         elif str(row.product_id) not in allowed_product_ids:
             conflicts.append({"id": requirement_id, "reason": "PRODUCT_NOT_LINKED"})
-        elif row.approved_version is None:
-            conflicts.append({"id": requirement_id, "reason": "NOT_APPROVED"})
-        elif row.status == RequirementItemStatus.CLOSED:
-            conflicts.append({"id": requirement_id, "reason": "CLOSED"})
 
     if conflicts:
         raise RequirementLinkError(

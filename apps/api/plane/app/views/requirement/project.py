@@ -544,28 +544,9 @@ class RequirementProjectsViewSet(BaseViewSet):
             return Response(
                 {"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND
             )
-        if requirement.approved_version is None:
-            return Response(
-                {
-                    "error": "Only approved requirements can enter a project.",
-                    "code": "REQUIREMENT_NOT_APPROVED",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
 
         projects = request.data.get("projects", [])
         removed_projects = request.data.get("removed_projects", [])
-
-        # 已关闭的需求不进任何关联选择器：只拦新增关联，仅移除的请求放行
-        if projects and requirement.status == RequirementItemStatus.CLOSED:
-            return Response(
-                {
-                    "error": "Closed requirements cannot be linked to a project.",
-                    "code": "REQUIREMENT_CLOSED",
-                    "requirement_ids": [str(requirement.id)],
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
 
         if projects:
             # 目标项目必须已经关联了这个产品 —— 与项目侧关联走的是同一条规则，

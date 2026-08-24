@@ -4,8 +4,6 @@
  * 候选项是**已经关联了本产品**的项目 —— 与项目侧关联走的是同一条规则（后端会再校验
  * 一次，见 RequirementProjectsViewSet.create），换个方向进来不该松一格。所以没有关联
  * 过本产品的项目在这里根本不出现，而不是选中后再报错。
- *
- * 只有已通过评审的需求能进项目（决策 3），未过评审的行整块禁用并说明原因。
  */
 import { useMemo, useState } from "react";
 import { xor } from "lodash-es";
@@ -109,8 +107,6 @@ export const RequirementProjectsSelect = ({
     }
   };
 
-  // 未过评审的需求不进入交付链路，禁用比让人点完再吃 409 好
-  const isApproved = requirement.approved_version !== null;
   /**
    * 只在**结构性**不可用时换成静态按钮。
    *
@@ -118,7 +114,7 @@ export const RequirementProjectsSelect = ({
    * 挂载着的 CustomSearchSelect 换成 Tooltip，下拉被整个卸载 —— 多选变成「勾一个关
    * 一次」。在飞的请求改用 disabled 表达，组件本身不动。
    */
-  const isStaticallyDisabled = readOnly || isLoading || !isApproved;
+  const isStaticallyDisabled = readOnly || isLoading;
 
   const button = (
     <span
@@ -144,17 +140,7 @@ export const RequirementProjectsSelect = ({
   );
 
   if (isStaticallyDisabled) {
-    return (
-      <Tooltip
-        tooltipContent={
-          !isApproved
-            ? t("requirement_detail.projects.needs_approval")
-            : t("project_requirements.readonly_hint")
-        }
-      >
-        {button}
-      </Tooltip>
-    );
+    return <Tooltip tooltipContent={t("project_requirements.readonly_hint")}>{button}</Tooltip>;
   }
 
   return (

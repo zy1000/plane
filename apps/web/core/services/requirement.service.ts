@@ -1131,7 +1131,7 @@ export class RequirementService extends APIService {
   /**
    * 候选池：可以关联进本项目的需求。
    *
-   * 只包含已关联产品下、且已通过评审的需求 —— 未过评审的需求不进入交付链路。
+   * 只包含已关联产品下、且尚未关联进本项目的需求 —— 已关联的不再出现。
    */
   async listLinkableRequirements(
     workspaceSlug: string,

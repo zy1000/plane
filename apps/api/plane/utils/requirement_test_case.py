@@ -14,8 +14,8 @@
   4. case.repository.project_id 为空（跨项目共享用例库，放行）**或** 落在需求已关联的
      项目集合里（RequirementProject）。
 
-**刻意不设评审门槛。** requirement_project.linkable_requirements_queryset 那道
-`approved_version__isnull=False` 是「需求进项目」的门槛；需求进了项目之后再挂容器与
+**刻意不设评审门槛。** 「需求进项目」这条链路（requirement_project.
+linkable_requirements_queryset）如今同样不设评审门槛；需求进了项目之后再挂容器与
 事实（迭代 / 发布 / 工作项）一律不再拦 in_review —— 理由见
 views/requirement/container.py 的模块注释：测试是项目侧的节奏，不该被产品侧审批阻塞，
 前端软提示即可。用例关联同理。

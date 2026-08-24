@@ -1635,7 +1635,6 @@ export default {
     projects: {
       label: "所属项目",
       placeholder: "未进入任何项目",
-      needs_approval: "需求通过评审后才能进入项目",
       no_candidates: "没有可选的项目（项目需先关联本产品）",
     },
     open: "打开详情",
@@ -2102,7 +2101,7 @@ export default {
     all_statuses: "全部状态",
     empty: {
       title: "还没有关联任何需求",
-      description: "把产品里已通过评审的需求关联进来，就能在项目里跟踪它们的交付进度。",
+      description: "把产品里的需求关联进来，就能在项目里跟踪它们的交付进度。",
     },
     no_products: {
       title: "本项目还没有关联产品",
@@ -2110,11 +2109,11 @@ export default {
     },
     linkable: {
       title: "关联需求",
-      subtitle: "从已关联产品中选择已通过评审的需求",
+      subtitle: "从已关联产品中选择需求",
       search_placeholder: "按编号或标题搜索",
       products_label: "产品",
       total_count: "共 {count} 个需求",
-      empty: "没有可关联的需求（需先关联产品，且需求需通过评审；已关闭的需求不会出现）",
+      empty: "没有可关联的需求（需先关联产品；已关联进本项目的需求不会出现）",
       load_failed: "加载失败",
       selected: "已选 {count} 条",
       selected_panel: "已选",
@@ -2190,7 +2189,7 @@ export default {
     unlink: "解除关联",
     empty: "尚未关联任何产品",
     manage: "管理产品",
-    manage_subtitle: "勾选要关联到本项目的产品。关联后才能引用其下已通过评审的需求。",
+    manage_subtitle: "勾选要关联到本项目的产品。关联后才能引用其下的需求。",
     linked_meta: "已关联 · {count} 条需求",
     unlinked_meta: "未关联",
     has_linked_requirements: "该产品下还有需求关联在本项目中，请先解除这些需求的关联。",
