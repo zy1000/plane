@@ -8,13 +8,14 @@
  * 显隐偏好按项目存 localStorage，与产品网格的自定义字段显隐是同一套做法
  * （requirement-grid.tsx 的 hiddenFieldIds + storageKey）。
  */
-import { Hash, Layers, ListTodo, Package, ShieldCheck } from "lucide-react";
+import { FolderOpenDot, Hash, Layers, ListTodo, Package, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { TRequirementBuiltinKey } from "@plane/types";
 
 /** 网格里的一列。内置列直接复用 REQUIREMENT_BUILTIN_COLUMNS 的渲染器，其余是本页特有 */
 export type TProjectRequirementColumnKey =
   | "display_id"
+  | "module"
   | "product"
   | "issues"
   | "approval"
@@ -24,6 +25,7 @@ export type TProjectRequirementColumnKey =
 /** 默认可见的列（标题是固定左列，不参与显隐，所以不在这里） */
 export const DEFAULT_VISIBLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
+  "module",
   "product",
   "status",
   "issues",
@@ -35,10 +37,11 @@ export const DEFAULT_VISIBLE_COLUMNS: TProjectRequirementColumnKey[] = [
 
 /**
  * 可勾选的全部列。display_id 可见时固定渲染在标题列之前（表格第一列），
- * 其余按此顺序排在标题之后。
+ * module 可见时紧跟编号（同为左固定），其余按此顺序排在标题之后。
  */
 export const TOGGLEABLE_COLUMNS: TProjectRequirementColumnKey[] = [
   "display_id",
+  "module",
   "product",
   "status",
   "issues",
@@ -55,6 +58,7 @@ export const TOGGLEABLE_COLUMNS: TProjectRequirementColumnKey[] = [
 /** 本页特有列的表头文案；内置列走 REQUIREMENT_BUILTIN_COLUMNS 自己的 labelKey */
 export const COLUMN_LABEL_KEYS: Partial<Record<TProjectRequirementColumnKey, string>> = {
   display_id: "requirements.identifier.column",
+  module: "requirement_modules.column",
   product: "project_requirements.product_column",
   status: "requirement_fields.builtin.status",
   issues: "project_requirements.issues.column",
@@ -65,6 +69,7 @@ export const COLUMN_LABEL_KEYS: Partial<Record<TProjectRequirementColumnKey, str
 /** 本页特有列的表头图标；内置列走 REQUIREMENT_BUILTIN_COLUMNS 自己的 icon */
 export const COLUMN_ICONS: Partial<Record<TProjectRequirementColumnKey, LucideIcon>> = {
   display_id: Hash,
+  module: FolderOpenDot,
   product: Package,
   issues: ListTodo,
   approval: ShieldCheck,

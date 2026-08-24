@@ -138,6 +138,8 @@ export type TRequirement = TRequirementBuiltinValues & {
    * 不进 builtin / 版本快照 / 变更单 diff，改挂靠走 set-module 端点，不触发审批。
    */
   module_id: string | null;
+  /** 模块名，服务端随行拍平（网格模块列 / 详情抽屉直接用） */
+  module_name: string | null;
   data: TRequirementData;
   sort_order: number;
   /**

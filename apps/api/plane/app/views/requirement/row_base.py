@@ -40,6 +40,7 @@ from plane.utils.requirement import (
 )
 from plane.utils.requirement_module import (
     expand_requirement_module_subtree_ids,
+    module_name_map,
     module_scope_filter,
     set_requirement_module,
 )
@@ -155,6 +156,8 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         return {
             **self._serializer_context(layer, owner),
             "source_library_identifiers": source_library_identifier_map(rows),
+            # 模块名按批解析：写路径返回的行是内存实例，逐行取 obj.module 会 N+1
+            "module_names": module_name_map(rows),
         }
 
     @staticmethod

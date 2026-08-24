@@ -956,7 +956,9 @@ ROW_FIELDS = [
     *BUILTIN_COLUMNS,
     # 模块挂靠（只读输出）。模块不是内容：不在 BUILTIN_COLUMNS 里、不进版本
     # 快照与变更单 diff，写入口是 set-module 端点与创建时的 module_id。
+    # module_name 随行拍平，网格模块列与详情抽屉直接用，不用前端再解析树。
     "module_id",
+    "module_name",
     "data",
     "sort_order",
     # 乐观锁计数器。与审批版本链（approved_version）是两个完全不同的数字，前端把它
@@ -998,6 +1000,7 @@ class RequirementSerializer(BaseSerializer):
     display_id = serializers.SerializerMethodField()
     source_display_id = serializers.SerializerMethodField()
     project_ids = serializers.SerializerMethodField()
+    module_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
@@ -1008,6 +1011,16 @@ class RequirementSerializer(BaseSerializer):
         # 没注解就是 [] 而不是 None —— 前端直接 map，
         # 少一处 ?? [] 就少一处忘了写的机会
         return [str(item) for item in getattr(obj, "project_ids", None) or []]
+
+    def get_module_name(self, obj):
+        if not obj.module_id:
+            return None
+        # 优先走 context 的批量映射（_row_context 会带，写路径的内存实例靠它免 N+1）；
+        # 列表入口没带映射时退回 FK 取值 —— 那些 queryset 都 select_related("module") 了
+        names = self.context.get("module_names")
+        if names is not None:
+            return names.get(str(obj.module_id))
+        return obj.module.name if obj.module else None
 
     def get_display_id(self, obj):
         # 作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目/库

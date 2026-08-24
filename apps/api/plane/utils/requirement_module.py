@@ -122,6 +122,24 @@ def build_module_tree_payload(*, scope_filter, total_queryset):
     }
 
 
+def module_name_map(rows):
+    """这一批行引用到的模块 -> 名称，供序列化 context 批量解析。
+
+    写路径（创建 / 导入 / bulk-save）返回的行是内存里新构造的实例，没有
+    select_related 可用 —— 逐行取 obj.module 会一行一查，导入 2000 条就是
+    2000 次查询。这里按批一次 IN 查询解决，口径同 source_library_identifier_map。
+    """
+    module_ids = {row.module_id for row in rows if row.module_id}
+    if not module_ids:
+        return {}
+    return {
+        str(module_id): name
+        for module_id, name in RequirementModule.objects.filter(
+            id__in=module_ids
+        ).values_list("id", "name")
+    }
+
+
 def get_or_create_requirement_module(*, product, name, parent, actor=None):
     """按 (产品, 同级, 名称) 取或建一个产品模块，供导入映射逐级建链。
 

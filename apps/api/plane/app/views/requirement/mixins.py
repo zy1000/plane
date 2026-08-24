@@ -104,6 +104,10 @@ def resolve_row_layer(policy):
         requirement_type_ids
     )
     return RowLayer(
+        # 不要在这条 queryset 上 select_related("module")：module 可空，会引入
+        # LEFT OUTER JOIN，而 partial_update / rollback 直接在 layer.queryset 上
+        # select_for_update()，Postgres 拒绝对 outer join 的可空侧加锁。
+        # 模块名由 _row_context 的 module_names 批量映射解析，不靠 FK 穿透。
         queryset=Requirement.objects.filter(**scope).order_by(
             "sort_order", "created_at", "id"
         ),

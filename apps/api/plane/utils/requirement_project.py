@@ -236,7 +236,9 @@ def linkable_requirements_queryset(*, slug, project_id):
         )
         .exclude(status=RequirementItemStatus.CLOSED)
         .exclude(id__in=linked_requirement_ids(project_id))
-        .select_related("product")
+        # module 供行序列化的 module_name 用；这条 queryset 只读、从不加锁，
+        # 可空外键的 OUTER JOIN 在这里没有 select_for_update 的问题
+        .select_related("product", "module")
         .order_by("product__identifier", "sort_order", "created_at", "id")
     )
 
@@ -350,7 +352,7 @@ def linked_requirements_queryset(*, slug, project_id):
                 Value([], output_field=ArrayField(UUIDField())),
             ),
         )
-        .select_related("product")
+        .select_related("product", "module")
         .order_by("link_sort_order", "product__identifier", "sequence_id")
     )
 

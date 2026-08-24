@@ -95,6 +95,9 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
         fields = get_library_field_specs(owner)
         fields_by_requirement_type = {str(owner.requirement_type_id): fields}
         return RowLayer(
+            # 不 select_related("module")：可空外键的 OUTER JOIN 会让写路径的
+            # select_for_update() 报错（理由见 resolve_row_layer 的同款注释）。
+            # 模块名由 _row_context 的 module_names 批量映射解析。
             queryset=Requirement.objects.filter(library=owner).order_by(
                 "sort_order", "created_at", "id"
             ),

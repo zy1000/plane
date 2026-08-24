@@ -7,6 +7,7 @@ import { Pagination } from "antd";
 import {
   BookMarked,
   Copy,
+  FolderOpenDot,
   Hash,
   History,
   Layers,
@@ -265,6 +266,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const displayColumns = useMemo(
     () => [
       { id: "display_id", name: t("requirements.identifier.column") },
+      { id: "module", name: t("requirement_modules.column") },
       { id: "description_html", name: t("requirement_fields.builtin.description") },
       { id: "approval", name: t("requirement_approval.column") },
       { id: "status", name: t("requirement_fields.builtin.status") },
@@ -280,6 +282,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   );
 
   const isDisplayIdVisible = !hiddenFieldIds.includes("display_id");
+  const isModuleVisible = !hiddenFieldIds.includes("module");
   const isSourceDisplayIdVisible = !hiddenFieldIds.includes("source_display_id");
   const isDescriptionVisible = !hiddenFieldIds.includes("description_html");
   const isApprovalVisible = !hiddenFieldIds.includes("approval");
@@ -322,13 +325,18 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const defaultPropertyColumnsWidth =
     selectColumnWidth +
     (isDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
+    (isModuleVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isSourceDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isApprovalVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isDescriptionVisible ? getRequirementColumnWidth("description_html") : 0) +
     (!hiddenFieldIds.includes("status") ? getRequirementColumnWidth("status") : 0) +
     propertyBuiltinColumns
       .filter((column) => column.key !== "description_html" && column.key !== "status")
-      .reduce((total, column) => (!hiddenFieldIds.includes(column.key) ? total + getRequirementColumnWidth(column.key) : total), 0) +
+      .reduce(
+        (total, column) =>
+          !hiddenFieldIds.includes(column.key) ? total + getRequirementColumnWidth(column.key) : total,
+        0
+      ) +
     (isRequirementTypeVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0);
 
   const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(containerWidth, defaultPropertyColumnsWidth);
@@ -337,6 +345,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
       title: defaultTitleColumnWidth,
     };
     if (isDisplayIdVisible) snapshot.display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
+    if (isModuleVisible) snapshot.module = REQUIREMENT_GRID_COLUMN_WIDTH;
     if (isSourceDisplayIdVisible) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
     if (isApprovalVisible) snapshot.approval = REQUIREMENT_GRID_COLUMN_WIDTH;
     if (isRequirementTypeVisible) snapshot.requirement_type = REQUIREMENT_GRID_COLUMN_WIDTH;
@@ -346,14 +355,28 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
       }
     });
     return snapshot;
-  }, [defaultTitleColumnWidth, hiddenFieldIds, isApprovalVisible, isDisplayIdVisible, isRequirementTypeVisible, isSourceDisplayIdVisible, propertyBuiltinColumns]);
+  }, [
+    defaultTitleColumnWidth,
+    hiddenFieldIds,
+    isApprovalVisible,
+    isDisplayIdVisible,
+    isModuleVisible,
+    isRequirementTypeVisible,
+    isSourceDisplayIdVisible,
+    propertyBuiltinColumns,
+  ]);
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
   const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
+  const moduleWidth = getWidth("module", REQUIREMENT_GRID_COLUMN_WIDTH);
   const sourceDisplayIdWidth = getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
   const displayIdStickyLeft = selectColumnWidth;
-  const titleStickyLeft = selectColumnWidth + (isDisplayIdVisible ? displayIdWidth : 0);
+  // 模块列插在编号与标题之间，同为左固定，offset 逐列累加
+  const moduleStickyLeft = selectColumnWidth + (isDisplayIdVisible ? displayIdWidth : 0);
+  const titleStickyLeft =
+    selectColumnWidth + (isDisplayIdVisible ? displayIdWidth : 0) + (isModuleVisible ? moduleWidth : 0);
   const propertyColumnsWidth =
     (isDisplayIdVisible ? displayIdWidth : 0) +
+    (isModuleVisible ? moduleWidth : 0) +
     (isSourceDisplayIdVisible ? sourceDisplayIdWidth : 0) +
     (isApprovalVisible ? getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) : 0) +
     (isDescriptionVisible && descriptionColumn
@@ -413,7 +436,8 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
    * 重新分配 UUID，否则新旧两行的表单行 ID 会撞在一起。
    */
   const handleDuplicate = (requirement: TRequirement) => {
-    const fields = requirementTypes.find((requirementType) => requirementType.id === requirement.requirement_type_id)?.fields ?? [];
+    const fields =
+      requirementTypes.find((requirementType) => requirementType.id === requirement.requirement_type_id)?.fields ?? [];
     return onDuplicate({
       requirementTypeId: requirement.requirement_type_id,
       data: copyRequirementData(requirement.data, fields),
@@ -531,20 +555,18 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           —— 既不会短一截露出背景，也不会因为定宽相加超出而把最右边的列（「所属
           类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，前两列留在原地。
         */}
-        <table
-          className="table-fixed border-collapse bg-surface-1 text-left text-13"
-          style={{ width: tableWidth }}
-        >
+        <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
           <colgroup>
             {showSelectColumn && <col style={{ width: selectColumnWidth }} />}
             {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
+            {isModuleVisible && <col style={{ width: moduleWidth }} />}
             <col style={{ width: titleColumnWidth }} />
             {isDescriptionVisible && descriptionColumn && (
-              <col style={{ width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)) }} />
+              <col
+                style={{ width: getWidth(descriptionColumn.key, getRequirementColumnWidth(descriptionColumn.key)) }}
+              />
             )}
-            {isApprovalVisible && (
-              <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
-            )}
+            {isApprovalVisible && <col style={{ width: getWidth("approval", REQUIREMENT_GRID_COLUMN_WIDTH) }} />}
             {!hiddenFieldIds.includes("status") && statusColumn && (
               <col style={{ width: getWidth(statusColumn.key, getRequirementColumnWidth(statusColumn.key)) }} />
             )}
@@ -607,6 +629,26 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   />
                 </th>
               )}
+              {isModuleVisible && (
+                <th
+                  className={cn(
+                    "group/header relative",
+                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                    REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                  )}
+                  style={{
+                    width: moduleWidth,
+                    minWidth: moduleWidth,
+                    maxWidth: moduleWidth,
+                    left: moduleStickyLeft,
+                  }}
+                >
+                  <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                    <RequirementGridHeaderLabel icon={FolderOpenDot} label={t("requirement_modules.column")} />
+                  </div>
+                  <RequirementGridColumnResizer onMouseDown={(event) => startResize("module", columnSnapshot, event)} />
+                </th>
+              )}
               <th
                 data-requirement-sticky-cell
                 className={cn(
@@ -627,9 +669,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                   />
                 </div>
-                <RequirementGridColumnResizer
-                  onMouseDown={(event) => startResize("title", columnSnapshot, event)}
-                />
+                <RequirementGridColumnResizer onMouseDown={(event) => startResize("title", columnSnapshot, event)} />
               </th>
               {isDescriptionVisible && descriptionColumn && (
                 <th className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
@@ -707,10 +747,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   */}
                   {showSelectColumn && (
                     <td
-                      className={cn(
-                        REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
-                        REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS
-                      )}
+                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_SELECT_BODY_CLASS)}
                       style={REQUIREMENT_GRID_SELECT_COLUMN_STYLE}
                     >
                       <div
@@ -765,6 +802,35 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                       </div>
                     </td>
                   )}
+                  {/* 模块列：紧跟编号，只读展示（挂靠走左侧树 / 批量移动） */}
+                  {isModuleVisible && (
+                    <td
+                      className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                      style={{
+                        width: moduleWidth,
+                        minWidth: moduleWidth,
+                        maxWidth: moduleWidth,
+                        left: moduleStickyLeft,
+                      }}
+                    >
+                      <div
+                        className={cn(
+                          "flex h-full w-full min-w-0 items-center px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                          isSelected
+                            ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                            : "group-hover/requirement:bg-layer-transparent-hover"
+                        )}
+                      >
+                        {requirement.module_name ? (
+                          <span className="min-w-0 truncate" title={requirement.module_name}>
+                            {requirement.module_name}
+                          </span>
+                        ) : (
+                          <span className="text-placeholder">—</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td
                     data-requirement-sticky-cell
                     className={cn(
@@ -805,54 +871,54 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                             buttonClassName="text-tertiary hover:text-primary"
                             portalElement={menuPortalEl}
                           >
-                          <CustomMenu.MenuItem
-                            onClick={() => void handleDuplicate(requirement)}
-                            disabled={isMutating}
-                          >
-                            <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
-                          </CustomMenu.MenuItem>
-                          {requirement.can_submit_review && onSubmitReview && (
-                            <CustomMenu.MenuItem onClick={() => onSubmitReview([requirement.id])}>
-                              <MenuRowLabel icon={Send} label={t("requirement_approval.submit_review")} />
-                            </CustomMenu.MenuItem>
-                          )}
-                          {requirement.can_withdraw && requirement.pending_change_request_id && onWithdrawReview && (
                             <CustomMenu.MenuItem
-                              onClick={() => onWithdrawReview(requirement.pending_change_request_id as string)}
-                            >
-                              <MenuRowLabel icon={Undo2} label={t("requirement_approval.withdraw_review")} />
-                            </CustomMenu.MenuItem>
-                          )}
-                          {requirement.pending_change_request_id && onOpenChangeRequest && (
-                            <CustomMenu.MenuItem
-                              onClick={() => onOpenChangeRequest(requirement.pending_change_request_id as string)}
-                            >
-                              <MenuRowLabel icon={History} label={t("requirement_approval.view_change_request")} />
-                            </CustomMenu.MenuItem>
-                          )}
-                          {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」 */}
-                          {!requirement.is_locked && (
-                            <CustomMenu.MenuItem
-                              onClick={() => {
-                                if (requirement.approved_version !== null && onSubmitReview) {
-                                  onSubmitReview([requirement.id]);
-                                  return;
-                                }
-                                setIdsToDelete([requirement.id]);
-                              }}
+                              onClick={() => void handleDuplicate(requirement)}
                               disabled={isMutating}
                             >
-                              <MenuRowLabel
-                                icon={Trash2}
-                                label={
-                                  requirement.approved_version !== null
-                                    ? t("requirement_approval.request_delete")
-                                    : t("delete")
-                                }
-                                tone={requirement.approved_version !== null ? undefined : "danger"}
-                              />
+                              <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
                             </CustomMenu.MenuItem>
-                          )}
+                            {requirement.can_submit_review && onSubmitReview && (
+                              <CustomMenu.MenuItem onClick={() => onSubmitReview([requirement.id])}>
+                                <MenuRowLabel icon={Send} label={t("requirement_approval.submit_review")} />
+                              </CustomMenu.MenuItem>
+                            )}
+                            {requirement.can_withdraw && requirement.pending_change_request_id && onWithdrawReview && (
+                              <CustomMenu.MenuItem
+                                onClick={() => onWithdrawReview(requirement.pending_change_request_id as string)}
+                              >
+                                <MenuRowLabel icon={Undo2} label={t("requirement_approval.withdraw_review")} />
+                              </CustomMenu.MenuItem>
+                            )}
+                            {requirement.pending_change_request_id && onOpenChangeRequest && (
+                              <CustomMenu.MenuItem
+                                onClick={() => onOpenChangeRequest(requirement.pending_change_request_id as string)}
+                              >
+                                <MenuRowLabel icon={History} label={t("requirement_approval.view_change_request")} />
+                              </CustomMenu.MenuItem>
+                            )}
+                            {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」 */}
+                            {!requirement.is_locked && (
+                              <CustomMenu.MenuItem
+                                onClick={() => {
+                                  if (requirement.approved_version !== null && onSubmitReview) {
+                                    onSubmitReview([requirement.id]);
+                                    return;
+                                  }
+                                  setIdsToDelete([requirement.id]);
+                                }}
+                                disabled={isMutating}
+                              >
+                                <MenuRowLabel
+                                  icon={Trash2}
+                                  label={
+                                    requirement.approved_version !== null
+                                      ? t("requirement_approval.request_delete")
+                                      : t("delete")
+                                  }
+                                  tone={requirement.approved_version !== null ? undefined : "danger"}
+                                />
+                              </CustomMenu.MenuItem>
+                            )}
                           </CustomMenu>
                         </span>
                       )}

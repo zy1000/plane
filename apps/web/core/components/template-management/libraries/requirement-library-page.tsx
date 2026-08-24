@@ -268,7 +268,14 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
         showDetailAction={false}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
-        onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
+        onRequirementUpdated={(requirement) => {
+          // 抽屉里改了挂靠时左侧树计数要跟上；先比后刷，别为每次内容编辑都白拉一次树
+          const previous = store.requirementsPage.results.find((row) => row.id === requirement.id);
+          if (previous && previous.module_id !== requirement.module_id) {
+            void moduleStore.refresh().catch(() => undefined);
+          }
+          store.syncRequirements([requirement]);
+        }}
         shareHref={(requirementId) => `${workspaceSlug}/templates/libraries/${libraryId}?peek=${requirementId}`}
       />
     </>

@@ -170,6 +170,15 @@ export const RequirementPeekOverview = (props: TProps) => {
     [detail, onRequirementUpdated]
   );
 
+  /** 改模块挂靠走 set-module 旁路端点；合并了 module_id / module_name 的行回灌给网格 */
+  const handleModuleChange = useCallback(
+    async (moduleId: string | null, moduleName: string | null) => {
+      const response = await detail.updateModule(moduleId, moduleName);
+      if (response) onRequirementUpdated?.(response);
+    },
+    [detail, onRequirementUpdated]
+  );
+
   useKeypress("Escape", () => {
     // 工作项抽屉叠在需求抽屉上时，Esc 先关工作项，别把需求一起带走
     if (issueDetail.peekIssue) return;
@@ -263,9 +272,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                           (entityKind === "library"
                             ? `${workspaceSlug}/templates/libraries/${entityId}?peek=${activeId}`
                             : `${workspaceSlug}/products/${entityId}/requirements/${activeId}`)
-                      ).then(() =>
-                        setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
-                      );
+                      ).then(() => setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") }));
                     }}
                   />
                 </Tooltip>
@@ -299,6 +306,10 @@ export const RequirementPeekOverview = (props: TProps) => {
                   // 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态
                   onStatusChange={
                     canEdit && entityKind === "product" ? (status) => void handleStatusChange(status) : undefined
+                  }
+                  // 模块同为旁路轴；库条目也有模块，不像状态那样限产品
+                  onModuleChange={
+                    canEdit ? (moduleId, moduleName) => void handleModuleChange(moduleId, moduleName) : undefined
                   }
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void handleRolledBack()}

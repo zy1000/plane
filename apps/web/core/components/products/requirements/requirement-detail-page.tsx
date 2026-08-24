@@ -55,8 +55,15 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
   const isEditable = canEditRequirementContent(requirement, canEdit);
   /** 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态 */
   const onStatusChange = canEdit ? detail.updateStatus : undefined;
+  /** 模块同为旁路轴（set-module），只看页面级写权限 */
+  const onModuleChange = canEdit
+    ? (moduleId: string | null, moduleName: string | null) => void detail.updateModule(moduleId, moduleName)
+    : undefined;
 
-  const knownRows = useMemo(() => (requirement ? [requirement, ...detail.children] : []), [detail.children, requirement]);
+  const knownRows = useMemo(
+    () => (requirement ? [requirement, ...detail.children] : []),
+    [detail.children, requirement]
+  );
   const parentTitles = useRequirementTitles({
     workspaceSlug: slug,
     entityKind: "product",
@@ -164,6 +171,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                     resolveParentTitle={resolveParentTitle}
                     onPatch={detail.submitPatch}
                     onStatusChange={onStatusChange}
+                    onModuleChange={onModuleChange}
                     onProjectsChanged={() => void detail.refresh()}
                   />
                 </div>
@@ -171,7 +179,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </div>
             <div
               className={cn(
-                "vertical-scrollbar scrollbar-sm hidden h-full w-[340px] flex-shrink-0 flex-col gap-5 overflow-y-auto",
+                "vertical-scrollbar hidden scrollbar-sm h-full w-[340px] flex-shrink-0 flex-col gap-5 overflow-y-auto",
                 "border-l border-subtle px-5 py-8 lg:flex"
               )}
             >
@@ -192,6 +200,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 resolveParentTitle={resolveParentTitle}
                 onPatch={detail.submitPatch}
                 onStatusChange={onStatusChange}
+                onModuleChange={onModuleChange}
                 onProjectsChanged={() => void detail.refresh()}
               />
             </div>

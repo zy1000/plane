@@ -157,19 +157,16 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     window.localStorage.setItem(getColumnStorageKey(projectId), JSON.stringify(hiddenColumns));
   }, [hiddenColumns, projectId]);
 
-  const isVisible = useCallback(
-    (key: TProjectRequirementColumnKey) => !hiddenColumns.includes(key),
-    [hiddenColumns]
-  );
+  const isVisible = useCallback((key: TProjectRequirementColumnKey) => !hiddenColumns.includes(key), [hiddenColumns]);
   const isDisplayIdVisible = isVisible("display_id");
+  // 模块与编号一样特殊：可见时紧跟编号钉在左侧，不进「标题之后」的普通列序
+  const isModuleVisible = isVisible("module");
   const propertyColumns = useMemo(
-    () => TOGGLEABLE_COLUMNS.filter((key) => key !== "display_id" && isVisible(key)),
+    () => TOGGLEABLE_COLUMNS.filter((key) => key !== "display_id" && key !== "module" && isVisible(key)),
     [isVisible]
   );
   const toggleColumn = (key: TProjectRequirementColumnKey) =>
-    setHiddenColumns((current) =>
-      current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
-    );
+    setHiddenColumns((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
 
   const builtinByKey = useMemo(
     () => Object.fromEntries(REQUIREMENT_BUILTIN_COLUMNS.map((column) => [column.key, column])),
@@ -259,29 +256,42 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   );
   const defaultPropertyColumnsWidth = propertyColumns.reduce((total, key) => total + defaultColumnWidth(key), 0);
   const defaultDisplayIdWidth = isDisplayIdVisible ? defaultColumnWidth("display_id") : 0;
+  const defaultModuleWidth = isModuleVisible ? defaultColumnWidth("module") : 0;
   const showSelectColumn = canManage;
   const selectColumnWidth = showSelectColumn ? REQUIREMENT_GRID_SELECT_COLUMN_WIDTH : 0;
   const defaultTitleColumnWidth = resolveRequirementTitleColumnWidth(
     containerWidth,
-    defaultPropertyColumnsWidth + defaultDisplayIdWidth + selectColumnWidth
+    defaultPropertyColumnsWidth + defaultDisplayIdWidth + defaultModuleWidth + selectColumnWidth
   );
   const columnSnapshot = useMemo(() => {
     const snapshot: Record<string, number> = { title: defaultTitleColumnWidth };
     if (isDisplayIdVisible) snapshot.display_id = defaultDisplayIdWidth;
+    if (isModuleVisible) snapshot.module = defaultModuleWidth;
     propertyColumns.forEach((key) => {
       snapshot[key] = defaultColumnWidth(key);
     });
     return snapshot;
-  }, [defaultColumnWidth, defaultDisplayIdWidth, defaultTitleColumnWidth, isDisplayIdVisible, propertyColumns]);
+  }, [
+    defaultColumnWidth,
+    defaultDisplayIdWidth,
+    defaultModuleWidth,
+    defaultTitleColumnWidth,
+    isDisplayIdVisible,
+    isModuleVisible,
+    propertyColumns,
+  ]);
   const displayIdWidth = isDisplayIdVisible ? getWidth("display_id", defaultDisplayIdWidth) : 0;
+  const moduleWidth = isModuleVisible ? getWidth("module", defaultModuleWidth) : 0;
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
   const propertyColumnsWidth = propertyColumns.reduce(
     (total, key) => total + getWidth(key, defaultColumnWidth(key)),
     0
   );
-  const tableWidth = selectColumnWidth + displayIdWidth + titleColumnWidth + propertyColumnsWidth;
+  const tableWidth = selectColumnWidth + displayIdWidth + moduleWidth + titleColumnWidth + propertyColumnsWidth;
   const displayIdStickyLeft = selectColumnWidth;
-  const titleStickyLeft = selectColumnWidth + displayIdWidth;
+  // 模块列插在编号与标题之间，左固定簇 offset 逐列累加
+  const moduleStickyLeft = selectColumnWidth + displayIdWidth;
+  const titleStickyLeft = selectColumnWidth + displayIdWidth + moduleWidth;
 
   /**
    * 父项标题只从**本页已有的行**里解析，不额外发请求。
@@ -346,6 +356,15 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         ) : (
           <span className="text-placeholder">—</span>
         );
+      case "module":
+        // 产品侧的模块挂靠，项目侧只读展示；无模块 = 只在「全部需求」里
+        return requirement.module_name ? (
+          <span className="min-w-0 truncate text-secondary" title={requirement.module_name}>
+            {requirement.module_name}
+          </span>
+        ) : (
+          <span className="text-placeholder">—</span>
+        );
       case "product":
         return requirement.product_id ? (
           <ProductChip
@@ -367,9 +386,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         if (!requirement.issue_count) return <span className="text-placeholder">—</span>;
         const effectiveCount = requirement.issue_count - requirement.cancelled_issue_count;
         const percent =
-          effectiveCount > 0
-            ? `${Math.round((requirement.completed_issue_count / effectiveCount) * 100)}%`
-            : "—";
+          effectiveCount > 0 ? `${Math.round((requirement.completed_issue_count / effectiveCount) * 100)}%` : "—";
         return (
           <span className="text-12 text-secondary">
             {requirement.completed_issue_count}/{effectiveCount} · {percent}
@@ -389,15 +406,11 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         return (
           <RequirementStatusCell
             status={requirement.status}
-            onChange={
-              canManage && onStatusChange ? (next) => onStatusChange(requirement.id, next) : undefined
-            }
+            onChange={canManage && onStatusChange ? (next) => onStatusChange(requirement.id, next) : undefined}
           />
         );
       default:
-        return (
-          <BuiltinCellValue columnKey={key} values={requirement} resolveParentTitle={resolveParentTitle} />
-        );
+        return <BuiltinCellValue columnKey={key} values={requirement} resolveParentTitle={resolveParentTitle} />;
     }
   };
 
@@ -516,9 +529,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             */}
             {isFilteredEmpty ? (
               <div className="max-w-md">
-                <p className="text-14 font-medium text-primary">
-                  {t("project_requirements.filtered_empty.title")}
-                </p>
+                <p className="text-14 font-medium text-primary">{t("project_requirements.filtered_empty.title")}</p>
                 <p className="mt-1.5 text-13 leading-5 text-secondary">
                   {t("project_requirements.filtered_empty.description")}
                 </p>
@@ -559,6 +570,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             <colgroup>
               {showSelectColumn && <col style={{ width: selectColumnWidth }} />}
               {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
+              {isModuleVisible && <col style={{ width: moduleWidth }} />}
               <col style={{ width: titleColumnWidth }} />
               {propertyColumns.map((key) => (
                 <col key={key} style={{ width: getWidth(key, defaultColumnWidth(key)) }} />
@@ -600,13 +612,32 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                     }}
                   >
                     <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
-                      <RequirementGridHeaderLabel
-                        icon={columnIcon("display_id")}
-                        label={columnLabel("display_id")}
-                      />
+                      <RequirementGridHeaderLabel icon={columnIcon("display_id")} label={columnLabel("display_id")} />
                     </div>
                     <RequirementGridColumnResizer
                       onMouseDown={(event) => startResize("display_id", columnSnapshot, event)}
+                    />
+                  </th>
+                )}
+                {isModuleVisible && (
+                  <th
+                    className={cn(
+                      "group/header relative",
+                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                      REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                    )}
+                    style={{
+                      width: moduleWidth,
+                      minWidth: moduleWidth,
+                      maxWidth: moduleWidth,
+                      left: moduleStickyLeft,
+                    }}
+                  >
+                    <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                      <RequirementGridHeaderLabel icon={columnIcon("module")} label={columnLabel("module")} />
+                    </div>
+                    <RequirementGridColumnResizer
+                      onMouseDown={(event) => startResize("module", columnSnapshot, event)}
                     />
                   </th>
                 )}
@@ -630,16 +661,12 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                     />
                   </div>
-                  <RequirementGridColumnResizer
-                    onMouseDown={(event) => startResize("title", columnSnapshot, event)}
-                  />
+                  <RequirementGridColumnResizer onMouseDown={(event) => startResize("title", columnSnapshot, event)} />
                 </th>
                 {propertyColumns.map((key) => (
                   <th key={key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
                     <RequirementGridHeaderLabel icon={columnIcon(key)} label={columnLabel(key)} />
-                    <RequirementGridColumnResizer
-                      onMouseDown={(event) => startResize(key, columnSnapshot, event)}
-                    />
+                    <RequirementGridColumnResizer onMouseDown={(event) => startResize(key, columnSnapshot, event)} />
                   </th>
                 ))}
               </tr>
@@ -682,10 +709,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                     )}
                     {isDisplayIdVisible && (
                       <td
-                        className={cn(
-                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
-                          REQUIREMENT_GRID_STICKY_BODY_CLASS
-                        )}
+                        className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
                         style={{
                           width: displayIdWidth,
                           minWidth: displayIdWidth,
@@ -702,6 +726,28 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                           )}
                         >
                           {renderCell("display_id", requirement)}
+                        </div>
+                      </td>
+                    )}
+                    {isModuleVisible && (
+                      <td
+                        className={cn(REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS, REQUIREMENT_GRID_STICKY_BODY_CLASS)}
+                        style={{
+                          width: moduleWidth,
+                          minWidth: moduleWidth,
+                          maxWidth: moduleWidth,
+                          left: moduleStickyLeft,
+                        }}
+                      >
+                        <div
+                          className={cn(
+                            "flex h-full w-full min-w-0 items-center gap-1.5 px-page-x transition-colors duration-150 motion-reduce:transition-none",
+                            isSelected
+                              ? "bg-accent-primary/5 group-hover/requirement:bg-accent-primary/10"
+                              : "group-hover/requirement:bg-layer-transparent-hover"
+                          )}
+                        >
+                          {renderCell("module", requirement)}
                         </div>
                       </td>
                     )}

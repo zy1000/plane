@@ -417,7 +417,14 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           canEdit={canEditPeek}
           onClose={() => setPeekRequirement(null)}
           onOpenRequirement={setPeekRequirement}
-          onRequirementUpdated={(requirement) => void refreshRequirementRow(requirement.id)}
+          onRequirementUpdated={(requirement) => {
+            // 有产品编辑权限的人可以在抽屉里改挂靠，左侧只读模块树的计数要跟上
+            const previous = rows.find((row) => row.id === requirement.id) ?? fetchedPeekRow;
+            if (previous?.id === requirement.id && previous.module_id !== requirement.module_id) {
+              void moduleStore.refresh().catch(() => undefined);
+            }
+            void refreshRequirementRow(requirement.id);
+          }}
           /*
            * 复制链接仍指回本页 ?peek=。放大跳到产品需求整页 —— 项目里没有独立整页路由。
            * 没有所属产品时不渲染按钮，避免跳到空地址。

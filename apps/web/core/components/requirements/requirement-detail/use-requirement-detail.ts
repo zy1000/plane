@@ -74,7 +74,11 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
   }, []);
 
   const listRows = useCallback(
-    (params: { ids?: string[]; filters?: { field_id: string; operator: "equals"; value: string }[]; perPage: number }) =>
+    (params: {
+      ids?: string[];
+      filters?: { field_id: string; operator: "equals"; value: string }[];
+      perPage: number;
+    }) =>
       entityKind === "library"
         ? requirementService.listLibraryItems(workspaceSlug, entityId, params)
         : requirementService.listRequirements(workspaceSlug, entityId, params),
@@ -272,6 +276,50 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
     [sendStatus, t]
   );
 
+  /**
+   * 改模块挂靠。走 set-module 旁路端点（与列表页的批量移动同一条链路）：
+   * 不带 version、不 bump version、不进内容 diff，评审中 / 已关闭都能改 ——
+   * 模块轴与评审轴、状态轴正交。产品需求与标准库条目都可用。
+   *
+   * moduleName 由下拉一并传来，本地直接合并 —— 端点只回 updated_ids，
+   * 不为一个名字重拉整行。
+   */
+  const sendModule = useCallback(
+    async (moduleId: string | null, moduleName: string | null) => {
+      const current = requirementRef.current;
+      if (!workspaceSlug || !entityId || !current) return null;
+      await requirementService.setRequirementModule(
+        workspaceSlug,
+        entityKind === "library" ? { libraryId: entityId } : { productId: entityId },
+        { requirement_ids: [current.id], module_id: moduleId }
+      );
+      const latest = requirementRef.current ?? current;
+      const merged: TRequirement = { ...latest, module_id: moduleId, module_name: moduleName };
+      applyRow(merged);
+      return merged;
+    },
+    [applyRow, entityId, entityKind, workspaceSlug]
+  );
+
+  const updateModule = useCallback(
+    (moduleId: string | null, moduleName: string | null) => {
+      const next = queueRef.current.then(
+        () => sendModule(moduleId, moduleName),
+        () => sendModule(moduleId, moduleName)
+      );
+      queueRef.current = next.catch((error: unknown) => {
+        const payload = error as { error?: string } | null;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
+        });
+      });
+      return queueRef.current;
+    },
+    [sendModule, t]
+  );
+
   const parentIds = useMemo(() => [requirement?.parent_id], [requirement?.parent_id]);
 
   return {
@@ -283,6 +331,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
     parentIds,
     submitPatch,
     updateStatus,
+    updateModule,
     refresh: loadRequirement,
     refreshTrail: loadTrail,
   };

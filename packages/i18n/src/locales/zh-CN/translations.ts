@@ -1881,6 +1881,7 @@ export default {
   requirement_modules: {
     all: "全部需求",
     sidebar_label: "模块",
+    column: "模块",
     empty: "暂无模块",
     add: "添加",
     rename: "重命名",

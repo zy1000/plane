@@ -1710,6 +1710,7 @@ export default {
   requirement_modules: {
     all: "All requirements",
     sidebar_label: "Modules",
+    column: "Module",
     empty: "No modules yet",
     add: "Add",
     rename: "Rename",

@@ -22,13 +22,11 @@ import {
   BuiltinCellValue,
   REQUIREMENT_BUILTIN_COLUMNS,
 } from "@/components/requirements/requirement-builtin-fields";
+import { RequirementModuleDropdown } from "@/components/requirements/module-tree/requirement-module-dropdown";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
-import {
-  RequirementRichTextEditor,
-  RequirementRichTextValue,
-} from "@/components/requirements/requirement-rich-text";
+import { RequirementRichTextEditor, RequirementRichTextValue } from "@/components/requirements/requirement-rich-text";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { RequirementChangeTrail } from "./requirement-change-trail";
@@ -75,6 +73,12 @@ type TProps = {
    * 行必须还能把状态选回去（重开），所以由调用方按页面级写权限决定传不传。
    */
   onStatusChange?: (status: TRequirementItemStatus) => void;
+  /**
+   * 改模块挂靠。走 set-module 旁路端点、不经 onPatch；不传则模块只读。
+   * 与 onStatusChange 同理和 readOnly 解耦 —— 模块不是内容，评审中 / 已关闭
+   * 都能改，由调用方按页面级写权限决定传不传。产品与标准库两侧都可用。
+   */
+  onModuleChange?: (moduleId: string | null, moduleName: string | null) => void;
   onOpenRequirement: (requirementId: string) => void;
   /** 回滚写的是活行而不是版本链，所以要让调用方重新拉一次这一行 */
   onRolledBack?: () => void;
@@ -196,6 +200,7 @@ const PropertyGrid = ({
   resolveParentTitle,
   onPatch,
   onStatusChange,
+  onModuleChange,
   leadingRow,
 }: {
   requirement: TRequirement;
@@ -204,6 +209,8 @@ const PropertyGrid = ({
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
   onStatusChange?: (status: TRequirementItemStatus) => void;
+  /** 改模块挂靠（set-module 旁路，不经 onPatch）；不传则模块行只读 */
+  onModuleChange?: (moduleId: string | null, moduleName: string | null) => void;
   leadingRow?: { label: string; value: React.ReactNode };
 }) => {
   const { t } = useTranslation();
@@ -214,6 +221,31 @@ const PropertyGrid = ({
           <span className="text-12 text-tertiary">{leadingRow.label}</span>
           <span className="min-w-0 truncate text-13 text-primary">{leadingRow.value}</span>
         </>
+      )}
+      {/* 模块：与状态同为旁路轴，走 set-module 而不是 onPatch，所以不看 readOnly ——
+          能不能改只看 onModuleChange 传没传（页面级写权限） */}
+      <span className="text-12 text-tertiary">{t("requirement_modules.column")}</span>
+      {onModuleChange ? (
+        <div className="min-w-0">
+          <RequirementModuleDropdown
+            workspaceSlug={parentScope.workspaceSlug}
+            productId={parentScope.productId}
+            libraryId={parentScope.libraryId}
+            value={requirement.module_id}
+            valueName={requirement.module_name}
+            onChange={onModuleChange}
+            placeholder="—"
+            buttonClassName="h-7 rounded px-1.5 -ml-1.5 hover:bg-layer-transparent-hover"
+            buttonTextClassName="text-13"
+          />
+        </div>
+      ) : (
+        <span
+          className={cn("min-w-0 truncate text-13", requirement.module_name ? "text-primary" : "text-placeholder")}
+          title={requirement.module_name ?? undefined}
+        >
+          {requirement.module_name ?? "—"}
+        </span>
       )}
       {PROPERTY_COLUMN_KEYS.map((columnKey) => {
         const column = REQUIREMENT_BUILTIN_COLUMNS.find((item) => item.key === columnKey);
@@ -268,6 +300,7 @@ export const RequirementDetailContent = (props: TProps) => {
     resolveParentTitle,
     onPatch,
     onStatusChange,
+    onModuleChange,
     onOpenRequirement,
     onRolledBack,
     issuesSection,
@@ -311,10 +344,7 @@ export const RequirementDetailContent = (props: TProps) => {
   const leafFields = useMemo(() => activeFields.filter((field) => field.field_type !== "form"), [activeFields]);
   const formFields = useMemo(() => activeFields.filter((field) => field.field_type === "form"), [activeFields]);
 
-  const parentScope = useMemo(
-    () => ({ workspaceSlug, productId, libraryId }),
-    [libraryId, productId, workspaceSlug]
-  );
+  const parentScope = useMemo(() => ({ workspaceSlug, productId, libraryId }), [libraryId, productId, workspaceSlug]);
   const commitData = (data: TRequirementData) => void onPatch({ data });
 
   const isDrawer = layout === "drawer";
@@ -348,7 +378,10 @@ export const RequirementDetailContent = (props: TProps) => {
 
         {readOnly ? (
           <h1
-            className={cn("font-semibold text-balance text-primary", isDrawer ? "text-20 leading-snug" : "text-22 leading-tight")}
+            className={cn(
+              "font-semibold text-balance text-primary",
+              isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
+            )}
           >
             {requirement.title || t("requirement_detail.untitled")}
           </h1>
@@ -357,14 +390,15 @@ export const RequirementDetailContent = (props: TProps) => {
             value={titleDraft ?? requirement.title}
             onChange={(event) => setTitleDraft(event.target.value)}
             onBlur={() => {
-              if (titleDraft !== null && titleDraft !== requirement.title) void onPatch({ builtin: { title: titleDraft } });
+              if (titleDraft !== null && titleDraft !== requirement.title)
+                void onPatch({ builtin: { title: titleDraft } });
               setTitleDraft(null);
             }}
             maxLength={255}
             placeholder={t("requirement_detail.untitled")}
             className={cn(
               "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-semibold text-primary",
-              "outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1",
+              "focus:border-accent-primary outline-none placeholder:text-placeholder hover:border-subtle focus:bg-surface-1",
               isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
             )}
           />
@@ -398,6 +432,7 @@ export const RequirementDetailContent = (props: TProps) => {
             parentScope={parentScope}
             onPatch={onPatch}
             onStatusChange={onStatusChange}
+            onModuleChange={onModuleChange}
           />
         )}
 
@@ -498,11 +533,7 @@ export const RequirementDetailContent = (props: TProps) => {
       {showHistory && !isLibrary && productId && (
         <div className="flex flex-col gap-6 border-t border-subtle pt-6">
           {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}
-          <RequirementChangeTrail
-            entries={trail}
-            requirementType={requirementType}
-            onFocusVersion={focusVersion}
-          />
+          <RequirementChangeTrail entries={trail} requirementType={requirementType} onFocusVersion={focusVersion} />
 
           <RequirementVersionHistory
             workspaceSlug={workspaceSlug}
@@ -531,6 +562,7 @@ export const RequirementDetailProperties = ({
   resolveParentTitle,
   onPatch,
   onStatusChange,
+  onModuleChange,
   onProjectsChanged,
 }: {
   requirement: TRequirement;
@@ -548,6 +580,8 @@ export const RequirementDetailProperties = ({
   onPatch: (patch: TPatch) => Promise<unknown>;
   /** 改需求级交付状态；不传则状态格只读（见 RequirementDetailContent 同名 prop） */
   onStatusChange?: (status: TRequirementItemStatus) => void;
+  /** 改模块挂靠（set-module 旁路）；不传则模块行只读（见 RequirementDetailContent 同名 prop） */
+  onModuleChange?: (moduleId: string | null, moduleName: string | null) => void;
   /** project_ids 是服务端注解的，改完必须重新拉这一行才能回显 */
   onProjectsChanged?: () => void;
 }) => {
@@ -565,6 +599,7 @@ export const RequirementDetailProperties = ({
         resolveParentTitle={resolveParentTitle}
         onPatch={onPatch}
         onStatusChange={onStatusChange}
+        onModuleChange={onModuleChange}
         leadingRow={{
           label: t("requirement_detail.requirement_type"),
           value: requirementTypeName ?? "—",

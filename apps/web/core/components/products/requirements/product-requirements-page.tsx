@@ -548,9 +548,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         canEdit={canEdit}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
-        // 抽屉已经把改完的整行交回来了（内容 PATCH 与状态改动都走这条），直接合并进当前页；
-        // 重拉会让后面的网格整张闪一下
-        onRequirementUpdated={(requirement) => store.syncRequirements([requirement])}
+        // 抽屉已经把改完的整行交回来了（内容 PATCH / 状态 / 模块改动都走这条），直接合并进
+        // 当前页；重拉会让后面的网格整张闪一下。挂靠变了才顺带刷左侧树计数
+        onRequirementUpdated={(requirement) => {
+          const previous = store.requirementsPage.results.find((row) => row.id === requirement.id);
+          if (previous && previous.module_id !== requirement.module_id) {
+            void refreshModules().catch(() => undefined);
+          }
+          store.syncRequirements([requirement]);
+        }}
         /*
          * 产品侧抽屉补上与项目侧同一组关联操作。拆分/挂工作项要先落到具体项目
          * （需求未进项目时按钮会提示）；用例关联仍是需求级，不需要项目。

@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranch } from "lucide-react";
+import { FolderOpenDot, GitBranch } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type {
   TRequirement,
@@ -14,6 +14,7 @@ import { TypeIcon } from "@/components/common/type-icon-picker";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
+import { RequirementModuleDropdown } from "../module-tree/requirement-module-dropdown";
 import { RequirementParentDropdown } from "../requirement-parent-dropdown";
 import { RequirementStatusCell } from "../requirement-status-cell";
 
@@ -29,6 +30,11 @@ type TProps = {
    * 选回去重开；不传则状态 chip 只读。
    */
   onStatusChange?: (status: TRequirementItemStatus) => void;
+  /**
+   * 改模块挂靠。与状态同为旁路轴（set-module 端点，不经 onPatch、不受 readOnly 管）；
+   * 不传则模块格只读。
+   */
+  onModuleChange?: (moduleId: string | null, moduleName: string | null) => void;
 };
 
 /**
@@ -39,7 +45,7 @@ type TProps = {
  * 不该有两种读法；标签-值栅格留给整页右栏（RequirementDetailProperties）。
  */
 export const RequirementPropertyBar = (props: TProps) => {
-  const { requirement, requirementType, readOnly, parentScope, onPatch, onStatusChange } = props;
+  const { requirement, requirementType, readOnly, parentScope, onPatch, onStatusChange, onModuleChange } = props;
   const { t } = useTranslation();
 
   const patch = (builtin: Partial<TRequirementBuiltinValues>) => void onPatch({ builtin });
@@ -55,14 +61,37 @@ export const RequirementPropertyBar = (props: TProps) => {
       <div className={fieldShell(true)}>
         <div className="flex h-7 min-w-0 items-center gap-1.5 text-body-xs-medium leading-5 text-secondary">
           {requirementType && (
-            <TypeIcon
-              iconProps={requirementType.logo_props?.icon}
-              className="size-3.5"
-              iconClassName="size-3.5"
-            />
+            <TypeIcon iconProps={requirementType.logo_props?.icon} className="size-3.5" iconClassName="size-3.5" />
           )}
           <span className="truncate">{requirementType?.name ?? "—"}</span>
         </div>
+      </div>
+
+      {/* 模块：与状态同为旁路轴（set-module，不经 onPatch）。有 onModuleChange 才是下拉 */}
+      <div className={fieldShell(false)}>
+        {onModuleChange ? (
+          <RequirementModuleDropdown
+            workspaceSlug={parentScope.workspaceSlug}
+            productId={parentScope.productId}
+            libraryId={parentScope.libraryId}
+            value={requirement.module_id}
+            valueName={requirement.module_name}
+            onChange={onModuleChange}
+            icon={FolderOpenDot}
+            buttonClassName="h-7 min-w-0 gap-1.5"
+            buttonTextClassName="text-body-xs-medium leading-5"
+          />
+        ) : (
+          <div
+            className="flex h-7 min-w-0 items-center gap-1.5 text-body-xs-medium leading-5"
+            title={requirement.module_name ?? undefined}
+          >
+            <FolderOpenDot className="size-3.5 shrink-0 text-tertiary" />
+            <span className={cn("truncate", requirement.module_name ? "text-secondary" : "text-placeholder")}>
+              {requirement.module_name ?? "—"}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 状态 chip 与右侧几个 DropdownButton 同壳（h-5 边框小胶囊）；有 onStatusChange 才是下拉。标准库没有交付状态。 */}
@@ -155,10 +184,7 @@ export const RequirementPropertyBar = (props: TProps) => {
           disabled={readOnly}
           icon={GitBranch}
           buttonClassName="h-7 gap-1.5 px-1.5"
-          buttonTextClassName={cn(
-            "text-body-xs-medium",
-            requirement.parent_id ? "text-secondary" : "text-placeholder"
-          )}
+          buttonTextClassName={cn("text-body-xs-medium", requirement.parent_id ? "text-secondary" : "text-placeholder")}
           {...parentScope}
         />
       </div>
