@@ -38,7 +38,7 @@ from plane.db.models import (
     RequirementProject,
     RequirementRelease,
 )
-from plane.utils.requirement import source_library_identifier_map
+from plane.utils.requirement import source_display_id_map
 from plane.utils.requirement_project import (
     linked_requirements_queryset,
     promote_to_released,
@@ -67,7 +67,7 @@ class BaseRequirementContainerViewSet(BaseViewSet):
             context={
                 "request": self.request,
                 "scope_identifiers": scope_identifier_map(rows),
-                "source_library_identifiers": source_library_identifier_map(rows),
+                "source_display_ids": source_display_id_map(rows),
                 # 容器列表只做展示与软提示汇总，不提供评审入口
                 "can_write": False,
             },

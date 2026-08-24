@@ -126,7 +126,16 @@ export type TRequirement = TRequirementBuiltinValues & {
    * 会把它整组回传给服务端，编号进去就成了客户端可伪造的输入。
    */
   sequence_id: number;
-  /** 拼好的展示编号，如 "ECOM-1"。前缀取自所属产品/项目/库的 identifier */
+  /**
+   * 标准库条目的手填编号（任意文本，不校验格式，库内唯一非空）；
+   * 产品/项目行恒为 null。写入走 create/update 载荷的顶层 code 字段 ——
+   * 同样刻意不进 TRequirementBuiltinValues，产品路径不该能写编号。
+   */
+  code: string | null;
+  /**
+   * 展示编号。产品/项目行是服务端拼的 "ECOM-1"（前缀取自 identifier）；
+   * 库条目就是手填的 code。
+   */
   display_id: string | null;
   /** 从标准库导入时的出处；手工录入的行三个 source_* 都是 null */
   source_library_id: string | null;
@@ -254,6 +263,8 @@ export type TRequirementBatchCreate = {
   after_id?: string;
   /** 左侧树选中模块后新建自动挂靠；服务端校验模块与作用域一致 */
   module_id?: string | null;
+  /** 库条目手填编号，库作用域必填；产品/项目路径传了会被服务端拒绝 */
+  code?: string;
 };
 
 export type TRequirementBatchUpdate = {
@@ -261,6 +272,8 @@ export type TRequirementBatchUpdate = {
   data: TRequirementData;
   builtin: TRequirementBuiltinValues;
   version: number;
+  /** 库条目手填编号；不带 = 不改。产品/项目路径不接受 */
+  code?: string;
 };
 
 export type TRequirementBatchDelete = {

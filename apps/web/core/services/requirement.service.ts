@@ -338,6 +338,8 @@ export class RequirementService extends APIService {
     libraryId: string,
     payload: {
       data: TRequirementData;
+      /** 手填编号，必填非空、库内唯一（服务端校验，不校验格式） */
+      code: string;
       before_id?: string;
       after_id?: string;
     }
@@ -353,7 +355,13 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     libraryId: string,
     itemId: string,
-    payload: { data: TRequirementData; builtin?: TRequirementBuiltinValues; version: number }
+    payload: {
+      data: TRequirementData;
+      builtin?: TRequirementBuiltinValues;
+      version: number;
+      /** 手填编号；不带 = 不改 */
+      code?: string;
+    }
   ): Promise<TRequirement> {
     return this.patch(
       `/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/${itemId}/`,

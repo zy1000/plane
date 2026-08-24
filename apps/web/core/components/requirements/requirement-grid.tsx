@@ -92,6 +92,8 @@ import {
   useRequirementGridColumnResize,
   useRequirementGridScrollContainer,
 } from "./requirement-grid-shared";
+import { EXPANDABLE_CELL_INPUT_CLASS } from "./expandable-cell";
+import { RequirementCodeInput } from "./requirement-code-input";
 import { RequirementIdentifier } from "./requirement-identifier";
 import { canEditRequirementContent, isRequirementClosed, RequirementStatusCell } from "./requirement-status-cell";
 import { copyRequirementData, createEmptyRequirementData } from "./requirement-row-data";
@@ -264,8 +266,14 @@ export const RequirementGrid = observer(
      * 有必填字段的类型建不出空行：后端在 validate_requirement_data 里按
      * enforce_required=field.is_active 校验（serializers/requirement.py:629），
      * 空值直接 400。这种类型仍旧走弹窗，填齐了一次落库。
+     *
+     * 标准库恒走弹窗：库条目的编号是手填必填的（REQUIREMENT_CODE_REQUIRED），
+     * 不带编号建不出空行，弹窗负责把编号收上来。
      */
-    const requiresCreateModal = useMemo(() => activeFields.some((field) => field.is_required), [activeFields]);
+    const requiresCreateModal = useMemo(
+      () => entityKind === "library" || activeFields.some((field) => field.is_required),
+      [activeFields, entityKind]
+    );
 
     /**
      * 内联新增一行：直接建出来，随后它就是一条普通的自动保存行。
@@ -797,7 +805,16 @@ export const RequirementGrid = observer(
                     }}
                   >
                     <div className={cn("flex h-full w-full min-w-0 items-center gap-1.5 px-page-x", rowStateClass)}>
-                      {requirement.display_id ? (
+                      {entityKind === "library" && isRowEditable ? (
+                        // 库条目编号手填可改：blur/回车提交自动保存，空值还原；
+                        // 重复由服务端查重后走行级 saveState 错误展示。开详情走标题旁图标
+                        <RequirementCodeInput
+                          value={localRow?.code ?? requirement.code ?? ""}
+                          onCommit={(code) => autosave.updateCode(key, code)}
+                          className={EXPANDABLE_CELL_INPUT_CLASS}
+                          placeholder={t("requirements.identifier.code_placeholder")}
+                        />
+                      ) : requirement.display_id ? (
                         onOpenDetail ? (
                           <button
                             type="button"

@@ -24,6 +24,7 @@ import {
 } from "@/components/requirements/requirement-builtin-fields";
 import { RequirementModuleDropdown } from "@/components/requirements/module-tree/requirement-module-dropdown";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { RequirementCodeInput } from "@/components/requirements/requirement-code-input";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
 import { RequirementRichTextEditor, RequirementRichTextValue } from "@/components/requirements/requirement-rich-text";
@@ -46,7 +47,7 @@ const PROPERTY_COLUMN_KEYS: TRequirementBuiltinKey[] = [
   "parent_id",
 ];
 
-type TPatch = { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData };
+type TPatch = { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData; code?: string };
 
 type TParentScope = { workspaceSlug: string; productId?: string; libraryId?: string };
 
@@ -368,12 +369,23 @@ export const RequirementDetailContent = (props: TProps) => {
         {/* 整页时抽屉那条 bar 不存在，编号在这里出场；抽屉里两处都显示也不冲突 ——
             标题上方这一行是编号唯一固定的位置 */}
         <div className="mb-1">
-          <RequirementIdentifier
-            displayId={requirement.display_id}
-            sourceDisplayId={requirement.source_display_id}
-            size="sm"
-            enableClickToCopy
-          />
+          {isLibrary && !readOnly ? (
+            // 库条目编号手填可改：blur/回车提交（空值还原不发请求），
+            // 重复由服务端查重后经 submitPatch 的错误 toast 报出
+            <RequirementCodeInput
+              value={requirement.code ?? ""}
+              onCommit={(code) => void onPatch({ code })}
+              className="-mx-1 w-full max-w-60 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-12 font-medium text-tertiary outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1"
+              placeholder={t("requirements.identifier.code_placeholder")}
+            />
+          ) : (
+            <RequirementIdentifier
+              displayId={requirement.display_id}
+              sourceDisplayId={requirement.source_display_id}
+              size="sm"
+              enableClickToCopy
+            />
+          )}
         </div>
 
         {readOnly ? (

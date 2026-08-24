@@ -48,7 +48,7 @@ from plane.utils.requirement import (
     filter_requirement_row_ids,
     get_referenced_requirement_type_ids,
     requirement_types_field_payload_from_specs,
-    source_library_identifier_map,
+    source_display_id_map,
 )
 from plane.utils.requirement_change import (
     RequirementChangeError,
@@ -125,7 +125,7 @@ class ProjectRequirementViewSet(BaseViewSet):
         return {
             "request": self.request,
             "scope_identifiers": scope_identifier_map(rows),
-            "source_library_identifiers": source_library_identifier_map(rows),
+            "source_display_ids": source_display_id_map(rows),
             # 项目侧 can_write 的含义窄得多：不是「能改这批行」，而是
             # 「能不能把它推进评审」。内容仍然一个字都改不了 —— 写端点根本不存在。
             # RequirementSerializer.get_can_submit_review 是唯一的消费者。

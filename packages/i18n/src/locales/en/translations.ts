@@ -1304,6 +1304,9 @@ export default {
       source_tooltip: "Original ID from the standard library",
       column: "ID",
       source_column: "Library ID",
+      code_placeholder: "Enter an ID",
+      code_required: "ID is required",
+      code_duplicate: "This ID is already used in the library",
     },
   },
   requirement_fields: {
@@ -1741,10 +1744,7 @@ export default {
       name: "Library name",
       name_placeholder: "e.g. Payment API library",
       identifier: "Identifier",
-      identifier_rule_hint:
-        "Used as the prefix for item IDs in this library: starts with a letter, uppercase letters and digits only, up to 12 characters.",
-      identifier_preview_label: "ID preview",
-      identifier_preview_note: "Shown as the source ID after importing into a product",
+      identifier_rule_hint: "Starts with a letter, uppercase letters and digits only, up to 12 characters.",
       requirement_type: "Requirement type",
       requirement_type_placeholder: "Pick a requirement type",
       requirement_type_hint: "Every item in the library shares this type's fields. It cannot be changed after creation.",

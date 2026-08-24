@@ -171,7 +171,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
    * 连续冲突说明是真的多端并发，交给调用方处理。
    */
   const sendPatch = useCallback(
-    async (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData }) => {
+    async (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData; code?: string }) => {
       const current = requirementRef.current;
       if (!workspaceSlug || !entityId || !current) return null;
 
@@ -179,6 +179,9 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
         data: patch.data ?? row.data,
         builtin: { ...pickBuiltinValues(row), ...(patch.builtin ?? {}) },
         version: row.version,
+        // 库条目手填编号：只在这次 patch 改它时才带上（不带 = 不改）；
+        // 产品行没有改编号的入口，永远不会带
+        ...(patch.code !== undefined ? { code: patch.code } : {}),
       });
 
       const persist = (id: string, payload: ReturnType<typeof payloadFor>) =>
@@ -213,7 +216,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const submitPatch = useCallback(
-    (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData }) => {
+    (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData; code?: string }) => {
       const next = queueRef.current.then(
         () => sendPatch(patch),
         () => sendPatch(patch)
@@ -221,10 +224,17 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
       // 调用方一律 void 掉返回值，失败必须在这里说出来，否则改动悄无声息地丢了
       queueRef.current = next.catch((error: unknown) => {
         const payload = error as { error?: string } | null;
+        // 编号错误码埋在字段级错误结构里（{"code": [...]}），整体检索后翻译成人话
+        const raw = JSON.stringify(error ?? {});
+        const codeError = raw.includes("REQUIREMENT_CODE_ALREADY_EXISTS")
+          ? t("requirements.identifier.code_duplicate")
+          : raw.includes("REQUIREMENT_CODE_REQUIRED")
+            ? t("requirements.identifier.code_required")
+            : null;
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
-          message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
+          message: codeError ?? payload?.error ?? t("workspace_products.requirements.toast.failed"),
         });
       });
       return queueRef.current;

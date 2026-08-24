@@ -130,6 +130,9 @@ class RequirementExcelMixin:
         )
 
     def _excel_export_context(self, owner, layer):
+        # 父项列要拼父需求的编号，父项可能不在筛选结果里，所以取整个作用域；
+        # 库作用域编号是行上手填的 code，一次 values_list 连它一起取
+        rows = list(layer.queryset.values_list("id", "sequence_id", "code"))
         return xl.ExportContext(
             scope_identifier=layer.serializer_context.get("scope_identifier") or "",
             user_display={
@@ -138,13 +141,11 @@ class RequirementExcelMixin:
                     owner.workspace_id
                 )
             },
-            # 父项列要拼父需求的编号，父项可能不在筛选结果里，所以取整个作用域
             sequence_by_id={
-                str(row_id): sequence_id
-                for row_id, sequence_id in layer.queryset.values_list(
-                    "id", "sequence_id"
-                )
+                str(row_id): sequence_id for row_id, sequence_id, _ in rows
             },
+            is_library=self.excel_is_library,
+            code_by_id={str(row_id): code or "" for row_id, _, code in rows},
         )
 
     # --- 导出 -------------------------------------------------------------
@@ -294,13 +295,18 @@ class RequirementExcelMixin:
             if not result.writes_content:
                 continue
             if result.action == "create":
+                create_data = {
+                    "client_id": result.client_id,
+                    "data": result.data,
+                    "builtin": result.builtin,
+                    "requirement_type_id": result.requirement_type_id,
+                }
+                # 库作用域：编号必填 + 与库内已有条目查重都由写序列化器给出，
+                # 预览期与导入期因此不可能报得不一致
+                if result.code is not None:
+                    create_data["code"] = result.code
                 serializer = RequirementBatchCreateSerializer(
-                    data={
-                        "client_id": result.client_id,
-                        "data": result.data,
-                        "builtin": result.builtin,
-                        "requirement_type_id": result.requirement_type_id,
-                    },
+                    data=create_data,
                     context=context,
                 )
             else:

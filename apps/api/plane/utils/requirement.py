@@ -42,6 +42,8 @@ SORT_ORDER_STEP = 1000
 # 「编号变了」）、是请求体的平铺键（加进来 → 客户端能自选编号）、也是
 # ROLLBACK_RESTORED_COLUMNS 的上游（加进来 → 回滚会把旧编号写回活行）。
 # 编号只出现在两个地方：模型字段定义，和 requirement_row_snapshot 的快照顶层。
+# code（库条目手填编号）同样不进这里：它是库作用域专属的顶层字段，进 builtin
+# 会让产品路径也能写编号。写入口见各 serializer 的 code 字段与两个工厂。
 BUILTIN_COLUMN_DEFAULTS = {
     "title": "",
     "description_html": None,
@@ -939,12 +941,14 @@ def insert_requirement_row(
     before_id=None,
     after_id=None,
     module_id=None,
+    code=None,
 ):
     """在指定位置插入一行需求。
 
     model / scope / new_row 三个参数让不同归属的表共用同一套插入语义。
     data 只装自定义字段，builtin 是八个内置列的完整 dict。module_id 不属于
-    builtin（模块不是内容），单独透传给工厂随行写入。
+    builtin（模块不是内容），单独透传给工厂随行写入。code 只在库作用域有值，
+    产品/项目工厂收到非 None 会显式报错。
     """
     if before_id and after_id:
         raise ValueError("Only one insertion anchor can be provided.")
@@ -960,6 +964,7 @@ def insert_requirement_row(
         actor=actor,
         requirement_type_id=requirement_type_id,
         module_id=module_id,
+        code=code,
     )
     row.save()
     return row
@@ -969,8 +974,8 @@ def insert_requirement_row(
 class RequirementSource:
     """一条需求的标准库出处。只有导入路径会构造它。
 
-    存的是库 id + 库内序号，不是拼好的 "SEC-12" —— 库改名之后已导入需求的来源编号
-    要跟着变，前缀在读侧解析（source_library_identifier_map）。
+    存的是库 id + 库内序号，不是编号文本 —— 库条目改手填编号之后已导入需求的
+    来源编号要跟着变，编号在读侧解析（source_display_id_map）。
     """
 
     library_id: Any
@@ -1023,24 +1028,34 @@ def requirement_display_id(requirement):
     return f"{product.identifier}-{requirement.sequence_id}"
 
 
-def source_library_identifier_map(rows):
-    """这一批行引用到的标准库 -> identifier，用于拼来源编号（SEC-12）。
+def source_display_id_map(rows):
+    """这一批行的来源库条目 -> 当前手填编号（code），用于展示来源编号。
 
-    source_library_id 是裸 UUID 不是外键（溯源不该被库的生命周期绑架），所以没有
-    prefetch 可用，改成按页批量解析：一页 100 行跨 N 个来源库也只多一次走主键的
-    IN 查询，没有来源的批次一次都不发。
+    键是 f"{source_library_id}:{source_sequence_id}"。跟随源条目**当前**的 code
+    （实时解析，不是导入时的快照）—— 与旧行为「改库标识号即时生效」口径一致。
 
-    用 all_objects：库被软删之后，从它导入的需求仍然该显示 SEC-12 ——
-    溯源不能因为源头没了就变成空白。
+    source_* 是裸值不是外键（溯源不该被库的生命周期绑架），所以没有 prefetch
+    可用，改成按页批量解析：一页 100 行跨 N 个来源库也只多一次查询，没有来源的
+    批次一次都不发。
+
+    用 all_objects：来源条目（或整个库）被软删之后，从它导入的需求仍然该显示
+    当年的编号 —— 溯源不能因为源头没了就变成空白。(library, sequence_id) 全域
+    唯一（req_unique_library_sequence 不带软删条件），每对至多命中一行。
     """
-    library_ids = {row.source_library_id for row in rows if row.source_library_id}
-    if not library_ids:
+    pairs = {}
+    for row in rows:
+        if row.source_library_id:
+            pairs.setdefault(row.source_library_id, set()).add(row.source_sequence_id)
+    if not pairs:
         return {}
+    condition = Q()
+    for library_id, sequence_ids in pairs.items():
+        condition |= Q(library_id=library_id, sequence_id__in=sequence_ids)
     return {
-        str(library_id): identifier
-        for library_id, identifier in RequirementLibrary.all_objects.filter(
-            id__in=library_ids
-        ).values_list("id", "identifier")
+        f"{library_id}:{sequence_id}": code
+        for library_id, sequence_id, code in Requirement.all_objects.filter(
+            condition
+        ).values_list("library_id", "sequence_id", "code")
     }
 
 
@@ -1061,7 +1076,13 @@ def _new_scoped_requirement(*, product=None, project=None):
         requirement_type_id,
         source=None,
         module_id=None,
+        code=None,
     ):
+        # 手填编号是库条目专属。产品/项目路径的 serializer 不会产出 code，
+        # 走到这里说明有调用方绕过了契约 —— 显式炸掉比静默丢弃更早暴露问题，
+        # DB 侧另有 req_code_only_on_library_item 兜底。
+        if code is not None:
+            raise ValueError("Scoped requirements do not accept a manual code.")
         return Requirement(
             product=product,
             project=project,
@@ -1091,14 +1112,18 @@ def _new_library_item(library):
         requirement_type_id,
         source=None,
         module_id=None,
+        code=None,
     ):
         # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定。
         # source 同理被**无条件丢弃** —— 库条目是导入的源头，不可能有来源。
         # DB 侧有 req_library_item_has_no_source 兜底。
+        # code（手填编号）由 serializer 保证非空且库内唯一，这里不兜底默认值 ——
+        # 上游漏传直接落 NULL，让唯一约束外的问题在测试里立刻现形。
         return Requirement(
             library=library,
             requirement_type_id=library.requirement_type_id,
             sequence_id=allocate(),
+            code=code,
             module_id=module_id,
             data=data,
             sort_order=sort_order,
@@ -1126,7 +1151,9 @@ def insert_baseline_requirement(
     before_id=None,
     after_id=None,
     module_id=None,
+    code=None,
 ):
+    # code 形参只为与库侧 insert 的调用形状对齐；产品/项目工厂对非 None 显式报错
     return insert_requirement_row(
         model=Requirement,
         scope=scope_row_filter(policy),
@@ -1140,6 +1167,7 @@ def insert_baseline_requirement(
         before_id=before_id,
         after_id=after_id,
         module_id=module_id,
+        code=code,
     )
 
 
@@ -1153,6 +1181,7 @@ def insert_library_item(
     before_id=None,
     after_id=None,
     module_id=None,
+    code=None,
 ):
     return insert_requirement_row(
         model=Requirement,
@@ -1165,6 +1194,7 @@ def insert_library_item(
         before_id=before_id,
         after_id=after_id,
         module_id=module_id,
+        code=code,
     )
 
 
@@ -1251,6 +1281,7 @@ def save_requirement_row_batch(
 
     now = timezone.now()
     updated_rows = []
+    code_touched = False
     for item in updates:
         row = rows_by_id[item["id"]]
         # 前快照与 was_approved 都必须在改动之前抓，且要用这里上了锁的行
@@ -1262,6 +1293,11 @@ def save_requirement_row_batch(
             if column in NON_CONTENT_BUILTIN_COLUMNS:
                 continue
             setattr(row, column, value)
+        # 手填编号只有库作用域的 serializer 会放进载荷（已 strip + 查重）；
+        # 不带 code 的 update 不动这一列，产品路径因此零变化
+        if "code" in item:
+            row.code = item["code"]
+            code_touched = True
         row.data = deepcopy(item["data"] or {})
         row.version += 1
         row.updated_at = now
@@ -1273,6 +1309,7 @@ def save_requirement_row_batch(
             updated_rows,
             [
                 *CONTENT_BUILTIN_COLUMNS,
+                *(["code"] if code_touched else []),
                 "data",
                 "version",
                 "approved_row_version",
@@ -1322,6 +1359,9 @@ def save_requirement_row_batch(
             # 创建时随行挂模块：来自 create serializer 的 module_id（已校验同
             # 作用域）或导入映射的产物。模块不是内容，不进 builtin。
             module_id=item.get("module_id"),
+            # 手填编号：库作用域 serializer 保证必填非空；产品路径不产出这个键，
+            # 恒为 None（绕过时工厂 ValueError + DB check 双保险）
+            code=item.get("code"),
         )
         row.save()
         ordered_rows.insert(insert_at, row)

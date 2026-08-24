@@ -685,12 +685,19 @@ class Requirement(BaseModel):
     # 从标准库导入时记下出处，手工创建恒为 NULL。
     # 用裸 UUID 而不是外键：这是溯源记录，标准库被删之后「这条需求当年从 SEC 导入」
     # 这个事实不该跟着消失，也不该因此 PROTECT 住库的删除。
-    # 前缀在读侧批量解析，见 utils.requirement.source_library_identifier_map。
+    # 来源编号在读侧批量解析，见 utils.requirement.source_display_id_map。
     source_library_id = models.UUIDField(
         null=True, blank=True, db_index=True, verbose_name="来源标准库 ID"
     )
     source_sequence_id = models.PositiveIntegerField(
         null=True, blank=True, verbose_name="来源标准库条目序号"
+    )
+    # 标准库条目的展示编号，用户手填（任意文本，不校验格式，库内唯一非空）；
+    # 产品/项目行恒 NULL（req_code_only_on_library_item），它们的展示编号仍由
+    # identifier + sequence_id 读时拼接。sequence_id 在库作用域照常分配 ——
+    # 排序锚点、source 溯源配对、导入判重都建立在它上，code 只管展示。
+    code = models.CharField(
+        max_length=255, null=True, blank=True, verbose_name="库条目编号（手填）"
     )
     title = models.CharField(max_length=255, blank=True, default="", verbose_name="需求标题")
     description_html = models.TextField(
@@ -850,6 +857,19 @@ class Requirement(BaseModel):
             models.CheckConstraint(
                 check=Q(library__isnull=True) | Q(source_library_id__isnull=True),
                 name="req_library_item_has_no_source",
+            ),
+            # 手填编号库内唯一。与上面的 sequence 约束不同，条件**带** deleted_at：
+            # code 是展示编号不是审计锚点（快照/溯源引用的仍是 sequence_id），
+            # 软删后编号可复用 —— 与 RequirementLibrary.identifier 的口径一致。
+            models.UniqueConstraint(
+                fields=["library", "code"],
+                condition=Q(library__isnull=False, deleted_at__isnull=True),
+                name="req_unique_library_code_active",
+            ),
+            # 产品/项目行不许有手填编号，它们的编号仍是 identifier-sequence_id
+            models.CheckConstraint(
+                check=Q(library__isnull=False) | Q(code__isnull=True),
+                name="req_code_only_on_library_item",
             ),
         ]
 

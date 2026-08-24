@@ -112,12 +112,14 @@ export const useLibraryItems = ({
   }, [fetchRequirements]);
 
   const createRequirement = useCallback(
-    async (data: TRequirementData, position: { before_id?: string; after_id?: string } = {}) => {
+    async (data: TRequirementData, code: string, position: { before_id?: string; after_id?: string } = {}) => {
       if (!workspaceSlug || !libraryId) throw new Error("Library is required.");
       setIsMutating(true);
       try {
         const response = await requirementService.createLibraryItem(workspaceSlug, libraryId, {
           data,
+          // 手填编号必填非空、库内唯一（服务端校验）
+          code,
           ...position,
         });
         await fetchRequirements();

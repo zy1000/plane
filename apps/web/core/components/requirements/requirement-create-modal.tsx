@@ -104,6 +104,8 @@ export const RequirementCreateModal = ({
   const { t } = useTranslation();
   const [builtin, setBuiltin] = useState<TRequirementBuiltinValues>(createEmptyBuiltinValues);
   const [data, setData] = useState<TRequirementData>({});
+  /** 库条目手填编号（必填非空、库内唯一）；产品作用域不渲染也不发送 */
+  const [codeDraft, setCodeDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 弹窗里传上去的资源。取消建行就得删掉，否则留一堆没有归属的孤儿文件 */
@@ -164,6 +166,8 @@ export const RequirementCreateModal = ({
     if (!isOpen) return;
     setBuiltin(seed?.builtin ? { ...seed.builtin } : createEmptyBuiltinValues());
     setData(seed?.data ? cloneDeep(seed.data) : createEmptyRequirementData(visibleFields));
+    // 编号每次打开都留空让用户填 —— 复制行也不带：编号库内唯一，抄过来必撞
+    setCodeDraft("");
     setTypeId(requirementTypeId ?? null);
     setDataTypeId(requirementTypeId ?? null);
     setPendingAssetIds([]);
@@ -225,6 +229,8 @@ export const RequirementCreateModal = ({
             ...(seed?.beforeId ? { before_id: seed.beforeId } : {}),
             ...(seed?.afterId ? { after_id: seed.afterId } : {}),
             ...(moduleId ? { module_id: moduleId } : {}),
+            // 库条目编号必填（服务端 REQUIREMENT_CODE_REQUIRED），产品路径不发
+            ...(entityKind === "library" ? { code: codeDraft.trim() } : {}),
           },
         ],
         updates: [],
@@ -235,7 +241,14 @@ export const RequirementCreateModal = ({
       onClose();
     } catch (submitError) {
       const payload = submitError as { error?: string; detail?: string };
-      setError(payload?.error ?? payload?.detail ?? t("workspace_products.requirements.toast.failed"));
+      // 编号错误码埋在批量序列化器的嵌套结构里，整体检索后翻译成人话
+      const raw = JSON.stringify(submitError ?? {});
+      const codeError = raw.includes("REQUIREMENT_CODE_ALREADY_EXISTS")
+        ? t("requirements.identifier.code_duplicate")
+        : raw.includes("REQUIREMENT_CODE_REQUIRED")
+          ? t("requirements.identifier.code_required")
+          : null;
+      setError(codeError ?? payload?.error ?? payload?.detail ?? t("workspace_products.requirements.toast.failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -244,6 +257,8 @@ export const RequirementCreateModal = ({
   const isTitleEmpty = !builtin.title.trim();
   /** 有选择器时类型是必填的第一个字段 —— 没选之前后端也接不了这一行 */
   const isTypeMissing = allowTypeSelection && !typeId;
+  /** 库条目编号手填必填 —— 空着后端也会拒（REQUIREMENT_CODE_REQUIRED） */
+  const isCodeMissing = entityKind === "library" && !codeDraft.trim();
 
   const parentScope =
     entityKind === "product" ? { workspaceSlug, productId: entityId } : { workspaceSlug, libraryId: entityId };
@@ -269,6 +284,20 @@ export const RequirementCreateModal = ({
           {allowTypeSelection && (
             <div className="flex items-center pt-2 pb-4">
               <RequirementTypeSelect types={selectableTypes} value={typeId} onChange={setTypeId} />
+            </div>
+          )}
+          {/* 库条目编号手填必填：放在标题上方，与列顺序（编号在前）一致 */}
+          {entityKind === "library" && (
+            <div className="pb-2">
+              <Input
+                id="requirement-create-code"
+                type="text"
+                value={codeDraft}
+                onChange={(event) => setCodeDraft(event.target.value)}
+                maxLength={255}
+                placeholder={t("requirements.identifier.code_placeholder")}
+                className="w-full text-body-sm-regular"
+              />
             </div>
           )}
           <div className={cn("space-y-1", !allowTypeSelection && "pt-2")}>
@@ -414,7 +443,7 @@ export const RequirementCreateModal = ({
                 variant="primary"
                 size="lg"
                 onClick={() => void handleSubmit()}
-                disabled={isSubmitting || isTitleEmpty || isTypeMissing || isFieldsLoading}
+                disabled={isSubmitting || isTitleEmpty || isTypeMissing || isCodeMissing || isFieldsLoading}
                 loading={isSubmitting}
               >
                 {t("save")}

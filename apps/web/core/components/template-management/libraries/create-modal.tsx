@@ -181,21 +181,8 @@ export function RequirementLibraryCreateModal() {
               error={errors.identifier ?? null}
             />
           </div>
-          {errors.identifier ? (
-            <p className="mt-1.5 text-11 text-danger-primary">{errors.identifier}</p>
-          ) : identifier ? (
-            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              <span className="text-11 text-tertiary">{t("requirement_libraries.fields.identifier_preview_label")}</span>
-              <span className="rounded border border-subtle bg-layer-2 px-1.5 font-mono text-11 text-secondary">
-                {identifier}-1
-              </span>
-              <span className="rounded border border-subtle bg-layer-2 px-1.5 font-mono text-11 text-secondary">
-                {identifier}-2
-              </span>
-              <span className="rounded border border-dashed border-subtle px-1.5 font-mono text-11 text-tertiary">…</span>
-              <span className="text-11 text-tertiary">{t("requirement_libraries.fields.identifier_preview_note")}</span>
-            </div>
-          ) : null}
+          {/* 条目编号已改为逐条手填，标识符不再是编号前缀，预览块随之撤掉 */}
+          {errors.identifier && <p className="mt-1.5 text-11 text-danger-primary">{errors.identifier}</p>}
         </div>
         {/* 需求类型：产品级可搜索下拉，选中后展示不可更换警示 */}
         <div>

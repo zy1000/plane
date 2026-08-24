@@ -944,9 +944,11 @@ ROW_FIELDS = [
     "project_id",
     "library_id",
     "requirement_type_id",
-    # 作用域内自增序号 + 服务端拼好的展示编号（ECOM-1）。
-    # 前缀是每个 RowLayer 的常量，从 context 拿，零查询。
+    # 作用域内自增序号 + 展示编号。产品/项目行的 display_id 是服务端拼的
+    # ECOM-1（前缀是每个 RowLayer 的常量，从 context 拿，零查询）；库条目的
+    # display_id 直接就是手填的 code。
     "sequence_id",
+    "code",
     "display_id",
     # 标准库出处。source_library_id 是裸 UUID（不是外键），前缀按页批量解析，
     # 见 BaseRequirementRowViewSet._row_context。手工创建的行三个都是 None。
@@ -1023,7 +1025,10 @@ class RequirementSerializer(BaseSerializer):
         return obj.module.name if obj.module else None
 
     def get_display_id(self, obj):
-        # 作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目/库
+        # 库条目的编号是用户手填的 code，不做任何拼接
+        if obj.library_id:
+            return obj.code
+        # 产品/项目作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目
         prefix = self.context.get("scope_identifier")
         if not prefix or obj.sequence_id is None:
             return None
@@ -1032,14 +1037,12 @@ class RequirementSerializer(BaseSerializer):
     def get_source_display_id(self, obj):
         if not obj.source_library_id:
             return None
-        # 拿不到前缀说明调用方用的是 _serializer_context 而不是 _row_context ——
+        # 实时跟随来源库条目当前的手填编号（source_display_id_map 按批反查）。
+        # 拿不到映射说明调用方用的是 _serializer_context 而不是 _row_context ——
         # 这时来源编号会静默消失（不报错），排查从这里开始
-        prefix = (self.context.get("source_library_identifiers") or {}).get(
-            str(obj.source_library_id)
+        return (self.context.get("source_display_ids") or {}).get(
+            f"{obj.source_library_id}:{obj.source_sequence_id}"
         )
-        if not prefix:
-            return None
-        return f"{prefix}-{obj.source_sequence_id}"
 
     def get_pending_change_request_id(self, obj):
         value = getattr(obj, "pending_change_request_id", None)
@@ -1090,7 +1093,42 @@ class _RequirementBuiltinWriteMixin:
         )
 
 
-class RequirementCreateSerializer(_RequirementBuiltinWriteMixin, serializers.Serializer):
+class _RequirementCodeWriteMixin:
+    """库条目手填编号（code）的写入校验。
+
+    刻意**不校验格式** —— 只有两条规则：非空、库内唯一（不含软删，口径同
+    req_unique_library_code_active）。产品/项目路径带 code 会被显式拒绝，
+    而不是静默丢弃 —— 尽早暴露用错端点的客户端。
+    """
+
+    def resolve_code(self, attrs, *, required, row_id=None):
+        owner = self.context["owner"]
+        if not isinstance(owner, RequirementLibrary):
+            if "code" in attrs:
+                raise serializers.ValidationError(
+                    {"code": "Only library items accept a manual code."}
+                )
+            return attrs
+        if "code" not in attrs and not required:
+            # update 不带 code = 不改编号
+            return attrs
+        code = (attrs.get("code") or "").strip()
+        if not code:
+            raise serializers.ValidationError({"code": "REQUIREMENT_CODE_REQUIRED"})
+        duplicates = Requirement.objects.filter(library=owner, code=code)
+        if row_id:
+            duplicates = duplicates.exclude(pk=row_id)
+        if duplicates.exists():
+            raise serializers.ValidationError(
+                {"code": "REQUIREMENT_CODE_ALREADY_EXISTS"}
+            )
+        attrs["code"] = code
+        return attrs
+
+
+class RequirementCreateSerializer(
+    _RequirementBuiltinWriteMixin, _RequirementCodeWriteMixin, serializers.Serializer
+):
     """新增一条需求。
 
     必须指明这行绑定哪个需求类型 —— 字段由类型提供，data 也按该类型的字段校验。
@@ -1105,6 +1143,9 @@ class RequirementCreateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
     # 创建时随行挂模块（左侧树选中某模块后新建自动挂靠）。模块不是内容，所以
     # 不进 builtin；更新走 set-module 端点，RequirementUpdateSerializer 不收它。
     module_id = serializers.UUIDField(required=False, allow_null=True)
+    # 库条目手填编号，库作用域必填（resolve_code）；产品/项目路径不接受。
+    # 顶层字段而不是 builtin 键 —— builtin 同时是产品路径的写载荷。
+    code = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
     def validate(self, attrs):
         if attrs.get("before_id") and attrs.get("after_id"):
@@ -1142,10 +1183,12 @@ class RequirementCreateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
             fields=resolver.specs(requirement_type_id),
         )
         attrs["builtin"] = self.resolve_builtin(attrs)
-        return attrs
+        return self.resolve_code(attrs, required=True)
 
 
-class RequirementUpdateSerializer(_RequirementBuiltinWriteMixin, serializers.Serializer):
+class RequirementUpdateSerializer(
+    _RequirementBuiltinWriteMixin, _RequirementCodeWriteMixin, serializers.Serializer
+):
     """更新一条需求。
 
     不接受 requirement_type_id —— 行与需求类型的绑定创建后不可变，调用方按行上
@@ -1155,6 +1198,8 @@ class RequirementUpdateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
     data = serializers.DictField()
     builtin = RequirementBuiltinWriteSerializer(required=False, default=dict)
     version = serializers.IntegerField(min_value=1)
+    # 库条目手填编号；不带 = 不改。产品/项目路径不接受。
+    code = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
     def validate_data(self, value):
         current_row = self.context.get("current_row")
@@ -1171,7 +1216,9 @@ class RequirementUpdateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
             row_id=self.context["row_id"],
             current_row=self.context.get("current_row"),
         )
-        return attrs
+        return self.resolve_code(
+            attrs, required=False, row_id=self.context["row_id"]
+        )
 
 
 class RequirementBatchCreateSerializer(RequirementCreateSerializer):
@@ -1179,7 +1226,7 @@ class RequirementBatchCreateSerializer(RequirementCreateSerializer):
 
 
 class RequirementBatchUpdateSerializer(
-    _RequirementBuiltinWriteMixin, serializers.Serializer
+    _RequirementBuiltinWriteMixin, _RequirementCodeWriteMixin, serializers.Serializer
 ):
     """批量更新的一项：按行自己的需求类型校验 data。
 
@@ -1190,6 +1237,8 @@ class RequirementBatchUpdateSerializer(
     data = serializers.DictField()
     builtin = RequirementBuiltinWriteSerializer(required=False, default=dict)
     version = serializers.IntegerField(min_value=1)
+    # 库条目手填编号；不带 = 不改。产品/项目路径不接受。
+    code = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
     def validate(self, attrs):
         row_requirement_types = self.context["row_requirement_types"]
@@ -1212,7 +1261,7 @@ class RequirementBatchUpdateSerializer(
             row_id=attrs["id"],
             current_row=current_row,
         )
-        return attrs
+        return self.resolve_code(attrs, required=False, row_id=attrs["id"])
 
 
 class RequirementBatchDeleteSerializer(serializers.Serializer):
@@ -1315,6 +1364,19 @@ class RequirementBatchSaveSerializer(serializers.Serializer):
         if set(update_ids).intersection(delete_ids):
             raise serializers.ValidationError(
                 "A requirement cannot be updated and deleted in the same request."
+            )
+
+        # 库条目手填编号的批内查重：单项校验只对照库内已有行，两条 create（或
+        # create 与改号的 update）在同一批里撞号要在这里拦，否则落库时才撞
+        # req_unique_library_code_active，整批 500。
+        codes = [
+            item["code"]
+            for item in [*creates, *updates]
+            if item.get("code")
+        ]
+        if len(codes) != len(set(codes)):
+            raise serializers.ValidationError(
+                {"code": "REQUIREMENT_CODE_DUPLICATED_IN_BATCH"}
             )
         return attrs
 

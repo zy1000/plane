@@ -101,7 +101,8 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
             queryset=Requirement.objects.filter(library=owner).order_by(
                 "sort_order", "created_at", "id"
             ),
-            # 库内条目的展示编号前缀（SEC-12 里的 SEC）
+            # 库条目的展示编号已是行上手填的 code，这里的标识不再参与 display_id
+            # 拼接；保留是给 Excel 导出文件名等与产品路径共用的兜底。
             serializer_context={"scope_identifier": owner.identifier},
             requirement_type_ids=[owner.requirement_type_id],
             fields=fields,

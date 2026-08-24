@@ -16,6 +16,8 @@ export function baselineEntryToRequirement(entry: TRequirementBaselineEntry, pro
     library_id: null,
     requirement_type_id: entry.requirement_type_id,
     sequence_id: snapshot.sequence_id ?? 0,
+    // 手填编号只存在于库条目；基线收录的都是产品行，恒为 null
+    code: null,
     display_id: entry.display_id ?? null,
     source_library_id: snapshot.source_library_id ?? null,
     source_sequence_id: snapshot.source_sequence_id ?? null,

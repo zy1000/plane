@@ -238,6 +238,21 @@ class TestRequirementApp:
         )
         by_name = {field["name"]: field["id"] for field in fields}
 
+        # 库条目编号是手填的，不带编号建不了
+        missing_code = api_client.post(
+            reverse(
+                "requirement-library-items",
+                kwargs={"slug": self.workspace.slug, "library_id": library.id},
+            ),
+            {
+                "data": {by_name["优先级"]: "中"},
+                "builtin": {"title": "标准条目", "description_html": "库描述"},
+            },
+            format="json",
+        )
+        assert missing_code.status_code == status.HTTP_400_BAD_REQUEST, missing_code.data
+        assert "REQUIREMENT_CODE_REQUIRED" in str(missing_code.data)
+
         created = api_client.post(
             reverse(
                 "requirement-library-items",
@@ -246,6 +261,7 @@ class TestRequirementApp:
             {
                 "data": {by_name["优先级"]: "中"},
                 "builtin": {"title": "标准条目", "description_html": "库描述"},
+                "code": "REQ-登录-001",
             },
             format="json",
         )
@@ -257,11 +273,29 @@ class TestRequirementApp:
         # 标准库条目永不走审批 —— 由 req_library_item_never_approved 约束硬保证
         assert item.approved_version is None
         assert item.status == "not_started"
-        # 库条目有自己作用域内的编号，且它是导入的源头，不可能有来源
+        # 库条目的展示编号就是手填的 code（不校验格式）；内部序号照常分配，
+        # 且它是导入的源头，不可能有来源
         assert item.sequence_id == 1
-        assert created.data["display_id"] == f"{library.identifier}-1"
+        assert item.code == "REQ-登录-001"
+        assert created.data["display_id"] == "REQ-登录-001"
         assert item.source_library_id is None
         assert created.data["source_display_id"] is None
+
+        # 同库内编号不可重复
+        duplicated = api_client.post(
+            reverse(
+                "requirement-library-items",
+                kwargs={"slug": self.workspace.slug, "library_id": library.id},
+            ),
+            {
+                "data": {},
+                "builtin": {"title": "撞号条目"},
+                "code": "REQ-登录-001",
+            },
+            format="json",
+        )
+        assert duplicated.status_code == status.HTTP_400_BAD_REQUEST, duplicated.data
+        assert "REQUIREMENT_CODE_ALREADY_EXISTS" in str(duplicated.data)
 
         imported = api_client.post(
             f"{self.requirements_url()}import/",
@@ -275,20 +309,24 @@ class TestRequirementApp:
         assert copy.title == "标准条目"
         assert copy.description_html == "库描述"
         assert list(copy.data.values()) == ["中"]
-        # 导入的行同时有自己的产品编号和来源库编号
+        # 导入的行同时有自己的产品编号和来源库编号：产品编号仍是自动生成的
+        # identifier-序号，来源编号则实时跟随库条目当前的手填 code
         payload = imported.data["created"][0]["requirement"]
         assert payload["display_id"] == f"{self.product.identifier}-1"
         assert copy.source_library_id == library.id
         assert copy.source_sequence_id == item.sequence_id
-        assert payload["source_display_id"] == f"{library.identifier}-1"
+        assert copy.code is None
+        assert payload["source_display_id"] == "REQ-登录-001"
 
-        # 库改名换标识后，已导入行的来源编号跟着变 —— 这正是存结构化 id
-        # 而不是快照字符串的理由
+        # 改库标识**不再**影响来源编号（编号已与标识脱钩）；改库条目的手填编号，
+        # 已导入行的来源编号实时跟随 —— 这正是存结构化 id 而不是快照字符串的理由
         library.identifier = "RENAMED"
         library.save()
+        item.code = "REQ-登录-V2"
+        item.save(update_fields=["code"])
         listed = api_client.get(self.requirements_url())
         assert listed.status_code == status.HTTP_200_OK, listed.data
-        assert listed.data["results"][0]["source_display_id"] == "RENAMED-1"
+        assert listed.data["results"][0]["source_display_id"] == "REQ-登录-V2"
 
     def test_sequence_ids_increment_per_scope_and_are_never_reused(self, api_client):
         api_client.force_authenticate(user=self.owner)

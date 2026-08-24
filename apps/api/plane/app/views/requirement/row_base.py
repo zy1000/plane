@@ -12,7 +12,7 @@
 import json
 from typing import NamedTuple
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework import serializers as drf_serializers
 from rest_framework.response import Response
@@ -36,7 +36,7 @@ from plane.utils.requirement import (
     requirement_content_values,
     resync_approved_row_version,
     row_was_approved,
-    source_library_identifier_map,
+    source_display_id_map,
 )
 from plane.utils.requirement_module import (
     expand_requirement_module_subtree_ids,
@@ -147,15 +147,15 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         }
 
     def _row_context(self, layer, owner, rows):
-        """给一批行准备序列化 context：作用域前缀（来自 layer）+ 来源库前缀。
+        """给一批行准备序列化 context：作用域前缀（来自 layer）+ 来源编号映射。
 
         任何要吐 RequirementSerializer 的地方都走这个方法，不要直接用
-        _serializer_context —— 后者不含来源库前缀，source_display_id 会静默返回
+        _serializer_context —— 后者不含来源编号映射，source_display_id 会静默返回
         None（不报错，只是编号消失）。
         """
         return {
             **self._serializer_context(layer, owner),
-            "source_library_identifiers": source_library_identifier_map(rows),
+            "source_display_ids": source_display_id_map(rows),
             # 模块名按批解析：写路径返回的行是内存实例，逐行取 obj.module 会 N+1
             "module_names": module_name_map(rows),
         }
@@ -390,6 +390,8 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                     after_id=serializer.validated_data.get("after_id"),
                     # 左侧树选中模块后新建自动挂靠；serializer 已校验同作用域
                     module_id=serializer.validated_data.get("module_id"),
+                    # 库条目手填编号（serializer 保证库作用域必填、产品路径无值）
+                    code=serializer.validated_data.get("code"),
                 )
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -415,6 +417,21 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
         specs = layer.requirement_type_resolver.specs(row_requirement_type_id)
+        try:
+            return self._partial_update_locked(request, layer, owner, specs, pk)
+        except IntegrityError:
+            # 两个并发 PATCH 把不同行改成同一个编号：查重都通过、落库撞
+            # req_unique_library_code_active。整个事务已回滚，这里翻译成
+            # 与 serializer 同码的 400
+            return Response(
+                {
+                    "error": "The code is already used by another item.",
+                    "code": "REQUIREMENT_CODE_ALREADY_EXISTS",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def _partial_update_locked(self, request, layer, owner, specs, pk):
         with transaction.atomic():
             row = layer.queryset.select_for_update().filter(id=pk).first()
             if row is None:
@@ -459,6 +476,11 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 # status 不算内容、不由内容路径写（见 NON_CONTENT_BUILTIN_COLUMNS）
                 if column in CONTENT_BUILTIN_COLUMNS:
                     setattr(row, column, value)
+            # 库条目手填编号；serializer 已 strip + 查重。单条 PATCH 只锁行不锁库，
+            # 并发窗口由唯一约束兜底（IntegrityError 在 atomic 外转 400）
+            code_touched = "code" in serializer.validated_data
+            if code_touched:
+                row.code = serializer.validated_data["code"]
             row.data = serializer.validated_data["data"]
             row.version += 1
             row.updated_by = request.user
@@ -466,6 +488,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             row.save(
                 update_fields=[
                     *CONTENT_BUILTIN_COLUMNS,
+                    *(["code"] if code_touched else []),
                     "data",
                     "version",
                     "approved_row_version",
@@ -764,8 +787,10 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
 
         context = {
             **self._serializer_context(layer, owner),
-            # 这一批的来源库就是 library 自己，直接给前缀，省掉那次 IN 查询
-            "source_library_identifiers": {str(library.id): library.identifier},
+            # 来源编号跟随库条目当前的手填 code，须按 (库, 序号) 对反查一次
+            "source_display_ids": source_display_id_map(
+                [row for _, row in created]
+            ),
         }
         return Response(
             {

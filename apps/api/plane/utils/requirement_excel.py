@@ -390,12 +390,16 @@ def build_sheet_specs(*, requirement_types, fields_by_type, is_library):
 class ExportContext:
     """导出一次所需的全部旁路数据，一次查好，逐行不再碰库。"""
 
-    #: 编号前缀（ECOM-1 里的 ECOM）
+    #: 编号前缀（ECOM-1 里的 ECOM）。库作用域不参与编号，见 is_library
     scope_identifier: str = ""
     #: user_id(str) -> 展示名
     user_display: dict = dataclass_field(default_factory=dict)
     #: requirement_id(str) -> sequence_id，父项列要拿它拼父需求的编号
     sequence_by_id: dict = dataclass_field(default_factory=dict)
+    #: 库作用域：编号是行上手填的 code，不是前缀拼接
+    is_library: bool = False
+    #: requirement_id(str) -> code，库作用域的父项列用它
+    code_by_id: dict = dataclass_field(default_factory=dict)
 
     def display_id(self, sequence_id):
         if sequence_id is None:
@@ -404,9 +408,16 @@ class ExportContext:
             return str(sequence_id)
         return f"{self.scope_identifier}-{sequence_id}"
 
+    def row_display_id(self, requirement):
+        if self.is_library:
+            return requirement.code or ""
+        return self.display_id(requirement.sequence_id)
+
     def display_id_of(self, requirement_id):
         if not requirement_id:
             return ""
+        if self.is_library:
+            return self.code_by_id.get(str(requirement_id), "")
         return self.display_id(self.sequence_by_id.get(str(requirement_id)))
 
     def user_name(self, user_id):
@@ -576,7 +587,7 @@ def _write_requirement(worksheet, sheet_spec, requirement, ctx, start_row):
         if column.form_id is not None:
             continue
         if column.kind == "sequence":
-            value = ctx.display_id(requirement.sequence_id)
+            value = ctx.row_display_id(requirement)
         elif column.kind == "builtin":
             value = format_builtin_value(column.key, requirement, ctx)
         else:
@@ -1078,6 +1089,8 @@ class RowResult:
     warnings: list = dataclass_field(default_factory=list)
     requirement_id: Optional[str] = None
     version: Optional[int] = None
+    #: 库作用域：编号列的手填文本。create 行随载荷落库；update 行它只是匹配键
+    code: Optional[str] = None
     builtin: dict = dataclass_field(default_factory=dict)
     data: dict = dataclass_field(default_factory=dict)
     #: 父项指向本批里的另一行时记在这里，等落库拿到新 id 再回填
@@ -1175,10 +1188,15 @@ class RequirementImportResolver:
 
         self.rows_by_sequence = {}
         self.rows_by_id = {}
+        # 库作用域按手填编号匹配已有行；活行的 code 由
+        # req_unique_library_code_active 保证唯一，不会碰撞
+        self.rows_by_code = {}
         for row in existing_rows:
             self.rows_by_id[str(row.id)] = row
             if row.sequence_id is not None:
                 self.rows_by_sequence[row.sequence_id] = row
+            if is_library and row.code:
+                self.rows_by_code[row.code] = row
 
         self.user_display = {}
         self._by_email = {}
@@ -1199,6 +1217,8 @@ class RequirementImportResolver:
             sequence_by_id={
                 str(row.id): row.sequence_id for row in existing_rows
             },
+            is_library=is_library,
+            code_by_id={str(row.id): row.code or "" for row in existing_rows},
         )
 
     # -- 成员 ---------------------------------------------------------------
@@ -1346,7 +1366,9 @@ class RequirementImportResolver:
         return _norm_data(existing.data) != _norm_data(result.data)
 
     def _resolve_target(self, group, result):
-        """按编号找到要更新的行；编号为空即新增。"""
+        """按编号找到要更新的行；产品作用域编号为空即新增，库作用域编号必填。"""
+        if self.is_library:
+            return self._resolve_library_target(group, result)
         sequence_id, error = parse_sequence(
             group.builtin_raw.get(SEQUENCE_COLUMN_KEY), self.scope_identifier
         )
@@ -1374,6 +1396,29 @@ class RequirementImportResolver:
                 "该需求属于其它需求类型，而需求类型创建后不可更换。"
                 "请把这一行放回它自己的工作表。"
             )
+        return existing
+
+    def _resolve_library_target(self, group, result):
+        """库作用域按手填编号精确匹配：命中 → 更新该条，未命中 → 新增（编号即该文本）。
+
+        编号是手填文本，不走 parse_sequence（没有前缀规则，**不校验格式**）；
+        但必填非空 —— 库条目创建必须带编号，这里没有「留空即新增」。
+        编号列对更新行只是匹配键：改一条条目的编号只能在页面上做，不能靠 Excel。
+        """
+        text = _cell_text(group.builtin_raw.get(SEQUENCE_COLUMN_KEY))
+        if not text:
+            result.errors.append("编号不能为空。")
+            return None
+        result.display_id = text
+        result.code = text
+        existing = self.rows_by_code.get(text)
+        if existing is None:
+            return None
+
+        result.action = "update"
+        result.requirement_id = str(existing.id)
+        result.version = existing.version
+        result.current_status = existing.status
         return existing
 
     def _resolve_title(self, group, result, existing):
@@ -1487,17 +1532,22 @@ class RequirementImportResolver:
             return
 
         # 格子没动就沿用，省一次解析，也不会因为父项已关闭而被「新指派」规则误伤
+        # （库作用域走 display_id_of 的 code 分支，比较口径自动一致）
         if existing is not None and existing.parent_id and text == self.export_ctx.display_id_of(
             existing.parent_id
         ):
             result.builtin["parent_id"] = str(existing.parent_id)
             return
 
-        sequence_id, error = parse_sequence(text, self.scope_identifier)
-        if error:
-            result.errors.append(f"「父项」{error}")
-            return
-        parent = self.rows_by_sequence.get(sequence_id)
+        if self.is_library:
+            # 手填编号精确匹配，不走 parse_sequence
+            parent = self.rows_by_code.get(text)
+        else:
+            sequence_id, error = parse_sequence(text, self.scope_identifier)
+            if error:
+                result.errors.append(f"「父项」{error}")
+                return
+            parent = self.rows_by_sequence.get(sequence_id)
         if parent is None:
             result.errors.append(f"「父项」编号 {text} 在当前范围内不存在。")
         elif existing is not None and str(parent.id) == str(existing.id):
@@ -1624,6 +1674,27 @@ def _flag_duplicate_targets(results):
             )
 
 
+def _flag_duplicate_codes(results):
+    """库作用域：两行**新增**用了同一个手填编号 —— 批内撞号在落库前给出可读报错。
+
+    两行匹配到同一条已有条目（update 撞 update）由 _flag_duplicate_targets 拦；
+    「新增的编号与库内已有条目重复」不会发生 —— 重复就已经匹配成 update 了。
+    产品作用域没有 code，天然空转。
+    """
+    first_by_code = {}
+    for result in results:
+        if result.code is None or result.requirement_id is not None:
+            continue
+        first = first_by_code.get(result.code)
+        if first is None:
+            first_by_code[result.code] = result
+        else:
+            result.errors.append(
+                f"编号 {result.code} 在文件里出现了多次"
+                f"（第 {first.row_number} 行已经用过）。"
+            )
+
+
 def _resolve_in_batch_parents(results, by_key):
     for result in results:
         if not result.parent_row_key:
@@ -1661,6 +1732,7 @@ def resolve_groups(groups, resolver):
     results = [resolver.resolve_group(group) for group in groups]
     by_key = {result.row_key: result for result in results}
     _flag_duplicate_targets(results)
+    _flag_duplicate_codes(results)
     _resolve_in_batch_parents(results, by_key)
     _detect_parent_cycles(results, by_key)
     for result in results:
@@ -1708,14 +1780,16 @@ def build_batch_payload(results, *, selected_keys=None):
             if parent_client_id:
                 parent_by_client_id[result.client_id] = parent_client_id
         if result.action == "create":
-            creates.append(
-                {
-                    "client_id": result.client_id,
-                    "data": result.data,
-                    "builtin": result.builtin,
-                    "requirement_type_id": result.requirement_type_id,
-                }
-            )
+            create_item = {
+                "client_id": result.client_id,
+                "data": result.data,
+                "builtin": result.builtin,
+                "requirement_type_id": result.requirement_type_id,
+            }
+            # 库作用域：新增行带手填编号；update 行不带 —— 编号列只是匹配键
+            if result.code is not None:
+                create_item["code"] = result.code
+            creates.append(create_item)
         elif result.writes_content:
             updates.append(
                 {

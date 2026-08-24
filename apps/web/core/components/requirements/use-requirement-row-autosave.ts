@@ -36,6 +36,8 @@ export type TRequirementRowSaveState = {
 type TLocalRow = {
   data: TRequirementData;
   builtin: TRequirementBuiltinValues;
+  /** 库条目手填编号；产品行恒 null（flush 时 null/空白不随载荷发出） */
+  code: string | null;
   version: number;
 };
 
@@ -48,6 +50,7 @@ type TBatchSaveError = {
 const toLocalRow = (requirement: TRequirement): TLocalRow => ({
   data: cloneDeep(requirement.data),
   builtin: pickBuiltinValues(requirement),
+  code: requirement.code ?? null,
   version: requirement.version,
 });
 
@@ -114,7 +117,16 @@ export const useRequirementRowAutosave = ({
       try {
         const response = await onSave({
           creates: [],
-          updates: [{ id: requirementId, version: row.version, data: row.data, builtin: row.builtin }],
+          updates: [
+            {
+              id: requirementId,
+              version: row.version,
+              data: row.data,
+              builtin: row.builtin,
+              // 编号只在库作用域存在；产品行恒 null，不进载荷（后端会拒绝）
+              ...(row.code != null && row.code.trim() !== "" ? { code: row.code } : {}),
+            },
+          ],
           deletes: [],
         });
 
@@ -199,6 +211,17 @@ export const useRequirementRowAutosave = ({
     [commitLocalRows, enqueueSave]
   );
 
+  /** 库条目行内改编号：覆盖本地值并排队保存。空值由调用方拦下，不要传进来 */
+  const updateCode = useCallback(
+    (requirementId: string, code: string) => {
+      const row = localRowsRef.current[requirementId];
+      if (!row) return;
+      commitLocalRows({ ...localRowsRef.current, [requirementId]: { ...row, code } });
+      enqueueSave(requirementId);
+    },
+    [commitLocalRows, enqueueSave]
+  );
+
   /** 冲突后重试：拿服务端最新的 version 重发一次当前的本地值 */
   const retryRow = useCallback(
     (requirementId: string, latestVersion: number) => {
@@ -217,5 +240,5 @@ export const useRequirementRowAutosave = ({
     [saveStates]
   );
 
-  return { getRow, getSaveState, updateBuiltin, updateData, retryRow };
+  return { getRow, getSaveState, updateBuiltin, updateData, updateCode, retryRow };
 };

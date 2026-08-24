@@ -127,7 +127,7 @@ def module_name_map(rows):
 
     写路径（创建 / 导入 / bulk-save）返回的行是内存里新构造的实例，没有
     select_related 可用 —— 逐行取 obj.module 会一行一查，导入 2000 条就是
-    2000 次查询。这里按批一次 IN 查询解决，口径同 source_library_identifier_map。
+    2000 次查询。这里按批一次 IN 查询解决，口径同 source_display_id_map。
     """
     module_ids = {row.module_id for row in rows if row.module_id}
     if not module_ids:
