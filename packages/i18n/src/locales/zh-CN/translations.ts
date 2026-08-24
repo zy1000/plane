@@ -2096,6 +2096,8 @@ export default {
     unlink_selected: "解除关联 {count} 条",
     submit_change: "提交变更",
     product_column: "所属产品",
+    sidebar_products: "产品",
+    sidebar_manage: "管理",
     all_products: "全部产品",
     all_statuses: "全部状态",
     empty: {
@@ -2104,7 +2106,8 @@ export default {
     },
     no_products: {
       title: "本项目还没有关联产品",
-      description: "需求来自产品。用右上角的「管理产品」把产品关联进来，才能引用它下面的需求。",
+      description: "需求来自产品。在左侧「产品」里把产品关联进来，才能引用它下面的需求。",
+      sidebar: "尚未关联产品，关联后才能引用需求。",
     },
     linkable: {
       title: "关联需求",
@@ -2189,8 +2192,18 @@ export default {
     empty: "尚未关联任何产品",
     manage: "管理产品",
     manage_subtitle: "勾选要关联到本项目的产品。关联后才能引用其下的需求。",
+    search_placeholder: "搜索产品名称或编号",
+    no_match: "没有匹配的产品",
+    linked_group: "已关联 · {count}",
+    unlinked_group: "未关联 · {count}",
+    linked: "已关联",
+    requirement_count: "{count} 条需求",
     linked_meta: "已关联 · {count} 条需求",
     unlinked_meta: "未关联",
+    footer_selected: "已选 {count}",
+    footer_no_change: "无变更",
+    footer_will_add: "将新增 {count}",
+    footer_will_remove: "将解除 {count}",
     has_linked_requirements: "该产品下还有需求关联在本项目中，请先解除这些需求的关联。",
   },
   workspace_products: {

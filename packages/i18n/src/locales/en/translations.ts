@@ -1923,6 +1923,8 @@ export default {
     unlink_selected: "Unlink {count}",
     submit_change: "Submit change",
     product_column: "Product",
+    sidebar_products: "Products",
+    sidebar_manage: "Manage",
     all_products: "All products",
     all_statuses: "All statuses",
     empty: {
@@ -1931,7 +1933,8 @@ export default {
     },
     no_products: {
       title: "No product linked to this project",
-      description: "Requirements come from products. Use \"Manage products\" in the toolbar to link one first.",
+      description: "Requirements come from products. Link a product in the left sidebar first.",
+      sidebar: "No products linked yet. Link one to start referencing its requirements.",
     },
     linkable: {
       title: "Link requirements",
@@ -2010,8 +2013,18 @@ export default {
     manage: "Manage products",
     manage_subtitle:
       "Select products to link to this project. You can then reference their requirements.",
+    search_placeholder: "Search by name or identifier",
+    no_match: "No matching products",
+    linked_group: "Linked · {count}",
+    unlinked_group: "Not linked · {count}",
+    linked: "Linked",
+    requirement_count: "{count} requirements",
     linked_meta: "Linked · {count} requirements",
     unlinked_meta: "Not linked",
+    footer_selected: "Selected {count}",
+    footer_no_change: "No changes",
+    footer_will_add: "Will add {count}",
+    footer_will_remove: "Will remove {count}",
     has_linked_requirements:
       "Requirements from this product are still linked to the project. Unlink them first.",
   },

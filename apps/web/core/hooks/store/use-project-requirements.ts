@@ -67,10 +67,11 @@ export const useProjectRequirements = ({
   const [perPage, setPerPage] = useState(20);
   const [listFilters, setListFiltersState] = useState<TProjectRequirementListQuery>(initialListQuery ?? {});
   /**
-   * 左侧模块树的过滤（含子模块）；null = 「全部」。独立于 listFilters ——
-   * rich-filters 的表达式重建不感知它，两者在服务端 AND 叠加。
+   * 左侧栏的浏览范围；null = 「全部」。独立于 listFilters ——
+   * rich-filters 的表达式重建不感知它们，与筛选在服务端 AND 叠加。
    */
   const [moduleId, setModuleIdState] = useState<string | null>(null);
+  const [productId, setProductIdState] = useState<string | null>(null);
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !projectId) return null;
@@ -109,7 +110,7 @@ export const useProjectRequirements = ({
           search,
           filters,
           requirementTypeId: listFilters.requirementTypeId,
-          productId: listFilters.productId,
+          productId: productId ?? undefined,
           status: listFilters.status,
           title: listFilters.title,
           approvalState: listFilters.approvalState,
@@ -135,7 +136,7 @@ export const useProjectRequirements = ({
         if (requestSequence === requestSequenceRef.current) setIsRequirementsLoading(false);
       }
     },
-    [cursor, filters, listFilters, perPage, projectId, search, workspaceSlug]
+    [cursor, filters, listFilters, moduleId, perPage, productId, projectId, search, workspaceSlug]
   );
 
   useEffect(() => {
@@ -288,6 +289,10 @@ export const useProjectRequirements = ({
     setCursor(undefined);
     setModuleIdState(value);
   }, []);
+  const setProductId = useCallback((value: string | null) => {
+    setCursor(undefined);
+    setProductIdState(value);
+  }, []);
 
   return {
     configuration,
@@ -304,12 +309,14 @@ export const useProjectRequirements = ({
     perPage,
     listFilters,
     moduleId,
+    productId,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
     setPerPage: updatePerPage,
     setListFilters,
     setModuleId,
+    setProductId,
     fetchConfiguration,
     fetchRequirements,
     linkRequirements,

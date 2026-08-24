@@ -1,31 +1,65 @@
 "use client";
 
+import { useMemo } from "react";
 import { Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import type { TProductProject } from "@plane/types";
 import { cn } from "@plane/utils";
 import type { TRequirementModulesStore } from "@/hooks/store/use-requirement-modules";
 import { RequirementModuleTree } from "./module-tree";
+import { ProjectRequirementProductNav } from "./project-requirement-product-nav";
 
 type TProps = {
   store: TRequirementModulesStore;
   selectedModuleId: string | null;
   onSelect: (moduleId: string | null) => void;
+  productLinks: TProductProject[];
+  isProductsLoading: boolean;
+  selectedProductId: string | null;
+  onSelectProduct: (productId: string | null) => void;
+  canManageProducts: boolean;
+  onManageProducts: () => void;
 };
 
 /**
- * 项目需求页左侧的只读模块树。
+ * 项目需求页左侧浏览栏：上半产品、下半只读模块树。
  *
  * 树来自「已关联需求所涉及的产品模块」（祖先闭包 + 子树计数），项目本身不落
- * 模块字段。单产品拍平直接展示；多产品按产品分组，组标题不可点击过滤。
+ * 模块字段。选中某个产品后只渲染该组，去掉不可点的产品分组标题。
  */
 export const ProjectRequirementModuleSidebar = (props: TProps) => {
-  const { store, selectedModuleId, onSelect } = props;
+  const {
+    store,
+    selectedModuleId,
+    onSelect,
+    productLinks,
+    isProductsLoading,
+    selectedProductId,
+    onSelectProduct,
+    canManageProducts,
+    onManageProducts,
+  } = props;
   const { t } = useTranslation();
-  const groups = store.groups;
+  const visibleGroups = useMemo(
+    () =>
+      selectedProductId ? store.groups.filter((group) => group.product_id === selectedProductId) : store.groups,
+    [selectedProductId, store.groups]
+  );
+  const moduleTotal = selectedProductId ? (visibleGroups[0]?.total ?? 0) : store.total;
+  const showProductHeaders = !selectedProductId && visibleGroups.length > 1;
   const isAllActive = selectedModuleId === null;
 
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-subtle bg-surface-2 sm:flex">
+      <ProjectRequirementProductNav
+        links={productLinks}
+        isLoading={isProductsLoading}
+        selectedProductId={selectedProductId}
+        onSelect={onSelectProduct}
+        canManage={canManageProducts}
+        onManage={onManageProducts}
+      />
+      <div className="mx-3 border-t border-subtle" />
       <div className="px-3 pt-3 pb-1.5 text-caption-sm-medium text-tertiary">
         {t("requirement_modules.sidebar_label")}
       </div>
@@ -49,16 +83,15 @@ export const ProjectRequirementModuleSidebar = (props: TProps) => {
               isAllActive ? "text-accent-primary" : "text-placeholder"
             )}
           >
-            {store.total}
+            {moduleTotal}
           </span>
         </button>
-        {groups.length === 0 && !store.isLoading && (
+        {visibleGroups.length === 0 && !store.isLoading && (
           <div className="text-caption-sm px-2 py-3 text-tertiary">{t("requirement_modules.empty")}</div>
         )}
-        {groups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.product_id} className="mt-1">
-            {/* 多产品才显示组标题；组标题只是分隔，不参与过滤 */}
-            {groups.length > 1 && (
+            {showProductHeaders && (
               <div className="flex items-center justify-between gap-2 px-2 pt-2 pb-1">
                 <span className="min-w-0 truncate text-caption-sm-medium text-tertiary">{group.product_name}</span>
                 <span className="text-caption-sm-medium text-placeholder tabular-nums">{group.total}</span>

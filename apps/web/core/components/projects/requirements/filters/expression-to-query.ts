@@ -44,9 +44,6 @@ const applyCondition = (
     case "status":
       query.status = mergeCsv(query.status, toStringArray(value));
       break;
-    case "product":
-      query.productId = mergeCsv(query.productId, toStringArray(value));
-      break;
     case "approval":
       query.approvalState = mergeCsv(query.approvalState, toStringArray(value));
       break;
@@ -124,7 +121,6 @@ export const projectRequirementExpressionToQuery = (
 
 export const FILTER_URL_KEYS = {
   status: "status",
-  product: "product",
   type: "type",
   approval: "approval",
   priority: "priority",
@@ -140,7 +136,6 @@ export const FILTER_URL_KEYS = {
 
 export const parseListQueryFromSearchParams = (params: URLSearchParams): TProjectRequirementListQuery => ({
   status: params.get(FILTER_URL_KEYS.status) || undefined,
-  productId: params.get(FILTER_URL_KEYS.product) || undefined,
   requirementTypeId: params.get(FILTER_URL_KEYS.type) || undefined,
   approvalState: params.get(FILTER_URL_KEYS.approval) || undefined,
   priority: params.get(FILTER_URL_KEYS.priority) || undefined,
@@ -170,7 +165,6 @@ export const listQueryToExpression = (query: TProjectRequirementListQuery): TPro
     pushCondition(conditions, "title", EXTENDED_EQUALITY_OPERATOR.CONTAINS, query.title);
   }
   if (query.status) pushCondition(conditions, "status", COLLECTION_OPERATOR.IN, query.status);
-  if (query.productId) pushCondition(conditions, "product", COLLECTION_OPERATOR.IN, query.productId);
   if (query.approvalState) pushCondition(conditions, "approval", COLLECTION_OPERATOR.IN, query.approvalState);
   if (query.priority) pushCondition(conditions, "priority", COLLECTION_OPERATOR.IN, query.priority);
   if (query.assigneeId) pushCondition(conditions, "assignee", COLLECTION_OPERATOR.IN, query.assigneeId);
@@ -205,7 +199,6 @@ export const applyListQueryToSearchParams = (params: URLSearchParams, query: TPr
   };
 
   setOrDelete(FILTER_URL_KEYS.status, query.status);
-  setOrDelete(FILTER_URL_KEYS.product, query.productId);
   setOrDelete(FILTER_URL_KEYS.type, query.requirementTypeId);
   setOrDelete(FILTER_URL_KEYS.approval, query.approvalState);
   setOrDelete(FILTER_URL_KEYS.priority, query.priority);
@@ -222,7 +215,6 @@ export const applyListQueryToSearchParams = (params: URLSearchParams, query: TPr
 export const serializeListQuery = (query: TProjectRequirementListQuery) =>
   [
     query.status,
-    query.productId,
     query.requirementTypeId,
     query.approvalState,
     query.priority,

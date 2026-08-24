@@ -8,11 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 import { xor } from "lodash-es";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProduct, TProductProject } from "@plane/types";
-import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
-import { cn } from "@plane/utils";
-import { ProductChip } from "@/components/products/product-chip";
+import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import { ProjectProductPickerRow } from "./project-product-picker-row";
 
 type TProps = {
   isOpen: boolean;
@@ -26,6 +26,12 @@ type TProps = {
   onSubmit: (payload: { products: string[]; removed_products: string[] }) => Promise<void>;
 };
 
+const matchesQuery = (product: TProduct, query: string) => {
+  if (!query) return true;
+  const haystack = `${product.name ?? ""} ${product.identifier ?? ""}`.toLowerCase();
+  return haystack.includes(query);
+};
+
 export const ProjectProductsModal = (props: TProps) => {
   const { isOpen, products, isProductsLoading, links, isSubmitting, handleClose, onSubmit } = props;
   const { t } = useTranslation();
@@ -33,16 +39,38 @@ export const ProjectProductsModal = (props: TProps) => {
   const linkedIds = useMemo(() => links.map((link) => link.product), [links]);
   const linkByProductId = useMemo(() => new Map(links.map((link) => [link.product, link])), [links]);
   const [selectedIds, setSelectedIds] = useState<string[]>(linkedIds);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // 每次打开都以服务端的现状为准，不要沿用上一次关掉时的草稿选择
   useEffect(() => {
-    if (isOpen) setSelectedIds(linkedIds);
+    if (!isOpen) return;
+    setSelectedIds(linkedIds);
+    setSearchQuery("");
   }, [isOpen, linkedIds]);
 
   const toggle = (productId: string) =>
     setSelectedIds((current) =>
       current.includes(productId) ? current.filter((item) => item !== productId) : [...current, productId]
     );
+
+  const query = searchQuery.trim().toLowerCase();
+  const filteredProducts = useMemo(
+    () => products.filter((product) => matchesQuery(product, query)),
+    [products, query]
+  );
+  const linkedProducts = filteredProducts.filter((product) => linkedIds.includes(product.id));
+  const unlinkedProducts = filteredProducts.filter((product) => !linkedIds.includes(product.id));
+  const addedCount = selectedIds.filter((id) => !linkedIds.includes(id)).length;
+  const removedCount = linkedIds.filter((id) => !selectedIds.includes(id)).length;
+  const footerDelta =
+    addedCount === 0 && removedCount === 0
+      ? t("project_products.footer_no_change")
+      : [
+          addedCount > 0 ? t("project_products.footer_will_add", { count: addedCount }) : null,
+          removedCount > 0 ? t("project_products.footer_will_remove", { count: removedCount }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   /** 求差集后拆成增删两份，与工作项挂模块的接口同形 */
   const handleSubmit = async () => {
@@ -74,14 +102,56 @@ export const ProjectProductsModal = (props: TProps) => {
     }
   };
 
+  const renderGroup = (title: string, rows: TProduct[]) => {
+    if (rows.length === 0) return null;
+    return (
+      <div className="pb-1">
+        <div className="px-3 pt-2 pb-1 text-caption-sm-medium text-tertiary">{title}</div>
+        {rows.map((product) => {
+          const link = linkByProductId.get(product.id);
+          return (
+            <ProjectProductPickerRow
+              key={product.id}
+              name={product.name}
+              identifier={product.identifier}
+              logoProps={product.logo_props}
+              isSelected={selectedIds.includes(product.id)}
+              isLinked={Boolean(link)}
+              requirementCount={link?.requirement_count ?? 0}
+              onToggle={() => toggle(product.id)}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
-    <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
+    <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXXL}>
       <div className="border-b border-subtle px-5 py-4">
         <h3 className="text-body-sm-semibold text-primary">{t("project_products.manage")}</h3>
-        <p className="mt-1 text-caption-sm-regular text-tertiary">{t("project_products.manage_subtitle")}</p>
+        <label className="relative mt-3 block">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-placeholder" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={t("project_products.search_placeholder")}
+            className="h-8 w-full rounded-md border border-subtle bg-surface-1 pr-8 pl-8 text-12 text-primary outline-none placeholder:text-placeholder focus:border-accent-primary"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-secondary hover:bg-layer-2 hover:text-primary"
+            >
+              <CloseIcon className="size-3.5" />
+            </button>
+          )}
+        </label>
       </div>
 
-      <div className="max-h-96 overflow-y-auto px-3 py-2">
+      <div className="vertical-scrollbar scrollbar-sm h-[min(36rem,60vh)] overflow-y-auto px-2 py-1">
         {isProductsLoading ? (
           <Loader className="space-y-2 p-2">
             <Loader.Item height="40px" />
@@ -92,52 +162,36 @@ export const ProjectProductsModal = (props: TProps) => {
           <p className="px-3 py-8 text-center text-13 text-secondary">
             {t("project_products.no_visible_products")}
           </p>
+        ) : filteredProducts.length === 0 ? (
+          <p className="px-3 py-8 text-center text-13 text-secondary">{t("project_products.no_match")}</p>
         ) : (
-          products.map((product) => {
-            const isSelected = selectedIds.includes(product.id);
-            const link = linkByProductId.get(product.id);
-            return (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() => toggle(product.id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-md border-[0.5px] border-transparent px-3 py-2.5 text-left text-13 text-primary transition-colors",
-                  "hover:bg-layer-transparent-hover",
-                  isSelected && "border-accent-strong bg-accent-primary/5"
-                )}
-              >
-                <Checkbox checked={isSelected} onChange={() => toggle(product.id)} />
-                <ProductChip
-                  identifier={product.identifier}
-                  name={product.name}
-                  logoProps={product.logo_props}
-                  className="min-w-0"
-                />
-                <span className="ml-auto shrink-0 text-11 text-tertiary">
-                  {link
-                    ? t("project_products.linked_meta", { count: link.requirement_count ?? 0 })
-                    : t("project_products.unlinked_meta")}
-                </span>
-              </button>
-            );
-          })
+          <>
+            {renderGroup(t("project_products.linked_group", { count: linkedProducts.length }), linkedProducts)}
+            {renderGroup(t("project_products.unlinked_group", { count: unlinkedProducts.length }), unlinkedProducts)}
+          </>
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-subtle px-5 py-3">
-        <Button variant="secondary" size="lg" onClick={handleClose}>
-          {t("cancel")}
-        </Button>
-        <Button
-          variant="primary"
-          size="lg"
-          loading={isSubmitting}
-          disabled={isSubmitting}
-          onClick={() => void handleSubmit()}
-        >
-          {t("confirm")}
-        </Button>
+      <div className="flex items-center justify-between gap-3 border-t border-subtle px-5 py-3">
+        <p className="min-w-0 truncate text-caption-sm-regular text-tertiary">
+          {t("project_products.footer_selected", { count: selectedIds.length })}
+          {" · "}
+          {footerDelta}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="secondary" size="lg" onClick={handleClose}>
+            {t("cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            size="lg"
+            loading={isSubmitting}
+            disabled={isSubmitting}
+            onClick={() => void handleSubmit()}
+          >
+            {t("confirm")}
+          </Button>
+        </div>
       </div>
     </ModalCore>
   );

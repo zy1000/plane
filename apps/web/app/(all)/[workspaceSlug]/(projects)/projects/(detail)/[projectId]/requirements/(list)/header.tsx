@@ -18,7 +18,7 @@ import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/com
 /**
  * 项目需求页的页头。
  *
- * 右侧是网格工具栏的挂点（搜索 / 过滤 / 列设置 / 管理产品 / 关联需求），
+ * 右侧是网格工具栏的挂点（搜索 / 过滤 / 列设置 / 关联需求），
  * 由列表页 portal 进来，避免页头和网格各维护一套按钮。
  */
 export const ProjectRequirementsHeader = observer(function ProjectRequirementsHeader() {

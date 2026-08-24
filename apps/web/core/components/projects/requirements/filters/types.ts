@@ -4,7 +4,6 @@ import { LOGICAL_OPERATOR } from "@plane/types";
 export const PROJECT_REQUIREMENT_FILTER_PROPERTY_KEYS = [
   "title",
   "status",
-  "product",
   "approval",
   "priority",
   "assignee",
@@ -35,7 +34,6 @@ export type TProjectRequirementFilterExpression = CompleteOrEmpty<TProjectRequir
 export type TProjectRequirementListQuery = {
   title?: string;
   status?: string;
-  productId?: string;
   requirementTypeId?: string;
   approvalState?: string;
   priority?: string;

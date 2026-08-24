@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Package, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import {
   DueDatePropertyIcon,
@@ -39,12 +39,6 @@ type TSelectOption = {
   value: string;
 };
 
-type TProductOption = {
-  id: string;
-  identifier: string;
-  name: string;
-};
-
 type TRequirementTypeOption = {
   id: string;
   name: string;
@@ -78,12 +72,10 @@ const getMultiSelectOperatorConfigs = (
 export const useProjectRequirementFiltersConfig = ({
   workspaceSlug,
   projectId,
-  products,
   requirementTypes,
 }: {
   workspaceSlug: string;
   projectId: string;
-  products: TProductOption[];
   requirementTypes: TRequirementTypeOption[];
 }) => {
   const { t } = useTranslation();
@@ -129,16 +121,6 @@ export const useProjectRequirementFiltersConfig = ({
     [t]
   );
 
-  const productOptions = useMemo<TSelectOption[]>(
-    () =>
-      products.map((product) => ({
-        id: product.id,
-        value: product.id,
-        label: product.identifier ? `${product.identifier} ${product.name}` : product.name,
-      })),
-    [products]
-  );
-
   const typeOptions = useMemo<TSelectOption[]>(
     () =>
       requirementTypes.map((requirementType) => ({
@@ -182,22 +164,6 @@ export const useProjectRequirementFiltersConfig = ({
         }),
       }),
     [operatorConfigs.allowNegative, operatorConfigs.allowedOperators, statusOptions, t]
-  );
-
-  const productFilterConfig = useMemo<TFilterConfig<TProjectRequirementFilterProperty>>(
-    () =>
-      createFilterConfig<TProjectRequirementFilterProperty>({
-        id: "product",
-        label: t("project_requirements.product_column"),
-        icon: Package,
-        isEnabled: productOptions.length > 0,
-        supportedOperatorConfigsMap: getMultiSelectOperatorConfigs(productOptions, {
-          isEnabled: productOptions.length > 0,
-          allowedOperators: operatorConfigs.allowedOperators,
-          allowNegative: operatorConfigs.allowNegative,
-        }),
-      }),
-    [operatorConfigs.allowNegative, operatorConfigs.allowedOperators, productOptions, t]
   );
 
   const approvalFilterConfig = useMemo<TFilterConfig<TProjectRequirementFilterProperty>>(
@@ -306,7 +272,6 @@ export const useProjectRequirementFiltersConfig = ({
     configs: [
       titleFilterConfig,
       statusFilterConfig,
-      productFilterConfig,
       approvalFilterConfig,
       priorityFilterConfig,
       assigneeFilterConfig,

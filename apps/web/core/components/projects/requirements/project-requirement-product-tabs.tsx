@@ -1,9 +1,11 @@
 /**
- * 产品筛选的 URL 参数约定。
+ * 产品浏览范围的 URL 参数约定。
  *
- * 页面入口已改为工具栏「管理产品」弹窗；这里只保留深链解析，避免 ?product=
- * 在名单未就绪时被首帧抹掉。
+ * 左侧栏独占 `?product=`，与 `?moduleId=` 同级。非法 / 已解除关联的 id
+ * 回落到「全部」，避免深链首帧在名单未就绪时把自己抹掉。
  */
+
+import type { TRequirementModule } from "@plane/types";
 
 export const PRODUCT_PARAM = "product";
 
@@ -20,4 +22,17 @@ export const getProductFromParam = (
   if (!value) return undefined;
   if (!allowedProductIds) return value;
   return allowedProductIds.includes(value) ? value : undefined;
+};
+
+const treeContainsModule = (modules: TRequirementModule[], moduleId: string): boolean =>
+  modules.some((item) => item.id === moduleId || treeContainsModule(item.children, moduleId));
+
+/** 当前选中的模块是否属于该产品分组。分组名单未到时不要用来清 moduleId。 */
+export const moduleBelongsToProduct = (
+  groups: { product_id: string; modules: TRequirementModule[] }[],
+  productId: string,
+  moduleId: string
+): boolean => {
+  const group = groups.find((item) => item.product_id === productId);
+  return group ? treeContainsModule(group.modules, moduleId) : false;
 };

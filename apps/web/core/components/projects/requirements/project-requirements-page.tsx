@@ -49,6 +49,11 @@ import {
 } from "./filters";
 import { ProjectProductsModal } from "./project-products-modal";
 import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "./project-requirement-filters";
+import {
+  PRODUCT_PARAM,
+  getProductFromParam,
+  moduleBelongsToProduct,
+} from "./project-requirement-product-tabs";
 import { ProjectRequirementsGrid } from "./project-requirements-grid";
 import { UnlinkRequirementConfirmModal } from "./unlink-confirm-modal";
 
@@ -93,12 +98,34 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
 
   const moduleStore = useRequirementModules(slug, project ? { kind: "project", projectId: project } : undefined);
 
-  // ?moduleId= 与左侧模块树选中双向同步。独立 URL 参数，不进 rich-filters 的
-  // 表达式序列化（applyListQueryToSearchParams 不认识它，所以不会被筛选写入冲掉），
-  // 两者在服务端 AND 叠加
+  // ?product= / ?moduleId= 与左侧栏选中双向同步。独立 URL 参数，不进 rich-filters
+  // 的表达式序列化（applyListQueryToSearchParams 不认识它们，所以不会被筛选写入冲掉），
+  // 与筛选在服务端 AND 叠加
+  const allowedProductIds = isProductLinksLoading ? null : productLinks.map((link) => link.product);
+  const urlProductId = getProductFromParam(searchParams.get(PRODUCT_PARAM), allowedProductIds) ?? null;
   const urlModuleId = searchParams.get("moduleId");
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(
+    () => getProductFromParam(searchParams.get(PRODUCT_PARAM), null) ?? null
+  );
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
+  const syncedProductRef = useRef(selectedProductId);
   const syncedModuleRef = useRef(urlModuleId);
+
+  useEffect(() => {
+    if (urlProductId === syncedProductRef.current) return;
+    syncedProductRef.current = urlProductId;
+    setSelectedProductId(urlProductId);
+  }, [urlProductId]);
+
+  useEffect(() => {
+    const raw = searchParams.get(PRODUCT_PARAM);
+    if (raw === selectedProductId) return;
+    syncedProductRef.current = selectedProductId;
+    const next = new URLSearchParams(searchParams);
+    if (selectedProductId) next.set(PRODUCT_PARAM, selectedProductId);
+    else next.delete(PRODUCT_PARAM);
+    setSearchParams(next, { replace: true });
+  }, [selectedProductId, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (urlModuleId === syncedModuleRef.current) return;
@@ -115,7 +142,17 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     setSearchParams(next, { replace: true });
   }, [selectedModuleId, urlModuleId, searchParams, setSearchParams]);
 
-  const { setModuleId } = store;
+  useEffect(() => {
+    if (!selectedProductId || !selectedModuleId || moduleStore.isLoading) return;
+    if (!moduleBelongsToProduct(moduleStore.groups, selectedProductId, selectedModuleId)) {
+      setSelectedModuleId(null);
+    }
+  }, [moduleStore.groups, moduleStore.isLoading, selectedModuleId, selectedProductId]);
+
+  const { setModuleId, setProductId } = store;
+  useEffect(() => {
+    setProductId(selectedProductId);
+  }, [selectedProductId, setProductId]);
   useEffect(() => {
     setModuleId(selectedModuleId);
   }, [selectedModuleId, setModuleId]);
@@ -138,15 +175,22 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
    * by_status / by_requirement_type 只跟随当前产品。
    */
   const facets = store.requirementsPage.extra_stats ?? null;
+  /**
+   * 项目侧 /products/ 不喂 status_counts，TProductProject.requirement_count 恒为 0。
+   * 名单仍用关联行（0 条需求的产品也在）；条数叠 by_product，对得上 facets.total。
+   */
+  const productNavLinks = useMemo(() => {
+    const counts = new Map((facets?.by_product ?? []).map((item) => [item.product_id, item.count]));
+    if (counts.size === 0) return productLinks;
+    return productLinks.map((link) => ({
+      ...link,
+      requirement_count: counts.get(link.product) ?? link.requirement_count ?? 0,
+    }));
+  }, [facets, productLinks]);
 
   const { areAllConfigsInitialized, configs } = useProjectRequirementFiltersConfig({
     workspaceSlug: slug ?? "",
     projectId: project ?? "",
-    products: productLinks.map((link) => ({
-      id: link.product,
-      identifier: link.product_identifier,
-      name: link.product_name,
-    })),
     requirementTypes: store.requirementTypes,
   });
 
@@ -347,6 +391,12 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             store={moduleStore}
             selectedModuleId={selectedModuleId}
             onSelect={setSelectedModuleId}
+            productLinks={productNavLinks}
+            isProductsLoading={isProductLinksLoading}
+            selectedProductId={selectedProductId}
+            onSelectProduct={setSelectedProductId}
+            canManageProducts={canManageProducts}
+            onManageProducts={() => setIsProductsModalOpen(true)}
           />
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ProjectRequirementsGrid
@@ -483,7 +533,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
         isOpen={isProductsModalOpen}
         products={products}
         isProductsLoading={isProductsLoading}
-        links={productLinks}
+        links={productNavLinks}
         isSubmitting={isProductLinksMutating}
         handleClose={() => setIsProductsModalOpen(false)}
         onSubmit={async (payload) => {
