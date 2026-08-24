@@ -15,6 +15,7 @@ from plane.db.models import (
     RequirementChangeRequest,
     RequirementItemStatus,
     RequirementLibrary,
+    RequirementModule,
     RequirementPriority,
     User,
 )
@@ -33,6 +34,7 @@ from plane.utils.requirement import (
     get_requirement_select_options,
     replace_requirement_approvers,
 )
+from plane.utils.requirement_module import module_scope_filter
 
 from .base import BaseSerializer
 
@@ -952,6 +954,9 @@ ROW_FIELDS = [
     "source_sequence_id",
     "source_display_id",
     *BUILTIN_COLUMNS,
+    # 模块挂靠（只读输出）。模块不是内容：不在 BUILTIN_COLUMNS 里、不进版本
+    # 快照与变更单 diff，写入口是 set-module 端点与创建时的 module_id。
+    "module_id",
     "data",
     "sort_order",
     # 乐观锁计数器。与审批版本链（approved_version）是两个完全不同的数字，前端把它
@@ -1084,12 +1089,25 @@ class RequirementCreateSerializer(_RequirementBuiltinWriteMixin, serializers.Ser
     requirement_type_id = serializers.UUIDField(required=False)
     before_id = serializers.UUIDField(required=False, allow_null=True)
     after_id = serializers.UUIDField(required=False, allow_null=True)
+    # 创建时随行挂模块（左侧树选中某模块后新建自动挂靠）。模块不是内容，所以
+    # 不进 builtin；更新走 set-module 端点，RequirementUpdateSerializer 不收它。
+    module_id = serializers.UUIDField(required=False, allow_null=True)
 
     def validate(self, attrs):
         if attrs.get("before_id") and attrs.get("after_id"):
             raise serializers.ValidationError(
                 "Only one insertion anchor can be provided."
             )
+
+        module_id = attrs.get("module_id")
+        if module_id:
+            scope = module_scope_filter(self.context["owner"])
+            if scope is None or not RequirementModule.objects.filter(
+                id=module_id, **scope
+            ).exists():
+                raise serializers.ValidationError(
+                    {"module_id": "The module was not found."}
+                )
 
         resolver = self.context["requirement_type_resolver"]
         requirement_type_id = attrs.get("requirement_type_id") or self.context.get(
@@ -1213,6 +1231,22 @@ class RequirementImportSerializer(serializers.Serializer):
             )
         attrs["item_ids"] = list(dict.fromkeys(attrs["item_ids"]))
         return attrs
+
+
+class RequirementSetModuleSerializer(serializers.Serializer):
+    """批量挂靠 / 移动需求到模块。
+
+    module_id 必传：显式传 null 才是「移回全部（取消挂靠）」，漏传按参数缺失报错，
+    避免把误发的空请求当成批量摘除。
+    """
+
+    requirement_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False
+    )
+    module_id = serializers.UUIDField(required=True, allow_null=True)
+
+    def validate_requirement_ids(self, value):
+        return list(dict.fromkeys(value))
 
 
 class RequirementRollbackSerializer(serializers.Serializer):

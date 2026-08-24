@@ -1,21 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { AlertCircle, Info, Library } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TRequirementTypeSchema } from "@plane/types";
+import type { TRequirementBatchSavePayload, TRequirementTypeSchema } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { RequirementExcelMenu } from "@/components/requirements/excel";
+import { MoveToModuleModal, RequirementModuleSidebar } from "@/components/requirements/module-tree";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
+import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useRequirementLibrariesContext } from "./context";
 
 /**
@@ -35,6 +37,47 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
   // 列表缓存能让刷新前的首屏不闪空标题，接口回来后以 store 为准
   const library = store.library ?? libraries.find((item) => item.id === libraryId) ?? null;
   const pageTitle = library?.name ?? t("requirement_libraries.title");
+
+  const moduleStore = useRequirementModules(workspaceSlug, libraryId ? { kind: "library", libraryId } : undefined);
+  /** 批量移动弹窗的目标行；空数组 = 关着 */
+  const [moveIds, setMoveIds] = useState<string[]>([]);
+
+  // ?moduleId= 与选中模块双向同步（与下面 peek 的同款写法）
+  const urlModuleId = searchParams.get("moduleId");
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
+  const syncedModuleRef = useRef(urlModuleId);
+
+  useEffect(() => {
+    if (urlModuleId === syncedModuleRef.current) return;
+    syncedModuleRef.current = urlModuleId;
+    setSelectedModuleId(urlModuleId);
+  }, [urlModuleId]);
+
+  useEffect(() => {
+    if (urlModuleId === selectedModuleId) return;
+    syncedModuleRef.current = selectedModuleId;
+    const next = new URLSearchParams(searchParams);
+    if (selectedModuleId) next.set("moduleId", selectedModuleId);
+    else next.delete("moduleId");
+    setSearchParams(next, { replace: true });
+  }, [selectedModuleId, urlModuleId, searchParams, setSearchParams]);
+
+  const { setModuleId } = store;
+  useEffect(() => {
+    setModuleId(selectedModuleId);
+  }, [selectedModuleId, setModuleId]);
+
+  /** 新增 / 删除会改变模块计数与「全部」总数，纯更新不会 */
+  const handleBulkSave = useCallback(
+    async (payload: TRequirementBatchSavePayload) => {
+      const response = await store.saveRequirementBatch(payload);
+      if (payload.creates.length || payload.deletes.length) {
+        void moduleStore.refresh().catch(() => undefined);
+      }
+      return response;
+    },
+    [store.saveRequirementBatch, moduleStore.refresh]
+  );
 
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
@@ -92,7 +135,10 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                         <span className="shrink-0 text-12 text-tertiary">{library.identifier}</span>
                       )}
                       {library && (
-                        <Tooltip tooltipContent={t("requirement_libraries.detail.requirement_type_tooltip")} position="bottom">
+                        <Tooltip
+                          tooltipContent={t("requirement_libraries.detail.requirement_type_tooltip")}
+                          position="bottom"
+                        >
                           <Link
                             to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                             className="max-w-48 shrink-0 truncate rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
@@ -119,6 +165,8 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                   filters={store.filters}
                   onImported={() => {
                     void store.fetchRequirements().catch(() => undefined);
+                    // Excel 导入的行不挂模块，但「全部」的总数变了
+                    void moduleStore.refresh().catch(() => undefined);
                   }}
                 />
               </div>
@@ -145,53 +193,71 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
             </div>
           </div>
         ) : (
-          <>
-            {library && (
-              <div className="flex shrink-0 items-start gap-2 border-b border-accent-primary/25 bg-accent-primary/[0.06] px-4 py-2 text-12 text-primary">
-                <Info className="mt-0.5 size-3.5 shrink-0 text-accent-primary" />
-                <span>
-                  {t("requirement_libraries.items.fields_readonly_prefix")}
-                  <Link
-                    to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
-                    className="font-medium text-accent-primary hover:underline"
-                  >
-                    {library.requirement_type_detail?.name}
-                  </Link>
-                  {t("requirement_libraries.items.fields_readonly_suffix")}
-                </span>
-              </div>
-            )}
-            <RequirementGrid
-              workspaceSlug={workspaceSlug}
-              entityId={libraryId ?? ""}
-              entityKind="library"
-              createRequirementTypeId={store.requirementTypeId ?? undefined}
-              fields={store.configuration?.fields ?? []}
-              requirements={store.requirementsPage.results}
-              totalCount={store.requirementsPage.total_count ?? 0}
-              totalPages={store.requirementsPage.total_pages ?? 0}
-              nextCursor={store.requirementsPage.next_cursor}
-              prevCursor={store.requirementsPage.prev_cursor}
-              nextPageResults={store.requirementsPage.next_page_results}
-              prevPageResults={store.requirementsPage.prev_page_results}
-              isLoading={store.isConfigurationLoading || store.isRequirementsLoading}
-              isMutating={store.isMutating}
-              error={store.requirementsError}
-              search={store.search}
-              filters={store.filters}
-              perPage={store.perPage}
-              onSearchChange={store.setSearch}
-              onFiltersChange={store.setFilters}
-              onPerPageChange={store.setPerPage}
-              onCursorChange={store.setCursor}
-              onRefresh={store.fetchRequirements}
-              onBulkSave={store.saveRequirementBatch}
-              onOpenDetail={setPeekRequirement}
-              toolbarPortalEl={dataToolbarHost}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <RequirementModuleSidebar
+              store={moduleStore}
+              selectedModuleId={selectedModuleId}
+              onSelect={setSelectedModuleId}
             />
-          </>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {library && (
+                <div className="border-accent-primary/25 flex shrink-0 items-start gap-2 border-b bg-accent-primary/[0.06] px-4 py-2 text-12 text-primary">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-accent-primary" />
+                  <span>
+                    {t("requirement_libraries.items.fields_readonly_prefix")}
+                    <Link
+                      to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
+                      className="font-medium text-accent-primary hover:underline"
+                    >
+                      {library.requirement_type_detail?.name}
+                    </Link>
+                    {t("requirement_libraries.items.fields_readonly_suffix")}
+                  </span>
+                </div>
+              )}
+              <RequirementGrid
+                workspaceSlug={workspaceSlug}
+                entityId={libraryId ?? ""}
+                entityKind="library"
+                createRequirementTypeId={store.requirementTypeId ?? undefined}
+                fields={store.configuration?.fields ?? []}
+                requirements={store.requirementsPage.results}
+                totalCount={store.requirementsPage.total_count ?? 0}
+                totalPages={store.requirementsPage.total_pages ?? 0}
+                nextCursor={store.requirementsPage.next_cursor}
+                prevCursor={store.requirementsPage.prev_cursor}
+                nextPageResults={store.requirementsPage.next_page_results}
+                prevPageResults={store.requirementsPage.prev_page_results}
+                isLoading={store.isConfigurationLoading || store.isRequirementsLoading}
+                isMutating={store.isMutating}
+                error={store.requirementsError}
+                search={store.search}
+                filters={store.filters}
+                perPage={store.perPage}
+                onSearchChange={store.setSearch}
+                onFiltersChange={store.setFilters}
+                onPerPageChange={store.setPerPage}
+                onCursorChange={store.setCursor}
+                onRefresh={store.fetchRequirements}
+                onBulkSave={handleBulkSave}
+                onOpenDetail={setPeekRequirement}
+                toolbarPortalEl={dataToolbarHost}
+                createModuleId={selectedModuleId}
+                onMoveToModule={setMoveIds}
+              />
+            </div>
+          </div>
         )}
       </ContentWrapper>
+      <MoveToModuleModal
+        isOpen={moveIds.length > 0}
+        handleClose={() => setMoveIds([])}
+        store={moduleStore}
+        requirementIds={moveIds}
+        onMoved={() => {
+          void store.fetchRequirements().catch(() => undefined);
+        }}
+      />
       <RequirementPeekOverview
         workspaceSlug={workspaceSlug}
         libraryId={libraryId ?? ""}

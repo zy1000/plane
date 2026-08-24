@@ -67,6 +67,8 @@ export const useProductRequirements = ({
   const [perPage, setPerPage] = useState(20);
   /** 当前需求类型视图；undefined = 不按类型过滤（默认视图 / 单类型） */
   const [requirementTypeFilter, setRequirementTypeFilter] = useState<string | undefined>();
+  /** 左侧模块树的过滤（含子模块）；null = 「全部」（含未挂靠的需求） */
+  const [moduleId, setModuleId] = useState<string | null>(null);
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !productId) return null;
@@ -96,6 +98,7 @@ export const useProductRequirements = ({
         search,
         filters,
         requirementTypeId: requirementTypeFilter,
+        moduleId: moduleId ?? undefined,
       });
       setRequirementsPage(response);
       return response;
@@ -105,7 +108,7 @@ export const useProductRequirements = ({
     } finally {
       setIsRequirementsLoading(false);
     }
-  }, [cursor, filters, perPage, search, requirementTypeFilter, productId, workspaceSlug]);
+  }, [cursor, filters, moduleId, perPage, search, requirementTypeFilter, productId, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);
@@ -138,7 +141,7 @@ export const useProductRequirements = ({
     async (
       data: TRequirementData,
       requirementTypeId: string,
-      position: { before_id?: string; after_id?: string } = {}
+      position: { before_id?: string; after_id?: string; module_id?: string | null } = {}
     ) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
       setIsMutating(true);
@@ -319,6 +322,10 @@ export const useProductRequirements = ({
     setCursor(undefined);
     setPerPage(value);
   }, []);
+  const updateModuleId = useCallback((value: string | null) => {
+    setCursor(undefined);
+    setModuleId(value);
+  }, []);
   /** 切类型视图。搜索与筛选一并清空 —— 筛选条件是按字段 ID 定的，换个类型就没有意义了 */
   const updateRequirementTypeFilter = useCallback((value: string | undefined) => {
     setCursor(undefined);
@@ -345,11 +352,13 @@ export const useProductRequirements = ({
     requirementsError,
     search,
     filters,
+    moduleId,
     cursor,
     perPage,
     requirementTypeFilter,
     setSearch: updateSearch,
     setFilters: updateFilters,
+    setModuleId: updateModuleId,
     setCursor,
     setPerPage: updatePerPage,
     setRequirementTypeFilter: updateRequirementTypeFilter,

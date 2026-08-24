@@ -24,6 +24,11 @@ from .library_item import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
 )
+from .module import (
+    ProjectRequirementModuleTreeAPIView,
+    RequirementModuleAPIView,
+    RequirementModuleDetailAPIView,
+)
 from .test_case import RequirementTestCaseViewSet
 from .type import (
     RequirementTypeConfigurationAPIView,
@@ -33,6 +38,7 @@ from .type import (
 __all__ = [
     "CycleRequirementViewSet",
     "IssueRequirementViewSet",
+    "ProjectRequirementModuleTreeAPIView",
     "ProjectRequirementViewSet",
     "ReleaseRequirementViewSet",
     "RequirementApprovalInboxAPIView",
@@ -45,6 +51,8 @@ __all__ = [
     "RequirementLibraryConfigurationAPIView",
     "RequirementLibraryItemViewSet",
     "RequirementLibraryViewSet",
+    "RequirementModuleAPIView",
+    "RequirementModuleDetailAPIView",
     "RequirementProjectsViewSet",
     "RequirementTestCaseViewSet",
     "RequirementTypeConfigurationAPIView",

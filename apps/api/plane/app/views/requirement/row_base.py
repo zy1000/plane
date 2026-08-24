@@ -23,11 +23,12 @@ from plane.app.serializers.requirement import (
     RequirementFilterSerializer,
     RequirementImportSerializer,
     RequirementSerializer,
+    RequirementSetModuleSerializer,
     RequirementUpdateSerializer,
 )
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.excel import RequirementExcelMixin
-from plane.db.models import Requirement, RequirementItemStatus
+from plane.db.models import Requirement, RequirementItemStatus, RequirementModule
 from plane.utils.requirement import (
     CONTENT_BUILTIN_COLUMNS,
     RequirementBatchConflict,
@@ -36,6 +37,11 @@ from plane.utils.requirement import (
     resync_approved_row_version,
     row_was_approved,
     source_library_identifier_map,
+)
+from plane.utils.requirement_module import (
+    expand_requirement_module_subtree_ids,
+    module_scope_filter,
+    set_requirement_module,
 )
 
 
@@ -270,6 +276,21 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             # 主列表默认不带；?ids= 回显豁免 —— 已指向已关闭父项的行仍要显示父项标题
             queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
 
+        # 按模块过滤（含子模块，与左侧模块树的计数口径一致）。库/产品两支共用；
+        # queryset 已锁定本作用域，跨作用域的 module_id 展开后与本批行无交集，
+        # 自然得到空集，不需要额外校验归属。
+        raw_module_id = request.query_params.get("module_id")
+        if raw_module_id:
+            try:
+                module_id = drf_serializers.UUIDField().run_validation(raw_module_id)
+            except drf_serializers.ValidationError as exc:
+                return Response(
+                    {"module_id": exc.detail}, status=status.HTTP_400_BAD_REQUEST
+                )
+            queryset = queryset.filter(
+                module_id__in=expand_requirement_module_subtree_ids(module_id)
+            )
+
         # 必须排在 apply_search 之前：搜索/筛选走的是 filter_requirement_row_ids，
         # 它会把整个 queryset 拉进 Python 逐行判定，先缩小范围能直接省下那部分扫描
         queryset = self.apply_scope_filters(request, queryset)
@@ -364,6 +385,8 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                     actor=request.user,
                     before_id=serializer.validated_data.get("before_id"),
                     after_id=serializer.validated_data.get("after_id"),
+                    # 左侧树选中模块后新建自动挂靠；serializer 已校验同作用域
+                    module_id=serializer.validated_data.get("module_id"),
                 )
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -612,6 +635,57 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 ).data,
                 "deleted_ids": [str(row_id) for row_id in deleted_ids],
             },
+            status=status.HTTP_200_OK,
+        )
+
+    def set_module(self, request, *args, **kwargs):
+        """批量挂靠 / 移动需求到模块（module_id 显式传 null = 移回「全部」）。
+
+        旁路 `.update()` 写入：模块不是内容，不 bump version、不碰
+        approved_row_version，也不判 locked / closed —— 模块轴与评审轴、状态轴
+        正交（口径同项目侧的状态写入口 set_requirement_status）。
+        """
+        owner, error = self._owner_or_error()
+        if error is not None:
+            return error
+        layer = self.resolve_layer(owner)
+
+        serializer = RequirementSetModuleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        requirement_ids = serializer.validated_data["requirement_ids"]
+        module_id = serializer.validated_data["module_id"]
+
+        if module_id is not None:
+            scope = module_scope_filter(owner)
+            if scope is None or not RequirementModule.objects.filter(
+                id=module_id, **scope
+            ).exists():
+                return Response(
+                    {"module_id": "The module was not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        found_ids = set(
+            layer.queryset.filter(id__in=requirement_ids).values_list("id", flat=True)
+        )
+        missing = [str(rid) for rid in requirement_ids if rid not in found_ids]
+        if missing:
+            return Response(
+                {
+                    "error": "One or more requirements were not found.",
+                    "requirement_ids": missing,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        set_requirement_module(
+            layer.queryset,
+            requirement_ids,
+            module_id=module_id,
+            actor=request.user,
+        )
+        return Response(
+            {"updated_ids": [str(rid) for rid in requirement_ids]},
             status=status.HTTP_200_OK,
         )
 

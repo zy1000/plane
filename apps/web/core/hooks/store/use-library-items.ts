@@ -56,6 +56,8 @@ export const useLibraryItems = ({
   const [requirementsError, setRequirementsError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<TRequirementFilter[]>([]);
+  /** 左侧模块树的过滤（含子模块）；null = 「全部」（含未挂靠的条目） */
+  const [moduleId, setModuleId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
 
@@ -86,6 +88,7 @@ export const useLibraryItems = ({
         search,
         filters,
         excludeImportedIntoProduct,
+        moduleId: moduleId ?? undefined,
       });
       setRequirementsPage(response);
       return response;
@@ -95,7 +98,7 @@ export const useLibraryItems = ({
     } finally {
       setIsRequirementsLoading(false);
     }
-  }, [cursor, excludeImportedIntoProduct, filters, libraryId, perPage, search, workspaceSlug]);
+  }, [cursor, excludeImportedIntoProduct, filters, libraryId, moduleId, perPage, search, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);
@@ -221,6 +224,10 @@ export const useLibraryItems = ({
     setCursor(undefined);
     setPerPage(value);
   }, []);
+  const updateModuleId = useCallback((value: string | null) => {
+    setCursor(undefined);
+    setModuleId(value);
+  }, []);
 
   return {
     configuration,
@@ -235,10 +242,12 @@ export const useLibraryItems = ({
     requirementsError,
     search,
     filters,
+    moduleId,
     cursor,
     perPage,
     setSearch: updateSearch,
     setFilters: updateFilters,
+    setModuleId: updateModuleId,
     setCursor,
     setPerPage: updatePerPage,
     fetchConfiguration,

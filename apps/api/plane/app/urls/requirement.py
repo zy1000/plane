@@ -3,6 +3,7 @@ from django.urls import path
 from plane.app.views.requirement import (
     CycleRequirementViewSet,
     IssueRequirementViewSet,
+    ProjectRequirementModuleTreeAPIView,
     ProjectRequirementViewSet,
     ReleaseRequirementViewSet,
     RequirementApprovalInboxAPIView,
@@ -15,6 +16,8 @@ from plane.app.views.requirement import (
     RequirementLibraryConfigurationAPIView,
     RequirementLibraryItemViewSet,
     RequirementLibraryViewSet,
+    RequirementModuleAPIView,
+    RequirementModuleDetailAPIView,
     RequirementProjectsViewSet,
     RequirementTestCaseViewSet,
     RequirementTypeConfigurationAPIView,
@@ -113,6 +116,23 @@ urlpatterns = [
         ),
         name="requirement-library-item",
     ),
+    # --- 需求模块：库 / 产品各一棵独立的树 -------------------------------
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/modules/",
+        RequirementModuleAPIView.as_view(),
+        name="requirement-library-modules",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/modules/<uuid:module_id>/",
+        RequirementModuleDetailAPIView.as_view(),
+        name="requirement-library-module-detail",
+    ),
+    # 批量挂靠 / 移动条目到模块（module_id 显式传 null = 移回「全部」）
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/set-module/",
+        RequirementLibraryItemViewSet.as_view({"post": "set_module"}),
+        name="requirement-library-item-set-module",
+    ),
     # --- 产品需求：条目本身 ---------------------------------------------
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/",
@@ -153,6 +173,21 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/excel/import/",
         RequirementViewSet.as_view({"post": "import_excel"}),
         name="product-requirement-excel-import",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/",
+        RequirementModuleAPIView.as_view(),
+        name="product-requirement-modules",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/<uuid:module_id>/",
+        RequirementModuleDetailAPIView.as_view(),
+        name="product-requirement-module-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/set-module/",
+        RequirementViewSet.as_view({"post": "set_module"}),
+        name="product-requirement-set-module",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/",
@@ -202,6 +237,12 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/requirement-configuration/",
         ProjectRequirementViewSet.as_view({"get": "configuration"}),
         name="project-requirement-configuration",
+    ),
+    # 项目需求页左侧的只读模块树（模块归产品，项目不落模块字段）
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirement-modules/",
+        ProjectRequirementModuleTreeAPIView.as_view(),
+        name="project-requirement-modules",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/<uuid:requirement_id>/",

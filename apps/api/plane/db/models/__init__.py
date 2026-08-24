@@ -171,6 +171,7 @@ from .requirement import (
     RequirementIssue,
     RequirementItemStatus,
     RequirementLibrary,
+    RequirementModule,
     RequirementPriority,
     RequirementProject,
     RequirementRelease,

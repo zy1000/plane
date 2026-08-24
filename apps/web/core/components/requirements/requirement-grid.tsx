@@ -17,6 +17,7 @@ import {
   BookMarked,
   Columns3,
   Copy,
+  FolderOpenDot,
   Hash,
   Maximize2,
   History,
@@ -160,6 +161,10 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
   /** 页头已有独立的「添加需求」时关掉工具栏这份，避免并排两个主按钮 */
   hideToolbarAdd?: boolean;
+  /** 左侧模块树的当前选中：新建的行自动挂进该模块（null/不传 = 不挂靠） */
+  createModuleId?: string | null;
+  /** 勾选行的「移动到模块」入口；不传则不渲染该按钮 */
+  onMoveToModule?: (requirementIds: string[]) => void;
 };
 
 
@@ -202,6 +207,8 @@ export const RequirementGrid = observer(
     onStatusChange,
     toolbarPortalEl,
     hideToolbarAdd = false,
+    createModuleId = null,
+    onMoveToModule,
   } = props;
   const { t } = useTranslation();
   const [searchInput, setSearchInput] = useState(search);
@@ -289,6 +296,7 @@ export const RequirementGrid = observer(
               ...(createRequirementTypeId ? { requirement_type_id: createRequirementTypeId } : {}),
               ...(seed.beforeId ? { before_id: seed.beforeId } : {}),
               ...(seed.afterId ? { after_id: seed.afterId } : {}),
+              ...(createModuleId ? { module_id: createModuleId } : {}),
             },
           ],
           updates: [],
@@ -307,7 +315,7 @@ export const RequirementGrid = observer(
         setIsCreatingRow(false);
       }
     },
-    [activeFields, createRequirementTypeId, isCreatingRow, onBulkSave, requiresCreateModal, t]
+    [activeFields, createModuleId, createRequirementTypeId, isCreatingRow, onBulkSave, requiresCreateModal, t]
   );
 
   // 页头的「录入」在类型视图里直接走这条内联路径，不再绕类型选择器
@@ -1183,6 +1191,17 @@ export const RequirementGrid = observer(
           {t("requirement_approval.submit_review_count", { count: submittableSelectedIds.length })}
         </Button>
       )}
+      {onMoveToModule && (
+        <Button
+          variant="secondary"
+          size="lg"
+          onClick={() => onMoveToModule(selectedIds)}
+          disabled={isMutating}
+        >
+          <FolderOpenDot className="size-3.5" />
+          {t("requirement_modules.move_to_module")}
+        </Button>
+      )}
       <Button
         variant="error-outline"
         size="lg"
@@ -1584,6 +1603,7 @@ export const RequirementGrid = observer(
         requirementTypeId={createRequirementTypeId}
         fields={activeFields}
         seed={createSeed ?? undefined}
+        moduleId={createModuleId}
         onClose={() => setCreateSeed(null)}
         // onBulkSave 内部对 creates 已经重拉过一次，这里不用再来一遍
         onSave={onBulkSave}

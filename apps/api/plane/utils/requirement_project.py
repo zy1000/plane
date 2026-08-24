@@ -10,6 +10,7 @@ RequirementItemStatus 的 docstring）。
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
 from datetime import date
+from uuid import UUID
 
 from django.db.models import (
     BooleanField,
@@ -40,6 +41,7 @@ from plane.db.models import (
     RequirementRelease,
     StateGroup,
 )
+from plane.utils.requirement_module import expand_requirement_module_subtree_ids
 
 
 def split_query_csv(raw):
@@ -173,6 +175,18 @@ def apply_project_requirement_list_filters(queryset, query_params):
             queryset = queryset.filter(target_date__gte=target_from)
         if target_to:
             queryset = queryset.filter(target_date__lte=target_to)
+
+    # 按模块过滤（含子模块，与左侧模块树的计数口径一致）。模块是产品侧的挂靠，
+    # queryset 是需求本体行，直接按 module_id 过滤即可 —— 项目侧不落模块字段。
+    module_id = (query_params.get("module_id") or "").strip()
+    if module_id:
+        try:
+            UUID(module_id)
+        except ValueError:
+            return None, {"module_id": "Invalid module id."}
+        queryset = queryset.filter(
+            module_id__in=expand_requirement_module_subtree_ids(module_id)
+        )
 
     return queryset, None
 

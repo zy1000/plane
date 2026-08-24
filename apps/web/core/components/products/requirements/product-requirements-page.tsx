@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Database, History, Inbox, Layers } from "lucide-react";
@@ -6,15 +6,17 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IUserLite, TRequirementItemStatus } from "@plane/types";
+import type { IUserLite, TRequirementBatchSavePayload, TRequirementItemStatus } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { MoveToModuleModal, RequirementModuleSidebar } from "@/components/requirements/module-tree";
 import { RequirementCreateModal } from "@/components/requirements/requirement-create-modal";
 import { RequirementGrid, type TRequirementGridHandle } from "@/components/requirements/requirement-grid";
 import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
+import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useRequirementBaselines } from "@/hooks/store/use-requirement-baselines";
 import { useRequirementApprovalInbox, useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { useUser } from "@/hooks/store/user";
@@ -32,10 +34,7 @@ import {
   resolveRequirementDataView,
   type TRequirementDataView,
 } from "./requirement-data-views";
-import {
-  RequirementPeekOverview,
-  RequirementProductRelations,
-} from "@/components/requirements/requirement-detail";
+import { RequirementPeekOverview, RequirementProductRelations } from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 
 const TABS = ["data", "changes", "baselines"] as const;
@@ -66,6 +65,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
 
   const store = useProductRequirements({ workspaceSlug, productId });
   const policy = store.policy;
+  const moduleStore = useRequirementModules(workspaceSlug, productId ? { kind: "product", productId } : undefined);
+  /** 批量移动弹窗的目标行；空数组 = 关着 */
+  const [moveIds, setMoveIds] = useState<string[]>([]);
   const requestedTab = searchParams.get("tab") as TProductRequirementsTab | null;
   const activeTab: TProductRequirementsTab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "data";
   const openedChangeRequestId = searchParams.get("cr");
@@ -128,6 +130,53 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     const nextFilter = activeView.kind === "requirementType" ? activeView.requirementTypeId : undefined;
     if (requirementTypeFilter !== nextFilter) setRequirementTypeFilter(nextFilter);
   }, [activeView, setRequirementTypeFilter, requirementTypeFilter]);
+
+  // ?moduleId= 与左侧模块树选中双向同步（写法同下面的 peek）。独立 URL 参数，
+  // 与需求类型视图 / rich-filters 正交，切视图时过滤保持
+  const urlModuleId = searchParams.get("moduleId");
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
+  const syncedModuleRef = useRef(urlModuleId);
+
+  useEffect(() => {
+    if (urlModuleId === syncedModuleRef.current) return;
+    syncedModuleRef.current = urlModuleId;
+    setSelectedModuleId(urlModuleId);
+  }, [urlModuleId]);
+
+  useEffect(() => {
+    if (urlModuleId === selectedModuleId) return;
+    syncedModuleRef.current = selectedModuleId;
+    const next = new URLSearchParams(searchParams);
+    if (selectedModuleId) next.set("moduleId", selectedModuleId);
+    else next.delete("moduleId");
+    setSearchParams(next, { replace: true });
+  }, [selectedModuleId, urlModuleId, searchParams, setSearchParams]);
+
+  const { setModuleId } = store;
+  useEffect(() => {
+    setModuleId(selectedModuleId);
+  }, [selectedModuleId, setModuleId]);
+
+  /** 新增 / 删除会改变模块计数与「全部」总数，纯更新不会 */
+  const { saveRequirementBatch, deleteRequirements } = store;
+  const { refresh: refreshModules } = moduleStore;
+  const handleBulkSave = useCallback(
+    async (payload: TRequirementBatchSavePayload) => {
+      const response = await saveRequirementBatch(payload);
+      if (payload.creates.length || payload.deletes.length) {
+        void refreshModules().catch(() => undefined);
+      }
+      return response;
+    },
+    [saveRequirementBatch, refreshModules]
+  );
+  const handleDeleteRequirements = useCallback(
+    async (requirementIds: string[]) => {
+      await deleteRequirements(requirementIds);
+      void refreshModules().catch(() => undefined);
+    },
+    [deleteRequirements, refreshModules]
+  );
 
   const setTab = (tab: TProductRequirementsTab) => {
     const next = new URLSearchParams(searchParams);
@@ -212,8 +261,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
       productId: productId ?? "",
       search: store.search,
       filters: store.filters,
-      requirementTypeIds:
-        activeView.kind === "requirementType" ? [activeView.requirementTypeId] : undefined,
+      requirementTypeIds: activeView.kind === "requirementType" ? [activeView.requirementTypeId] : undefined,
     }),
     [workspaceSlug, productId, store.search, store.filters, activeView]
   );
@@ -365,108 +413,131 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             onSettled={refreshLayer}
           />
         ) : activeTab === "data" ? (
-          requirementTypes.length === 0 ? (
-            <EmptyStateDetailed
-              assetKey="work-item"
-              title={t("workspace_products.requirements.data.empty.title")}
-              description={t("workspace_products.requirements.data.empty.description")}
-              customButton={
-                canEdit ? (
-                  <RequirementCreateActions
-                    onImportPrefetch={() => setShouldPrefetchImport(true)}
-                    onImport={() => setIsImportOpen(true)}
-                    onManualEntry={() => setIsCreateOpen(true)}
-                    excel={excelProps}
-                  />
-                ) : undefined
-              }
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <RequirementModuleSidebar
+              store={moduleStore}
+              selectedModuleId={selectedModuleId}
+              onSelect={setSelectedModuleId}
+              readonly={!canEdit}
             />
-          ) : activeView.kind === "default" ? (
-            <RequirementDefaultViewGrid
-              workspaceSlug={workspaceSlug ?? ""}
-              productId={productId ?? ""}
-              requirementTypes={requirementTypes}
-              requirements={store.requirementsPage.results}
-              totalCount={store.requirementsPage.total_count ?? 0}
-              perPage={store.perPage}
-              nextCursor={store.requirementsPage.next_cursor}
-              prevCursor={store.requirementsPage.prev_cursor}
-              nextPageResults={store.requirementsPage.next_page_results}
-              prevPageResults={store.requirementsPage.prev_page_results}
-              isLoading={isLoading || store.isRequirementsLoading}
-              isMutating={store.isMutating}
-              error={store.requirementsError}
-              readOnly={!canEdit}
-              search={store.search}
-              filters={store.filters}
-              onSearchChange={store.setSearch}
-              onFiltersChange={store.setFilters}
-              onCursorChange={store.setCursor}
-              onPerPageChange={store.setPerPage}
-              onDelete={store.deleteRequirements}
-              onDuplicate={({ requirementTypeId, data, afterId }) =>
-                store.createRequirement(data, requirementTypeId, { after_id: afterId })
-              }
-              onOpenRequirementTypeView={(requirementTypeId) =>
-                changeView({ kind: "requirementType", requirementTypeId })
-              }
-              onOpenDetail={setPeekRequirement}
-              onOpenChangeRequest={openChangeRequest}
-              onSubmitReview={approvalActions.openSubmitModal}
-              onWithdrawReview={approvalActions.withdraw}
-              onStatusChange={onStatusChange}
-              toolbarPortalEl={dataToolbarHost}
-            />
-          ) : (
-            <RequirementGrid
-              ref={gridRef}
-              hideToolbarAdd
-              // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
-              key={activeView.requirementTypeId}
-              workspaceSlug={workspaceSlug ?? ""}
-              entityId={productId ?? ""}
-              entityKind="product"
-              showApprovalColumn
-              readOnly={!canEdit}
-              createRequirementTypeId={activeView.requirementTypeId}
-              columnStorageId={activeView.requirementTypeId}
-              fields={activeType?.fields ?? []}
-              /*
-               * 列已经换成新类型了，行还得等 requirementTypeFilter 同步过去（那是个
-               * effect，比这次渲染晚一拍）。这一拍里先按空列表渲染，让网格照常走骨架屏 ——
-               * 否则会闪出「新类型的列配上一个视图的行」。
-               */
-              requirements={
-                store.requirementTypeFilter === activeView.requirementTypeId ? store.requirementsPage.results : []
-              }
-              totalCount={store.requirementsPage.total_count ?? 0}
-              totalPages={store.requirementsPage.total_pages ?? 0}
-              nextCursor={store.requirementsPage.next_cursor}
-              prevCursor={store.requirementsPage.prev_cursor}
-              nextPageResults={store.requirementsPage.next_page_results}
-              prevPageResults={store.requirementsPage.prev_page_results}
-              isLoading={isLoading || store.isRequirementsLoading}
-              isMutating={store.isMutating}
-              error={store.requirementsError}
-              search={store.search}
-              filters={store.filters}
-              perPage={store.perPage}
-              onSearchChange={store.setSearch}
-              onFiltersChange={store.setFilters}
-              onPerPageChange={store.setPerPage}
-              onCursorChange={store.setCursor}
-              onRefresh={store.fetchRequirements}
-              onBulkSave={store.saveRequirementBatch}
-              onOpenDetail={setPeekRequirement}
-              onSubmitReview={approvalActions.openSubmitModal}
-              onWithdrawReview={approvalActions.withdraw}
-              onOpenChangeRequest={openChangeRequest}
-              onStatusChange={onStatusChange}
-              toolbarPortalEl={dataToolbarHost}
-            />
-          )
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {requirementTypes.length === 0 ? (
+                <EmptyStateDetailed
+                  assetKey="work-item"
+                  title={t("workspace_products.requirements.data.empty.title")}
+                  description={t("workspace_products.requirements.data.empty.description")}
+                  customButton={
+                    canEdit ? (
+                      <RequirementCreateActions
+                        onImportPrefetch={() => setShouldPrefetchImport(true)}
+                        onImport={() => setIsImportOpen(true)}
+                        onManualEntry={() => setIsCreateOpen(true)}
+                        excel={excelProps}
+                      />
+                    ) : undefined
+                  }
+                />
+              ) : activeView.kind === "default" ? (
+                <RequirementDefaultViewGrid
+                  workspaceSlug={workspaceSlug ?? ""}
+                  productId={productId ?? ""}
+                  requirementTypes={requirementTypes}
+                  requirements={store.requirementsPage.results}
+                  totalCount={store.requirementsPage.total_count ?? 0}
+                  perPage={store.perPage}
+                  nextCursor={store.requirementsPage.next_cursor}
+                  prevCursor={store.requirementsPage.prev_cursor}
+                  nextPageResults={store.requirementsPage.next_page_results}
+                  prevPageResults={store.requirementsPage.prev_page_results}
+                  isLoading={isLoading || store.isRequirementsLoading}
+                  isMutating={store.isMutating}
+                  error={store.requirementsError}
+                  readOnly={!canEdit}
+                  search={store.search}
+                  filters={store.filters}
+                  onSearchChange={store.setSearch}
+                  onFiltersChange={store.setFilters}
+                  onCursorChange={store.setCursor}
+                  onPerPageChange={store.setPerPage}
+                  onDelete={handleDeleteRequirements}
+                  onDuplicate={async ({ requirementTypeId, data, afterId }) => {
+                    const response = await store.createRequirement(data, requirementTypeId, { after_id: afterId });
+                    void refreshModules().catch(() => undefined);
+                    return response;
+                  }}
+                  onOpenRequirementTypeView={(requirementTypeId) =>
+                    changeView({ kind: "requirementType", requirementTypeId })
+                  }
+                  onOpenDetail={setPeekRequirement}
+                  onOpenChangeRequest={openChangeRequest}
+                  onSubmitReview={approvalActions.openSubmitModal}
+                  onWithdrawReview={approvalActions.withdraw}
+                  onStatusChange={onStatusChange}
+                  toolbarPortalEl={dataToolbarHost}
+                />
+              ) : (
+                <RequirementGrid
+                  ref={gridRef}
+                  hideToolbarAdd
+                  // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
+                  key={activeView.requirementTypeId}
+                  workspaceSlug={workspaceSlug ?? ""}
+                  entityId={productId ?? ""}
+                  entityKind="product"
+                  showApprovalColumn
+                  readOnly={!canEdit}
+                  createRequirementTypeId={activeView.requirementTypeId}
+                  columnStorageId={activeView.requirementTypeId}
+                  fields={activeType?.fields ?? []}
+                  /*
+                   * 列已经换成新类型了，行还得等 requirementTypeFilter 同步过去（那是个
+                   * effect，比这次渲染晚一拍）。这一拍里先按空列表渲染，让网格照常走骨架屏 ——
+                   * 否则会闪出「新类型的列配上一个视图的行」。
+                   */
+                  requirements={
+                    store.requirementTypeFilter === activeView.requirementTypeId ? store.requirementsPage.results : []
+                  }
+                  totalCount={store.requirementsPage.total_count ?? 0}
+                  totalPages={store.requirementsPage.total_pages ?? 0}
+                  nextCursor={store.requirementsPage.next_cursor}
+                  prevCursor={store.requirementsPage.prev_cursor}
+                  nextPageResults={store.requirementsPage.next_page_results}
+                  prevPageResults={store.requirementsPage.prev_page_results}
+                  isLoading={isLoading || store.isRequirementsLoading}
+                  isMutating={store.isMutating}
+                  error={store.requirementsError}
+                  search={store.search}
+                  filters={store.filters}
+                  perPage={store.perPage}
+                  onSearchChange={store.setSearch}
+                  onFiltersChange={store.setFilters}
+                  onPerPageChange={store.setPerPage}
+                  onCursorChange={store.setCursor}
+                  onRefresh={store.fetchRequirements}
+                  onBulkSave={handleBulkSave}
+                  onOpenDetail={setPeekRequirement}
+                  onSubmitReview={approvalActions.openSubmitModal}
+                  onWithdrawReview={approvalActions.withdraw}
+                  onOpenChangeRequest={openChangeRequest}
+                  onStatusChange={onStatusChange}
+                  toolbarPortalEl={dataToolbarHost}
+                  createModuleId={selectedModuleId}
+                  onMoveToModule={canEdit ? setMoveIds : undefined}
+                />
+              )}
+            </div>
+          </div>
         ) : null}
       </ContentWrapper>
+      <MoveToModuleModal
+        isOpen={moveIds.length > 0}
+        handleClose={() => setMoveIds([])}
+        store={moduleStore}
+        requirementIds={moveIds}
+        onMoved={() => {
+          void store.fetchRequirements().catch(() => undefined);
+        }}
+      />
 
       <RequirementPeekOverview
         workspaceSlug={workspaceSlug ?? ""}
@@ -510,6 +581,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         onClose={() => setIsImportOpen(false)}
         onImport={async (payloads) => {
           const responses = await store.importFromLibraries(payloads);
+          // 导入会按名称路径映射/新建产品模块，左栏要跟上
+          void refreshModules().catch(() => undefined);
           if (!responses.length) return responses;
           // 跨库导入时切到第一批的类型视图，用户马上能看到刚导进来的数据
           changeView({ kind: "requirementType", requirementTypeId: responses[0].requirement_type_id });
@@ -531,8 +604,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           entityId={productId ?? ""}
           entityKind="product"
           allowTypeSelection
+          moduleId={selectedModuleId}
           onClose={() => setIsCreateOpen(false)}
-          onSave={store.saveRequirementBatch}
+          onSave={handleBulkSave}
           onUpload={uploadAsset}
         />
       )}
@@ -553,10 +627,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           setIsInboxOpen(false);
           // 收件箱是跨产品的：别的产品的单要整页跳过去，不能只改当前页的 query
           if (item.product_id === productId) openChangeRequest(item.id);
-          else
-            navigate(
-              `/${workspaceSlug}/products/${item.product_id}/requirements?tab=changes&cr=${item.id}`
-            );
+          else navigate(`/${workspaceSlug}/products/${item.product_id}/requirements?tab=changes&cr=${item.id}`);
         }}
       />
     </>

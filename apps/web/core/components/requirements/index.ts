@@ -1,3 +1,4 @@
+export * from "./module-tree";
 export * from "./requirement-builtin-field-section";
 export * from "./requirement-builtin-fields";
 export * from "./requirement-status-cell";

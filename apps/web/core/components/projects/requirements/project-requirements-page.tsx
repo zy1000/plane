@@ -24,10 +24,8 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { ProductChip } from "@/components/products/product-chip";
 import { PageHead } from "@/components/core/page-title";
 import { isRequirementClosed } from "@/components/requirements";
-import {
-  RequirementPeekOverview,
-  RequirementProjectRelations,
-} from "@/components/requirements/requirement-detail";
+import { ProjectRequirementModuleSidebar } from "@/components/requirements/module-tree";
+import { RequirementPeekOverview, RequirementProjectRelations } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useProject } from "@/hooks/store/use-project";
@@ -35,6 +33,7 @@ import { useProducts } from "@/hooks/store/use-products";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useProductRequirementCanEdit } from "@/hooks/store/use-product-requirement-can-edit";
 import { useProjectRequirements } from "@/hooks/store/use-project-requirements";
+import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useUserPermissions } from "@/hooks/store/user";
 import { RequirementService } from "@/services/requirement.service";
 import { ExistingRequirementsModal } from "./existing-requirements-modal";
@@ -75,9 +74,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const syncedFilterRef = useRef(serializeListQuery(initialListQuery));
 
   useLayoutEffect(() => {
-    setDataToolbarHost(
-      document.getElementById(PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID) as HTMLDivElement | null
-    );
+    setDataToolbarHost(document.getElementById(PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID) as HTMLDivElement | null);
   }, []);
 
   const store = useProjectRequirements({
@@ -93,6 +90,35 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   } = useProjectProducts({ workspaceSlug: slug, projectId: project });
   // 关联产品弹窗的候选项。列表接口已按可见性过滤，后端还会再校验一次
   const { products, isLoading: isProductsLoading } = useProducts(slug);
+
+  const moduleStore = useRequirementModules(slug, project ? { kind: "project", projectId: project } : undefined);
+
+  // ?moduleId= 与左侧模块树选中双向同步。独立 URL 参数，不进 rich-filters 的
+  // 表达式序列化（applyListQueryToSearchParams 不认识它，所以不会被筛选写入冲掉），
+  // 两者在服务端 AND 叠加
+  const urlModuleId = searchParams.get("moduleId");
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
+  const syncedModuleRef = useRef(urlModuleId);
+
+  useEffect(() => {
+    if (urlModuleId === syncedModuleRef.current) return;
+    syncedModuleRef.current = urlModuleId;
+    setSelectedModuleId(urlModuleId);
+  }, [urlModuleId]);
+
+  useEffect(() => {
+    if (urlModuleId === selectedModuleId) return;
+    syncedModuleRef.current = selectedModuleId;
+    const next = new URLSearchParams(searchParams);
+    if (selectedModuleId) next.set("moduleId", selectedModuleId);
+    else next.delete("moduleId");
+    setSearchParams(next, { replace: true });
+  }, [selectedModuleId, urlModuleId, searchParams, setSearchParams]);
+
+  const { setModuleId } = store;
+  useEffect(() => {
+    setModuleId(selectedModuleId);
+  }, [selectedModuleId, setModuleId]);
 
   const canView = allowProjectPermissionKeys([PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY], slug ?? "", project ?? "");
   const canManage = allowProjectPermissionKeys(
@@ -244,6 +270,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
 
   const handleLink = async (requirementIds: string[]) => {
     await store.linkRequirements(requirementIds);
+    // 关联进来的需求可能带来新模块 / 改变计数，左栏跟着刷
+    void moduleStore.refresh().catch(() => undefined);
     setToast({
       type: TOAST_TYPE.SUCCESS,
       title: t("project_requirements.toast.linked", { count: requirementIds.length }),
@@ -254,6 +282,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     if (!idsToUnlink.length) return;
     try {
       await store.unlinkRequirements(idsToUnlink);
+      void moduleStore.refresh().catch(() => undefined);
       setToast({ type: TOAST_TYPE.SUCCESS, title: t("project_requirements.toast.unlinked") });
       // 解掉的那条可能正开着抽屉，它已经不在本项目里了
       if (peekRequirementId && idsToUnlink.includes(peekRequirementId)) setPeekRequirement(null);
@@ -311,54 +340,65 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
         <FiltersRow filter={filter} />
 
-        <ProjectRequirementsGrid
-          requirementTypes={store.requirementTypes}
-          requirements={rows}
-          totalCount={store.requirementsPage.total_count ?? 0}
-          perPage={store.perPage}
-          nextCursor={store.requirementsPage.next_cursor}
-          prevCursor={store.requirementsPage.prev_cursor}
-          nextPageResults={store.requirementsPage.next_page_results}
-          prevPageResults={store.requirementsPage.prev_page_results}
-          isLoading={store.isRequirementsLoading || store.isConfigurationLoading}
-          isMutating={store.isMutating}
-          /*
-           * 配置接口挂掉时也要说话：requirementTypes 会静默变空，类型列全是 —、
-           * 类型筛选整个消失，但用户看不到任何解释
-           */
-          error={store.requirementsError ?? store.configurationError}
-          onRetry={() => {
-            void store.fetchConfiguration().catch(() => undefined);
-            void store.fetchRequirements().catch(() => undefined);
-          }}
-          workspaceSlug={slug}
-          projectId={project}
-          canManage={canManage}
-          canManageProducts={canManageProducts}
-          onManageProducts={() => setIsProductsModalOpen(true)}
-          /*
-           * 请求还在飞、或者请求挂了的时候按「有产品」处理：这个标志只用来决定空态
-           * 说哪句话、以及要不要禁用「关联需求」。宁可让人点开一个空的候选池，也
-           * 不要在加载的那一瞬间把按钮变灰、把空态写成「先去关联产品」。
-           */
-          hasLinkedProducts={isProductLinksLoading || productLinks.length > 0}
-          hasAnyLinked={(facets?.total ?? 0) > 0}
-          activeFilterCount={filter.allConditionsForDisplay.length + (store.search.trim() ? 1 : 0)}
-          onClearFilters={() => {
-            void filter.clearFilters();
-            store.setSearch("");
-          }}
-          search={store.search}
-          onSearchChange={store.setSearch}
-          onCursorChange={store.setCursor}
-          onPerPageChange={store.setPerPage}
-          onOpenDetail={setPeekRequirement}
-          onLink={() => setIsLinkModalOpen(true)}
-          onUnlink={setIdsToUnlink}
-          onStatusChange={(requirementId, status) => void handleStatusChange(requirementId, status)}
-          toolbarPortalEl={dataToolbarHost}
-          toolbarAfterSearch={<FiltersToggle filter={filter} />}
-        />
+        {/* 左模块树 + 右网格。保持 min-h-0 / overflow-hidden 链路完整，
+            否则网格的 sticky 表头与分页会被撑破（本页 layout 不包 ContentWrapper 滚动） */}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <ProjectRequirementModuleSidebar
+            store={moduleStore}
+            selectedModuleId={selectedModuleId}
+            onSelect={setSelectedModuleId}
+          />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ProjectRequirementsGrid
+              requirementTypes={store.requirementTypes}
+              requirements={rows}
+              totalCount={store.requirementsPage.total_count ?? 0}
+              perPage={store.perPage}
+              nextCursor={store.requirementsPage.next_cursor}
+              prevCursor={store.requirementsPage.prev_cursor}
+              nextPageResults={store.requirementsPage.next_page_results}
+              prevPageResults={store.requirementsPage.prev_page_results}
+              isLoading={store.isRequirementsLoading || store.isConfigurationLoading}
+              isMutating={store.isMutating}
+              /*
+               * 配置接口挂掉时也要说话：requirementTypes 会静默变空，类型列全是 —、
+               * 类型筛选整个消失，但用户看不到任何解释
+               */
+              error={store.requirementsError ?? store.configurationError}
+              onRetry={() => {
+                void store.fetchConfiguration().catch(() => undefined);
+                void store.fetchRequirements().catch(() => undefined);
+              }}
+              workspaceSlug={slug}
+              projectId={project}
+              canManage={canManage}
+              canManageProducts={canManageProducts}
+              onManageProducts={() => setIsProductsModalOpen(true)}
+              /*
+               * 请求还在飞、或者请求挂了的时候按「有产品」处理：这个标志只用来决定空态
+               * 说哪句话、以及要不要禁用「关联需求」。宁可让人点开一个空的候选池，也
+               * 不要在加载的那一瞬间把按钮变灰、把空态写成「先去关联产品」。
+               */
+              hasLinkedProducts={isProductLinksLoading || productLinks.length > 0}
+              hasAnyLinked={(facets?.total ?? 0) > 0}
+              activeFilterCount={filter.allConditionsForDisplay.length + (store.search.trim() ? 1 : 0)}
+              onClearFilters={() => {
+                void filter.clearFilters();
+                store.setSearch("");
+              }}
+              search={store.search}
+              onSearchChange={store.setSearch}
+              onCursorChange={store.setCursor}
+              onPerPageChange={store.setPerPage}
+              onOpenDetail={setPeekRequirement}
+              onLink={() => setIsLinkModalOpen(true)}
+              onUnlink={setIdsToUnlink}
+              onStatusChange={(requirementId, status) => void handleStatusChange(requirementId, status)}
+              toolbarPortalEl={dataToolbarHost}
+              toolbarAfterSearch={<FiltersToggle filter={filter} />}
+            />
+          </div>
+        </div>
       </ContentWrapper>
 
       {/*
@@ -442,6 +482,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
         onSubmit={async (payload) => {
           await updateProducts(payload);
           await store.fetchRequirements();
+          void moduleStore.refresh().catch(() => undefined);
         }}
       />
     </>

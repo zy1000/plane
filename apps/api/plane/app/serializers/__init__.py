@@ -183,10 +183,15 @@ from .requirement import (
     RequirementFilterSerializer,
     RequirementImportSerializer,
     RequirementSerializer,
+    RequirementSetModuleSerializer,
     RequirementStatusWriteSerializer,
     RequirementUpdateSerializer,
 )
 from .requirement_library import RequirementLibrarySerializer
+from .requirement_module import (
+    RequirementModuleSerializer,
+    RequirementModuleWriteSerializer,
+)
 from .requirement_type import (
     RequirementTypeConfigurationWriteSerializer,
     RequirementTypeSerializer,

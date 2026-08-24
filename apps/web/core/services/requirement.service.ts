@@ -1,10 +1,12 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateRequirementLibraryPayload,
+  TCreateRequirementModulePayload,
   TLinkableRequirementsResponse,
   TLinkableTestCasesResponse,
   TProductProject,
   TProjectRequirement,
+  TProjectRequirementModulesResponse,
   TProjectRequirementsResponse,
   TRequirement,
   TRequirementApprovalAction,
@@ -40,12 +42,17 @@ import type {
   TRequirementItemStatus,
   TRequirementLibrary,
   TRequirementLibraryConfiguration,
+  TRequirementModule,
+  TRequirementModuleScope,
+  TRequirementModuleTreeResponse,
   TRequirementsResponse,
   TRequirementSubmitReviewPayload,
   TRequirementTestCase,
   TRequirementTrailResponse,
   TRequirementVersionsResponse,
+  TSetRequirementModulePayload,
   TUpdateRequirementLibraryPayload,
+  TUpdateRequirementModulePayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
@@ -303,6 +310,8 @@ export class RequirementService extends APIService {
       ids?: string[];
       /** 藏掉已经导进该产品的条目 —— 导入弹窗的候选池用，必须在服务端剔除才能保住分页 */
       excludeImportedIntoProduct?: string;
+      /** 按模块过滤（含子模块）；不传 = 全部（含未挂靠的条目） */
+      moduleId?: string;
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/`, {
@@ -315,6 +324,7 @@ export class RequirementService extends APIService {
         ...(params.excludeImportedIntoProduct
           ? { exclude_imported_into_product: params.excludeImportedIntoProduct }
           : {}),
+        ...(params.moduleId ? { module_id: params.moduleId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -388,6 +398,99 @@ export class RequirementService extends APIService {
       });
   }
 
+  /* --- 需求模块（标准库 / 产品各一棵独立的树） ----------------------------- */
+
+  /** 模块树的 URL 根：库与产品两组前缀，由 scope 分派 */
+  private modulesRoot(workspaceSlug: string, scope: TRequirementModuleScope) {
+    if ("libraryId" in scope) {
+      return `/api/workspaces/${workspaceSlug}/requirement-libraries/${scope.libraryId}/modules`;
+    }
+    return `/api/workspaces/${workspaceSlug}/products/${scope.productId}/requirement-modules`;
+  }
+
+  /** 批量挂靠/移动端点挂在条目路由下，与模块树的前缀不同 */
+  private setModuleRoot(workspaceSlug: string, scope: TRequirementModuleScope) {
+    if ("libraryId" in scope) {
+      return `/api/workspaces/${workspaceSlug}/requirement-libraries/${scope.libraryId}/items/set-module`;
+    }
+    return `/api/workspaces/${workspaceSlug}/products/${scope.productId}/requirements/set-module`;
+  }
+
+  /** 一次拿整棵树 + 子树累加计数 + 作用域总数（「全部」节点的计数） */
+  async listRequirementModules(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope
+  ): Promise<TRequirementModuleTreeResponse> {
+    return this.get(`${this.modulesRoot(workspaceSlug, scope)}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createRequirementModule(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope,
+    payload: TCreateRequirementModulePayload
+  ): Promise<TRequirementModule> {
+    return this.post(`${this.modulesRoot(workspaceSlug, scope)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateRequirementModule(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope,
+    moduleId: string,
+    payload: TUpdateRequirementModulePayload
+  ): Promise<TRequirementModule> {
+    return this.patch(`${this.modulesRoot(workspaceSlug, scope)}/${moduleId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 删除模块会连带删掉子模块；模块下的需求不删，回到「全部」 */
+  async deleteRequirementModule(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope,
+    moduleId: string
+  ): Promise<void> {
+    return this.delete(`${this.modulesRoot(workspaceSlug, scope)}/${moduleId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量挂靠/移动需求到模块；module_id 显式传 null = 移回「全部」 */
+  async setRequirementModule(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope,
+    payload: TSetRequirementModulePayload
+  ): Promise<{ updated_ids: string[] }> {
+    return this.post(`${this.setModuleRoot(workspaceSlug, scope)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 项目需求页左侧的只读模块树（按产品分组，只含已关联需求涉及的模块） */
+  async listProjectRequirementModules(
+    workspaceSlug: string,
+    projectId: string
+  ): Promise<TProjectRequirementModulesResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/requirement-modules/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /* --- 需求配置（审批规则 + 字段/需求类型） -------------------------------- */
 
   private configurationRoot(workspaceSlug: string, productId: string) {
@@ -431,6 +534,8 @@ export class RequirementService extends APIService {
       ids?: string[];
       /** 关联选择器（父项下拉等）用：排除已关闭的需求。带 ids 回显时服务端豁免 */
       excludeClosed?: boolean;
+      /** 按模块过滤（含子模块）；不传 = 全部（含未挂靠的需求） */
+      moduleId?: string;
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/`, {
@@ -442,6 +547,7 @@ export class RequirementService extends APIService {
         ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
         ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
+        ...(params.moduleId ? { module_id: params.moduleId } : {}),
       },
     })
       .then((response) => response?.data)
@@ -459,6 +565,8 @@ export class RequirementService extends APIService {
       requirement_type_id: string;
       before_id?: string;
       after_id?: string;
+      /** 左侧树选中模块后新建自动挂靠 */
+      module_id?: string | null;
     }
   ): Promise<TRequirement> {
     return this.post(`${this.requirementsRoot(workspaceSlug, productId)}/`, payload)
@@ -975,6 +1083,8 @@ export class RequirementService extends APIService {
       exclude_issue_id?: string;
       /** 关联选择器用：排除已关闭的需求（主列表不带 —— 项目页仍要看到已关闭需求） */
       excludeClosed?: boolean;
+      /** 左侧模块树的过滤（含子模块）；模块归产品，项目侧只读 */
+      moduleId?: string;
     } = {}
   ): Promise<TProjectRequirementsResponse> {
     return this.get(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/`, {
@@ -1001,6 +1111,7 @@ export class RequirementService extends APIService {
         ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),
         ...(params.exclude_issue_id ? { exclude_issue_id: params.exclude_issue_id } : {}),
         ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
+        ...(params.moduleId ? { module_id: params.moduleId } : {}),
       },
     })
       .then((response) => response?.data)

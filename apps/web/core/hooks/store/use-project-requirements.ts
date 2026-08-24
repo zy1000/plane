@@ -66,6 +66,11 @@ export const useProjectRequirements = ({
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
   const [listFilters, setListFiltersState] = useState<TProjectRequirementListQuery>(initialListQuery ?? {});
+  /**
+   * 左侧模块树的过滤（含子模块）；null = 「全部」。独立于 listFilters ——
+   * rich-filters 的表达式重建不感知它，两者在服务端 AND 叠加。
+   */
+  const [moduleId, setModuleIdState] = useState<string | null>(null);
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !projectId) return null;
@@ -116,6 +121,7 @@ export const useProjectRequirements = ({
           targetDate: listFilters.targetDate,
           targetDateFrom: listFilters.targetDateFrom,
           targetDateTo: listFilters.targetDateTo,
+          moduleId: moduleId ?? undefined,
         });
         if (requestSequence !== requestSequenceRef.current) return response;
         setRequirementsPage(response);
@@ -278,6 +284,10 @@ export const useProjectRequirements = ({
     setCursor(undefined);
     setListFiltersState(value);
   }, []);
+  const setModuleId = useCallback((value: string | null) => {
+    setCursor(undefined);
+    setModuleIdState(value);
+  }, []);
 
   return {
     configuration,
@@ -293,11 +303,13 @@ export const useProjectRequirements = ({
     cursor,
     perPage,
     listFilters,
+    moduleId,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
     setPerPage: updatePerPage,
     setListFilters,
+    setModuleId,
     fetchConfiguration,
     fetchRequirements,
     linkRequirements,

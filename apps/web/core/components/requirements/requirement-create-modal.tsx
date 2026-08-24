@@ -80,6 +80,8 @@ type TProps = {
   /** 类型固定时这一行的字段。allowTypeSelection 时不用它 */
   fields?: TRequirementField[];
   seed?: TRequirementCreateSeed;
+  /** 左侧模块树的当前选中：弹窗建出的行自动挂进该模块 */
+  moduleId?: string | null;
   onClose: () => void;
   onSave: (payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
@@ -94,6 +96,7 @@ export const RequirementCreateModal = ({
   allowTypeSelection = false,
   fields = EMPTY_FIELDS,
   seed,
+  moduleId = null,
   onClose,
   onSave,
   onUpload,
@@ -221,6 +224,7 @@ export const RequirementCreateModal = ({
             ...(typeId ? { requirement_type_id: typeId } : {}),
             ...(seed?.beforeId ? { before_id: seed.beforeId } : {}),
             ...(seed?.afterId ? { after_id: seed.afterId } : {}),
+            ...(moduleId ? { module_id: moduleId } : {}),
           },
         ],
         updates: [],

@@ -26,6 +26,7 @@ from plane.db.models import (
     Workspace,
     WorkspaceMember,
 )
+from plane.utils.requirement_module import map_library_modules_to_product
 
 
 SORT_ORDER_STEP = 1000
@@ -937,11 +938,13 @@ def insert_requirement_row(
     actor=None,
     before_id=None,
     after_id=None,
+    module_id=None,
 ):
     """在指定位置插入一行需求。
 
     model / scope / new_row 三个参数让不同归属的表共用同一套插入语义。
-    data 只装自定义字段，builtin 是八个内置列的完整 dict。
+    data 只装自定义字段，builtin 是八个内置列的完整 dict。module_id 不属于
+    builtin（模块不是内容），单独透传给工厂随行写入。
     """
     if before_id and after_id:
         raise ValueError("Only one insertion anchor can be provided.")
@@ -956,6 +959,7 @@ def insert_requirement_row(
         sort_order=sort_order,
         actor=actor,
         requirement_type_id=requirement_type_id,
+        module_id=module_id,
     )
     row.save()
     return row
@@ -1049,7 +1053,15 @@ def _new_scoped_requirement(*, product=None, project=None):
         raise ValueError("A scoped requirement needs a product or a project.")
     allocate = _sequence_allocator(scope)
 
-    def factory(data, columns, sort_order, actor, requirement_type_id, source=None):
+    def factory(
+        data,
+        columns,
+        sort_order,
+        actor,
+        requirement_type_id,
+        source=None,
+        module_id=None,
+    ):
         return Requirement(
             product=product,
             project=project,
@@ -1058,6 +1070,7 @@ def _new_scoped_requirement(*, product=None, project=None):
             # 只有从标准库导入才有来源；手工创建恒为 (None, None)
             source_library_id=source.library_id if source else None,
             source_sequence_id=source.sequence_id if source else None,
+            module_id=module_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -1070,7 +1083,15 @@ def _new_scoped_requirement(*, product=None, project=None):
 def _new_library_item(library):
     allocate = _sequence_allocator({"library_id": library.id})
 
-    def factory(data, columns, sort_order, actor, requirement_type_id, source=None):
+    def factory(
+        data,
+        columns,
+        sort_order,
+        actor,
+        requirement_type_id,
+        source=None,
+        module_id=None,
+    ):
         # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定。
         # source 同理被**无条件丢弃** —— 库条目是导入的源头，不可能有来源。
         # DB 侧有 req_library_item_has_no_source 兜底。
@@ -1078,6 +1099,7 @@ def _new_library_item(library):
             library=library,
             requirement_type_id=library.requirement_type_id,
             sequence_id=allocate(),
+            module_id=module_id,
             data=data,
             sort_order=sort_order,
             created_by=actor,
@@ -1103,6 +1125,7 @@ def insert_baseline_requirement(
     actor=None,
     before_id=None,
     after_id=None,
+    module_id=None,
 ):
     return insert_requirement_row(
         model=Requirement,
@@ -1116,6 +1139,7 @@ def insert_baseline_requirement(
         actor=actor,
         before_id=before_id,
         after_id=after_id,
+        module_id=module_id,
     )
 
 
@@ -1128,6 +1152,7 @@ def insert_library_item(
     actor=None,
     before_id=None,
     after_id=None,
+    module_id=None,
 ):
     return insert_requirement_row(
         model=Requirement,
@@ -1139,6 +1164,7 @@ def insert_library_item(
         actor=actor,
         before_id=before_id,
         after_id=after_id,
+        module_id=module_id,
     )
 
 
@@ -1293,6 +1319,9 @@ def save_requirement_row_batch(
             # RequirementBatchSaveSerializer 没有这个字段，所以客户端伪造不了。
             # 别给那个 serializer 加 source 字段，否则溯源就成了可伪造的输入。
             source=item.get("source"),
+            # 创建时随行挂模块：来自 create serializer 的 module_id（已校验同
+            # 作用域）或导入映射的产物。模块不是内容，不进 builtin。
+            module_id=item.get("module_id"),
         )
         row.save()
         ordered_rows.insert(insert_at, row)
@@ -1332,7 +1361,11 @@ def save_baseline_requirement_batch(
 
 
 def build_library_import_creates(*, library, item_ids, before_id=None, after_id=None):
-    """把选中的库条目整理成 (creates, 源父项映射)。
+    """把选中的库条目整理成 (creates, 源父项映射, 源模块映射)。
+
+    源模块映射 {client_id: 源模块 id | None} 由 import_library_items 按名称路径
+    翻译成目标产品的模块（见 utils.requirement_module.map_library_modules_to_product），
+    这里只记录出处，不做任何跨作用域解析。
 
     data 直接深拷贝 —— 库条目与目标行引用的是同一个需求类型，字段 UUID 完全一致，
     不做任何重映射；只顺手裁掉不属于当前字段集的残留 key（字段后来被删过）。
@@ -1356,10 +1389,12 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
     specs = get_library_field_specs(library)
     creates = []
     parent_by_client_id = {}
+    module_by_client_id = {}
     for item_id in item_ids:
         item = items_by_id[item_id]
         builtin = builtin_values_from_row(item)
         parent_by_client_id[item_id] = builtin[BUILTIN_PARENT_COLUMN]
+        module_by_client_id[item_id] = item.module_id
         builtin[BUILTIN_PARENT_COLUMN] = None
         for column in LIBRARY_HIDDEN_BUILTIN_COLUMNS:
             builtin[column] = BUILTIN_COLUMN_DEFAULTS[column]
@@ -1380,7 +1415,7 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
                 **({"after_id": after_id} if after_id else {}),
             }
         )
-    return creates, parent_by_client_id
+    return creates, parent_by_client_id, module_by_client_id
 
 
 def remap_imported_parents(*, model, created_rows, parent_by_client_id):
@@ -1408,13 +1443,26 @@ def remap_imported_parents(*, model, created_rows, parent_by_client_id):
 def import_library_items(
     *, policy, library, item_ids, actor=None, before_id=None, after_id=None
 ):
-    """把标准库条目导入这个作用域的需求表。"""
-    creates, parent_by_client_id = build_library_import_creates(
+    """把标准库条目导入这个作用域的需求表。
+
+    源条目挂了模块时，按名称路径在目标产品里逐级匹配/创建同名模块链并挂上
+    （产品已有同路径模块则复用）；源条目无模块则不挂。
+    """
+    creates, parent_by_client_id, module_by_client_id = build_library_import_creates(
         library=library,
         item_ids=item_ids,
         before_id=before_id,
         after_id=after_id,
     )
+    if policy.product_id and any(module_by_client_id.values()):
+        target_module_ids = map_library_modules_to_product(
+            library=library,
+            product=policy.product,
+            module_by_client_id=module_by_client_id,
+            actor=actor,
+        )
+        for item in creates:
+            item["module_id"] = target_module_ids.get(item["client_id"])
     created_rows, updated_rows, deleted_ids = save_baseline_requirement_batch(
         policy=policy,
         creates=creates,

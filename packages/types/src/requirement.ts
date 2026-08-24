@@ -133,6 +133,11 @@ export type TRequirement = TRequirementBuiltinValues & {
   source_sequence_id: number | null;
   /** 拼好的来源编号，如 "SEC-12"。库改名后会自动跟随 */
   source_display_id: string | null;
+  /**
+   * 模块挂靠；null = 未挂靠（只在「全部」里展示）。模块不是需求内容：
+   * 不进 builtin / 版本快照 / 变更单 diff，改挂靠走 set-module 端点，不触发审批。
+   */
+  module_id: string | null;
   data: TRequirementData;
   sort_order: number;
   /**
@@ -245,6 +250,8 @@ export type TRequirementBatchCreate = {
   requirement_type_id?: string;
   before_id?: string;
   after_id?: string;
+  /** 左侧树选中模块后新建自动挂靠；服务端校验模块与作用域一致 */
+  module_id?: string | null;
 };
 
 export type TRequirementBatchUpdate = {
@@ -333,6 +340,62 @@ export type TRequirementLibraryConfiguration = {
   fields: TRequirementField[];
   /** 乐观锁基准，取的是需求类型的 updated_at——改字段动的是类型 */
   expected_updated_at: string;
+};
+
+/* --- 需求模块 ----------------------------------------------------------- */
+
+/**
+ * 需求模块树节点。标准库 / 产品各自维护一棵独立的树；库条目导入产品时按
+ * 名称路径逐级匹配 / 创建。
+ */
+export type TRequirementModule = {
+  id: string;
+  name: string;
+  /** 父模块 id；null = 根级 */
+  parent: string | null;
+  sort_order: number;
+  /** 子树累加计数（本模块与全部后代下的需求数），与列表 module_id 过滤口径一致 */
+  count: number;
+  children: TRequirementModule[];
+};
+
+export type TRequirementModuleTreeResponse = {
+  modules: TRequirementModule[];
+  /** 作用域内全部需求数（含未挂靠的行），「全部」节点的计数 */
+  total: number;
+};
+
+/** 模块归属：库模块与产品模块相互独立，两组 URL 前缀 */
+export type TRequirementModuleScope = { libraryId: string } | { productId: string };
+
+export type TCreateRequirementModulePayload = {
+  name: string;
+  parent?: string | null;
+  sort_order?: number;
+};
+
+export type TUpdateRequirementModulePayload = Partial<TCreateRequirementModulePayload>;
+
+/** module_id 必传：显式 null 才是「移回全部（取消挂靠）」 */
+export type TSetRequirementModulePayload = {
+  requirement_ids: string[];
+  module_id: string | null;
+};
+
+/** 项目需求页左侧只读模块树的一个产品分组 */
+export type TProjectRequirementModuleGroup = {
+  product_id: string;
+  product_name: string;
+  product_identifier: string;
+  /** 该产品已关联进本项目的需求数（含未挂靠模块的行） */
+  total: number;
+  /** 已剪掉子树计数为 0 分支的树（祖先闭包） */
+  modules: TRequirementModule[];
+};
+
+export type TProjectRequirementModulesResponse = {
+  products: TProjectRequirementModuleGroup[];
+  total: number;
 };
 
 export type TRequirementConfigurationPayload = {

@@ -437,6 +437,125 @@ class RequirementLibrary(BaseModel):
         return super().save(*args, **kwargs)
 
 
+class RequirementModule(BaseModel):
+    """需求模块：标准库 / 产品各自维护的一棵分类树，用于归纳需求条目。
+
+    模块不是需求内容 —— 不进内置列常量、不进版本快照、不进变更单 diff，挂靠与
+    移动都不走审批（与 status 同为旁路轴，见 utils.requirement_module）。库模块
+    与产品模块相互独立；标准库条目导入产品时按模块的名称路径逐级匹配/创建。
+    """
+
+    workspace = models.ForeignKey(
+        "db.WorkSpace",
+        on_delete=models.CASCADE,
+        related_name="requirement_modules",
+        verbose_name="所属工作区",
+    )
+    library = models.ForeignKey(
+        RequirementLibrary,
+        on_delete=models.CASCADE,
+        related_name="modules",
+        null=True,
+        blank=True,
+        verbose_name="所属需求标准库",
+    )
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="requirement_modules",
+        null=True,
+        blank=True,
+        verbose_name="所属产品",
+    )
+    # CASCADE：删模块连带删整棵子树；挂靠的需求走 Requirement.module 的
+    # SET_NULL 回到「全部」，不会被带走。
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="children",
+        null=True,
+        blank=True,
+        verbose_name="父模块",
+    )
+    name = models.CharField(max_length=30, verbose_name="模块名称")
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+
+    class Meta:
+        db_table = "requirement_modules"
+        ordering = ("sort_order", "created_at", "id")
+        constraints = [
+            models.CheckConstraint(
+                check=Q(library__isnull=False, product__isnull=True)
+                | Q(library__isnull=True, product__isnull=False),
+                name="req_module_owner_exactly_one",
+            ),
+            # 同级不重名。根级与子级分开判（parent 为 NULL 时不参与唯一索引比较，
+            # 必须单独一条），库/产品两个作用域各自独立。
+            models.UniqueConstraint(
+                fields=["library", "name"],
+                condition=Q(
+                    library__isnull=False,
+                    parent__isnull=True,
+                    deleted_at__isnull=True,
+                ),
+                name="req_module_unique_library_root_name",
+            ),
+            models.UniqueConstraint(
+                fields=["library", "name", "parent"],
+                condition=Q(
+                    library__isnull=False,
+                    parent__isnull=False,
+                    deleted_at__isnull=True,
+                ),
+                name="req_module_unique_library_child_name",
+            ),
+            models.UniqueConstraint(
+                fields=["product", "name"],
+                condition=Q(
+                    product__isnull=False,
+                    parent__isnull=True,
+                    deleted_at__isnull=True,
+                ),
+                name="req_module_unique_product_root_name",
+            ),
+            models.UniqueConstraint(
+                fields=["product", "name", "parent"],
+                condition=Q(
+                    product__isnull=False,
+                    parent__isnull=False,
+                    deleted_at__isnull=True,
+                ),
+                name="req_module_unique_product_child_name",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        super().clean()
+        # 跨行规则，DB 表达不了：父模块必须同属一个库/产品
+        if self.parent_id:
+            if self.parent_id == self.id:
+                raise ValidationError({"parent": "模块不能以自身作为父模块。"})
+            parent = self.parent
+            if (
+                parent.library_id != self.library_id
+                or parent.product_id != self.product_id
+            ):
+                raise ValidationError(
+                    {"parent": "父模块必须属于同一个标准库或产品。"}
+                )
+
+    def save(self, *args, **kwargs):
+        if not self.workspace_id:
+            if self.library_id:
+                self.workspace_id = self.library.workspace_id
+            elif self.product_id:
+                self.workspace_id = self.product.workspace_id
+        return super().save(*args, **kwargs)
+
+
 class RequirementField(BaseModel):
     requirement_type = models.ForeignKey(
         RequirementType,
@@ -610,6 +729,19 @@ class Requirement(BaseModel):
         blank=True,
         verbose_name="父项",
     )
+    # 模块挂靠。模块不是需求内容：不进 BUILTIN_COLUMNS / 版本快照 / 变更单 diff，
+    # 挂靠变更不走审批、不 bump version。写入口只有三个：创建工厂
+    # （utils.requirement 的两个 _new_* 工厂）、set-module 旁路写入
+    # （utils.requirement_module.set_requirement_module）、库导入时的名称路径映射。
+    # SET_NULL：删模块只解除挂靠，需求回「全部」。
+    module = models.ForeignKey(
+        "db.RequirementModule",
+        on_delete=models.SET_NULL,
+        related_name="requirements",
+        null=True,
+        blank=True,
+        verbose_name="所属需求模块",
+    )
     data = models.JSONField(default=dict, blank=True, verbose_name="自定义字段数据")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     version = models.PositiveIntegerField(default=1, verbose_name="乐观锁计数（每次写入 +1）")
@@ -765,6 +897,17 @@ class Requirement(BaseModel):
             raise ValidationError(
                 {"requirement_type": "标准库条目的需求类型必须与所属标准库一致。"}
             )
+        # 模块必须与本行同属一个库/产品。项目作用域的行两列皆空，而模块恒有
+        # 一个归属（req_module_owner_exactly_one），所以项目行天然挂不了模块。
+        if self.module_id:
+            module = self.module
+            if (
+                module.library_id != self.library_id
+                or module.product_id != self.product_id
+            ):
+                raise ValidationError(
+                    {"module": "模块必须属于需求所在的标准库或产品。"}
+                )
 
     def save(self, *args, **kwargs):
         if not self.workspace_id:
