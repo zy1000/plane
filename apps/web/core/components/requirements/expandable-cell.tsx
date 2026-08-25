@@ -10,14 +10,27 @@ import { Modal } from "antd";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 
-export type TExpandableCellVariant = "grid" | "detail" | "modal";
+export type TExpandableCellVariant = "grid" | "compact" | "detail" | "modal";
 
 /**
  * 静息底色的配方，与 requirement-grid-shared 的 FIELD_INPUT_CLASS 同名同义，只是焦点
  * 落在内部的输入框上，焦点态得用 focus-within；定高也换成最小高度，摘要能折到三行。
+ *
+ * grid 铺满整格（td 走 REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS，不带内边距），文字贴着
+ * 格线排。py-3 是为了在 44px 行高里把单行文字压到垂直居中（12 + 20 + 12），同时留着
+ * items-start，富文本摘要折到三行时往下长而不是把首行顶歪。
+ * grid 这套只管排版：hover 底色与焦点描边归格子管（REQUIREMENT_GRID_CELL_EDITABLE_CLASS）
+ * —— 这层外壳是定高的，rowSpan 撑高的格子里它只占中间一截，画不满。
+ * compact 是详情页子表单那张小表：宿主 td 自带 px-2.5 py-1.5、表头才 text-11，控件铺满
+ * 会把它撑成主网格的尺寸，所以那里保留原来「格子里一个小方框」的紧凑配方。
  */
 const SHELL_CLASS = {
-  grid: "focus-within:border-accent-primary focus-within:ring-accent-primary/10 min-h-8 border-transparent bg-transparent px-2 py-1.5 text-14 hover:border-subtle hover:bg-layer-1 focus-within:bg-surface-1 focus-within:ring-2",
+  grid: "min-h-11 rounded-none border-0 bg-transparent px-page-x py-3 text-14",
+  // 焦点态照原意是「蓝边框 + 淡光晕」，但 accent-primary 没有 border-color / ring-color
+  // 命名空间，原来的 border-accent-primary 与 ring-accent-primary/10 都是无效类 ——
+  // 边框压根没变色，ring 的颜色落回 currentcolor 渲染成近黑。换成有效的 accent-strong
+  compact:
+    "focus-within:ring-accent-strong/10 min-h-8 border-transparent bg-transparent px-2 py-1.5 text-14 hover:border-subtle hover:bg-layer-1 focus-within:border-accent-strong focus-within:bg-surface-1 focus-within:ring-2",
   detail:
     "min-h-8 border-transparent bg-transparent px-2 py-1.5 text-14 hover:bg-layer-transparent-hover focus-within:border-accent-primary focus-within:bg-surface-1",
   // 建行弹窗：与工作项 ExtraFieldControl 同皮（见 FIELD_INPUT_CLASS.modal）

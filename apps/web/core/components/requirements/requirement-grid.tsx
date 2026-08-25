@@ -84,6 +84,8 @@ import {
   MenuRowLabel,
   REQUIREMENT_GRID_BODY_CELL_CLASS,
   REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+  REQUIREMENT_GRID_CELL_EDITABLE_CLASS,
+  REQUIREMENT_GRID_CELL_PAD_CLASS,
   REQUIREMENT_GRID_COLUMN_WIDTH,
   REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
   REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
@@ -871,7 +873,20 @@ export const RequirementGrid = observer(
                       left: titleStickyLeft,
                     }}
                   >
-                    <div className={cn("flex h-full w-full min-w-0 items-center gap-1.5 px-page-x", rowStateClass)}>
+                    {/*
+                      编辑态左内边距让给标题输入框自己（它要铺满到格线）；右边留着，那里
+                      排的是详情入口和行菜单，不归输入框。
+                      整格反馈挂在这一层而不是 td 上：行态底色（rowStateClass）是不透明的，
+                      铺在这儿会把 td 盖住。这一层本身就是 h-full w-full，同样铺满整格。
+                    */}
+                    <div
+                      className={cn(
+                        "flex h-full w-full min-w-0 items-center gap-1.5",
+                        isRowEditable ? "pr-page-x" : "px-page-x",
+                        rowStateClass,
+                        isRowEditable && REQUIREMENT_GRID_CELL_EDITABLE_CLASS
+                      )}
+                    >
                       <span className="min-w-0 flex-1">
                         {isRowEditable ? (
                           <BuiltinCellEditor
@@ -949,7 +964,16 @@ export const RequirementGrid = observer(
                       <td
                         key={column.key}
                         rowSpan={totalRows}
-                        className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                        /*
+                         * 编辑控件铺满整格，内边距由控件自己给（见 FIELD_INPUT_CLASS.grid）；
+                         * hover / 焦点画在格子上，rowSpan 撑高时才不会只亮中间一截。
+                         * 状态格例外：它自己就是个带下拉的胶囊，不需要整格反馈。
+                         */
+                        className={cn(
+                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          groupCellClass,
+                          isRowEditable && column.key !== "status" && REQUIREMENT_GRID_CELL_EDITABLE_CLASS
+                        )}
                       >
                         {column.key === "status" ? (
                           /*
@@ -958,14 +982,16 @@ export const RequirementGrid = observer(
                            * 读 requirement.status 而不是 autosave 的 builtin.status —— dirty 行的
                            * 本地副本会停在旧值上，状态端点的结果只回灌到 requirements。
                            */
-                          <RequirementStatusCell
-                            status={requirement.status}
-                            onChange={
-                              !readOnly && onStatusChange
-                                ? (status) => onStatusChange(requirement.id, status)
-                                : undefined
-                            }
-                          />
+                          <div className={REQUIREMENT_GRID_CELL_PAD_CLASS}>
+                            <RequirementStatusCell
+                              status={requirement.status}
+                              onChange={
+                                !readOnly && onStatusChange
+                                  ? (status) => onStatusChange(requirement.id, status)
+                                  : undefined
+                              }
+                            />
+                          </div>
                         ) : isRowEditable ? (
                           <BuiltinCellEditor
                             columnKey={column.key}
@@ -976,11 +1002,13 @@ export const RequirementGrid = observer(
                             deferTextCommit
                           />
                         ) : (
-                          <BuiltinCellValue
-                            columnKey={column.key}
-                            values={builtin}
-                            resolveParentTitle={resolveParentTitle}
-                          />
+                          <div className={REQUIREMENT_GRID_CELL_PAD_CLASS}>
+                            <BuiltinCellValue
+                              columnKey={column.key}
+                              values={builtin}
+                              resolveParentTitle={resolveParentTitle}
+                            />
+                          </div>
                         )}
                       </td>,
                     ];
@@ -992,7 +1020,12 @@ export const RequirementGrid = observer(
                       <td
                         key={field.id}
                         rowSpan={totalRows}
-                        className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                        /* 编辑控件铺满整格；hover / 焦点画在格子上，rowSpan 撑高时才画得满 */
+                        className={cn(
+                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          groupCellClass,
+                          isRowEditable && REQUIREMENT_GRID_CELL_EDITABLE_CLASS
+                        )}
                       >
                         {isRowEditable ? (
                           <LeafEditor
@@ -1005,7 +1038,9 @@ export const RequirementGrid = observer(
                             deferTextCommit
                           />
                         ) : (
-                          <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
+                          <div className={REQUIREMENT_GRID_CELL_PAD_CLASS}>
+                            <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
+                          </div>
                         )}
                       </td>,
                     ];
@@ -1041,7 +1076,13 @@ export const RequirementGrid = observer(
                         key={`${form.id}-${child.id}`}
                         /* 整组单元格都接放置，落点范围跟测试步骤那张表一样是整行，不是编号那一格 */
                         ref={isRowDraggable ? getDropRef(`${dragRowKey}#${child.id}`, dragPayload) : undefined}
-                        className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass, dragCellClass)}
+                        /* 编辑控件铺满整格；hover / 焦点画在格子上（见 FIELD_INPUT_CLASS.grid） */
+                        className={cn(
+                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          groupCellClass,
+                          row && isRowEditable && REQUIREMENT_GRID_CELL_EDITABLE_CLASS,
+                          dragCellClass
+                        )}
                       >
                         {row ? (
                           isRowEditable ? (
@@ -1055,7 +1096,9 @@ export const RequirementGrid = observer(
                               deferTextCommit
                             />
                           ) : (
-                            <LeafValue field={child} value={currentValue} workspaceSlug={workspaceSlug} />
+                            <div className={REQUIREMENT_GRID_CELL_PAD_CLASS}>
+                              <LeafValue field={child} value={currentValue} workspaceSlug={workspaceSlug} />
+                            </div>
                           )
                         ) : null}
                       </td>

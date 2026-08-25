@@ -289,6 +289,11 @@ export const RequirementSubformSection = (props: TProps) => {
                                   onChange={(value) => setCell(form, row.id, child.id, value)}
                                   onUpload={onUpload}
                                   deferTextCommit
+                                  /*
+                                   * 这张小表的格子自带 px-2.5 py-1.5、表头才 text-11，走不了
+                                   * 主网格那套铺满整格的控件（44px 行高 + px-page-x 会把它撑坏）
+                                   */
+                                  variant="compact"
                                 />
                               )}
                             </td>

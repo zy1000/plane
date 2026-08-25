@@ -199,8 +199,9 @@ export const BuiltinCellEditor = ({
   const { t } = useTranslation();
   /** headline / chip 只改这一个控件的取景，不另起一套底子 */
   const base = variant === "headline" || variant === "chip" ? "modal" : variant;
-  // 详情页跟着工作项侧栏走透明下拉；网格保留边框按钮，否则单元格看不出能点
-  const dropdownVariant = base === "detail" ? "transparent-with-text" : "border-with-text";
+  // 详情页跟着工作项侧栏走透明下拉；网格铺满整格后可编辑性交给 hover 底色，再画一圈
+  // 按钮边框就又变回浮在格子里的小方框。只有建行弹窗还需要实边框把字段框出来
+  const dropdownVariant = base === "modal" ? "border-with-text" : "transparent-with-text";
   const inputClass = variant === "headline" ? FIELD_HEADLINE_INPUT_CLASS : FIELD_INPUT_CLASS[base];
   // 网格有列头，空值不必再写「选择成员」「开始日期」这类提示；详情页与建行弹窗没有列头，才保留
   const isGrid = base === "grid";
@@ -255,8 +256,9 @@ export const BuiltinCellEditor = ({
     // 状态不走内容 PATCH：这里恒只读，改状态由各页面单独渲染带 onChange 的
     // RequirementStatusCell（走独立的状态端点）。服务端同样会忽略内容载荷里的 status。
     // 撑到和其它编辑器一样的行高，免得进出编辑态时整行跳一下。
+    // 状态是个胶囊不是输入框，grid 下补回格子的 px-page-x 而不是铺满
     return (
-      <div className="flex h-8 min-w-0 items-center px-2">
+      <div className={cn("flex min-w-0 items-center", isGrid ? "h-11 px-page-x" : "h-8 px-2")}>
         <RequirementStatusCell status={values.status} />
       </div>
     );

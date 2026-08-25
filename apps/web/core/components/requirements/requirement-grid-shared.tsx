@@ -536,6 +536,40 @@ export const REQUIREMENT_GRID_CELL_BORDER_CLASS = CELL_BORDER_BASE;
 export const REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS = `${CELL_BORDER_BASE} h-11`;
 export const REQUIREMENT_GRID_BODY_CELL_CLASS = `${CELL_BORDER_BASE} h-11 px-page-x`;
 
+/**
+ * FLUSH 格子里「不该铺满」的内容自己补回内边距：只读值、开关、附件上传这类不是输入框的
+ * 东西贴着格线反而难看。可编辑的输入控件走 FIELD_INPUT_CLASS.grid 那套铺满配方。
+ *
+ * 保持块级、不定高：垂直居中交给 td 的 align-middle，跟没拆内层 div 之前一个样；换成
+ * flex + h-full 反而会让内层 truncate 的 span 变成不肯收缩的 flex item，长文本溢出去。
+ *
+ * 注意不能靠 cn() 往 REQUIREMENT_GRID_BODY_CELL_CLASS 后面补 px 来退回内边距 ——
+ * twMerge 认不出 px-page-x 属于 px 组，盖不住（同 requirement-grid 里编号格那处注释）。
+ */
+export const REQUIREMENT_GRID_CELL_PAD_CLASS = "min-w-0 px-page-x";
+
+/**
+ * 可编辑格子的整格反馈：hover 底色与焦点描边画在格子（td）上，不画在控件上。
+ *
+ * 控件是 44px 定高，而带子表单行的需求会让内置列与根字段列 rowSpan 横跨好几行，格子
+ * 高出好几倍 —— 状态画在控件上时就只占中间一截，上下够不着格线，露出两条空白。格子
+ * 本身永远就是那个矩形，画在它身上天然铺满，控件多高都不用管。
+ * 焦点靠 focus-within 冒上来：真正接收焦点的是里面的 input 或下拉按钮。
+ *
+ * 主信号是底色（hover 上灰、聚焦转白），描边只把「就是这一格」点出来，所以压到 1px
+ * 并降透明度 —— 一屏十来列的密集表格里，2px 实心品牌蓝太抢。
+ *
+ * 用 accent-strong/60 而不是 accent-subtle：描边色只有 accent-strong 与 accent-subtle
+ * 两档，而 accent-subtle 是 brand-300（浅色主题下 oklch 亮度 0.94，近乎白），1px 画在
+ * 聚焦转白的底色上等于没画。降透明度才能同时做到「淡」和「看得见」。
+ *
+ * 颜色不能写 accent-primary：它只在 background-color / text-color / stroke / fill 四个
+ * 命名空间里有定义，没有 --ring-color-accent-primary。写了不报错，但 --tw-ring-color
+ * 会落回 currentcolor，描边渲染成近黑色。
+ */
+export const REQUIREMENT_GRID_CELL_EDITABLE_CLASS =
+  "hover:bg-layer-1 focus-within:bg-surface-1 focus-within:ring-1 focus-within:ring-accent-strong/60 focus-within:ring-inset";
+
 /** 左固定列。z 值要压过普通单元格，否则横滚时被盖住 */
 export const REQUIREMENT_GRID_STICKY_HEADER_CLASS = "left-0 z-[15] md:sticky";
 export const REQUIREMENT_GRID_STICKY_BODY_CLASS = "left-0 z-10 bg-surface-1 md:sticky";
@@ -823,17 +857,18 @@ export const RequirementGridHeader = ({
  *
  * 两套现在都是静息无底色，只在 hover / focus 时显形。
  *
- * grid 原先常驻一层 bg-layer-1/60 来暗示「这一格可以点」，实际效果是反的：控件
- * h-8 装在 h-11、左右各留 21.6px（px-page-x）的格子里，灰块永远浮在白格子中间够不着
- * 边，格线与灰块两套矩形互相打架；而 60% 的灰（≈#F8F9F9）又比表头的实心 bg-layer-1
- * （#F4F5F5）还浅，层级整个倒过来。可编辑性交给 hover:bg-layer-1 + focus 的边框与
- * ring 表达就够了 —— 与工作项电子表格同一套（见 issue-layouts/spreadsheet 的
- * issue-column.tsx：单元格自身不带底色，只有 hover 才上 bg-layer-1）。
+ * grid 铺满整格：控件自己吃掉 44px 行高和 px-page-x 的左右内边距，格子（td）改用
+ * REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS 不带内边距。这样文字贴着格线排，不再是一个
+ * 浮在格子中间、四周围一圈空白的圆角小方框 —— 那既浪费了 160px 列宽里 43px 的横向
+ * 空间，格线与方框两套矩形也互相打架。与工作项电子表格同一套（见 issue-layouts/
+ * spreadsheet 的 issue-column.tsx：td 不带 padding，列组件自己铺满 + px-page-x）。
+ * 注意 grid 这套只管排版，hover 底色与焦点描边归格子管（见
+ * REQUIREMENT_GRID_CELL_EDITABLE_CLASS）—— 控件定高，rowSpan 撑高的格子里画不满。
  * detail：标签已经把可编辑性说清楚了，再铺一层底色就是噪音 —— 与工作项详情侧栏
  * 对齐（见 issues/issue-detail/sidebar.tsx，全部 transparent-with-text，静息无底色）。
  */
 export const FIELD_INPUT_CLASS = {
-  grid: "focus:border-accent-primary focus:ring-accent-primary/10 h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-subtle hover:bg-layer-1 focus:bg-surface-1 focus:ring-2 motion-reduce:transition-none",
+  grid: "h-11 w-full min-w-0 rounded-none border-0 bg-transparent px-page-x text-14 text-primary outline-none placeholder:text-placeholder",
   detail:
     "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   // 建行弹窗：与工作项 ExtraFieldControl（compact=false）同皮 —— Input/下拉都是
@@ -851,7 +886,9 @@ export const FIELD_HEADLINE_INPUT_CLASS =
 
 /** 下拉按钮版：要用 ! 盖掉 @plane/ui 自带的边框 */
 export const FIELD_DROPDOWN_CLASS = {
-  grid: "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  grid: "h-11 w-full min-w-0 rounded-none !border-0 bg-transparent px-page-x",
+  compact:
+    "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
     "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
@@ -860,7 +897,9 @@ export const FIELD_DROPDOWN_CLASS = {
 
 /** MultiSelectDropdown 走 buttonContainerClassName，没有 ! 之争。原生 button 默认居中，必须显式 text-left。 */
 const MULTI_SELECT_CLASS = {
-  grid: "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+  grid: "flex h-11 w-full min-w-0 items-center rounded-none border-0 bg-transparent px-page-x text-left",
+  compact:
+    "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
     "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
@@ -895,8 +934,12 @@ export const LeafEditor = ({
   onRemoveAsset?: (assetId: string) => void;
   /** 网格草稿把富文本里上传的资源登记为待提交，取消编辑时统一清理 */
   onAssetUpload?: (assetId: string) => void;
-  /** detail 直接内联完整编辑器；grid 只有 160px 列宽，简单内容内联改、复杂内容走弹窗 */
-  variant?: "grid" | "detail" | "modal";
+  /**
+   * detail 直接内联完整编辑器；grid 只有 160px 列宽，简单内容内联改、复杂内容走弹窗。
+   * compact 与 grid 同为表格单元格（同样有列头、同样走弹窗改长文本），只是宿主格子自带
+   * 内边距、行更矮 —— 详情页里那张子表单小表就是它，控件在那儿不铺满。
+   */
+  variant?: "grid" | "compact" | "detail" | "modal";
   /**
    * 文本字段是否延后到失焦再提交。默认跟随 variant，但两者不是一回事：
    * 网格的 onChange 只写 draftRows（逐字符是对的，isDirty 要靠它），详情页与
@@ -905,10 +948,13 @@ export const LeafEditor = ({
   deferTextCommit?: boolean;
 }) => {
   const { t } = useTranslation();
+  // 表格形态（grid / compact）头上就有列名，空值不必再写「请选择」这类占位提示
+  const isTableCell = variant === "grid" || variant === "compact";
   if (field.field_type === "boolean") {
-    // 撑到和其它编辑器一样的 h-8：裸开关只有 16px 高，夹在一排 32px 控件里会矮一截
+    // 撑到和其它编辑器一样的行高：裸开关只有 16px 高，夹在一排控件里会矮一截。
+    // 开关不是输入框，铺满整格没有意义，grid 下自己补回格子的 px-page-x
     return (
-      <div className="flex h-8 min-w-0 items-center">
+      <div className={cn("flex min-w-0 items-center", variant === "grid" ? "h-11 px-page-x" : "h-8")}>
         <ToggleSwitch value={Boolean(value)} onChange={() => onChange(!value)} size="sm" />
       </div>
     );
@@ -1011,7 +1057,9 @@ export const LeafEditor = ({
         multiple={false}
         value={typeof value === "string" ? value : null}
         onChange={(memberId) => onChange(memberId)}
-        buttonVariant={variant === "detail" ? "transparent-with-text" : "border-with-text"}
+        // 网格铺满整格后可编辑性交给 hover 底色，再画一圈按钮边框就又变回浮在格子里的小方框；
+        // compact 的格子没铺满，仍靠边框告诉人这里能点
+        buttonVariant={variant === "grid" || variant === "detail" ? "transparent-with-text" : "border-with-text"}
         // modal 高度/内边距与 ExtraFieldControl（compact=false）的 user 字段一致
         buttonClassName={
           variant === "modal"
@@ -1020,7 +1068,7 @@ export const LeafEditor = ({
         }
         buttonContainerClassName="w-full min-w-0"
         // 网格有列头，空值不必再写「选择成员」；与上面选择器的 emptyLabel 同一口径
-        placeholder={variant === "grid" ? "" : (field.config.placeholder ?? t("requirement_grid.data.select_member"))}
+        placeholder={isTableCell ? "" : (field.config.placeholder ?? t("requirement_grid.data.select_member"))}
         showUserDetails
       />
     );
@@ -1031,8 +1079,9 @@ export const LeafEditor = ({
       onRemoveAsset?.(assetId);
       onChange(assets.filter((item) => item.asset_id !== assetId));
     };
+    // 附件是一叠卡片加一个上传区，不是输入框，铺满整格没有意义 —— grid 下补回格子内边距
     return (
-      <div className="flex w-full min-w-0 flex-col gap-1">
+      <div className={cn("flex w-full min-w-0 flex-col gap-1", variant === "grid" && "px-page-x py-1.5")}>
         {field.field_type === "image" ? (
           <div className="flex flex-wrap gap-1">
             {assets.map((asset) => {
@@ -1126,7 +1175,7 @@ export const LeafEditor = ({
       value={typeof value === "string" ? value : ""}
       onChange={onChange}
       label={field.name}
-      placeholder={variant === "grid" ? undefined : (field.config.placeholder ?? field.name)}
+      placeholder={isTableCell ? undefined : (field.config.placeholder ?? field.name)}
       variant={variant}
       deferCommit={deferTextCommit ?? variant === "detail"}
     />
