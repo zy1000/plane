@@ -2064,7 +2064,6 @@ export default {
     navigation: {
       dashboard: "Dashboard",
       requirements: "Requirements",
-      plans: "Plans",
       projects: "Projects",
       releases: "Releases",
       settings: "Settings",
@@ -2756,6 +2755,11 @@ export default {
       no_match: "No matching projects",
       linked_meta: "Linked · {count} requirements",
       unlinked_meta: "Not linked",
+      unlink: "Unlink",
+      unlink_confirm_title: "Unlink this project",
+      unlink_confirm_description:
+        "{name} will no longer be able to reference this product's requirements. If any are still linked in that project, unlink those requirements first.",
+      toast_unlinked: "Project unlinked",
       has_linked_requirements:
         "Requirements from this product are still linked to the project. Unlink them first.",
       empty: {
@@ -2796,10 +2800,6 @@ export default {
       requirements: {
         title: "Requirements are coming soon",
         description: "Collect, refine, and prioritize product requirements here.",
-      },
-      plans: {
-        title: "Plans are coming soon",
-        description: "Maintain product goals, roadmaps, and delivery phases here.",
       },
       projects: {
         title: "Projects are coming soon",

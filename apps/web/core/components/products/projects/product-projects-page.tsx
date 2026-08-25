@@ -5,9 +5,10 @@ import { Link, useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import { EUserWorkspaceRoles } from "@plane/types";
-import { Breadcrumbs, Header, Loader } from "@plane/ui";
+import { EUserWorkspaceRoles, type TProductProject } from "@plane/types";
+import { AlertModalCore, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
@@ -44,6 +45,29 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
     productId: productId?.toString(),
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  /** 行级解除关联的二次确认对象。确认框里展示项目名，避免解错行 */
+  const [pendingUnlink, setPendingUnlink] = useState<TProductProject | null>(null);
+
+  const handleUnlinkConfirm = () => {
+    if (!pendingUnlink) return;
+    void (async () => {
+      try {
+        await updateProjects({ removed_projects: [pendingUnlink.project] });
+        setPendingUnlink(null);
+        setToast({ type: TOAST_TYPE.SUCCESS, title: t("workspace_products.projects.toast_unlinked") });
+      } catch (error) {
+        const payload = error as { error?: string; code?: string } | null;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message:
+            payload?.code === "PRODUCT_HAS_LINKED_REQUIREMENTS"
+              ? t("workspace_products.projects.has_linked_requirements")
+              : (payload?.error ?? t("error")),
+        });
+      }
+    })();
+  };
 
   const candidateProjects = useMemo<TProductProjectCandidate[]>(() => {
     const byId = new Map<string, TProductProjectCandidate>();
@@ -168,6 +192,11 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
                   <th className="w-56 px-4 py-2.5">{t("workspace_products.projects.status_distribution")}</th>
                   <th className="w-24 px-4 py-2.5">{t("workspace_products.projects.completion")}</th>
                   <th className="w-40 px-4 py-2.5">{t("workspace_products.projects.linked_at")}</th>
+                  {canManage && (
+                    <th className="w-12 px-4 py-2.5">
+                      <span className="sr-only">{t("workspace_products.projects.unlink")}</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -206,6 +235,24 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
                       <td className="px-4 py-3 text-11 text-secondary">
                         {renderFormattedDate(link.created_at, "yyyy-MM-dd") ?? "-"}
                       </td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          <CustomMenu
+                            placement="bottom-end"
+                            closeOnSelect
+                            ellipsis
+                            ariaLabel={t("workspace_products.projects.unlink")}
+                          >
+                            <CustomMenu.MenuItem
+                              onClick={() => setPendingUnlink(link)}
+                              disabled={isMutating}
+                              className="text-danger-primary"
+                            >
+                              {t("workspace_products.projects.unlink")}
+                            </CustomMenu.MenuItem>
+                          </CustomMenu>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -214,6 +261,19 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
           )}
         </div>
       </ContentWrapper>
+      <AlertModalCore
+        isOpen={pendingUnlink !== null}
+        isSubmitting={isMutating}
+        handleClose={() => setPendingUnlink(null)}
+        handleSubmit={handleUnlinkConfirm}
+        title={t("workspace_products.projects.unlink_confirm_title")}
+        content={t("workspace_products.projects.unlink_confirm_description", {
+          name: pendingUnlink?.project_detail?.name ?? pendingUnlink?.project ?? "",
+        })}
+        // AlertModalCore 的按钮默认是英文硬编码，本仓库其余调用点也都显式传
+        primaryButtonText={{ default: t("workspace_products.projects.unlink"), loading: t("loading") }}
+        secondaryButtonText={t("cancel")}
+      />
       {canManage && (
         <ProductProjectsModal
           isOpen={isModalOpen}

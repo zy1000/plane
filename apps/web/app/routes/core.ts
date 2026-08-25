@@ -129,10 +129,6 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirements/[requirementId]/page.tsx"
             ),
             route(
-              ":workspaceSlug/products/:productId/plans",
-              "./(all)/[workspaceSlug]/(projects)/products/[productId]/plans/page.tsx"
-            ),
-            route(
               ":workspaceSlug/products/:productId/projects",
               "./(all)/[workspaceSlug]/(projects)/products/[productId]/projects/page.tsx"
             ),

@@ -2242,7 +2242,6 @@ export default {
     navigation: {
       dashboard: "仪表盘",
       requirements: "需求",
-      plans: "计划",
       projects: "项目",
       releases: "发布",
       settings: "设置",
@@ -2928,6 +2927,10 @@ export default {
       no_match: "没有匹配的项目",
       linked_meta: "已关联 · {count} 条需求",
       unlinked_meta: "未关联",
+      unlink: "解除关联",
+      unlink_confirm_title: "解除项目关联",
+      unlink_confirm_description: "解除后「{name}」将不能再引用本产品的需求。若该项目下仍关联着本产品的需求，需先解除那些需求的关联。",
+      toast_unlinked: "已解除关联",
       has_linked_requirements: "该项目下还有本产品需求，请先解除这些需求的关联。",
       empty: {
         title: "还没有项目引用该产品",
@@ -2968,10 +2971,6 @@ export default {
       requirements: {
         title: "需求功能即将上线",
         description: "产品需求的收集、梳理和优先级管理将在这里进行。",
-      },
-      plans: {
-        title: "计划功能即将上线",
-        description: "产品目标、路线规划和阶段安排将在这里统一维护。",
       },
       projects: {
         title: "项目功能即将上线",

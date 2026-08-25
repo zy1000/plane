@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { CalendarRange, FolderKanban, ListChecks, Rocket } from "lucide-react";
+import { FolderKanban, ListChecks, Rocket } from "lucide-react";
 
-export type TProductTabKey = "dashboard" | "requirements" | "plans" | "projects" | "releases";
+export type TProductTabKey = "dashboard" | "requirements" | "projects" | "releases";
 
 export type TProductNavigationItem = {
   key: TProductTabKey;
@@ -15,12 +15,6 @@ export const PRODUCT_NAVIGATION_ITEMS: TProductNavigationItem[] = [
     key: "requirements",
     icon: ListChecks,
     i18nKey: "workspace_products.navigation.requirements",
-    managerOnly: false,
-  },
-  {
-    key: "plans",
-    icon: CalendarRange,
-    i18nKey: "workspace_products.navigation.plans",
     managerOnly: false,
   },
   {
