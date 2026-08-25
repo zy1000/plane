@@ -13,6 +13,7 @@ import type { TRequirementLibrary } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Checkbox, Header, Loader } from "@plane/ui";
 import { renderFormattedDateTime } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { BulkOperationsBar } from "@/components/common/bulk-operations-bar";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -209,17 +210,6 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                   isLast
                 />
               </Breadcrumbs>
-              {selectedLibraryIds.length > 0 && (
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    setLibrariesToDelete(libraries.filter((library) => selectedLibraryIds.includes(library.id)))
-                  }
-                >
-                  <Trash2 className="size-3.5 text-danger-primary" />
-                  {t("requirement_libraries.list.delete_selected", { count: selectedLibraryIds.length })}
-                </Button>
-              )}
             </Header.LeftItem>
             <Header.RightItem className="gap-1.5">
               <div className="flex items-center">
@@ -405,44 +395,62 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                 </tbody>
               </table>
             </div>
-            <div className="flex h-11 shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 text-11 text-secondary">
-              <div className="flex items-center gap-2">
-                <span>{t("requirement_libraries.list.total", { count: filteredLibraries.length })}</span>
-                <select
-                  value={perPage}
-                  onChange={(event) => setPerPage(Number(event.target.value))}
-                  className="h-7 rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:bg-layer-transparent-hover"
-                  aria-label={t("requirement_libraries.list.per_page")}
+            <div className="relative shrink-0">
+              <BulkOperationsBar
+                selectedCount={selectedLibraryIds.length}
+                selectedLabel={t("requirement_grid.data.selected_count", { count: selectedLibraryIds.length })}
+                onClearSelection={() => setSelectedLibraryIds([])}
+              >
+                <Button
+                  variant="error-outline"
+                  size="lg"
+                  disabled={isMutating}
+                  onClick={() =>
+                    setLibrariesToDelete(libraries.filter((library) => selectedLibraryIds.includes(library.id)))
+                  }
                 >
-                  {PAGE_SIZE_OPTIONS.map((value) => (
-                    <option key={value} value={value}>
-                      {t("requirement_libraries.list.per_page_value", { count: value })}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  className="grid size-7 place-items-center rounded-md border border-subtle text-secondary hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label={t("requirement_libraries.list.previous_page")}
-                >
-                  <ChevronLeft className="size-3.5" />
-                </button>
-                <span className="min-w-16 text-center tabular-nums">
-                  {t("requirement_libraries.list.page", { page, total: totalPages })}
-                </span>
-                <button
-                  type="button"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                  className="grid size-7 place-items-center rounded-md border border-subtle text-secondary hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label={t("requirement_libraries.list.next_page")}
-                >
-                  <ChevronRight className="size-3.5" />
-                </button>
+                  {t("delete")}
+                </Button>
+              </BulkOperationsBar>
+              <div className="flex h-11 items-center justify-between border-t border-subtle bg-surface-1 px-4 text-11 text-secondary">
+                <div className="flex items-center gap-2">
+                  <span>{t("requirement_libraries.list.total", { count: filteredLibraries.length })}</span>
+                  <select
+                    value={perPage}
+                    onChange={(event) => setPerPage(Number(event.target.value))}
+                    className="h-7 rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:bg-layer-transparent-hover"
+                    aria-label={t("requirement_libraries.list.per_page")}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((value) => (
+                      <option key={value} value={value}>
+                        {t("requirement_libraries.list.per_page_value", { count: value })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    className="grid size-7 place-items-center rounded-md border border-subtle text-secondary hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={t("requirement_libraries.list.previous_page")}
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
+                  <span className="min-w-16 text-center tabular-nums">
+                    {t("requirement_libraries.list.page", { page, total: totalPages })}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    className="grid size-7 place-items-center rounded-md border border-subtle text-secondary hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={t("requirement_libraries.list.next_page")}
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </>
