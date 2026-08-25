@@ -15,6 +15,7 @@ import { MembersSettingsLoader } from "@/components/ui/loader/settings/members";
 import { useMember } from "@/hooks/store/use-member";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRoles } from "@/hooks/store/use-product-roles";
+import { useProductsContext } from "../../context";
 import { AddProductMembersModal, type TProductMemberOption } from "./add-members-modal";
 import { ConfirmProductMemberRemove } from "./confirm-member-remove";
 import { ProductRoleMultiSelect } from "./product-role-multi-select";
@@ -90,9 +91,10 @@ function ProductMemberNameCell(props: {
   row: TProductMemberRow;
   workspaceSlug: string;
   removeLabel: string;
+  isOwner: boolean;
   onRemove: (row: TProductMemberRow) => void;
 }) {
-  const { row, workspaceSlug, removeLabel, onRemove } = props;
+  const { row, workspaceSlug, removeLabel, isOwner, onRemove } = props;
   const displayName = getMemberFullName(row.member);
 
   return (
@@ -103,21 +105,24 @@ function ProductMemberNameCell(props: {
       <Link href={`/${workspaceSlug}/profile/${row.member.id}`} className="min-w-0 flex-1 truncate text-secondary">
         {displayName}
       </Link>
-      <CustomMenu
-        ellipsis
-        closeOnSelect
-        placement="bottom-end"
-        optionsClassName="p-1.5"
-        buttonClassName="p-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-        ariaLabel={removeLabel}
-      >
-        <CustomMenu.MenuItem onClick={() => onRemove(row)}>
-          <div className="flex items-center gap-1 font-medium text-danger-primary">
-            <CircleMinus className="size-3.5 shrink-0" />
-            {removeLabel}
-          </div>
-        </CustomMenu.MenuItem>
-      </CustomMenu>
+      {/* 负责人必须始终是成员，移不掉：换人得先在产品设置里改负责人 */}
+      {!isOwner && (
+        <CustomMenu
+          ellipsis
+          closeOnSelect
+          placement="bottom-end"
+          optionsClassName="p-1.5"
+          buttonClassName="p-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          ariaLabel={removeLabel}
+        >
+          <CustomMenu.MenuItem onClick={() => onRemove(row)}>
+            <div className="flex items-center gap-1 font-medium text-danger-primary">
+              <CircleMinus className="size-3.5 shrink-0" />
+              {removeLabel}
+            </div>
+          </CustomMenu.MenuItem>
+        </CustomMenu>
+      )}
     </div>
   );
 }
@@ -164,6 +169,8 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
     productId
   );
   const { roles, isLoading: isRolesLoading, error: rolesError, fetchRoles } = useProductRoles(workspaceSlug, productId);
+  const { products } = useProductsContext();
+  const ownerId = products.find(({ id }) => id === productId)?.owner;
 
   const rows = useMemo<TProductMemberRow[]>(
     () =>
@@ -255,10 +262,15 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
         }),
       });
     } catch (requestError) {
+      const errorCode =
+        requestError && typeof requestError === "object" ? (requestError as { error?: string }).error : undefined;
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("workspace_products.settings.members.remove_failed_title"),
-        message: t("workspace_products.settings.members.try_again"),
+        message:
+          errorCode === "PRODUCT_OWNER_CANNOT_BE_REMOVED"
+            ? t("workspace_products.validation.owner_cannot_be_removed")
+            : t("workspace_products.settings.members.try_again"),
       });
       throw requestError;
     }
@@ -281,6 +293,7 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
           row={row}
           workspaceSlug={workspaceSlug}
           removeLabel={t("workspace_products.settings.members.remove")}
+          isOwner={row.member.id === ownerId}
           onRemove={setMemberToRemove}
         />
       ),

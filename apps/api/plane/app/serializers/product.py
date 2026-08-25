@@ -128,6 +128,12 @@ class ProductSerializer(BaseSerializer):
             raise serializers.ValidationError(
                 "Owner must be an active member of this workspace."
             )
+        # 创建时产品还不存在、成员表必然为空，负责人由 ViewSet.create 落成首个产品成员；
+        # 编辑时负责人必须已经在成员里，否则产品成员这层就形同虚设。
+        if self.instance is not None and not ProductMember.objects.filter(
+            product=self.instance, member=owner
+        ).exists():
+            raise serializers.ValidationError("PRODUCT_OWNER_NOT_MEMBER")
         return owner
 
     def validate_description_html(self, value):

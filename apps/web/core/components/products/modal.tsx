@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { AlertTriangle, Globe2, LockKeyhole, Pencil, X } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
@@ -20,6 +20,7 @@ import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { handleCoverImageChange } from "@/helpers/cover-image.helper";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
+import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -75,14 +76,29 @@ export const ProductModal = observer(function ProductModal() {
     resetAssets,
   } = useProductEditorAssets({ entityId: editorEntityId, workspaceSlug });
   const { isMobile } = usePlatformOS();
+  // 编辑态才按产品成员收窄负责人候选；创建态产品还不存在、成员表为空，
+  // 只能从工作区成员里选，后端会把选中的人落成首个产品成员。
+  const ownerScopeProductId = isOpen && editable && mode !== "create" ? product?.id : undefined;
+  const { members: productMembers } = useProductMembers(workspaceSlug, ownerScopeProductId);
+  const ownerCandidateIds = useMemo(() => {
+    if (!ownerScopeProductId) return undefined;
+    const ids = productMembers.map((membership) => membership.member);
+    // 成员还在加载时先兜住当前负责人，否则下拉会短暂空掉
+    if (product?.owner && !ids.includes(product.owner)) ids.unshift(product.owner);
+    return ids;
+  }, [ownerScopeProductId, product?.owner, productMembers]);
   const hasWorkspaceAdminAccess =
     workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug);
   const canManageProduct = Boolean(product && (product.owner === currentUser?.id || hasWorkspaceAdminAccess));
+  const isProductMember = Boolean(
+    currentUser?.id && productMembers.some((membership) => membership.member === currentUser.id)
+  );
   const willLosePrivateAccess = Boolean(
     editable &&
     isPrivateProduct &&
     ownerId &&
     ownerId !== currentUser?.id &&
+    !isProductMember &&
     !hasWorkspaceAdminAccess
   );
 
@@ -214,7 +230,11 @@ export const ProductModal = observer(function ProductModal() {
           ? (error as { name?: string[]; identifier?: string[]; owner?: string[] })
           : {};
       if (errorPayload.owner?.[0]) {
-        setOwnerError(String(errorPayload.owner[0]));
+        setOwnerError(
+          errorPayload.owner[0] === "PRODUCT_OWNER_NOT_MEMBER"
+            ? t("workspace_products.validation.owner_not_member")
+            : String(errorPayload.owner[0])
+        );
       } else if (errorPayload.identifier?.[0]) {
         // 后端返回 PRODUCT_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
         setIdentifierError(
@@ -435,6 +455,7 @@ export const ProductModal = observer(function ProductModal() {
                     <MemberDropdown
                       multiple={false}
                       value={ownerId}
+                      memberIds={ownerCandidateIds}
                       onChange={(value) => {
                         setOwnerId(value);
                         setOwnerError(null);

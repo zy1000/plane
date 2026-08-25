@@ -2053,7 +2053,11 @@ export default {
       private_description: "Visible only to the owner, product members, and workspace admins.",
       private_access_warning: "You will lose access after saving unless you add yourself as a product member.",
     },
-    validation: { owner_required: "Select an owner" },
+    validation: {
+      owner_required: "Select an owner",
+      owner_not_member: "The owner must be a member of this product. Add them in member settings first.",
+      owner_cannot_be_removed: "This member is the product owner. Change the owner before removing them.",
+    },
     actions: {
       view: "View",
       edit: "Edit",

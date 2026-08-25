@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.serializers.product import ProductSerializer
 from plane.app.views.base import BaseViewSet
-from plane.db.models import Product, Workspace
+from plane.db.models import Product, ProductMember, Workspace
 from plane.utils.product import (
     can_create_product,
     can_manage_product,
@@ -103,6 +103,9 @@ class ProductViewSet(BaseViewSet):
             network=serializer.validated_data.get("network", 2),
             created_by=request.user,
         )
+        # 负责人同时是首个产品成员：之后改负责人只能从成员里选（见 validate_owner），
+        # 这里是成员表的起点，缺了它产品建完就没有任何成员。
+        ProductMember.objects.get_or_create(product=product, member_id=product.owner_id)
         # 创建流的封面资产上传时 product 还不存在，这里反向把 asset 挂到产品上
         # （正向 product.cover_image_asset 已由 serializer.save 落库）
         cover_asset = serializer.validated_data.get("cover_image_asset")

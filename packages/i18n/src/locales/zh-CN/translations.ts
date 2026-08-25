@@ -2231,7 +2231,11 @@ export default {
       private_description: "仅负责人、产品成员和工作区管理员可查看。",
       private_access_warning: "保存后你将无法继续访问；如需保留查看权限，请将自己添加为产品成员。",
     },
-    validation: { owner_required: "请选择负责人" },
+    validation: {
+      owner_required: "请选择负责人",
+      owner_not_member: "负责人必须是该产品的成员，请先在成员设置里添加",
+      owner_cannot_be_removed: "该成员是产品负责人，请先更换负责人再移除",
+    },
     actions: {
       view: "查看",
       edit: "编辑",

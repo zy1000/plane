@@ -104,6 +104,13 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     return Array.from(byId.values());
   }, [approverDetails, currentUser, productMembers]);
 
+  // 负责人只能从产品成员里选。成员还在加载时先兜住当前负责人，否则下拉会短暂空掉。
+  const ownerCandidateIds = useMemo(() => {
+    const ids = productMembers.map((membership) => membership.member);
+    if (product?.owner && !ids.includes(product.owner)) ids.unshift(product.owner);
+    return ids;
+  }, [product?.owner, productMembers]);
+
   const isApprovalDirty = useMemo(
     () => Boolean(approvalBaseline && approvalDraft && serializeApprovalDraft(approvalDraft) !== approvalBaseline),
     [approvalBaseline, approvalDraft]
@@ -278,7 +285,12 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         error && typeof error === "object"
           ? (error as { name?: string[]; identifier?: string[]; owner?: string[] })
           : {};
-      if (errorPayload.owner?.[0]) setOwnerError(String(errorPayload.owner[0]));
+      if (errorPayload.owner?.[0])
+        setOwnerError(
+          errorPayload.owner[0] === "PRODUCT_OWNER_NOT_MEMBER"
+            ? t("workspace_products.validation.owner_not_member")
+            : String(errorPayload.owner[0])
+        );
       // 后端返回 PRODUCT_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
       else if (errorPayload.identifier?.[0])
         setIdentifierError(
@@ -380,6 +392,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
                 <MemberDropdown
                   multiple={false}
                   value={ownerId}
+                  memberIds={ownerCandidateIds}
                   onChange={(value) => {
                     setOwnerId(value);
                     setOwnerError(null);

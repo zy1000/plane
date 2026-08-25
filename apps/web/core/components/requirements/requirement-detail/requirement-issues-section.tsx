@@ -1,9 +1,9 @@
 /**
  * 需求详情的「关联工作项」Section（项目侧变体）。
  *
- * 主入口在项目，不在产品：拆分/关联/解除都要求一个确定的项目语境（RequirementIssue
- * 挂在 (需求, 项目) 下），产品侧的按项目分组只读展示复用这里导出的行组件
- * （见 requirement-issues-by-project.tsx）。
+ * 主入口在项目，不在产品：拆分/关联都要求一个确定的项目语境（RequirementIssue 挂在
+ * (需求, 项目) 下），产品侧的按项目分组复用这里导出的行组件
+ * （见 requirement-issues-by-project.tsx）—— 解除不用选项目，两侧都给。
  *
  * 拆分是「创建 + 关联」两步、非原子（§1.4 已裁决不做组合端点）：第二步失败时工作项
  * 已经创建成功，所以失败提示引导走「关联已有工作项」补救，而不是让人重拆一条。
@@ -33,8 +33,8 @@ import { RequirementRelationCollapsible } from "./requirement-relation-collapsib
 /**
  * 关联工作项的一行。版式对齐工作项详情子工作项：左缩进 + 箭头占位，属性收在右侧。
  *
- * 项目侧 Section 与产品侧按项目分组共用 —— 两侧的差别只有「能不能解除」，收在
- * onUnlink 是否传入里，不另开一套行渲染。
+ * 项目侧 Section 与产品侧按项目分组共用 —— 能不能解除收在 onUnlink 是否传入里，
+ * 不另开一套行渲染。
  */
 export const RequirementIssueRow = ({
   workspaceSlug,
@@ -46,7 +46,7 @@ export const RequirementIssueRow = ({
   issue: TRequirementIssue;
   /** 编号徽章与 /browse/ 链接都要它；私密项目解析不到时编号与跳转一并退化为纯文本 */
   projectIdentifier?: string;
-  /** 传了才渲染行尾的解除按钮（项目侧 canManage）；产品侧只读不传 */
+  /** 传了才渲染行尾的解除按钮：项目侧按 requirement_link.manage，产品侧暂只按 canManage */
   onUnlink?: (issue: TRequirementIssue) => void;
 }) => {
   const { t } = useTranslation();

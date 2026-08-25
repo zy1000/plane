@@ -68,7 +68,12 @@ export const RequirementProductRelations = (props: TProps) => {
         />
       )}
       <div className="flex flex-col">
-        <RequirementIssuesByProject workspaceSlug={workspaceSlug} requirement={requirement} />
+        <RequirementIssuesByProject
+          workspaceSlug={workspaceSlug}
+          requirement={requirement}
+          canManage={canManage}
+          onChanged={onChanged}
+        />
         <RequirementTestCasesSection
           workspaceSlug={workspaceSlug}
           productId={productId}

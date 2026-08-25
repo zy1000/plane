@@ -178,6 +178,13 @@ class ProductMemberViewSet(BaseViewSet):
                 {"error": "You do not have permission to remove product members."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # 负责人必须始终在成员里（见 ProductSerializer.validate_owner），
+        # 放行的话产品就再也改不了负责人了 —— 要换人先改负责人再移除。
+        if product_member.member_id == product_member.product.owner_id:
+            return Response(
+                {"error": "PRODUCT_OWNER_CANNOT_BE_REMOVED"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         product_member.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
