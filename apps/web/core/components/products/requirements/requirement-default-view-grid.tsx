@@ -845,9 +845,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                           <span className="min-w-0 truncate" title={requirement.module_name}>
                             {requirement.module_name}
                           </span>
-                        ) : (
-                          <span className="text-placeholder">—</span>
-                        )}
+                        ) : null}
                       </div>
                       {selectHost === "module" && (
                         <RequirementGridHoverSelect

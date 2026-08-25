@@ -1439,6 +1439,7 @@ export default {
     view_change_request: "View change request",
     has_unsubmitted_changes: "Changed after approval, not submitted yet",
     approved_version: "Approved v{version}",
+    review: "Review",
     submit_review: "Submit for review",
     submit_review_count: "Submit for review ({count})",
     withdraw_review: "Withdraw review",

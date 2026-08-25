@@ -167,7 +167,7 @@ export function ChangeRequestDetail(props: TProps) {
       <div className="grid flex-1 place-items-center px-6 py-16 text-center">
         <div>
           <p className="text-13 font-medium text-primary">{t("workspace_products.requirements.change.error_title")}</p>
-          {store.error && <p className="mt-1 text-12 text-secondary">{store.error}</p>}
+          {store.error && <p className="mt-1 text-13 text-secondary">{store.error}</p>}
           <Button className="mt-3" variant="secondary" onClick={onBack}>
             {t("common.back")}
           </Button>
@@ -184,7 +184,7 @@ export function ChangeRequestDetail(props: TProps) {
   });
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto text-13">
         <header>
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-subtle px-4 py-3 md:px-6">
             <button
@@ -206,7 +206,7 @@ export function ChangeRequestDetail(props: TProps) {
               {changeRequest.reason || t("workspace_products.requirements.change.untitled")}
             </span>
             <span aria-hidden className="hidden h-4 w-px shrink-0 bg-layer-3 sm:block" />
-            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-12 text-tertiary">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-13 text-tertiary">
               <Avatar
                 size="sm"
                 name={changeRequest.created_by_detail?.display_name ?? ""}
@@ -267,10 +267,10 @@ export function ChangeRequestDetail(props: TProps) {
                         {t(`workspace_products.requirements.change.change_type.${item.change_type}`)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-12 text-primary">
+                        <span className="block truncate text-13 text-primary">
                           {item.title || t("requirement_detail.untitled")}
                         </span>
-                        <span className="block truncate text-10 text-tertiary">
+                        <span className="block truncate text-13 text-tertiary">
                           {item.requirement_type_name}
                         </span>
                       </span>

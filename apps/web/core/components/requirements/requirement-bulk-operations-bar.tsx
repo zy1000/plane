@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpenDot, Send, Trash2 } from "lucide-react";
+import { FolderOpenDot } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Checkbox } from "@plane/ui";
@@ -57,8 +57,7 @@ export function RequirementBulkOperationsBar(props: TProps) {
         <div className="flex items-center gap-1.5">
           {onSubmitReview && submitReviewCount > 0 && (
             <Button variant="primary" size="lg" disabled={disabled} onClick={onSubmitReview}>
-              <Send className="size-3.5" />
-              {t("requirement_approval.submit_review")}
+              {t("requirement_approval.review")}
             </Button>
           )}
           {onMoveToModule && (
@@ -74,7 +73,6 @@ export function RequirementBulkOperationsBar(props: TProps) {
               disabled={disabled || effectiveDeleteCount === 0}
               onClick={onDelete}
             >
-              <Trash2 className="size-3.5" />
               {t("delete")}
             </Button>
           )}

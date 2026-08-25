@@ -34,7 +34,7 @@ export const DIFF_OLD_VALUE = "text-danger-secondary line-through";
 export const DIFF_NEW_VALUE = "text-success-secondary";
 
 export const PILL_BASE = "inline-flex items-center rounded-full px-2 py-0.5 text-10 font-medium";
-export const CHANGE_TYPE_BADGE = "inline-flex items-center rounded px-1.5 py-0.5 text-10 font-medium";
+export const CHANGE_TYPE_BADGE = "inline-flex items-center rounded px-2 py-0.5 text-13 font-medium";
 
 /** 「全部通过」/「任一通过」/「{n} 人通过」——审批进度卡片与底部审批条共用 */
 export const approvalRuleLabel = (

@@ -850,9 +850,7 @@ export const RequirementGrid = observer(
                         <span className="min-w-0 truncate" title={requirement.module_name}>
                           {requirement.module_name}
                         </span>
-                      ) : (
-                        <span className="text-placeholder">—</span>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 )}

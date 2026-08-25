@@ -1603,6 +1603,7 @@ export default {
     view_change_request: "查看变更单",
     has_unsubmitted_changes: "已通过审批后又改过，尚未提交",
     approved_version: "已通过 v{version}",
+    review: "评审",
     submit_review: "提交评审",
     submit_review_count: "提交评审 ({count})",
     withdraw_review: "撤回评审",

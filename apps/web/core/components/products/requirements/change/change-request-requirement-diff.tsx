@@ -203,12 +203,12 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
         </span>
         {/* 一张单里可能有十几条需求，编号是审批人唯一能拿去对照的稳定标识 */}
         <RequirementIdentifier displayId={item.display_id} size="sm" />
-        <h3 className="min-w-0 truncate text-14 font-medium text-primary">
+        <h3 className="min-w-0 truncate text-13 font-medium text-primary">
           {item.title || t("requirement_detail.untitled")}
         </h3>
-        <span className="text-11 text-tertiary">{item.requirement_type_name}</span>
+        <span className="text-13 text-tertiary">{item.requirement_type_name}</span>
         {item.base_version !== null && (
-          <span className="text-11 text-tertiary tabular-nums">
+          <span className="text-13 text-tertiary tabular-nums">
             {t("workspace_products.requirements.change.based_on_version", {
               version: item.base_version,
             })}
@@ -218,7 +218,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
           <button
             type="button"
             onClick={() => setShowAll((current) => !current)}
-            className="ml-auto text-11 text-accent-primary hover:underline"
+            className="ml-auto text-13 text-accent-primary hover:underline"
           >
             {showAll
               ? t("workspace_products.requirements.change.show_changed_only", { count: changedCount })
@@ -230,7 +230,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
       <div className="overflow-hidden rounded-md border border-subtle">
         {/* 新增/删除只有一侧有内容，两栏表头会误导成「另一侧被清空」 */}
         {!isCreate && !isDelete && (
-          <div className="grid grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-subtle bg-layer-1 px-3 py-1.5 text-11 font-medium text-secondary">
+          <div className="grid grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-subtle bg-layer-1 px-3 py-1.5 text-13 font-medium text-secondary">
             <span>{t("workspace_products.requirements.change.field")}</span>
             <span>{t("workspace_products.requirements.change.before")}</span>
             <span>{t("workspace_products.requirements.change.after")}</span>
@@ -238,7 +238,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
         )}
 
         {visibleRows.length === 0 ? (
-          <p className="px-3 py-4 text-12 text-placeholder">
+          <p className="px-3 py-4 text-13 text-placeholder">
             {t("workspace_products.requirements.change.no_field_changes")}
           </p>
         ) : (
@@ -253,7 +253,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                 row.changed && !isCreate && !isDelete && "bg-warning-subtle/10"
               )}
             >
-              <span className="text-12 text-tertiary">{row.label}</span>
+              <span className="text-13 text-tertiary">{row.label}</span>
               {isCreate ? (
                 <SideValue
                   field={row.field}
@@ -301,9 +301,9 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
         const shown = showAll ? aligned : changedRows;
         return (
           <div key={form.id} className="overflow-hidden rounded-md border border-subtle">
-            <div className="flex items-center gap-2 bg-layer-1 px-3 py-1.5 text-12 font-medium text-primary">
+            <div className="flex items-center gap-2 bg-layer-1 px-3 py-1.5 text-13 font-medium text-primary">
               {form.name}
-              <span className="text-11 font-normal text-tertiary">
+              <span className="text-13 font-normal text-tertiary">
                 {t("workspace_products.requirements.change.subform_row_delta", {
                   before: getFormRows(before?.data ?? {}, form.id).length,
                   after: getFormRows(after?.data ?? {}, form.id).length,
@@ -311,14 +311,14 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-full border-collapse text-left">
+              <table className="w-full min-w-full border-collapse text-left text-13">
                 <thead>
                   <tr className="border-b border-subtle">
-                    <th className="w-16 px-2 py-1.5 text-11 font-medium text-secondary" />
+                    <th className="w-16 px-2 py-1.5 text-13 font-medium text-secondary" />
                     {children.map((child) => (
                       <th
                         key={child.id}
-                        className="min-w-32 border-l border-subtle px-2.5 py-1.5 text-11 font-medium text-secondary"
+                        className="min-w-32 border-l border-subtle px-2.5 py-1.5 text-13 font-medium text-secondary"
                       >
                         {child.name}
                       </th>
@@ -328,7 +328,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                 <tbody>
                   {shown.map((row) => (
                     <tr key={row.key} className="border-b border-subtle last:border-b-0">
-                      <td className="px-2 py-1.5 align-top text-10 text-tertiary">
+                      <td className="px-2 py-1.5 align-top text-13 text-tertiary">
                         {t(`workspace_products.requirements.change.subform_state.${row.state}`)}
                         {row.moved && (
                           <span className="mt-0.5 block text-warning-primary tabular-nums">
