@@ -88,9 +88,6 @@ export function CreateBaselineModal(props: TProps) {
         <h2 className="text-16 font-semibold text-primary">
           {t("workspace_products.requirements.baseline.form.title")}
         </h2>
-        <p className="mt-1 text-12 leading-5 text-secondary">
-          {t("workspace_products.requirements.baseline.form.description")}
-        </p>
 
         <label className="mt-4 block">
           <span className="mb-2 block text-12 font-medium text-primary">
@@ -101,8 +98,7 @@ export function CreateBaselineModal(props: TProps) {
             onChange={(event) => setName(event.target.value)}
             maxLength={255}
             autoFocus
-            className="focus:border-accent-primary w-full rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t("workspace_products.requirements.baseline.form.name_placeholder")}
+            className="focus:border-accent-primary w-full rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
           />
         </label>
 
@@ -115,8 +111,7 @@ export function CreateBaselineModal(props: TProps) {
             onChange={(event) => setDescription(event.target.value)}
             rows={2}
             maxLength={2000}
-            className="focus:border-accent-primary w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t("workspace_products.requirements.baseline.form.summary_placeholder")}
+            className="focus:border-accent-primary w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none"
           />
         </label>
 
