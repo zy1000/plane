@@ -79,12 +79,9 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
   };
   const totalPages = Math.max(1, Math.ceil(filteredLibraries.length / perPage));
   const paginatedLibraries = filteredLibraries.slice((page - 1) * perPage, page * perPage);
-  // 非空标准库删不掉（后端会拒），所以也不允许勾选，否则批量删除必然失败
-  const selectableLibraryIds = paginatedLibraries
-    .filter((library) => library.item_count === 0)
-    .map((library) => library.id);
-  const selectedOnPageCount = selectableLibraryIds.filter((id) => selectedLibraryIds.includes(id)).length;
-  const isPageSelected = selectableLibraryIds.length > 0 && selectedOnPageCount === selectableLibraryIds.length;
+  const pageLibraryIds = paginatedLibraries.map((library) => library.id);
+  const selectedOnPageCount = pageLibraryIds.filter((id) => selectedLibraryIds.includes(id)).length;
+  const isPageSelected = pageLibraryIds.length > 0 && selectedOnPageCount === pageLibraryIds.length;
   const isPagePartiallySelected = selectedOnPageCount > 0 && !isPageSelected;
 
   useEffect(() => {
@@ -127,10 +124,13 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
 
   const togglePageSelection = () => {
     setSelectedLibraryIds((current) => {
-      if (isPageSelected) return current.filter((id) => !selectableLibraryIds.includes(id));
-      return Array.from(new Set([...current, ...selectableLibraryIds]));
+      if (isPageSelected) return current.filter((id) => !pageLibraryIds.includes(id));
+      return Array.from(new Set([...current, ...pageLibraryIds]));
     });
   };
+
+  // 删库会连带删掉库内条目，弹窗里要把这个数字亮出来
+  const itemsToDeleteCount = librariesToDelete.reduce((total, library) => total + library.item_count, 0);
 
   const handleDelete = async () => {
     if (librariesToDelete.length === 0) return;
@@ -337,7 +337,6 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                 </thead>
                 <tbody>
                   {paginatedLibraries.map((library) => {
-                    const isEmptyLibrary = library.item_count === 0;
                     const isSelected = selectedLibraryIds.includes(library.id);
                     return (
                       <tr
@@ -350,7 +349,6 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                         <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                           <Checkbox
                             checked={isSelected}
-                            disabled={!isEmptyLibrary}
                             onChange={() =>
                               setSelectedLibraryIds((current) =>
                                 isSelected ? current.filter((id) => id !== library.id) : [...current, library.id]
@@ -390,20 +388,11 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                           className="px-3 py-2.5 text-center align-middle"
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <Tooltip
-                            tooltipContent={
-                              isEmptyLibrary
-                                ? t("delete")
-                                : t("requirement_libraries.list.delete_blocked", {
-                                    count: library.item_count,
-                                  })
-                            }
-                          >
+                          <Tooltip tooltipContent={t("delete")}>
                             <button
                               type="button"
-                              disabled={!isEmptyLibrary}
                               onClick={() => setLibrariesToDelete([library])}
-                              className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-tertiary"
+                              className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary"
                               aria-label={t("requirement_libraries.list.delete_library", { name: library.name })}
                             >
                               <Trash2 className="size-3.5" />
@@ -471,15 +460,23 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
             : "requirement_libraries.list.delete_title"
         )}
         content={
-          librariesToDelete.length > 1 ? (
-            t("requirement_libraries.list.delete_many_description", { count: librariesToDelete.length })
-          ) : (
-            <>
-              {t("requirement_libraries.list.delete_description_prefix")}
-              <span className="font-medium text-primary">{librariesToDelete[0]?.name}</span>
-              {t("requirement_libraries.list.delete_description_suffix")}
-            </>
-          )
+          <>
+            {librariesToDelete.length > 1 ? (
+              t("requirement_libraries.list.delete_many_description", { count: librariesToDelete.length })
+            ) : (
+              <>
+                {t("requirement_libraries.list.delete_description_prefix")}
+                <span className="font-medium text-primary">{librariesToDelete[0]?.name}</span>
+                {t("requirement_libraries.list.delete_description_suffix")}
+              </>
+            )}
+            {/* AlertModalCore 已经把 content 包在 <p> 里，这里只能用 span 换行 */}
+            {itemsToDeleteCount > 0 && (
+              <span className="mt-2 block text-danger-primary">
+                {t("requirement_libraries.list.delete_cascade_notice", { count: itemsToDeleteCount })}
+              </span>
+            )}
+          </>
         }
       />
     </>

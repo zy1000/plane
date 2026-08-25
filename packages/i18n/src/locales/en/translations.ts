@@ -1786,7 +1786,7 @@ export default {
       delete_many_description: "Delete {count} requirement libraries? This cannot be undone.",
       delete_success: "Deleted {count} requirement libraries.",
       delete_library: "Delete {name}",
-      delete_blocked: "Remove the {count} items in this library first.",
+      delete_cascade_notice: "The {count} items in it will be deleted as well.",
       delete_title: "Delete standard library?",
       delete_description_prefix: "Are you sure you want to delete ",
       delete_description_suffix: "? This action cannot be undone.",

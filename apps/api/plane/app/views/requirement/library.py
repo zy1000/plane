@@ -25,7 +25,13 @@ class RequirementLibraryViewSet(BaseViewSet):
             .filter(workspace__slug=self.workspace_slug)
             .select_related("workspace", "requirement_type", "created_by", "updated_by")
             .annotate(
-                item_count=Count("items", distinct=True),
+                # 条目是软删除，join 不会自动带上 deleted_at 过滤 —— 不加的话
+                # 清空过的库会一直显示历史条目数
+                item_count=Count(
+                    "items",
+                    filter=Q(items__deleted_at__isnull=True),
+                    distinct=True,
+                ),
                 field_count=Count(
                     "requirement_type__fields",
                     filter=Q(requirement_type__fields__deleted_at__isnull=True),
@@ -101,14 +107,8 @@ class RequirementLibraryViewSet(BaseViewSet):
                 {"error": "Requirement library not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        # 删库会级联删掉库内所有条目，先要求清空以免误操作
-        if library.items.exists():
-            return Response(
-                {
-                    "error": "Remove the items in this library first.",
-                    "code": "REQUIREMENT_LIBRARY_NOT_EMPTY",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+        # 库内条目随库级联软删（soft_delete_related_objects）。条目永不审批、
+        # 没有版本与基线，导入到产品的需求只留裸 UUID 溯源，删库对它们没有副作用，
+        # 所以不要求先清空 —— 误删由前端确认弹窗兜底，与 Product 的口径一致
         library.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

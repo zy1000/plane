@@ -1956,7 +1956,7 @@ export default {
       delete_many_description: "确定要删除这 {count} 个需求标准库吗？此操作无法撤销。",
       delete_success: "已删除 {count} 个需求标准库。",
       delete_library: "删除{name}",
-      delete_blocked: "请先清空库内的 {count} 条条目。",
+      delete_cascade_notice: "库内的 {count} 条条目将一并删除。",
       delete_title: "删除需求标准库？",
       delete_description_prefix: "确定要删除“",
       delete_description_suffix: "”吗？此操作无法撤销。",
