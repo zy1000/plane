@@ -4,6 +4,7 @@ export * from "./requirement-builtin-fields";
 export * from "./requirement-builtin-layout";
 export * from "./requirement-status-cell";
 export * from "./requirement-grid";
+export * from "./requirement-bulk-operations-bar";
 export * from "./requirement-field-builder";
 export * from "./requirement-parent-dropdown";
 export * from "./requirement-fields-preview";

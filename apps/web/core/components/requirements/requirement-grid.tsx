@@ -108,6 +108,7 @@ import { useRequirementTitles } from "./use-requirement-titles";
 import { SubformRowHandle } from "./subform-row-handle";
 import { getSubformDropEdgeClass, moveFormRow, useSubformRowDnd } from "./use-subform-row-dnd";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
+import { RequirementBulkOperationsBar } from "@/components/requirements/requirement-bulk-operations-bar";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
 
 type TProps = {
@@ -1178,42 +1179,7 @@ export const RequirementGrid = observer(
     );
     const useExternalToolbar = Boolean(toolbarPortalEl);
 
-    const toolbarActions: ReactNode = showSelectionActions ? (
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span className="px-1 text-12 font-medium text-primary tabular-nums" aria-live="polite">
-          {t("requirement_grid.data.selected_count", { count: selectedIds.length })}
-        </span>
-        <Button variant="ghost" size="lg" onClick={() => setSelectedIds([])}>
-          {t("requirement_grid.data.clear_selection")}
-        </Button>
-        {onSubmitReview && submittableSelectedIds.length > 0 && (
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => onSubmitReview(submittableSelectedIds)}
-            disabled={isMutating}
-          >
-            <Send className="size-3.5" />
-            {t("requirement_approval.submit_review_count", { count: submittableSelectedIds.length })}
-          </Button>
-        )}
-        {onMoveToModule && (
-          <Button variant="secondary" size="lg" onClick={() => onMoveToModule(selectedIds)} disabled={isMutating}>
-            <FolderOpenDot className="size-3.5" />
-            {t("requirement_modules.move_to_module")}
-          </Button>
-        )}
-        <Button
-          variant="error-outline"
-          size="lg"
-          onClick={() => setIdsToDelete(deletableSelectedIds)}
-          disabled={isMutating || deletableSelectedIds.length === 0}
-        >
-          <Trash2 className="size-3.5" />
-          {t("delete")}
-        </Button>
-      </div>
-    ) : (
+    const toolbarActions: ReactNode = (
       <>
         <div className="flex items-center">
           {!isSearchOpen && (
@@ -1555,7 +1521,20 @@ export const RequirementGrid = observer(
           )}
         </div>
 
-        <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+        <div className="relative shrink-0">
+          {showSelectionActions && (
+            <RequirementBulkOperationsBar
+              selectedCount={selectedIds.length}
+              disabled={isMutating}
+              onClearSelection={() => setSelectedIds([])}
+              submitReviewCount={submittableSelectedIds.length}
+              onSubmitReview={onSubmitReview ? () => onSubmitReview(submittableSelectedIds) : undefined}
+              deleteCount={deletableSelectedIds.length}
+              onDelete={() => setIdsToDelete(deletableSelectedIds)}
+              onMoveToModule={onMoveToModule ? () => onMoveToModule(selectedIds) : undefined}
+            />
+          )}
+          <div className="flex items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
           <div className="flex items-center gap-4 text-sm">
             <span className="text-secondary">
               {displayedTotalCount > 0
@@ -1584,6 +1563,7 @@ export const RequirementGrid = observer(
             }}
             onShowSizeChange={(_page, pageSize) => onPerPageChange(pageSize)}
           />
+          </div>
         </div>
 
         <RequirementCreateModal

@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -69,6 +68,7 @@ import {
   useRequirementGridColumnResize,
   useRequirementGridScrollContainer,
 } from "@/components/requirements/requirement-grid-shared";
+import { RequirementBulkOperationsBar } from "@/components/requirements/requirement-bulk-operations-bar";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { copyRequirementData } from "@/components/requirements/requirement-row-data";
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
@@ -418,9 +418,18 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
   const visibleIds = requirements.map((requirement) => requirement.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  /**
+   * 勾选会跨页保留；can_submit_review 只随当前页数据下发。
+   * 翻页后旧行不在 requirements 里，若当场 find 会把可提交数算成 0，提交按钮被藏掉。
+   * 用已见过的行缓存判断，删除则本来就按 selectedIds，两边一致。
+   */
+  const canSubmitReviewByIdRef = useRef<Map<string, boolean>>(new Map());
+  for (const item of requirements) {
+    canSubmitReviewByIdRef.current.set(item.id, Boolean(item.can_submit_review));
+  }
   /** 可提交的选中行。撤回不做批量 —— 撤回作用在变更单上，一个选区可能跨多张单 */
   const submittableSelectedIds = useMemo(
-    () => selectedIds.filter((id) => requirements.find((item) => item.id === id)?.can_submit_review),
+    () => selectedIds.filter((id) => canSubmitReviewByIdRef.current.get(id)),
     [requirements, selectedIds]
   );
 
@@ -521,21 +530,6 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           onToggle={toggleDisplayColumn}
         />
       </FiltersDropdown>
-      {!readOnly && onSubmitReview && submittableSelectedIds.length > 0 && (
-        <Button
-          variant="primary"
-          size="lg"
-          disabled={isMutating}
-          onClick={() => onSubmitReview(submittableSelectedIds)}
-        >
-          {t("requirement_approval.submit_review_count", { count: submittableSelectedIds.length })}
-        </Button>
-      )}
-      {!readOnly && selectedIds.length > 0 && (
-        <Button variant="error-outline" size="lg" disabled={isMutating} onClick={() => setIdsToDelete(selectedIds)}>
-          {t("workspace_products.requirements.data.views.delete_selected", { count: selectedIds.length })}
-        </Button>
-      )}
     </div>
   );
 
@@ -1057,7 +1051,18 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
         )}
       </div>
 
-      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+      <div className="relative shrink-0">
+        {!readOnly && (
+          <RequirementBulkOperationsBar
+            selectedCount={selectedIds.length}
+            disabled={isMutating}
+            onClearSelection={() => setSelectedIds([])}
+            submitReviewCount={submittableSelectedIds.length}
+            onSubmitReview={onSubmitReview ? () => onSubmitReview(submittableSelectedIds) : undefined}
+            onDelete={() => setIdsToDelete(selectedIds)}
+          />
+        )}
+        <div className="flex items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
         <span className="text-sm text-secondary">
           {isLoading && <LoaderIcon className="mr-1 inline size-3.5 animate-spin" />}
           {totalCount > 0
@@ -1084,6 +1089,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
             onCursorChange(`${perPage}:${page - 1}:0`);
           }}
         />
+        </div>
       </div>
 
       <AlertModalCore
