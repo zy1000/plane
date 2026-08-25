@@ -130,7 +130,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
 
   return (
     <aside
-      className="relative flex shrink-0 flex-col border-r border-subtle bg-surface-2"
+      className="relative flex shrink-0 flex-col border-r border-subtle"
       style={{ width, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH }}
     >
       <div

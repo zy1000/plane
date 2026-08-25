@@ -289,6 +289,8 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
       <style
         dangerouslySetInnerHTML={{
           __html: `
+        .requirement-module-tree.ant-tree,
+        .requirement-module-tree .ant-tree { background: transparent !important; }
         .requirement-module-tree .ant-tree-indent-unit { width: 10px !important; }
         .requirement-module-tree .ant-tree-switcher {
           width: 20px !important;
@@ -300,6 +302,15 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
         }
         .requirement-module-tree .ant-tree-node-content-wrapper { padding-inline: 0px !important; min-width: 0; }
         .requirement-module-tree .ant-tree-title { display: block; min-width: 0; }
+        .requirement-module-tree .ant-tree-treenode-selected,
+        .requirement-module-tree .ant-tree-treenode-selected::before,
+        .requirement-module-tree .ant-tree-treenode-selected > .ant-tree-node-content-wrapper,
+        .requirement-module-tree .ant-tree-treenode-selected > .ant-tree-node-content-wrapper:hover,
+        .requirement-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected,
+        .requirement-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected:hover {
+          background: transparent !important;
+          box-shadow: none !important;
+        }
       `,
         }}
       />
