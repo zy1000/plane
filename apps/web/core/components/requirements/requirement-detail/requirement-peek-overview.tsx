@@ -279,7 +279,7 @@ export const RequirementPeekOverview = (props: TProps) => {
               </div>
             </div>
 
-            <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-6 pt-1 pb-12">
+            <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-6 pt-1 pb-12 text-body-sm-regular">
               {!isBodyMounted || (detail.isLoading && !requirement) ? (
                 <Loader className="flex flex-col gap-3 py-2">
                   <Loader.Item height="28px" width="60%" />
@@ -287,7 +287,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                   <Loader.Item height="200px" />
                 </Loader>
               ) : detail.error || !requirement ? (
-                <p className="py-10 text-center text-13 text-secondary">
+                <p className="py-10 text-center text-body-sm-regular text-secondary">
                   {detail.error ?? t("requirement_detail.not_found")}
                 </p>
               ) : (

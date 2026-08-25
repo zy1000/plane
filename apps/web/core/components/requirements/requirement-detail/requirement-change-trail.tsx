@@ -194,7 +194,7 @@ export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersio
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex items-center gap-1.5 text-12 font-medium text-primary"
+        className="flex items-center gap-1.5 text-body-sm-semibold text-primary"
       >
         {isOpen ? (
           <ChevronDown className="size-3 text-tertiary" />

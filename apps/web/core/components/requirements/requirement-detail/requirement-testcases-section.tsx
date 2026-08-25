@@ -65,13 +65,13 @@ export const RequirementTestCaseRow = ({
           {onOpen ? (
             <button
               type="button"
-              className="min-w-0 max-w-full truncate text-left text-13 text-primary"
+              className="min-w-0 max-w-full truncate text-left text-body-xs-medium text-primary"
               onClick={() => onOpen(testCase)}
             >
               {title}
             </button>
           ) : (
-            <span className="min-w-0 max-w-full truncate text-13 text-primary">{title}</span>
+            <span className="min-w-0 max-w-full truncate text-body-xs-medium text-primary">{title}</span>
           )}
         </Tooltip>
       </div>
@@ -81,7 +81,7 @@ export const RequirementTestCaseRow = ({
             {scopeLabel}
           </span>
         )}
-        <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-11 text-secondary">
+        <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-sm-medium text-secondary">
           <CalendarDays className="h-3 w-3 shrink-0" />
           {testCase.created_at ? renderFormattedDate(testCase.created_at) : "—"}
         </span>
@@ -244,7 +244,7 @@ export const RequirementTestCasesSection = (props: TProps) => {
               ))}
             </div>
           ) : (
-            <p className="px-2.5 pb-3 text-13 text-tertiary">{t("requirement_detail.test_cases.empty")}</p>
+            <p className="px-2.5 pb-3 text-body-xs-regular text-tertiary">{t("requirement_detail.test_cases.empty")}</p>
           )}
         </RequirementRelationCollapsible>
       )}

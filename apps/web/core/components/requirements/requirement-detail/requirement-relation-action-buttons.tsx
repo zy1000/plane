@@ -77,7 +77,9 @@ const IssueProjectAction = ({
           closeOnSelect
           maxHeight="md"
         >
-          <div className="px-2 py-1 text-11 text-tertiary">{t("project_requirements.issues.pick_project")}</div>
+          <div className="px-2 py-1 text-caption-sm-regular text-tertiary">
+            {t("project_requirements.issues.pick_project")}
+          </div>
           {projects?.map((project) => (
             <CustomMenu.MenuItem key={project.id} onClick={() => onPick(project.id)}>
               {project.name}

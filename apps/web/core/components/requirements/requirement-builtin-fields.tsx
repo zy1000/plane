@@ -286,7 +286,7 @@ export const BuiltinCellEditor = ({
         value={values.assignee_id}
         onChange={(memberId) => onChange({ assignee_id: memberId })}
         buttonVariant={dropdownVariant}
-        buttonClassName={cn(dropdownClass, "text-14")}
+        buttonClassName={cn(dropdownClass, base === "detail" ? "text-body-xs-medium" : "text-14")}
         buttonContainerClassName={containerClass}
         placeholder={isGrid ? "" : t("requirement_grid.data.select_member")}
         showUserDetails

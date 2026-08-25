@@ -96,7 +96,7 @@ export const RequirementIssueRow = ({
         </span>
       )}
       <Tooltip tooltipContent={issue.name} position="top">
-        <span className="min-w-0 max-w-full truncate text-13 text-primary">{issue.name}</span>
+        <span className="min-w-0 max-w-full truncate text-body-xs-medium text-primary">{issue.name}</span>
       </Tooltip>
     </>
   );
@@ -128,7 +128,7 @@ export const RequirementIssueRow = ({
         {/* 状态按 state_group 配色 —— 状态名是项目内自定义的，group 才是稳定的
             跨项目语义轴（完成率也按它算），行内色点与之保持同一口径 */}
         {issue.state_name && (
-          <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-11 text-secondary">
+          <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-sm-medium text-secondary">
             <span
               className="size-2 rounded-full"
               style={{
@@ -340,7 +340,7 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
               ))}
             </div>
           ) : (
-            <p className="px-2.5 pb-3 text-13 text-tertiary">{t("project_requirements.issues.empty")}</p>
+            <p className="px-2.5 pb-3 text-body-xs-regular text-tertiary">{t("project_requirements.issues.empty")}</p>
           )}
         </RequirementRelationCollapsible>
       )}

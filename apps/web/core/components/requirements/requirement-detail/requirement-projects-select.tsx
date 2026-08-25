@@ -119,7 +119,7 @@ export const RequirementProjectsSelect = ({
   const button = (
     <span
       className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-2 text-13",
+        "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-2 text-body-xs-medium",
         isStaticallyDisabled ? "text-secondary" : "text-primary hover:bg-layer-transparent-hover"
       )}
     >

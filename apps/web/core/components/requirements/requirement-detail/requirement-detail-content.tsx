@@ -123,7 +123,7 @@ const FieldRows = ({
   <div className="grid grid-cols-[minmax(6rem,11rem)_minmax(0,1fr)] items-start gap-x-4 gap-y-2.5">
     {fields.map((field) => (
       <div key={field.id} className="contents">
-        <span className="pt-1.5 text-12 text-tertiary">
+        <span className="pt-1.5 text-body-xs-regular text-tertiary">
           {field.name}
           {field.is_required && <span className="ml-0.5 text-danger-primary">*</span>}
         </span>
@@ -167,7 +167,7 @@ const RequirementApprovalBadge = ({ requirement }: { requirement: TRequirement }
     <div className="flex flex-wrap items-center gap-2">
       <span
         className={cn(
-          "inline-flex h-5 items-center gap-1 rounded px-1.5 text-11 font-medium",
+          "inline-flex h-5 items-center gap-1 rounded px-1.5 text-caption-sm-medium",
           REQUIREMENT_APPROVAL_PILL[state]
         )}
       >
@@ -176,7 +176,7 @@ const RequirementApprovalBadge = ({ requirement }: { requirement: TRequirement }
         {t(`requirement_approval.state.${state}`)}
       </span>
       {requirement.approved_version !== null && (
-        <span className="text-11 text-tertiary tabular-nums">
+        <span className="text-body-xs-regular text-tertiary tabular-nums">
           {t("requirement_approval.approved_version", { version: requirement.approved_version })}
         </span>
       )}
@@ -185,7 +185,7 @@ const RequirementApprovalBadge = ({ requirement }: { requirement: TRequirement }
 };
 
 const SectionHeading = ({ label }: { label: string }) => (
-  <div className="text-13 font-medium text-primary">{label}</div>
+  <div className="text-body-sm-semibold text-primary">{label}</div>
 );
 
 /** 一个区块：标题与内容贴紧，区块之间靠外层的 gap 拉开 */
@@ -227,13 +227,13 @@ const PropertyGrid = ({
     <div className="grid grid-cols-[minmax(4rem,auto)_minmax(0,1fr)] items-center gap-x-4 gap-y-2.5">
       {leadingRow && (
         <>
-          <span className="text-12 text-tertiary">{leadingRow.label}</span>
-          <span className="min-w-0 truncate text-13 text-primary">{leadingRow.value}</span>
+          <span className="text-body-xs-regular text-tertiary">{leadingRow.label}</span>
+          <span className="min-w-0 truncate text-body-xs-medium text-primary">{leadingRow.value}</span>
         </>
       )}
       {/* 模块：与状态同为旁路轴，走 set-module 而不是 onPatch，所以不看 readOnly ——
           能不能改只看 onModuleChange 传没传（页面级写权限） */}
-      <span className="text-12 text-tertiary">{t("requirement_modules.column")}</span>
+      <span className="text-body-xs-regular text-tertiary">{t("requirement_modules.column")}</span>
       {onModuleChange ? (
         <div className="min-w-0">
           <RequirementModuleDropdown
@@ -245,12 +245,15 @@ const PropertyGrid = ({
             onChange={onModuleChange}
             placeholder="—"
             buttonClassName="h-7 rounded px-1.5 -ml-1.5 hover:bg-layer-transparent-hover"
-            buttonTextClassName="text-13"
+            buttonTextClassName="text-body-xs-medium"
           />
         </div>
       ) : (
         <span
-          className={cn("min-w-0 truncate text-13", requirement.module_name ? "text-primary" : "text-placeholder")}
+          className={cn(
+            "min-w-0 truncate text-body-xs-medium",
+            requirement.module_name ? "text-primary" : "text-placeholder"
+          )}
           title={requirement.module_name ?? undefined}
         >
           {requirement.module_name ?? "—"}
@@ -261,7 +264,7 @@ const PropertyGrid = ({
         if (!column) return null;
         return (
           <div key={columnKey} className="contents">
-            <span className="text-12 text-tertiary">{t(column.labelKey)}</span>
+            <span className="text-body-xs-regular text-tertiary">{t(column.labelKey)}</span>
             <div className="min-w-0">
               {columnKey === "status" ? (
                 /*
@@ -359,13 +362,13 @@ export const RequirementDetailContent = (props: TProps) => {
   const isDrawer = layout === "drawer";
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-7 text-body-sm-regular">
       <header className="flex flex-col gap-2">
         {requirement.parent_id && (
           <button
             type="button"
             onClick={() => onOpenRequirement(requirement.parent_id as string)}
-            className="flex max-w-full items-center gap-1.5 self-start text-12 text-tertiary transition-colors hover:text-primary"
+            className="flex max-w-full items-center gap-1.5 self-start text-caption-sm-regular text-tertiary transition-colors hover:text-primary"
           >
             <CornerDownRight className="size-3 shrink-0 rotate-180" />
             <span className="truncate">
@@ -383,7 +386,7 @@ export const RequirementDetailContent = (props: TProps) => {
             <RequirementCodeInput
               value={requirement.code ?? ""}
               onCommit={(code) => void onPatch({ code })}
-              className="-mx-1 w-full max-w-60 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-12 font-medium text-tertiary outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1"
+              className="-mx-1 w-full max-w-60 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-caption-sm-medium text-tertiary outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1"
               placeholder={t("requirements.identifier.code_placeholder")}
             />
           ) : (
@@ -399,7 +402,7 @@ export const RequirementDetailContent = (props: TProps) => {
         {readOnly ? (
           <h1
             className={cn(
-              "font-semibold text-balance text-primary",
+              "font-medium text-balance text-primary",
               isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
             )}
           >
@@ -417,7 +420,7 @@ export const RequirementDetailContent = (props: TProps) => {
             maxLength={255}
             placeholder={t("requirement_detail.untitled")}
             className={cn(
-              "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-semibold text-primary",
+              "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-medium text-primary",
               "focus:border-accent-primary outline-none placeholder:text-placeholder hover:border-subtle focus:bg-surface-1",
               isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
             )}
@@ -466,10 +469,10 @@ export const RequirementDetailContent = (props: TProps) => {
                 workspaceSlug={workspaceSlug}
                 editorId={`requirement-description-${requirement.id}`}
                 value={requirement.description_html}
-                containerClassName="-ml-3 border-none text-13"
+                containerClassName="-ml-3 border-none"
               />
             ) : (
-              <p className="text-13 text-placeholder">{t("requirement_detail.no_description")}</p>
+              <p className="text-body-sm-regular text-placeholder">{t("requirement_detail.no_description")}</p>
             )
           ) : (
             <RequirementRichTextEditor
@@ -479,7 +482,7 @@ export const RequirementDetailContent = (props: TProps) => {
               value={requirement.description_html ?? ""}
               onChange={(html) => void onPatch({ builtin: { description_html: html } })}
               placeholder={t("requirement_detail.no_description")}
-              containerClassName="-ml-3 min-h-20 border-none text-13"
+              containerClassName="-ml-3 min-h-20 border-none"
             />
           )}
         </div>
@@ -520,7 +523,7 @@ export const RequirementDetailContent = (props: TProps) => {
                 key={child.id}
                 type="button"
                 onClick={() => onOpenRequirement(child.id)}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-12 transition-colors hover:bg-layer-1"
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-xs-medium transition-colors hover:bg-layer-1"
               >
                 {!isLibrary && (
                   <span className="shrink-0">
@@ -622,7 +625,7 @@ export const RequirementDetailProperties = ({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <span className="text-12 font-medium text-primary">{t("requirement_detail.properties")}</span>
+      <span className="text-body-sm-semibold text-primary">{t("requirement_detail.properties")}</span>
 
       <PropertyGrid
         requirement={requirement}
@@ -645,7 +648,7 @@ export const RequirementDetailProperties = ({
         这里写的是关联表。
       */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-11 text-tertiary">{t("requirement_detail.projects.label")}</span>
+        <span className="text-body-xs-regular text-tertiary">{t("requirement_detail.projects.label")}</span>
         <RequirementProjectsSelect
           workspaceSlug={workspaceSlug}
           productId={productId}
@@ -655,7 +658,7 @@ export const RequirementDetailProperties = ({
         />
       </div>
 
-      <div className="mt-auto flex flex-col gap-1 border-t border-subtle pt-3 text-11 text-placeholder">
+      <div className="mt-auto flex flex-col gap-1 border-t border-subtle pt-3 text-caption-sm-regular text-placeholder">
         <span>{t("requirement_detail.meta.created_at", { date: requirement.created_at?.slice(0, 10) ?? "—" })}</span>
         <span>{t("requirement_detail.meta.updated_at", { date: requirement.updated_at?.slice(0, 10) ?? "—" })}</span>
         {requirement.approved_version !== null && (

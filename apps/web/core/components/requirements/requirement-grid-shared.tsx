@@ -234,14 +234,17 @@ export const LeafValue = ({
   variant?: "grid" | "detail" | "modal";
 }) => {
   const { t } = useTranslation();
+  const isDetail = variant === "detail";
+  const shortValueClass = isDetail ? "text-body-xs-medium" : "text-13";
+  const longValueClass = isDetail ? "text-body-sm-regular leading-5" : "text-13 leading-5";
   if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
   if (field.field_type === "boolean") {
     return (
       <span
         className={cn(
-          value
-            ? "inline-flex rounded-md bg-success-subtle px-2 py-0.5 text-13 text-success-primary"
-            : "inline-flex rounded-md bg-layer-2 px-2 py-0.5 text-13 text-secondary",
+          "inline-flex rounded-md px-2 py-0.5",
+          shortValueClass,
+          value ? "bg-success-subtle text-success-primary" : "bg-layer-2 text-secondary",
           className
         )}
       >
@@ -266,7 +269,8 @@ export const LeafValue = ({
           <span
             key={option.id}
             className={cn(
-              "inline-flex max-w-44 items-center truncate rounded-md border border-subtle bg-layer-2 px-2 py-0.5 text-13 text-primary",
+              "inline-flex max-w-44 items-center truncate rounded-md border border-subtle bg-layer-2 px-2 py-0.5 text-primary",
+              shortValueClass,
               className
             )}
           >
@@ -276,7 +280,13 @@ export const LeafValue = ({
       </span>
     );
   }
-  if (field.field_type === "member") return <RequirementMemberValue value={value} />;
+  if (field.field_type === "member") {
+    return (
+      <span className={shortValueClass}>
+        <RequirementMemberValue value={value} />
+      </span>
+    );
+  }
   if (field.field_type === "attachment" || field.field_type === "image") {
     const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
     if (!assets.length) return null;
@@ -295,7 +305,8 @@ export const LeafValue = ({
             target="_blank"
             rel="noreferrer noopener"
             className={cn(
-              "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-13 text-primary hover:text-accent-primary",
+              "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-primary hover:text-accent-primary",
+              shortValueClass,
               className
             )}
           >
@@ -312,7 +323,7 @@ export const LeafValue = ({
         workspaceSlug={workspaceSlug}
         editorId={`requirement-field-${field.id}`}
         value={String(value)}
-        containerClassName={cn("!pl-0 border-none text-13", className)}
+        containerClassName={cn("!pl-0 border-none", className)}
       />
     );
   }
@@ -322,7 +333,8 @@ export const LeafValue = ({
     <span
       title={variant === "detail" ? undefined : text}
       className={cn(
-        "block text-13 leading-5 text-primary",
+        "block text-primary",
+        longValueClass,
         variant === "detail" ? "max-w-full whitespace-pre-wrap" : "w-full min-w-0 truncate",
         className
       )}
@@ -870,7 +882,7 @@ export const RequirementGridHeader = ({
 export const FIELD_INPUT_CLASS = {
   grid: "h-11 w-full min-w-0 rounded-none border-0 bg-transparent px-page-x text-14 text-primary outline-none placeholder:text-placeholder",
   detail:
-    "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-14 text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-body-xs-medium text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   // 建行弹窗：与工作项 ExtraFieldControl（compact=false）同皮 —— Input/下拉都是
   // border-subtle-1 + bg-layer-2，不要再铺一层更硬的 border-subtle / surface-1。
   modal:
@@ -890,7 +902,7 @@ export const FIELD_DROPDOWN_CLASS = {
   compact:
     "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
-    "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 text-body-xs-medium transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
     "h-[38px] w-full min-w-0 border-[0.5px] !border-subtle-1 bg-layer-2 px-3 transition-colors duration-150 hover:!border-strong focus:!border-accent-primary motion-reduce:transition-none",
 } as const;
@@ -901,7 +913,7 @@ const MULTI_SELECT_CLASS = {
   compact:
     "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
-    "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left text-body-xs-medium transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
     "flex h-[38px] w-full min-w-0 items-center rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 text-left transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
 } as const;
@@ -950,6 +962,7 @@ export const LeafEditor = ({
   const { t } = useTranslation();
   // 表格形态（grid / compact）头上就有列名，空值不必再写「请选择」这类占位提示
   const isTableCell = variant === "grid" || variant === "compact";
+  const valueTextClass = variant === "detail" ? "text-body-xs-medium" : "text-13";
   if (field.field_type === "boolean") {
     // 撑到和其它编辑器一样的行高：裸开关只有 16px 高，夹在一排控件里会矮一截。
     // 开关不是输入框，铺满整格没有意义，grid 下自己补回格子的 px-page-x
@@ -996,7 +1009,8 @@ export const LeafEditor = ({
             return (
               <span
                 className={cn(
-                  "min-w-0 flex-1 truncate text-13",
+                  "min-w-0 flex-1 truncate",
+                  valueTextClass,
                   empty ? (isModal ? "text-tertiary" : "text-placeholder") : "text-primary"
                 )}
               >
@@ -1025,7 +1039,8 @@ export const LeafEditor = ({
         label={
           <span
             className={cn(
-              "min-w-0 truncate text-13",
+              "min-w-0 truncate",
+              valueTextClass,
               selectedOption ? "text-primary" : isModal ? "text-tertiary" : "text-placeholder"
             )}
           >
@@ -1064,7 +1079,7 @@ export const LeafEditor = ({
         buttonClassName={
           variant === "modal"
             ? "!h-[38px] !w-full !rounded !px-3 !py-2 !text-13"
-            : cn(FIELD_DROPDOWN_CLASS[variant], "text-14")
+            : cn(FIELD_DROPDOWN_CLASS[variant], variant === "detail" ? "text-body-xs-medium" : "text-14")
         }
         buttonContainerClassName="w-full min-w-0"
         // 网格有列头，空值不必再写「选择成员」；与上面选择器的 emptyLabel 同一口径
@@ -1109,7 +1124,10 @@ export const LeafEditor = ({
           assets.map((asset) => (
             <span
               key={asset.asset_id}
-              className="flex min-w-0 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-0.5 text-12"
+              className={cn(
+                "flex min-w-0 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-0.5",
+                variant === "detail" ? "text-body-xs-medium" : "text-12"
+              )}
             >
               <Paperclip className="size-3 shrink-0" />
               <span className="min-w-0 flex-1 truncate" title={asset.name}>
@@ -1126,7 +1144,12 @@ export const LeafEditor = ({
             </span>
           ))
         )}
-        <label className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-12 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none">
+        <label
+          className={cn(
+            "inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-center gap-1 truncate rounded-md border border-dashed border-subtle bg-transparent px-1.5 text-secondary transition-colors duration-150 hover:border-accent-subtle hover:bg-layer-1 hover:text-primary motion-reduce:transition-none",
+            variant === "detail" ? "text-body-xs-medium" : "text-12"
+          )}
+        >
           <Paperclip className="size-3 shrink-0" />
           <span className="truncate">
             {t(
@@ -1163,7 +1186,7 @@ export const LeafEditor = ({
     return variant === "detail" ? (
       <RequirementRichTextEditor
         {...richTextProps}
-        containerClassName="min-h-20 rounded-md border border-subtle bg-surface-1 pt-2 pr-2 text-13"
+        containerClassName="min-h-20 rounded-md border border-subtle bg-surface-1 pt-2 pr-2"
       />
     ) : (
       <RequirementRichTextCell {...richTextProps} label={field.name} variant={variant} deferCommit={deferTextCommit} />

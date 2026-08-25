@@ -160,7 +160,7 @@ export const RequirementSubformSection = (props: TProps) => {
                 type="button"
                 onClick={() => jumpTo(form.id)}
                 className={cn(
-                  "inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-12 transition-colors",
+                  "inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-caption-sm-medium transition-colors",
                   "border-subtle bg-surface-1 text-secondary hover:border-accent-subtle hover:text-primary",
                   count === 0 && "text-placeholder"
                 )}
@@ -192,7 +192,7 @@ export const RequirementSubformSection = (props: TProps) => {
               <button
                 type="button"
                 onClick={() => toggle(form.id)}
-                className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-12 font-medium text-primary"
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-body-sm-medium text-primary"
               >
                 {isOpen ? (
                   <ChevronDown className="size-3 shrink-0 text-tertiary" />
@@ -200,7 +200,7 @@ export const RequirementSubformSection = (props: TProps) => {
                   <ChevronRight className="size-3 shrink-0 text-tertiary" />
                 )}
                 <span className="truncate">{form.name}</span>
-                <span className="shrink-0 text-11 font-normal text-tertiary">
+                <span className="shrink-0 text-caption-sm-regular font-normal text-tertiary">
                   {rows.length
                     ? t("requirement_detail.subform.row_count", { count: rows.length })
                     : t("requirement_detail.subform.empty")}
@@ -210,7 +210,7 @@ export const RequirementSubformSection = (props: TProps) => {
                 <button
                   type="button"
                   onClick={() => addRow(form)}
-                  className="inline-flex shrink-0 items-center gap-1 text-11 text-accent-primary hover:text-accent-primary-hover"
+                  className="inline-flex shrink-0 items-center gap-1 text-body-xs-medium text-accent-primary hover:text-accent-primary-hover"
                 >
                   <Plus className="size-3" />
                   {t("requirement_detail.subform.add_row")}
@@ -225,13 +225,13 @@ export const RequirementSubformSection = (props: TProps) => {
                 <table className="w-full min-w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-subtle">
-                      <th className="w-12 border-r border-subtle px-2.5 py-1.5 text-11 font-medium text-secondary">
+                      <th className="w-12 border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary">
                         {t("requirement_detail.subform.row_number")}
                       </th>
                       {columns.map((child) => (
                         <th
                           key={child.id}
-                          className="min-w-32 border-r border-subtle px-2.5 py-1.5 text-11 font-medium text-secondary"
+                          className="min-w-32 border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary"
                         >
                           {child.name}
                           {child.is_required && <span className="ml-0.5 text-danger-primary">*</span>}
@@ -257,7 +257,7 @@ export const RequirementSubformSection = (props: TProps) => {
                              */
                             ref={readOnly ? undefined : getRowRef(rowKey, dragPayload)}
                             className={cn(
-                              "relative border-r border-subtle px-2.5 py-1.5 text-center align-top text-12 text-tertiary tabular-nums",
+                              "relative border-r border-subtle px-2.5 py-1.5 text-center align-top text-body-xs-regular text-tertiary tabular-nums",
                               !readOnly && "cursor-grab active:cursor-grabbing",
                               dragClass
                             )}
@@ -290,7 +290,7 @@ export const RequirementSubformSection = (props: TProps) => {
                                   onUpload={onUpload}
                                   deferTextCommit
                                   /*
-                                   * 这张小表的格子自带 px-2.5 py-1.5、表头才 text-11，走不了
+                                   * 这张小表的格子自带 px-2.5 py-1.5、表头才 caption-sm，走不了
                                    * 主网格那套铺满整格的控件（44px 行高 + px-page-x 会把它撑坏）
                                    */
                                   variant="compact"
@@ -343,12 +343,12 @@ export const RequirementSubformSection = (props: TProps) => {
                           <button
                             type="button"
                             onClick={() => addRow(form)}
-                            className="inline-flex items-center gap-1 text-12 text-accent-primary hover:text-accent-primary-hover"
+                            className="inline-flex items-center gap-1 text-body-xs-medium text-accent-primary hover:text-accent-primary-hover"
                           >
                             <Plus className="size-3.5" />
                             {t("requirement_detail.subform.add_row")}
                           </button>
-                          <p className="mt-1 text-11 text-placeholder">
+                          <p className="mt-1 text-caption-sm-regular text-placeholder">
                             {t("requirement_detail.subform.empty_add")}
                           </p>
                         </td>
@@ -360,7 +360,9 @@ export const RequirementSubformSection = (props: TProps) => {
             )}
 
             {isOpen && columns.length === 0 && (
-              <p className="px-2.5 py-3 text-12 text-placeholder">{t("requirement_detail.subform.no_fields")}</p>
+              <p className="px-2.5 py-3 text-body-xs-regular text-placeholder">
+                {t("requirement_detail.subform.no_fields")}
+              </p>
             )}
           </div>
         );

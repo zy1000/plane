@@ -35,7 +35,7 @@ export const RequirementApprovalPanel = ({
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       <span
         className={cn(
-          "inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-11 font-medium",
+          "inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-caption-sm-medium",
           REQUIREMENT_APPROVAL_PILL[state]
         )}
       >
@@ -45,7 +45,7 @@ export const RequirementApprovalPanel = ({
       </span>
 
       {requirement.approved_version !== null && (
-        <span className="text-11 text-tertiary tabular-nums">
+        <span className="text-body-xs-regular text-tertiary tabular-nums">
           {t("requirement_approval.approved_version", { version: requirement.approved_version })}
         </span>
       )}
@@ -54,7 +54,7 @@ export const RequirementApprovalPanel = ({
         <button
           type="button"
           onClick={() => onOpenChangeRequest(requirement.pending_change_request_id as string)}
-          className="text-11 text-accent-primary hover:underline"
+          className="text-body-xs-medium text-accent-primary hover:underline"
         >
           {t("requirement_approval.view_change_request")}
         </button>

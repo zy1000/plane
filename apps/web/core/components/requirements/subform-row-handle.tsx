@@ -16,7 +16,9 @@ type TProps = {
 export function SubformRowHandle({ index, label, draggable = true }: TProps) {
   if (!draggable) {
     return (
-      <span className="absolute inset-0 grid place-items-center text-13 text-primary tabular-nums">{index}</span>
+      <span className="absolute inset-0 grid place-items-center text-body-xs-regular text-tertiary tabular-nums">
+        {index}
+      </span>
     );
   }
 
@@ -26,7 +28,7 @@ export function SubformRowHandle({ index, label, draggable = true }: TProps) {
       aria-label={label}
       className={cn(
         "group/handle absolute inset-0 grid cursor-grab place-items-center select-none",
-        "text-13 text-primary tabular-nums active:cursor-grabbing"
+        "text-body-xs-regular text-tertiary tabular-nums active:cursor-grabbing"
       )}
     >
       <span className="relative grid min-h-4 min-w-4 place-items-center">

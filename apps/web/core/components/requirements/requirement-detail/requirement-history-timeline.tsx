@@ -44,7 +44,7 @@ export const HistoryTime = ({ value }: { value: string }) => {
     <time
       dateTime={value}
       title={renderFormattedDateTime(value)}
-      className="shrink-0 cursor-help pt-0.5 text-11 text-placeholder tabular-nums"
+      className="shrink-0 cursor-help pt-0.5 text-caption-sm-regular text-placeholder tabular-nums"
     >
       {formatRelative(value, t)}
     </time>
@@ -188,20 +188,20 @@ export const HistoryLine = ({
   children: ReactNode;
   muted?: boolean;
 }) => (
-  <span className={cn("text-13 leading-snug break-words", muted ? "text-tertiary" : "text-secondary")}>
+  <span className={cn("text-body-xs-regular leading-snug break-words", muted ? "text-tertiary" : "text-secondary")}>
     <span className={cn(muted ? "text-secondary" : "font-medium text-primary")}>{actor}</span> {children}
   </span>
 );
 
 /** 副行：徽章组 + 补充说明，统一降到 placeholder */
 export const HistorySub = ({ children }: { children: ReactNode }) => (
-  <span className="flex flex-wrap items-center gap-1.5 text-11 text-placeholder">{children}</span>
+  <span className="flex flex-wrap items-center gap-1.5 text-caption-sm-regular text-placeholder">{children}</span>
 );
 
 /** 空态：一句陈述 + 一句「什么时候会有东西」 */
 export const HistoryEmpty = ({ title, description }: { title: string; description: string }) => (
   <div className="flex flex-col gap-0.5 py-3 pl-7">
-    <span className="text-12 text-tertiary">{title}</span>
-    <span className="text-11 text-placeholder">{description}</span>
+    <span className="text-body-xs-regular text-tertiary">{title}</span>
+    <span className="text-caption-sm-regular text-placeholder">{description}</span>
   </div>
 );

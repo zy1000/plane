@@ -74,14 +74,14 @@ export const RequirementModifiedBanner = ({
 
   return (
     <div className="rounded-md border border-warning-subtle bg-warning-subtle/30 px-3 py-2.5">
-      <p className="text-12 leading-5 text-primary">
+      <p className="text-body-xs-regular leading-5 text-primary">
         {t("requirement_detail.modified_banner.title", { version: approvedVersion })}
       </p>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
         <button
           type="button"
           onClick={() => setIsDiffOpen((current) => !current)}
-          className="flex items-center gap-1 text-11 text-accent-primary hover:underline"
+          className="flex items-center gap-1 text-body-xs-medium text-accent-primary hover:underline"
         >
           <GitCompareArrows className="size-3" />
           {isDiffOpen
@@ -92,7 +92,7 @@ export const RequirementModifiedBanner = ({
           <button
             type="button"
             onClick={() => setIsConfirmOpen(true)}
-            className="flex items-center gap-1 text-11 text-secondary hover:text-primary"
+            className="flex items-center gap-1 text-body-xs-medium text-secondary hover:text-primary"
           >
             <Undo2 className="size-3" />
             {t("requirement_detail.modified_banner.discard", { version: approvedVersion })}

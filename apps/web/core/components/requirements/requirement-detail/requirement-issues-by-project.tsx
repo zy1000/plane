@@ -71,7 +71,7 @@ const ProjectIssuesGroup = ({
   if (error) {
     // 无权查看该项目（403 等）时如实说明，不能把「看不到」误报成「没拆工作项」
     return (
-      <p data-requirement-issues className="px-2.5 text-13 text-tertiary">
+      <p data-requirement-issues className="px-2.5 text-body-xs-regular text-tertiary">
         {t("project_requirements.hidden_project")}
       </p>
     );

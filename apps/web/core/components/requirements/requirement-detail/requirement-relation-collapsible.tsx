@@ -25,7 +25,7 @@ export const RequirementRelationCollapsible = (props: TProps) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   const indicatorElement = progress ? (
-    <div className="flex items-center gap-1.5 text-13 text-tertiary">
+    <div className="flex items-center gap-1.5 text-body-sm-regular text-tertiary">
       <CircularProgressIndicator
         size={18}
         percentage={progress.total ? (progress.completed / progress.total) * 100 : 0}
@@ -37,7 +37,7 @@ export const RequirementRelationCollapsible = (props: TProps) => {
     </div>
   ) : typeof count === "number" ? (
     <span className="flex items-center justify-center">
-      <span className="text-14 !leading-3 text-tertiary">{count}</span>
+      <span className="text-body-sm-regular text-tertiary">{count}</span>
     </span>
   ) : undefined;
 

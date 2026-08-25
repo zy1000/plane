@@ -32,7 +32,7 @@ const SHELL_CLASS = {
   compact:
     "focus-within:ring-accent-strong/10 min-h-8 border-transparent bg-transparent px-2 py-1.5 text-14 hover:border-subtle hover:bg-layer-1 focus-within:border-accent-strong focus-within:bg-surface-1 focus-within:ring-2",
   detail:
-    "min-h-8 border-transparent bg-transparent px-2 py-1.5 text-14 hover:bg-layer-transparent-hover focus-within:border-accent-primary focus-within:bg-surface-1",
+    "min-h-8 border-transparent bg-transparent px-2 py-1.5 text-body-sm-regular hover:bg-layer-transparent-hover focus-within:border-accent-primary focus-within:bg-surface-1",
   // 建行弹窗：与工作项 ExtraFieldControl 同皮（见 FIELD_INPUT_CLASS.modal）
   modal:
     "min-h-[38px] border-[0.5px] border-subtle-1 bg-layer-2 px-3 py-2 text-13 focus-within:border-accent-primary",
