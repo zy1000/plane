@@ -92,27 +92,25 @@ class RequirementApprovalHarness:
         assert response.status_code == status.HTTP_200_OK, response.data
         return response.data["results"][0]
 
-    def configure_approver(self, api_client):
-        policy = api_client.get(self.url("requirement-configuration")).data["policy"]
-        response = api_client.put(
-            self.url("requirement-configuration"),
-            {
-                "expected_updated_at": policy["updated_at"],
-                "policy": {
-                    "owner_id": str(self.owner.id),
-                    "approver_ids": [str(self.approver.id)],
-                    "approval_type": "any",
-                    "required_count": None,
-                },
-            },
-            format="json",
-        )
-        assert response.status_code == status.HTTP_200_OK, response.data
-        return response.data
-
-    def submit(self, api_client, requirement_ids, *, change_type=None, reason="变更说明"):
+    def submit(
+        self,
+        api_client,
+        requirement_ids,
+        *,
+        change_type=None,
+        reason="变更说明",
+        approver_ids=None,
+        approval_type="any",
+        required_count=None,
+    ):
+        """评审人与规则随每次提交给定；默认指定 self.approver、任一通过。"""
         payload = {
             "reason": reason,
+            "approval_type": approval_type,
+            "required_count": required_count,
+            "approver_ids": (
+                [str(self.approver.id)] if approver_ids is None else approver_ids
+            ),
             "items": [
                 {
                     "requirement_id": str(requirement_id),
@@ -209,20 +207,77 @@ class RequirementApprovalHarness:
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestRequirementApprovalApp(RequirementApprovalHarness):
-    def test_submit_requires_an_approver(self, api_client):
+    def test_submit_requires_an_approver_unless_no_review(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
         row = self.add_requirement(api_client, type_id, "无审批人")
 
-        response = self.submit(api_client, [row["id"]])
+        response = self.submit(api_client, [row["id"]], approver_ids=[])
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "approver_ids" in response.data
+
+    def test_n_of_m_required_count_cannot_exceed_approvers(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        row = self.add_requirement(api_client, type_id, "人数越界")
+
+        response = self.submit(
+            api_client, [row["id"]], approval_type="n_of_m", required_count=2
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "required_count" in response.data
+
+    def test_approvers_must_be_product_members(self, api_client):
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        row = self.add_requirement(api_client, type_id, "外人审批")
+        outsider = UserFactory(username=f"req-change-outsider-{uuid4()}")
+
+        response = self.submit(api_client, [row["id"]], approver_ids=[str(outsider.id)])
 
         assert response.status_code == status.HTTP_409_CONFLICT, response.data
-        assert response.data["code"] == "REQUIREMENT_APPROVER_REQUIRED"
+        assert response.data["code"] == "REQUIREMENT_APPROVER_INVALID"
+        assert response.data["approver_ids"] == [str(outsider.id)]
+
+    def test_no_review_rule_applies_on_submit(self, api_client):
+        """无需评审：提交即通过 —— 不建审批行、不锁行、不发「请审批」通知。"""
+        api_client.force_authenticate(user=self.owner)
+        type_id = self.create_requirement_type(api_client)
+        row = self.add_requirement(api_client, type_id, "免审需求")
+
+        change_request = self.submit_ok(
+            api_client, [row["id"]], approval_type="none", approver_ids=[]
+        )
+
+        assert change_request["status"] == "approved"
+        assert change_request["approval_type"] == "none"
+        assert change_request["approvals"] == []
+        assert change_request["completed_at"] is not None
+
+        stored = Requirement.objects.get(id=row["id"])
+        assert stored.approved_version == 1
+        assert stored.pending_change_item_id is None
+        assert RequirementVersion.objects.filter(target_id=row["id"], version=1).exists()
+        assert self.fetch_requirement(api_client, row["id"])["approval_state"] == "approved"
+        assert not Notification.objects.filter(
+            entity_identifier=change_request["id"]
+        ).exists()
+
+        # 已经结单，没人能再对它表态
+        api_client.force_authenticate(user=self.approver)
+        acted = api_client.post(
+            self.url("requirement-change-request-act", pk=change_request["id"]),
+            {"action": "approved"},
+            format="json",
+        )
+        assert acted.status_code == status.HTTP_409_CONFLICT, acted.data
+        assert acted.data["code"] == "REQUIREMENT_CHANGE_CLOSED"
 
     def test_approval_writes_v1_and_confirms_the_row(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "短信验证码登录")
         assert row["approval_state"] == "draft"
         assert row["status"] == "not_started"
@@ -251,7 +306,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
         """整个改造的第一目的：产品级冻结没有了。"""
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         first = self.add_requirement(api_client, type_id, "需求 A")
         second = self.add_requirement(api_client, type_id, "需求 B")
 
@@ -268,7 +322,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_two_requirements_produce_two_independent_change_requests(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         first = self.add_requirement(api_client, type_id, "需求 A")
         second = self.add_requirement(api_client, type_id, "需求 B")
 
@@ -285,7 +338,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_one_change_request_can_cover_several_requirements(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         first = self.add_requirement(api_client, type_id, "需求 A")
         second = self.add_requirement(api_client, type_id, "需求 B")
 
@@ -301,7 +353,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_a_requirement_cannot_be_in_two_pending_change_requests(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "需求 A")
         self.submit_ok(api_client, [row["id"]])
 
@@ -313,7 +364,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_reject_keeps_the_content_and_allows_resubmit(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "会被驳回")
 
         change_request = self.submit_ok(api_client, [row["id"]])
@@ -334,7 +384,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_modified_state_after_approval(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
         assert approved["approval_state"] == "approved"
 
@@ -352,7 +401,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_draft_deletes_directly_but_approved_needs_review(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
 
         draft_row = self.add_requirement(api_client, type_id, "打错的一行")
         deleted = api_client.delete(f"{self.requirements_url()}{draft_row['id']}/")
@@ -379,7 +427,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     ):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         parent = self.approve_one(api_client, type_id, "父需求")
         child = self.approve_one(
             api_client, type_id, "子需求", parent_id=parent["id"]
@@ -400,7 +447,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     ):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
 
         requirement_type = RequirementType.objects.get(id=type_id)
@@ -453,7 +499,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
         不通知就只能靠人主动去列表里轮询。"""
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "需要审批的需求")
 
         change_request = self.submit_ok(api_client, [row["id"]])
@@ -483,7 +528,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_withdraw_notifies_pending_approvers(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "会被撤回的需求")
         change_request = self.submit_ok(api_client, [row["id"]])
 
@@ -502,7 +546,6 @@ class TestRequirementApprovalApp(RequirementApprovalHarness):
     def test_only_the_submitter_can_withdraw(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "需求 A")
         change_request = self.submit_ok(api_client, [row["id"]])
 
@@ -543,7 +586,6 @@ class TestRequirementBaselineApp(RequirementApprovalHarness):
     def test_baseline_only_collects_approved_requirements(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
         draft = self.add_requirement(api_client, type_id, "还没过审的草稿")
 
@@ -570,7 +612,6 @@ class TestRequirementBaselineApp(RequirementApprovalHarness):
     def test_preview_counts_without_writing(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         self.approve_one(api_client, type_id, "已确认的需求")
         self.add_requirement(api_client, type_id, "草稿")
 
@@ -589,7 +630,6 @@ class TestRequirementBaselineApp(RequirementApprovalHarness):
     ):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, approved, "第二版（未提交）")
 
@@ -613,7 +653,6 @@ class TestRequirementBaselineApp(RequirementApprovalHarness):
     def test_baseline_content_does_not_follow_the_live_row(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         baseline = self.create_baseline(api_client, "R1.0").data
 
@@ -639,7 +678,6 @@ class TestRequirementBaselineApp(RequirementApprovalHarness):
     def test_compare_two_baselines(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         kept = self.approve_one(api_client, type_id, "不变的需求")
         changed = self.approve_one(api_client, type_id, "会改的需求")
         first = self.create_baseline(api_client, "R1.0").data
@@ -685,7 +723,6 @@ class TestRequirementApprovalInboxApp(RequirementApprovalHarness):
     def test_inbox_lists_only_what_waits_on_me(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "等审批的需求")
         change_request = self.submit_ok(api_client, [row["id"]])
 
@@ -705,7 +742,6 @@ class TestRequirementApprovalInboxApp(RequirementApprovalHarness):
     def test_acting_moves_the_request_from_pending_to_processed(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "会被驳回的需求")
         change_request = self.submit_ok(api_client, [row["id"]])
         self.act(api_client, change_request["id"], action="rejected")
@@ -721,7 +757,6 @@ class TestRequirementApprovalInboxApp(RequirementApprovalHarness):
     def test_inbox_can_be_narrowed_to_one_product(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "A 产品的需求")
         self.submit_ok(api_client, [row["id"]])
 
@@ -767,7 +802,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
     def test_rollback_restores_content_and_leaves_it_modified(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, row, "第二版")
         self.act(api_client, self.submit_ok(api_client, [row["id"]])["id"])
@@ -790,7 +824,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
         """
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, approved, "改错了")
 
@@ -805,7 +838,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
         """回到的不是已通过那一版，内容就确实与已批准的不同 —— 仍要走评审。"""
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         current = self.fetch_requirement(api_client, approved["id"])
         self.patch_requirement(api_client, current, "第二版")
@@ -821,7 +853,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
     def test_rolled_back_content_can_be_resubmitted(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, row, "第二版")
         self.act(api_client, self.submit_ok(api_client, [row["id"]])["id"])
@@ -836,7 +867,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
     def test_rollback_is_refused_while_in_review(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.approve_one(api_client, type_id, "第一版")
         current = self.fetch_requirement(api_client, row["id"])
         self.patch_requirement(api_client, current, "第二版")
@@ -852,7 +882,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
     def test_rollback_rejects_an_unknown_version(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.approve_one(api_client, type_id, "只有 v1")
 
         response = self.rollback(api_client, row["id"], 7)
@@ -864,7 +893,6 @@ class TestRequirementRollbackApp(RequirementApprovalHarness):
         """字段结构立即生效且不走审批：vK 当年填的字段今天可能已经没了。"""
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         field = self.add_field(api_client, type_id, "验收标准")
         row = self.add_requirement(api_client, type_id, "带字段的需求")
         filled = api_client.patch(
@@ -903,7 +931,6 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
     def test_status_from_the_client_is_ignored(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
 
         response = self.patch_builtin(api_client, approved, status="released")
@@ -923,7 +950,6 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
         """
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
 
         self.patch_builtin(api_client, approved)
@@ -940,7 +966,6 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
         """
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, approved, "第二版（未提交）")
 
@@ -956,7 +981,6 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
     def test_status_is_not_part_of_the_change_diff(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "已确认的需求")
         self.patch_builtin(api_client, approved, title="改了标题", status="released")
 
@@ -967,7 +991,6 @@ class TestRequirementStatusAxisApp(RequirementApprovalHarness):
     def test_rollback_does_not_touch_the_status(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         # 直接改库里的 status —— 模拟状态写入口写进来的「已发布」
         Requirement.objects.filter(id=approved["id"]).update(status="released")
@@ -996,7 +1019,6 @@ class TestRequirementRejectRevertApp(RequirementApprovalHarness):
     def test_reject_without_revert_keeps_the_content(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, approved, "第二版")
 
@@ -1009,7 +1031,6 @@ class TestRequirementRejectRevertApp(RequirementApprovalHarness):
     def test_reject_with_revert_restores_the_approved_content(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         approved = self.approve_one(api_client, type_id, "第一版")
         self.patch_requirement(api_client, approved, "第二版")
 
@@ -1028,7 +1049,6 @@ class TestRequirementRejectRevertApp(RequirementApprovalHarness):
         """新增被驳回时没有「上一版」可回，只能留在草稿。"""
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         row = self.add_requirement(api_client, type_id, "全新的需求")
 
         self.act(api_client, self.submit_ok(api_client, [row["id"]])["id"], action="rejected", revert=True)

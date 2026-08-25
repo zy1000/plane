@@ -1,6 +1,6 @@
 """需求进项目：候选池、关联校验、项目侧的提单授权，以及需求状态的写入口。
 
-这里只处理「引用」这一层。需求本体、字段结构、版本、基线、审批名单全部仍归产品，
+这里只处理「引用」这一层。需求本体、字段结构、版本、基线全部仍归产品，
 项目侧一律只读 —— 写入口只有关联关系本身（项目/迭代/发布/工作项四张关联表）、
 sort_order，以及需求级的交付状态 `Requirement.status`（人工维护，产品侧与项目侧
 共用 set_requirement_status；只有两条只升不降的自动推进 promote_*，见
@@ -27,10 +27,10 @@ from django.utils import timezone
 
 from plane.db.models import (
     Cycle,
+    Product,
     ProductProject,
     ReleaseStatus,
     Requirement,
-    RequirementApprovalPolicy,
     RequirementApprovalState,
     RequirementChangeType,
     RequirementCycle,
@@ -41,6 +41,7 @@ from plane.db.models import (
     RequirementRelease,
     StateGroup,
 )
+from plane.utils.requirement import RequirementScopeHandle
 from plane.utils.requirement_module import expand_requirement_module_subtree_ids
 
 
@@ -664,21 +665,25 @@ def can_submit_change_from_project(user, requirement, project) -> bool:
     return not requirement.is_locked
 
 
-def resolve_policy_for_linked_requirement(requirement):
-    """取需求所属产品的审批配置。
+def resolve_scope_for_linked_requirement(requirement, *, for_update=False):
+    """取需求所属产品作为变更单的作用域句柄。
 
-    与 views/requirement/mixins.get_scoped_policy 的区别有两点，都是刻意的：
-    - 不查产品可见性。能走到这里的人已经通过了项目侧的 requirement_link 权限，
-      而需求本身已经被关联进这个项目 —— 产品的可见性不该再挡一次。
-    - 不惰性创建。配置行不存在意味着这个产品还没有审批人，submit_change_request
-      随后也会以 REQUIREMENT_APPROVER_REQUIRED 拒绝；由项目成员创建一条 owner 是
-      自己的产品审批配置显然更糟。
+    与 views/requirement/mixins.get_requirement_scope 的区别是刻意的：不查产品可见性。
+    能走到这里的人已经通过了项目侧的 requirement_link 权限，而需求本身已经被关联进
+    这个项目 —— 产品的可见性不该再挡一次。
+
+    for_update 锁 Product 行：变更单序号按产品取号（Max+1），项目侧提单与产品侧提单
+    并发时没有这把锁会撞 req_change_unique_product_sequence_active。
     """
-    return (
-        RequirementApprovalPolicy.objects.filter(product_id=requirement.product_id)
-        .select_related("workspace", "product", "project", "owner")
-        .first()
+    queryset = Product.objects.filter(id=requirement.product_id).select_related(
+        "workspace"
     )
+    if for_update:
+        queryset = queryset.select_for_update(of=("self",))
+    product = queryset.first()
+    if product is None:
+        return None
+    return RequirementScopeHandle.for_product(product)
 
 
 def set_requirement_status(requirement_id, *, status, actor=None):

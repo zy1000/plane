@@ -31,7 +31,7 @@ from plane.app.serializers import (
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.app.views.requirement.mixins import (
     can_write_requirements,
-    get_scoped_policy,
+    get_requirement_scope,
 )
 from plane.app.views.requirement.type import is_workspace_member
 from plane.db.models import (
@@ -113,26 +113,16 @@ def paginate_sequence(view, request, items, *, total=None, default_per_page=DEFA
 class ProductScopedMixin:
     """变更相关端点共用的作用域解析与写权限校验。"""
 
-    def resolve_policy(self, *, for_update=False, create=True):
-        _, policy = get_scoped_policy(
-            self.request.user,
-            slug=self.kwargs.get("slug"),
-            product_id=self.kwargs.get("product_id"),
-            for_update=for_update,
-            create=create,
-        )
-        return policy
-
     def resolve_scope(self, *, for_update=False):
-        return get_scoped_policy(
+        """返回 (product, scope)；产品不存在或不可见时两者都是 None。"""
+        return get_requirement_scope(
             self.request.user,
             slug=self.kwargs.get("slug"),
             product_id=self.kwargs.get("product_id"),
             for_update=for_update,
-            create=True,
         )
 
-    def snapshot_context(self, policy):
+    def snapshot_context(self, scope):
         """快照序列化用的 context：把编号前缀带进去。
 
         快照里只存 sequence_id 不存拼好的编号 —— 产品改标识后，历史版本、变更单与
@@ -140,7 +130,7 @@ class ProductScopedMixin:
         """
         return {
             "scope_identifier": (
-                policy.product.identifier if policy.product_id else policy.project.identifier
+                scope.product.identifier if scope.product_id else scope.project.identifier
             )
         }
 
@@ -157,14 +147,14 @@ class ProductScopedMixin:
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    def policy_for_write(self, *, for_update=False):
-        """返回 (policy, error_response)。"""
-        product, policy = self.resolve_scope(for_update=for_update)
+    def scope_for_write(self, *, for_update=False):
+        """返回 (scope, error_response)。"""
+        product, scope = self.resolve_scope(for_update=for_update)
         if product is None:
             return None, self.not_found()
         if not can_write_requirements(self.request.user, product):
             return None, self.forbidden()
-        return policy, None
+        return scope, None
 
     def scope_filter(self):
         product_id = self.kwargs.get("product_id")
@@ -199,7 +189,7 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def list(self, request, slug, product_id):
-        if self.resolve_policy() is None:
+        if self.resolve_scope()[1] is None:
             return self.not_found()
         queryset = self.get_queryset()
 
@@ -239,7 +229,7 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def retrieve(self, request, slug, product_id, pk):
-        if self.resolve_policy() is None:
+        if self.resolve_scope()[1] is None:
             return self.not_found()
         change_request = self.get_queryset().filter(id=pk).first()
         if change_request is None:
@@ -261,18 +251,22 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def create(self, request, slug, product_id):
-        """提交 1..N 条需求进入评审。"""
+        """提交 1..N 条需求进入评审。评审人与规则随这次提交给定，只对这张单有效。"""
         serializer = RequirementChangeSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
         try:
             with transaction.atomic():
-                policy, error = self.policy_for_write(for_update=True)
+                scope, error = self.scope_for_write(for_update=True)
                 if error is not None:
                     return error
                 change_request = submit_change_request(
-                    policy=policy,
-                    items=serializer.validated_data["items"],
-                    reason=serializer.validated_data["reason"],
+                    scope=scope,
+                    items=validated["items"],
+                    approver_ids=validated["approver_ids"],
+                    approval_type=validated["approval_type"],
+                    required_count=validated["required_count"],
+                    reason=validated["reason"],
                     actor=request.user,
                 )
         except RequirementChangeError as exc:
@@ -290,7 +284,7 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
-                if self.resolve_policy(for_update=True) is None:
+                if self.resolve_scope(for_update=True)[1] is None:
                     return self.not_found()
                 change_request = (
                     RequirementChangeRequest.objects.select_for_update()
@@ -322,7 +316,7 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
     def cancel(self, request, slug, product_id, pk):
         try:
             with transaction.atomic():
-                if self.resolve_policy(for_update=True) is None:
+                if self.resolve_scope(for_update=True)[1] is None:
                     return self.not_found()
                 change_request = (
                     RequirementChangeRequest.objects.select_for_update()
@@ -364,8 +358,8 @@ class RequirementChangeItemViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementChangeItemSerializer
 
     def list(self, request, slug, product_id, pk):
-        policy = self.resolve_policy()
-        if policy is None:
+        _, scope = self.resolve_scope()
+        if scope is None:
             return self.not_found()
         queryset = (
             RequirementChangeItem.objects.filter(
@@ -391,7 +385,7 @@ class RequirementChangeItemViewSet(ProductScopedMixin, BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda results: RequirementChangeItemSerializer(
-                results, many=True, context=self.snapshot_context(policy)
+                results, many=True, context=self.snapshot_context(scope)
             ).data,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
@@ -405,8 +399,8 @@ class RequirementVersionViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementVersionSerializer
 
     def list(self, request, slug, product_id, requirement_id):
-        policy = self.resolve_policy()
-        if policy is None:
+        _, scope = self.resolve_scope()
+        if scope is None:
             return self.not_found()
         queryset = (
             RequirementVersion.objects.filter(
@@ -419,7 +413,7 @@ class RequirementVersionViewSet(ProductScopedMixin, BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda results: RequirementVersionSerializer(
-                results, many=True, context=self.snapshot_context(policy)
+                results, many=True, context=self.snapshot_context(scope)
             ).data,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
@@ -438,7 +432,7 @@ class RequirementChangeTrailViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementChangeItemSerializer
 
     def list(self, request, slug, product_id, requirement_id):
-        if self.resolve_policy() is None:
+        if self.resolve_scope()[1] is None:
             return self.not_found()
         requirement = Requirement.objects.filter(
             id=requirement_id, product_id=product_id
@@ -556,7 +550,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         ).select_related("created_by")
 
     def list(self, request, slug, product_id):
-        if self.resolve_policy() is None:
+        if self.resolve_scope()[1] is None:
             return self.not_found()
         return self.paginate(
             request=request,
@@ -584,13 +578,13 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         )
 
         with transaction.atomic():
-            policy, error = self.policy_for_write(for_update=not is_preview)
+            scope, error = self.scope_for_write(for_update=not is_preview)
             if error is not None:
                 return error
 
             if is_preview:
                 entries, skipped, stale = collect_baseline_entries(
-                    policy,
+                    scope,
                     requirement_type_ids=requirement_type_ids,
                     requirement_ids=requirement_ids,
                 )
@@ -605,7 +599,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
                 )
 
             baseline, skipped, stale = create_baseline(
-                policy,
+                scope,
                 name=serializer.validated_data["name"],
                 description=serializer.validated_data["description"],
                 requirement_type_ids=requirement_type_ids,
@@ -627,7 +621,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         return Response(payload, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, slug, product_id, pk):
-        if self.resolve_policy() is None:
+        if self.resolve_scope()[1] is None:
             return self.not_found()
         baseline = self.get_queryset().filter(id=pk).first()
         if baseline is None:
@@ -647,7 +641,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def partial_update(self, request, slug, product_id, pk):
-        policy, error = self.policy_for_write()
+        _, error = self.scope_for_write()
         if error is not None:
             return error
         baseline = self.get_queryset().filter(id=pk).first()
@@ -664,7 +658,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, slug, product_id, pk):
-        policy, error = self.policy_for_write()
+        _, error = self.scope_for_write()
         if error is not None:
             return error
         baseline = self.get_queryset().filter(id=pk).first()
@@ -678,8 +672,8 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def requirements(self, request, slug, product_id, pk):
         """基线收录的条目。内容与字段结构都取自被收录的那一版，不跟随需求现状。"""
-        policy = self.resolve_policy()
-        if policy is None:
+        _, scope = self.resolve_scope()
+        if scope is None:
             return self.not_found()
         baseline = self.get_queryset().filter(id=pk).first()
         if baseline is None:
@@ -699,7 +693,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda results: RequirementBaselineEntrySerializer(
-                results, many=True, context=self.snapshot_context(policy)
+                results, many=True, context=self.snapshot_context(scope)
             ).data,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
@@ -707,7 +701,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def compare(self, request, slug, product_id, pk):
         """与另一个基线对比。`?to=<baselineId>`。"""
-        if self.resolve_policy() is None:
+        if self.resolve_scope()[1] is None:
             return self.not_found()
         from_baseline = self.get_queryset().filter(id=pk).first()
         to_id = request.query_params.get("to")

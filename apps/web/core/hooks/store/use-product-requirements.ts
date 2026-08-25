@@ -3,9 +3,7 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirement,
-  TRequirementApprovalPolicy,
   TRequirementConfiguration,
-  TRequirementConfigurationPayload,
   TRequirementBatchSavePayload,
   TRequirementBuiltinValues,
   TRequirementData,
@@ -40,18 +38,16 @@ const EMPTY_PAGE: TRequirementsResponse = {
 const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
 
 /**
- * 一个产品的需求：基线（审批配置 / 状态 / 版本）+ 游标分页的需求条目。
+ * 一个产品的需求：只读配置（写权限 / 待审计数 / 字段与需求类型）+ 游标分页的需求条目。
  *
- * 基线由后端惰性创建，所以这里没有「创建基线」这一步 —— 打开页面就一定拿得到一份。
+ * 配置没有写入口 —— 评审人与通过规则随每次提交评审给定，产品级不再持有。
  */
 export const useProductRequirements = ({
   workspaceSlug,
   productId,
-  onPolicyUpdate,
 }: {
   workspaceSlug: string | undefined;
   productId: string | undefined;
-  onPolicyUpdate?: (policy: TRequirementApprovalPolicy) => void;
 }) => {
   const { t } = useTranslation();
   const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
@@ -77,7 +73,6 @@ export const useProductRequirements = ({
     try {
       const response = await requirementService.getConfiguration(workspaceSlug, productId);
       setConfiguration(response);
-      onPolicyUpdate?.(response.policy);
       return response;
     } catch (requestError) {
       setConfigurationError(getErrorMessage(requestError));
@@ -85,7 +80,7 @@ export const useProductRequirements = ({
     } finally {
       setIsConfigurationLoading(false);
     }
-  }, [onPolicyUpdate, productId, workspaceSlug]);
+  }, [productId, workspaceSlug]);
 
   const fetchRequirements = useCallback(async () => {
     if (!workspaceSlug || !productId) return EMPTY_PAGE;
@@ -120,22 +115,6 @@ export const useProductRequirements = ({
   useEffect(() => {
     void fetchRequirements().catch(() => undefined);
   }, [fetchRequirements]);
-
-  const updateConfiguration = useCallback(
-    async (payload: TRequirementConfigurationPayload) => {
-      if (!workspaceSlug || !productId) throw new Error("Product is required.");
-      setIsMutating(true);
-      try {
-        const response = await requirementService.updateConfiguration(workspaceSlug, productId, payload);
-        setConfiguration(response);
-        onPolicyUpdate?.(response.policy);
-        return response;
-      } finally {
-        setIsMutating(false);
-      }
-    },
-    [onPolicyUpdate, productId, workspaceSlug]
-  );
 
   const createRequirement = useCallback(
     async (
@@ -342,7 +321,9 @@ export const useProductRequirements = ({
 
   return {
     configuration,
-    policy: configuration?.policy ?? null,
+    /** 能不能录入/修改需求条目；配置没到之前按不能改处理 */
+    canEdit: configuration?.can_edit ?? false,
+    pendingChangeRequestCount: configuration?.pending_change_request_count ?? 0,
     requirementTypes: configuration?.requirement_types ?? EMPTY_REQUIREMENT_TYPES,
     requirementsPage,
     isConfigurationLoading,
@@ -364,7 +345,6 @@ export const useProductRequirements = ({
     setRequirementTypeFilter: updateRequirementTypeFilter,
     fetchConfiguration,
     fetchRequirements,
-    updateConfiguration,
     createRequirement,
     updateRequirement,
     updateStatus,

@@ -28,7 +28,6 @@ import type {
   TRequirementChangeStatus,
   TRequirementChangeType,
   TRequirementConfiguration,
-  TRequirementConfigurationPayload,
   TRequirementContainerLinkPayload,
   TRequirementData,
   TRequirementExcelImportResponse,
@@ -45,6 +44,7 @@ import type {
   TRequirementModule,
   TRequirementModuleScope,
   TRequirementModuleTreeResponse,
+  TRequirementProjectSubmitChangePayload,
   TRequirementsResponse,
   TRequirementSubmitReviewPayload,
   TRequirementTestCase,
@@ -499,27 +499,19 @@ export class RequirementService extends APIService {
       });
   }
 
-  /* --- 需求配置（审批规则 + 字段/需求类型） -------------------------------- */
+  /* --- 需求配置（字段/需求类型） ------------------------------------------ */
 
   private configurationRoot(workspaceSlug: string, productId: string) {
     return `/api/workspaces/${workspaceSlug}/products/${productId}/requirement-configuration`;
   }
 
-  /** 配置由后端惰性创建，所以 GET 一定拿得到一份（哪怕是空态） */
+  /**
+   * 配置只读：写权限、待审计数与网格字段/需求类型。
+   *
+   * 没有写端点 —— 评审人与通过规则随每次提交评审给定（见 submitReview），产品级不再持有。
+   */
   async getConfiguration(workspaceSlug: string, productId: string): Promise<TRequirementConfiguration> {
     return this.get(`${this.configurationRoot(workspaceSlug, productId)}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async updateConfiguration(
-    workspaceSlug: string,
-    productId: string,
-    payload: TRequirementConfigurationPayload
-  ): Promise<TRequirementConfiguration> {
-    return this.put(`${this.configurationRoot(workspaceSlug, productId)}/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -780,6 +772,9 @@ export class RequirementService extends APIService {
    *
    * 没有单条的提交端点：行上带 pending_change_request_id，单条提交就是 items.length === 1，
    * 单条撤回就是对那个 id 调 cancel。一条代码路径，单条与批量不会走偏。
+   *
+   * 评审人与通过规则随本次提交给定，只对这一张变更单有效；规则为 none 时服务端直接
+   * 返回 status === "approved" 的单。
    */
   async submitReview(
     workspaceSlug: string,
@@ -1047,7 +1042,7 @@ export class RequirementService extends APIService {
 
   /* --- 项目 ↔ 需求 ------------------------------------------------------ */
 
-  /** 项目网格渲染自定义列所需的需求类型与字段。形状与产品的 configuration 一致，但 policy 恒为 null */
+  /** 项目网格渲染自定义列所需的需求类型与字段。形状与产品的 configuration 一致，但 can_edit 恒为 false */
   async getProjectRequirementConfiguration(
     workspaceSlug: string,
     projectId: string
@@ -1207,7 +1202,7 @@ export class RequirementService extends APIService {
   /**
    * 项目侧发起变更单。
    *
-   * 变更单本身仍是产品作用域、审批人仍是产品的名单 —— 项目只是提单入口。
+   * 变更单本身仍是产品作用域、评审人与规则由提交人本次指定 —— 项目只是提单入口。
    * 需求内容与已批准版本一致时服务端会以 REQUIREMENT_NO_CHANGES 拒绝，那是对的：
    * 没有变化就没有可审的东西。
    */
@@ -1215,7 +1210,7 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     projectId: string,
     requirementId: string,
-    payload: { reason?: string } = {}
+    payload: TRequirementProjectSubmitChangePayload
   ): Promise<TRequirementChangeRequest> {
     return this.post(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/${requirementId}/changes/`, payload)
       .then((response) => response?.data)

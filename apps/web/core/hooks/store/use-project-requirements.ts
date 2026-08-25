@@ -5,6 +5,7 @@ import type {
   TRequirementConfiguration,
   TRequirementFilter,
   TRequirementItemStatus,
+  TRequirementProjectSubmitChangePayload,
   TRequirementTypeSchema,
 } from "@plane/types";
 import type { TProjectRequirementListQuery } from "@/components/projects/requirements/filters";
@@ -200,8 +201,9 @@ export const useProjectRequirements = ({
     [fetchConfiguration, fetchRequirements, projectId, workspaceSlug]
   );
 
+  /** 评审人与规则由提交人本次指定，随 payload 一起发 */
   const submitChange = useCallback(
-    async (requirementId: string, reason?: string) => {
+    async (requirementId: string, payload: TRequirementProjectSubmitChangePayload) => {
       if (!workspaceSlug || !projectId) throw new Error("Project is required.");
       setIsMutating(true);
       try {
@@ -209,7 +211,7 @@ export const useProjectRequirements = ({
           workspaceSlug,
           projectId,
           requirementId,
-          { reason }
+          payload
         );
         // 提交后这一行进入评审、变成只读，审批态要立刻反映出来
         await fetchRequirements();

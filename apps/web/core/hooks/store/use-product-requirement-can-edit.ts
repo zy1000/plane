@@ -6,7 +6,7 @@ const requirementService = new RequirementService();
 /**
  * 当前用户能不能改某个产品下的需求内容。
  *
- * 项目需求页自己的 configuration 不带 policy（审批/写入权在产品上），抽屉要改
+ * 项目需求页自己的 configuration 的 can_edit 恒为 false（写入权在产品上），抽屉要改
  * 标题、字段、子表单时必须再问一次产品。取不到或没权限都当不能改，不要把
  * 项目成员误导进一排会 403 的编辑器。
  */
@@ -30,7 +30,7 @@ export const useProductRequirementCanEdit = ({
     void requirementService
       .getConfiguration(workspaceSlug, productId)
       .then((response) => {
-        if (!cancelled) setCanEdit(Boolean(response.policy?.can_edit));
+        if (!cancelled) setCanEdit(Boolean(response.can_edit));
       })
       .catch(() => {
         if (!cancelled) setCanEdit(false);

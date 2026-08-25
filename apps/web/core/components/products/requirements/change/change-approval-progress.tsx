@@ -3,7 +3,7 @@ import { Fragment } from "react";
 import { Popover, Transition } from "@headlessui/react";
 import { CheckCircle2, ChevronDown, CircleMinus, Clock3, XCircle } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirementChangeApproval, TRequirementChangeStatus } from "@plane/types";
+import type { TRequirementApprovalType, TRequirementChangeApproval, TRequirementChangeStatus } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 
@@ -22,10 +22,13 @@ const REQUEST_STATE_ICON: Record<TRequirementChangeStatus, { Icon: typeof CheckC
 
 export function ChangeApprovalProgress({
   approvals,
+  approvalType,
   status,
   summary,
 }: {
   approvals: TRequirementChangeApproval[];
+  /** none 的单没有审批行，进度计数与「未配置审批人」空态都不适用 */
+  approvalType: TRequirementApprovalType;
   status: TRequirementChangeStatus;
   summary?: string;
 }) {
@@ -44,7 +47,7 @@ export function ChangeApprovalProgress({
             <span className={cn("font-medium", statusClassName)}>
               {t(`workspace_products.requirements.change.statuses.${status}`)}
             </span>
-            {status !== "cancelled" && (
+            {status !== "cancelled" && approvalType !== "none" && (
               <>
                 <span aria-hidden className="text-tertiary">
                   ·
@@ -114,7 +117,11 @@ export function ChangeApprovalProgress({
                 </div>
               ) : (
                 <p className="px-4 py-5 text-13 text-tertiary">
-                  {t("workspace_products.requirements.change.approval_empty")}
+                  {t(
+                    approvalType === "none"
+                      ? "workspace_products.requirements.change.approval_none"
+                      : "workspace_products.requirements.change.approval_empty"
+                  )}
                 </p>
               )}
             </Popover.Panel>

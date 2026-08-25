@@ -32,7 +32,6 @@ name="requirement_owner_exactly_one"   # product / project / library 三选一
 |---|---|
 | 编号会变 | `req_unique_product_sequence` 刻意不带 `deleted_at` 条件（`requirement.py:704`），编号永不复用。搬作用域必须重新取号，`PRD-001` 变成别的号 |
 | 历史分裂 | `RequirementVersion`(`:1139`) / `RequirementBaseline`(`:1221`) / `RequirementChangeRequest`(`:917`) 各自有 product/project 二选一约束，搬家后历史行作用域与活行不一致 |
-| 审批人换人 | `RequirementApprovalPolicy` 按作用域唯一，搬过去等于换了一套审批名单 |
 | 语义不对 | 一条需求可以同时被多个项目引用（禅道实测：同一条需求同时属于两个项目）。归属唯一，引用多个 |
 
 **结论：`Requirement.project` 这条腿原样休眠不动**（它是「项目自建需求」的预留，与本次无关），项目侧一律走新建的关联表。
@@ -400,9 +399,9 @@ def can_submit_change_from_project(user, requirement, project) -> bool:
     # 3. requirement.is_locked 为 False（不在别的待审单里）
 ```
 
-新端点 `POST .../projects/<pid>/requirements/<req_id>/changes/` 通过该检查后，**直接调用现有的** `utils/requirement_change.py::submit_change_request()`，变更单本身仍是 **product 作用域**（`RequirementChangeRequest` 的 product/project 二选一约束保持 product 侧），审批人仍是产品的审批名单。
+新端点 `POST .../projects/<pid>/requirements/<req_id>/changes/` 通过该检查后，**直接调用现有的** `utils/requirement_change.py::submit_change_request()`，变更单本身仍是 **product 作用域**（`RequirementChangeRequest` 的 product/project 二选一约束保持 product 侧），评审人与通过规则由提交人在请求体里本次指定（与产品侧提单同一套 `approver_ids / approval_type / required_count`，2026-08-25 起产品级不再有审批配置）。
 
-即：**项目只是提单入口，审批权威不下放。**
+即：**项目只是提单入口，单仍归产品；评审人由提交人本次指定。**
 
 ---
 

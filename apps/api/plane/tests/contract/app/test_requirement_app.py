@@ -17,7 +17,6 @@ from plane.db.models import (
     Product,
     ProductMember,
     Requirement,
-    RequirementApprovalPolicy,
     RequirementLibrary,
     RequirementType,
     WorkspaceMember,
@@ -154,41 +153,22 @@ class TestRequirementApp:
         assert response.status_code == status.HTTP_201_CREATED, response.data
         return response.data
 
-    def configure_approver(self, api_client):
-        policy = api_client.get(self.configuration_url()).data["policy"]
-        response = api_client.put(
-            self.configuration_url(),
-            {
-                "expected_updated_at": policy["updated_at"],
-                "policy": {
-                    "owner_id": str(self.owner.id),
-                    "approver_ids": [str(self.approver.id)],
-                    "approval_type": "any",
-                    "required_count": None,
-                },
-            },
-            format="json",
-        )
-        assert response.status_code == status.HTTP_200_OK, response.data
-
     # --- tests ---------------------------------------------------------
 
-    def test_configuration_is_created_lazily_and_starts_empty(self, api_client):
+    def test_configuration_is_read_only_and_carries_no_policy(self, api_client):
         api_client.force_authenticate(user=self.owner)
-        assert not RequirementApprovalPolicy.objects.filter(
-            product=self.product
-        ).exists()
 
         response = api_client.get(self.configuration_url())
 
         assert response.status_code == status.HTTP_200_OK, response.data
-        # 配置不再持有状态与版本 —— 那些长在每一条需求上
-        assert "status" not in response.data["policy"]
-        assert response.data["policy"]["pending_change_request_count"] == 0
+        # 产品级不再有审批配置：评审人与规则随每次提交给定
+        assert "policy" not in response.data
+        assert response.data["can_edit"] is True
+        assert response.data["pending_change_request_count"] == 0
         assert response.data["requirement_types"] == []
-        assert (
-            RequirementApprovalPolicy.objects.filter(product=self.product).count() == 1
-        )
+
+        updated = api_client.put(self.configuration_url(), {}, format="json")
+        assert updated.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_builtin_values_live_on_columns_not_in_data(self, api_client):
         api_client.force_authenticate(user=self.owner)
@@ -474,13 +454,17 @@ class TestRequirementApp:
     def test_bulk_save_rejects_rows_that_are_under_review(self, api_client):
         api_client.force_authenticate(user=self.owner)
         type_id = self.create_requirement_type(api_client)
-        self.configure_approver(api_client)
         locked = self.add_requirement(api_client, type_id, "评审中")
         submitted = api_client.post(
             self.url(
                 "requirement-change-requests", product_id=self.product.id
             ),
-            {"reason": "提交", "items": [{"requirement_id": locked["id"]}]},
+            {
+                "reason": "提交",
+                "approval_type": "any",
+                "approver_ids": [str(self.approver.id)],
+                "items": [{"requirement_id": locked["id"]}],
+            },
             format="json",
         )
         assert submitted.status_code == status.HTTP_201_CREATED, submitted.data

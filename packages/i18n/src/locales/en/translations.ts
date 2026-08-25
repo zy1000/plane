@@ -2225,14 +2225,16 @@ export default {
       approval: {
         toast: {
           submitted: "Submitted {count} requirements for review",
+          submitted_auto_approved: "Submitted {count} requirement(s); no review needed, changes are live",
           withdrawn: "Review withdrawn",
         },
         submit: {
           title: "Submit requirements for review",
           reason: "Reason",
           confirm: "Submit for review",
+          approvers_required: "Select at least one reviewer",
         },
-        unconfigured: "Not configured",
+        none: "No review",
         any: "Any approver",
         all: "All approvers",
         n_of_m: "A minimum number",
@@ -2250,7 +2252,6 @@ export default {
       validation: {
         title: "Enter a requirement name.",
         owner: "Select a requirement owner.",
-        required_count: "Set the required approvals between 1 and the number of approvers.",
       },
       toast: {
         created: "Requirement created.",
@@ -2447,9 +2448,6 @@ export default {
           reverted: "Draft discarded. The requirements are back on their last published version.",
           failed: "That action could not be completed. Please try again.",
         },
-        errors: {
-          REQUIREMENT_APPROVER_REQUIRED: "Configure at least one approver before submitting for approval.",
-        },
       },
       change: {
         field: "Field",
@@ -2525,6 +2523,7 @@ export default {
         },
         no_changes: "No changes",
         rule: {
+          none: "No review",
           any: "any approver",
           all: "all approvers",
           n_of_m: "{count} approvers",
@@ -2537,6 +2536,7 @@ export default {
         },
         approval_waiting: "Waiting for review",
         approval_empty: "No approvers are assigned to this request.",
+        approval_none: "No review required; effective on submission.",
         meta_columns: {
           field: "Field",
           before: "Before",
@@ -2711,8 +2711,6 @@ export default {
         settings_description: "Maintain the requirement's basic information, owner, and approval rules.",
         basic: "Basic information",
         basic_description: "Set the core information used to identify and manage this requirement.",
-        approval: "Approval settings",
-        approval_description: "Choose the approvers and the rule required to publish changes.",
         current_status: "Baseline status",
         status_overview_description: "Publishing and approval state",
         not_published: "Not published yet",
@@ -2728,21 +2726,6 @@ export default {
         sub_field_count: "{count} sub-fields",
         default_value_summary: "Default {value}",
         current_version: "v{version}",
-        approval_label: "Approval settings: ",
-        rule_help: "The counter lives on its own row, so selecting it never changes the row height.",
-        read_only_hint: "Only product admins can change this configuration.",
-        summary: {
-          any: "Once submitted, a requirement takes effect after any 1 of {approvers} approves it.",
-          all: "Once submitted, a requirement takes effect after all of {approvers} approve it.",
-          n_of_m: "Once submitted, a requirement takes effect after any {count} of {approvers} approve it.",
-          empty: "No approver configured — nobody can submit a requirement for review.",
-          more: "and {count} more",
-        },
-        rule_short: {
-          any: "Any 1 approves",
-          all: "All approve",
-          n_of_m: "Any {count} approve",
-        },
       },
     },
     projects: {

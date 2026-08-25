@@ -30,19 +30,19 @@ STALE_MODIFIED = "modified"
 ENTRY_BATCH_SIZE = 500
 
 
-def _scope_filter(policy):
-    if policy.product_id:
-        return {"product_id": policy.product_id}
-    return {"project_id": policy.project_id}
+def _scope_filter(scope):
+    if scope.product_id:
+        return {"product_id": scope.product_id}
+    return {"project_id": scope.project_id}
 
 
-def collect_baseline_entries(policy, *, requirement_type_ids=None, requirement_ids=None):
+def collect_baseline_entries(scope, *, requirement_type_ids=None, requirement_ids=None):
     """返回 (可收录的 (需求, 版本) 列表, skipped, stale)。
 
     不写库 —— 创建与 dry-run 预览共用这一份判定，保证「预览说会纳入 128 条」与实际
     落库的 128 条永远是同一批。
     """
-    queryset = Requirement.objects.filter(**_scope_filter(policy)).order_by(
+    queryset = Requirement.objects.filter(**_scope_filter(scope)).order_by(
         "sort_order", "created_at", "id"
     )
     if requirement_type_ids:
@@ -104,7 +104,7 @@ def collect_baseline_entries(policy, *, requirement_type_ids=None, requirement_i
 
 
 def create_baseline(
-    policy,
+    scope,
     *,
     name,
     description="",
@@ -114,15 +114,15 @@ def create_baseline(
 ):
     """建一份基线并落库。返回 (baseline, skipped, stale)。"""
     entries, skipped, stale = collect_baseline_entries(
-        policy,
+        scope,
         requirement_type_ids=requirement_type_ids,
         requirement_ids=requirement_ids,
     )
 
     baseline = RequirementBaseline(
-        workspace_id=policy.workspace_id,
-        product_id=policy.product_id,
-        project_id=policy.project_id,
+        workspace_id=scope.workspace_id,
+        product_id=scope.product_id,
+        project_id=scope.project_id,
         name=name,
         description=description or "",
         entry_count=len(entries),

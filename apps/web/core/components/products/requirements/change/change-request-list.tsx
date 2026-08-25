@@ -23,8 +23,17 @@ const approvalDotClass = (approval: TRequirementChangeApproval) => {
 
 function ApprovalProgress({ changeRequest }: { changeRequest: TRequirementChangeRequest }) {
   const { t } = useTranslation();
-  const { approvals, approved_count: approvedCount, rejected_count: rejectedCount, total_count: totalCount } =
-    changeRequest;
+  const {
+    approvals,
+    approval_type: approvalType,
+    approved_count: approvedCount,
+    rejected_count: rejectedCount,
+    total_count: totalCount,
+  } = changeRequest;
+  // 无需评审的单没有审批行：圆点画不出来、计数会是 0/0，只说明规则就够了
+  if (approvalType === "none") {
+    return <span className="text-secondary">{t("workspace_products.requirements.change.rule.none")}</span>;
+  }
   return (
     <span className="flex items-center gap-2">
       <span className="flex items-center gap-1">

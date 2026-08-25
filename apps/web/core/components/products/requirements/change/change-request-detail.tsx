@@ -177,11 +177,15 @@ export function ChangeRequestDetail(props: TProps) {
   }
 
   const rule = approvalRuleLabel(t, changeRequest.approval_type, changeRequest.required_count);
-  const ruleSummary = t("workspace_products.requirements.change.rule_summary", {
-    rule,
-    total: changeRequest.total_count,
-    approved: changeRequest.approved_count,
-  });
+  // 无需评审的单没有「x/y 已通过」可讲，直接给规则文案
+  const ruleSummary =
+    changeRequest.approval_type === "none"
+      ? rule
+      : t("workspace_products.requirements.change.rule_summary", {
+          rule,
+          total: changeRequest.total_count,
+          approved: changeRequest.approved_count,
+        });
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto text-13">
@@ -223,6 +227,7 @@ export function ChangeRequestDetail(props: TProps) {
             <div className="ml-auto">
               <ChangeApprovalProgress
                 approvals={changeRequest.approvals}
+                approvalType={changeRequest.approval_type}
                 status={changeRequest.status}
                 summary={ruleSummary}
               />

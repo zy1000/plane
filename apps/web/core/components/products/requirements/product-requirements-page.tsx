@@ -44,7 +44,8 @@ type TProductRequirementsTab = (typeof TABS)[number];
 /**
  * 产品需求页。
  *
- * 审批配置已迁到产品设置「通用」；这里只做数据 / 变更 / 基线。状态与版本长在每一行上。
+ * 评审人与通过规则随每次提交在弹窗里选，产品级不再持有；这里只做数据 / 变更 / 基线。
+ * 状态与版本长在每一行上。
  */
 export const ProductRequirementsPage = observer(function ProductRequirementsPage() {
   const { t } = useTranslation();
@@ -64,7 +65,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [isInboxOpen, setIsInboxOpen] = useState(false);
 
   const store = useProductRequirements({ workspaceSlug, productId });
-  const policy = store.policy;
   const moduleStore = useRequirementModules(workspaceSlug, productId ? { kind: "product", productId } : undefined);
   /** 批量移动弹窗的目标行；空数组 = 关着 */
   const [moveIds, setMoveIds] = useState<string[]>([]);
@@ -89,7 +89,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     [peekRequirementId, store.requirementsPage.results]
   );
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
-  const canEdit = Boolean(policy?.can_edit);
+  const canEdit = store.canEdit;
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
   const baselinesStore = useRequirementBaselines({ workspaceSlug, productId });
   /**
@@ -97,14 +97,13 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
    * 这个产品的待办；跨产品的全量在弹窗里翻页看。
    */
   const approvalInbox = useRequirementApprovalInbox({ workspaceSlug, productId });
-  const pendingCount = policy?.pending_change_request_count ?? 0;
+  const pendingCount = store.pendingChangeRequestCount;
   const memberOptions = useMemo(() => {
     const byId = new Map<string, IUserLite>();
     members.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    policy?.approver_details.forEach((member) => byId.set(member.id, member));
     if (currentUser) byId.set(currentUser.id, currentUser);
     return Array.from(byId.values());
-  }, [currentUser, members, policy]);
+  }, [currentUser, members]);
 
   const requirementTypes = store.requirementTypes;
   const activeView = useMemo(
@@ -276,7 +275,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     onSubmitted: () => setTab("changes"),
   });
 
-  const isLoading = store.isConfigurationLoading || !policy;
+  const isLoading = store.isConfigurationLoading || !store.configuration;
 
   /**
    * 网格状态格的写入口。只在有页面级写权限时给 —— 状态格刻意不跟行级 is_locked / closed
@@ -622,8 +621,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
       <SubmitReviewModal
         isOpen={approvalActions.isSubmitModalOpen}
         isSubmitting={changesStore.isMutating}
+        workspaceSlug={workspaceSlug}
+        productId={productId}
         onClose={approvalActions.closeSubmitModal}
-        onSubmit={(reason) => void approvalActions.submit(reason)}
+        onSubmit={(payload) => void approvalActions.submit(payload)}
       />
 
       <ApprovalInboxModal

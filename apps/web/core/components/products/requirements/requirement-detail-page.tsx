@@ -51,7 +51,7 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     [requirement?.requirement_type_id, store.requirementTypes]
   );
   /** 能不能改需求条目（页面级写权限）；内容还要看这一行在不在评审中 / 有没有关闭 */
-  const canEdit = Boolean(store.policy?.can_edit);
+  const canEdit = store.canEdit;
   const isEditable = canEditRequirementContent(requirement, canEdit);
   /** 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态 */
   const onStatusChange = canEdit ? detail.updateStatus : undefined;
@@ -213,8 +213,10 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
       <SubmitReviewModal
         isOpen={approvalActions.isSubmitModalOpen}
         isSubmitting={changesStore.isMutating}
+        workspaceSlug={workspaceSlug}
+        productId={productId}
         onClose={approvalActions.closeSubmitModal}
-        onSubmit={(reason) => void approvalActions.submit(reason)}
+        onSubmit={(payload) => void approvalActions.submit(payload)}
       />
     </>
   );

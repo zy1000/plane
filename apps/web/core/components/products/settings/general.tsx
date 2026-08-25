@@ -6,7 +6,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EFileAssetType, EUserWorkspaceRoles } from "@plane/types";
-import type { IUserLite, TLogoProps, TProductNetwork, TRequirementApprovalPolicy } from "@plane/types";
+import type { TLogoProps, TProductNetwork } from "@plane/types";
 import { CustomSelect, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
@@ -20,28 +20,14 @@ import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { RequirementService } from "@/services/requirement.service";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "../context";
 import { DeleteProductModal } from "../delete-modal";
 import { ProductLogoCoverHeader } from "../logo-cover-header";
 import { ProductSettingsHeader } from "./header";
-import {
-  ProductRequirementApprovalSection,
-  type TProductRequirementApprovalDraft,
-} from "./requirement-approval-section";
 
 const workspaceService = new WorkspaceService();
-const requirementService = new RequirementService();
 const EMPTY_DESCRIPTION = "<p></p>";
-
-const toApprovalDraft = (policy: TRequirementApprovalPolicy): TProductRequirementApprovalDraft => ({
-  approver_ids: policy.approver_ids,
-  approval_type: policy.approval_type,
-  required_count: policy.required_count,
-});
-
-const serializeApprovalDraft = (draft: TProductRequirementApprovalDraft) => JSON.stringify(draft);
 
 export const ProductGeneralSettings = observer(function ProductGeneralSettings() {
   const { workspaceSlug, productId } = useParams();
@@ -67,12 +53,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
   const [formError, setFormError] = useState<string | null>(null);
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
-  const [approvalDraft, setApprovalDraft] = useState<TProductRequirementApprovalDraft | null>(null);
-  const [approvalBaseline, setApprovalBaseline] = useState("");
-  const [approvalPolicyUpdatedAt, setApprovalPolicyUpdatedAt] = useState<string | null>(null);
-  const [canManageApproval, setCanManageApproval] = useState(false);
-  const [isApprovalLoading, setIsApprovalLoading] = useState(Boolean(workspaceSlug && productId));
-  const [approverDetails, setApproverDetails] = useState<IUserLite[]>([]);
 
   const { cleanupSessionAssets, commitAssets, handleDeferredAssetDelete, handleDuplicate, handleUpload, resetAssets } =
     useProductEditorAssets({
@@ -96,25 +76,12 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     !hasWorkspaceAdminAccess
   );
 
-  const memberOptions = useMemo(() => {
-    const byId = new Map<string, IUserLite>();
-    productMembers.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    approverDetails.forEach((member) => byId.set(member.id, member));
-    if (currentUser) byId.set(currentUser.id, currentUser);
-    return Array.from(byId.values());
-  }, [approverDetails, currentUser, productMembers]);
-
   // 负责人只能从产品成员里选。成员还在加载时先兜住当前负责人，否则下拉会短暂空掉。
   const ownerCandidateIds = useMemo(() => {
     const ids = productMembers.map((membership) => membership.member);
     if (product?.owner && !ids.includes(product.owner)) ids.unshift(product.owner);
     return ids;
   }, [product?.owner, productMembers]);
-
-  const isApprovalDirty = useMemo(
-    () => Boolean(approvalBaseline && approvalDraft && serializeApprovalDraft(approvalDraft) !== approvalBaseline),
-    [approvalBaseline, approvalDraft]
-  );
 
   useEffect(() => {
     if (!product) return;
@@ -132,37 +99,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     resetAssets();
     setEditorVersion((version) => version + 1);
   }, [product?.id, product?.updated_at, resetAssets]);
-
-  useEffect(() => {
-    if (!workspaceSlug || !productId) return;
-    let cancelled = false;
-    setIsApprovalLoading(true);
-    void requirementService
-      .getConfiguration(workspaceSlug, productId)
-      .then((response) => {
-        if (cancelled) return;
-        const draft = toApprovalDraft(response.policy);
-        setApprovalDraft(draft);
-        setApprovalBaseline(serializeApprovalDraft(draft));
-        setApprovalPolicyUpdatedAt(response.policy.updated_at);
-        setCanManageApproval(response.policy.can_manage);
-        setApproverDetails(response.policy.approver_details);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setApprovalDraft(null);
-        setApprovalBaseline("");
-        setApprovalPolicyUpdatedAt(null);
-        setCanManageApproval(false);
-        setApproverDetails([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsApprovalLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [productId, workspaceSlug]);
 
   useEffect(
     () => () => {
@@ -187,23 +123,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       setOwnerError(t("workspace_products.validation.owner_required"));
       return;
     }
-    if (
-      canManageApproval &&
-      isApprovalDirty &&
-      approvalDraft &&
-      approvalDraft.approver_ids.length > 0 &&
-      approvalDraft.approval_type === "n_of_m" &&
-      (!approvalDraft.required_count ||
-        approvalDraft.required_count < 1 ||
-        approvalDraft.required_count > approvalDraft.approver_ids.length)
-    ) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("workspace_products.requirements.validation.required_count"),
-      });
-      return;
-    }
 
     setIsSaving(true);
     setFormError(null);
@@ -226,46 +145,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         ...(coverPayload ?? {}),
       });
       await commitAssets(descriptionHTML);
-
-      if (canManageApproval && isApprovalDirty && approvalDraft && approvalPolicyUpdatedAt) {
-        try {
-          const response = await requirementService.updateConfiguration(workspaceSlug, productId, {
-            expected_updated_at: approvalPolicyUpdatedAt,
-            policy: {
-              approver_ids: approvalDraft.approver_ids,
-              approval_type: approvalDraft.approver_ids.length ? approvalDraft.approval_type : "any",
-              required_count:
-                approvalDraft.approver_ids.length && approvalDraft.approval_type === "n_of_m"
-                  ? approvalDraft.required_count
-                  : null,
-            },
-          });
-          const nextDraft = toApprovalDraft(response.policy);
-          setApprovalDraft(nextDraft);
-          setApprovalBaseline(serializeApprovalDraft(nextDraft));
-          setApprovalPolicyUpdatedAt(response.policy.updated_at);
-          setApproverDetails(response.policy.approver_details);
-        } catch (error) {
-          const payload = error as { code?: string; error?: string };
-          if (payload?.code === "REQUIREMENT_CONFIGURATION_CONFLICT") {
-            const refreshed = await requirementService.getConfiguration(workspaceSlug, productId).catch(() => null);
-            if (refreshed) {
-              const nextDraft = toApprovalDraft(refreshed.policy);
-              setApprovalDraft(nextDraft);
-              setApprovalBaseline(serializeApprovalDraft(nextDraft));
-              setApprovalPolicyUpdatedAt(refreshed.policy.updated_at);
-              setCanManageApproval(refreshed.policy.can_manage);
-              setApproverDetails(refreshed.policy.approver_details);
-            }
-          }
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: t("error"),
-            message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
-          });
-          return;
-        }
-      }
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -466,21 +345,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               <span>{t("workspace_products.visibility.private_access_warning")}</span>
             </div>
-          )}
-
-          {isApprovalLoading ? (
-            <Loader>
-              <Loader.Item height="160px" />
-            </Loader>
-          ) : (
-            approvalDraft && (
-              <ProductRequirementApprovalSection
-                draft={approvalDraft}
-                readOnly={!canManageApproval}
-                memberOptions={memberOptions}
-                onChange={setApprovalDraft}
-              />
-            )
           )}
 
           <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">

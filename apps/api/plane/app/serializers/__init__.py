@@ -176,8 +176,6 @@ from .qa import (
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
 from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer
 from .requirement import (
-    RequirementApprovalPolicySerializer,
-    RequirementApprovalPolicyWriteSerializer,
     RequirementBatchSaveSerializer,
     RequirementCreateSerializer,
     RequirementFilterSerializer,
@@ -207,6 +205,7 @@ from .requirement_change import (
     RequirementChangeRequestDetailSerializer,
     RequirementChangeRequestSerializer,
     RequirementChangeSubmitSerializer,
+    RequirementProjectChangeSubmitSerializer,
     RequirementSchemaRevisionSerializer,
     RequirementVersionSerializer,
 )

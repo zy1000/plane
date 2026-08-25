@@ -34,7 +34,7 @@
 - **Requirement** — 需求条目本身，**就是唯一的可变副本**。没有影子表 / 工作副本表，人直接改它。三种归属共用一张表：`product` / `project` / `library` 三选一（CheckConstraint 强制）。
 - **RequirementType** — 字段定义源，**工作区级**。条目通过外键实时引用字段定义；字段结构变更**立即生效、不走审批**。
 - **RequirementVersion** — 每条需求各自的版本链（v1, v2…），**只在审批通过时写入**。
-- **approval** — `RequirementApprovalPolicy`（规则：any / all / n_of_m）+ `RequirementApprover`（名单）。Policy 只管规则，**不持有状态**，每作用域唯一一条、惰性创建。
+- **approval** — **没有产品级的审批配置**（2026-08-25 改造，迁移 `0345` 删掉了 `RequirementApprovalPolicy` / `RequirementApprover`）。评审人名单与通过规则（`none` 无需评审 / `any` / `all` / `n_of_m`）由提交人在**每次提交评审时**给定，只对那一张变更单有效，直接落在 `RequirementChangeRequest.approval_type/required_count` 与 `RequirementChangeApproval` 行上。`none` 提交即通过（不建审批行、不锁行、不发通知，直接走 `_apply_approved_items`）。
 - **change**（`RequirementChangeRequest` + `RequirementChangeItem`）— **唯一的审批载体**。一张单覆盖 1..N 条需求，同批通过 / 同批驳回。审批单位是**变更单**，不是条目。
 - **baseline**（`RequirementBaseline` + `Entry`）— 一组 (需求, 版本) 的不可变命名快照，**语义等同 git tag**。没有状态、不参与审批、创建后内容不可改（只有 name/description 能改）。
 
@@ -95,14 +95,14 @@
 - **不追随删除的表一律用裸 `UUIDField` 而非外键**（`requirement.py:150-153`）：`ChangeItem.target_id`、`Version.target_id`、`BaselineEntry.requirement_id`。原因是仓库的 `soft_delete_related_objects` 会把 PROTECT 当 CASCADE 处理。**新增需要活过需求删除的表时照此办理。**
 - **提交时客户端只发指针不发快照**，服务端自己读当前行内容 —— 否则一个陈旧的网格可以用旧内容开出一张新单。
 - **`change_type` 由服务端定**，客户端只能表达「我要删」的意图。
-- 提交时冻结三样东西进单：`schema_revision`（字段结构）、`approval_type`/`required_count`（规则快照）、`RequirementChangeApproval` 行（名单快照）。**在途的单不受后续配置修改影响。**
+- 提交时写进单里的：`schema_revision`（字段结构快照）、`approval_type`/`required_count` 与 `RequirementChangeApproval` 行（**本次提交给定的**规则与名单，不是任何配置的快照）。评审人资格（产品成员 / 工作区管理员）在 `submit_change_request` 里查，产品侧与项目侧两个提单入口共用（409 `REQUIREMENT_APPROVER_INVALID`）；形状校验（none 不带名单、n_of_m 人数区间）在 `RequirementChangeApprovalSpecSerializer`。
 - update 类型做字段级 diff，无实质变化的行直接跳过；全部无变化则删掉空单并抛 `REQUIREMENT_NO_CHANGES`。
 - **回滚 `rollback_requirement_to_version()` 不是撤销审批**：版本链一条不动，`approved_version` 也不变，它只是一次写在活行上的**普通编辑**（`version += 1`）。只恢复内容列（`parent_id` 不回滚，避免 FK 悬挂）。恢复的 `data` 必须按**当前**字段结构裁剪（`prune_requirement_data_to_fields`）。
 - **标准库条目是旁路**：`RequirementLibrary` 内的条目永不走审批（approval_state 永远 `draft`，status 恒 `not_started`），由 CheckConstraint `req_library_item_never_approved` 硬保证。
 - 基线只收录 `approved_version` 非空的需求；评审中/已改动的按**上一个已通过版本**收录并标 `stale`；从未通过的 `skipped`。`collect_baseline_entries()` 不写库，**创建与 dry-run 预览共用同一份判定**。
 - `compare_baselines()` 产出的 diff item 形状**与 RequirementChangeItem 一致**，前端 diff 组件可直接复用。
 - **模型层 product / project 双作用域都建了约束，但 URL 层目前只暴露 product 作用域**的变更单 / 基线 / 配置入口。project 是模型预留，不要以为有对应 API。
-- `can_manage_policy` 权限**比写权限更窄**（`views/requirement/mixins.py`），防止提交者自改审批人。
+- **作用域句柄是 `RequirementScopeHandle`**（`utils/requirement.py`，product / project 二选一），产品级的取号写锁就是 `Product` 行（`get_requirement_scope(for_update=True)` → `select_for_update`）。以前这两个角色由 policy 行兼任，别再找 `get_scoped_policy` / `can_manage_policy`。提交人可以把自己列为评审人（产品决策：既然有 `none`，限制自审没有实际防护意义）。
 
 ### 文件落点
 
@@ -113,7 +113,7 @@
 | Serializers | `serializers/requirement.py`(1222行) / `requirement_change.py` / `requirement_type.py` / `requirement_library.py` / `requirement_project.py` |
 | Utils | `utils/requirement.py`(领域核心) / `requirement_change.py`(提交审批驳回撤回回滚) / `requirement_project.py`(项目侧关联 + 需求状态写入口与自动推进) / `requirement_baseline.py` / `requirement_schema.py` / `requirement_notification.py` |
 | URLs | `apps/api/plane/app/urls/requirement.py` |
-| 迁移 | `0302`–`0323`（`0319` drop baseline approval、`0320` 审批下沉到条目 是两次关键转向） |
+| 迁移 | `0302`–`0323`（`0319` drop baseline approval、`0320` 审批下沉到条目 是两次关键转向）、`0345`（删产品级审批配置，规则加 `none`） |
 | 前端类型 | `packages/types/src/requirement.ts`、`requirement-type.ts` |
 | 前端 service | `apps/web/core/services/requirement.service.ts`、`requirement-type.service.ts` |
 | 前端 hook | `core/hooks/store/use-requirement-*.ts`、`use-product-requirements.ts`（**走局部 state，不进 MobX root store**） |

@@ -40,6 +40,7 @@ from plane.utils.requirement import (
     CONTENT_BUILTIN_COLUMNS,
     builtin_values_from_payload,
     field_specs_for_requirement_types,
+    get_requirement_eligible_user_ids,
     prune_requirement_data_to_fields,
     serialize_builtin_values,
 )
@@ -154,17 +155,17 @@ def changed_root_field_ids(before_row, after_row, fields_by_id):
 # --- 序号与版本号 ---------------------------------------------------------
 
 
-def scope_filter(policy):
-    """这份审批配置管辖的行/单的过滤条件。标准库的行永远不在其中。"""
-    if policy.product_id:
-        return {"product_id": policy.product_id}
-    return {"project_id": policy.project_id}
+def scope_filter(scope):
+    """这个作用域管辖的行/单的过滤条件。标准库的行永远不在其中。"""
+    if scope.product_id:
+        return {"product_id": scope.product_id}
+    return {"project_id": scope.project_id}
 
 
-def _next_sequence_id(policy):
+def _next_sequence_id(scope):
     """变更单序号按作用域自增（CR-001），不再按基线。"""
     current = RequirementChangeRequest.objects.filter(
-        **scope_filter(policy)
+        **scope_filter(scope)
     ).aggregate(value=Max("sequence_id"))["value"]
     return (current or 0) + 1
 
@@ -239,21 +240,53 @@ def _resolve_change_type(row, requested):
     return RequirementChangeType.UPDATE
 
 
-def submit_change_request(*, policy, items, reason="", actor=None):
+def _validate_approvers(scope, approver_ids):
+    """评审人必须是这个作用域里能审批的人（产品成员 / 工作区管理员）。
+
+    形状类校验（去重、n_of_m 人数区间、none 不带名单）在序列化器；这里只做要查库的
+    那一条，放在 util 里是让产品侧与项目侧两个提单入口共用。
+    """
+    eligible_ids = get_requirement_eligible_user_ids(
+        workspace_id=scope.workspace_id,
+        user_ids=approver_ids,
+        product_id=scope.product_id,
+        project_id=scope.project_id,
+    )
+    invalid = [str(item) for item in approver_ids if item not in eligible_ids]
+    if invalid:
+        raise RequirementChangeError(
+            "Approvers must be members of this product.",
+            code="REQUIREMENT_APPROVER_INVALID",
+            detail={"approver_ids": invalid},
+        )
+
+
+def submit_change_request(
+    *,
+    scope,
+    items,
+    approver_ids,
+    approval_type,
+    required_count=None,
+    reason="",
+    actor=None,
+):
     """提交 1..N 条需求进入评审。
 
     items: [{"requirement_id": UUID, "change_type": "create"|"update"|"delete"}]
     客户端只发指针不发快照 —— 服务端自己读当前行内容，否则一个陈旧的网格可以用旧
     内容开出一张新单。
+
+    评审人与通过规则由提交人在这一刻给定，只对这张单有效 —— 产品级没有常驻的审批
+    配置，所以它们不是「快照」，而是第一手输入。approval_type=none 是「无需评审」：
+    不建审批行、不锁行，提交即按通过处理。
     """
-    approver_ids = list(
-        policy.approvers.order_by("sort_order", "created_at", "id").values_list(
-            "approver_id", flat=True
-        )
-    )
-    if not approver_ids:
+    approver_ids = list(dict.fromkeys(approver_ids or []))
+    if approval_type == RequirementApprovalType.NONE:
+        approver_ids = []
+    elif not approver_ids:
         raise RequirementChangeError(
-            "Configure at least one approver before submitting.",
+            "Select at least one approver before submitting.",
             code="REQUIREMENT_APPROVER_REQUIRED",
         )
     if not items:
@@ -261,8 +294,10 @@ def submit_change_request(*, policy, items, reason="", actor=None):
             "Select at least one requirement to submit.",
             code="REQUIREMENT_NO_CHANGES",
         )
+    if approver_ids:
+        _validate_approvers(scope, approver_ids)
 
-    scope = scope_filter(policy)
+    row_scope = scope_filter(scope)
     requested_by_id = {}
     for item in items:
         requested_by_id[str(item["requirement_id"])] = item.get(
@@ -272,7 +307,7 @@ def submit_change_request(*, policy, items, reason="", actor=None):
     # 锁定顺序恒定（sort_order, created_at, id），两个并发提交不会死锁
     rows = list(
         Requirement.objects.select_for_update()
-        .filter(**scope, id__in=list(requested_by_id))
+        .filter(**row_scope, id__in=list(requested_by_id))
         .order_by("sort_order", "created_at", "id")
     )
     found_ids = {str(row.id) for row in rows}
@@ -345,14 +380,20 @@ def submit_change_request(*, policy, items, reason="", actor=None):
             requirement_type, actor=actor
         )
 
+    is_auto_approved = approval_type == RequirementApprovalType.NONE
     change_request = RequirementChangeRequest(
-        workspace_id=policy.workspace_id,
-        product_id=policy.product_id,
-        project_id=policy.project_id,
-        sequence_id=_next_sequence_id(policy),
-        approval_type=policy.approval_type,
-        required_count=policy.required_count,
-        status=RequirementChangeStatus.PENDING,
+        workspace_id=scope.workspace_id,
+        product_id=scope.product_id,
+        project_id=scope.project_id,
+        sequence_id=_next_sequence_id(scope),
+        approval_type=approval_type,
+        required_count=required_count,
+        status=(
+            RequirementChangeStatus.APPROVED
+            if is_auto_approved
+            else RequirementChangeStatus.PENDING
+        ),
+        completed_at=timezone.now() if is_auto_approved else None,
         reason=reason or "",
         created_by=actor,
         updated_by=actor,
@@ -425,7 +466,13 @@ def submit_change_request(*, policy, items, reason="", actor=None):
         ]
     )
 
-    # 审批人名单与规则在提交这一刻就物化下来，此后改配置不影响在途的单
+    if is_auto_approved:
+        # 无需评审：跳过审批行、通知与锁行，直接走通过路径 —— 与 act 通过时同一个
+        # util，版本链与三列回填不会走偏。刻意不给提交人发「已通过」：他刚点完提交。
+        _apply_approved_items(change_request, actor=actor)
+        return change_request
+
+    # 审批人名单与规则在提交这一刻写进单里，只对这张单有效
     RequirementChangeApproval.objects.bulk_create(
         [
             RequirementChangeApproval(

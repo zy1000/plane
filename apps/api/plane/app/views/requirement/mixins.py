@@ -7,21 +7,23 @@
 
 只读也不再是产品级的闸门：一条需求能不能写，只看它自己在不在评审中
 （Requirement.pending_change_item），见 row_base.py 的逐端点闸门。
+
+作用域句柄是 RequirementScopeHandle（product / project 二选一）；产品级的取号写锁
+就是 Product 行本身 —— 审批人与规则已经下沉到每张变更单，产品上没有配置行可锁了。
 """
 
 from typing import NamedTuple
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
 
 from plane.db.models import (
     Product,
     Requirement,
-    RequirementApprovalPolicy,
     RequirementType,
 )
 from plane.utils.product import can_edit_product_requirements, can_view_product
 from plane.utils.requirement import (
+    RequirementScopeHandle,
     field_specs_for_requirement_types,
     get_referenced_requirement_type_ids,
     get_requirement_type_field_specs,
@@ -90,15 +92,15 @@ class RowLayer(NamedTuple):
     import_items: object
 
 
-def resolve_row_layer(policy):
+def resolve_row_layer(scope):
     """产品/项目作用域下的需求行入口。
 
     字段一律实时取自被引用的需求类型 —— 字段结构变更立即生效，正式表里再没有任何
     东西是冻结的。历史版本的渲染依据由 RequirementTypeSchemaRevision 保住。
     """
-    scope = scope_row_filter(policy)
+    row_scope = scope_row_filter(scope)
     requirement_type_ids = get_referenced_requirement_type_ids(
-        model=Requirement, scope=scope
+        model=Requirement, scope=row_scope
     )
     fields, fields_by_requirement_type = field_specs_for_requirement_types(
         requirement_type_ids
@@ -108,44 +110,50 @@ def resolve_row_layer(policy):
         # LEFT OUTER JOIN，而 partial_update / rollback 直接在 layer.queryset 上
         # select_for_update()，Postgres 拒绝对 outer join 的可空侧加锁。
         # 模块名由 _row_context 的 module_names 批量映射解析，不靠 FK 穿透。
-        queryset=Requirement.objects.filter(**scope).order_by(
+        queryset=Requirement.objects.filter(**row_scope).order_by(
             "sort_order", "created_at", "id"
         ),
         serializer_context={
-            "product_id": policy.product_id,
-            "project_id": policy.project_id,
+            "product_id": scope.product_id,
+            "project_id": scope.project_id,
             # 这一批行的展示编号前缀（ECOM-1 里的 ECOM）。作用域内是常量，
-            # policy 已经 select_related 了 product/project，取它零查询。
+            # 句柄上挂的就是已加载的 product/project 实例，取它零查询。
             "scope_identifier": (
-                policy.product.identifier
-                if policy.product_id
-                else policy.project.identifier
+                scope.product.identifier
+                if scope.product_id
+                else scope.project.identifier
             ),
         },
         requirement_type_ids=requirement_type_ids,
         fields=fields,
         fields_by_requirement_type=fields_by_requirement_type,
         requirement_type_resolver=RequirementTypeResolver(
-            workspace_id=policy.workspace_id
+            workspace_id=scope.workspace_id
         ),
         default_requirement_type_id=None,
-        insert=lambda **kwargs: insert_baseline_requirement(policy=policy, **kwargs),
+        insert=lambda **kwargs: insert_baseline_requirement(scope=scope, **kwargs),
         save_batch=lambda **kwargs: save_baseline_requirement_batch(
-            policy=policy, **kwargs
+            scope=scope, **kwargs
         ),
-        import_items=lambda **kwargs: import_library_items(policy=policy, **kwargs),
+        import_items=lambda **kwargs: import_library_items(scope=scope, **kwargs),
     )
 
 
-def get_scoped_product(user, *, slug, product_id):
-    """按工作区与可见性解析产品；不存在或不可见都返回 None。"""
+def get_scoped_product(user, *, slug, product_id, for_update=False):
+    """按工作区与可见性解析产品；不存在或不可见都返回 None。
+
+    for_update 锁 Product 行：它是产品内取号（需求 sequence_id、变更单 sequence_id
+    都是 Max+1）的互斥锁，只在 transaction.atomic() 内传 True。
+    """
+    queryset = (
+        Product.objects.filter(id=product_id, workspace__slug=slug)
+        .select_related("workspace")
+        .prefetch_related("reviewers")
+    )
+    if for_update:
+        queryset = queryset.select_for_update(of=("self",))
     try:
-        product = (
-            Product.objects.filter(id=product_id, workspace__slug=slug)
-            .select_related("workspace")
-            .prefetch_related("reviewers")
-            .first()
-        )
+        product = queryset.first()
     except (ValidationError, ValueError):
         return None
     if product is None or not can_view_product(user, product):
@@ -153,54 +161,18 @@ def get_scoped_product(user, *, slug, product_id):
     return product
 
 
-def get_scoped_policy(user, *, slug, product_id, for_update=False, create=False):
-    """解析产品的需求审批配置。
-
-    配置是惰性创建的：产品刚建出来时并没有配置行，第一次打开需求页（GET 配置）或第一次
-    提交评审时才落库。create=False 时返回 (product, None)，调用方按需决定是报 404 还是
-    给一份空态 —— 没有配置不影响录入需求，只影响提交评审。
+def get_requirement_scope(user, *, slug, product_id, for_update=False):
+    """解析产品并给出它的作用域句柄，返回 (product, scope)；产品不存在或不可见时
+    两者都是 None。写路径传 for_update=True 拿产品级写锁（见 get_scoped_product）。
     """
-    product = get_scoped_product(user, slug=slug, product_id=product_id)
+    product = get_scoped_product(
+        user, slug=slug, product_id=product_id, for_update=for_update
+    )
     if product is None:
         return None, None
-
-    queryset = RequirementApprovalPolicy.objects.filter(product=product).select_related(
-        "workspace", "product", "project", "owner"
-    )
-    if for_update:
-        queryset = queryset.select_for_update(of=("self",))
-    policy = queryset.first()
-    if policy is None and create:
-        # 配置行还不存在时 for_update 锁不住任何东西，两个并发的「产品第一条需求」
-        # 会同时走到这里。谁先 INSERT 谁赢，输的那个吞掉 IntegrityError 再回头把
-        # 赢家的行锁住 —— 否则两条需求会各自取到 sequence_id=1。
-        # 内层 atomic 是必需的：不开 savepoint 的话 IntegrityError 会把外层事务
-        # 标记成 broken，后面一句查询都发不出去。
-        try:
-            with transaction.atomic():
-                policy = RequirementApprovalPolicy.objects.create(
-                    product=product,
-                    workspace_id=product.workspace_id,
-                    owner=user,
-                    created_by=user,
-                )
-        except IntegrityError:
-            policy = None
-        policy = queryset.first() or policy
-    return product, policy
+    return product, RequirementScopeHandle.for_product(product)
 
 
 def can_write_requirements(user, product):
     """能不能录入/修改需求条目。产品成员即可。"""
     return can_edit_product_requirements(user, product)
-
-
-def can_manage_policy(user, product):
-    """能不能改审批配置（谁是审批人、几个人通过）。
-
-    必须比 can_write_requirements 更窄：配置本身不再受审批保护，两者相同的话，任何
-    能提交的人都可以先把审批人改成自己再批自己的单。
-    """
-    from plane.utils.product import can_manage_product
-
-    return can_manage_product(user, product)

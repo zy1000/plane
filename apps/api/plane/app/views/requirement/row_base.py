@@ -109,7 +109,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
     # --- 子类必须实现 ---------------------------------------------------
 
     def resolve_owner(self, *, for_update=False):
-        """返回这批需求行的归属对象（审批配置或标准库）；不存在或不可见时返回 None。"""
+        """返回这批需求行的归属对象（产品作用域句柄或标准库）；不存在或不可见时返回 None。"""
         raise NotImplementedError
 
     def can_write(self, owner):
@@ -354,7 +354,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
     def create(self, request, *args, **kwargs):
         """新增永不设闸门 —— 新行恒为草稿态，没有已批准内容需要保护。
 
-        整个方法体在一个事务里，**第一件事**就是拿作用域写锁（产品是审批配置行，
+        整个方法体在一个事务里，**第一件事**就是拿作用域写锁（产品是 Product 行，
         标准库是库行）：sequence_id 用 Max+1 取号，没有这把锁，两个并发的单条创建会
         拿到同一个号然后撞 req_unique_*_sequence。锁的顺序与 bulk_save /
         import_from_library 一致（owner 行 → requirements 行），所以不会与它们死锁。

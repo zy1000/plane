@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 from uuid import uuid4
 
 from django.db.models import Max, Q
@@ -13,7 +13,6 @@ from plane.db.models import (
     ProductMember,
     ProjectMember,
     Requirement,
-    RequirementApprover,
     RequirementChangeItem,
     RequirementChangeStatus,
     RequirementField,
@@ -503,24 +502,6 @@ def rows_affected_by_fields(requirement_type):
     因此 affected_row_count 现在也包含已通过审批的行，确认弹窗的文案要跟着改口径。
     """
     return Requirement.objects.filter(requirement_type=requirement_type)
-
-
-def replace_requirement_approvers(*, policy, approver_ids, actor=None):
-    """Replace the active approver list while preserving the submitted order."""
-    RequirementApprover.objects.filter(policy=policy).delete()
-    RequirementApprover.objects.bulk_create(
-        [
-            RequirementApprover(
-                policy=policy,
-                approver_id=approver_id,
-                sort_order=index,
-                created_by=actor,
-            )
-            for index, approver_id in enumerate(approver_ids)
-        ]
-    )
-    if hasattr(policy, "_prefetched_objects_cache"):
-        policy._prefetched_objects_cache.pop("approvers", None)
 
 
 def _field_specs_of(owner):
@@ -1105,9 +1086,9 @@ def _sequence_allocator(scope):
     用 objects 的话，删掉 ECOM-7 之后下一条新建会拿到 7，然后撞
     req_unique_product_sequence，整批回滚。
 
-    并发正确性完全依赖调用方已经持有该作用域的写锁：产品/项目是
-    RequirementApprovalPolicy 行（get_scoped_policy(for_update=True)），
-    标准库是 RequirementLibrary 行（get_scoped_library(for_update=True)）。
+    并发正确性完全依赖调用方已经持有该作用域的写锁：产品是 Product 行
+    （get_requirement_scope(for_update=True)），标准库是 RequirementLibrary 行
+    （get_scoped_library(for_update=True)）。
 
     计数器活在闭包里，所以**工厂实例必须一次写入用一个**，绝不能提到 RowLayer
     字段上或缓存在按请求复用的对象里 —— 跨事务复用会发出重复的号。
@@ -1246,16 +1227,41 @@ def _new_library_item(library):
     return factory
 
 
-def scope_row_filter(policy):
+class RequirementScopeHandle(NamedTuple):
+    """产品/项目作用域的句柄：需求行、变更单、基线的读写入口都拿它定作用域。
+
+    以前这个角色由 RequirementApprovalPolicy 行兼任（它同时是产品级的取号写锁）。
+    审批人与规则下沉到每张变更单后，产品级不再有常驻配置，作用域与写锁改由
+    Product / Project 行本身承担 —— 属性名沿用旧的 policy，接收方不用改。
+    """
+
+    workspace_id: Any
+    product: Any = None
+    project: Any = None
+
+    @property
+    def product_id(self):
+        return self.product.id if self.product is not None else None
+
+    @property
+    def project_id(self):
+        return self.project.id if self.project is not None else None
+
+    @classmethod
+    def for_product(cls, product):
+        return cls(workspace_id=product.workspace_id, product=product)
+
+
+def scope_row_filter(scope):
     """一个产品/项目作用域下的需求行的过滤条件。标准库的行永远不在其中。"""
-    if policy.product_id:
-        return {"product_id": policy.product_id}
-    return {"project_id": policy.project_id}
+    if scope.product_id:
+        return {"product_id": scope.product_id}
+    return {"project_id": scope.project_id}
 
 
 def insert_baseline_requirement(
     *,
-    policy,
+    scope,
     data,
     builtin,
     requirement_type_id,
@@ -1268,9 +1274,9 @@ def insert_baseline_requirement(
     # code 形参只为与库侧 insert 的调用形状对齐；产品/项目工厂对非 None 显式报错
     return insert_requirement_row(
         model=Requirement,
-        scope=scope_row_filter(policy),
+        scope=scope_row_filter(scope),
         new_row=_new_scoped_requirement(
-            product=policy.product, project=policy.project
+            product=scope.product, project=scope.project
         ),
         data=data,
         builtin=builtin,
@@ -1493,7 +1499,7 @@ def save_requirement_row_batch(
 
 def save_baseline_requirement_batch(
     *,
-    policy,
+    scope,
     creates,
     updates,
     deletes,
@@ -1501,9 +1507,9 @@ def save_baseline_requirement_batch(
 ):
     return save_requirement_row_batch(
         model=Requirement,
-        scope=scope_row_filter(policy),
+        scope=scope_row_filter(scope),
         new_row=_new_scoped_requirement(
-            product=policy.product, project=policy.project
+            product=scope.product, project=scope.project
         ),
         creates=creates,
         updates=updates,
@@ -1594,7 +1600,7 @@ def remap_imported_parents(*, model, created_rows, parent_by_client_id):
 
 
 def import_library_items(
-    *, policy, library, item_ids, actor=None, before_id=None, after_id=None
+    *, scope, library, item_ids, actor=None, before_id=None, after_id=None
 ):
     """把标准库条目导入这个作用域的需求表。
 
@@ -1607,17 +1613,17 @@ def import_library_items(
         before_id=before_id,
         after_id=after_id,
     )
-    if policy.product_id and any(module_by_client_id.values()):
+    if scope.product_id and any(module_by_client_id.values()):
         target_module_ids = map_library_modules_to_product(
             library=library,
-            product=policy.product,
+            product=scope.product,
             module_by_client_id=module_by_client_id,
             actor=actor,
         )
         for item in creates:
             item["module_id"] = target_module_ids.get(item["client_id"])
     created_rows, updated_rows, deleted_ids = save_baseline_requirement_batch(
-        policy=policy,
+        scope=scope,
         creates=creates,
         updates=[],
         deletes=[],

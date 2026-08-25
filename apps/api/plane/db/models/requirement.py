@@ -91,6 +91,9 @@ class RequirementPriority(models.TextChoices):
 
 
 class RequirementApprovalType(models.TextChoices):
+    """变更单的通过规则。none 是「无需评审」：提交即通过，不建审批行。"""
+
+    NONE = "none", "无需评审"
     ANY = "any", "任一人通过"
     ALL = "all", "全部通过"
     N_OF_M = "n_of_m", "至少 N 人通过"
@@ -120,8 +123,9 @@ class RequirementChangeType(models.TextChoices):
 #
 # 审批的单位是**一条需求**，不是整个产品。
 #
-#   RequirementApprovalPolicy —— 一个产品（或项目）唯一一条，只回答「谁能批、
-#                                要几个人批」。不持有状态，也不持有版本。
+#   RequirementChangeRequest  —— 一次变更申请。「谁能批、要几个人批」由提交人在
+#                                提交这一刻给定，只对这张单有效；产品级没有常驻的
+#                                审批配置。
 #   Requirement               —— 需求条目本身。它就是唯一的可变副本，人直接改它；
 #                                「最后一次批准的内容」在 RequirementVersion 里。
 #   RequirementVersion        —— 每条需求各自的版本链（v1, v2, ...）。
@@ -261,110 +265,6 @@ class RequirementTypeSchemaRevision(BaseModel):
 
     def __str__(self):
         return f"{self.requirement_type_id} r{self.revision}"
-
-
-class RequirementApprovalPolicy(BaseModel):
-    """一个产品（或项目）的需求审批配置。
-
-    它只回答「谁能批、要几个人批」，不再持有任何状态或版本 —— 状态与版本现在长在
-    每一条需求上。每个作用域只有一条，惰性创建。
-
-    改配置立即生效、不走审批。在途的变更单不受影响：提交那一刻规则与名单就已经快照
-    进变更单与 RequirementChangeApproval 行了。正因为配置不再受审批保护，能改它的人
-    必须比能提交的人更窄（见 can_manage_product），否则任何人都能把审批人改成自己。
-    """
-
-    workspace = models.ForeignKey(
-        "db.WorkSpace",
-        on_delete=models.CASCADE,
-        related_name="requirement_approval_policies",
-        verbose_name="所属工作区",
-    )
-    product = models.ForeignKey(
-        "db.Product",
-        on_delete=models.CASCADE,
-        related_name="requirement_approval_policies",
-        null=True,
-        blank=True,
-        verbose_name="所属产品",
-    )
-    project = models.ForeignKey(
-        "db.Project",
-        on_delete=models.CASCADE,
-        related_name="requirement_approval_policies",
-        null=True,
-        blank=True,
-        verbose_name="所属项目",
-    )
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="owned_requirement_approval_policies",
-        verbose_name="负责人",
-    )
-    approval_type = models.CharField(
-        max_length=10,
-        choices=RequirementApprovalType.choices,
-        default=RequirementApprovalType.ANY,
-        verbose_name="审批通过规则",
-    )
-    required_count = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="最少通过人数（仅 N_OF_M 模式生效）",
-    )
-
-    class Meta:
-        db_table = "requirement_approval_policies"
-        ordering = ("-updated_at",)
-        constraints = [
-            # 作用域：必须且只能归属一个产品或一个项目
-            models.CheckConstraint(
-                check=Q(product__isnull=False, project__isnull=True)
-                | Q(product__isnull=True, project__isnull=False),
-                name="req_policy_scope_exactly_one",
-            ),
-            # 审批规则：N_OF_M 必须给 >=1 的通过人数，其余规则必须为空
-            models.CheckConstraint(
-                check=(
-                    Q(approval_type=RequirementApprovalType.N_OF_M)
-                    & Q(required_count__gte=1)
-                )
-                | (
-                    ~Q(approval_type=RequirementApprovalType.N_OF_M)
-                    & Q(required_count__isnull=True)
-                ),
-                name="req_policy_required_count_consistent",
-            ),
-            # 每个作用域只允许一条有效配置
-            models.UniqueConstraint(
-                fields=["product"],
-                condition=Q(product__isnull=False, deleted_at__isnull=True),
-                name="req_policy_unique_product_active",
-            ),
-            models.UniqueConstraint(
-                fields=["project"],
-                condition=Q(project__isnull=False, deleted_at__isnull=True),
-                name="req_policy_unique_project_active",
-            ),
-        ]
-
-    def __str__(self):
-        return f"approval policy of {self.product_id or self.project_id}"
-
-    @property
-    def scope(self):
-        if self.product_id:
-            return RequirementScope.PRODUCT
-        return RequirementScope.PROJECT
-
-    def save(self, *args, **kwargs):
-        if not self.workspace_id:
-            if self.product_id:
-                self.workspace_id = self.product.workspace_id
-            elif self.project_id:
-                self.workspace_id = self.project.workspace_id
-        return super().save(*args, **kwargs)
 
 
 class RequirementLibrary(BaseModel):
@@ -946,42 +846,6 @@ class Requirement(BaseModel):
         return super().save(*args, **kwargs)
 
 
-class RequirementApprover(BaseModel):
-    """审批配置的审批人名单（谁可以审批），与审批规则（approval_type/required_count）配套。
-
-    随配置存在：发起变更请求时按此名单快照为 RequirementChangeApproval 记录，所以
-    在途的变更单不会因为名单被改而受影响。当前仅支持指定成员。
-    """
-
-    policy = models.ForeignKey(
-        RequirementApprovalPolicy,
-        on_delete=models.CASCADE,
-        related_name="approvers",
-        verbose_name="所属审批配置",
-    )
-    approver = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="requirement_approvers",
-        verbose_name="审批人",
-    )
-    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
-
-    class Meta:
-        db_table = "requirement_approvers"
-        ordering = ("sort_order", "created_at", "id")
-        constraints = [
-            models.UniqueConstraint(
-                fields=["policy", "approver"],
-                condition=Q(deleted_at__isnull=True),
-                name="req_approver_unique_policy_approver_active",
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.approver_id} @ {self.policy_id}"
-
-
 class RequirementChangeRequest(BaseModel):
     """一次变更申请，覆盖 1..N 条需求（默认 1）。
 
@@ -1032,10 +896,10 @@ class RequirementChangeRequest(BaseModel):
         max_length=10,
         choices=RequirementApprovalType.choices,
         default=RequirementApprovalType.ANY,
-        verbose_name="审批通过规则快照",
+        verbose_name="审批通过规则",
     )
     required_count = models.PositiveSmallIntegerField(
-        null=True, blank=True, verbose_name="最少通过人数快照"
+        null=True, blank=True, verbose_name="最少通过人数"
     )
     status = models.CharField(
         max_length=20,

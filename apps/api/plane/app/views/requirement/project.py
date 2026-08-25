@@ -7,7 +7,8 @@
 项目对需求内容**只读**。属于项目的可写数据只有三样：关联关系本身、
 RequirementProject 上的 sort_order，以及需求级的交付状态（Requirement.status，
 跨项目共享一份，走 utils.set_requirement_status，与产品侧同一个写入口）。
-需求内容的唯一权威在产品 —— 项目成员想改内容只能提变更单，走产品现有的审批名单。
+需求内容的唯一权威在产品 —— 项目成员想改内容只能提变更单，评审人与规则由提交人
+本次指定。
 
 因此这里刻意不复用 BaseRequirementRowViewSet：那套基类的每一个写端点都以
 「能写这批行」为前提，而项目侧根本没有那个前提。
@@ -22,7 +23,10 @@ from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.requirement import RequirementFilterSerializer
-from plane.app.serializers.requirement_change import RequirementChangeRequestSerializer
+from plane.app.serializers.requirement_change import (
+    RequirementChangeRequestSerializer,
+    RequirementProjectChangeSubmitSerializer,
+)
 from plane.app.serializers.requirement_project import (
     MultiProductRequirementSerializer,
     ProjectRequirementSerializer,
@@ -65,7 +69,7 @@ from plane.utils.requirement_project import (
     promote_on_project_link,
     requirement_facets,
     resolve_linkable_requirements,
-    resolve_policy_for_linked_requirement,
+    resolve_scope_for_linked_requirement,
     set_requirement_status,
     split_query_csv,
 )
@@ -326,15 +330,16 @@ class ProjectRequirementViewSet(BaseViewSet):
     def configuration(self, request, slug, project_id):
         """网格渲染自定义列所需的需求类型与字段。
 
-        与产品的 requirement-configuration 形状一致，但**没有 policy** —— 审批配置
-        是产品的，项目页不出现任何审批入口。
+        与产品的 requirement-configuration 形状一致，但 can_edit 恒为 False ——
+        需求内容的写入权在产品上，项目侧只有关联与状态。
         """
         requirement_type_ids, specs, by_requirement_type = self._requirement_type_specs(
             project_id
         )
         return Response(
             {
-                "policy": None,
+                "can_edit": False,
+                "pending_change_request_count": 0,
                 "requirement_types": requirement_types_field_payload_from_specs(
                     requirement_type_ids, by_requirement_type
                 ),
@@ -465,9 +470,13 @@ class ProjectRequirementViewSet(BaseViewSet):
     def submit_change(self, request, slug, project_id, requirement_id):
         """项目侧发起变更单。
 
-        项目只是提单入口，审批权威不下放：单本身仍是 **product 作用域**，审批人仍是
-        产品的名单，走的也是产品那份 submit_change_request，一行没有分叉。
+        项目只是提单入口：单本身仍是 **product 作用域**，评审人与通过规则由提交人
+        本次指定，走的也是产品那份 submit_change_request，一行没有分叉。
         """
+        serializer = RequirementProjectChangeSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         requirement = Requirement.objects.filter(
             id=requirement_id, workspace__slug=slug
@@ -484,23 +493,21 @@ class ProjectRequirementViewSet(BaseViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        policy = resolve_policy_for_linked_requirement(requirement)
-        if policy is None:
-            return Response(
-                {
-                    "error": "This product has no approval configuration yet.",
-                    "code": "REQUIREMENT_APPROVER_REQUIRED",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        reason = request.data.get("reason", "")
         try:
             with transaction.atomic():
+                scope = resolve_scope_for_linked_requirement(requirement, for_update=True)
+                if scope is None:
+                    return Response(
+                        {"error": "Product not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
                 change_request = submit_change_request(
-                    policy=policy,
+                    scope=scope,
                     items=[{"requirement_id": requirement.id}],
-                    reason=reason,
+                    approver_ids=validated["approver_ids"],
+                    approval_type=validated["approval_type"],
+                    required_count=validated["required_count"],
+                    reason=validated["reason"],
                     actor=request.user,
                 )
         except RequirementChangeError as exc:

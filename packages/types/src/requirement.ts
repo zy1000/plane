@@ -3,7 +3,8 @@ import type { TPaginatedResponse } from "./pagination";
 import type { TStateGroups } from "./state";
 import type { IUserLite } from "./users";
 
-export type TRequirementApprovalType = "any" | "all" | "n_of_m";
+/** 通过规则；none = 无需评审，提交即自动通过 */
+export type TRequirementApprovalType = "none" | "any" | "all" | "n_of_m";
 export type TRequirementFieldType =
   | "text"
   | "member"
@@ -205,36 +206,6 @@ export type TRequirement = TRequirementBuiltinValues & {
   updated_by: string | null;
 };
 
-/**
- * 需求审批配置：一个产品（或项目）的「谁能批、要几个人批」。
- *
- * 它不持有状态也不持有版本 —— 那些现在长在每一条需求上。每个作用域唯一一条，由后端
- * 惰性创建，所以前端不需要「创建配置」这个动作。
- */
-export type TRequirementApprovalPolicy = {
-  id: string;
-  workspace_id: string;
-  scope: "product" | "project";
-  product_id: string | null;
-  project_id: string | null;
-  owner_id: string;
-  owner_detail: IUserLite;
-  approval_type: TRequirementApprovalType;
-  required_count: number | null;
-  approver_ids: string[];
-  approver_details: IUserLite[];
-  /** 能不能录入/修改需求条目 */
-  can_edit: boolean;
-  /** 能不能改审批配置本身。必然比 can_edit 窄 —— 否则谁都能把审批人改成自己 */
-  can_manage: boolean;
-  /** 现在一个产品下可以同时有多张待审单，所以给计数而不是单个 id */
-  pending_change_request_count: number;
-  created_at: string;
-  updated_at: string;
-  created_by: string | null;
-  updated_by: string | null;
-};
-
 export type TRequirementField = {
   id: string;
   client_id?: string;
@@ -275,8 +246,16 @@ export type TRequirementTypeSchema = {
   builtin_fields?: TRequirementBuiltinFieldConfig[];
 };
 
+/**
+ * 需求配置：只读的写权限、待审计数与网格字段。
+ *
+ * 评审人与通过规则不在这里 —— 它们随每次提交评审在弹窗里给定，只对那一张变更单有效。
+ */
 export type TRequirementConfiguration = {
-  policy: TRequirementApprovalPolicy;
+  /** 能不能录入/修改需求条目；项目侧恒为 false（写入权在产品上） */
+  can_edit: boolean;
+  /** 一个产品下可以同时有多张待审单，所以给计数而不是单个 id；项目侧恒为 0 */
+  pending_change_request_count: number;
   /** 所有引用到的需求类型字段的扁平并集 */
   fields: TRequirementField[];
   /** 这个作用域下的需求引用到的需求类型，数据页据此分视图 */
@@ -442,13 +421,6 @@ export type TProjectRequirementModuleGroup = {
 export type TProjectRequirementModulesResponse = {
   products: TProjectRequirementModuleGroup[];
   total: number;
-};
-
-export type TRequirementConfigurationPayload = {
-  expected_updated_at: string;
-  policy: Partial<
-    Pick<TRequirementApprovalPolicy, "owner_id" | "approval_type" | "required_count" | "approver_ids">
-  >;
 };
 
 export type TRequirementsResponse = TPaginatedResponse<TRequirement[]>;
@@ -862,14 +834,31 @@ export type TRequirementSchemaTrailEntry = TRequirementSchemaRevision & {
 
 export type TRequirementTrailEntry = TRequirementContentTrailEntry | TRequirementSchemaTrailEntry;
 
+/**
+ * 提交评审时给定的评审人 + 通过规则，只对本次提交的变更单有效。
+ *
+ * none 时 approver_ids 必须为空、required_count 为 null；n_of_m 时 required_count 在
+ * 1..approver_ids.length；其它规则 required_count 为 null。
+ */
+export type TRequirementApprovalSpec = {
+  approval_type: TRequirementApprovalType;
+  required_count: number | null;
+  approver_ids: string[];
+};
+
 /** 提交评审：只发指针不发快照，服务端自己读当前行内容 */
-export type TRequirementSubmitReviewPayload = {
+export type TRequirementSubmitReviewPayload = TRequirementApprovalSpec & {
   reason?: string;
   items: {
     requirement_id: string;
     /** 只有 delete 是真的意图；新增与修改由服务端按 approved_version 判定 */
     change_type?: TRequirementChangeType;
   }[];
+};
+
+/** 项目侧提单：单条需求，评审人与规则同样由提交人本次指定 */
+export type TRequirementProjectSubmitChangePayload = TRequirementApprovalSpec & {
+  reason?: string;
 };
 
 export type TRequirementChangeRequest = {

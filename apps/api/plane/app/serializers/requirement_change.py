@@ -3,6 +3,7 @@ from rest_framework import serializers
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
     RequirementApprovalAction,
+    RequirementApprovalType,
     RequirementBaseline,
     RequirementBaselineEntry,
     RequirementChangeApproval,
@@ -282,7 +283,75 @@ class RequirementChangeSubmitItemSerializer(serializers.Serializer):
     )
 
 
-class RequirementChangeSubmitSerializer(serializers.Serializer):
+class RequirementChangeApprovalSpecSerializer(serializers.Serializer):
+    """一次提交的评审人与通过规则。只对这张变更单有效 —— 产品级没有常驻配置。
+
+    这里只做形状校验（不查库）：成员资格由 utils.requirement_change 在提单时校验，
+    产品侧与项目侧两个入口共用。
+    """
+
+    approval_type = serializers.ChoiceField(
+        choices=RequirementApprovalType.choices,
+        default=RequirementApprovalType.ANY,
+    )
+    required_count = serializers.IntegerField(
+        required=False, allow_null=True, default=None, min_value=1
+    )
+    approver_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
+
+    def validate_approver_ids(self, value):
+        return list(dict.fromkeys(value))
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        approval_type = attrs["approval_type"]
+        required_count = attrs.get("required_count")
+        approver_ids = attrs["approver_ids"]
+
+        if approval_type == RequirementApprovalType.NONE:
+            if approver_ids:
+                raise serializers.ValidationError(
+                    {"approver_ids": "Approvers must be empty when no review is required."}
+                )
+        elif not approver_ids:
+            raise serializers.ValidationError(
+                {"approver_ids": "Select at least one approver."}
+            )
+
+        if approval_type == RequirementApprovalType.N_OF_M:
+            if required_count is None:
+                raise serializers.ValidationError(
+                    {"required_count": "This field is required for n_of_m approval."}
+                )
+            if required_count > len(approver_ids):
+                raise serializers.ValidationError(
+                    {
+                        "required_count": (
+                            "The required count cannot exceed the number of approvers."
+                        )
+                    }
+                )
+        elif required_count is not None:
+            raise serializers.ValidationError(
+                {"required_count": "This field must be null unless approval_type is n_of_m."}
+            )
+        return attrs
+
+
+class RequirementProjectChangeSubmitSerializer(RequirementChangeApprovalSpecSerializer):
+    """项目侧提单：需求由 URL 指定，请求体只有原因与评审规则。"""
+
+    reason = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=2000
+    )
+
+    def validate_reason(self, value):
+        return (value or "").strip()
+
+
+class RequirementChangeSubmitSerializer(RequirementProjectChangeSubmitSerializer):
     """提交 1..N 条需求进入评审。
 
     只收指针不收快照 —— 服务端自己读当前行内容，否则一个陈旧的网格可以用旧内容开出
@@ -290,13 +359,7 @@ class RequirementChangeSubmitSerializer(serializers.Serializer):
     approved_version 判定。
     """
 
-    reason = serializers.CharField(
-        required=False, allow_blank=True, default="", max_length=2000
-    )
     items = RequirementChangeSubmitItemSerializer(many=True, allow_empty=False)
-
-    def validate_reason(self, value):
-        return (value or "").strip()
 
     def validate_items(self, value):
         seen = set()

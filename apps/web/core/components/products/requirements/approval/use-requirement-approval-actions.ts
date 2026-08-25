@@ -1,14 +1,16 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirementChangeType } from "@plane/types";
+import type {
+  TRequirementApprovalSpec,
+  TRequirementChangeRequest,
+  TRequirementChangeType,
+  TRequirementSubmitReviewPayload,
+} from "@plane/types";
 
 type TChangesStore = {
   isMutating: boolean;
-  submitReview: (payload: {
-    reason?: string;
-    items: { requirement_id: string; change_type?: TRequirementChangeType }[];
-  }) => Promise<unknown>;
+  submitReview: (payload: TRequirementSubmitReviewPayload) => Promise<TRequirementChangeRequest>;
   cancelChangeRequest: (changeRequestId: string) => Promise<unknown>;
 };
 
@@ -49,12 +51,13 @@ export const useRequirementApprovalActions = ({
     setPendingChangeType(undefined);
   }, []);
 
+  /** spec 是弹窗里本次选定的评审人与规则，原样进 payload */
   const submit = useCallback(
-    async (reason: string) => {
+    async (spec: TRequirementApprovalSpec & { reason: string }) => {
       if (!pendingSelection.length) return;
       try {
-        await changesStore.submitReview({
-          reason,
+        const changeRequest = await changesStore.submitReview({
+          ...spec,
           items: pendingSelection.map((requirementId) => ({
             requirement_id: requirementId,
             ...(pendingChangeType ? { change_type: pendingChangeType } : {}),
@@ -63,22 +66,23 @@ export const useRequirementApprovalActions = ({
         closeSubmitModal();
         onSettled();
         onSubmitted?.();
+        // 无需评审的单服务端直接置为 approved，提示要说「已生效」而不是「进入评审」
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("success"),
-          message: t("workspace_products.requirements.approval.toast.submitted", {
-            count: pendingSelection.length,
-          }),
+          message: t(
+            changeRequest.status === "approved"
+              ? "workspace_products.requirements.approval.toast.submitted_auto_approved"
+              : "workspace_products.requirements.approval.toast.submitted",
+            { count: pendingSelection.length }
+          ),
         });
       } catch (error) {
-        const payload = error as { code?: string; error?: string };
+        const payload = error as { error?: string };
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
-          message:
-            payload?.code === "REQUIREMENT_APPROVER_REQUIRED"
-              ? t("workspace_products.requirements.state.errors.REQUIREMENT_APPROVER_REQUIRED")
-              : (payload?.error ?? t("workspace_products.requirements.toast.failed")),
+          message: payload?.error ?? t("workspace_products.requirements.toast.failed"),
         });
       }
     },

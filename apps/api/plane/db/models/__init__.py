@@ -154,10 +154,8 @@ from .product import (
 from .requirement import (
     Requirement,
     RequirementApprovalAction,
-    RequirementApprovalPolicy,
     RequirementApprovalState,
     RequirementApprovalType,
-    RequirementApprover,
     RequirementBaseline,
     RequirementBaselineEntry,
     RequirementChangeApproval,

@@ -2402,14 +2402,16 @@ export default {
       approval: {
         toast: {
           submitted: "已提交 {count} 条需求进入评审",
+          submitted_auto_approved: "已提交 {count} 条需求，无需评审，变更已生效",
           withdrawn: "已撤回评审",
         },
         submit: {
           title: "提交需求评审",
           reason: "变更原因",
           confirm: "提交评审",
+          approvers_required: "请至少选择一名评审人",
         },
-        unconfigured: "未配置",
+        none: "无需评审",
         any: "任一审批人通过",
         all: "全部审批人通过",
         n_of_m: "指定最少通过人数",
@@ -2427,7 +2429,6 @@ export default {
       validation: {
         title: "请输入需求名称。",
         owner: "请选择需求负责人。",
-        required_count: "最少通过人数必须在 1 和审批人数之间。",
       },
       toast: {
         created: "需求创建成功。",
@@ -2621,9 +2622,6 @@ export default {
           reverted: "草稿已撤回，需求恢复到上一个已发布版本。",
           failed: "操作未能完成，请稍后重试。",
         },
-        errors: {
-          REQUIREMENT_APPROVER_REQUIRED: "提交审批前请至少配置一名审批人。",
-        },
       },
       change: {
         field: "字段",
@@ -2699,6 +2697,7 @@ export default {
         },
         no_changes: "无变更",
         rule: {
+          none: "无需评审",
           any: "任一通过",
           all: "全部通过",
           n_of_m: "{count} 人通过",
@@ -2711,6 +2710,7 @@ export default {
         },
         approval_waiting: "等待处理",
         approval_empty: "此变更单未配置审批人。",
+        approval_none: "无需评审，提交即生效。",
         meta_columns: {
           field: "字段",
           before: "变更前",
@@ -2882,8 +2882,6 @@ export default {
         settings_description: "本产品全部需求作为一个整体的审批与版本单元。",
         basic: "基本信息",
         basic_description: "设置需求的核心信息，便于识别与管理。",
-        approval: "审批设置",
-        approval_description: "配置需求的审批人及通过规则。",
         current_status: "基线状态",
         status_overview_description: "发布与审批状态",
         not_published: "尚未发布",
@@ -2899,21 +2897,6 @@ export default {
         sub_field_count: "{count} 个子字段",
         default_value_summary: "默认 {value}",
         current_version: "v{version}",
-        approval_label: "审批设置：",
-        rule_help: "计数控件常驻在它自己那一行，选中与否都不改变行高。",
-        read_only_hint: "只有产品管理员能改这份配置。",
-        summary: {
-          any: "需求提交评审后，需要 {approvers} 中的任意 1 人通过，变更才会生效。",
-          all: "需求提交评审后，需要 {approvers} 全部通过，变更才会生效。",
-          n_of_m: "需求提交评审后，需要 {approvers} 中的任意 {count} 人通过，变更才会生效。",
-          empty: "还没有配置审批人 —— 现在没有人能提交需求评审。",
-          more: "等 {count} 人",
-        },
-        rule_short: {
-          any: "任意 1 人通过",
-          all: "全部通过",
-          n_of_m: "任意 {count} 人通过",
-        },
       },
     },
     /** 产品详情页的「项目」页签。产品负责人可在此增删关联 */
