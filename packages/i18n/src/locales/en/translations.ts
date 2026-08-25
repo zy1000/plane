@@ -1305,6 +1305,7 @@ export default {
       column: "ID",
       source_column: "Library ID",
       code_placeholder: "Enter an ID",
+      code_optional_placeholder: "Leave blank to auto-generate as <library identifier>-<sequence>",
       code_required: "ID is required",
       code_duplicate: "This ID is already used in the library",
     },

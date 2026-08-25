@@ -1210,13 +1210,16 @@ def _new_library_item(library):
         # 库内条目的需求类型恒等于库所选的类型，不接受调用方指定。
         # source 同理被**无条件丢弃** —— 库条目是导入的源头，不可能有来源。
         # DB 侧有 req_library_item_has_no_source 兜底。
-        # code（手填编号）由 serializer 保证非空且库内唯一，这里不兜底默认值 ——
-        # 上游漏传直接落 NULL，让唯一约束外的问题在测试里立刻现形。
+        sequence_id = allocate()
         return Requirement(
             library=library,
             requirement_type_id=library.requirement_type_id,
-            sequence_id=allocate(),
-            code=code,
+            sequence_id=sequence_id,
+            # 手填编号非空时由 serializer 保证库内唯一；不带编号（行内新增的空行）
+            # 则按「库标识-序号」补一个占位编号，用户之后在格子里改。序号永不复用，
+            # 占位编号之间天然不撞；改成手填之前库条目的展示编号就是这个格式
+            # （迁移 0341 也按此回填），老数据与占位编号看起来是一体的。
+            code=code or f"{library.identifier}-{sequence_id}",
             module_id=module_id,
             data=data,
             sort_order=sort_order,

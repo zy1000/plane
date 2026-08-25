@@ -390,7 +390,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                     after_id=serializer.validated_data.get("after_id"),
                     # 左侧树选中模块后新建自动挂靠；serializer 已校验同作用域
                     module_id=serializer.validated_data.get("module_id"),
-                    # 库条目手填编号（serializer 保证库作用域必填、产品路径无值）
+                    # 库条目手填编号（可不带，工厂补「库标识-序号」占位编号；产品路径无值）
                     code=serializer.validated_data.get("code"),
                 )
         except ValueError as exc:

@@ -219,8 +219,8 @@ class TestRequirementApp:
         )
         by_name = {field["name"]: field["id"] for field in fields}
 
-        # 库条目编号是手填的，不带编号建不了
-        missing_code = api_client.post(
+        # 不带编号也能建（行内新增的空行）：服务端按「库标识-序号」补占位编号
+        auto_coded = api_client.post(
             reverse(
                 "requirement-library-items",
                 kwargs={"slug": self.workspace.slug, "library_id": library.id},
@@ -231,8 +231,10 @@ class TestRequirementApp:
             },
             format="json",
         )
-        assert missing_code.status_code == status.HTTP_400_BAD_REQUEST, missing_code.data
-        assert "REQUIREMENT_CODE_REQUIRED" in str(missing_code.data)
+        assert auto_coded.status_code == status.HTTP_201_CREATED, auto_coded.data
+        assert auto_coded.data["sequence_id"] == 1
+        assert auto_coded.data["code"] == f"{library.identifier}-1"
+        assert auto_coded.data["display_id"] == f"{library.identifier}-1"
 
         created = api_client.post(
             reverse(
@@ -256,7 +258,7 @@ class TestRequirementApp:
         assert item.status == "not_started"
         # 库条目的展示编号就是手填的 code（不校验格式）；内部序号照常分配，
         # 且它是导入的源头，不可能有来源
-        assert item.sequence_id == 1
+        assert item.sequence_id == 2
         assert item.code == "REQ-登录-001"
         assert created.data["display_id"] == "REQ-登录-001"
         assert item.source_library_id is None

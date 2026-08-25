@@ -117,6 +117,13 @@ import { RequirementApprovalCell } from "@/components/products/requirements/appr
 import { RequirementBulkOperationsBar } from "@/components/requirements/requirement-bulk-operations-bar";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
 
+/**
+ * 编号列默认宽：普通列宽再加上行按钮组（详情入口 + 行菜单，两枚 size-6 图标与
+ * 两档 gap-1.5 ≈ 60px）。按钮组挂在编号格右侧且行内占位，不加这一截默认宽度
+ * 下编号只剩二三十像素可看。
+ */
+const DISPLAY_ID_COLUMN_WIDTH = REQUIREMENT_GRID_COLUMN_WIDTH + 60;
+
 type TProps = {
   workspaceSlug: string;
   /** 这批需求的归属：产品需求传 productId，标准库条目传 libraryId。附件也挂在它上面 */
@@ -290,13 +297,10 @@ export const RequirementGrid = observer(
      * enforce_required=field.is_active 校验（serializers/requirement.py:629），
      * 空值直接 400。这种类型仍旧走弹窗，填齐了一次落库。
      *
-     * 标准库恒走弹窗：库条目的编号是手填必填的（REQUIREMENT_CODE_REQUIRED），
-     * 不带编号建不出空行，弹窗负责把编号收上来。
+     * 标准库不再例外：建行不带编号时服务端按「库标识-序号」补占位编号
+     * （_new_library_item），空行落得了地，之后在编号格里改成正式编号即可。
      */
-    const requiresCreateModal = useMemo(
-      () => entityKind === "library" || activeFields.some((field) => field.is_required),
-      [activeFields, entityKind]
-    );
+    const requiresCreateModal = useMemo(() => activeFields.some((field) => field.is_required), [activeFields]);
 
     /**
      * 内联新增一行：直接建出来，随后它就是一条普通的自动保存行。
@@ -468,7 +472,7 @@ export const RequirementGrid = observer(
     const showSelectColumn = !readOnly;
     const defaultNonTitleColumnsWidth = useMemo(
       () =>
-        REQUIREMENT_GRID_COLUMN_WIDTH + // 编号
+        DISPLAY_ID_COLUMN_WIDTH + // 编号（含行按钮组）
         REQUIREMENT_GRID_COLUMN_WIDTH + // 模块（紧跟编号，同为左固定）
         (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         (showApprovalColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
@@ -493,7 +497,7 @@ export const RequirementGrid = observer(
     const columnSnapshot = useMemo(() => {
       const snapshot: Record<string, number> = {
         title: defaultTitleColumnWidth,
-        display_id: REQUIREMENT_GRID_COLUMN_WIDTH,
+        display_id: DISPLAY_ID_COLUMN_WIDTH,
         module_name: REQUIREMENT_GRID_COLUMN_WIDTH,
       };
       if (showSourceColumn) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
@@ -513,7 +517,7 @@ export const RequirementGrid = observer(
       return snapshot;
     }, [builtinEntries, defaultTitleColumnWidth, showApprovalColumn, showSourceColumn, visibleRootFields]);
     const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
-    const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
+    const displayIdWidth = getWidth("display_id", DISPLAY_ID_COLUMN_WIDTH);
     const moduleColumnWidth = getWidth("module_name", REQUIREMENT_GRID_COLUMN_WIDTH);
     const displayIdStickyLeft = 0;
     // 模块列插在编号与标题之间，三列同属左固定簇，offset 逐列累加
@@ -650,7 +654,7 @@ export const RequirementGrid = observer(
      * 行操作菜单。「插入 / 复制」不再往表格里插一行草稿，而是带着锚点打开建行弹窗
      * —— 后端建行强制校验必填字段，空草稿行在服务端落不了地（见 RequirementCreateModal）。
      *
-     * portal 出滚动容器：标题列 sticky 会自建层叠上下文，菜单留在格内会被下面几行盖住。
+     * portal 出滚动容器：编号列 sticky 会自建层叠上下文，菜单留在格内会被下面几行盖住。
      */
     const renderRowActionMenu = (requirement: TRequirement) => (
       <div className="flex justify-center">
@@ -771,7 +775,8 @@ export const RequirementGrid = observer(
                 className={cn("group transition-colors duration-150 motion-reduce:transition-none", rowStateClass)}
               >
                 {/*
-                编号 / 标题左固定。勾选叠在编号格上，不占独立格子。
+                编号 / 标题左固定。勾选叠在编号格上，不占独立格子；行按钮组
+                （详情入口 + 行菜单）行内排在编号格右侧，不挂标题格。
                 左固定列底色必须不透明，行态着色铺在内层 div。
               */}
                 {isFirstRow && (
@@ -797,29 +802,48 @@ export const RequirementGrid = observer(
                         rowStateClass
                       )}
                     >
-                      {entityKind === "library" && isRowEditable ? (
-                        // 库条目编号手填可改：blur/回车提交自动保存，空值还原；
-                        // 重复由服务端查重后走行级 saveState 错误展示。开详情走标题旁图标
-                        <RequirementCodeInput
-                          value={localRow?.code ?? requirement.code ?? ""}
-                          onCommit={(code) => autosave.updateCode(key, code)}
-                          className={EXPANDABLE_CELL_INPUT_CLASS}
-                          placeholder={t("requirements.identifier.code_placeholder")}
-                        />
-                      ) : requirement.display_id ? (
-                        onOpenDetail ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenDetail(requirement.id)}
-                            className="min-w-0 truncate text-left hover:text-accent-primary"
-                          >
+                      <span className="flex min-w-0 flex-1 items-center">
+                        {entityKind === "library" && isRowEditable ? (
+                          // 库条目编号手填可改：blur/回车提交自动保存，空值还原；
+                          // 重复由服务端查重后走行级 saveState 错误展示。开详情走本格右侧图标
+                          <RequirementCodeInput
+                            value={localRow?.code ?? requirement.code ?? ""}
+                            onCommit={(code) => autosave.updateCode(key, code)}
+                            className={EXPANDABLE_CELL_INPUT_CLASS}
+                            placeholder={t("requirements.identifier.code_placeholder")}
+                          />
+                        ) : requirement.display_id ? (
+                          onOpenDetail ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenDetail(requirement.id)}
+                              className="min-w-0 truncate text-left hover:text-accent-primary"
+                            >
+                              <RequirementIdentifier displayId={requirement.display_id} />
+                            </button>
+                          ) : (
                             <RequirementIdentifier displayId={requirement.display_id} />
-                          </button>
+                          )
                         ) : (
-                          <RequirementIdentifier displayId={requirement.display_id} />
-                        )
-                      ) : (
-                        <span className="text-placeholder">—</span>
+                          <span className="text-placeholder">—</span>
+                        )}
+                      </span>
+
+                      {/* 行按钮组：可编辑时详情入口不劫持编号/标题点击 —— 它们归内联编辑 */}
+                      {onOpenDetail && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetail(requirement.id)}
+                          title={t("requirement_detail.open")}
+                          className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-layer-transparent-hover hover:text-primary focus-visible:opacity-100"
+                        >
+                          <Maximize2 className="size-3.5" />
+                        </button>
+                      )}
+                      {!readOnly && (
+                        <span className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                          {renderRowActionMenu(requirement)}
+                        </span>
                       )}
                     </div>
                     {showSelectColumn && (
@@ -881,8 +905,8 @@ export const RequirementGrid = observer(
                     }}
                   >
                     {/*
-                      编辑态左内边距让给标题输入框自己（它要铺满到格线）；右边留着，那里
-                      排的是详情入口和行菜单，不归输入框。
+                      编辑态左内边距让给标题输入框自己（它要铺满到格线）；右边留一档给
+                      保存失败的提示。详情入口和行菜单在编号格，不在这里。
                       整格反馈挂在这一层而不是 td 上：行态底色（rowStateClass）是不透明的，
                       铺在这儿会把 td 盖住。这一层本身就是 h-full w-full，同样铺满整格。
                     */}
@@ -922,22 +946,6 @@ export const RequirementGrid = observer(
                         )}
                       </span>
 
-                      {/* 可编辑时详情入口不劫持标题点击 —— 标题归内联编辑 */}
-                      {onOpenDetail && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenDetail(requirement.id)}
-                          title={t("requirement_detail.open")}
-                          className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-layer-transparent-hover hover:text-primary focus-visible:opacity-100"
-                        >
-                          <Maximize2 className="size-3.5" />
-                        </button>
-                      )}
-                      {!readOnly && (
-                        <span className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                          {renderRowActionMenu(requirement)}
-                        </span>
-                      )}
                       {/* 这一行存失败了就把原因挂在标题格上，别让人以为已经存下去了 */}
                       {saveState.error && (
                         <span className="shrink-0 text-11 text-danger-primary" title={saveState.error}>

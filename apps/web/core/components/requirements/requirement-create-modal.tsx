@@ -382,8 +382,8 @@ export const RequirementCreateModal = ({
             ...(seed?.beforeId ? { before_id: seed.beforeId } : {}),
             ...(seed?.afterId ? { after_id: seed.afterId } : {}),
             ...(moduleId ? { module_id: moduleId } : {}),
-            // 库条目编号必填（服务端 REQUIREMENT_CODE_REQUIRED），产品路径不发
-            ...(entityKind === "library" ? { code: codeDraft.trim() } : {}),
+            // 库条目编号选填：留空由服务端补「库标识-序号」占位编号；产品路径不发
+            ...(entityKind === "library" && codeDraft.trim() ? { code: codeDraft.trim() } : {}),
           },
         ],
         updates: [],
@@ -398,9 +398,7 @@ export const RequirementCreateModal = ({
       const raw = JSON.stringify(submitError ?? {});
       const codeError = raw.includes("REQUIREMENT_CODE_ALREADY_EXISTS")
         ? t("requirements.identifier.code_duplicate")
-        : raw.includes("REQUIREMENT_CODE_REQUIRED")
-          ? t("requirements.identifier.code_required")
-          : null;
+        : null;
       setError(codeError ?? payload?.error ?? payload?.detail ?? t("workspace_products.requirements.toast.failed"));
     } finally {
       setIsSubmitting(false);
@@ -408,17 +406,15 @@ export const RequirementCreateModal = ({
   };
 
   /**
-   * 必填清单：类型（有选择器时）、编号（库）、标题，再加该类型里 is_required 的自定义字段
+   * 必填清单：类型（有选择器时）、标题，再加该类型里 is_required 的自定义字段
    * —— 叶子按值判空，子表按「至少一行」，口径与后端 enforce_required 一致。
    * 保存按钮由它决定，底部进度条靠它说「还差什么」。字段随类型配置走，这里不认任何字段名。
+   * 库条目编号不在其中：留空由服务端补占位编号。
    */
   const requiredEntries = useMemo<TRequiredEntry[]>(() => {
     const entries: TRequiredEntry[] = [];
     if (allowTypeSelection) {
       entries.push({ key: "type", label: t("requirement_detail.requirement_type"), missing: !typeId });
-    }
-    if (entityKind === "library") {
-      entries.push({ key: "code", label: t("requirements.identifier.column"), missing: !codeDraft.trim() });
     }
     entries.push({ key: "title", label: t("requirement_fields.builtin.title"), missing: !builtin.title.trim() });
     for (const field of visibleFields) {
@@ -426,7 +422,7 @@ export const RequirementCreateModal = ({
       entries.push({ key: field.id, label: field.name, missing: isRequirementValueEmpty(field, data[field.id]) });
     }
     return entries;
-  }, [allowTypeSelection, builtin.title, codeDraft, data, entityKind, t, typeId, visibleFields]);
+  }, [allowTypeSelection, builtin.title, data, t, typeId, visibleFields]);
   const missingKeys = useMemo(
     () => new Set(requiredEntries.filter((entry) => entry.missing).map((entry) => entry.key)),
     [requiredEntries]
@@ -485,7 +481,7 @@ export const RequirementCreateModal = ({
                 <RequirementTypeSelect types={selectableTypes} value={typeId} onChange={setTypeId} />
               </ModalField>
             )}
-            {/* 库条目编号手填必填：与标题同排、放在前面，与列顺序（编号在前）一致 */}
+            {/* 库条目编号手填选填（留空自动补占位编号）：与标题同排、放在前面，与列顺序（编号在前）一致 */}
             <div
               className={cn(
                 "grid gap-3.5",
@@ -493,20 +489,14 @@ export const RequirementCreateModal = ({
               )}
             >
               {entityKind === "library" && (
-                <ModalField
-                  label={t("requirements.identifier.column")}
-                  icon={Hash}
-                  required
-                  error={showError("code") ? t("requirements.identifier.code_required") : undefined}
-                  onBlur={() => touch("code")}
-                >
+                <ModalField label={t("requirements.identifier.column")} icon={Hash}>
                   <Input
                     id="requirement-create-code"
                     type="text"
                     value={codeDraft}
                     onChange={(event) => setCodeDraft(event.target.value)}
                     maxLength={255}
-                    hasError={showError("code")}
+                    placeholder={t("requirements.identifier.code_optional_placeholder")}
                     className="w-full text-body-sm-regular"
                   />
                 </ModalField>

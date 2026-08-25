@@ -729,11 +729,12 @@ class _RequirementCodeWriteMixin:
     """库条目手填编号（code）的写入校验。
 
     刻意**不校验格式** —— 只有两条规则：非空、库内唯一（不含软删，口径同
-    req_unique_library_code_active）。产品/项目路径带 code 会被显式拒绝，
-    而不是静默丢弃 —— 尽早暴露用错端点的客户端。
+    req_unique_library_code_active）。建行可以不带编号（行内新增的空行），由工厂
+    补「库标识-序号」占位编号；已有的编号不能清空。产品/项目路径带 code 会被显式
+    拒绝，而不是静默丢弃 —— 尽早暴露用错端点的客户端。
     """
 
-    def resolve_code(self, attrs, *, required, row_id=None):
+    def resolve_code(self, attrs, *, on_create, row_id=None):
         owner = self.context["owner"]
         if not isinstance(owner, RequirementLibrary):
             if "code" in attrs:
@@ -741,11 +742,15 @@ class _RequirementCodeWriteMixin:
                     {"code": "Only library items accept a manual code."}
                 )
             return attrs
-        if "code" not in attrs and not required:
-            # update 不带 code = 不改编号
-            return attrs
         code = (attrs.get("code") or "").strip()
         if not code:
+            if on_create:
+                # 建行不带编号 = 让工厂补占位编号（见 _new_library_item）
+                attrs.pop("code", None)
+                return attrs
+            if "code" not in attrs:
+                # update 不带 code = 不改编号
+                return attrs
             raise serializers.ValidationError({"code": "REQUIREMENT_CODE_REQUIRED"})
         duplicates = Requirement.objects.filter(library=owner, code=code)
         if row_id:
@@ -815,7 +820,7 @@ class RequirementCreateSerializer(
             fields=resolver.specs(requirement_type_id),
         )
         attrs["builtin"] = self.resolve_builtin(attrs)
-        return self.resolve_code(attrs, required=True)
+        return self.resolve_code(attrs, on_create=True)
 
 
 class RequirementUpdateSerializer(
@@ -849,7 +854,7 @@ class RequirementUpdateSerializer(
             current_row=self.context.get("current_row"),
         )
         return self.resolve_code(
-            attrs, required=False, row_id=self.context["row_id"]
+            attrs, on_create=False, row_id=self.context["row_id"]
         )
 
 
@@ -893,7 +898,7 @@ class RequirementBatchUpdateSerializer(
             row_id=attrs["id"],
             current_row=current_row,
         )
-        return self.resolve_code(attrs, required=False, row_id=attrs["id"])
+        return self.resolve_code(attrs, on_create=False, row_id=attrs["id"])
 
 
 class RequirementBatchDeleteSerializer(serializers.Serializer):

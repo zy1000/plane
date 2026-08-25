@@ -1470,6 +1470,7 @@ export default {
       column: "编号",
       source_column: "标准库编号",
       code_placeholder: "填写编号",
+      code_optional_placeholder: "留空则按「库标识-序号」自动生成",
       code_required: "编号不能为空",
       code_duplicate: "编号在该标准库内已存在",
     },
