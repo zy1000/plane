@@ -103,7 +103,11 @@ import { RequirementCodeInput } from "./requirement-code-input";
 import { RequirementIdentifier } from "./requirement-identifier";
 import { canEditRequirementContent, isRequirementClosed, RequirementStatusCell } from "./requirement-status-cell";
 import { copyRequirementData, createEmptyRequirementData } from "./requirement-row-data";
-import { RequirementCreateModal, type TRequirementCreateSeed } from "./requirement-create-modal";
+import {
+  RequirementCreateModal,
+  type TRequirementCreateContext,
+  type TRequirementCreateSeed,
+} from "./requirement-create-modal";
 import { useRequirementAssetUpload } from "./use-requirement-asset-upload";
 import { useRequirementRowAutosave } from "./use-requirement-row-autosave";
 import { useRequirementTitles } from "./use-requirement-titles";
@@ -177,6 +181,8 @@ type TProps = {
   hideToolbarAdd?: boolean;
   /** 左侧模块树的当前选中：新建的行自动挂进该模块（null/不传 = 不挂靠） */
   createModuleId?: string | null;
+  /** 建行弹窗标题栏下的上下文（库名 / 产品名、需求类型名）。不传只显示归属类别 */
+  createModalContext?: TRequirementCreateContext;
   /** 勾选行的「移动到模块」入口；不传则不渲染该按钮 */
   onMoveToModule?: (requirementIds: string[]) => void;
 };
@@ -222,6 +228,7 @@ export const RequirementGrid = observer(
       toolbarPortalEl,
       hideToolbarAdd = false,
       createModuleId = null,
+      createModalContext,
       onMoveToModule,
     } = props;
     const { t } = useTranslation();
@@ -1615,6 +1622,7 @@ export const RequirementGrid = observer(
           requirementTypeId={createRequirementTypeId}
           builtinLayout={builtinLayout}
           fields={activeFields}
+          context={createModalContext}
           seed={createSeed ?? undefined}
           moduleId={createModuleId}
           onClose={() => setCreateSeed(null)}

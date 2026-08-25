@@ -282,8 +282,6 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const inlineText = toInlineText(value);
   const preview = value ? stripAndTruncateHTML(value, CELL_PREVIEW_LENGTH) : "";
-  // 网格单元格旁边就是列头，空值不必再占一行提示；弹窗没有列头，才回落到占位文案
-  const emptyHint = variant === "modal" ? (placeholder || t("requirement_grid.data.expand_rich_text")) : "";
   const openModal = () => setDraft(value ?? "");
 
   return (
@@ -297,7 +295,7 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
             className="min-w-0 flex-1 text-left outline-none"
           >
             <span className={cn("block leading-5", preview ? "line-clamp-3 text-primary" : "truncate text-placeholder")}>
-              {preview || emptyHint}
+              {preview}
             </span>
           </button>
         ) : deferCommit ? (
@@ -305,14 +303,12 @@ export const RequirementRichTextCell = observer(function RequirementRichTextCell
             value={inlineText}
             onCommit={(next) => onChange(fromInlineText(next))}
             className={EXPANDABLE_CELL_INPUT_CLASS}
-            placeholder={emptyHint}
           />
         ) : (
           <input
             value={inlineText}
             onChange={(event) => onChange(fromInlineText(event.target.value))}
             className={EXPANDABLE_CELL_INPUT_CLASS}
-            placeholder={emptyHint}
           />
         )}
       </ExpandableCell>

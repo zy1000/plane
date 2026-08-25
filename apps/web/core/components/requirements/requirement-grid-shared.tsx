@@ -1198,7 +1198,7 @@ export const LeafEditor = ({
       value={typeof value === "string" ? value : ""}
       onChange={onChange}
       label={field.name}
-      placeholder={isTableCell ? undefined : (field.config.placeholder ?? field.name)}
+      placeholder={variant === "detail" ? (field.config.placeholder ?? field.name) : undefined}
       variant={variant}
       deferCommit={deferTextCommit ?? variant === "detail"}
     />

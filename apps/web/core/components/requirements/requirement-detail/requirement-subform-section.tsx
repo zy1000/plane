@@ -200,6 +200,7 @@ export const RequirementSubformSection = (props: TProps) => {
                   <ChevronRight className="size-3 shrink-0 text-tertiary" />
                 )}
                 <span className="truncate">{form.name}</span>
+                {form.is_required && <span className="shrink-0 text-danger-primary">*</span>}
                 <span className="shrink-0 text-caption-sm-regular font-normal text-tertiary">
                   {rows.length
                     ? t("requirement_detail.subform.row_count", { count: rows.length })
@@ -335,22 +336,17 @@ export const RequirementSubformSection = (props: TProps) => {
                       );
                     })}
                     {rows.length === 0 && !readOnly && (
+                      // 「添加行」只保留表头右侧那一个入口，空态只负责引导；必填的子表说清「至少一行」
                       <tr>
                         <td
                           colSpan={columns.length + 2}
-                          className="px-2.5 py-3 text-center"
+                          className="px-3 py-4 text-center text-body-xs-regular text-placeholder"
                         >
-                          <button
-                            type="button"
-                            onClick={() => addRow(form)}
-                            className="inline-flex items-center gap-1 text-body-xs-medium text-accent-primary hover:text-accent-primary-hover"
-                          >
-                            <Plus className="size-3.5" />
-                            {t("requirement_detail.subform.add_row")}
-                          </button>
-                          <p className="mt-1 text-caption-sm-regular text-placeholder">
-                            {t("requirement_detail.subform.empty_add")}
-                          </p>
+                          {t(
+                            form.is_required
+                              ? "requirement_detail.subform.empty_add_required"
+                              : "requirement_detail.subform.empty_add"
+                          )}
                         </td>
                       </tr>
                     )}

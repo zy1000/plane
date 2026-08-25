@@ -205,11 +205,12 @@ export const BuiltinCellEditor = ({
   const inputClass = variant === "headline" ? FIELD_HEADLINE_INPUT_CLASS : FIELD_INPUT_CLASS[base];
   // 网格有列头，空值不必再写「选择成员」「开始日期」这类提示；详情页与建行弹窗没有列头，才保留
   const isGrid = base === "grid";
-  // 属性条上的胶囊与工作项 IssueDefaultProperties 同高（h-7），别跟着字段行的 38px 跑
+  // 属性条上的胶囊与工作项 IssueDefaultProperties 同高（h-7），别跟着字段行的 38px 跑。
+  // 边框由建行弹窗外层那个「字段名 + 控件」的壳来画，控件自己不再描边，否则是双层框
   const isChip = variant === "chip";
   const dropdownClass = cn(
     FIELD_DROPDOWN_CLASS[base],
-    isChip && "h-7 w-auto !border-strong bg-transparent px-2"
+    isChip && "h-7 w-auto rounded-none !border-0 bg-transparent px-2 hover:bg-layer-transparent-hover"
   );
   const containerClass = isChip ? "min-w-0" : "w-full min-w-0";
 
@@ -267,10 +268,11 @@ export const BuiltinCellEditor = ({
   if (columnKey === "priority") {
     return (
       <PriorityDropdown
-        // none 在 ISSUE_PRIORITIES 里有自己的标题「None」和占位图标，网格列头已经说明是优先级，空值保持空白
-        value={isGrid && values.priority === "none" ? null : values.priority}
-        placeholder={isGrid ? "" : undefined}
-        hideIcon={isGrid && (!values.priority || values.priority === "none")}
+        // none 在 ISSUE_PRIORITIES 里有自己的标题「None」和占位图标：网格列头已经说明是优先级，
+        // 空值保持空白；胶囊带字段名标签，空值只写「无」
+        value={(isGrid || isChip) && values.priority === "none" ? null : values.priority}
+        placeholder={isGrid ? "" : isChip ? t("requirement_grid.data.priority_none") : undefined}
+        hideIcon={(isGrid || isChip) && (!values.priority || values.priority === "none")}
         onChange={(next) => onChange({ priority: next as TRequirementPriority })}
         buttonVariant={dropdownVariant}
         buttonClassName={dropdownClass}
@@ -316,10 +318,11 @@ export const BuiltinCellEditor = ({
       value={values.parent_id}
       onChange={(parentId) => onChange({ parent_id: parentId })}
       excludeId={rowId}
-      placeholder={isGrid ? "" : undefined}
+      // 胶囊带字段名标签（图标也在标签上），空值只写「未选择」
+      placeholder={isGrid ? "" : isChip ? t("requirement_grid.data.parent_none") : undefined}
       buttonClassName={cn(dropdownClass, isChip && "gap-1.5")}
-      // 胶囊上没有字段名，图标就是它的标签 —— 其余几个下拉自带图标，这个得显式给
-      icon={isChip ? GitBranch : undefined}
+      // 传了这个就得自己带颜色：下拉只在缺省分支里区分已选 / 占位
+      buttonTextClassName={isChip ? (values.parent_id ? "text-12 text-primary" : "text-12 text-placeholder") : undefined}
       containerClassName={isChip ? "w-auto" : undefined}
       {...parentScope}
     />

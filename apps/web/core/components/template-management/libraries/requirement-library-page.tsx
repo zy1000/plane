@@ -220,6 +220,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 entityId={libraryId ?? ""}
                 entityKind="library"
                 createRequirementTypeId={store.requirementTypeId ?? undefined}
+                createModalContext={{ entityName: library?.name, typeName: library?.requirement_type_detail?.name }}
                 builtinLayout={store.configuration?.builtin_fields ?? null}
                 fields={store.configuration?.fields ?? []}
                 requirements={store.requirementsPage.results}
