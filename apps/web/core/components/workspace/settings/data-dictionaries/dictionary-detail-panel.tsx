@@ -10,7 +10,6 @@ import type {
 } from "@plane/types";
 import { Input, TextArea } from "@plane/ui";
 import { DictionaryItemsEditor } from "./dictionary-items-editor";
-import { DictionaryTypeBadge } from "./dictionary-list";
 import { getDataDictionaryFieldErrorI18nKey } from "./helpers";
 
 type Props = {
@@ -75,16 +74,6 @@ export function DictionaryDetailPanel(props: Props) {
   return (
     <div className="flex flex-col gap-6 rounded-lg border border-subtle bg-surface-1 p-5">
       <section className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-11 text-tertiary">
-              {t("workspace_settings.settings.data_dictionaries.detail.key_label")}
-            </span>
-            <span className="truncate font-mono text-13 text-primary">{dictionary.key}</span>
-          </div>
-          <DictionaryTypeBadge isSystem={dictionary.is_system} />
-        </div>
-
         <div className="flex flex-col gap-1">
           <label className="text-12 font-medium text-secondary" htmlFor="data-dictionary-name">
             {t("workspace_settings.settings.data_dictionaries.detail.name_label")}
@@ -121,25 +110,23 @@ export function DictionaryDetailPanel(props: Props) {
           />
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          {dictionary.is_system ? (
-            <p className="text-11 text-tertiary">
-              {t("workspace_settings.settings.data_dictionaries.detail.system_locked")}
-            </p>
-          ) : canEdit ? (
-            <Button variant="error-outline" size="lg" onClick={() => onDelete(dictionary)}>
-              <Trash2 className="size-3.5" />
-              {t("workspace_settings.settings.data_dictionaries.detail.delete")}
-            </Button>
-          ) : (
-            <span />
-          )}
-          {canEdit && isDirty && (
-            <Button variant="primary" size="lg" onClick={() => void handleSave()} loading={isSaving}>
-              {t("workspace_settings.settings.data_dictionaries.detail.save")}
-            </Button>
-          )}
-        </div>
+        {canEdit && (!dictionary.is_system || isDirty) && (
+          <div className="flex items-center justify-between gap-3">
+            {!dictionary.is_system ? (
+              <Button variant="error-outline" size="lg" onClick={() => onDelete(dictionary)}>
+                <Trash2 className="size-3.5" />
+                {t("workspace_settings.settings.data_dictionaries.detail.delete")}
+              </Button>
+            ) : (
+              <span />
+            )}
+            {isDirty && (
+              <Button variant="primary" size="lg" onClick={() => void handleSave()} loading={isSaving}>
+                {t("workspace_settings.settings.data_dictionaries.detail.save")}
+              </Button>
+            )}
+          </div>
+        )}
       </section>
 
       <div className="border-t border-subtle" />

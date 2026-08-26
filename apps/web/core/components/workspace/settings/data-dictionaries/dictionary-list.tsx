@@ -56,13 +56,10 @@ export function DictionaryList(props: Props) {
                   <span className="truncate text-13 font-medium text-primary">{dictionary.name}</span>
                   <DictionaryTypeBadge isSystem={dictionary.is_system} />
                 </span>
-                <span className="flex w-full items-center justify-between gap-2 text-11 text-tertiary">
-                  <span className="truncate font-mono">{dictionary.key}</span>
-                  <span className="shrink-0">
-                    {t("workspace_settings.settings.data_dictionaries.list.item_count", {
-                      count: dictionary.items.length,
-                    })}
-                  </span>
+                <span className="text-11 text-tertiary">
+                  {t("workspace_settings.settings.data_dictionaries.list.item_count", {
+                    count: dictionary.items.length,
+                  })}
                 </span>
               </button>
             );

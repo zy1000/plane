@@ -217,7 +217,7 @@ export function DataDictionariesRoot(props: Props) {
 
   return (
     <>
-      <SettingsHeading title={t(`${I18N}.title`)} description={t(`${I18N}.description`)} />
+      <SettingsHeading title={t(`${I18N}.title`)} />
       <div className="mt-6 w-full">{renderBody()}</div>
 
       <DictionaryCreateModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSubmit={handleCreate} />

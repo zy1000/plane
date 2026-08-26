@@ -75,14 +75,9 @@ export function DictionaryItemsEditor(props: Props) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-12 font-medium text-primary">
-            {t("workspace_settings.settings.data_dictionaries.detail.values_title")}
-          </p>
-          <p className="mt-0.5 text-10 text-secondary">
-            {t("workspace_settings.settings.data_dictionaries.detail.values_description")}
-          </p>
-        </div>
+        <p className="text-12 font-medium text-primary">
+          {t("workspace_settings.settings.data_dictionaries.detail.values_title")}
+        </p>
         <span className="rounded bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">
           {dictionary.items.length}
         </span>
