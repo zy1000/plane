@@ -23,8 +23,17 @@ type TProps = {
   onChanged?: () => void;
 };
 
-export const RequirementProductRelations = (props: TProps) => {
-  const { workspaceSlug, productId, requirement, canManage, onChanged } = props;
+/**
+ * 拆分 / 关联工作项 / 关联用例三个动作的项目落点与弹窗开关。
+ *
+ * 抽屉的关联区（本组件）和整页的关联 Tab 卡片（RequirementRelationsTabs）共用同一套：
+ * 两处只是版式不同，「必须先选项目」的规则不能各写一份。
+ */
+export const useProductRelationActions = ({
+  workspaceSlug,
+  productId,
+  requirement,
+}: Pick<TProps, "workspaceSlug" | "productId" | "requirement">) => {
   const { t } = useTranslation();
   const { links } = useProductProjects({ workspaceSlug, productId });
   const [actionProjectId, setActionProjectId] = useState<string | null>(null);
@@ -56,6 +65,33 @@ export const RequirementProductRelations = (props: TProps) => {
     if (kind === "split") setIsSplitOpen(true);
     else setIsLinkIssueOpen(true);
   };
+
+  return {
+    issueProjects,
+    actionProjectId,
+    isSplitOpen,
+    setIsSplitOpen,
+    isLinkIssueOpen,
+    setIsLinkIssueOpen,
+    isLinkCaseOpen,
+    setIsLinkCaseOpen,
+    beginIssueAction,
+  };
+};
+
+export const RequirementProductRelations = (props: TProps) => {
+  const { workspaceSlug, productId, requirement, canManage, onChanged } = props;
+  const {
+    issueProjects,
+    actionProjectId,
+    isSplitOpen,
+    setIsSplitOpen,
+    isLinkIssueOpen,
+    setIsLinkIssueOpen,
+    isLinkCaseOpen,
+    setIsLinkCaseOpen,
+    beginIssueAction,
+  } = useProductRelationActions({ workspaceSlug, productId, requirement });
 
   return (
     <div className="flex flex-col space-y-4">

@@ -1472,6 +1472,8 @@ export default {
     copy_link: "Copy link",
     link_copied: "Link copied",
     properties: "Properties",
+    custom_fields: "Fields",
+    relations: "Relations",
     requirement_type: "Requirement type",
     no_description: "No description",
     closed_hint: "This requirement is closed: content is read-only. Pick another status to reopen it.",
@@ -1490,6 +1492,7 @@ export default {
     untitled: "Untitled requirement",
     not_found: "This requirement could not be found",
     sub_requirements: "Sub requirements",
+    sub_requirements_empty: "No sub requirements yet",
     test_cases: {
       section_title: "Linked test cases",
       widget_title: "Test cases",
@@ -1564,6 +1567,7 @@ export default {
       change_request: "CR-{sequence}",
     },
     meta: {
+      label: "Details",
       created_at: "Created {date}",
       updated_at: "Updated {date}",
       last_changed_version: "Last changed in v{version}",

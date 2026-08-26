@@ -16,7 +16,7 @@
  * 用例的 type / priority 是后端 IntegerChoices 数值，标签映射在 testhub 的 globalEnums
  * 里，需求页先渲染时那个 map 是空的 —— 详见 requirement-testcase-link-modal.tsx。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarDays, Link2Off } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { PlusIcon } from "@plane/propel/icons";
@@ -24,7 +24,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirementTestCase } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { renderFormattedDate } from "@plane/utils";
+import { cn, renderFormattedDate } from "@plane/utils";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { useRequirementTestCases } from "@/hooks/store/use-requirement-test-cases";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
@@ -118,6 +118,14 @@ type TProps = {
   hideAddActions?: boolean;
   linkModalOpen?: boolean;
   onLinkModalOpenChange?: (open: boolean) => void;
+  /**
+   * collapsible：自带「用例」折叠头（抽屉用）。
+   * plain：只出行与空态，折叠头由整页关联 Tab 卡片的 Tab 代替；hideWhenEmpty / hideAddActions
+   * 在这个变体下不起作用 —— 空态必须占位，新增走 Tab 行右侧的操作条。
+   */
+  variant?: "collapsible" | "plain";
+  /** 关联用例数，加载完才报；给 Tab 计数 */
+  onCountChange?: (count: number) => void;
 };
 
 export const RequirementTestCasesSection = (props: TProps) => {
@@ -131,7 +139,10 @@ export const RequirementTestCasesSection = (props: TProps) => {
     hideAddActions = false,
     linkModalOpen,
     onLinkModalOpenChange,
+    variant = "collapsible",
+    onCountChange,
   } = props;
+  const isPlain = variant === "plain";
   const { t } = useTranslation();
   const { testCases, isLoading, linkTestCases, unlinkTestCase } = useRequirementTestCases({
     workspaceSlug,
@@ -147,6 +158,11 @@ export const RequirementTestCasesSection = (props: TProps) => {
   const [caseToUnlink, setCaseToUnlink] = useState<TRequirementTestCase | null>(null);
   const [isUnlinking, setIsUnlinking] = useState(false);
   const showList = testCases.length > 0 || !hideWhenEmpty;
+
+  useEffect(() => {
+    if (isLoading) return;
+    onCountChange?.(testCases.length);
+  }, [isLoading, onCountChange, testCases.length]);
 
   /**
    * 409 冲突要说清是哪条、为什么 —— 「不能关联」不可行动，「这条用例不在本需求的项目
@@ -205,48 +221,57 @@ export const RequirementTestCasesSection = (props: TProps) => {
     }
   };
 
+  const list =
+    isLoading && !testCases.length ? (
+      <div className={cn("px-2.5 pb-2.5", isPlain && "pt-2.5")}>
+        <Loader className="flex flex-col gap-1.5">
+          <Loader.Item height="36px" />
+          <Loader.Item height="36px" />
+        </Loader>
+      </div>
+    ) : testCases.length ? (
+      <div className={cn("pb-1", isPlain && "pt-1")}>
+        {testCases.map((testCase) => (
+          <RequirementTestCaseRow
+            key={testCase.id}
+            testCase={testCase}
+            onOpen={setActiveCase}
+            onUnlink={canManage ? setCaseToUnlink : undefined}
+          />
+        ))}
+      </div>
+    ) : (
+      <p className={cn("text-body-xs-regular text-tertiary", isPlain ? "px-3 py-3" : "px-2.5 pb-3")}>
+        {t("requirement_detail.test_cases.empty")}
+      </p>
+    );
+
   return (
     <>
-      {showList && (
-        <RequirementRelationCollapsible
-          title={t("requirement_detail.test_cases.widget_title")}
-          count={testCases.length}
-          actions={
-            canManage && !hideAddActions ? (
-              <button
-                type="button"
-                aria-label={t("requirement_detail.test_cases.link_existing")}
-                title={t("requirement_detail.test_cases.link_existing")}
-                onClick={() => setIsLinkModalOpen(true)}
-                className="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
-              >
-                <PlusIcon className="h-4 w-4" />
-              </button>
-            ) : undefined
-          }
-        >
-          {isLoading && !testCases.length ? (
-            <div className="px-2.5 pb-2.5">
-              <Loader className="flex flex-col gap-1.5">
-                <Loader.Item height="36px" />
-                <Loader.Item height="36px" />
-              </Loader>
-            </div>
-          ) : testCases.length ? (
-            <div className="pb-1">
-              {testCases.map((testCase) => (
-                <RequirementTestCaseRow
-                  key={testCase.id}
-                  testCase={testCase}
-                  onOpen={setActiveCase}
-                  onUnlink={canManage ? setCaseToUnlink : undefined}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="px-2.5 pb-3 text-body-xs-regular text-tertiary">{t("requirement_detail.test_cases.empty")}</p>
-          )}
-        </RequirementRelationCollapsible>
+      {isPlain ? (
+        list
+      ) : (
+        showList && (
+          <RequirementRelationCollapsible
+            title={t("requirement_detail.test_cases.widget_title")}
+            count={testCases.length}
+            actions={
+              canManage && !hideAddActions ? (
+                <button
+                  type="button"
+                  aria-label={t("requirement_detail.test_cases.link_existing")}
+                  title={t("requirement_detail.test_cases.link_existing")}
+                  onClick={() => setIsLinkModalOpen(true)}
+                  className="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                </button>
+              ) : undefined
+            }
+          >
+            {list}
+          </RequirementRelationCollapsible>
+        )
       )}
 
       <UpdateModal

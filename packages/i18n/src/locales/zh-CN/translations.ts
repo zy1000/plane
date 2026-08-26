@@ -1642,6 +1642,10 @@ export default {
     copy_link: "复制链接",
     link_copied: "链接已复制",
     properties: "属性",
+    /** 整页主区自定义字段网格的区块标题 */
+    custom_fields: "字段",
+    /** 整页把子需求 / 关联工作项 / 关联测试用例合成一张 Tab 卡片时的区块标题 */
+    relations: "关联",
     requirement_type: "需求类型",
     no_description: "暂无描述",
     /** status=closed 时详情页顶部的只读提示 */
@@ -1661,6 +1665,7 @@ export default {
     untitled: "未命名需求",
     not_found: "找不到这条需求",
     sub_requirements: "子需求",
+    sub_requirements_empty: "暂无子需求",
     test_cases: {
       section_title: "关联测试用例",
       widget_title: "用例",
@@ -1738,6 +1743,7 @@ export default {
       change_request: "CR-{sequence}",
     },
     meta: {
+      label: "元信息",
       created_at: "创建于 {date}",
       updated_at: "更新于 {date}",
       last_changed_version: "最后变更版本 v{version}",

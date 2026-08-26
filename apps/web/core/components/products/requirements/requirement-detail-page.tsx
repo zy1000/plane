@@ -4,8 +4,12 @@ import { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
 import { Link, useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { IconButton } from "@plane/propel/icon-button";
+import { CopyLinkIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import { Header, Loader } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { cn, copyUrlToClipboard } from "@plane/utils";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -13,7 +17,7 @@ import {
   RequirementApprovalPanel,
   RequirementDetailContent,
   RequirementDetailProperties,
-  RequirementProductRelations,
+  RequirementRelationsTabs,
   useRequirementDetail,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
@@ -28,7 +32,8 @@ import { useRequirementApprovalActions } from "./approval/use-requirement-approv
 /**
  * 需求详情整页。
  *
- * 与抽屉共用 RequirementDetailContent，差别只有两处：属性从横条挪进右栏，描述不折叠。
+ * 与抽屉共用 RequirementDetailContent，差别在版式：主列铺满、属性从横条挪进右栏、
+ * 审批动作提到标题行右侧、子需求 / 工作项 / 用例合成一张 Tab 卡片、历史区左右分栏。
  * 深链进来时网格没加载过，行数据由 useRequirementDetail 自己按 id 取。
  */
 export const ProductRequirementDetailPage = observer(function ProductRequirementDetailPage() {
@@ -89,6 +94,14 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
       router.push(`/${slug}/products/${product}/requirements?tab=changes&cr=${changeRequestId}`),
     [product, router, slug]
   );
+  /** 与抽屉的复制链接同一条路径：整页地址本身就是分享链接 */
+  const copyLink = useCallback(
+    () =>
+      void copyUrlToClipboard(`${slug}/products/${product}/requirements/${requirementId ?? ""}`).then(() =>
+        setToast({ type: TOAST_TYPE.SUCCESS, title: t("requirement_detail.link_copied") })
+      ),
+    [product, requirementId, slug, t]
+  );
 
   return (
     <>
@@ -132,9 +145,9 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
           </div>
         ) : (
           <div className="flex h-full w-full overflow-hidden">
-            {/* 正文限宽并居中：右栏之外还剩几百上千像素时，标签/值铺满整行会读不成一列 */}
-            <div className="vertical-scrollbar scrollbar-sm h-full min-w-0 flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-8">
-              <div className="mx-auto w-full max-w-[52rem]">
+            {/* 主列从左铺到右栏为止，只封顶不居中：1440px 之外才留白，而且留在右侧一处 */}
+            <div className="vertical-scrollbar scrollbar-sm h-full min-w-0 flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-7">
+              <div className="w-full max-w-[90rem]">
                 <RequirementDetailContent
                   workspaceSlug={slug}
                   productId={product}
@@ -149,13 +162,37 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   onStatusChange={onStatusChange}
                   onOpenRequirement={openRequirement}
                   onRolledBack={() => void detail.refresh()}
-                  issuesSection={
-                    <RequirementProductRelations
+                  headerActions={
+                    <>
+                      {/* 推动评审的入口放在标题右侧 —— 页面级动作不该藏在右栏里 */}
+                      <RequirementApprovalPanel
+                        variant="actions"
+                        requirement={requirement}
+                        isMutating={changesStore.isMutating}
+                        onSubmitReview={(id) => approvalActions.openSubmitModal([id])}
+                        onWithdrawReview={(changeRequestId) => void approvalActions.withdraw(changeRequestId)}
+                        onOpenChangeRequest={openChangeRequest}
+                      />
+                      <Tooltip tooltipContent={t("requirement_detail.copy_link")}>
+                        <IconButton
+                          variant="secondary"
+                          size="lg"
+                          icon={CopyLinkIcon}
+                          aria-label={t("requirement_detail.copy_link")}
+                          onClick={copyLink}
+                        />
+                      </Tooltip>
+                    </>
+                  }
+                  relationsSection={
+                    <RequirementRelationsTabs
                       workspaceSlug={slug}
                       productId={product}
                       requirement={requirement}
+                      subRequirements={detail.children}
                       canManage={canEdit}
                       onChanged={() => void detail.refresh()}
+                      onOpenRequirement={openRequirement}
                     />
                   }
                 />
@@ -180,17 +217,10 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
             </div>
             <div
               className={cn(
-                "vertical-scrollbar hidden scrollbar-sm h-full w-[340px] flex-shrink-0 flex-col gap-5 overflow-y-auto",
-                "border-l border-subtle px-5 py-8 lg:flex"
+                "vertical-scrollbar hidden scrollbar-sm h-full w-[380px] flex-shrink-0 flex-col overflow-y-auto",
+                "border-l border-subtle px-6 py-6 lg:flex"
               )}
             >
-              <RequirementApprovalPanel
-                requirement={requirement}
-                isMutating={changesStore.isMutating}
-                onSubmitReview={(requirementId) => approvalActions.openSubmitModal([requirementId])}
-                onWithdrawReview={(changeRequestId) => void approvalActions.withdraw(changeRequestId)}
-                onOpenChangeRequest={openChangeRequest}
-              />
               <RequirementDetailProperties
                 requirement={requirement}
                 requirementTypeName={requirementType?.name ?? null}

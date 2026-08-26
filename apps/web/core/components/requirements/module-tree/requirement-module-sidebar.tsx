@@ -138,10 +138,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
         className="absolute top-0 right-0 z-10 h-full w-1.5"
         style={{ cursor: "col-resize" }}
       />
-      <div className="px-3 pt-3 pb-1.5 text-caption-sm-medium text-tertiary">
-        {t("requirement_modules.sidebar_label")}
-      </div>
-      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-2 pt-3 pb-3">
         <RequirementModuleTree
           modules={store.modules}
           total={store.total}

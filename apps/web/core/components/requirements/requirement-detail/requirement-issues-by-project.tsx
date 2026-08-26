@@ -11,11 +11,12 @@
  * 跟着产品侧的 canManage 走（与同区域的添加操作条同一道门）。后端 DELETE 仍按项目级
  * 权限校验，无权时点了会收到 403 提示。
  */
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementIssue } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
+import { cn } from "@plane/utils";
 import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { useProductProjects } from "@/hooks/store/use-product-projects";
 import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
@@ -30,6 +31,7 @@ const ProjectIssuesGroup = ({
   projectIdentifier,
   canManage,
   onChanged,
+  onCountChange,
 }: {
   workspaceSlug: string;
   requirementId: string;
@@ -37,6 +39,8 @@ const ProjectIssuesGroup = ({
   projectIdentifier?: string;
   canManage: boolean;
   onChanged?: () => void;
+  /** 本项目的行数（加载完才报；无权查看按 0 报），给外层汇总成 Tab 计数 */
+  onCountChange?: (projectId: string, count: number) => void;
 }) => {
   const { t } = useTranslation();
   const { issues, isLoading, error, unlinkIssue } = useRequirementIssues({
@@ -46,6 +50,11 @@ const ProjectIssuesGroup = ({
   });
   const [issueToUnlink, setIssueToUnlink] = useState<TRequirementIssue | null>(null);
   const [isUnlinking, setIsUnlinking] = useState(false);
+
+  useEffect(() => {
+    if (isLoading) return;
+    onCountChange?.(projectId, error ? 0 : issues.length);
+  }, [error, isLoading, issues.length, onCountChange, projectId]);
 
   const handleUnlink = async () => {
     if (!issueToUnlink) return;
@@ -117,11 +126,21 @@ export const RequirementIssuesByProject = ({
   requirement,
   canManage,
   onChanged,
+  variant = "collapsible",
+  onCountChange,
 }: {
   workspaceSlug: string;
   requirement: TRequirement;
   canManage: boolean;
   onChanged?: () => void;
+  /**
+   * collapsible：自带「工作项」折叠头，没进项目 / 还没关联时整块不出现（抽屉用）。
+   * plain：只出行，没进项目 / 还没关联时用一句说明占位 —— 给整页的关联 Tab 卡片用，
+   * 折叠头由 Tab 代替，空态也必须占位，否则切到这个 Tab 会是一片空白。
+   */
+  variant?: "collapsible" | "plain";
+  /** 各项目行数之和；每个项目都加载完才报一次 */
+  onCountChange?: (count: number) => void;
 }) => {
   const { t } = useTranslation();
   // 项目名/标识与详情页「所属项目」多选同源（产品 ↔ 项目关联表）；候选只含当前用户
@@ -132,7 +151,58 @@ export const RequirementIssuesByProject = ({
     [links]
   );
 
-  const projectIds = requirement.project_ids ?? [];
+  const projectIds = useMemo(() => requirement.project_ids ?? [], [requirement.project_ids]);
+
+  // 每个项目各自拉数，Tab 计数要等全部到齐再汇总，否则数字会一跳一跳
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const handleGroupCount = useCallback((projectId: string, count: number) => {
+    setCounts((prev) => (prev[projectId] === count ? prev : { ...prev, [projectId]: count }));
+  }, []);
+  const allLoaded = projectIds.every((projectId) => projectId in counts);
+  useEffect(() => {
+    if (!onCountChange || !allLoaded) return;
+    onCountChange(projectIds.reduce((sum, projectId) => sum + (counts[projectId] ?? 0), 0));
+  }, [allLoaded, counts, onCountChange, projectIds]);
+
+  const groups = projectIds.map((projectId) => {
+    const detail = projectById.get(projectId);
+    return (
+      <ProjectIssuesGroup
+        key={projectId}
+        workspaceSlug={workspaceSlug}
+        requirementId={requirement.id}
+        projectId={projectId}
+        projectIdentifier={detail?.identifier}
+        canManage={canManage}
+        onChanged={onChanged}
+        onCountChange={handleGroupCount}
+      />
+    );
+  });
+
+  if (variant === "plain") {
+    return (
+      <>
+        {!projectIds.length ? (
+          <p className="px-3 py-4 text-body-xs-regular text-tertiary">
+            {t("project_requirements.issues.link_project_first")}
+          </p>
+        ) : (
+          // 有任何一行（含无权查看的说明）就把空态藏掉；加载中不出空态，免得与骨架屏叠着
+          <div className={cn("flex flex-col py-1", "[&:has([data-requirement-issues])_[data-issues-empty]]:hidden")}>
+            {groups}
+            {allLoaded && (
+              <p data-issues-empty className="px-3 py-3 text-body-xs-regular text-tertiary">
+                {t("project_requirements.issues.empty")}
+              </p>
+            )}
+          </div>
+        )}
+        <IssuePeekOverview />
+      </>
+    );
+  }
+
   // 没进任何项目就整个 Section 不渲染。有项目但还没关联工作项时，靠
   // has-[[data-requirement-issues]] 把空折叠头藏掉 —— 行一到就显示。
   if (!projectIds.length) return null;
@@ -141,22 +211,7 @@ export const RequirementIssuesByProject = ({
     <>
       <div className="hidden has-[[data-requirement-issues]]:block">
         <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")}>
-          <div className="flex flex-col pb-3">
-            {projectIds.map((projectId) => {
-              const detail = projectById.get(projectId);
-              return (
-                <ProjectIssuesGroup
-                  key={projectId}
-                  workspaceSlug={workspaceSlug}
-                  requirementId={requirement.id}
-                  projectId={projectId}
-                  projectIdentifier={detail?.identifier}
-                  canManage={canManage}
-                  onChanged={onChanged}
-                />
-              );
-            })}
-          </div>
+          <div className="flex flex-col pb-3">{groups}</div>
         </RequirementRelationCollapsible>
       </div>
       <IssuePeekOverview />

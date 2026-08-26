@@ -9,6 +9,7 @@ export * from "./requirement-project-relations";
 export * from "./requirement-modified-banner";
 export * from "./requirement-peek-overview";
 export * from "./requirement-projects-select";
+export * from "./requirement-relations-tabs";
 export * from "./requirement-subform-section";
 export * from "./requirement-testcase-link-modal";
 export * from "./requirement-testcases-section";
