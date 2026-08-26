@@ -62,6 +62,17 @@ export const getRequirementRowKey = (
 export const isEmptyRequirementValue = (value: TRequirementValue | undefined) =>
   value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
 
+/** 子表一行是否全空：没填，或富文本只剩空标签。详情页展示时把这种行藏掉，避免预置空格子。 */
+export const isBlankFormRow = (row: TRequirementFormRow): boolean => {
+  const values = Object.values(row.values ?? {});
+  if (!values.length) return true;
+  return values.every((value) => {
+    if (isEmptyRequirementValue(value)) return true;
+    if (typeof value === "string") return stripAndTruncateHTML(value, 2000).trim() === "";
+    return false;
+  });
+};
+
 export const getCursorPageOffset = (cursor?: string) => {
   if (!cursor) return null;
   const offset = Number(cursor.split(":")[1]);
@@ -1186,7 +1197,7 @@ export const LeafEditor = ({
     return variant === "detail" ? (
       <RequirementRichTextEditor
         {...richTextProps}
-        containerClassName="min-h-20 rounded-md border border-subtle bg-surface-1 pt-2 pr-2"
+        containerClassName="min-h-8 border-none pt-1"
       />
     ) : (
       <RequirementRichTextCell {...richTextProps} label={field.name} variant={variant} deferCommit={deferTextCommit} />

@@ -266,13 +266,14 @@ export const BuiltinCellEditor = ({
   }
 
   if (columnKey === "priority") {
+    const hideNoneChrome = isGrid || isChip || base === "detail";
     return (
       <PriorityDropdown
         // none 在 ISSUE_PRIORITIES 里有自己的标题「None」和占位图标：网格列头已经说明是优先级，
-        // 空值保持空白；胶囊带字段名标签，空值只写「无」
-        value={(isGrid || isChip) && values.priority === "none" ? null : values.priority}
-        placeholder={isGrid ? "" : isChip ? t("requirement_grid.data.priority_none") : undefined}
-        hideIcon={(isGrid || isChip) && (!values.priority || values.priority === "none")}
+        // 空值保持空白；详情右栏 / 胶囊带字段名标签，空值只写「无」
+        value={hideNoneChrome && values.priority === "none" ? null : values.priority}
+        placeholder={isGrid ? "" : t("requirement_grid.data.priority_none")}
+        hideIcon={hideNoneChrome && (!values.priority || values.priority === "none")}
         onChange={(next) => onChange({ priority: next as TRequirementPriority })}
         buttonVariant={dropdownVariant}
         buttonClassName={dropdownClass}
@@ -305,7 +306,9 @@ export const BuiltinCellEditor = ({
         onChange={(date) => onChange({ [columnKey]: renderFormattedPayloadDate(date) ?? null })}
         minDate={!isStart && values.start_date ? new Date(values.start_date) : undefined}
         maxDate={isStart && values.target_date ? new Date(values.target_date) : undefined}
-        placeholder={isGrid ? "" : t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)}
+        placeholder={
+          isGrid ? "" : base === "detail" ? t("requirement_detail.select_date") : t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)
+        }
         buttonVariant={dropdownVariant}
         buttonClassName={dropdownClass}
         buttonContainerClassName={containerClass}

@@ -1644,10 +1644,14 @@ export default {
     properties: "属性",
     /** 整页主区自定义字段网格的区块标题 */
     custom_fields: "字段",
-    /** 整页把子需求 / 关联工作项 / 关联测试用例合成一张 Tab 卡片时的区块标题 */
+    /** 整页关联区曾用过的区块标题；现在操作条自己说明身份，不再单独出这一行 */
     relations: "关联",
     requirement_type: "需求类型",
     no_description: "暂无描述",
+    add_description: "添加描述…",
+    /** 右栏交付状态与标题旁审批态不是同一根轴 */
+    delivery_status_hint: "下面的「{status}」是交付状态，和标题旁的「{approval}」不是一回事。",
+    select_date: "选择日期",
     /** status=closed 时详情页顶部的只读提示 */
     closed_hint: "需求已关闭：内容只读，选择其它状态可重新打开",
     modified_banner: {
@@ -1697,7 +1701,7 @@ export default {
       row_actions: "行操作",
       insert_above: "在上方插入",
       insert_below: "在下方插入",
-      empty_add: "还没有条目，点右上角「添加行」开始填写",
+      empty_add: "还没有行。需要时再添加。",
       empty_add_required: "至少需要 1 行，点右上角「添加行」开始填写",
       no_fields: "这个子表单还没有配置字段",
     },

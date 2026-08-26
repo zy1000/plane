@@ -14,7 +14,13 @@ import type {
 } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { getFormRows, LeafEditor, LeafValue, MenuRowLabel } from "@/components/requirements/requirement-grid-shared";
+import {
+  getFormRows,
+  isBlankFormRow,
+  LeafEditor,
+  LeafValue,
+  MenuRowLabel,
+} from "@/components/requirements/requirement-grid-shared";
 import { SubformRowHandle } from "@/components/requirements/subform-row-handle";
 import {
   getSubformDropEdgeClass,
@@ -69,6 +75,8 @@ export const RequirementSubformSection = (props: TProps) => {
   const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
   /** 点索引胶囊后要滚过去，滚动容器由调用方决定，所以只记 id 让 ref 回调去做 */
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
+  /** 已存的全空行默认不展示；点「添加行」才把其中一行露出来，避免预置空格子 */
+  const [visibleEmptyRowIds, setVisibleEmptyRowIds] = useState<Set<string>>(() => new Set());
 
   const rowsByForm = useMemo(
     () => Object.fromEntries(forms.map((form) => [form.id, getFormRows(data, form.id)])),
@@ -82,7 +90,7 @@ export const RequirementSubformSection = (props: TProps) => {
   const defaultOpenIds = useMemo(() => {
     const candidates = defaultOpenEmpty
       ? forms
-      : forms.filter((form) => (rowsByForm[form.id]?.length ?? 0) > 0);
+      : forms.filter((form) => (rowsByForm[form.id] ?? []).some((row) => !isBlankFormRow(row)));
     return candidates.slice(0, defaultOpenCount).map((form) => form.id);
   }, [defaultOpenCount, defaultOpenEmpty, forms, rowsByForm]);
 
@@ -102,16 +110,30 @@ export const RequirementSubformSection = (props: TProps) => {
 
   const writeRows = (formId: string, rows: TRequirementFormRow[]) => onChange({ ...data, [formId]: rows });
 
+  const revealEmptyRow = (rowId: string) =>
+    setVisibleEmptyRowIds((prev) => (prev.has(rowId) ? prev : new Set(prev).add(rowId)));
+
   const addRow = (form: TRequirementField) => {
-    // 子行自带 UUID：复制整行需求时要靠它重新分配，撞 id 会让两行的表单行互相串写
-    writeRows(form.id, [...(rowsByForm[form.id] ?? []), { id: uuidv4(), values: {} }]);
+    const rows = rowsByForm[form.id] ?? [];
+    const hiddenBlank = rows.find((row) => isBlankFormRow(row) && !visibleEmptyRowIds.has(row.id));
+    if (hiddenBlank) {
+      revealEmptyRow(hiddenBlank.id);
+    } else {
+      // 子行自带 UUID：复制整行需求时要靠它重新分配，撞 id 会让两行的表单行互相串写
+      const id = uuidv4();
+      revealEmptyRow(id);
+      writeRows(form.id, [...rows, { id, values: {} }]);
+    }
     if (!effectiveOpenIds.includes(form.id)) setOpenIds([...effectiveOpenIds, form.id]);
   };
 
   /** 在指定位置插入空行。addRow 是它的「插到末尾」特例，但还要负责展开本块，所以分开写 */
   const insertRow = (form: TRequirementField, index: number) => {
+    if (index < 0) return;
     const rows = [...(rowsByForm[form.id] ?? [])];
-    rows.splice(index, 0, { id: uuidv4(), values: {} });
+    const id = uuidv4();
+    rows.splice(index, 0, { id, values: {} });
+    revealEmptyRow(id);
     writeRows(form.id, rows);
   };
 
@@ -153,7 +175,7 @@ export const RequirementSubformSection = (props: TProps) => {
       {forms.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           {forms.map((form) => {
-            const count = rowsByForm[form.id]?.length ?? 0;
+            const count = (rowsByForm[form.id] ?? []).filter((row) => !isBlankFormRow(row)).length;
             return (
               <button
                 key={form.id}
@@ -174,7 +196,9 @@ export const RequirementSubformSection = (props: TProps) => {
       )}
 
       {forms.map((form) => {
-        const rows = rowsByForm[form.id] ?? [];
+        const storedRows = rowsByForm[form.id] ?? [];
+        const rows = storedRows.filter((row) => !isBlankFormRow(row) || visibleEmptyRowIds.has(row.id));
+        const filledCount = storedRows.filter((row) => !isBlankFormRow(row)).length;
         const isOpen = effectiveOpenIds.includes(form.id);
         const columns = form.children.filter((child) => child.is_active);
         return (
@@ -202,8 +226,8 @@ export const RequirementSubformSection = (props: TProps) => {
                 <span className="truncate">{form.name}</span>
                 {form.is_required && <span className="shrink-0 text-danger-primary">*</span>}
                 <span className="shrink-0 text-caption-sm-regular font-normal text-tertiary">
-                  {rows.length
-                    ? t("requirement_detail.subform.row_count", { count: rows.length })
+                  {filledCount
+                    ? t("requirement_detail.subform.row_count", { count: filledCount })
                     : t("requirement_detail.subform.empty")}
                 </span>
               </button>
@@ -244,6 +268,7 @@ export const RequirementSubformSection = (props: TProps) => {
                   <tbody>
                     {rows.map((row, index) => {
                       const rowKey = `${form.id}:${row.id}`;
+                      const storedIndex = storedRows.findIndex((item) => item.id === row.id);
                       // 指示线与拖动态画在每个单元格上：<tr> 在 border-collapse 下吃不住阴影
                       const dragClass = readOnly
                         ? ""
@@ -314,13 +339,13 @@ export const RequirementSubformSection = (props: TProps) => {
                                 placement="bottom-end"
                                 portalElement={menuPortalEl}
                               >
-                                <CustomMenu.MenuItem onClick={() => insertRow(form, index)}>
+                                <CustomMenu.MenuItem onClick={() => insertRow(form, storedIndex)}>
                                   <MenuRowLabel
                                     icon={ArrowUpToLine}
                                     label={t("requirement_detail.subform.insert_above")}
                                   />
                                 </CustomMenu.MenuItem>
-                                <CustomMenu.MenuItem onClick={() => insertRow(form, index + 1)}>
+                                <CustomMenu.MenuItem onClick={() => insertRow(form, storedIndex + 1)}>
                                   <MenuRowLabel
                                     icon={ArrowDownToLine}
                                     label={t("requirement_detail.subform.insert_below")}

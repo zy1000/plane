@@ -1476,6 +1476,9 @@ export default {
     relations: "Relations",
     requirement_type: "Requirement type",
     no_description: "No description",
+    add_description: "Add a description…",
+    delivery_status_hint: "“{status}” below is the delivery status. It is not the same as “{approval}” next to the title.",
+    select_date: "Select date",
     closed_hint: "This requirement is closed: content is read-only. Pick another status to reopen it.",
     modified_banner: {
       title: "These edits have not been submitted for review. The approved version is v{version}.",
@@ -1521,7 +1524,7 @@ export default {
       row_actions: "Row actions",
       insert_above: "Insert above",
       insert_below: "Insert below",
-      empty_add: "No rows yet. Use “Add row” above to start",
+      empty_add: "No rows yet. Add one when you need it.",
       empty_add_required: "At least one row is required. Use “Add row” above to start",
       no_fields: "This sub form has no fields yet",
     },

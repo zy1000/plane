@@ -1,7 +1,7 @@
 /**
  * 整页的审批动作区：状态胶囊 + 查看变更单 + 提交/撤回。
  *
- * 抽屉里不渲染这一块 —— 标题下的 RequirementApprovalBadge 已经说清审批态，
+ * 抽屉里不渲染这一块 —— 编号旁的 RequirementApprovalBadge 已经说清审批态，
  * 提交/撤回走网格行菜单。整页标题行右侧才是详情视图里推动评审的入口。
  * variant="actions" 时不再重复状态胶囊（标题下的徽标已经说了），只出链接和按钮。
  */
@@ -11,6 +11,7 @@ import { Button } from "@plane/propel/button";
 import type { TRequirement } from "@plane/types";
 import { cn } from "@plane/utils";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
+import { isBlankRequirementDescription } from "@/components/requirements/requirement-rich-text";
 
 type TProps = {
   requirement: TRequirement;
@@ -37,6 +38,10 @@ export const RequirementApprovalPanel = ({
   const showState = variant === "panel";
   // 标题行里的按钮跟 28px 的图标按钮同高；右栏胶囊旁边才用小号
   const buttonSize = showState ? "sm" : "lg";
+  // 描述为空或只是复读标题时，主按钮降成描边，逻辑仍可点
+  const submitVariant = isBlankRequirementDescription(requirement.description_html, requirement.title)
+    ? "secondary"
+    : "primary";
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
@@ -71,7 +76,7 @@ export const RequirementApprovalPanel = ({
 
       <span className={cn("flex items-center gap-2", showState && "ml-auto")}>
         {requirement.can_submit_review && onSubmitReview && (
-          <Button variant="primary" size={buttonSize} disabled={isMutating} onClick={() => onSubmitReview(requirement.id)}>
+          <Button variant={submitVariant} size={buttonSize} disabled={isMutating} onClick={() => onSubmitReview(requirement.id)}>
             <Send className="size-3" />
             {t("requirement_approval.submit_review")}
           </Button>

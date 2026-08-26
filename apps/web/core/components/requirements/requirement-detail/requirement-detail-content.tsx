@@ -30,7 +30,11 @@ import { LeafEditor, LeafValue } from "@/components/requirements/requirement-gri
 import { RequirementCodeInput } from "@/components/requirements/requirement-code-input";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
-import { RequirementRichTextEditor, RequirementRichTextValue } from "@/components/requirements/requirement-rich-text";
+import {
+  isBlankRequirementDescription,
+  RequirementRichTextEditor,
+  RequirementRichTextValue,
+} from "@/components/requirements/requirement-rich-text";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
@@ -108,8 +112,8 @@ type TProps = {
    */
   headerActions?: React.ReactNode;
   /**
-   * 整页把子需求 / 关联工作项 / 关联测试用例合成一张 Tab 卡片（RequirementRelationsTabs）
-   * 时由调用方注入；传了就替换掉这里自带的子需求区块和 issuesSection / testCasesSection 三段竖排。
+   * 整页把子需求 / 关联工作项 / 关联测试用例交给调用方（操作条 + 有内容才出的折叠块）。
+   * 传了就替换掉这里自带的子需求区块和 issuesSection / testCasesSection 三段竖排。
    */
   relationsSection?: React.ReactNode;
 };
@@ -240,7 +244,7 @@ export const RequirementSubRequirementList = ({
 };
 
 /**
- * 标题下方的审批徽标：状态胶囊 + 已通过的版本号。
+ * 编号旁的审批徽标：状态胶囊 + 已通过的版本号。
  *
  * 这是详情页第一个要回答的问题 —— 我看到的这些值，是不是评审通过的那一版。动作按钮
  * 不在这里（在 RequirementApprovalPanel），这一块只负责说清楚现在是什么状态。
@@ -447,6 +451,8 @@ export const RequirementDetailContent = (props: TProps) => {
   const commitData = (data: TRequirementData) => void onPatch({ data });
 
   const isDrawer = layout === "drawer";
+  const approvalBadge = !isLibrary ? <RequirementApprovalBadge requirement={requirement} /> : null;
+  const descriptionBlank = isBlankRequirementDescription(requirement.description_html, requirement.title);
 
   const parentLink = requirement.parent_id ? (
     <button
@@ -491,10 +497,13 @@ export const RequirementDetailContent = (props: TProps) => {
             {isDrawer ? (
               <>
                 {parentLink}
-                <div className="mb-1">{identifier}</div>
+                <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
+                  {identifier}
+                  {approvalBadge}
+                </div>
               </>
             ) : (
-              // 整页把父需求和编号收成一行，标题上方只占一行高度
+              // 整页把父需求、编号、审批态收成一行，标题上方只占一行高度
               <div className="mb-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                 {parentLink && (
                   <>
@@ -502,7 +511,10 @@ export const RequirementDetailContent = (props: TProps) => {
                     <span aria-hidden className="h-3 border-l border-strong" />
                   </>
                 )}
-                {identifier}
+                <div className="flex min-w-0 items-center gap-2">
+                  {identifier}
+                  {approvalBadge}
+                </div>
               </div>
             )}
 
@@ -510,7 +522,7 @@ export const RequirementDetailContent = (props: TProps) => {
               <h1
                 className={cn(
                   "font-medium text-balance text-primary",
-                  isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
+                  isDrawer ? "text-20 leading-snug" : "text-24 leading-tight"
                 )}
               >
                 {requirement.title || t("requirement_detail.untitled")}
@@ -529,14 +541,10 @@ export const RequirementDetailContent = (props: TProps) => {
                 className={cn(
                   "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-medium text-primary",
                   "focus:border-accent-primary outline-none placeholder:text-placeholder hover:border-subtle focus:bg-surface-1",
-                  isDrawer ? "text-20 leading-snug" : "text-22 leading-tight"
+                  isDrawer ? "text-20 leading-snug" : "text-24 leading-tight"
                 )}
               />
             )}
-
-            {/* 审批态跟在标题下方，是这一屏第一个要回答的问题：我看到的这些值，是不是评审
-                通过的那一版。status（需求级交付状态，人工维护）是另一根轴，退到属性区里去。 */}
-            {!isLibrary && <RequirementApprovalBadge requirement={requirement} />}
           </div>
 
           {!isDrawer && headerActions && (
@@ -578,25 +586,28 @@ export const RequirementDetailContent = (props: TProps) => {
             整页跟主列一样铺满 —— 主列本身已经封顶（见 requirement-detail-page），不再二次限宽 */}
         <div className={cn(isDrawer && "max-w-[42rem]")}>
           {readOnly ? (
-            requirement.description_html ? (
+            descriptionBlank ? (
+              <p className="text-body-sm-regular text-placeholder">{t("requirement_detail.no_description")}</p>
+            ) : (
               <RequirementRichTextValue
                 workspaceSlug={workspaceSlug}
                 editorId={`requirement-description-${requirement.id}`}
                 value={requirement.description_html}
                 containerClassName="-ml-3 border-none"
               />
-            ) : (
-              <p className="text-body-sm-regular text-placeholder">{t("requirement_detail.no_description")}</p>
             )
           ) : (
             <RequirementRichTextEditor
               workspaceSlug={workspaceSlug}
               entityId={requirement.id}
               editorId={`requirement-description-${requirement.id}`}
-              value={requirement.description_html ?? ""}
-              onChange={(html) => void onPatch({ builtin: { description_html: html } })}
-              placeholder={t("requirement_detail.no_description")}
-              containerClassName="-ml-3 min-h-20 border-none"
+              value={descriptionBlank ? "" : (requirement.description_html ?? "")}
+              onChange={(html) => {
+                if (descriptionBlank && isBlankRequirementDescription(html, requirement.title)) return;
+                void onPatch({ builtin: { description_html: html } });
+              }}
+              placeholder={t("requirement_detail.add_description")}
+              containerClassName="-ml-3 min-h-8 border-none"
             />
           )}
         </div>
@@ -644,8 +655,7 @@ export const RequirementDetailContent = (props: TProps) => {
       )}
 
       {relationsSection ? (
-        // 整页：三块关联合成一张 Tab 卡片，外面套一个与「字段」「子表单」同级的区块标题
-        <Section label={t("requirement_detail.relations")}>{relationsSection}</Section>
+        relationsSection
       ) : (
         <>
           {subRequirements.length > 0 && (
@@ -759,6 +769,12 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
   return (
     <div className="flex flex-col gap-5">
       <RailGroup label={t("requirement_detail.properties")}>
+        <p className="-mt-1 text-caption-sm-regular text-placeholder">
+          {t("requirement_detail.delivery_status_hint", {
+            status: t(`requirement_fields.statuses.${requirement.status}`),
+            approval: t(`requirement_approval.state.${requirement.approval_state}`),
+          })}
+        </p>
         <PropertyGrid
           requirement={requirement}
           readOnly={readOnly}

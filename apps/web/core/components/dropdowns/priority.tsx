@@ -223,7 +223,7 @@ function BackgroundButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? t("common.priority") ?? placeholder}
+            {priorityDetails?.title ?? placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -307,7 +307,7 @@ function TransparentButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? t("common.priority") ?? placeholder}
+            {priorityDetails?.title ?? placeholder}
           </span>
         )}
         {dropdownArrow && (

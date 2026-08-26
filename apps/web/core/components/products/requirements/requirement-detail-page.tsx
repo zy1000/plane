@@ -33,7 +33,7 @@ import { useRequirementApprovalActions } from "./approval/use-requirement-approv
  * 需求详情整页。
  *
  * 与抽屉共用 RequirementDetailContent，差别在版式：主列铺满、属性从横条挪进右栏、
- * 审批动作提到标题行右侧、子需求 / 工作项 / 用例合成一张 Tab 卡片、历史区左右分栏。
+ * 审批动作提到标题行右侧、关联区与工作项详情同一套（操作条 + 有内容才出折叠块）、历史区左右分栏。
  * 深链进来时网格没加载过，行数据由 useRequirementDetail 自己按 id 取。
  */
 export const ProductRequirementDetailPage = observer(function ProductRequirementDetailPage() {
@@ -123,9 +123,6 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 size="sm"
                 enableClickToCopy
               />
-              <h1 className="min-w-0 truncate text-13 font-medium text-primary">
-                {requirement?.title || t("requirement_detail.untitled")}
-              </h1>
             </Header.LeftItem>
           </Header>
         }

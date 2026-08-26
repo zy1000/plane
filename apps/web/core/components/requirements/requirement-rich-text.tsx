@@ -64,6 +64,23 @@ const toInlineText = (html: string | null | undefined) => {
 /** 输入框里的文本 → 存库的单段 HTML。空串就是空串，hasRichTextChanged 把它和 <p></p> 判等 */
 const fromInlineText = (text: string) => (text ? `<p>${escapeHtml(text)}</p>` : "");
 
+/** 富文本抽成可比对的纯文本：简单段落走 toInlineText，复杂内容再剥标签 */
+export const getRequirementRichTextPlain = (html: string | null | undefined) => {
+  const inline = toInlineText(html);
+  if (inline !== null) return inline.trim();
+  return stripAndTruncateHTML(html ?? "", 2000).trim();
+};
+
+/**
+ * 描述要不要当空展示：没写，或纯文本和标题一模一样（建行时常把标题复读进描述）。
+ * 只影响展示，不改库里的值。
+ */
+export const isBlankRequirementDescription = (html: string | null | undefined, title?: string | null) => {
+  const text = getRequirementRichTextPlain(html);
+  if (!text) return true;
+  return Boolean(title?.trim() && text === title.trim());
+};
+
 /**
  * workspaceId 解析 + 编辑器的上传/复制回调。
  *

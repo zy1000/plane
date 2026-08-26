@@ -26,7 +26,7 @@ type TProps = {
 /**
  * 拆分 / 关联工作项 / 关联用例三个动作的项目落点与弹窗开关。
  *
- * 抽屉的关联区（本组件）和整页的关联 Tab 卡片（RequirementRelationsTabs）共用同一套：
+ * 抽屉的关联区（本组件）和整页的关联区（RequirementRelationsTabs）共用同一套：
  * 两处只是版式不同，「必须先选项目」的规则不能各写一份。
  */
 export const useProductRelationActions = ({
