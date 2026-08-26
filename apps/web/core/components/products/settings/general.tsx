@@ -23,6 +23,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "../context";
 import { DeleteProductModal } from "../delete-modal";
+import { ProductExtendedFields, useProductExtendedFields } from "../extended-fields";
 import { ProductLogoCoverHeader } from "../logo-cover-header";
 import { ProductSettingsHeader } from "./header";
 
@@ -53,6 +54,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
   const [formError, setFormError] = useState<string | null>(null);
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
+  const extended = useProductExtendedFields({ product, mode: "edit" });
 
   const { cleanupSessionAssets, commitAssets, handleDeferredAssetDelete, handleDuplicate, handleUpload, resetAssets } =
     useProductEditorAssets({
@@ -90,6 +92,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     setDescriptionHTML(product.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product.owner);
     setNetwork(product.network);
+    extended.reset(product);
     // 老产品可能没有 logo/封面：不注入随机默认，展示层用 PackageOpen/默认封面兜底
     setLogoProps(product.logo_props?.in_use ? product.logo_props : undefined);
     setCoverImageUrl(product.cover_image_url ?? null);
@@ -98,7 +101,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     setOwnerError(null);
     resetAssets();
     setEditorVersion((version) => version + 1);
-  }, [product?.id, product?.updated_at, resetAssets]);
+  }, [extended.reset, product?.id, product?.updated_at, resetAssets]);
 
   useEffect(
     () => () => {
@@ -123,11 +126,13 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       setOwnerError(t("workspace_products.validation.owner_required"));
       return;
     }
+    if (!extended.validate()) return;
 
     setIsSaving(true);
     setFormError(null);
     setIdentifierError(null);
     setOwnerError(null);
+    extended.clearErrors();
     try {
       // 换封面：静态图/上传在资产确认时由后端直接回写绑定，外链才进 PATCH payload
       const coverPayload = await handleCoverImageChange(product.cover_image_url, coverImageUrl, {
@@ -143,6 +148,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         owner: ownerId,
         ...(logoProps ? { logo_props: logoProps } : {}),
         ...(coverPayload ?? {}),
+        ...extended.getPayload(),
       });
       await commitAssets(descriptionHTML);
 
@@ -177,7 +183,9 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
             ? t("common.identifier.already_exists")
             : t("common.identifier.invalid")
         );
-      else setFormError(String(errorPayload.name?.[0] ?? t("workspace_products.toast.failed")));
+      else if (extended.applyServerErrors(error)) {
+        // 字段级错误已在扩展字段区行内展示
+      } else setFormError(String(errorPayload.name?.[0] ?? t("workspace_products.toast.failed")));
     } finally {
       setIsSaving(false);
     }
@@ -263,6 +271,17 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
               </div>
             )}
           </div>
+
+          <ProductExtendedFields
+            workspaceSlug={workspaceSlug}
+            editable
+            variant="settings"
+            product={product}
+            values={extended.values}
+            errors={extended.errors}
+            onChange={extended.setValue}
+            missingRequiredFields={extended.missingRequiredFields}
+          />
 
           <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
             <div>

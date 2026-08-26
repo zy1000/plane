@@ -183,6 +183,14 @@ export const WORKSPACE_SETTINGS = {
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/requirement-types`),
   },
+  "data-dictionaries": {
+    key: "data-dictionaries",
+    i18n_label: "workspace_settings.settings.data_dictionaries.title",
+    href: `/settings/data-dictionaries`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    requiresMembership: true,
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/data-dictionaries`),
+  },
   changelog: {
     key: "changelog",
     i18n_label: "更新日志管理",

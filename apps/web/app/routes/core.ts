@@ -521,6 +521,11 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/requirement-types/:requirementTypeId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/requirement-types/[requirementTypeId]/page.tsx"
           ),
+          // Workspace Data Dictionaries
+          route(
+            ":workspaceSlug/settings/data-dictionaries",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/data-dictionaries/page.tsx"
+          ),
         ]),
 
         // --------------------------------------------------------------------

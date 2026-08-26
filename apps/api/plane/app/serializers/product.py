@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
+    DataDictionaryItem,
     FileAsset,
     Product,
     ProductMember,
@@ -14,8 +15,10 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.utils.content_validator import validate_html_content
+from plane.utils.data_dictionary import PRODUCT_DICTIONARY_FIELD_KEYS
 
 from .base import BaseSerializer
+from .data_dictionary import DataDictionaryItemLiteSerializer
 
 
 # 首位必须是字母，且不含连字符 —— 展示编号是 "{identifier}-{sequence_id}"，
@@ -23,10 +26,45 @@ from .base import BaseSerializer
 IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{0,11}$")
 
 
+def _dictionary_item_field():
+    # 必须显式声明：模型列 null=True，ModelSerializer 会自动生成 required=False / allow_null=True。
+    # 这里要的是「创建必填、PATCH 可省略、显式 null 拒绝」—— required=True + allow_null 默认 False 正好。
+    return serializers.PrimaryKeyRelatedField(
+        queryset=DataDictionaryItem.objects.select_related("dictionary"), required=True
+    )
+
+
 class ProductSerializer(BaseSerializer):
     description_html = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
+    stage = _dictionary_item_field()
+    category = _dictionary_item_field()
+    status = _dictionary_item_field()
+    hardware_level = _dictionary_item_field()
+    structure_level = _dictionary_item_field()
+    software_level = _dictionary_item_field()
+    stage_detail = DataDictionaryItemLiteSerializer(source="stage", read_only=True)
+    category_detail = DataDictionaryItemLiteSerializer(source="category", read_only=True)
+    status_detail = DataDictionaryItemLiteSerializer(source="status", read_only=True)
+    hardware_level_detail = DataDictionaryItemLiteSerializer(
+        source="hardware_level", read_only=True
+    )
+    structure_level_detail = DataDictionaryItemLiteSerializer(
+        source="structure_level", read_only=True
+    )
+    software_level_detail = DataDictionaryItemLiteSerializer(
+        source="software_level", read_only=True
+    )
+    start_date = serializers.DateField(required=True)
+    project_lead = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), required=True
+    )
+    test_lead = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), required=True
+    )
+    project_lead_detail = UserLiteSerializer(source="project_lead", read_only=True)
+    test_lead_detail = UserLiteSerializer(source="test_lead", read_only=True)
     reviewers = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), many=True, required=False
     )
@@ -115,6 +153,63 @@ class ProductSerializer(BaseSerializer):
             )
         return reviewers
 
+    def _require_workspace_member(self, user, message):
+        workspace = self.context.get("workspace")
+        if workspace is None:
+            raise serializers.ValidationError("Workspace is required.")
+        if not WorkspaceMember.objects.filter(
+            workspace=workspace,
+            member=user,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).exists():
+            raise serializers.ValidationError(message)
+        return user
+
+    # 两位负责人只要求是工作区成员，不像 owner 那样要求已在产品成员表里
+    def validate_project_lead(self, user):
+        return self._require_workspace_member(
+            user, "Project lead must be an active member of this workspace."
+        )
+
+    def validate_test_lead(self, user):
+        return self._require_workspace_member(
+            user, "Test lead must be an active member of this workspace."
+        )
+
+    def validate_code(self, value):
+        code = (value or "").strip()
+        if not code:
+            raise serializers.ValidationError("Product code cannot be empty.")
+        workspace = self.context.get("workspace")
+        if workspace is None:
+            raise serializers.ValidationError("Workspace is required.")
+        queryset = Product.objects.filter(workspace=workspace, code=code)
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("PRODUCT_CODE_ALREADY_EXISTS")
+        return code
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # 字典值必须属于本工作区、且来自对应的系统字典（阶段字段不能塞一个「产品状态」的值）
+        workspace = self.context.get("workspace")
+        errors = {}
+        for field, key in PRODUCT_DICTIONARY_FIELD_KEYS.items():
+            item = attrs.get(field)
+            if item is None:
+                continue
+            if (
+                workspace is None
+                or item.workspace_id != workspace.id
+                or item.dictionary.key != key
+            ):
+                errors[field] = ["PRODUCT_DICTIONARY_ITEM_INVALID"]
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
     def validate_owner(self, owner):
         workspace = self.context.get("workspace")
         if workspace is None:
@@ -154,6 +249,7 @@ class ProductSerializer(BaseSerializer):
             # 需求编号的前缀（ECOM-1）。可以 PATCH 改 —— 编号是读时拼的，
             # 改完所有已有需求的展示编号自动跟随，没有第二份真相要同步。
             "identifier",
+            "code",
             "description_html",
             "network",
             "workspace",
@@ -161,6 +257,27 @@ class ProductSerializer(BaseSerializer):
             "reviewers",
             "owner_detail",
             "reviewer_details",
+            "stage",
+            "category",
+            "status",
+            "hardware_level",
+            "structure_level",
+            "software_level",
+            "stage_detail",
+            "category_detail",
+            "status_detail",
+            "hardware_level_detail",
+            "structure_level_detail",
+            "software_level_detail",
+            "start_date",
+            "project_lead",
+            "test_lead",
+            "project_lead_detail",
+            "test_lead_detail",
+            "model_number",
+            "external_model",
+            "o_phase_close_date",
+            "v_phase_close_date",
             "logo_props",
             "cover_image",
             "cover_image_asset",
@@ -175,6 +292,14 @@ class ProductSerializer(BaseSerializer):
             "workspace",
             "owner_detail",
             "reviewer_details",
+            "stage_detail",
+            "category_detail",
+            "status_detail",
+            "hardware_level_detail",
+            "structure_level_detail",
+            "software_level_detail",
+            "project_lead_detail",
+            "test_lead_detail",
             "cover_image_url",
             "created_at",
             "updated_at",

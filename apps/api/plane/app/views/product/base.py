@@ -16,11 +16,15 @@ from plane.utils.product import (
 class ProductViewSet(BaseViewSet):
     model = Product
     serializer_class = ProductSerializer
-    search_fields = ["name", "identifier"]
+    search_fields = ["name", "identifier", "code"]
     filterset_fields = {
         "network": ["exact"],
         "owner_id": ["exact"],
         "reviewers": ["exact"],
+        "stage_id": ["exact"],
+        "category_id": ["exact"],
+        "status_id": ["exact"],
+        "project_lead_id": ["exact"],
     }
 
     def get_queryset(self):
@@ -29,7 +33,19 @@ class ProductViewSet(BaseViewSet):
             .get_queryset()
             .filter(workspace__slug=self.workspace_slug)
             .select_related(
-                "workspace", "owner", "created_by", "updated_by", "cover_image_asset"
+                "workspace",
+                "owner",
+                "created_by",
+                "updated_by",
+                "cover_image_asset",
+                "stage",
+                "category",
+                "status",
+                "hardware_level",
+                "structure_level",
+                "software_level",
+                "project_lead",
+                "test_lead",
             )
             .prefetch_related("reviewers")
         )

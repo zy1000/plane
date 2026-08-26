@@ -16,6 +16,7 @@ from .notification import urlpatterns as notification_urls
 from .page import urlpatterns as page_urls
 from .project import urlpatterns as project_urls
 from .product import urlpatterns as product_urls
+from .data_dictionary import urlpatterns as data_dictionary_urls
 from .requirement import urlpatterns as requirement_urls
 from .search import urlpatterns as search_urls
 from .state import urlpatterns as state_urls
@@ -49,6 +50,7 @@ urlpatterns = [
     *page_urls,
     *project_urls,
     *product_urls,
+    *data_dictionary_urls,
     *requirement_urls,
     *search_urls,
     *state_urls,

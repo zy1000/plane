@@ -40,7 +40,11 @@ export const GROUPED_WORKSPACE_SETTINGS = {
     WORKSPACE_SETTINGS["templates"],
     WORKSPACE_SETTINGS["requirement-types"],
   ],
-  [WORKSPACE_SETTINGS_CATEGORY.PROJECT]: [WORKSPACE_SETTINGS["issue-type-categories"]],
+  // 「项目」分区：工作项类别 + 数据字典（产品阶段/类别/状态等下拉值）
+  [WORKSPACE_SETTINGS_CATEGORY.PROJECT]: [
+    WORKSPACE_SETTINGS["issue-type-categories"],
+    WORKSPACE_SETTINGS["data-dictionaries"],
+  ],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
   [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"]],
 } as Record<WORKSPACE_SETTINGS_CATEGORY, TWorkspaceSettingsItem[]>;

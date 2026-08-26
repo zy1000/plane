@@ -10,6 +10,7 @@
 |---|---|---|---|---|
 | requirement 需求 | 类型化字段 + 版本 + 变更单 + 审批 + 基线 | product / project / library | `requirement/` | `components/requirements/` |
 | product 产品 | 需求的顶层容器，**与 project 无外键关系** | workspace | `product/` | `components/products/` |
+| data_dictionary 数据字典 | 工作区级枚举值维护：6 个系统字典由代码预置，可自建；产品的阶段/类别/状态/研发等级引用其值 | workspace | `data_dictionary.py`（单文件） | `components/workspace/settings/data-dictionaries/` |
 | release 发布 | 发布单，Cycle 的克隆放大版 | project | `release/` | `components/releases/` |
 | qa 测试 | TestHub：用例/计划/执行/评审/报表（体量最大） | 混合，见下 | `qa/` | `components/qa/` |
 | timesheet 工时 | 工时填报与报表 | project + workspace | `timesheet/` | `components/timesheets/` |
@@ -123,13 +124,30 @@
 
 ## product（产品）
 
-`db/models/product.py`（140 行）。`Product` / `ProductMember` / `ProductRole` / `ProductMemberRole`。
+`db/models/product.py`。`Product` / `ProductMember` / `ProductRole` / `ProductMemberRole` / `ProductProject`。
 
 - **workspace 级**，路由 `workspaces/<slug>/products/...`，**完全不经过 Project**。
+- **字段（2026-08-26 扩展，迁移 `0347`）**：
+  - `identifier`：需求编号前缀（`KF01A008-1`），后端语义不变；**前端 label 叫「开发编号」**（`workspace_products.fields.identifier`）。
+  - `code` 产品代号：工作区内条件唯一 + 非空 CheckConstraint；迁移回填自 `name`；`Product.save()` 在 code 为空时回落 name（只为 ORM 直建/测试兜底，API 层必填）。
+  - 6 个字典 FK `stage / category / status / hardware_level / structure_level / software_level` → `DataDictionaryItem`，`on_delete=RESTRICT`，**DB 可空 / API 必填**：存量产品迁移后为空，前端在编辑时强制补齐。`ProductSerializer.validate` 校验值属于本工作区且 `dictionary.key` 与字段对应（`PRODUCT_DICTIONARY_FIELD_KEYS`，错误码 `PRODUCT_DICTIONARY_ITEM_INVALID`）。
+  - `start_date`（回填 `created_at` 日期）；`project_lead` / `test_lead`（`SET_NULL`，回填 owner，**只要求工作区活跃成员、不要求产品成员** —— 与 owner 不同）；可选 `model_number / external_model / o_phase_close_date / v_phase_close_date`；`reviewers` 沿用（私有产品可见性判定仍看它）。
+  - 陷阱：必填字段在 serializer 里显式声明 `required=True`（模型列 `null=True`，不声明会被自动生成成可空）。**PATCH 可省略必填字段，但显式 `null` 会 400；PUT 现在必须带全。**
 - 自带**一套平行于 Project 的成员与角色体系**（`ProductMember` + `ProductRole.permissions` JSON），**不复用** Plane 的 ProjectMember / WorkspaceMember 权限。改产品权限时不要去动原生权限体系。
 - `ProductMember` 主键是 AutoField，不是 UUID。
 - **product 和 project 之间没有直接外键**，但已有 `ProductProject` 关联表（`db/models/product.py`）表达「项目引用了哪些产品」——它是项目侧关联需求的候选池前提。`Project.product_type` 只是 CharField，与该关联表无关。
 - 产品导航有 5 个 tab（dashboard / requirements / plans / projects / releases，见 `components/products/navigation.ts`），**只有 requirements 是实装的**，其余渲染 `ProductFeaturePage` 空态占位。后端无对应模型。
+
+## data_dictionary（数据字典）
+
+`db/models/data_dictionary.py`：`DataDictionary`（字典头）+ `DataDictionaryItem`（字典值），都是 `BaseModel`、workspace 级。item 上冗余 `workspace` 由 `save()` 从 dictionary 传播；`sort_order` 追加式 `max+10000`（同 Label），拖拽排序前端算邻居中点后 PATCH。
+
+- **6 个系统字典**（`is_system=True`，key 不可改、不可删，可改 name/description）：`product_stage / product_category / product_status / product_hardware_level / product_structure_level / product_software_level`。用户也可自建字典（key 规则 `^[a-z][a-z0-9_]{0,63}$`，创建后不可改）。
+- **预置策略三段**：规格与幂等 `ensure_system_dictionaries(workspace)` 在 `utils/data_dictionary.py`（列表 / 创建接口每次先跑，只补缺失字典、不补值、不覆盖用户改动）；迁移 `0346` 的 RunPython 给存量工作区 seed（**迁移内有规格副本，改规格要两处同步**）；没有 signal。测试跑 `--nomigrations`，所以 `tests/factories.py::product_required_payload` 自己调 ensure。
+- **删除语义（最容易踩）**：`soft_delete_related_objects` 把 RESTRICT/PROTECT 当 CASCADE 软删引用方，所以字典与字典值**只硬删**（模型 `delete()` 强制 `soft=False`）。删除前用 `Product.all_objects` 查六个 FK 引用（`is_item_in_use / is_dictionary_in_use`），被引用 409 `DATA_DICTIONARY_ITEM_IN_USE`；系统字典 409 `DATA_DICTIONARY_SYSTEM_PROTECTED`；DB 的 RESTRICT 兜并发。
+- 权限：读写都是「活跃工作区成员」（复用 `views/requirement/type.py::is_workspace_member`）。
+- 路由 `workspaces/<slug>/data-dictionaries/[<pk>/[items/[<pk>/]]]`；字段级错误码 `DATA_DICTIONARY_KEY_INVALID / _KEY_ALREADY_EXISTS / _NAME_ALREADY_EXISTS / _ITEM_ALREADY_EXISTS`。
+- 前端：`packages/types/src/data-dictionary.ts`（`EProductDictionaryKey`）、`core/services/data-dictionary.service.ts`、`core/hooks/store/use-data-dictionaries.ts`（局部 state，含乐观排序）、设置页 `settings/(workspace)/data-dictionaries/` + `components/workspace/settings/data-dictionaries/`；产品表单里的字典下拉在 `components/products/extended-fields/`（一次拉全部字典再分发给 6 个下拉）。
 
 ## release（发布）
 
@@ -205,6 +223,7 @@
 
 ```
 Product (workspace 级，与 Project 无 FK)
+  ├─FK×6(RESTRICT)── DataDictionaryItem ──FK── DataDictionary   （阶段/类别/状态/三个研发等级）
   └─FK── Requirement / ChangeRequest / Baseline / Version
               （requirement 的 product | project | library 三选一作用域）
 
@@ -225,6 +244,7 @@ Project (原生)
 - 需求 ↔ Cycle / Release / Issue 已由 `RequirementCycle` / `RequirementRelease` / `RequirementIssue` 关联表打通，但它们只圈定范围、供计数，不派生需求状态（见 requirement 节轴 A）。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表仍无外键关系，只能人工对应。
 - **product 和 project 之间没有直接外键**，关系走 `ProductProject` 关联表（见上）。
 - milestone 与除 Issue / Project 外的一切无关联。
+- 数据字典目前只被 Product 引用，与 requirement / issue 无关联。
 - changelog 与所有模块零关联。
 
 ---

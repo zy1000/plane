@@ -144,6 +144,7 @@ from .workflow import (
     IssueTransitionApprovalRecord,
 )
 from .timesheet import TimeSheet, TimesheetCategory
+from .data_dictionary import DataDictionary, DataDictionaryItem
 from .product import (
     Product,
     ProductMember,

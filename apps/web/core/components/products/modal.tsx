@@ -26,6 +26,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
+import { ProductExtendedFields, useProductExtendedFields } from "./extended-fields";
 import {
   ProductLogoCoverHeader,
   buildCreateProductCoverPayload,
@@ -64,6 +65,7 @@ export const ProductModal = observer(function ProductModal() {
   const persistedProduct = useRef<TProduct | null>(null);
   const { isOpen, mode, product } = modal;
   const editable = mode !== "view";
+  const extended = useProductExtendedFields({ product, mode });
   const isPrivateProduct = network === 0;
   const editorEntityId = mode === "create" ? draftEntityId.current : (product?.id ?? "product");
   const {
@@ -109,6 +111,7 @@ export const ProductModal = observer(function ProductModal() {
     setDescriptionHTML(product?.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product?.owner ?? currentUser?.id ?? null);
     setNetwork(product?.network ?? 2);
+    extended.reset(product);
     if (mode === "create") {
       const visualDefaults = getProductLogoCoverDefaults();
       setLogoProps(visualDefaults.logoProps);
@@ -128,7 +131,7 @@ export const ProductModal = observer(function ProductModal() {
     draftEntityId.current = uuidv4();
     resetAssets();
     setEditorVersion((version) => version + 1);
-  }, [currentUser?.id, isOpen, mode, product?.id, product?.updated_at, resetAssets]);
+  }, [currentUser?.id, extended.reset, isOpen, mode, product?.id, product?.updated_at, resetAssets]);
 
   const handleClose = async () => {
     if (isSaving) return;
@@ -152,11 +155,13 @@ export const ProductModal = observer(function ProductModal() {
       setOwnerError(t("workspace_products.validation.owner_required"));
       return;
     }
+    if (!extended.validate()) return;
 
     setIsSaving(true);
     setFormError(null);
     setIdentifierError(null);
     setOwnerError(null);
+    extended.clearErrors();
     setAttachmentWarning(false);
     const payload = {
       name: trimmedName,
@@ -165,6 +170,7 @@ export const ProductModal = observer(function ProductModal() {
       network,
       owner: ownerId,
       ...(logoProps ? { logo_props: logoProps } : {}),
+      ...extended.getPayload(),
     };
 
     try {
@@ -242,6 +248,8 @@ export const ProductModal = observer(function ProductModal() {
             ? t("common.identifier.already_exists")
             : t("common.identifier.invalid")
         );
+      } else if (extended.applyServerErrors(error)) {
+        // 字段级错误已在扩展字段区行内展示
       } else {
         setFormError(String(errorPayload.name?.[0] ?? t("workspace_products.toast.failed")));
       }
@@ -387,6 +395,19 @@ export const ProductModal = observer(function ProductModal() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                <div className="md:col-span-4">
+                  <ProductExtendedFields
+                    workspaceSlug={workspaceSlug}
+                    editable={editable}
+                    variant="modal"
+                    product={product}
+                    values={extended.values}
+                    errors={extended.errors}
+                    onChange={extended.setValue}
+                    missingRequiredFields={mode === "edit" ? extended.missingRequiredFields : undefined}
+                  />
                 </div>
               </div>
 

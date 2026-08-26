@@ -15,7 +15,11 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.license.models import Instance, InstanceAdmin
-from plane.tests.factories import UserFactory, WorkspaceFactory
+from plane.tests.factories import (
+    UserFactory,
+    WorkspaceFactory,
+    product_required_payload,
+)
 
 
 @pytest.mark.contract
@@ -30,9 +34,14 @@ class TestProductApp:
             role=20,
         )
         self.list_url = reverse("products", kwargs={"slug": self.workspace.slug})
+        # 0347 之后创建产品多了 10 个必填字段；字典值来自系统字典的预置
+        self.required_fields = product_required_payload(self.workspace, self.owner)
 
     def authenticate(self, api_client, user):
         api_client.force_authenticate(user=user)
+
+    def product_payload(self, **fields):
+        return {"code": f"C{uuid4().hex[:8]}", **self.required_fields, **fields}
 
     def add_member(self, role):
         user = UserFactory(username=f"product-member-{uuid4()}")
@@ -49,21 +58,29 @@ class TestProductApp:
 
         create_response = api_client.post(
             self.list_url,
-            {
-                "name": "  Launchpad  ",
+            self.product_payload(
+                name="  Launchpad  ",
                 # 小写 + 空白：标识必须在查重之前就被归一化成 "LP"
-                "identifier": "  lp  ",
-                "description_html": '<p>Hello</p><script>alert("x")</script>',
-                "network": 0,
-                "owner": str(reviewer.id),
-                "reviewers": [str(reviewer.id)],
-            },
+                identifier="  lp  ",
+                code="  Cedar28B-032501-水  ",
+                description_html='<p>Hello</p><script>alert("x")</script>',
+                network=0,
+                owner=str(reviewer.id),
+                reviewers=[str(reviewer.id)],
+                model_number="M-1",
+            ),
             format="json",
         )
 
         assert create_response.status_code == status.HTTP_201_CREATED
         assert create_response.data["name"] == "Launchpad"
         assert create_response.data["identifier"] == "LP"
+        assert create_response.data["code"] == "Cedar28B-032501-水"
+        assert str(create_response.data["stage_detail"]["id"]) == self.required_fields["stage"]
+        assert str(create_response.data["project_lead_detail"]["id"]) == str(self.owner.id)
+        assert create_response.data["start_date"] == "2026-01-01"
+        assert create_response.data["model_number"] == "M-1"
+        assert create_response.data["external_model"] is None
         assert create_response.data["network"] == 0
         assert str(create_response.data["owner"]) == str(reviewer.id)
         assert str(create_response.data["owner_detail"]["id"]) == str(reviewer.id)
@@ -81,6 +98,8 @@ class TestProductApp:
         assert [item["id"] for item in list_response.data] == [product_id]
         assert detail_response.status_code == status.HTTP_200_OK
 
+        # 改负责人要求新负责人已是产品成员（PRODUCT_OWNER_NOT_MEMBER），先把 owner 加进去
+        ProductMember.objects.get_or_create(product_id=product_id, member=self.owner)
         update_response = api_client.patch(
             detail_url,
             {
@@ -117,7 +136,7 @@ class TestProductApp:
 
         duplicate_response = api_client.post(
             self.list_url,
-            {"name": "  Launchpad  ", "identifier": "LP2"},
+            self.product_payload(name="  Launchpad  ", identifier="LP2"),
             format="json",
         )
         assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -126,7 +145,9 @@ class TestProductApp:
         outsider = UserFactory(username=f"product-outsider-{uuid4()}")
         reviewer_response = api_client.post(
             self.list_url,
-            {"name": "Another product", "identifier": "ANOTHER", "reviewers": [str(outsider.id)]},
+            self.product_payload(
+                name="Another product", identifier="ANOTHER", reviewers=[str(outsider.id)]
+            ),
             format="json",
         )
         assert reviewer_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -134,7 +155,9 @@ class TestProductApp:
 
         owner_response = api_client.post(
             self.list_url,
-            {"name": "Outside owner", "identifier": "OUTSIDE", "owner": str(outsider.id)},
+            self.product_payload(
+                name="Outside owner", identifier="OUTSIDE", owner=str(outsider.id)
+            ),
             format="json",
         )
         assert owner_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -142,11 +165,33 @@ class TestProductApp:
 
         network_response = api_client.post(
             self.list_url,
-            {"name": "Invalid network", "identifier": "INVALIDNET", "network": 1},
+            self.product_payload(name="Invalid network", identifier="INVALIDNET", network=1),
             format="json",
         )
         assert network_response.status_code == status.HTTP_400_BAD_REQUEST
         assert "valid choice" in network_response.data["network"][0]
+
+        # 字典值必须来自对应的系统字典：把「产品状态」的值塞进 stage 要被拒
+        wrong_dictionary_response = api_client.post(
+            self.list_url,
+            self.product_payload(
+                name="Wrong dictionary",
+                identifier="WRONGDICT",
+                stage=self.required_fields["status"],
+            ),
+            format="json",
+        )
+        assert wrong_dictionary_response.status_code == status.HTTP_400_BAD_REQUEST
+        assert wrong_dictionary_response.data["stage"] == ["PRODUCT_DICTIONARY_ITEM_INVALID"]
+
+        # 代号工作区内唯一
+        duplicate_code_response = api_client.post(
+            self.list_url,
+            self.product_payload(name="Same code", identifier="SAMECODE", code="Launchpad"),
+            format="json",
+        )
+        assert duplicate_code_response.status_code == status.HTTP_400_BAD_REQUEST
+        assert duplicate_code_response.data["code"] == ["PRODUCT_CODE_ALREADY_EXISTS"]
 
     def test_private_product_visibility(self, api_client):
         admin = self.add_member(role=20)
@@ -222,7 +267,7 @@ class TestProductApp:
         assert (
             api_client.post(
                 self.list_url,
-                {"name": "Member product", "identifier": "MEMBERNEW"},
+                self.product_payload(name="Member product", identifier="MEMBERNEW"),
                 format="json",
             ).status_code
             == status.HTTP_201_CREATED

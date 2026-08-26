@@ -8,7 +8,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TProduct } from "@plane/types";
+import type { IUserLite, TProduct } from "@plane/types";
 import { EUserWorkspaceRoles } from "@plane/types";
 import { Avatar, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
@@ -18,15 +18,10 @@ import { DeleteProductModal } from "./delete-modal";
 import { ProductModal } from "./modal";
 import { useProductsContext } from "./context";
 
-const ProductOwner = ({ product }: { product: TProduct }) => (
+const ProductUserCell = ({ user }: { user: IUserLite | null | undefined }) => (
   <div className="flex min-w-0 items-center gap-2">
-    <Avatar
-      size="sm"
-      name={product.owner_detail?.display_name}
-      src={getFileURL(product.owner_detail?.avatar_url ?? "")}
-      showTooltip={false}
-    />
-    <span className="truncate text-xs text-primary">{product.owner_detail?.display_name ?? "-"}</span>
+    <Avatar size="sm" name={user?.display_name} src={getFileURL(user?.avatar_url ?? "")} showTooltip={false} />
+    <span className="truncate text-xs text-primary">{user?.display_name ?? "-"}</span>
   </div>
 );
 
@@ -46,7 +41,11 @@ export const ProductsRoot = observer(function ProductsRoot() {
   const filteredProducts = useMemo(
     () =>
       normalizedSearch
-        ? products.filter((product) => product.name.toLocaleLowerCase().includes(normalizedSearch))
+        ? products.filter((product) =>
+            [product.name, product.code, product.identifier].some((text) =>
+              (text ?? "").toLocaleLowerCase().includes(normalizedSearch)
+            )
+          )
         : products,
     [normalizedSearch, products]
   );
@@ -123,22 +122,37 @@ export const ProductsRoot = observer(function ProductsRoot() {
         <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
           <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
             <div className="min-h-0 flex-1 overflow-auto vertical-scrollbar scrollbar-lg">
-              <table className="w-full min-w-[920px] table-fixed text-sm">
+              <table className="w-full min-w-[1280px] table-fixed text-sm">
                 <thead className="border-b border-subtle bg-layer-1">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-secondary">
                       {t("workspace_products.fields.name")}
                     </th>
-                    <th className="hidden w-40 px-4 py-3 text-left font-medium text-secondary sm:table-cell">
-                      {t("workspace_products.fields.owner")}
+                    <th className="w-44 px-4 py-3 text-left font-medium text-secondary">
+                      {t("workspace_products.fields.code")}
                     </th>
-                    <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
-                      {t("workspace_products.fields.visibility")}
+                    <th className="hidden w-32 px-4 py-3 text-left font-medium text-secondary md:table-cell">
+                      {t("workspace_products.fields.identifier")}
+                    </th>
+                    <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary md:table-cell">
+                      {t("workspace_products.fields.stage")}
+                    </th>
+                    <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary md:table-cell">
+                      {t("workspace_products.fields.status")}
                     </th>
                     <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
+                      {t("workspace_products.fields.project_lead")}
+                    </th>
+                    <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
+                      {t("workspace_products.fields.owner")}
+                    </th>
+                    <th className="hidden w-24 px-4 py-3 text-left font-medium text-secondary xl:table-cell">
+                      {t("workspace_products.fields.visibility")}
+                    </th>
+                    <th className="hidden w-32 px-4 py-3 text-left font-medium text-secondary xl:table-cell">
                       {t("workspace_products.fields.updated_at")}
                     </th>
-                    <th className="w-40 px-4 py-3 text-left font-medium text-secondary">
+                    <th className="w-36 px-4 py-3 text-left font-medium text-secondary">
                       {t("workspace_products.fields.actions")}
                     </th>
                   </tr>
@@ -165,10 +179,25 @@ export const ProductsRoot = observer(function ProductsRoot() {
                             <p className="min-w-0 truncate text-sm font-medium text-primary">{product.name}</p>
                           </Link>
                         </td>
-                        <td className="hidden px-4 py-3 sm:table-cell">
-                          <ProductOwner product={product} />
+                        <td className="px-4 py-3 text-xs text-primary">
+                          <span className="block truncate">{product.code || "-"}</span>
+                        </td>
+                        <td className="hidden px-4 py-3 font-mono text-xs uppercase text-primary md:table-cell">
+                          <span className="block truncate">{product.identifier}</span>
+                        </td>
+                        <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
+                          <span className="block truncate">{product.stage_detail?.label ?? "-"}</span>
+                        </td>
+                        <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
+                          <span className="block truncate">{product.status_detail?.label ?? "-"}</span>
                         </td>
                         <td className="hidden px-4 py-3 lg:table-cell">
+                          <ProductUserCell user={product.project_lead_detail} />
+                        </td>
+                        <td className="hidden px-4 py-3 lg:table-cell">
+                          <ProductUserCell user={product.owner_detail} />
+                        </td>
+                        <td className="hidden px-4 py-3 xl:table-cell">
                           <span className="inline-flex items-center gap-1.5 text-xs text-primary">
                             {product.network === 0 ? (
                               <LockKeyhole className="size-3 text-secondary" />
@@ -182,7 +211,7 @@ export const ProductsRoot = observer(function ProductsRoot() {
                             )}
                           </span>
                         </td>
-                        <td className="hidden whitespace-nowrap px-4 py-3 text-secondary lg:table-cell">
+                        <td className="hidden whitespace-nowrap px-4 py-3 text-secondary xl:table-cell">
                           {product.updated_at ? renderFormattedDate(product.updated_at) : "-"}
                         </td>
                         <td className="px-4 py-3">

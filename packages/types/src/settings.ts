@@ -21,6 +21,7 @@ export type TWorkspaceSettingsTabs =
   | "webhooks"
   | "issue-type-categories"
   | "requirement-types"
+  | "data-dictionaries"
   | "changelog";
 export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;
