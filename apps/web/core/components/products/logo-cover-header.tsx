@@ -66,10 +66,13 @@ type Props = {
   onLogoChange?: (logoProps: TLogoProps) => void;
   /** 封面容器额外样式；弹窗贴边时用 rounded-t-lg，设置页默认四角圆角 */
   className?: string;
+  /** 弹窗用矮封面，设置页保持默认高度 */
+  compact?: boolean;
 };
 
 export const ProductLogoCoverHeader = (props: Props) => {
-  const { coverImageUrl, logoProps, editable, entityIdentifier, onCoverChange, onLogoChange, className } = props;
+  const { coverImageUrl, logoProps, editable, entityIdentifier, onCoverChange, onLogoChange, className, compact } =
+    props;
   const { t } = useTranslation();
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const { control } = useForm({ defaultValues: { search: "" } });
@@ -81,7 +84,7 @@ export const ProductLogoCoverHeader = (props: Props) => {
   );
 
   return (
-    <div className="group relative h-44 w-full">
+    <div className={cn("group relative w-full", compact ? "h-[6.75rem]" : "h-44")}>
       <div className={cn("absolute inset-0 overflow-hidden", className ?? "rounded-lg")}>
         <CoverImage
           src={coverImageUrl ?? undefined}
@@ -102,7 +105,7 @@ export const ProductLogoCoverHeader = (props: Props) => {
           />
         </div>
       )}
-      <div className="absolute -bottom-[22px] left-3">
+      <div className={cn("absolute -bottom-[22px]", compact ? "left-6" : "left-3")}>
         {editable ? (
           <EmojiPicker
             iconType="material"

@@ -2069,6 +2069,7 @@ export default {
       description: "Description",
       no_description: "No description",
       owner: "Owner",
+      product_owner: "Product owner",
       visibility: "Visibility",
       updated_at: "Updated",
       actions: "Actions",
@@ -2096,6 +2097,11 @@ export default {
     },
     extended: {
       section_title: "Product information",
+      identity: "Identity",
+      classification: "Classification",
+      levels: "R&D levels",
+      plan: "Schedule",
+      team: "Team",
     },
     visibility: {
       public: "Public",

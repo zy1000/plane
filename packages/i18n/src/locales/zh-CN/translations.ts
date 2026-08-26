@@ -2250,6 +2250,7 @@ export default {
       description: "描述",
       no_description: "暂无描述",
       owner: "负责人",
+      product_owner: "产品负责人",
       visibility: "可见性",
       updated_at: "更新时间",
       actions: "操作",
@@ -2277,6 +2278,11 @@ export default {
     },
     extended: {
       section_title: "产品信息",
+      identity: "标识",
+      classification: "分类",
+      levels: "研发等级",
+      plan: "计划",
+      team: "团队",
     },
     visibility: {
       public: "公开",
