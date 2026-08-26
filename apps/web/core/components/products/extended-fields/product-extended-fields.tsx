@@ -28,7 +28,7 @@ type Props = {
   /** 编辑存量产品时缺失的必填项，非空则在区块顶部提示补齐 */
   missingRequiredFields?: TProductExtendedFieldKey[];
   className?: string;
-  /** 弹窗把产品负责人放进「团队」区，与项目/测试负责人同一套控件 */
+  /** 把产品负责人放进「团队」区，与项目/测试负责人同一套控件 */
   ownerField?: ReactNode;
 };
 
@@ -114,11 +114,16 @@ const UserCell = ({ user }: { user: IUserLite | null | undefined }) =>
     <>—</>
   );
 
-function ModalSection(props: { title: string; extra?: ReactNode; children: ReactNode }) {
-  const { title, extra, children } = props;
+function FieldSection(props: { title: string; extra?: ReactNode; divided?: boolean; children: ReactNode }) {
+  const { title, extra, divided, children } = props;
   return (
-    <section className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
+    <section className="space-y-3.5">
+      <div
+        className={cn(
+          "flex items-baseline justify-between gap-3",
+          divided && "border-b border-subtle pb-2"
+        )}
+      >
         <h3 className="text-13 font-semibold text-primary">{title}</h3>
         {extra ? <span className="text-12 text-tertiary">{extra}</span> : null}
       </div>
@@ -145,7 +150,13 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
   const { isLoading, getDictionaryByKey } = useDataDictionaries(workspaceSlug, { autoFetch: editable });
   const styles = VARIANT_STYLES[variant];
   const reviewers = product?.reviewer_details ?? [];
-  const showOptional = variant === "settings";
+  const showOptional = false;
+  const divided = variant === "settings";
+  const gridClass = cn(
+    "grid grid-cols-1",
+    variant === "settings" ? "gap-x-6 gap-y-4" : "gap-x-5 gap-y-4",
+    styles.grid
+  );
 
   const fieldLabel = (key: TProductExtendedFieldKey) => t(`workspace_products.fields.${key}`);
   const wrapperProps = (key: TProductExtendedFieldKey) => ({
@@ -196,11 +207,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
   };
 
   const textFields = TEXT_FIELDS.map((key) => (
-    <FieldWrapper
-      key={key}
-      {...wrapperProps(key)}
-      hint={editable && variant === "settings" && key === "code" ? t("workspace_products.fields.code_hint") : undefined}
-    >
+    <FieldWrapper key={key} {...wrapperProps(key)}>
       {editable ? (
         <Input
           id={`product-${key}`}
@@ -219,18 +226,13 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
     </FieldWrapper>
   ));
 
-  const dictionaryFields = (keys: readonly TProductDictionaryFieldKey[], inlineEmptyHint: boolean) =>
+  const dictionaryFields = (keys: readonly TProductDictionaryFieldKey[]) =>
     keys.map((key) => {
       const dictionary = getDictionaryByKey(PRODUCT_DICTIONARY_FIELDS[key]);
       const detail = product?.[`${key}_detail` as const] ?? null;
       const empty = isDictionaryEmpty(key);
       return (
-        <FieldWrapper
-          key={key}
-          {...wrapperProps(key)}
-          error={empty ? undefined : errors[key]}
-          hint={inlineEmptyHint && empty ? renderDictionaryEmptyHint(key) : undefined}
-        >
+        <FieldWrapper key={key} {...wrapperProps(key)} error={empty ? undefined : errors[key]}>
           {editable ? (
             <div className={styles.control}>
               <DictionaryItemSelect
@@ -344,53 +346,34 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
       </div>
     ) : null;
 
-  if (variant === "settings") {
-    return (
-      <section className={cn("space-y-3", className)}>
-        <h3 className={styles.title}>{t("workspace_products.extended.section_title")}</h3>
-        {missingBanner}
-        <div className={cn("grid grid-cols-1 gap-x-3 gap-y-3", styles.grid)}>
-          {textFields}
-          {dictionaryFields([...CLASSIFICATION_FIELDS, ...LEVEL_FIELDS], true)}
-          {dateFields}
-          {leadFields}
-          {reviewersField}
-        </div>
-      </section>
-    );
-  }
-
   return (
-    <div className={cn("space-y-7", className)}>
+    <div className={cn(variant === "settings" ? "space-y-8" : "space-y-7", className)}>
       {missingBanner}
-      <ModalSection
+      <FieldSection
         title={t("workspace_products.extended.identity")}
         extra={editable ? t("workspace_products.fields.code_hint") : undefined}
+        divided={divided}
       >
-        <div className={cn("grid grid-cols-1 gap-x-5 gap-y-4", styles.grid)}>{textFields}</div>
-      </ModalSection>
-      <ModalSection title={t("workspace_products.extended.classification")}>
+        <div className={gridClass}>{textFields}</div>
+      </FieldSection>
+      <FieldSection title={t("workspace_products.extended.classification")} divided={divided}>
         {renderDictionaryEmptyBanners(CLASSIFICATION_FIELDS)}
-        <div className={cn("grid grid-cols-1 gap-x-5 gap-y-4", styles.grid)}>
-          {dictionaryFields(CLASSIFICATION_FIELDS, false)}
-        </div>
-      </ModalSection>
-      <ModalSection title={t("workspace_products.extended.levels")}>
+        <div className={gridClass}>{dictionaryFields(CLASSIFICATION_FIELDS)}</div>
+      </FieldSection>
+      <FieldSection title={t("workspace_products.extended.levels")} divided={divided}>
         {renderDictionaryEmptyBanners(LEVEL_FIELDS)}
-        <div className={cn("grid grid-cols-1 gap-x-5 gap-y-4", styles.grid)}>
-          {dictionaryFields(LEVEL_FIELDS, false)}
-        </div>
-      </ModalSection>
-      <ModalSection title={t("workspace_products.extended.plan")}>
-        <div className={cn("grid grid-cols-1 gap-x-5 gap-y-4", styles.grid)}>{dateFields}</div>
-      </ModalSection>
-      <ModalSection title={t("workspace_products.extended.team")}>
-        <div className={cn("grid grid-cols-1 gap-x-5 gap-y-4", styles.grid)}>
+        <div className={gridClass}>{dictionaryFields(LEVEL_FIELDS)}</div>
+      </FieldSection>
+      <FieldSection title={t("workspace_products.extended.plan")} divided={divided}>
+        <div className={gridClass}>{dateFields}</div>
+      </FieldSection>
+      <FieldSection title={t("workspace_products.extended.team")} divided={divided}>
+        <div className={gridClass}>
           {ownerField}
           {leadFields}
           {reviewersField}
         </div>
-      </ModalSection>
+      </FieldSection>
     </div>
   );
 });

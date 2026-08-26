@@ -2331,7 +2331,7 @@ export default {
         name: "产品名称",
         identifier: "开发编号",
         identifier_hint:
-          "如 KF01A008：首字母开头，仅限大写字母和数字，最多 12 个字符；同时作为该产品需求编号的前缀（KF01A008-1），工作区内唯一。",
+          "如 KF01A008：首字母开头，仅限大写字母和数字，最多 12 个字符；同时作为该产品需求编号的前缀。",
         description: "产品描述",
         owner: "负责人",
         visibility: "可见性",

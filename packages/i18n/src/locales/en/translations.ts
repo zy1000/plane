@@ -2150,7 +2150,7 @@ export default {
         name: "Product name",
         identifier: "Development ID",
         identifier_hint:
-          "e.g. KF01A008: starts with a letter, uppercase letters and digits only, up to 12 characters. Also used as the requirement ID prefix (KF01A008-1). Unique per workspace.",
+          "e.g. KF01A008: starts with a letter, uppercase letters and digits only, up to 12 characters. Also used as the requirement ID prefix.",
         description: "Product description",
         owner: "Owner",
         visibility: "Visibility",

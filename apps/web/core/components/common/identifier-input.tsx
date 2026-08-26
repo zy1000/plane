@@ -38,15 +38,33 @@ type TProps = {
   required?: boolean;
   /** 隐藏 hint 与错误文案（错误描边保留），用于由外部统一展示提示行的紧凑布局 */
   hideMessages?: boolean;
+  labelClassName?: string;
+  inputClassName?: string;
 };
 
 export const IdentifierInput = (props: TProps) => {
-  const { id, value, onChange, editable = true, error, autoFocus, label, hint, required, hideMessages } = props;
+  const {
+    id,
+    value,
+    onChange,
+    editable = true,
+    error,
+    autoFocus,
+    label,
+    hint,
+    required,
+    hideMessages,
+    labelClassName,
+    inputClassName,
+  } = props;
   const { t } = useTranslation();
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 flex items-center gap-0.5 text-12 font-medium text-secondary">
+      <label
+        htmlFor={id}
+        className={cn("mb-1.5 flex items-center gap-0.5 text-12 font-medium text-secondary", labelClassName)}
+      >
         {label ?? t("common.identifier.label")}
         {required && <span className="text-danger-primary">*</span>}
       </label>
@@ -59,7 +77,8 @@ export const IdentifierInput = (props: TProps) => {
           autoFocus={autoFocus}
           className={cn(
             "focus:border-accent-primary h-9 w-full rounded-md border bg-surface-1 px-3 text-13 uppercase text-primary outline-none placeholder:text-placeholder",
-            error ? "border-danger-primary" : "border-subtle"
+            error ? "border-danger-primary" : "border-subtle",
+            inputClassName
           )}
           placeholder={t("common.identifier.placeholder")}
         />
