@@ -889,11 +889,12 @@ export const RequirementGridHeader = ({
  * REQUIREMENT_GRID_CELL_EDITABLE_CLASS）—— 控件定高，rowSpan 撑高的格子里画不满。
  * detail：标签已经把可编辑性说清楚了，再铺一层底色就是噪音 —— 与工作项详情侧栏
  * 对齐（见 issues/issue-detail/sidebar.tsx，全部 transparent-with-text，静息无底色）。
+ * 左右用 -mx-2 抵掉控件内边距，值和字段名齐左；hover / 焦点框仍留着 px-2。
  */
 export const FIELD_INPUT_CLASS = {
   grid: "h-11 w-full min-w-0 rounded-none border-0 bg-transparent px-page-x text-14 text-primary outline-none placeholder:text-placeholder",
   detail:
-    "h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-body-xs-medium text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "h-8 w-full min-w-0 -mx-2 rounded-md border border-transparent bg-transparent px-2 text-body-xs-medium text-primary transition-colors duration-150 outline-none placeholder:text-placeholder hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   // 建行弹窗：与工作项 ExtraFieldControl（compact=false）同皮 —— Input/下拉都是
   // border-subtle-1 + bg-layer-2，不要再铺一层更硬的 border-subtle / surface-1。
   modal:
@@ -913,7 +914,7 @@ export const FIELD_DROPDOWN_CLASS = {
   compact:
     "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 transition-colors duration-150 hover:!border-subtle hover:bg-layer-1 focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
-    "h-8 w-full min-w-0 border !border-transparent bg-transparent px-2 text-body-xs-medium transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "h-8 w-full min-w-0 -mx-2 border !border-transparent bg-transparent px-2 text-body-xs-medium transition-colors duration-150 hover:bg-layer-transparent-hover focus:!border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
     "h-[38px] w-full min-w-0 border-[0.5px] !border-subtle-1 bg-layer-2 px-3 transition-colors duration-150 hover:!border-strong focus:!border-accent-primary motion-reduce:transition-none",
 } as const;
@@ -924,7 +925,7 @@ const MULTI_SELECT_CLASS = {
   compact:
     "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left transition-colors duration-150 hover:border-subtle hover:bg-layer-1 focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   detail:
-    "flex h-8 w-full min-w-0 items-center rounded-md border border-transparent bg-transparent px-2 text-left text-body-xs-medium transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
+    "flex h-8 w-full min-w-0 -mx-2 items-center rounded-md border border-transparent bg-transparent px-2 text-left text-body-xs-medium transition-colors duration-150 hover:bg-layer-transparent-hover focus:border-accent-primary focus:bg-surface-1 motion-reduce:transition-none",
   modal:
     "flex h-[38px] w-full min-w-0 items-center rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 text-left transition-colors duration-150 hover:border-strong focus:border-accent-primary motion-reduce:transition-none",
 } as const;
@@ -1197,7 +1198,7 @@ export const LeafEditor = ({
     return variant === "detail" ? (
       <RequirementRichTextEditor
         {...richTextProps}
-        containerClassName="min-h-8 border-none pt-1"
+        containerClassName="-ml-3 min-h-8 border-none pt-1"
       />
     ) : (
       <RequirementRichTextCell {...richTextProps} label={field.name} variant={variant} deferCommit={deferTextCommit} />

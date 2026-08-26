@@ -259,7 +259,7 @@ export const BuiltinCellEditor = ({
     // 撑到和其它编辑器一样的行高，免得进出编辑态时整行跳一下。
     // 状态是个胶囊不是输入框，grid 下补回格子的 px-page-x 而不是铺满
     return (
-      <div className={cn("flex min-w-0 items-center", isGrid ? "h-11 px-page-x" : "h-8 px-2")}>
+      <div className={cn("flex min-w-0 items-center", isGrid ? "h-11 px-page-x" : "h-8 -mx-2 px-2")}>
         <RequirementStatusCell status={values.status} />
       </div>
     );

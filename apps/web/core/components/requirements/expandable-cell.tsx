@@ -31,8 +31,9 @@ const SHELL_CLASS = {
   // 边框压根没变色，ring 的颜色落回 currentcolor 渲染成近黑。换成有效的 accent-strong
   compact:
     "focus-within:ring-accent-strong/10 min-h-8 border-transparent bg-transparent px-2 py-1.5 text-14 hover:border-subtle hover:bg-layer-1 focus-within:border-accent-strong focus-within:bg-surface-1 focus-within:ring-2",
+  // -mx-2 把焦点框的左右内边距吐回去，值和上面的字段名齐左；hover / 焦点仍有可点面积
   detail:
-    "min-h-8 border-transparent bg-transparent px-2 py-1.5 text-body-sm-regular hover:bg-layer-transparent-hover focus-within:border-accent-primary focus-within:bg-surface-1",
+    "min-h-8 -mx-2 border-transparent bg-transparent px-2 py-1.5 text-body-sm-regular hover:bg-layer-transparent-hover focus-within:border-accent-primary focus-within:bg-surface-1",
   // 建行弹窗：与工作项 ExtraFieldControl 同皮（见 FIELD_INPUT_CLASS.modal）
   modal:
     "min-h-[38px] border-[0.5px] border-subtle-1 bg-layer-2 px-3 py-2 text-13 focus-within:border-accent-primary",

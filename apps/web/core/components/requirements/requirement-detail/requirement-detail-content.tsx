@@ -333,7 +333,7 @@ const PropertyGrid = ({
             valueName={requirement.module_name}
             onChange={onModuleChange}
             placeholder="—"
-            buttonClassName="h-7 rounded px-1.5 -ml-1.5 hover:bg-layer-transparent-hover"
+            buttonClassName="h-7 rounded -ml-2 px-2 hover:bg-layer-transparent-hover"
             buttonTextClassName="text-body-xs-medium"
           />
         </div>
