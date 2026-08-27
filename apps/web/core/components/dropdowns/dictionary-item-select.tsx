@@ -11,7 +11,7 @@ type Props = {
   disabled?: boolean;
   placeholder?: string;
   hasError?: boolean;
-  /** 字典列表还没回来时用产品自带的 *_detail.label 兜住当前值 */
+  /** 字典列表还没回来时用调用方自带的 *_detail.label 兜住当前值 */
   fallbackLabel?: string | null;
   isLoading?: boolean;
   className?: string;

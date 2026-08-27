@@ -13,6 +13,7 @@ from plane.app.serializers.workspace import WorkspaceLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer, UserAdminLiteSerializer
 from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.db.models import (
+    DataDictionaryItem,
     IssueType,
     Permission,
     Project,
@@ -23,7 +24,11 @@ from plane.db.models import (
     ProjectPublicMember,
     ProjectGroupRole,
     IssueSequence,
+    User,
+    WorkspaceMember,
 )
+from plane.utils.data_dictionary import PROJECT_DICTIONARY_FIELD_KEYS
+from .data_dictionary import DataDictionaryItemLiteSerializer
 from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
     ISSUE_TYPE_PERMISSION_KEY_PREFIX,
@@ -87,14 +92,70 @@ def get_project_member_role_sources(obj, context):
     ]
 
 
-class ProjectSerializer(BaseSerializer):
+def _dictionary_item_field(required=True):
+    # 必须显式声明：模型列 null=True，ModelSerializer 会自动生成 required=False / allow_null=True。
+    # 必填字段要的是「创建必填、PATCH 可省略、显式 null 拒绝」—— required=True + allow_null=False 正好。
+    return serializers.PrimaryKeyRelatedField(
+        queryset=DataDictionaryItem.objects.select_related("dictionary"),
+        required=required,
+        allow_null=not required,
+    )
+
+
+class ProjectExtendedDetailMixin(serializers.Serializer):
+    """0348 扩展字段的只读 detail，ProjectSerializer / ProjectListSerializer 共用。
+
+    必须继承 serializers.Serializer（同 WorkspaceMemberRoleFieldsMixin），
+    否则 fields="__all__" 收不到 mixin 上声明的字段。
+    """
+
+    business_unit_detail = DataDictionaryItemLiteSerializer(source="business_unit", read_only=True)
+    status_detail = DataDictionaryItemLiteSerializer(source="status", read_only=True)
+    project_type_detail = DataDictionaryItemLiteSerializer(source="project_type", read_only=True)
+    product_manager_detail = UserLiteSerializer(source="product_manager", read_only=True)
+
+
+class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
     workspace_detail = WorkspaceLiteSerializer(source="workspace", read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
+    # code 不用声明：模型列无 blank=True，DRF 自动 required + allow_blank=False；归一化与查重在 validate_code。
+    # 下面这些列 DB 可空 / API 创建必填（business_unit 选填），语义同 ProductSerializer。
+    business_unit = _dictionary_item_field(required=False)
+    status = _dictionary_item_field()
+    project_type = _dictionary_item_field()
+    product_manager = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=True)
+    start_date = serializers.DateField(required=True)
+    end_date = serializers.DateField(required=True)
 
     class Meta:
         model = Project
         fields = "__all__"
         read_only_fields = ["workspace", "deleted_at"]
+
+    def validate_code(self, value):
+        code = (value or "").strip()
+        if not code:
+            raise serializers.ValidationError("PROJECT_CODE_REQUIRED")
+        # 与 DB 条件唯一约束同口径：未软删行全部参与，包括 is_template=True 的模板项目
+        queryset = Project.all_objects.filter(
+            workspace_id=self.context["workspace_id"], code=code, deleted_at__isnull=True
+        )
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("PROJECT_CODE_ALREADY_EXIST")
+        return code
+
+    def validate_product_manager(self, user):
+        # 只要求工作区活跃成员，不要求（也不自动加入）项目成员，与 Product.project_lead 同口径
+        if not WorkspaceMember.objects.filter(
+            workspace_id=self.context["workspace_id"],
+            member=user,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).exists():
+            raise serializers.ValidationError("PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER")
+        return user
 
     def validate_name(self, name):
         project_id = self.instance.id if self.instance else None
@@ -162,6 +223,18 @@ class ProjectSerializer(BaseSerializer):
             if grade not in allowed_grades:
                 raise serializers.ValidationError({"grade": "INVALID_PROJECT_GRADE"})
 
+        # 字典值必须属于本工作区、且来自对应的系统字典（状态字段不能塞一个「项目类型」的值）
+        workspace_id = str(self.context["workspace_id"])
+        errors = {}
+        for field, key in PROJECT_DICTIONARY_FIELD_KEYS.items():
+            item = data.get(field)
+            if item is None:
+                continue
+            if str(item.workspace_id) != workspace_id or item.dictionary.key != key:
+                errors[field] = ["PROJECT_DICTIONARY_ITEM_INVALID"]
+        if errors:
+            raise serializers.ValidationError(errors)
+
         return data
 
     def create(self, validated_data):
@@ -193,7 +266,7 @@ class ProjectLiteSerializer(BaseSerializer):
         read_only_fields = fields
 
 
-class ProjectListSerializer(DynamicBaseSerializer):
+class ProjectListSerializer(ProjectExtendedDetailMixin, DynamicBaseSerializer):
     is_favorite = serializers.BooleanField(read_only=True)
     sort_order = serializers.FloatField(read_only=True)
     member_role = serializers.IntegerField(read_only=True)

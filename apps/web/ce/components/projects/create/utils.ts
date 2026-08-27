@@ -23,6 +23,14 @@ export const getProjectFormValues = (projectLead?: string | null): Partial<IProj
   product_type: null,
   network: 0,
   project_lead: projectLead ?? null,
+  /** 0348 扩展字段：不在 defaultValues 里的键不会进 formData，RHF 的校验也不会跑 */
+  code: "",
+  business_unit: null,
+  product_manager: null,
+  status: null,
+  project_type: null,
+  start_date: null,
+  end_date: null,
   /** 创建时默认开启全部项目特性，跳过创建后选择特性的环节 */
   cycle_view: true,
   module_view: true,

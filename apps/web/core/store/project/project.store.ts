@@ -588,6 +588,8 @@ export class ProjectStore implements IProjectStore {
       });
       const response = await this.projectService.updateProject(workspaceSlug, projectId, data);
       runInAction(() => {
+        // 用服务端真值覆盖乐观值：*_detail（字典值 / 研发产品经理）只有响应里才有
+        update(this.projectMap, [projectId], (p) => ({ ...p, ...response }));
         this.isUpdatingProject = false;
       });
       return response;

@@ -1,12 +1,13 @@
-"""数据字典：系统字典规格、幂等预置、产品引用检查。
+"""数据字典：系统字典规格、幂等预置、产品 / 项目引用检查。
 
-迁移 0346 里有一份 SYSTEM_DICTIONARIES 的副本（迁移不能 import 运行时代码），改这里要同步改那边。
+迁移里有 SYSTEM_DICTIONARIES 的副本（迁移不能 import 运行时代码）：产品六项在 0346，项目三项在 0348，
+改这里要同步改那边。
 """
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
-from plane.db.models import DataDictionary, DataDictionaryItem, Product
+from plane.db.models import DataDictionary, DataDictionaryItem, Product, Project
 
 SORT_ORDER_STEP = 10000
 
@@ -81,6 +82,20 @@ SYSTEM_DICTIONARIES = (
         "description": "",
         "items": LEVEL_ITEMS,
     },
+    # ---- 项目（0348）。追加在产品字典之后，enumerate 的下标决定 sort_order，别往中间插 ----
+    {"key": "project_business_unit", "name": "所属BU", "description": "", "items": ()},
+    {
+        "key": "project_status",
+        "name": "项目状态",
+        "description": "",
+        "items": ("待启动", "活跃中", "维护", "已完成", "已暂停", "已取消"),
+    },
+    {
+        "key": "project_type",
+        "name": "项目类型",
+        "description": "",
+        "items": ("开拓型项目", "交付型项目", "预研型项目", "维护型项目"),
+    },
 )
 SYSTEM_DICTIONARY_KEYS = tuple(spec["key"] for spec in SYSTEM_DICTIONARIES)
 
@@ -92,6 +107,13 @@ PRODUCT_DICTIONARY_FIELD_KEYS = {
     "hardware_level": "product_hardware_level",
     "structure_level": "product_structure_level",
     "software_level": "product_software_level",
+}
+
+# Project 字段 -> 系统字典 key。ProjectSerializer 校验、删除前引用检查、测试 helper 三处共用。
+PROJECT_DICTIONARY_FIELD_KEYS = {
+    "business_unit": "project_business_unit",
+    "status": "project_status",
+    "project_type": "project_type",
 }
 
 
@@ -139,17 +161,32 @@ def ensure_system_dictionaries(workspace):
             continue
 
 
-def product_reference_filter(item_ids):
+def _reference_filter(field_keys, item_ids):
     item_ids = list(item_ids)
     query = Q()
-    for field in PRODUCT_DICTIONARY_FIELD_KEYS:
+    for field in field_keys:
         query |= Q(**{f"{field}__in": item_ids})
     return query
 
 
+def product_reference_filter(item_ids):
+    return _reference_filter(PRODUCT_DICTIONARY_FIELD_KEYS, item_ids)
+
+
+def project_reference_filter(item_ids):
+    return _reference_filter(PROJECT_DICTIONARY_FIELD_KEYS, item_ids)
+
+
+def _is_referenced(item_ids):
+    # all_objects：软删的产品 / 项目（含模板项目）仍持有 FK，硬删字典值会撞 DB 的 RESTRICT
+    return (
+        Product.all_objects.filter(product_reference_filter(item_ids)).exists()
+        or Project.all_objects.filter(project_reference_filter(item_ids)).exists()
+    )
+
+
 def is_item_in_use(item):
-    # all_objects：软删的产品仍持有 FK，硬删字典值会撞 DB 的 RESTRICT
-    return Product.all_objects.filter(product_reference_filter([item.id])).exists()
+    return _is_referenced([item.id])
 
 
 def is_dictionary_in_use(dictionary):
@@ -160,4 +197,4 @@ def is_dictionary_in_use(dictionary):
     )
     if not item_ids:
         return False
-    return Product.all_objects.filter(product_reference_filter(item_ids)).exists()
+    return _is_referenced(item_ids)

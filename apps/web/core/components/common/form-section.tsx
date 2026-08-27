@@ -1,0 +1,139 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
+import type { ReactNode } from "react";
+import { AlertTriangle } from "lucide-react";
+import { cn } from "@plane/utils";
+
+/**
+ * 分区表单的布局原语：分区标题 + 字段外壳（label / 必填星号 / 错误 / 提示）+ 两套 variant 样式 token。
+ * 产品与项目的创建弹窗、设置页共用，保证两个模块的表单长得一样。
+ */
+
+/** 表单所在容器：弹窗 / 设置页，各自一套字号与边框 token */
+export type TFormVariant = "modal" | "settings";
+
+export type TFormVariantStyles = {
+  title: string;
+  grid: string;
+  label: string;
+  /** 控件外层容器，统一行高 */
+  control: string;
+  /** @plane/ui Input */
+  input: string;
+  /** DateDropdown / MemberDropdown / DictionaryItemSelect 的 buttonClassName */
+  dropdownButton: string;
+  /** CustomSelect（非搜索下拉）的 buttonClassName，与 input / dropdownButton 同高 */
+  select: string;
+  /** 只读文本 */
+  text: string;
+  error: string;
+  hint: string;
+};
+
+export const FORM_VARIANT_STYLES: Record<TFormVariant, TFormVariantStyles> = {
+  modal: {
+    title: "text-13 font-semibold text-primary",
+    grid: "md:grid-cols-2",
+    label: "mb-1.5 block text-13 font-medium text-secondary",
+    control: "h-10 w-full",
+    input: "h-10 min-h-10 w-full !py-0 text-13 leading-5",
+    dropdownButton: "h-full w-full text-13",
+    select:
+      "!border-subtle-1 !shadow-none flex !h-10 !min-h-10 !max-h-10 w-full items-center rounded-md border-[0.5px] px-3 !py-0 text-left text-13 font-normal leading-5",
+    text: "flex min-h-10 items-center text-13 text-primary",
+    error: "mt-1 text-11 text-danger-primary",
+    hint: "mt-1 text-12 text-tertiary",
+  },
+  settings: {
+    title: "text-body-md-medium text-primary",
+    grid: "md:grid-cols-2",
+    label: "mb-1.5 block text-body-sm-medium text-primary",
+    control: "h-10 w-full",
+    input: "h-10 w-full border !border-subtle bg-surface-1 px-3 !py-0 text-body-sm-regular text-primary",
+    dropdownButton: "h-full w-full border !border-subtle bg-surface-1 text-body-sm-regular",
+    select:
+      "!border-subtle !shadow-none flex !h-10 !min-h-10 !max-h-10 w-full items-center rounded-md border bg-surface-1 px-3 !py-0 text-left text-body-sm-regular font-normal",
+    text: "flex min-h-10 items-center text-body-sm-regular text-primary",
+    error: "mt-1.5 text-caption-md-regular text-danger-primary",
+    hint: "mt-1.5 text-caption-md-regular text-tertiary",
+  },
+};
+
+/** 分区内字段网格：弹窗 gap-x-5 / 设置页 gap-x-6 */
+export const getFormGridClassName = (variant: TFormVariant) =>
+  cn("grid grid-cols-1", variant === "settings" ? "gap-x-6 gap-y-4" : "gap-x-5 gap-y-4", FORM_VARIANT_STYLES[variant].grid);
+
+/** 分区之间的间距 */
+export const getFormSectionsClassName = (variant: TFormVariant) =>
+  variant === "settings" ? "space-y-8" : "space-y-7";
+
+export type TFormSectionProps = {
+  title: string;
+  /** 标题右侧的小字说明 */
+  extra?: ReactNode;
+  /** 设置页变体在标题下加分隔线 */
+  divided?: boolean;
+  children: ReactNode;
+};
+
+export function FormSection(props: TFormSectionProps) {
+  const { title, extra, divided, children } = props;
+  return (
+    <section className="space-y-3.5">
+      <div className={cn("flex items-baseline justify-between gap-3", divided && "border-b border-subtle pb-2")}>
+        <h3 className="text-13 font-semibold text-primary">{title}</h3>
+        {extra ? <span className="text-12 text-tertiary">{extra}</span> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export type TFormFieldProps = {
+  label: string;
+  required: boolean;
+  /** 只读态不显示必填星号 */
+  editable: boolean;
+  optionalText?: string;
+  showOptional?: boolean;
+  error?: string;
+  /** 无错误时显示在控件下方 */
+  hint?: ReactNode;
+  styles: TFormVariantStyles;
+  /** 整行字段传 "md:col-span-2" */
+  className?: string;
+  children: ReactNode;
+};
+
+export function FormField(props: TFormFieldProps) {
+  const { label, required, editable, optionalText = "", showOptional = false, error, hint, styles, className, children } =
+    props;
+  return (
+    <div className={cn("min-w-0", className)}>
+      <span className={styles.label}>
+        {label}
+        {editable && required ? <span className="ml-0.5 text-danger-primary">*</span> : null}
+        {editable && !required && showOptional ? (
+          <span className="ml-1 font-normal text-tertiary">({optionalText})</span>
+        ) : null}
+      </span>
+      {children}
+      {error ? <p className={styles.error}>{error}</p> : hint ? <div className={styles.hint}>{hint}</div> : null}
+    </div>
+  );
+}
+
+/** 表单顶部的黄色提示横幅（存量数据缺必填等） */
+export function FormWarningBanner(props: { children: ReactNode; className?: string }) {
+  const { children, className } = props;
+  return (
+    <div className={cn("flex gap-3 rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2.5", className)}>
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-primary" />
+      <div className="text-11 leading-4 text-secondary">{children}</div>
+    </div>
+  );
+}

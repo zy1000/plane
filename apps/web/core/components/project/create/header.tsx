@@ -48,11 +48,11 @@ function ProjectCreateHeader(props: Props) {
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
 
   return (
-    <div className="group relative h-44 w-full rounded-lg">
+    <div className="group relative h-44 w-full rounded-t-lg">
       <CoverImage
         src={coverImage}
         alt={t("project_cover_image_alt")}
-        className="absolute top-0 left-0 h-full w-full rounded-lg"
+        className="absolute top-0 left-0 h-full w-full rounded-t-lg"
       />
       {showActionButtons && (
         <div className="absolute top-2.5 left-2.5">

@@ -15,6 +15,7 @@ import { EFileAssetType } from "@plane/types";
 import ProjectCommonAttributes from "@/components/project/create/common-attributes";
 import ProjectCreateHeader from "@/components/project/create/header";
 import ProjectCreateButtons from "@/components/project/create/project-create-buttons";
+import { applyProjectServerErrors, useProjectDictionaries } from "@/components/project/form-fields";
 // hooks
 import { getCoverImageType, uploadCoverImage } from "@/helpers/cover-image.helper";
 import { useProject } from "@/hooks/store/use-project";
@@ -56,8 +57,10 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
     defaultValues,
     reValidateMode: "onChange",
   });
-  const { getValues, handleSubmit, reset, setValue } = methods;
+  const { getValues, handleSubmit, reset, setValue, setError } = methods;
   const { isMobile } = usePlatformOS();
+  // 一次拉全量字典给所属BU / 项目状态 / 项目类型三个下拉共用
+  const dictionaries = useProjectDictionaries(workspaceSlug);
 
   useEffect(() => {
     if (!currentUserId || getValues("project_lead")) return;
@@ -79,6 +82,12 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   const onSubmit = async (formData: Partial<TProject>) => {
     // Upper case identifier
     formData.identifier = formData.identifier?.toUpperCase();
+    formData.code = formData.code?.trim();
+    // data 预填（模板 / 复制项目）可能带进只读的 *_detail，别 POST 出去
+    delete formData.business_unit_detail;
+    delete formData.status_detail;
+    delete formData.project_type_detail;
+    delete formData.product_manager_detail;
     const coverImage = formData.cover_image_url;
     let uploadedAssetUrl: string | null = null;
 
@@ -129,45 +138,13 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
         handleNextStep(res.id);
       })
       .catch((err) => {
-        try {
-          // Handle the new error format where codes are nested in arrays under field names
-          const errorData = err?.data ?? {};
-
-          const nameError = errorData.name?.includes("PROJECT_NAME_ALREADY_EXIST");
-          const identifierError = errorData?.identifier?.includes("PROJECT_IDENTIFIER_ALREADY_EXIST");
-
-          if (nameError || identifierError) {
-            if (nameError) {
-              setToast({
-                type: TOAST_TYPE.ERROR,
-                title: t("toast.error"),
-                message: t("project_name_already_taken"),
-              });
-            }
-
-            if (identifierError) {
-              setToast({
-                type: TOAST_TYPE.ERROR,
-                title: t("toast.error"),
-                message: t("project_identifier_already_taken"),
-              });
-            }
-          } else {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t("toast.error"),
-              message: t("something_went_wrong"),
-            });
-          }
-        } catch (error) {
-          // Fallback error handling if the error processing fails
-          console.error("Error processing API error:", error);
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: t("toast.error"),
-            message: t("something_went_wrong"),
-          });
-        }
+        // 字段级错误（名称 / 项目 ID / 代号重复、字典值无效、必填缺失…）行内展示；其余 toast
+        if (applyProjectServerErrors(err?.data ?? {}, setError, t)) return;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: t("something_went_wrong"),
+        });
       });
   };
 
@@ -181,20 +158,27 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
 
   return (
     <FormProvider {...methods}>
-      <ProjectCreateHeader handleClose={handleClose} isMobile={isMobile} />
-
-      <form onSubmit={handleSubmit(onSubmit)} className="px-3">
-        <div className="mt-9 space-y-6 pb-5">
-          <ProjectCommonAttributes
-            setValue={setValue}
-            isMobile={isMobile}
-            shouldAutoSyncIdentifier={shouldAutoSyncIdentifier}
-            setShouldAutoSyncIdentifier={setShouldAutoSyncIdentifier}
-          />
-          <ProjectAttributes isMobile={isMobile} />
+      {/* 头部固定、中间分区滚动、底部按钮固定（同产品创建弹窗） */}
+      <div className="flex max-h-[min(88vh,52rem)] min-h-0 flex-col">
+        <div className="relative z-[1] shrink-0">
+          <ProjectCreateHeader handleClose={handleClose} isMobile={isMobile} />
         </div>
-        <ProjectCreateButtons handleClose={handleClose} />
-      </form>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+          <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-7">
+            <div className="mt-10 space-y-7 pb-6">
+              <ProjectCommonAttributes
+                setValue={setValue}
+                isMobile={isMobile}
+                shouldAutoSyncIdentifier={shouldAutoSyncIdentifier}
+                setShouldAutoSyncIdentifier={setShouldAutoSyncIdentifier}
+                dictionaries={dictionaries}
+              />
+              <ProjectAttributes isMobile={isMobile} />
+            </div>
+          </div>
+          <ProjectCreateButtons handleClose={handleClose} isMobile={isMobile} />
+        </form>
+      </div>
     </FormProvider>
   );
 });

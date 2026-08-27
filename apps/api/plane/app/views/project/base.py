@@ -117,6 +117,10 @@ class ProjectViewSet(BaseViewSet):
                 "default_assignee",
                 "project_lead",
                 "cover_image_asset",
+                "business_unit",
+                "status",
+                "project_type",
+                "product_manager",
             )
             .annotate(
                 is_favorite=Exists(
@@ -485,6 +489,13 @@ class ProjectViewSet(BaseViewSet):
             "guest_view_all_features",
             "project_lead",
             "network",
+            "code",
+            "business_unit",
+            "status",
+            "project_type",
+            "product_manager",
+            "start_date",
+            "end_date",
             "created_at",
             "updated_at",
             "created_by",
@@ -638,7 +649,10 @@ class ProjectViewSet(BaseViewSet):
 
         workspace = Workspace.objects.get(slug=slug)
 
-        project = Project.objects.get(pk=pk, workspace=workspace)
+        # select_related 四个扩展 FK：下面 ProjectSerializer(project).data 的快照要出 *_detail
+        project = Project.objects.select_related(
+            "business_unit", "status", "project_type", "product_manager"
+        ).get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(
             ProjectSerializer(project).data, cls=DjangoJSONEncoder

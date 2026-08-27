@@ -204,6 +204,52 @@ class Project(BaseModel):
 
     pms_project_name = models.CharField(max_length=255, null=True, blank=True)
 
+    # ---- 0348 扩展字段，口径与 Product 0347 逐条对应 ----
+    # 项目代号：工作区内条件唯一 + 非空 check（见 Meta.constraints）；save() 在空时回落 name。
+    code = models.CharField(max_length=255, verbose_name="项目代号")
+    # 三个字典 FK：DB 允许空（迁移前的存量项目为空，前端编辑时强制补齐），
+    # API 层 status / project_type 必填、business_unit 选填。
+    # RESTRICT 而非 PROTECT：直接删被引用的字典值同样报错，但整个工作区硬删时
+    # Project 与 DataDictionaryItem 同批级联可以通过。真正的保护在
+    # DataDictionaryItemViewSet.destroy 的引用检查（utils/data_dictionary.py::is_item_in_use）。
+    business_unit = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="projects_by_business_unit",
+        verbose_name="所属BU",
+    )
+    status = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="projects_by_status",
+        verbose_name="项目状态",
+    )
+    # 与上面的 product_type（CharField choices，产品类型）是两个概念，互不相干
+    project_type = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="projects_by_project_type",
+        verbose_name="项目类型",
+    )
+    # 只要求工作区活跃成员，不进 ProjectMember（与 Product.project_lead 同口径；
+    # 注意不同于本模型的 project_lead —— 那个会在创建时被加成项目管理员）
+    product_manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="product_manager_projects",
+        verbose_name="研发产品经理",
+    )
+    start_date = models.DateField(null=True, blank=True, verbose_name="开始日期")
+    end_date = models.DateField(null=True, blank=True, verbose_name="完成日期")
+
     objects = SoftProjectManager()
 
     def __init__(self, *args, **kwargs):
@@ -243,6 +289,13 @@ class Project(BaseModel):
                 condition=Q(deleted_at__isnull=True),
                 name="project_unique_name_workspace_when_deleted_at_null",
             ),
+            models.UniqueConstraint(
+                fields=["code", "workspace"],
+                condition=Q(deleted_at__isnull=True),
+                name="project_unique_code_workspace_when_deleted_at_null",
+            ),
+            # 空代号没有意义，且会让第一个漏填的项目静默拿到 ''，直到第二个才撞唯一约束
+            models.CheckConstraint(check=~Q(code=""), name="project_code_not_blank"),
         ]
         verbose_name = "Project"
         verbose_name_plural = "Projects"
@@ -253,6 +306,13 @@ class Project(BaseModel):
         from plane.db.models import Workspace
 
         self.identifier = self.identifier.strip().upper()
+        # ORM 直建（workspace_seed_task / dummy_data_task / 模板 / 外部 API / 测试）的兜底，
+        # 口径与迁移 0348 的回填一致：代号缺省 = 名称，名称也空则 identifier。
+        # API 层 code 仍是必填（ProjectSerializer.validate_code），这里只是别让 CheckConstraint 在非 API 路径上炸。
+        if self.code:
+            self.code = self.code.strip()
+        else:
+            self.code = (self.name or "").strip() or self.identifier
         is_creating = self._state.adding
 
         if is_creating and not self.is_timezone_provided:
