@@ -83,11 +83,6 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
     // Upper case identifier
     formData.identifier = formData.identifier?.toUpperCase();
     formData.code = formData.code?.trim();
-    // data 预填（模板 / 复制项目）可能带进只读的 *_detail，别 POST 出去
-    delete formData.business_unit_detail;
-    delete formData.status_detail;
-    delete formData.project_type_detail;
-    delete formData.product_manager_detail;
     const coverImage = formData.cover_image_url;
     let uploadedAssetUrl: string | null = null;
 

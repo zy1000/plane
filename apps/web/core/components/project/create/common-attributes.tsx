@@ -16,7 +16,7 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { Input, TextArea } from "@plane/ui";
 import { cn, projectIdentifierSanitizer, getTabIndex } from "@plane/utils";
 // components
-import { FORM_VARIANT_STYLES, FormField, FormSection, getFormGridClassName } from "@/components/common/form-section";
+import { FORM_VARIANT_STYLES, FormFieldShell, FormSection, getFormGridClassName } from "@/components/common/form-section";
 import {
   ProjectClassificationSection,
   ProjectCodeField,
@@ -74,7 +74,7 @@ function ProjectCommonAttributes(props: Props) {
     <>
       <FormSection title={t("workspace_projects.sections.basic")}>
         <div className={grid}>
-          <FormField
+          <FormFieldShell
             className="md:col-span-2"
             label={t("workspace_projects.fields.name")}
             required
@@ -107,8 +107,8 @@ function ProjectCommonAttributes(props: Props) {
                 />
               )}
             />
-          </FormField>
-          <FormField
+          </FormFieldShell>
+          <FormFieldShell
             label={t("workspace_projects.fields.identifier")}
             required
             editable
@@ -158,7 +158,7 @@ function ProjectCommonAttributes(props: Props) {
                 <InfoIcon className="absolute top-1/2 right-2 h-3 w-3 -translate-y-1/2 text-placeholder" />
               </Tooltip>
             </div>
-          </FormField>
+          </FormFieldShell>
           <ProjectCodeField control={control} variant="modal" tabIndex={getIndex("code")} />
           <ProjectNetworkField control={control} variant="modal" tabIndex={getIndex("network")} />
           <ProjectDictionaryField
@@ -169,7 +169,7 @@ function ProjectCommonAttributes(props: Props) {
             dictionaries={dictionaries}
             tabIndex={getIndex("business_unit")}
           />
-          <FormField
+          <FormFieldShell
             className="md:col-span-2"
             label={t("workspace_projects.fields.description")}
             required={false}
@@ -196,7 +196,7 @@ function ProjectCommonAttributes(props: Props) {
                 />
               )}
             />
-          </FormField>
+          </FormFieldShell>
         </div>
       </FormSection>
       <ProjectClassificationSection

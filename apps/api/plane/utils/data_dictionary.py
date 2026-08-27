@@ -117,6 +117,20 @@ PROJECT_DICTIONARY_FIELD_KEYS = {
 }
 
 
+def system_dictionary_name(workspace, spec):
+    """用户自建了同名字典时，系统字典的 name 加 key 后缀。
+
+    否则 (workspace, name) 唯一约束会把系统字典永远挡在门外 —— 产品 / 项目的必填字典字段就再也填不了。
+    """
+    name = spec["name"]
+    taken = (
+        DataDictionary.objects.filter(workspace=workspace, name=name)
+        .exclude(key=spec["key"])
+        .exists()
+    )
+    return f"{name}（{spec['key']}）" if taken else name
+
+
 def ensure_system_dictionaries(workspace):
     """幂等：只补缺失的系统字典；已存在的一律不碰（不补值、不覆盖用户改过的 name / description）。
 
@@ -130,6 +144,7 @@ def ensure_system_dictionaries(workspace):
     for index, spec in enumerate(SYSTEM_DICTIONARIES):
         if spec["key"] in existing:
             continue
+        name = system_dictionary_name(workspace, spec)
         try:
             # 字典头与预置值同一事务：并发首次调用要么看到完整字典，要么看不到
             with transaction.atomic():
@@ -137,7 +152,7 @@ def ensure_system_dictionaries(workspace):
                     workspace=workspace,
                     key=spec["key"],
                     defaults={
-                        "name": spec["name"],
+                        "name": name,
                         "description": spec["description"],
                         "is_system": True,
                         "sort_order": (index + 1) * SORT_ORDER_STEP,
@@ -157,7 +172,7 @@ def ensure_system_dictionaries(workspace):
                         ]
                     )
         except IntegrityError:
-            # (workspace, name) 撞上用户自建的同名字典：跳过，别让列表接口 500
+            # 并发首次调用彼此撞 key / name：跳过，下次调用会补上，别让列表接口 500
             continue
 
 

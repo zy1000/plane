@@ -94,4 +94,5 @@ export const PROJECT_SERVER_ERROR_I18N: Record<string, string> = {
   INVALID_PROJECT_GRADE: "workspace_projects.validation.invalid_option",
   PROJECT_DICTIONARY_ITEM_INVALID: "workspace_projects.validation.invalid_option",
   PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER: "workspace_projects.validation.invalid_option",
+  PROJECT_END_DATE_BEFORE_START_DATE: "workspace_projects.validation.end_before_start",
 };

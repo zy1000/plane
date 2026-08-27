@@ -67,10 +67,6 @@ export const FORM_VARIANT_STYLES: Record<TFormVariant, TFormVariantStyles> = {
 export const getFormGridClassName = (variant: TFormVariant) =>
   cn("grid grid-cols-1", variant === "settings" ? "gap-x-6 gap-y-4" : "gap-x-5 gap-y-4", FORM_VARIANT_STYLES[variant].grid);
 
-/** 分区之间的间距 */
-export const getFormSectionsClassName = (variant: TFormVariant) =>
-  variant === "settings" ? "space-y-8" : "space-y-7";
-
 export type TFormSectionProps = {
   title: string;
   /** 标题右侧的小字说明 */
@@ -93,7 +89,8 @@ export function FormSection(props: TFormSectionProps) {
   );
 }
 
-export type TFormFieldProps = {
+/** 字段外壳（label / 必填星号 / 错误 / 提示）。名字带 Shell 是为了避开 @plane/ui 里已有的 FormField */
+export type TFormFieldShellProps = {
   label: string;
   required: boolean;
   /** 只读态不显示必填星号 */
@@ -101,7 +98,7 @@ export type TFormFieldProps = {
   optionalText?: string;
   showOptional?: boolean;
   error?: string;
-  /** 无错误时显示在控件下方 */
+  /** 显示在控件下方；与错误同时存在时两行都显示（如「字典没有值」的引导要和必填错误一起看到） */
   hint?: ReactNode;
   styles: TFormVariantStyles;
   /** 整行字段传 "md:col-span-2" */
@@ -109,7 +106,7 @@ export type TFormFieldProps = {
   children: ReactNode;
 };
 
-export function FormField(props: TFormFieldProps) {
+export function FormFieldShell(props: TFormFieldShellProps) {
   const { label, required, editable, optionalText = "", showOptional = false, error, hint, styles, className, children } =
     props;
   return (
@@ -122,7 +119,8 @@ export function FormField(props: TFormFieldProps) {
         ) : null}
       </span>
       {children}
-      {error ? <p className={styles.error}>{error}</p> : hint ? <div className={styles.hint}>{hint}</div> : null}
+      {error ? <p className={styles.error}>{error}</p> : null}
+      {hint ? <div className={styles.hint}>{hint}</div> : null}
     </div>
   );
 }

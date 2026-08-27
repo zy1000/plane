@@ -75,14 +75,28 @@ export function ProjectClassificationSection(props: TClassificationSectionProps)
   );
 }
 
-export function ProjectTeamSection(props: TProjectFormSectionProps) {
-  const { control, variant, disabled, getIndex } = props;
+type TTeamSectionProps = TProjectFormSectionProps & {
+  /**
+   * 设置页传当前项目 id：负责人只能从项目成员里选（后端 PATCH 不会把负责人补成项目成员，
+   * 权限层却按负责人给全量权限，选个非成员会出现「有权限没成员行」的项目）。创建时项目还不存在，不传。
+   */
+  projectId?: string;
+};
+
+export function ProjectTeamSection(props: TTeamSectionProps) {
+  const { control, variant, disabled, getIndex, projectId } = props;
   const { t } = useTranslation();
   const base = { control, variant, disabled };
   return (
     <FormSection title={t("workspace_projects.sections.team")} divided={variant === "settings"}>
       <div className={getFormGridClassName(variant)}>
-        <ProjectMemberField {...base} name="project_lead" required tabIndex={getIndex?.("lead")} />
+        <ProjectMemberField
+          {...base}
+          name="project_lead"
+          required
+          projectId={projectId}
+          tabIndex={getIndex?.("lead")}
+        />
         <ProjectMemberField {...base} name="product_manager" required tabIndex={getIndex?.("product_manager")} />
       </div>
     </FormSection>

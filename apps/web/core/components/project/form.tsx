@@ -22,7 +22,7 @@ import { cn, renderFormattedDate } from "@plane/utils";
 import { CoverImage } from "@/components/common/cover-image";
 import {
   FORM_VARIANT_STYLES,
-  FormField,
+  FormFieldShell,
   FormSection,
   FormWarningBanner,
   getFormGridClassName,
@@ -284,7 +284,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
 
         <FormSection title={t("workspace_projects.sections.basic")} divided>
           <div className={grid}>
-            <FormField
+            <FormFieldShell
               className="md:col-span-2"
               label={t("workspace_projects.fields.name")}
               required
@@ -320,8 +320,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                   />
                 )}
               />
-            </FormField>
-            <FormField
+            </FormFieldShell>
+            <FormFieldShell
               label={t("workspace_projects.fields.identifier")}
               required
               editable={isAdmin}
@@ -369,7 +369,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                   <Info className="absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-placeholder" />
                 </Tooltip>
               </div>
-            </FormField>
+            </FormFieldShell>
             <ProjectCodeField {...sectionProps} />
             <ProjectNetworkField {...sectionProps} />
             <ProjectDictionaryField
@@ -379,7 +379,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               dictionaries={dictionaries}
               fallbackLabel={project.business_unit_detail?.label}
             />
-            <FormField
+            <FormFieldShell
               className="md:col-span-2"
               label={t("workspace_projects.fields.description")}
               required={false}
@@ -400,8 +400,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                   />
                 )}
               />
-            </FormField>
-            <FormField
+            </FormFieldShell>
+            <FormFieldShell
               label={t("workspace_projects.fields.pms_project_name")}
               required={false}
               editable={isAdmin}
@@ -435,8 +435,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                   />
                 )}
               />
-            </FormField>
-            <FormField
+            </FormFieldShell>
+            <FormFieldShell
               label={t("workspace_projects.fields.timezone")}
               required
               editable={isAdmin}
@@ -459,12 +459,12 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                   />
                 )}
               />
-            </FormField>
+            </FormFieldShell>
           </div>
         </FormSection>
 
         <ProjectClassificationSection {...sectionProps} dictionaries={dictionaries} project={project} />
-        <ProjectTeamSection {...sectionProps} />
+        <ProjectTeamSection {...sectionProps} projectId={projectId} />
         <ProjectPlanSection {...sectionProps} />
 
         <div className="flex items-center justify-between py-2">

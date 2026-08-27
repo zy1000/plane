@@ -14,7 +14,7 @@ export type TProjectDictionaries = {
   workspaceSlug: string;
   isLoading: boolean;
   get: (key: TProjectDictionaryFieldKey) => TDataDictionary | undefined;
-  /** 字典已加载、但还没有任何可选值 */
+  /** 字典已加载、但还没有任何可选值（或该工作区根本没这个系统字典 —— 同名撞车等异常） */
   isEmpty: (key: TProjectDictionaryFieldKey) => boolean;
 };
 
@@ -30,10 +30,11 @@ export const useProjectDictionaries = (workspaceSlug: string, enabled = true): T
   );
   const isEmpty = useCallback(
     (key: TProjectDictionaryFieldKey) => {
+      if (!enabled || isLoading) return false;
       const dictionary = get(key);
-      return dictionary !== undefined && dictionary.items.length === 0;
+      return dictionary === undefined || dictionary.items.length === 0;
     },
-    [get]
+    [enabled, isLoading, get]
   );
   return { workspaceSlug, isLoading, get, isEmpty };
 };

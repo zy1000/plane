@@ -12,7 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TProjectGrade, TProjectProductType } from "@plane/types";
 import { CustomSelect, Input } from "@plane/ui";
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
-import { FORM_VARIANT_STYLES, FormField } from "@/components/common/form-section";
+import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-section";
 import type { TFormVariant } from "@/components/common/form-section";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
@@ -66,7 +66,7 @@ export function ProjectCodeField(props: TProjectFieldProps) {
         },
       }}
       render={({ field: { value, onChange, ref }, fieldState: { error } }) => (
-        <FormField
+        <FormFieldShell
           label={label("code")}
           required
           editable={!disabled}
@@ -88,7 +88,7 @@ export function ProjectCodeField(props: TProjectFieldProps) {
             disabled={disabled}
             tabIndex={tabIndex}
           />
-        </FormField>
+        </FormFieldShell>
       )}
     />
   );
@@ -105,7 +105,7 @@ export function ProjectNetworkField(props: TProjectFieldProps) {
       render={({ field: { value, onChange } }) => {
         const selected = NETWORK_CHOICES.find((network) => network.key === value);
         return (
-          <FormField label={label("network")} required={false} editable={!disabled} styles={styles}>
+          <FormFieldShell label={label("network")} required={false} editable={!disabled} styles={styles}>
             <CustomSelect
               value={value}
               onChange={onChange}
@@ -139,7 +139,7 @@ export function ProjectNetworkField(props: TProjectFieldProps) {
                 </CustomSelect.Option>
               ))}
             </CustomSelect>
-          </FormField>
+          </FormFieldShell>
         );
       }}
     />
@@ -160,7 +160,7 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
   const dictionary = dictionaries.get(name);
   const empty = dictionaries.isEmpty(name);
-  // 字典没有可选值：禁用下拉，把错误位换成「去数据字典里加」的提示
+  // 字典没有可选值（或该工作区根本没这个系统字典）：禁用下拉，在必填错误之外再给一条「去数据字典里加」的引导
   const emptyHint = empty ? (
     <span className="flex flex-wrap items-center gap-x-1">
       {t("workspace_projects.validation.dictionary_empty", { name: dictionary?.name ?? label(name) })}
@@ -178,15 +178,15 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
       name={name}
       rules={required ? { validate: (value) => Boolean(value) || requiredMessage(name) } : undefined}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormField
+        <FormFieldShell
           label={label(name)}
           required={required}
           editable={!disabled}
-          error={empty ? undefined : error?.message}
+          error={error?.message}
           hint={emptyHint}
           styles={styles}
         >
-          <div className={styles.control} tabIndex={tabIndex}>
+          <div className={styles.control}>
             <DictionaryItemSelect
               dictionary={dictionary}
               value={value ?? null}
@@ -197,9 +197,10 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
               fallbackLabel={fallbackLabel}
               isLoading={dictionaries.isLoading}
               buttonClassName={styles.dropdownButton}
+              tabIndex={tabIndex}
             />
           </div>
-        </FormField>
+        </FormFieldShell>
       )}
     />
   );
@@ -209,10 +210,12 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
 type TProjectMemberFieldProps = TProjectFieldProps & {
   name: TProjectMemberFieldKey;
   required: boolean;
+  /** 传了就只在该项目的成员里选（设置页的负责人）；不传用工作区成员（创建时 / 研发产品经理） */
+  projectId?: string;
 };
 
 export function ProjectMemberField(props: TProjectMemberFieldProps) {
-  const { control, variant, disabled = false, tabIndex, name, required } = props;
+  const { control, variant, disabled = false, tabIndex, name, required, projectId } = props;
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
   return (
     <Controller
@@ -221,11 +224,11 @@ export function ProjectMemberField(props: TProjectMemberFieldProps) {
       // project_lead 可能是 IUserLite 对象，用 validate 而不是 required，先归一再判空
       rules={required ? { validate: (value) => Boolean(normalizeUserId(value)) || requiredMessage(name) } : undefined}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormField label={label(name)} required={required} editable={!disabled} error={error?.message} styles={styles}>
+        <FormFieldShell label={label(name)} required={required} editable={!disabled} error={error?.message} styles={styles}>
           <div className={styles.control}>
-            {/* 不传 projectId：创建时项目还不存在；研发产品经理也只要求是工作区成员 */}
             <MemberDropdown
               multiple={false}
+              projectId={projectId}
               value={normalizeUserId(value)}
               onChange={onChange}
               buttonVariant="border-with-text"
@@ -238,7 +241,7 @@ export function ProjectMemberField(props: TProjectMemberFieldProps) {
               tabIndex={tabIndex}
             />
           </div>
-        </FormField>
+        </FormFieldShell>
       )}
     />
   );
@@ -268,7 +271,7 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
         },
       }}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormField label={label(name)} required={required} editable={!disabled} error={error?.message} styles={styles}>
+        <FormFieldShell label={label(name)} required={required} editable={!disabled} error={error?.message} styles={styles}>
           <div className={styles.control}>
             <DateDropdown
               value={getDate(value)}
@@ -285,7 +288,7 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
               tabIndex={tabIndex}
             />
           </div>
-        </FormField>
+        </FormFieldShell>
       )}
     />
   );
@@ -306,7 +309,7 @@ export function ProjectGradeField(props: TProjectChoiceFieldProps) {
       name="grade"
       rules={required ? { required: t("project_grade_required") } : undefined}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormField label={label("grade")} required={required} editable={!disabled} error={error?.message} styles={styles}>
+        <FormFieldShell label={label("grade")} required={required} editable={!disabled} error={error?.message} styles={styles}>
           <CustomSelect
             value={value ?? ""}
             onChange={(val: string) => onChange(val === "" ? null : (val as TProjectGrade))}
@@ -332,7 +335,7 @@ export function ProjectGradeField(props: TProjectChoiceFieldProps) {
               </CustomSelect.Option>
             ))}
           </CustomSelect>
-        </FormField>
+        </FormFieldShell>
       )}
     />
   );
@@ -348,7 +351,7 @@ export function ProjectProductTypeField(props: TProjectChoiceFieldProps) {
       name="product_type"
       rules={required ? { required: requiredMessage("product_type") } : undefined}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormField
+        <FormFieldShell
           label={label("product_type")}
           required={required}
           editable={!disabled}
@@ -380,7 +383,7 @@ export function ProjectProductTypeField(props: TProjectChoiceFieldProps) {
               </CustomSelect.Option>
             ))}
           </CustomSelect>
-        </FormField>
+        </FormFieldShell>
       )}
     />
   );

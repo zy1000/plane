@@ -10,7 +10,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import {
   FORM_VARIANT_STYLES,
-  FormField,
+  FormFieldShell,
   FormSection,
   FormWarningBanner,
   getFormGridClassName,
@@ -125,7 +125,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
   };
 
   const textFields = TEXT_FIELDS.map((key) => (
-    <FormField key={key} {...wrapperProps(key)}>
+    <FormFieldShell key={key} {...wrapperProps(key)}>
       {editable ? (
         <Input
           id={`product-${key}`}
@@ -141,7 +141,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
       ) : (
         <p className={cn(styles.text, "truncate")}>{values[key] || "—"}</p>
       )}
-    </FormField>
+    </FormFieldShell>
   ));
 
   const dictionaryFields = (keys: readonly TProductDictionaryFieldKey[]) =>
@@ -150,7 +150,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
       const detail = product?.[`${key}_detail` as const] ?? null;
       const empty = isDictionaryEmpty(key);
       return (
-        <FormField key={key} {...wrapperProps(key)} error={empty ? undefined : errors[key]}>
+        <FormFieldShell key={key} {...wrapperProps(key)} error={empty ? undefined : errors[key]}>
           {editable ? (
             <div className={styles.control}>
               <DictionaryItemSelect
@@ -168,12 +168,12 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
           ) : (
             <p className={cn(styles.text, "truncate")}>{detail?.label ?? "—"}</p>
           )}
-        </FormField>
+        </FormFieldShell>
       );
     });
 
   const dateFields = DATE_FIELDS.map((key) => (
-    <FormField key={key} {...wrapperProps(key)}>
+    <FormFieldShell key={key} {...wrapperProps(key)}>
       {editable ? (
         <div className={styles.control}>
           <DateDropdown
@@ -190,11 +190,11 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
       ) : (
         <p className={styles.text}>{renderFormattedDate(values[key]) ?? "—"}</p>
       )}
-    </FormField>
+    </FormFieldShell>
   ));
 
   const leadFields = LEAD_FIELDS.map((key) => (
-    <FormField key={key} {...wrapperProps(key)}>
+    <FormFieldShell key={key} {...wrapperProps(key)}>
       {editable ? (
         <div className={styles.control}>
           <MemberDropdown
@@ -214,11 +214,11 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
           <UserCell user={product?.[`${key}_detail` as const]} />
         </div>
       )}
-    </FormField>
+    </FormFieldShell>
   ));
 
   const reviewersField = (
-    <FormField {...wrapperProps("reviewers")}>
+    <FormFieldShell {...wrapperProps("reviewers")}>
       {editable ? (
         <div className={styles.control}>
           <MemberDropdown
@@ -249,7 +249,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
           )}
         </div>
       )}
-    </FormField>
+    </FormFieldShell>
   );
 
   const missingBanner =

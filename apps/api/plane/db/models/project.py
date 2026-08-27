@@ -309,10 +309,8 @@ class Project(BaseModel):
         # ORM 直建（workspace_seed_task / dummy_data_task / 模板 / 外部 API / 测试）的兜底，
         # 口径与迁移 0348 的回填一致：代号缺省 = 名称，名称也空则 identifier。
         # API 层 code 仍是必填（ProjectSerializer.validate_code），这里只是别让 CheckConstraint 在非 API 路径上炸。
-        if self.code:
-            self.code = self.code.strip()
-        else:
-            self.code = (self.name or "").strip() or self.identifier
+        # 先 strip 再判空："   " 也算空，别让它撞 project_code_not_blank
+        self.code = (self.code or "").strip() or (self.name or "").strip() or self.identifier
         is_creating = self._state.adding
 
         if is_creating and not self.is_timezone_provided:

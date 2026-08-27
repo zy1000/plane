@@ -133,9 +133,8 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
         read_only_fields = ["workspace", "deleted_at"]
 
     def validate_code(self, value):
-        code = (value or "").strip()
-        if not code:
-            raise serializers.ValidationError("PROJECT_CODE_REQUIRED")
+        # DRF 的 CharField 已先 trim 并拒绝空串，这里只做查重
+        code = value.strip()
         # 与 DB 条件唯一约束同口径：未软删行全部参与，包括 is_template=True 的模板项目
         queryset = Project.all_objects.filter(
             workspace_id=self.context["workspace_id"], code=code, deleted_at__isnull=True
@@ -147,6 +146,9 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
         return code
 
     def validate_product_manager(self, user):
+        # 值没变就不再查成员资格：负责人事后被移出工作区的项目，不该因此改不了别的字段
+        if self.instance is not None and self.instance.product_manager_id == user.id:
+            return user
         # 只要求工作区活跃成员，不要求（也不自动加入）项目成员，与 Product.project_lead 同口径
         if not WorkspaceMember.objects.filter(
             workspace_id=self.context["workspace_id"],
@@ -234,6 +236,12 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
                 errors[field] = ["PROJECT_DICTIONARY_ITEM_INVALID"]
         if errors:
             raise serializers.ValidationError(errors)
+
+        # 完成日期不能早于开始日期；PATCH 只带其中一个时与实例上的另一个比
+        start_date = data.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = data.get("end_date", getattr(self.instance, "end_date", None))
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({"end_date": ["PROJECT_END_DATE_BEFORE_START_DATE"]})
 
         return data
 

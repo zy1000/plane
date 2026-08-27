@@ -594,6 +594,58 @@ class TestProjectAPIPatchDelete(TestProjectBase):
         assert project2.code == "Project Two"
 
     @pytest.mark.django_db
+    def test_partial_update_end_date_before_start_date_rejected(self, session_client, workspace, create_user):
+        """完成日期不能早于开始日期；PATCH 只带一个日期时与实例上的另一个比"""
+        create_response = session_client.post(
+            self.get_project_url(workspace.slug),
+            self.project_payload(workspace, create_user, name="Dated", identifier="DT"),
+            format="json",
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        url = self.get_project_url(workspace.slug, pk=create_response.json()["id"])
+
+        # 载荷里 start_date=2026-01-01
+        response = session_client.patch(url, {"end_date": "2025-12-31"}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["end_date"] == ["PROJECT_END_DATE_BEFORE_START_DATE"]
+
+        response = session_client.patch(url, {"start_date": "2027-01-01"}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["end_date"] == ["PROJECT_END_DATE_BEFORE_START_DATE"]
+
+        response = session_client.patch(url, {"start_date": "2026-06-01", "end_date": "2026-06-01"}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+
+    @pytest.mark.django_db
+    def test_partial_update_keeps_product_manager_who_left_workspace(self, session_client, workspace, create_user):
+        """研发产品经理事后被移出工作区：值不变时不再查成员资格，其它字段照常能改"""
+        manager = User.objects.create_user(email="pm@example.com", username="pm")
+        membership = WorkspaceMember.objects.create(workspace=workspace, member=manager, role=15, is_active=True)
+        create_response = session_client.post(
+            self.get_project_url(workspace.slug),
+            self.project_payload(
+                workspace, create_user, name="PM Left", identifier="PML", product_manager=str(manager.id)
+            ),
+            format="json",
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        url = self.get_project_url(workspace.slug, pk=create_response.json()["id"])
+
+        membership.is_active = False
+        membership.save()
+
+        # 值没变：放行
+        response = session_client.patch(
+            url, {"description": "still editable", "product_manager": str(manager.id)}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        # 换成另一个非成员：仍然拒绝
+        outsider = User.objects.create_user(email="outsider2@example.com", username="outsider2")
+        response = session_client.patch(url, {"product_manager": str(outsider.id)}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["product_manager"] == ["PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER"]
+
+    @pytest.mark.django_db
     def test_partial_update_project_forbidden_non_admin(self, session_client, workspace):
         """Test that non-admin project members cannot update project"""
         # Create a project

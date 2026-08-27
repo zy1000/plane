@@ -16,6 +16,7 @@ type Props = {
   isLoading?: boolean;
   className?: string;
   buttonClassName?: string;
+  tabIndex?: number;
 };
 
 export function DictionaryItemSelect(props: Props) {
@@ -30,6 +31,7 @@ export function DictionaryItemSelect(props: Props) {
     isLoading = false,
     className,
     buttonClassName,
+    tabIndex,
   } = props;
   const items = dictionary?.items;
 
@@ -54,6 +56,7 @@ export function DictionaryItemSelect(props: Props) {
       disabled={disabled}
       className={cn("h-full w-full", className)}
       customButtonClassName="h-full rounded-md"
+      tabIndex={tabIndex}
       optionsClassName="w-[min(20rem,calc(100vw-2rem))]"
       customButton={
         <div

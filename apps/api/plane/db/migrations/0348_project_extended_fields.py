@@ -33,8 +33,9 @@ def seed_project_dictionaries(apps, schema_editor):
     """给存量工作区补 3 个项目字典。新建的工作区由列表接口的 ensure_system_dictionaries 兜。
 
     与 0346 的差别：0346 跑的时候用户还没有自建字典，这里必须防两种撞车 ——
-    同 key（用户自建了 key=project_status 的字典）和同 name（撞 (workspace, name) 唯一约束）。
-    两种都跳过，与运行时 ensure_system_dictionaries 捕获 IntegrityError 后跳过的行为一致。
+    同 key（用户自建了 key=project_status 的字典）：跳过；
+    同 name（撞 (workspace, name) 唯一约束）：name 加 key 后缀照建，与运行时 system_dictionary_name 一致，
+    否则该工作区永远没有这个系统字典、项目也就永远建不了。
     历史模型带的是普通 Manager（看得见软删行），所以查重显式加 deleted_at__isnull=True。
     """
     Workspace = apps.get_model("db", "Workspace")
@@ -48,17 +49,18 @@ def seed_project_dictionaries(apps, schema_editor):
     )
     for workspace_id in workspace_ids:
         for offset, spec in enumerate(PROJECT_SYSTEM_DICTIONARIES):
-            exists = (
-                DataDictionary.objects.filter(workspace_id=workspace_id, deleted_at__isnull=True)
-                .filter(Q(key=spec["key"]) | Q(name=spec["name"]))
-                .exists()
-            )
-            if exists:
+            existing = DataDictionary.objects.filter(workspace_id=workspace_id, deleted_at__isnull=True)
+            if existing.filter(key=spec["key"]).exists():
                 continue
+            name = spec["name"]
+            if existing.filter(name=name).exists():
+                name = f"{name}（{spec['key']}）"
+                if existing.filter(name=name).exists():
+                    continue
             dictionary = DataDictionary.objects.create(
                 workspace_id=workspace_id,
                 key=spec["key"],
-                name=spec["name"],
+                name=name,
                 description=spec["description"],
                 is_system=True,
                 sort_order=(PROJECT_DICTIONARY_INDEX_OFFSET + offset + 1) * SORT_ORDER_STEP,
@@ -88,25 +90,39 @@ def unseed_project_dictionaries(apps, schema_editor):
 def backfill_project_fields(apps, schema_editor):
     """code ← name（空则 identifier）；product_manager ← project_lead；start/end ← 迁移当天。
 
+    负责人已不是工作区活跃成员的不抄进 product_manager：序列化器会校验成员资格，
+    抄进去会让该项目的设置页改任何字段都 400。
     三个字典字段留空：存量项目下次编辑时前端强制补齐（同 Product 0347）。
     历史 Manager 是普通 Manager：软删行、模板项目（is_template=True）都看得见、都回填。
     条件唯一只看未软删行；name 在未软删行内本就唯一，code=name 正常不会撞，
     但 strip 后（"A" 与 "A "）或空 name 回落 identifier 时可能撞，这里对未软删行做一次兜底去重。
     """
     Project = apps.get_model("db", "Project")
+    WorkspaceMember = apps.get_model("db", "WorkspaceMember")
     # TIME_ZONE="UTC"，即 UTC 当天；整批同一天，别在循环里逐行取
     today = timezone.localdate()
+    active_members = set(
+        WorkspaceMember.objects.filter(is_active=True, deleted_at__isnull=True).values_list(
+            "workspace_id", "member_id"
+        )
+    )
     fields = ["code", "product_manager", "start_date", "end_date"]
     seen_active = set()  # (workspace_id, code)
     pending = []
     for row in Project.objects.order_by("created_at", "id").iterator():
         code = (row.name or "").strip() or (row.identifier or "")
         if row.deleted_at is None:
-            if (row.workspace_id, code) in seen_active:
-                code = f"{code}-{row.identifier}"
+            # 兜底后缀本身也可能撞（"Foo-BAR" 恰好是别人的名字），循环到唯一为止
+            base, attempt = code, 0
+            while (row.workspace_id, code) in seen_active:
+                attempt += 1
+                code = f"{base}-{row.identifier}" if attempt == 1 else f"{base}-{row.identifier}-{attempt}"
             seen_active.add((row.workspace_id, code))
         row.code = code
-        row.product_manager_id = row.project_lead_id
+        lead_id = row.project_lead_id
+        row.product_manager_id = (
+            lead_id if lead_id and (row.workspace_id, lead_id) in active_members else None
+        )
         row.start_date = today
         row.end_date = today
         pending.append(row)

@@ -120,7 +120,8 @@ class ProjectViewSet(BaseViewSet):
                 "business_unit",
                 "status",
                 "project_type",
-                "product_manager",
+                # product_manager_detail 要出头像 URL，一并把 avatar_asset 拉上，否则每行一条查询
+                "product_manager__avatar_asset",
             )
             .annotate(
                 is_favorite=Exists(
@@ -651,7 +652,7 @@ class ProjectViewSet(BaseViewSet):
 
         # select_related 四个扩展 FK：下面 ProjectSerializer(project).data 的快照要出 *_detail
         project = Project.objects.select_related(
-            "business_unit", "status", "project_type", "product_manager"
+            "business_unit", "status", "project_type", "product_manager__avatar_asset"
         ).get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(
@@ -913,7 +914,10 @@ class DeployBoardViewSet(BaseViewSet):
 
 class ProjectAPI(BaseViewSet):
     model = Project
-    queryset = Project.objects.all()
+    # ProjectListSerializer 现在带 4 个 *_detail，不 select_related 会 N+1
+    queryset = Project.objects.select_related(
+        "business_unit", "status", "project_type", "product_manager__avatar_asset"
+    )
     pagination_class = CustomPaginator
     filterset_fields = {"name": ["exact", "icontains", "in"], "id": ["exact"]}
     serializer_class = ProjectListSerializer
@@ -1324,7 +1328,9 @@ class ProjectAPI(BaseViewSet):
             member__member_workspace__is_active=True,
         ).values_list("project_id", flat=True)
 
-        query = Project.objects.filter(pk__in=project_id)
+        query = Project.objects.filter(pk__in=project_id).select_related(
+            "business_unit", "status", "project_type", "product_manager__avatar_asset"
+        )
         query = self.filter_queryset(query).order_by("-created_at")
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
