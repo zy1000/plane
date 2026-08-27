@@ -155,6 +155,8 @@ export const SubIssuesListItemProperties = observer(function SubIssuesListItemPr
             showTooltip
             customTooltipHeading="Date Range"
             renderPlaceholder={false}
+            // 详情抽屉里后续折叠块（用例 / 关联需求）会盖住行内弹出层，挂到 body 与 DateDropdown 一致
+            renderInPortal
           />
         </div>
       </WithDisplayPropertiesHOC>

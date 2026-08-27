@@ -550,7 +550,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           header: fullscreenModalHeaderStyles,
           body: fullscreenModalBodyStyles,
         }}
-        destroyOnClose
+        destroyOnHidden
         getContainer={() => document.body}
       >
         <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
@@ -606,7 +606,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           header: fullscreenModalHeaderStyles,
           body: fullscreenModalBodyStyles,
         }}
-        destroyOnClose
+        destroyOnHidden
         getContainer={() => document.body}
       >
         <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">{announcementsListBody}</div>
@@ -626,7 +626,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         footer={null}
         centered
         width={2500}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
         <div className="h-[78vh] max-h-[78vh]">
@@ -654,7 +654,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         footer={null}
         centered
         width={2500}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
         <div className="h-[78vh] max-h-[78vh]">

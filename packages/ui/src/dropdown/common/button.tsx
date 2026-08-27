@@ -27,7 +27,7 @@ export function DropdownButton(props: IMultiSelectDropdownButton | ISingleSelect
         ref={setReferenceElement}
         type="button"
         className={cn(
-          "clickable block h-full max-w-full outline-none",
+          "clickable flex h-full max-w-full items-center text-left outline-none",
           {
             "cursor-not-allowed text-secondary": disabled,
             "cursor-pointer": !disabled,

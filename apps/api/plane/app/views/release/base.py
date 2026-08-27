@@ -57,6 +57,8 @@ from plane.db.models import (
     Issue,
     IssueAssignee,
     Release,
+    ReleaseStatus,
+    RequirementRelease,
     UserFavorite,
     ReleaseIssue,
     ReleaseLink,
@@ -79,6 +81,7 @@ from plane.utils.release.overdue_strategy import (
 )
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.paginator import CustomPaginator
+from plane.utils.requirement_project import promote_on_release_completed
 from plane.utils.response import list_response
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
@@ -793,6 +796,10 @@ class ReleaseViewSet(BaseViewSet):
             new_status = updated_release.status
             if new_status and new_status != previous_status:
                 sync_overdue_on_status_change(updated_release, previous_status, new_status)
+                # 发布成功 = 需求状态只升不降的自动推进 (b)：关联需求推到 released。
+                # 其余流转（驳回/取消/改回测试中）一律不降档
+                if new_status == ReleaseStatus.COMPLETED:
+                    promote_on_release_completed(updated_release.id)
             sync_overdue_on_date_change(
                 updated_release,
                 prev_handoff=previous_test_handoff_date,
@@ -908,6 +915,23 @@ class ReleaseViewSet(BaseViewSet):
             return Response(release, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def update(self, request, *args, **kwargs):
+        """PUT 全量更新走 ModelViewSet 默认实现，不经上面的 partial_update ——
+        这是个历史缺口（overdue 同步、活动流、状态邮件都不触发，目前被
+        serializer 的负责人校验意外挡住）。这里只兜「发布成功推进需求状态不能漏」
+        这一件事，不替它补齐其余副作用。
+        """
+        instance = self.get_object()
+        previous_status = instance.status
+        response = super().update(request, *args, **kwargs)
+        instance.refresh_from_db(fields=["status"])
+        if (
+            instance.status != previous_status
+            and instance.status == ReleaseStatus.COMPLETED
+        ):
+            promote_on_release_completed(instance.id)
+        return response
+
     @allow_fine_permission(PermissionKey.RELEASES_VIEW)
     def overdues(self, request, slug, project_id, pk):
         """返回该发布的逾期记录列表（含已结束记录），最新优先。"""
@@ -953,6 +977,9 @@ class ReleaseViewSet(BaseViewSet):
             project_id=str(project_id),
             epoch=int(timezone.now().timestamp()),
         )
+        # 同步软删需求关联行（不等异步级联，需求侧的发布关联计数读的就是这张表）。
+        # 删除发布单不改需求状态（只升不降）
+        RequirementRelease.objects.filter(release_id=pk).delete()
         release.delete()
         ReleaseIssue.objects.filter(release=pk, project_id=project_id).delete()
         UserFavorite.objects.filter(

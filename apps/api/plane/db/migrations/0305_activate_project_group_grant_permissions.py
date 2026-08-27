@@ -85,7 +85,7 @@ def deactivate_project_group_grant_permissions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("db", "0293_seed_default_workspace_roles"),
+        ("db", "0304_requirementapprover"),
     ]
 
     operations = [

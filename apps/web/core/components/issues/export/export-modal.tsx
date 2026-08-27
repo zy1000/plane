@@ -116,7 +116,7 @@ export const IssueExportModal: React.FC<Props> = observer((props) => {
       okText="开始导出"
       cancelText="取消"
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
       width={640}
       maskClosable={!submitting}
     >

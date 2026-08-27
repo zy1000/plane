@@ -401,7 +401,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
           <div onClick={(e) => e.stopPropagation()}>
             <Select
               style={{ width: 200 }}
-              bordered={false}
+              variant="borderless"
               suffixIcon={null}
               placeholder="选择用例库"
               value={selectedRepositoryId}
@@ -419,7 +419,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       keyboard={false}
       maskClosable={false}
       getContainer={false}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space>
           <Button onClick={handleRequestClose}>取消</Button>

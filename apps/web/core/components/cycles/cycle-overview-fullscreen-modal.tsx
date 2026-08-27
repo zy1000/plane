@@ -77,7 +77,7 @@ export function CycleOverviewFullscreenModal({ isOpen, onClose, title, badgeText
           flexDirection: "column",
         },
       }}
-      destroyOnClose
+      destroyOnHidden
       getContainer={() => document.body}
     >
       {children}

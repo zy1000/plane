@@ -27,6 +27,9 @@ type RichTextEditorWrapperProps = MakeOptional<
   workspaceId: string;
   projectId?: string;
   issueSequenceId?: number;
+  /** Queue asset removals in the caller instead of deleting them immediately. */
+  deferAssetDeletion?: boolean;
+  onDeferredAssetDelete?: TFileHandler["delete"];
 } & (
     | {
         editable: false;
@@ -49,6 +52,8 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     workspaceSlug,
     workspaceId,
     projectId,
+    deferAssetDeletion = false,
+    onDeferredAssetDelete,
     disabledExtensions: additionalDisabledExtensions = [],
     ...rest
   } = props;
@@ -70,6 +75,19 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     projectId,
     workspaceSlug,
   });
+  const fileHandler = getEditorFileHandlers({
+    projectId,
+    uploadFile: editable ? props.uploadFile : async () => "",
+    duplicateFile: editable ? props.duplicateFile : async () => "",
+    workspaceId,
+    workspaceSlug,
+  });
+
+  if (deferAssetDeletion) {
+    fileHandler.delete = async (assetSrc: string) => {
+      await onDeferredAssetDelete?.(assetSrc);
+    };
+  }
 
   return (
     <RichTextEditorWithRef
@@ -77,13 +95,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
       disabledExtensions={[...richTextEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
       editable={editable}
       flaggedExtensions={richTextEditorExtensions.flagged}
-      fileHandler={getEditorFileHandlers({
-        projectId,
-        uploadFile: editable ? props.uploadFile : async () => "",
-        duplicateFile: editable ? props.duplicateFile : async () => "",
-        workspaceId,
-        workspaceSlug,
-      })}
+      fileHandler={fileHandler}
       getEditorMetaData={getEditorMetaData}
       mentionHandler={{
         searchCallback: async (query) => {

@@ -41,7 +41,6 @@ export interface IReleaseStore {
   setPlotType: (releaseId: string, plotType: TReleasePlotType) => void;
   // fetch
   updateReleaseDistribution: (distributionUpdates: DistributionUpdates, releaseId: string) => void;
-  fetchWorkspaceReleases: (workspaceSlug: string) => Promise<IRelease[]>;
   fetchReleases: (workspaceSlug: string, projectId: string) => Promise<undefined | IRelease[]>;
   fetchReleasesSlim: (workspaceSlug: string, projectId: string) => Promise<undefined | IRelease[]>;
   fetchArchivedReleases: (workspaceSlug: string, projectId: string) => Promise<undefined | IRelease[]>;
@@ -103,7 +102,6 @@ export class ReleaseStore implements IReleaseStore {
       projectArchivedReleaseIds: computed,
       // actions
       setPlotType: action,
-      fetchWorkspaceReleases: action,
       fetchReleases: action,
       fetchArchivedReleases: action,
       fetchArchivedReleaseDetails: action,
@@ -259,31 +257,6 @@ export class ReleaseStore implements IReleaseStore {
    */
   setPlotType = (releaseId: string, plotType: TReleasePlotType) => {
     set(this.plotType, [releaseId], plotType);
-  };
-
-  /**
-   * @description fetch all releases in workspace
-   * @param workspaceSlug
-   * @returns IRelease[]
-   */
-  fetchWorkspaceReleases = async (workspaceSlug: string) => {
-    const projectIds = this.rootStore.projectRoot.project.workspaceProjectIds ?? [];
-    if (!projectIds.length) return [];
-    const batches = await Promise.all(
-      projectIds.map((projectId) =>
-        this.releaseService.getReleases(workspaceSlug, projectId).catch(() => [] as IRelease[])
-      )
-    );
-    const response = batches.flat();
-    runInAction(() => {
-      response.forEach((release) => {
-        set(this.releaseMap, [release.id], { ...this.releaseMap[release.id], ...release });
-      });
-      projectIds.forEach((projectId) => {
-        set(this.fetchedMap, projectId, true);
-      });
-    });
-    return response;
   };
 
   /**

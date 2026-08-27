@@ -135,7 +135,7 @@ export const useIssueAttachmentPreview = ({
         width="100vw"
         style={{ top: 0, paddingBottom: 0 }}
         styles={{ body: { padding: 0 } }}
-        destroyOnClose
+        destroyOnHidden
         title={
           <Typography.Text strong style={{ marginTop: -16, marginBottom: -16 }}>
             {`预览：${imagePreview?.name ?? "图片"}`}

@@ -18,18 +18,45 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from plane.app.permissions import allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    allow_fine_permission,
+    allow_fine_permission_or_template,
+    allow_workspace_member,
+    PermissionKey,
+)
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, TestCaseActivitySerializer, PlanCaseRecordSerializer, CaseListSerializer, \
     CaseLabelListSerializer, IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
+from plane.app.views.qa.utils import expand_module_subtree_ids
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
     CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
+from plane.bgtasks.copy_case_assets_task import copy_case_assets
 from plane.bgtasks.test_case_activities_task import test_case_activity
+from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
+
+
+def sync_case_labels_by_name(source_case, new_case, target_repository_id):
+    """把源用例的标签按名称同步到目标库：已有同名标签复用，缺失则在目标库新建。
+
+    供 copy_case / 模块复制 / 从模板导入三处复制路径共用。
+    """
+    label_names = list(source_case.labels.values_list("name", flat=True))
+    if not label_names:
+        return
+    existing = CaseLabel.objects.filter(
+        repository_id=target_repository_id, name__in=label_names, deleted_at__isnull=True
+    )
+    existing_by_name = {lb.name: lb for lb in existing}
+    labels = list(existing_by_name.values())
+    for name in label_names:
+        if name not in existing_by_name:
+            labels.append(CaseLabel.objects.create(repository_id=target_repository_id, name=name))
+    new_case.labels.set(labels)
 
 
 def get_or_create_case_module(repository_id, name, parent):
@@ -51,8 +78,16 @@ class CaseAssetAPIView(BaseAPIView):
     queryset = FileAsset.objects.all()
     serializer_class = CaseAttachmentSerializer
 
+    @allow_workspace_member
     def get(self, request, slug, case_id: str):
-        case = self.queryset.filter(case_id=case_id, is_uploaded=True)
+        # 锁 workspace + entity_type，排除软删；模板用例（无 project）同样适用
+        case = self.queryset.filter(
+            case_id=case_id,
+            workspace__slug=slug,
+            entity_type=FileAsset.EntityTypeContext.CASE_ATTACHMENT,
+            is_uploaded=True,
+            is_deleted=False,
+        )
         serializer = self.serializer_class(instance=case, many=True)
         return Response(data=serializer.data)
 
@@ -249,7 +284,7 @@ class CaseAPI(BaseViewSet):
         return list_response(data=result, count=len(result))
 
     @action(detail=False, methods=['post'], url_path='export')
-    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def export(self, request, slug):
         fields = request.data.get('fields') or []
         if not isinstance(fields, list) or not fields:
@@ -294,19 +329,7 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             qs = qs.filter(repository_id=repository_id)
         if module_id:
-            expanded = {str(module_id)}
-            frontier = [str(module_id)]
-            while frontier:
-                children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id",
-                                                                                                           flat=True)
-                )
-                new_children = [str(c) for c in children if str(c) not in expanded]
-                if not new_children:
-                    break
-                expanded.update(new_children)
-                frontier = new_children
-            qs = qs.filter(module_id__in=list(expanded))
+            qs = qs.filter(module_id__in=expand_module_subtree_ids(module_id))
 
         header = [allowed[f] for f in fields]
         buffer = io.StringIO()
@@ -1259,7 +1282,7 @@ class CaseAPI(BaseViewSet):
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='import-case')
-    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1367,7 +1390,7 @@ class CaseAPI(BaseViewSet):
                         status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='validate-import-case')
-    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def validate_import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1477,6 +1500,7 @@ class CaseAPI(BaseViewSet):
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='copy-case')
+    @allow_workspace_member
     def copy_case(self, request, slug):
         cases_id = request.data.get('cases_id') or []
         module_id = request.data.get('module_id')
@@ -1504,12 +1528,17 @@ class CaseAPI(BaseViewSet):
             return Response({"error": "Invalid source case repository"}, status=status.HTTP_400_BAD_REQUEST)
 
         created = []
+        copied_pairs = []
         target_repository_id = target_module.repository_id
         for source_case in source_cases:
             base_fields = dict(
                 name=source_case.name,
                 precondition=source_case.precondition,
                 steps=source_case.steps,
+                # 文本模式三件套必须一并复制，否则 mode=TEXT 的用例复制后丢正文
+                mode=source_case.mode,
+                text_description=source_case.text_description,
+                text_result=source_case.text_result,
                 remark=source_case.remark,
                 state=getattr(source_case, "state", None),
                 type=source_case.type,
@@ -1523,23 +1552,19 @@ class CaseAPI(BaseViewSet):
 
             new_case = TestCase.objects.create(code="", **base_fields)
 
-            label_names = list(source_case.labels.values_list("name", flat=True))
-            target_labels = []
-            if label_names:
-                existing_labels = CaseLabel.objects.filter(
-                    repository_id=target_repository_id, name__in=label_names, deleted_at__isnull=True
-                )
-                existing_by_name = {label.name: label for label in existing_labels}
-                missing_names = [name for name in label_names if name not in existing_by_name]
-                for name in missing_names:
-                    target_labels.append(CaseLabel.objects.create(repository_id=target_repository_id, name=name))
-                target_labels.extend(list(existing_by_name.values()))
-
-            new_case.labels.set(target_labels)
+            sync_case_labels_by_name(source_case, new_case, target_repository_id)
             # 不复制评审与执行记录；问题关联保持原样
             new_case.issues.set(list(source_case.issues.all()))
 
             created.append(new_case)
+            copied_pairs.append((str(source_case.id), str(new_case.id)))
+
+        # 附件与富文本图片异步跟随复制；broker 不可用时降级为“复制成功但资产不跟随”
+        try:
+            for src_id, new_id in copied_pairs:
+                copy_case_assets.delay(src_id, new_id, str(request.user.id))
+        except Exception as e:
+            log_exception(e)
 
         serializer = CaseListSerializer(created, many=True)
         return list_response(data=serializer.data, count=len(created))
@@ -1567,6 +1592,7 @@ class CaseMindmapAPIView(BaseAPIView):
 
 class CaseModuleView(BaseViewSet):
 
+    @allow_workspace_member
     def copy(self, request, slug):
         case_module_id = request.data.get('module_id')
         target_module_id = request.data.get('target_module_id')
@@ -1615,20 +1641,6 @@ class CaseModuleView(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        def _sync_labels(source_case, new_case, repo_id):
-            label_names = list(source_case.labels.values_list("name", flat=True))
-            if not label_names:
-                return
-            existing = CaseLabel.objects.filter(
-                repository_id=repo_id, name__in=label_names, deleted_at__isnull=True
-            )
-            existing_by_name = {lb.name: lb for lb in existing}
-            labels = list(existing_by_name.values())
-            for name in label_names:
-                if name not in existing_by_name:
-                    labels.append(CaseLabel.objects.create(repository_id=repo_id, name=name))
-            new_case.labels.set(labels)
-
         def _copy_cases(source_mod, new_mod, repo_id):
             source_cases = (
                 TestCase.objects.filter(module=source_mod, deleted_at__isnull=True)
@@ -1651,8 +1663,9 @@ class CaseModuleView(BaseViewSet):
                     module=new_mod,
                     assignee_id=getattr(request.user, "id", None),
                 )
-                _sync_labels(sc, new_case, repo_id)
+                sync_case_labels_by_name(sc, new_case, repo_id)
                 new_case.issues.set(list(sc.issues.all()))
+                copied_pairs.append((str(sc.id), str(new_case.id)))
 
         def _copy_module_recursive(source_mod, parent_mod, repo_id):
             new_mod = CaseModule.objects.create(
@@ -1666,8 +1679,21 @@ class CaseModuleView(BaseViewSet):
                 _copy_module_recursive(child, new_mod, repo_id)
             return new_mod
 
+        def _enqueue_asset_copy(pairs, actor_id):
+            # 附件与富文本图片异步跟随复制；broker 不可用时降级为“复制成功但资产不跟随”
+            try:
+                for src_id, new_id in pairs:
+                    copy_case_assets.delay(src_id, new_id, actor_id)
+            except Exception as e:
+                log_exception(e)
+
+        copied_pairs = []
         with transaction.atomic():
             new_root = _copy_module_recursive(source_module, target_parent, str(target_repository_id))
+            # on_commit 保证 worker 读到的是已提交的新用例行
+            transaction.on_commit(
+                lambda: _enqueue_asset_copy(list(copied_pairs), str(request.user.id))
+            )
 
         return Response(
             {"id": str(new_root.id), "name": new_root.name},

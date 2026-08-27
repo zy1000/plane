@@ -1,11 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Table, TableBody, TableCell, TableRow } from "@plane/propel/table";
-import { Tag } from "antd";
+import { CalendarDays, Link2Off } from "lucide-react";
+import { Tooltip } from "@plane/propel/tooltip";
 import { renderFormattedDate } from "@plane/utils";
-import { Button } from "@plane/propel/button";
-import { Unlink } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 
 type Props = {
@@ -30,82 +28,59 @@ export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
   const [activeCaseId, setActiveCaseId] = React.useState<string | undefined>(undefined);
   const [isCaseModalOpen, setIsCaseModalOpen] = React.useState(false);
 
-  const getReviewColor = (review?: string) => {
-    switch (review) {
-      case "通过":
-        return "green";
-      case "不通过":
-        return "red";
-      case "重新提审":
-      case "建议":
-        return "gold";
-      case "评审中":
-        return "blue";
-      case "未评审":
-      default:
-        return "default";
-    }
+  const openCase = (caseId: string) => {
+    setActiveCaseId(caseId);
+    setIsCaseModalOpen(true);
   };
 
   return (
-    <div className="px-2.5 pb-2.5">
-      <div className="rounded-md">
-        <Table>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
-                </TableCell>
-              </TableRow>
-            ) : data.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <div className="h-20 grid place-items-center text-sm text-secondary">暂无相关用例</div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              data.map((item) => (
-                <TableRow
-                  key={String(item.id)}
-                  className="hover:bg-[#f7f7f7]"
+    <div className="pb-1">
+      {loading ? (
+        <div className="grid min-h-11 place-items-center text-13 text-secondary">加载中...</div>
+      ) : data.length === 0 ? (
+        <div className="grid min-h-11 place-items-center text-13 text-secondary">暂无相关用例</div>
+      ) : (
+        data.map((item) => (
+          <div
+            key={String(item.id)}
+            className="group relative flex h-full min-h-11 w-full items-center py-1 pr-2 transition-all hover:bg-surface-2"
+            style={{ paddingLeft: 6 }}
+          >
+            {/* 对齐子工作项行首的展开箭头占位，标题与 CULTER-xxx 同一竖线 */}
+            <div className="flex size-5 shrink-0" aria-hidden />
+            <div className="flex min-w-0 flex-1 items-center">
+              <Tooltip tooltipContent={item.name} position="top">
+                <button
+                  type="button"
+                  className="min-w-0 max-w-full truncate text-left text-13 text-primary"
+                  onClick={() => openCase(String(item.id))}
                 >
-                  <TableCell
-                    className="max-w-[360px] truncate cursor-pointer"
-                    title={item.name}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveCaseId(String(item.id));
-                      setIsCaseModalOpen(true);
-                    }}
-                  >
-                    {item.name ?? "-"}
-                  </TableCell>
-                  <TableCell>
-                    <Tag color={getReviewColor(item.review)} className="inline-flex justify-center w-[55px]">
-                      {item.review || "-"}
-                    </Tag>
-                  </TableCell>
-                  <TableCell>{item.created_at ? renderFormattedDate(item.created_at) : "-"}</TableCell>
-                  <TableCell className="w-10">
-                    <Button
-                      variant="neutral-primary"
-                      size="sm"
-                      className="p-1 rounded-md border-none !bg-transparent shadow-none hover:!bg-transparent"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(item.id);
-                      }}
-                    >
-                      <Unlink className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  {item.name ?? "-"}
+                </button>
+              </Tooltip>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="inline-flex h-5 items-center justify-center whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-caption-md-medium text-secondary">
+                {item.review || "-"}
+              </span>
+              <span className="inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-sm border-[0.5px] border-strong px-1.5 text-11 text-secondary">
+                <CalendarDays className="h-3 w-3 shrink-0" />
+                {item.created_at ? renderFormattedDate(item.created_at) : "-"}
+              </span>
+              <Tooltip tooltipContent="解除关联">
+                <button
+                  type="button"
+                  aria-label="解除关联"
+                  onClick={() => onDelete(item.id)}
+                  className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+                >
+                  <Link2Off className="size-3.5" />
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+        ))
+      )}
       <UpdateModal
         open={isCaseModalOpen}
         onClose={() => {

@@ -12,8 +12,7 @@ import { ReadonlyState } from "@/components/readonly/state";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { generateWorkItemLink } from "@plane/utils";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-
-type TWorkItemType = "Requirement" | "Task" | "Bug";
+import { workItemTypeName, type TWorkItemType } from "./work-item-category";
 
 type Project = {
   id: string;
@@ -51,7 +50,7 @@ type WorkItemDisplayModalProps = {
 
 export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
   caseId,
-  defaultType = "Requirement",
+  defaultType = "Task",
   className,
   reloadToken,
   onCountChange,
@@ -62,7 +61,6 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
   const [activeType, setActiveType] = React.useState<TWorkItemType>(defaultType);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [buttonLoading, setButtonLoading] = React.useState<Record<TWorkItemType, boolean>>({
-    Requirement: false,
     Task: false,
     Bug: false,
   });
@@ -75,10 +73,9 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
     setLoading(true);
     setButtonLoading((prev) => ({ ...prev, [type]: true }));
     try {
-      const type_name = type === "Requirement" ? "需求" : type === "Task" ? "任务" : "缺陷";
       const res = await caseService.issueList(String(workspaceSlug), {
         case_id: caseId,
-        type_name,
+        type_name: workItemTypeName(type),
         page_size: 1000,
       });
       const resolved: TIssue[] = Array.isArray((res as any)?.data)

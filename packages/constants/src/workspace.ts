@@ -175,6 +175,22 @@ export const WORKSPACE_SETTINGS = {
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
   },
+  "requirement-types": {
+    key: "requirement-types",
+    i18n_label: "workspace_settings.settings.requirement_types.title",
+    href: `/settings/requirement-types`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    requiresMembership: true,
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/requirement-types`),
+  },
+  "data-dictionaries": {
+    key: "data-dictionaries",
+    i18n_label: "workspace_settings.settings.data_dictionaries.title",
+    href: `/settings/data-dictionaries`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    requiresMembership: true,
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/data-dictionaries`),
+  },
   changelog: {
     key: "changelog",
     i18n_label: "更新日志管理",
@@ -411,6 +427,33 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
       return !normalizedPathname.startsWith(`${normalizedUrl}archives/`);
     },
   },
+  products: {
+    key: "products",
+    labelTranslationKey: "products",
+    href: `/products/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname: string, url: string) => {
+      const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+      const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
+      return normalizedPathname === normalizedUrl;
+    },
+  },
+  templates: {
+    key: "templates",
+    labelTranslationKey: "templates",
+    /** 点进来的落地页；改这里不影响下面的高亮范围 */
+    href: `/templates/libraries/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname: string, url: string) => {
+      const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+      const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
+      // 整个 /templates 子树都算命中，与默认落地的是哪个 tab 无关
+      const marker = "/templates/";
+      const markerIndex = normalizedUrl.indexOf(marker);
+      if (markerIndex === -1) return normalizedPathname.startsWith(normalizedUrl);
+      return normalizedPathname.startsWith(normalizedUrl.slice(0, markerIndex + marker.length));
+    },
+  },
 };
 
 export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
@@ -419,6 +462,8 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarN
 
 export const WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["projects"],
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["products"],
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["templates"],
 ];
 
 export const IS_FAVORITE_MENU_OPEN = "is_favorite_menu_open";

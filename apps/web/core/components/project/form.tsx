@@ -4,10 +4,10 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Info } from "lucide-react";
-import { NETWORK_CHOICES, PROJECT_GRADE_OPTIONS, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
+import { NETWORK_CHOICES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // plane imports
 import { Button } from "@plane/propel/button";
@@ -16,10 +16,17 @@ import { LockIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { EFileAssetType } from "@plane/types";
-import type { IProject, IWorkspace, TProjectGrade, TProjectProductType } from "@plane/types";
-import { CustomSelect, Input } from "@plane/ui";
-import { renderFormattedDate } from "@plane/utils";
+import type { IProject, IWorkspace } from "@plane/types";
+import { Input } from "@plane/ui";
+import { cn, renderFormattedDate } from "@plane/utils";
 import { CoverImage } from "@/components/common/cover-image";
+import {
+  FORM_VARIANT_STYLES,
+  FormFieldShell,
+  FormSection,
+  FormWarningBanner,
+  getFormGridClassName,
+} from "@/components/common/form-section";
 import { ImagePickerPopover } from "@/components/core/image-picker-popover";
 import { TimezoneSelect } from "@/components/global";
 // helpers
@@ -27,11 +34,24 @@ import { handleCoverImageChange } from "@/helpers/cover-image.helper";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+// plane web types
+import type { TProject } from "@/plane-web/types/projects";
 // services
 import { ProjectService } from "@/services/project";
 // local imports
-import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
-import { ProjectNetworkIcon } from "./project-network-icon";
+import {
+  ProjectClassificationSection,
+  ProjectCodeField,
+  ProjectDictionaryField,
+  ProjectNetworkField,
+  ProjectPlanSection,
+  ProjectTeamSection,
+  applyProjectServerErrors,
+  getMissingProjectRequiredFields,
+  getProjectFieldLabelKey,
+  normalizeUserId,
+  useProjectDictionaries,
+} from "./form-fields";
 import { ProjectDescriptionFormEditor } from "./project-description-form-editor";
 
 export interface IProjectDetailsForm {
@@ -42,6 +62,13 @@ export interface IProjectDetailsForm {
 }
 const projectService = new ProjectService();
 
+/** store 里 project_lead 可能是对象（详情接口）也可能是 id（列表接口 / PATCH 响应），进表单前归一 */
+const toFormValues = (project: IProject): TProject => ({
+  ...project,
+  workspace: (project.workspace as IWorkspace).id,
+  project_lead: normalizeUserId(project.project_lead),
+});
+
 export function ProjectDetailsForm(props: IProjectDetailsForm) {
   const { project, workspaceSlug, projectId, isAdmin } = props;
   const { t } = useTranslation();
@@ -51,6 +78,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
   // store hooks
   const { updateProject } = useProject();
   const { isMobile } = usePlatformOS();
+  // 一次拉全量字典给所属BU / 项目状态 / 项目类型共用；无编辑权限不请求
+  const dictionaries = useProjectDictionaries(workspaceSlug, isAdmin);
 
   // form info
   const {
@@ -62,22 +91,21 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
     reset,
     formState: { errors },
     getValues,
-  } = useForm<IProject>({
-    defaultValues: {
-      ...project,
-      workspace: (project.workspace as IWorkspace).id,
-    },
+  } = useForm<TProject>({
+    defaultValues: toFormValues(project),
   });
   // derived values
   const currentNetwork = NETWORK_CHOICES.find((n) => n.key === project?.network);
   const coverImage = watch("cover_image_url");
+  const styles = FORM_VARIANT_STYLES.settings;
+  const grid = getFormGridClassName("settings");
+  const sectionProps = { control, variant: "settings" as const, disabled: !isAdmin };
+  // 0348 之前的存量项目缺必填字段，顶部横幅提示；RHF 的 rules 会在保存时拦截
+  const missingRequiredFields = useMemo(() => getMissingProjectRequiredFields(project), [project]);
 
   useEffect(() => {
     if (project && projectId !== getValues("id")) {
-      reset({
-        ...project,
-        workspace: (project.workspace as IWorkspace).id,
-      });
+      reset(toFormValues(project));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, projectId]);
@@ -90,7 +118,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
     setValue("identifier", formattedValue);
   };
 
-  const handleUpdateChange = async (payload: Partial<IProject>) => {
+  const handleUpdateChange = async (payload: Partial<TProject>) => {
     if (!workspaceSlug || !project) return;
     return updateProject(workspaceSlug.toString(), project.id, payload)
       .then(() => {
@@ -101,52 +129,20 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
         });
       })
       .catch((err) => {
-        try {
-          // Handle the new error format where codes are nested in arrays under field names
-          const errorData = err ?? {};
-
-          const nameError = errorData.name?.includes("PROJECT_NAME_ALREADY_EXIST");
-          const identifierError = errorData?.identifier?.includes("PROJECT_IDENTIFIER_ALREADY_EXIST");
-
-          if (nameError || identifierError) {
-            if (nameError) {
-              setToast({
-                type: TOAST_TYPE.ERROR,
-                title: t("toast.error"),
-                message: t("project_name_already_taken"),
-              });
-            }
-
-            if (identifierError) {
-              setToast({
-                type: TOAST_TYPE.ERROR,
-                title: t("toast.error"),
-                message: t("project_identifier_already_taken"),
-              });
-            }
-          } else {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t("toast.error"),
-              message: t("something_went_wrong"),
-            });
-          }
-        } catch (error) {
-          // Fallback error handling if the error processing fails
-          console.error("Error processing API error:", error);
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: t("toast.error"),
-            message: t("something_went_wrong"),
-          });
-        }
+        // 字段级错误（名称 / 项目 ID / 代号重复、字典值无效…）行内展示；其余 toast
+        if (applyProjectServerErrors(err ?? {}, setError, t)) return;
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: t("something_went_wrong"),
+        });
       });
   };
 
-  const onSubmit = async (formData: IProject) => {
+  const onSubmit = async (formData: TProject) => {
     if (!workspaceSlug) return;
     setIsLoading(true);
-    const payload: Partial<IProject> = {
+    const payload: Partial<TProject> = {
       name: formData.name,
       network: formData.network,
       identifier: formData.identifier,
@@ -156,6 +152,15 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       pms_project_name: formData.pms_project_name?.trim() || null,
       grade: formData.grade ?? null,
       product_type: formData.product_type ?? null,
+      // 0348 扩展字段：必填项都挂了 rules，走到这里不会是 null；business_unit 选填允许 null
+      code: formData.code?.trim() ?? "",
+      business_unit: formData.business_unit ?? null,
+      product_manager: normalizeUserId(formData.product_manager),
+      status: formData.status ?? null,
+      project_type: formData.project_type ?? null,
+      start_date: formData.start_date ?? null,
+      end_date: formData.end_date ?? null,
+      project_lead: normalizeUserId(formData.project_lead),
     };
 
     // Handle cover image changes
@@ -268,260 +273,200 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
           </div>
         </div>
       </div>
-      <div className="mt-8 flex flex-col gap-8">
-        <div className="flex flex-col gap-1">
-          <h4 className="text-13">{t("common.project_name")}</h4>
-          <Controller
-            control={control}
-            name="name"
-            rules={{
-              required: t("name_is_required"),
-              maxLength: {
-                value: 255,
-                message: "Project name should be less than 255 characters",
-              },
-            }}
-            render={({ field: { value, onChange, ref } }) => (
-              <Input
-                id="name"
-                name="name"
-                type="text"
-                ref={ref}
-                value={value}
-                onChange={onChange}
-                hasError={Boolean(errors.name)}
-                className="rounded-md !p-3 font-medium"
-                placeholder={t("common.project_name")}
-                disabled={!isAdmin}
-              />
-            )}
-          />
-          <span className="text-11 text-danger-primary">{errors?.name?.message}</span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <h4 className="text-13">项目描述</h4>
-          <Controller
-            name="description_html"
-            control={control}
-            render={({ field: { value, onChange } }) => (
-              <ProjectDescriptionFormEditor
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                value={value}
-                onChange={onChange}
-                disabled={!isAdmin}
-                placeholder={t("project_description_placeholder")}
-              />
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <h4 className="text-13">Project ID</h4>
-            <div className="relative">
+      <div className="mt-8 space-y-8">
+        {isAdmin && missingRequiredFields.length > 0 && (
+          <FormWarningBanner>
+            {t("workspace_projects.validation.legacy_incomplete", {
+              fields: missingRequiredFields.map((key) => t(getProjectFieldLabelKey(key))).join("、"),
+            })}
+          </FormWarningBanner>
+        )}
+
+        <FormSection title={t("workspace_projects.sections.basic")} divided>
+          <div className={grid}>
+            <FormFieldShell
+              className="md:col-span-2"
+              label={t("workspace_projects.fields.name")}
+              required
+              editable={isAdmin}
+              error={errors.name?.message}
+              styles={styles}
+            >
               <Controller
                 control={control}
-                name="identifier"
+                name="name"
                 rules={{
-                  required: t("project_id_is_required"),
-                  validate: (value) => /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) || t("project_id_allowed_char"),
-                  minLength: {
-                    value: 1,
-                    message: t("project_id_min_char"),
-                  },
+                  required: t("name_is_required"),
                   maxLength: {
-                    value: 10,
-                    message: t("project_id_max_char"),
+                    value: 255,
+                    message: t("workspace_projects.validation.max_length", {
+                      field: t("workspace_projects.fields.name"),
+                      max: 255,
+                    }),
                   },
                 }}
-                render={({ field: { value, ref } }) => (
+                render={({ field: { value, onChange, ref } }) => (
                   <Input
-                    id="identifier"
-                    name="identifier"
+                    id="name"
+                    name="name"
                     type="text"
-                    value={value}
-                    onChange={handleIdentifierChange}
                     ref={ref}
-                    hasError={Boolean(errors.identifier)}
-                    placeholder={t("project_settings.general.enter_project_id")}
-                    className="w-full font-medium"
+                    value={value}
+                    onChange={onChange}
+                    hasError={Boolean(errors.name)}
+                    className={cn(styles.input, "font-medium")}
+                    placeholder={t("common.project_name")}
                     disabled={!isAdmin}
                   />
                 )}
               />
-              <Tooltip
-                isMobile={isMobile}
-                tooltipContent={t("project_id_tooltip_content")}
-                className="text-13"
-                position="right-start"
-              >
-                <Info className="absolute top-2.5 right-2 h-4 w-4 text-placeholder" />
-              </Tooltip>
-            </div>
-            <span className="text-11 text-danger-primary">
-              <>{errors?.identifier?.message}</>
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <h4 className="text-13">{t("workspace_projects.network.label")}</h4>
-            <Controller
-              name="network"
-              control={control}
-              render={({ field: { value, onChange } }) => {
-                const selectedNetwork = NETWORK_CHOICES.find((n) => n.key === value);
-                return (
-                  <CustomSelect
+            </FormFieldShell>
+            <FormFieldShell
+              label={t("workspace_projects.fields.identifier")}
+              required
+              editable={isAdmin}
+              error={errors.identifier?.message}
+              styles={styles}
+            >
+              <div className="relative">
+                <Controller
+                  control={control}
+                  name="identifier"
+                  rules={{
+                    required: t("project_id_is_required"),
+                    validate: (value) =>
+                      /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) || t("project_id_allowed_char"),
+                    minLength: {
+                      value: 1,
+                      message: t("project_id_min_char"),
+                    },
+                    maxLength: {
+                      value: 10,
+                      message: t("project_id_max_char"),
+                    },
+                  }}
+                  render={({ field: { value, ref } }) => (
+                    <Input
+                      id="identifier"
+                      name="identifier"
+                      type="text"
+                      value={value}
+                      onChange={handleIdentifierChange}
+                      ref={ref}
+                      hasError={Boolean(errors.identifier)}
+                      placeholder={t("project_settings.general.enter_project_id")}
+                      className={cn(styles.input, "pr-8 font-medium")}
+                      disabled={!isAdmin}
+                    />
+                  )}
+                />
+                <Tooltip
+                  isMobile={isMobile}
+                  tooltipContent={t("project_id_tooltip_content")}
+                  className="text-13"
+                  position="right-start"
+                >
+                  <Info className="absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-placeholder" />
+                </Tooltip>
+              </div>
+            </FormFieldShell>
+            <ProjectCodeField {...sectionProps} />
+            <ProjectNetworkField {...sectionProps} />
+            <ProjectDictionaryField
+              {...sectionProps}
+              name="business_unit"
+              required={false}
+              dictionaries={dictionaries}
+              fallbackLabel={project.business_unit_detail?.label}
+            />
+            <FormFieldShell
+              className="md:col-span-2"
+              label={t("workspace_projects.fields.description")}
+              required={false}
+              editable={isAdmin}
+              styles={styles}
+            >
+              <Controller
+                name="description_html"
+                control={control}
+                render={({ field: { value, onChange } }) => (
+                  <ProjectDescriptionFormEditor
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
                     value={value}
                     onChange={onChange}
-                    label={
-                      <div className="flex items-center gap-1">
-                        {selectedNetwork ? (
-                          <>
-                            <ProjectNetworkIcon iconKey={selectedNetwork.iconKey} className="h-3.5 w-3.5" />
-                            {t(selectedNetwork.i18n_label)}
-                          </>
-                        ) : (
-                          <span className="text-placeholder">{t("select_network")}</span>
-                        )}
-                      </div>
-                    }
-                    buttonClassName="!border-subtle !shadow-none font-medium rounded-md"
-                    input
                     disabled={!isAdmin}
-                    // optionsClassName="w-full"
-                  >
-                    {NETWORK_CHOICES.map((network) => (
-                      <CustomSelect.Option key={network.key} value={network.key}>
-                        <div className="flex items-start gap-2">
-                          <ProjectNetworkIcon iconKey={network.iconKey} className="h-3.5 w-3.5" />
-                          <div className="-mt-1">
-                            <p>{t(network.i18n_label)}</p>
-                            <p className="text-11 text-placeholder">{t(network.description)}</p>
-                          </div>
-                        </div>
-                      </CustomSelect.Option>
-                    ))}
-                  </CustomSelect>
-                );
-              }}
-            />
-          </div>
-          <div className="flex flex-col gap-1 self-start">
-            <h4 className="text-13">产品类型</h4>
-            <Controller
-              name="product_type"
-              control={control}
-              render={({ field: { value, onChange } }) => (
-                <CustomSelect
-                  value={value ?? ""}
-                  onChange={(val: string) => {
-                    onChange(val === "" ? null : (val as TProjectProductType));
-                  }}
-                  label={
-                    value ? (
-                      <span>{value}</span>
-                    ) : (
-                      <span className="text-placeholder">请选择产品类型</span>
-                    )
-                  }
-                  buttonClassName="!border-subtle !shadow-none font-medium rounded-md"
-                  input
-                  disabled={!isAdmin}
-                >
-                  <CustomSelect.Option value="">未设置</CustomSelect.Option>
-                  {PROJECT_PRODUCT_TYPE_OPTIONS.map((option) => (
-                    <CustomSelect.Option key={option} value={option}>
-                      {option}
-                    </CustomSelect.Option>
-                  ))}
-                </CustomSelect>
-              )}
-            />
-          </div>
-          <div className="col-span-1 flex flex-col gap-1">
-            <h4 className="text-13">{t("common.project_timezone")}</h4>
-            <Controller
-              name="timezone"
-              control={control}
-              rules={{ required: t("project_settings.general.please_select_a_timezone") }}
-              render={({ field: { value, onChange } }) => (
-                <>
+                    placeholder={t("project_description_placeholder")}
+                  />
+                )}
+              />
+            </FormFieldShell>
+            <FormFieldShell
+              label={t("workspace_projects.fields.pms_project_name")}
+              required={false}
+              editable={isAdmin}
+              error={errors.pms_project_name?.message}
+              styles={styles}
+            >
+              <Controller
+                control={control}
+                name="pms_project_name"
+                rules={{
+                  maxLength: {
+                    value: 255,
+                    message: t("workspace_projects.validation.max_length", {
+                      field: t("workspace_projects.fields.pms_project_name"),
+                      max: 255,
+                    }),
+                  },
+                }}
+                render={({ field: { value, onChange, ref } }) => (
+                  <Input
+                    id="pms_project_name"
+                    name="pms_project_name"
+                    type="text"
+                    ref={ref}
+                    value={value ?? ""}
+                    onChange={onChange}
+                    hasError={Boolean(errors.pms_project_name)}
+                    className={styles.input}
+                    placeholder={t("workspace_projects.fields.pms_project_name")}
+                    disabled={!isAdmin}
+                  />
+                )}
+              />
+            </FormFieldShell>
+            <FormFieldShell
+              label={t("workspace_projects.fields.timezone")}
+              required
+              editable={isAdmin}
+              error={errors.timezone?.message}
+              styles={styles}
+            >
+              <Controller
+                name="timezone"
+                control={control}
+                rules={{ required: t("project_settings.general.please_select_a_timezone") }}
+                render={({ field: { value, onChange } }) => (
                   <TimezoneSelect
                     value={value}
                     onChange={(value: string) => {
                       onChange(value);
                     }}
                     error={Boolean(errors.timezone)}
+                    buttonClassName={styles.select}
                     disabled={!isAdmin}
                   />
-                </>
-              )}
-            />
-            {errors.timezone && <span className="text-11 text-danger-primary">{errors.timezone.message}</span>}
+                )}
+              />
+            </FormFieldShell>
           </div>
-          <div className="col-span-1 flex flex-col gap-1">
-            <h4 className="text-13">PMS项目名称</h4>
-            <Controller
-              control={control}
-              name="pms_project_name"
-              rules={{
-                maxLength: {
-                  value: 255,
-                  message: "PMS项目名称不能超过 255 个字符",
-                },
-              }}
-              render={({ field: { value, onChange, ref } }) => (
-                <Input
-                  id="pms_project_name"
-                  name="pms_project_name"
-                  type="text"
-                  ref={ref}
-                  value={value ?? ""}
-                  onChange={onChange}
-                  hasError={Boolean(errors.pms_project_name)}
-                  className="font-medium"
-                  placeholder="PMS项目名称"
-                  disabled={!isAdmin}
-                />
-              )}
-            />
-            {errors.pms_project_name && (
-              <span className="text-11 text-danger-primary">{errors.pms_project_name.message}</span>
-            )}
-          </div>
-          <div className="col-span-1 flex flex-col gap-1">
-            <h4 className="text-13">项目等级</h4>
-            <Controller
-              name="grade"
-              control={control}
-              render={({ field: { value, onChange } }) => (
-                <CustomSelect
-                  value={value ?? ""}
-                  onChange={(val: string) => {
-                    onChange(val === "" ? null : (val as TProjectGrade));
-                  }}
-                  label={
-                    value ? (
-                      <ProjectGradeBadge grade={value} />
-                    ) : (
-                      <span className="text-placeholder">{t("select_project_grade")}</span>
-                    )
-                  }
-                  buttonClassName="!border-subtle !shadow-none font-medium rounded-md"
-                  input
-                  disabled={!isAdmin}
-                >
-                  <CustomSelect.Option value="">未设置</CustomSelect.Option>
-                  {PROJECT_GRADE_OPTIONS.map((option) => (
-                    <CustomSelect.Option key={option} value={option}>
-                      <ProjectGradeBadge grade={option} />
-                    </CustomSelect.Option>
-                  ))}
-                </CustomSelect>
-              )}
-            />
-          </div>
-        </div>
+        </FormSection>
+
+        <ProjectClassificationSection {...sectionProps} dictionaries={dictionaries} project={project} />
+        <ProjectTeamSection {...sectionProps} projectId={projectId} />
+        <ProjectPlanSection {...sectionProps} />
+
         <div className="flex items-center justify-between py-2">
           <>
             <Button variant="primary" size="lg" type="submit" loading={isLoading} disabled={!isAdmin}>

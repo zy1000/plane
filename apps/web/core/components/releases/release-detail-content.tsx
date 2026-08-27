@@ -1,8 +1,8 @@
 "use client";
-import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { Modal } from "antd";
 import { Button } from "@plane/propel/button";
 import {
@@ -43,6 +43,7 @@ import {
   getReleaseDetailTabStorageKey,
   RELEASE_DETAIL_TABS,
   formatReleaseOverviewDateRange,
+  getReleaseRequirementsKey,
 } from "@/components/releases/release-overview";
 import type { ReleaseDetailTabKey, ReleaseTabItem } from "@/components/releases/release-overview";
 import type { TReleaseUpdatePayload } from "@/components/releases/release-status-dropdown";
@@ -196,6 +197,16 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   const { data: releaseOverdueByAssignee, mutate: mutateReleaseOverdueByAssignee } = useSWR(releaseOverdueSwrKey, () =>
     releaseService.getReleaseOverdueByAssignee(workspaceSlug!.toString(), projectId!.toString(), releaseId)
   );
+
+  /**
+   * 关联需求列表已迁到「发布内容」页的需求子页，这里不再展示、也不再订阅。
+   * 但发布成功会让服务端把关联需求的交付状态推到 released，所以仍要按 key 让那份
+   * 缓存失效 —— 用全局 mutate 而不是再挂一个 hook，省掉概览页一次没人看的请求。
+   */
+  const refreshReleaseRequirements = useCallback(() => {
+    if (!workspaceSlugValue || !projectIdValue || !releaseId) return;
+    void mutate(getReleaseRequirementsKey(workspaceSlugValue, projectIdValue, releaseId));
+  }, [projectIdValue, releaseId, workspaceSlugValue]);
 
   const resolveReleaseFileApiErrorMessage = (error: unknown, fallbackMessage: string): string => {
     if (typeof error === "string" && error.trim()) return error;
@@ -547,6 +558,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
           title: "Success!",
           message: "Release updated successfully.",
         });
+        // 发布/驳回等状态变更会让服务端重算需求阶段，成功后刷新关联需求列表
+        void refreshReleaseRequirements();
       })
       .catch((err) => {
         if (isProjectPermissionError(err)) {
@@ -622,7 +635,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   const releaseTabs: ReleaseTabItem[] = useMemo(
     () => [
       ...RELEASE_DETAIL_TABS.map((tab) =>
-        tab.key === "materials" ? { ...tab, badge: cycles.length + plans.length + releaseFilesTotal } : tab
+        tab.key === "materials"
+          ? { ...tab, badge: cycles.length + plans.length + releaseFilesTotal }
+          : tab
       ),
     ],
     [cycles.length, plans.length, releaseFilesTotal]
@@ -975,7 +990,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
           loading: associatingPlans,
         }}
         width={720}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="mt-2">
           {selectablePlansLoading ? (

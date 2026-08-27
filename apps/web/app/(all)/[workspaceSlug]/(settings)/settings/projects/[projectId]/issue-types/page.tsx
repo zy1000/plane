@@ -5,21 +5,18 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FC, FormEvent, ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
 import { usePopper } from "react-popper";
-import * as LucideIcons from "lucide-react";
 import {
   AlignLeft,
   CalendarDays,
   Check,
   ChevronDown,
-  CircleDot,
   GripVertical,
   Hash,
   Layers,
-  Layers3,
   ListChecks,
   MoreHorizontal,
   Pencil,
@@ -27,14 +24,12 @@ import {
   Search,
   ToggleLeft,
   Trash2,
-  Type,
   Users,
 } from "lucide-react";
 // plane imports
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
-import { LUCIDE_ICONS_LIST } from "@plane/propel/emoji-icon-picker";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import {
   AlertModalCore,
@@ -48,6 +43,14 @@ import {
 } from "@plane/ui";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import {
+  getRandomTypeIconOption,
+  getTypeIconOption,
+  TypeIcon,
+  TypeIconPicker,
+  toTypeIconProps,
+} from "@/components/common/type-icon-picker";
+import type { TTypeIconOption } from "@/components/common/type-icon-picker";
 import { PageHead } from "@/components/core/page-title";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
@@ -76,8 +79,6 @@ type TFieldTypeOption = {
   rowLabel: string;
   icon: typeof AlignLeft;
 };
-type TLucideIcon = FC<{ className?: string; strokeWidth?: string | number }>;
-
 const DEFAULT_FIELD_TYPE_OPTION: TFieldTypeOption = { value: "text", label: "文本", rowLabel: "文本", icon: AlignLeft };
 const SELECT_FIELD_TYPE_OPTION: TFieldTypeOption = {
   value: "select",
@@ -93,25 +94,6 @@ const FIELD_TYPE_OPTIONS: TFieldTypeOption[] = [
   { value: "date", label: "日期", rowLabel: "日期", icon: CalendarDays },
   { value: "user", label: "成员选择器", rowLabel: "成员", icon: Users },
 ];
-
-const TYPE_ICON_BACKGROUND = "#FFFFFF";
-const DEFAULT_TYPE_ICON_OPTION = { name: "Layers3", icon: Layers3, color: "#2563EB", background: TYPE_ICON_BACKGROUND };
-const TYPE_ICON_COLOR_OPTIONS = [
-  "#0284C7",
-  "#E11D48",
-  "#EF4444",
-  "#F97316",
-  "#0F766E",
-  "#3B82F6",
-  "#4F46E5",
-  "#6D28D9",
-  "#6B7280",
-];
-const TYPE_ICON_ALIASES: Record<string, TLucideIcon> = {
-  layers: Layers3,
-  target: CircleDot,
-  type: Type,
-};
 
 const isSelectFieldType = (fieldType: TTypeExtraField["field_type"]) => fieldType === "select";
 
@@ -145,45 +127,6 @@ const getFieldRowLabel = (field: TTypeExtraField): string => {
   if (field.field_type === "text") return getTextMode(field.options) === "paragraph" ? "段落" : "单行";
   if (field.field_type === "select" && getSelectionMode(field.options) === "multiple") return "多选";
   return getFieldTypeOption(field.field_type).rowLabel;
-};
-
-const getLucideIcon = (iconName?: string) =>
-  iconName
-    ? (TYPE_ICON_ALIASES[iconName] ??
-      (LucideIcons as unknown as Record<string, TLucideIcon | undefined>)[iconName] ??
-      DEFAULT_TYPE_ICON_OPTION.icon)
-    : DEFAULT_TYPE_ICON_OPTION.icon;
-
-const isUtilityClass = (value?: string) =>
-  !!value && !value.startsWith("#") && !value.startsWith("rgb") && !value.startsWith("hsl");
-
-const getTypeIconOption = (issueType?: Partial<TIssueType>) => {
-  const iconProps = issueType?.logo_props?.icon;
-  return {
-    name: iconProps?.name ?? DEFAULT_TYPE_ICON_OPTION.name,
-    icon: getLucideIcon(iconProps?.name),
-    color: iconProps?.color ?? DEFAULT_TYPE_ICON_OPTION.color,
-    background: TYPE_ICON_BACKGROUND,
-  };
-};
-
-type TTypeIconOption = ReturnType<typeof getTypeIconOption>;
-
-/** 创建工作项类型时，从 lucide 图标库 + 预设色板中随机挑选一套作为默认展示 */
-const getRandomTypeIconOption = (): TTypeIconOption => {
-  const iconCandidate = LUCIDE_ICONS_LIST[Math.floor(Math.random() * LUCIDE_ICONS_LIST.length)];
-  const color =
-    TYPE_ICON_COLOR_OPTIONS[Math.floor(Math.random() * TYPE_ICON_COLOR_OPTIONS.length)] ??
-    DEFAULT_TYPE_ICON_OPTION.color;
-  if (!iconCandidate) {
-    return { ...DEFAULT_TYPE_ICON_OPTION, color };
-  }
-  return {
-    name: iconCandidate.name,
-    icon: iconCandidate.element as TLucideIcon,
-    color,
-    background: TYPE_ICON_BACKGROUND,
-  };
 };
 
 const getApiErrorMessage = (error: unknown, fallback: string) => {
@@ -296,122 +239,9 @@ function MoreMenu({ items, title = "更多操作" }: { items: TMoreMenuItem[]; t
   );
 }
 
-const WorkItemTypeIcon = ({ issueType, className = "" }: { issueType?: Partial<TIssueType>; className?: string }) => {
-  const iconOption = getTypeIconOption(issueType);
-  const Icon = iconOption.icon;
-  const colorClassName = isUtilityClass(iconOption.color) ? iconOption.color : "";
-  const iconStyle = colorClassName ? undefined : { color: iconOption.color };
-
-  return (
-    <span
-      className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${colorClassName} ${className}`}
-      style={iconStyle}
-    >
-      <Icon className="size-4" />
-    </span>
-  );
-};
-
-function WorkItemTypeIconPicker({
-  value,
-  isOpen,
-  onChange,
-  onToggle,
-}: {
-  value: TTypeIconOption;
-  isOpen: boolean;
-  onChange: (value: TTypeIconOption) => void;
-  onToggle: (isOpen: boolean) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const Icon = value.icon;
-  const selectedColor = value.color;
-  const filteredIcons = useMemo(
-    () => LUCIDE_ICONS_LIST.filter((icon) => icon.name.toLowerCase().includes(query.trim().toLowerCase())),
-    [query]
-  );
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  useOutsideClickDetector(containerRef, () => onToggle(false), true);
-
-  const handleColorChange = (color: string) => onChange({ ...value, color, background: TYPE_ICON_BACKGROUND });
-
-  const handleIconChange = (iconName: string, icon: TLucideIcon) => {
-    onChange({ ...value, name: iconName, icon });
-    onToggle(false);
-    setQuery("");
-  };
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        className="flex size-9 shrink-0 items-center justify-center rounded-md text-primary transition hover:bg-layer-1-hover"
-        onClick={() => onToggle(!isOpen)}
-        aria-label="选择图标"
-      >
-        <Icon className="size-5" style={{ color: selectedColor }} strokeWidth={2} />
-      </button>
-      {isOpen && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-80 rounded-lg border border-subtle bg-surface-1 p-3 shadow-raised-200">
-          <div className="mb-3 flex h-9 items-center gap-2 rounded-lg bg-surface-2 px-3">
-            <Search className="size-4 text-tertiary" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search"
-              className="h-full w-full bg-transparent text-sm text-primary outline-none placeholder:text-tertiary"
-            />
-          </div>
-          <p className="mb-2 text-xs text-secondary">Choose icon color</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {TYPE_ICON_COLOR_OPTIONS.map((color) => {
-              const isSelected = color === selectedColor;
-              return (
-                <button
-                  key={color}
-                  type="button"
-                  className="flex size-5 items-center justify-center rounded-full"
-                  style={{ backgroundColor: color }}
-                  onClick={() => handleColorChange(color)}
-                  aria-label="选择图标颜色"
-                >
-                  {isSelected && <Check className="size-3 text-white" />}
-                </button>
-              );
-            })}
-            <label className="relative flex size-5 cursor-pointer items-center justify-center rounded-full border border-subtle conical-gradient">
-              <input
-                type="color"
-                value={selectedColor}
-                onChange={(e) => handleColorChange(e.target.value)}
-                className="absolute inset-0 size-full cursor-pointer opacity-0"
-                aria-label="自定义图标颜色"
-              />
-            </label>
-          </div>
-          <p className="mb-2 text-xs text-secondary">Pick icon</p>
-          <div className="grid max-h-44 grid-cols-8 gap-1 overflow-y-auto pr-1">
-            {filteredIcons.map((icon) => {
-              const IconOption = icon.element as TLucideIcon;
-              return (
-                <button
-                  key={icon.name}
-                  type="button"
-                  className="flex size-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary"
-                  onClick={() => handleIconChange(icon.name, IconOption)}
-                  title={icon.name}
-                >
-                  <IconOption className="size-4" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+const WorkItemTypeIcon = ({ issueType, className = "" }: { issueType?: Partial<TIssueType>; className?: string }) => (
+  <TypeIcon iconProps={issueType?.logo_props?.icon} className={className} />
+);
 
 type TDeleteTarget = { kind: "issueType"; issueType: TIssueType } | { kind: "field"; field: TTypeExtraField };
 
@@ -1127,7 +957,7 @@ function WorkItemTypeModal({
     if (editingIssueType) {
       setName(editingIssueType.name ?? "");
       setDescription(editingIssueType.description ?? "");
-      setIconOption(getTypeIconOption(editingIssueType));
+      setIconOption(getTypeIconOption(editingIssueType?.logo_props?.icon));
       setCategoryId(editingIssueType.category_id ?? null);
     } else {
       setName("");
@@ -1154,13 +984,7 @@ function WorkItemTypeModal({
     await onSubmit({
       name: name.trim(),
       description: description.trim(),
-      logo_props: {
-        icon: {
-          name: iconOption.name,
-          color: iconOption.color,
-          background_color: iconOption.background,
-        },
-      },
+      logo_props: { icon: toTypeIconProps(iconOption) },
       category_id: categoryId,
     });
   };
@@ -1178,7 +1002,7 @@ function WorkItemTypeModal({
           {editingIssueType ? t("project_settings.issue_types.edit_title") : "创建工作项类型"}
         </h3>
         <div className="relative mt-4 flex items-end gap-2">
-          <WorkItemTypeIconPicker
+          <TypeIconPicker
             value={iconOption}
             isOpen={isIconPickerOpen}
             onChange={setIconOption}

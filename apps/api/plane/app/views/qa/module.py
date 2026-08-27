@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
 
+from plane.app.permissions import allow_workspace_member
 from plane.app.serializers.qa import CaseModuleCreateUpdateSerializer, CaseModuleListSerializer
 from plane.app.views import BaseAPIView
 from plane.db.models import CaseModule, TestCase
@@ -19,8 +20,13 @@ class CaseModuleCountAPIView(BaseAPIView):
         'repository_id': ['exact'],
     }
 
+    def get_queryset(self):
+        # 锁定在 URL slug 对应的工作区内
+        return CaseModule.objects.filter(repository__workspace__slug=self.workspace_slug)
+
+    @allow_workspace_member
     def get(self, request, slug):
-        modules = self.filter_queryset(self.queryset).annotate(
+        modules = self.filter_queryset(self.get_queryset()).annotate(
             case_count=Count('cases', filter=Q(cases__deleted_at__isnull=True))).values('id', 'parent_id', 'case_count')
 
         # 每个模块的直属用例数，以及父子关系，用于把子模块的用例数累加到父模块上，
@@ -45,7 +51,12 @@ class CaseModuleCountAPIView(BaseAPIView):
             memo[mid] = total
             return total
 
-        result = dict(total=TestCase.objects.filter(repository_id=request.query_params['repository_id']).count())
+        result = dict(
+            total=TestCase.objects.filter(
+                repository_id=request.query_params['repository_id'],
+                repository__workspace__slug=slug,
+            ).count()
+        )
         for mid in direct_counts:
             result[mid] = subtree_count(mid)
 
@@ -57,6 +68,7 @@ class CaseModuleDetailAPIView(BaseAPIView):
     queryset = CaseModule.objects.all()
     serializer_class = CaseModuleCreateUpdateSerializer
 
+    @allow_workspace_member
     def patch(self, request, slug, module_id):
         module = get_object_or_404(
             self.queryset,

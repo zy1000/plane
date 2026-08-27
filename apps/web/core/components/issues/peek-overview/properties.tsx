@@ -213,6 +213,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
                 disabled={disabled}
               />
             </StructureFieldValue>
+
           </div>
         </PropertyGroupSection>
 

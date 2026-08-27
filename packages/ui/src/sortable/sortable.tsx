@@ -75,6 +75,7 @@ export function Sortable<T>({ data, render, onChange, keyExtractor, containerCla
           destination.data as TEnhancedData<T> & { closestEdge: string },
           keyExtractor
         );
+        if (!movedItem) return;
         onChange(newData, movedItem);
       },
     });

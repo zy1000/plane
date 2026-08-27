@@ -11,7 +11,7 @@ import type { FilterDropdownProps } from "antd/es/table/interface";
 import { formatDateTime, getEnums, globalEnums } from "./util";
 
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import RepositoryModal from "./repository-modal";
+import RepositoryModal from "@/components/qa/repository-modal";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { useTestHub } from "./testhub-context";
 import styles from "./reviews/reviews.module.css";

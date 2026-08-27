@@ -85,10 +85,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
     return mergedItems;
   }, [personalPreferences]);
 
-  const projectsSidebarItem = useMemo(
-    () => WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS.find((item) => item.key === "projects"),
-    []
-  );
+  const pinnedSidebarItems = useMemo(() => WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS, []);
 
   return (
     <div className="flex h-full flex-col">
@@ -117,11 +114,11 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             </Link>
           </div>
         )}
-        {projectsSidebarItem && (
-          <div className="flex flex-col gap-0.5">
-            <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
-          </div>
-        )}
+        <div className="flex flex-col gap-0.5">
+          {pinnedSidebarItems.map((item) => (
+            <SidebarItem key={`pinned_${item.key}`} item={item} />
+          ))}
+        </div>
         <div className="flex flex-col gap-0.5">
           <Link href={`/${workspaceSlug}/timesheets/overview/`}>
             <SidebarNavItem isActive={!!pathname?.includes(`/${workspaceSlug}/timesheets`)}>

@@ -99,7 +99,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [effectiveSelectedRoleId, loadRolePermissions]);
 
-  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 模板` : undefined;
+  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 角色` : undefined;
   const selectedRole = effectiveSelectedRoleId
     ? (roles.find((r) => r.id === effectiveSelectedRoleId) ?? null)
     : null;

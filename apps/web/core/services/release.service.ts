@@ -8,6 +8,7 @@ import type {
   ReleaseLink,
   TIssuesResponse,
   TFileSignedURLResponse,
+  TProductReleasesResponse,
 } from "@plane/types";
 import type { TCycleOverdueByAssigneeResponse } from "@/services/cycle.service";
 import { APIService } from "@/services/api.service";
@@ -20,6 +21,15 @@ export class ReleaseService extends APIService {
 
   async getReleases(workspaceSlug: string, projectId: string): Promise<IRelease[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 产品侧：关联项目下的发布单聚合列表（只读） */
+  async getProductReleases(workspaceSlug: string, productId: string): Promise<TProductReleasesResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/releases/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

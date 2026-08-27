@@ -266,7 +266,16 @@ class TestCaseRepositorySerializer(ModelSerializer):
 
     class Meta:
         model = TestCaseRepository
-        fields = ["name", "description", "project", "workspace"]
+        fields = ["name", "description", "project", "workspace", "is_template"]
+        # workspace 由 view 按 URL slug 注入，不信任客户端传值
+        extra_kwargs = {"workspace": {"required": False}}
+
+    def validate(self, attrs):
+        is_template = attrs.get("is_template", getattr(self.instance, "is_template", False))
+        project = attrs.get("project", getattr(self.instance, "project", None))
+        if is_template and project is not None:
+            raise serializers.ValidationError({"project": "模板库不能关联项目"})
+        return attrs
 
 
 class TestCaseRepositoryDetailSerializer(ModelSerializer):

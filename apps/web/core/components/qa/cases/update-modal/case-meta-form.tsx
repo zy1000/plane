@@ -1,6 +1,8 @@
 "use client";
 import React, { useState } from "react";
 import { Select } from "antd";
+import { FileText, Flag, Tag } from "lucide-react";
+import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import * as LucideIcons from "lucide-react";
 
@@ -9,9 +11,6 @@ type Option = { value: string; label: React.ReactNode; title?: string; disabled?
 type CaseMetaFormProps = {
   disabled?: boolean;
   projectId?: string;
-  code?: string;
-  onCodeChange?: (v: string) => void;
-  onCodeBlur?: () => void;
   assignee?: string;
   onAssigneeChange: (v: any) => void;
   onAssigneeBlur: () => void;
@@ -37,21 +36,31 @@ type CaseMetaFormProps = {
   onDeleteLabel?: (id: string) => void;
 };
 
+const fieldShell = (index: number) =>
+  cn("flex min-h-7 min-w-0 flex-1 items-center gap-1.5", index > 0 ? "border-l border-subtle pl-2.5" : "pl-2", "pr-2.5");
+
+// 根节点 !h-7：antd 单选根节点默认 32px 高，若只压缩内部选择器，文字会比同行图标偏高 2px
+const selectClassName =
+  "!h-7 w-full min-w-0 text-body-xs-medium [&_.ant-select-selector]:!h-7 [&_.ant-select-selector]:!px-0 [&_.ant-select-selection-item]:!text-body-xs-medium [&_.ant-select-selection-item]:!leading-5 [&_.ant-select-selection-item]:!text-secondary [&_.ant-select-selection-placeholder]:!text-placeholder";
+
+// showSearch 会让 antd 选择器和内部搜索框变成文本光标，这里是选项选择，可用时应显示小手
+const selectPointerClassName =
+  "[&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-search-input]:!cursor-pointer";
+
+const priorityDotClass = (label: string) => {
+  if (label.includes("高")) return "bg-danger-primary";
+  if (label.includes("中")) return "bg-warning-primary";
+  if (label.includes("低")) return "bg-accent-primary";
+  return "bg-[--border-subtle]";
+};
+
 export function CaseMetaForm(props: CaseMetaFormProps) {
   const {
     disabled = false,
     projectId,
-    code,
-    onCodeChange,
-    onCodeBlur,
     assignee,
     onAssigneeChange,
     onAssigneeBlur,
-    assigneeOptions,
-    stateValue,
-    onStateChange,
-    onStateBlur,
-    caseStateOptions,
     typeValue,
     onTypeChange,
     onTypeBlur,
@@ -84,137 +93,126 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
     }
   };
 
+  const selectedPriorityLabel = String(
+    casePriorityOptions.find((option) => String(option.value) === String(priorityValue))?.title ??
+      casePriorityOptions.find((option) => String(option.value) === String(priorityValue))?.label ??
+      ""
+  );
+
   return (
-    <div className="mb-5">
-      <div className="ml-[10px] grid grid-cols-5 gap-2">
-        <div>
-          <label className="mb-1 ml-[10px] block text-sm font-medium text-secondary">维护人</label>
-          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
-            <MemberDropdown
-              multiple={false}
-              projectId={projectId ? String(projectId) : undefined}
-              value={assignee ?? null}
-              onChange={(val) => {
-                if (disabled) return;
-                onAssigneeChange(val);
-                setTimeout(() => onAssigneeBlur(), 0);
-              }}
-              disabled={disabled}
-              placeholder="请选择维护人"
-              className="w-full text-sm"
-              buttonContainerClassName="w-full text-left"
-              buttonVariant="transparent-with-text"
-              buttonClassName="text-sm"
-              dropdownArrowClassName="h-3.5 w-3.5"
-              showUserDetails={true}
-              optionsClassName="z-[1200]"
-            />
-          </div>
-        </div>
+    <div className={cn("mb-2 flex w-full min-w-0 flex-nowrap items-stretch text-body-xs-medium", disabled && "opacity-60")}>
+      <div className={fieldShell(0)}>
+        <MemberDropdown
+          multiple={false}
+          projectId={projectId ? String(projectId) : undefined}
+          value={assignee ?? null}
+          onChange={(val) => {
+            if (disabled) return;
+            onAssigneeChange(val);
+            setTimeout(() => onAssigneeBlur(), 0);
+          }}
+          disabled={disabled}
+          placeholder="维护人"
+          className="group w-full min-w-0"
+          buttonContainerClassName="h-7 w-full min-w-0 text-left"
+          buttonVariant="transparent-with-text"
+          buttonClassName="h-7 min-w-0 justify-start px-0 text-body-xs-medium leading-5 text-secondary"
+          dropdownArrowClassName="h-3.5 w-3.5"
+          showUserDetails={true}
+          optionsClassName="z-[1200]"
+        />
+      </div>
 
-        <div>
-          <label className="mb-1 ml-[6px] block text-sm font-medium text-secondary">用例编号</label>
-          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
-            <input
-              value={code ?? ""}
-              onChange={(e) => onCodeChange?.(e.target.value)}
-              onBlur={onCodeBlur}
-              disabled={disabled}
-              placeholder="例如：ABC-123"
-              className="w-full bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed disabled:text-secondary"
-            />
-          </div>
-        </div>
+      <div className={fieldShell(1)}>
+        <FileText className="size-3.5 shrink-0 text-secondary" />
+        <Select
+          placeholder="类型"
+          options={caseTypeOptions}
+          value={typeValue}
+          onChange={onTypeChange}
+          onBlur={onTypeBlur}
+          disabled={disabled}
+          showSearch
+          suffixIcon={null}
+          variant="borderless"
+          className={cn(selectClassName, !disabled && selectPointerClassName)}
+          popupMatchSelectWidth={false}
+          dropdownStyle={{ zIndex: 1200 }}
+          filterOption={(input, option) =>
+            String(option?.label ?? "")
+              .toLowerCase()
+              .includes(input.toLowerCase())
+          }
+        />
+      </div>
 
-        <div>
-          <label className="mb-1 ml-[6px] block text-sm font-medium text-secondary">用例类型</label>
-          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
-            <Select
-              placeholder="请选择用例类型"
-              options={caseTypeOptions}
-              value={typeValue}
-              onChange={onTypeChange}
-              onBlur={onTypeBlur}
-              disabled={disabled}
-              showSearch
-              suffixIcon={null}
-              variant="borderless"
-              className="w-full text-sm"
-              dropdownStyle={{ zIndex: 1200 }}
-              filterOption={(input, option) =>
-                String(option?.label ?? "")
-                  .toLowerCase()
-                  .includes(input.toLowerCase())
-              }
-            />
-          </div>
-        </div>
-        <div>
-          <label className="mb-1 ml-[10px] block text-sm font-medium text-secondary">优先级</label>
-          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
-            <Select
-              placeholder="请选择优先级"
-              options={casePriorityOptions}
-              value={priorityValue}
-              onChange={onPriorityChange}
-              onBlur={onPriorityBlur}
-              disabled={disabled}
-              showSearch
-              suffixIcon={null}
-              variant="borderless"
-              className="w-full text-sm"
-              dropdownStyle={{ zIndex: 1200 }}
-              filterOption={(input, option) =>
-                String(option?.label ?? "")
-                  .toLowerCase()
-                  .includes(input.toLowerCase())
-              }
-            />
-          </div>
-        </div>
+      <div className={fieldShell(2)}>
+        {selectedPriorityLabel ? (
+          <span className={`size-3.5 shrink-0 rounded-full ${priorityDotClass(selectedPriorityLabel)}`} />
+        ) : (
+          <Flag className="size-3.5 shrink-0 text-placeholder" />
+        )}
+        <Select
+          placeholder="优先级"
+          options={casePriorityOptions}
+          value={priorityValue}
+          onChange={onPriorityChange}
+          onBlur={onPriorityBlur}
+          disabled={disabled}
+          showSearch
+          suffixIcon={null}
+          variant="borderless"
+          className={cn(selectClassName, !disabled && selectPointerClassName)}
+          popupMatchSelectWidth={false}
+          dropdownStyle={{ zIndex: 1200 }}
+          filterOption={(input, option) =>
+            String(option?.label ?? "")
+              .toLowerCase()
+              .includes(input.toLowerCase())
+          }
+        />
+      </div>
 
-        <div>
-          <label className="mb-1 ml-[10px] block text-sm font-medium text-secondary">标签</label>
-          <div
-            className="flex min-h-[32px] cursor-text flex-wrap items-center gap-2 rounded border border-transparent bg-white p-1 transition-colors focus-within:border-subtle"
-            onClick={() => {
-              if (disabled) return;
-              const input = document.getElementById("meta-label-input");
-              input?.focus();
-            }}
-          >
-            {labelList.map((label) => (
-              <div
-                key={label.id}
-                className="group flex items-center gap-1 rounded border border-accent-subtle bg-accent-subtle px-2 py-0.5 text-xs text-accent-primary"
+      <div
+        className={cn(fieldShell(3), "cursor-text")}
+        onClick={() => {
+          if (disabled) return;
+          document.getElementById("meta-label-input")?.focus();
+        }}
+      >
+        <Tag className="size-3.5 shrink-0 text-secondary" />
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          {labelList.map((label) => (
+            <span
+              key={label.id}
+              className="group inline-flex items-center gap-0.5 text-body-xs-medium leading-5 text-secondary"
+            >
+              {label.name}
+              <span
+                className={cn(
+                  "text-tertiary opacity-0 transition-opacity group-hover:opacity-100",
+                  disabled ? "cursor-not-allowed" : "cursor-pointer hover:text-danger-primary"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (disabled) return;
+                  onDeleteLabel?.(label.id);
+                }}
               >
-                <span>{label.name}</span>
-                <span
-                  className={`opacity-50 transition-opacity ${
-                    disabled ? "cursor-not-allowed" : "cursor-pointer group-hover:opacity-100 hover:text-danger-primary"
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (disabled) return;
-                    onDeleteLabel?.(label.id);
-                  }}
-                >
-                  <LucideIcons.X size={12} />
-                </span>
-              </div>
-            ))}
-
-            <input
-              id="meta-label-input"
-              value={labelInput}
-              onChange={(e) => setLabelInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onBlur={handleCreateLabel}
-              disabled={disabled}
-              placeholder={labelList.length === 0 ? "输入标签名称" : ""}
-              className="min-w-[60px] flex-1 bg-transparent text-sm outline-none disabled:cursor-not-allowed disabled:text-secondary"
-            />
-          </div>
+                <LucideIcons.X size={10} />
+              </span>
+            </span>
+          ))}
+          <input
+            id="meta-label-input"
+            value={labelInput}
+            onChange={(e) => setLabelInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleCreateLabel}
+            disabled={disabled}
+            placeholder={labelList.length === 0 ? "添加标签" : ""}
+            className="min-w-[4.5rem] bg-transparent text-body-xs-medium leading-5 text-secondary outline-none placeholder:text-placeholder disabled:cursor-not-allowed"
+          />
         </div>
       </div>
     </div>

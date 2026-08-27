@@ -4,106 +4,29 @@
  * See the LICENSE file for details.
  */
 
-import { Controller, useFormContext } from "react-hook-form";
-// plane imports
-import { NETWORK_CHOICES, ETabIndices } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
-import type { IProject } from "@plane/types";
-import { CustomSelect } from "@plane/ui";
-import { cn, getTabIndex } from "@plane/utils";
-// components
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
+import { useFormContext } from "react-hook-form";
+import { ETabIndices } from "@plane/constants";
+import { getTabIndex } from "@plane/utils";
+import { ProjectPlanSection, ProjectTeamSection } from "@/components/project/form-fields";
+import type { TProject } from "@/plane-web/types/projects";
 
 type Props = {
   isMobile?: boolean;
 };
 
+/** 创建弹窗的「团队」+「计划」分区（可见性已并入基本信息） */
 function ProjectAttributes(props: Props) {
   const { isMobile = false } = props;
-  const { t } = useTranslation();
-  const { control } = useFormContext<IProject>();
+  const { control } = useFormContext<TProject>();
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
-  const leadRequiredError = t("name_is_required").replace(t("name"), t("lead"));
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Controller
-        name="network"
-        control={control}
-        render={({ field: { onChange, value } }) => {
-          const currentNetwork = NETWORK_CHOICES.find((n) => n.key === value);
-
-          return (
-            <div className="h-7 flex-shrink-0" tabIndex={getIndex("network")}>
-              <CustomSelect
-                value={value}
-                onChange={onChange}
-                label={
-                  <div className="flex h-full items-center gap-1">
-                    {currentNetwork ? (
-                      <>
-                        <ProjectNetworkIcon iconKey={currentNetwork.iconKey} />
-                        {t(currentNetwork.i18n_label)}
-                      </>
-                    ) : (
-                      <span className="text-placeholder">{t("select_network")}</span>
-                    )}
-                  </div>
-                }
-                placement="bottom-start"
-                className="h-full"
-                buttonClassName="h-full"
-                noChevron
-                tabIndex={getIndex("network")}
-              >
-                {NETWORK_CHOICES.map((network) => (
-                  <CustomSelect.Option key={network.key} value={network.key}>
-                    <div className="flex items-start gap-2">
-                      <ProjectNetworkIcon iconKey={network.iconKey} className="h-3.5 w-3.5" />
-                      <div className="-mt-1">
-                        <p>{t(network.i18n_label)}</p>
-                        <p className="text-11 text-placeholder">{t(network.description)}</p>
-                      </div>
-                    </div>
-                  </CustomSelect.Option>
-                ))}
-              </CustomSelect>
-            </div>
-          );
-        }}
-      />
-      <Controller
-        name="project_lead"
-        control={control}
-        rules={{ required: leadRequiredError }}
-        render={({ field: { value, onChange }, fieldState: { error } }) => {
-          if (value === undefined || value === null || typeof value === "string")
-            return (
-              <div className="relative h-7 flex-shrink-0" tabIndex={getIndex("lead")}>
-                <MemberDropdown
-                  value={value ?? null}
-                  onChange={onChange}
-                  placeholder={t("lead")}
-                  multiple={false}
-                  buttonVariant="border-with-text"
-                  buttonClassName={cn("text-11", error?.message && "border-danger-strong")}
-                  tabIndex={getIndex("lead")}
-                />
-                {error?.message && (
-                  <span className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap text-caption-sm-medium text-danger-primary">
-                    {error.message}
-                  </span>
-                )}
-              </div>
-            );
-          else return <></>;
-        }}
-      />
-    </div>
+    <>
+      <ProjectTeamSection control={control} variant="modal" getIndex={getIndex} />
+      <ProjectPlanSection control={control} variant="modal" getIndex={getIndex} />
+    </>
   );
 }
 
 export default ProjectAttributes;
-
 export { ProjectAttributes };

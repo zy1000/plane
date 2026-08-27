@@ -14,6 +14,10 @@ type Props = {
   moduleId: string;
   moduleName: string;
   onSuccess: () => void;
+  /** 额外合并进模块树（库列表）请求的查询参数（如模板场景传 { is_template: true }）；不传时请求与现状一致 */
+  repositoryQuery?: Record<string, any>;
+  /** project 为空的用例库分组标签（如模板场景传「模板库」）；不传时保持后端返回的名称或「-」 */
+  emptyProjectGroupLabel?: string;
 };
 
 type SelectionTarget =
@@ -29,6 +33,8 @@ export const CopyModuleModal: React.FC<Props> = ({
   moduleId,
   moduleName,
   onSuccess,
+  repositoryQuery,
+  emptyProjectGroupLabel,
 }) => {
   const fetchLockRef = useRef(false);
   const [target, setTarget] = useState<SelectionTarget | null>(null);
@@ -49,7 +55,7 @@ export const CopyModuleModal: React.FC<Props> = ({
     fetchLockRef.current = true;
     setTreeLoading(true);
     try {
-      const workspaces = await caseModuleService.getUserModuleTree();
+      const workspaces = await caseModuleService.getUserModuleTree(repositoryQuery);
       setWorkspaceTrees(workspaces || []);
       setExpandedKeys(["root"]);
       setAutoExpandParent(true);
@@ -148,6 +154,8 @@ export const CopyModuleModal: React.FC<Props> = ({
     workspaces.map((ws) => {
       const projectNodes = (ws.projects || []).map((proj: any) => {
         const projKey = proj?.id ? `proj:${ws.slug}:${proj.id}` : `proj:${ws.slug}:__no_project__`;
+        // project 为空的分组（模板库 project=null 会落在这里），允许调用方自定义标签
+        const projName = proj?.id ? (proj?.name ?? "-") : (emptyProjectGroupLabel ?? proj?.name ?? "-");
         const repoNodes = (proj.repositories || []).map((repo: any) => ({
           title: renderTitle(repo.name, "repository"),
           key: `repo:${ws.slug}:${repo.id}`,
@@ -159,9 +167,9 @@ export const CopyModuleModal: React.FC<Props> = ({
           children: buildModuleNodes(repo.modules || [], ws.slug),
         }));
         return {
-          title: renderTitle(proj?.name ?? "-", "project"),
+          title: renderTitle(projName, "project"),
           key: projKey,
-          name: proj?.name ?? "-",
+          name: projName,
           kind: "project",
           selectable: false,
           children: repoNodes,
@@ -194,7 +202,8 @@ export const CopyModuleModal: React.FC<Props> = ({
     return walk(nodes);
   };
 
-  const treeNodes = useMemo(() => buildTree(workspaceTrees), [workspaceTrees]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const treeNodes = useMemo(() => buildTree(workspaceTrees), [workspaceTrees, emptyProjectGroupLabel]);
   const filteredNodes = useMemo(() => filterTree(treeNodes, search), [treeNodes, search]);
 
   const treeData = [

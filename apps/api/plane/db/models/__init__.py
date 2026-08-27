@@ -144,3 +144,39 @@ from .workflow import (
     IssueTransitionApprovalRecord,
 )
 from .timesheet import TimeSheet, TimesheetCategory
+from .data_dictionary import DataDictionary, DataDictionaryItem
+from .product import (
+    Product,
+    ProductMember,
+    ProductMemberRole,
+    ProductProject,
+    ProductRole,
+)
+from .requirement import (
+    Requirement,
+    RequirementApprovalAction,
+    RequirementApprovalState,
+    RequirementApprovalType,
+    RequirementBaseline,
+    RequirementBaselineEntry,
+    RequirementChangeApproval,
+    RequirementChangeItem,
+    RequirementChangeRequest,
+    RequirementChangeStatus,
+    RequirementChangeType,
+    RequirementCycle,
+    RequirementField,
+    RequirementFieldType,
+    RequirementIssue,
+    RequirementItemStatus,
+    RequirementLibrary,
+    RequirementModule,
+    RequirementPriority,
+    RequirementProject,
+    RequirementRelease,
+    RequirementScope,
+    RequirementTestCase,
+    RequirementType,
+    RequirementTypeSchemaRevision,
+    RequirementVersion,
+)

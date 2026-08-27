@@ -5,6 +5,7 @@
  */
 
 import type { TLogoProps } from "../common";
+import type { TDataDictionaryItemLite } from "../data-dictionary";
 import type { TUserPermissions } from "../enums";
 import type { TStateGroups } from "../state";
 import type { IUser, IUserLite } from "../users";
@@ -83,6 +84,25 @@ export interface IPartialProject {
   grade?: TProjectGrade | null;
   /** 项目产品类型（列表/详情接口可能返回） */
   product_type?: TProjectProductType | null;
+  // ---- 0348 扩展字段：API 创建时必填（business_unit 除外），但 DB 可空（迁移前的存量项目为 null，编辑时必须补齐）----
+  /** 项目代号，工作区内唯一 */
+  code?: string | null;
+  /** 所属BU（数据字典值 id，选填） */
+  business_unit?: string | null;
+  business_unit_detail?: TDataDictionaryItemLite | null;
+  /** 研发产品经理（user id；只要求工作区成员，不进项目成员） */
+  product_manager?: string | null;
+  product_manager_detail?: IUserLite | null;
+  /** 项目状态（数据字典值 id） */
+  status?: string | null;
+  status_detail?: TDataDictionaryItemLite | null;
+  /** 项目类型（数据字典值 id；与 product_type 产品类型是两个概念） */
+  project_type?: string | null;
+  project_type_detail?: TDataDictionaryItemLite | null;
+  /** YYYY-MM-DD */
+  start_date?: string | null;
+  /** YYYY-MM-DD */
+  end_date?: string | null;
 }
 
 export interface IProject extends IPartialProject {
@@ -207,6 +227,8 @@ export type TProjectIssuesSearchParams = {
   issue_relation?: boolean;
   cycle?: boolean;
   release?: boolean;
+  /** 排除已挂**该**需求的工作项（需求 ↔ 工作项是多对多，挂过别的需求不算） */
+  exclude_requirement_id?: string;
   module?: string;
   sub_issue?: boolean;
   issue_id?: string;

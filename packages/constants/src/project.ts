@@ -206,10 +206,24 @@ export const PROJECT_GROUP_GRANT_EDIT_PERMISSION_KEY = "project.group_grant.edit
 /** 项目概览页（/projects/:id/overview），底层 key 兼容旧 PermissionKey.PROJECT_ANALYTICS_VIEW */
 export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
 
-/** 项目工作项 / 需求 / 缺陷页面查看权限常量，与后端 PermissionKey.PROJECT_*_VIEW 一致 */
+/**
+ * 项目工作项 / 缺陷页面查看权限常量，与后端 PermissionKey.PROJECT_*_VIEW 一致。
+ *
+ * PROJECT_REQUIREMENTS_VIEW 原先守的是研发需求页（/dev-requirements），该页面已
+ * 下线，前端暂无消费方；key 保留 —— 它已写进线上角色配置与后端权限种子，删常量
+ * 不省任何东西，反而丢掉这层对应关系的记录。
+ */
 export const PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY = "project.work_items.view" as const;
 export const PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY = "project.requirements.view" as const;
 export const PROJECT_DEFECTS_VIEW_PERMISSION_KEY = "project.defects.view" as const;
+
+/**
+ * 产品需求进项目（/projects/:id/requirements），与后端
+ * PermissionKey.PROJECT_REQUIREMENT_LINK_* / PROJECT_PRODUCT_LINK_MANAGE 一致。
+ */
+export const PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY = "project.requirement_link.view" as const;
+export const PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY = "project.requirement_link.manage" as const;
+export const PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY = "project.product_link.manage" as const;
 
 /** 项目收集页权限常量，与后端 PermissionKey.INTAKE_VIEW 一致 */
 export const PROJECT_INTAKE_VIEW_PERMISSION_KEY = "intake.view" as const;

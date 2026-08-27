@@ -40,6 +40,16 @@ export type TNotificationData = {
   };
   /** 工作流审批申请通知专用，指向 IssueTransitionRecord 的 ID */
   transition_record_id?: string;
+  /** 需求审批通知专用。需求归产品不归项目，所以这类通知的 project 恒为空 */
+  requirement_change_request?: {
+    id: string;
+    sequence_id: number;
+    product_id: string | null;
+    project_id: string | null;
+    reason: string;
+    requirement_count: number;
+    requirement_titles: string[];
+  };
 };
 
 export type TNotification = {

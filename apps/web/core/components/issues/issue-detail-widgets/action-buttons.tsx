@@ -6,9 +6,10 @@
 
 "use client";
 
-import type { FC } from "react";
 import React from "react";
-import { Paperclip, FlaskConical } from "lucide-react";
+import { observer } from "mobx-react";
+import { Paperclip, FlaskConical, FileText } from "lucide-react";
+import { PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, ViewsIcon, RelationPropertyIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -23,7 +24,9 @@ import { RelationActionButton } from "./relations";
 import { SubIssuesActionButton } from "./sub-issues";
 import { IssueDetailWidgetButton } from "./widget-button";
 import IssueCaseSelectionModal from "./qa-cases/IssueCaseSelectionModal";
+import { WorkItemRequirementsActionButton } from "./work-item-requirements";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useUserPermissions } from "@/hooks/store/user";
 
 /** 与分段触发器内边距、高度一致，供 CustomMenu / 原生日 button 复用 */
 const WIDGET_GROUP_MENU_CLASS = "relative !w-auto min-w-0 text-left !max-w-none";
@@ -53,12 +56,17 @@ type Props = {
   hideWidgets?: TWorkItemWidgets[];
 };
 
-export const IssueDetailWidgetActionButtons: FC<Props> = (props) => {
+export const IssueDetailWidgetActionButtons = observer(function IssueDetailWidgetActionButtons(props: Props) {
   const { workspaceSlug, projectId, issueId, disabled, issueServiceType, hideWidgets } = props;
   // translation
   const { t } = useTranslation();
   const { fetchIssue } = useIssueDetail(issueServiceType);
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const [isCaseModalOpen, setIsCaseModalOpen] = React.useState(false);
+  // 关联需求要单独的关联管理权限，与工作项可编辑（disabled）是两道门。显式传 ws/pid：
+  // peek 可能从工作区级视图打开，靠路由回退会判错项目
+  const canManageRequirements =
+    !disabled && allowProjectPermissionKeys([PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY], workspaceSlug, projectId);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -119,6 +127,26 @@ export const IssueDetailWidgetActionButtons: FC<Props> = (props) => {
                     showLabel={false}
                     title={t("issue.add.link")}
                     icon={<LinkIcon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+                    disabled={disabled}
+                  />
+                }
+                disabled={disabled}
+                issueServiceType={issueServiceType}
+              />
+            </WidgetGroupTooltip>
+          </div>
+        )}
+        {!hideWidgets?.includes("requirements") && canManageRequirements && (
+          <div className={WIDGET_GROUP_SEGMENT}>
+            <WidgetGroupTooltip content={t("project_requirements.container.link_button")}>
+              <WorkItemRequirementsActionButton
+                className={WIDGET_GROUP_TRIGGER_CLASS}
+                customButton={
+                  <IssueDetailWidgetButton
+                    asContentOnly
+                    showLabel={false}
+                    title={t("project_requirements.container.link_button")}
+                    icon={<FileText className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
                     disabled={disabled}
                   />
                 }
@@ -189,4 +217,4 @@ export const IssueDetailWidgetActionButtons: FC<Props> = (props) => {
       )}
     </div>
   );
-};
+});

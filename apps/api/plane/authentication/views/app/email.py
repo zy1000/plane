@@ -133,7 +133,7 @@ class SignInAuthEndpoint(View):
             )
             # If successful, this will create user if needed (via base class logic) and return user
             user = ldap_provider.authenticate()
-            # user = User.objects.get(email=email)
+            # user = User.objects.get(email__icontains=email)
 
             # Login the user and record his device info
             user_login(request=request, user=user, is_app=True)

@@ -183,7 +183,8 @@ export function ResizableSidebar({
       <div
         id="main-sidebar"
         className={cn(
-          "z-20 h-full border-r border-subtle bg-surface-1",
+          "h-full border-r border-subtle bg-surface-1",
+          isAnySidebarDropdownOpen ? "z-30" : "z-20",
           !isResizing && "transition-all duration-300 ease-in-out",
           isMobile && isCollapsed ? "translate-x-[-100%] opacity-0" : "translate-x-0 opacity-100",
           isMobile && "absolute",
@@ -226,7 +227,8 @@ export function ResizableSidebar({
       {/* Peek View */}
       <div
         className={cn(
-          "shadow-sm absolute z-20 h-full bg-surface-1",
+          "shadow-sm absolute h-full bg-surface-1",
+          isAnySidebarDropdownOpen ? "z-30" : "z-20",
           !isResizing && "transition-all duration-300 ease-in-out",
           isCollapsed && showPeek ? "translate-x-0 opacity-100" : "translate-x-[-100%] opacity-0",
           "pointer-events-none",

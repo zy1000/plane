@@ -16,6 +16,9 @@ export { ReleaseOverviewTab } from "./release-overview-tab";
 export { ReleaseScopeTab } from "./release-scope-tab";
 export { ReleaseQualityTab } from "./release-quality-tab";
 export { ReleaseMaterialsTab } from "./release-materials-tab";
+export { ReleaseRequirementsSection } from "./release-requirements-section";
+export { ReleaseRequirementsAssociateModal } from "./release-requirements-associate-modal";
+export { getReleaseRequirementsKey, useReleaseRequirements } from "./use-release-requirements";
 export { ReleaseActivityTab } from "./release-activity-tab";
 export {
   formatDateLabel,

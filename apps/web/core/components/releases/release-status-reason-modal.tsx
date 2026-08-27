@@ -67,7 +67,7 @@ export function ReleaseStatusReasonModal(props: Props) {
       okText="确定"
       cancelText="取消"
       okButtonProps={{ loading, disabled: trimmed.length === 0 }}
-      destroyOnClose
+      destroyOnHidden
       maskClosable={!loading}
       width={720}
     >

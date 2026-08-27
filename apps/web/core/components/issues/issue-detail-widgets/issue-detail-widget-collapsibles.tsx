@@ -20,6 +20,7 @@ import { LinksCollapsible } from "./links";
 import { RelationsCollapsible } from "./relations";
 import { SubIssuesCollapsible } from "./sub-issues";
 import { QaCasesCollapsible } from "./qa-cases/root";
+import { WorkItemRequirementsCollapsible } from "./work-item-requirements";
 
 type Props = {
   workspaceSlug: string;
@@ -75,6 +76,15 @@ export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidget
       )}
       {!hideWidgets?.includes("qa-cases") && (
         <QaCasesCollapsible
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          disabled={disabled}
+          issueServiceType={issueServiceType}
+        />
+      )}
+      {!hideWidgets?.includes("requirements") && (
+        <WorkItemRequirementsCollapsible
           workspaceSlug={workspaceSlug}
           projectId={projectId}
           issueId={issueId}

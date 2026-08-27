@@ -29,6 +29,8 @@ export type TCaseOrderBy = "code" | "-created_at" | "-updated_at" | "-priority";
 type Props = {
   disabled?: boolean;
   displayProperties: TCaseDisplayProperties;
+  /** 需要隐藏的显示列 key（如模板场景无评审/执行）；不传时展示全部选项 */
+  hiddenPropertyKeys?: TCaseDisplayPropertyKey[];
   ordering?: string;
   onDisplayPropertiesChange: (updatedDisplayProperties: Partial<TCaseDisplayProperties>) => void;
   onOrderByChange: (orderBy: TCaseOrderBy) => void;
@@ -80,6 +82,7 @@ const ORDER_BY_OPTIONS: TOrderByOption[] = [
 export const CasesDisplayFilters = ({
   disabled = false,
   displayProperties,
+  hiddenPropertyKeys,
   ordering,
   onDisplayPropertiesChange,
   onOrderByChange,
@@ -88,6 +91,10 @@ export const CasesDisplayFilters = ({
   const [orderByExpanded, setOrderByExpanded] = useState(true);
 
   const activeOrderBy: TCaseOrderBy = (ordering as TCaseOrderBy) || "-created_at";
+
+  const visiblePropertyOptions = hiddenPropertyKeys?.length
+    ? DISPLAY_PROPERTY_OPTIONS.filter((property) => !hiddenPropertyKeys.includes(property.key))
+    : DISPLAY_PROPERTY_OPTIONS;
 
   return (
     <FiltersDropdown
@@ -114,7 +121,7 @@ export const CasesDisplayFilters = ({
           />
           {displayPropertiesExpanded && (
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              {DISPLAY_PROPERTY_OPTIONS.map((property) => {
+              {visiblePropertyOptions.map((property) => {
                 const isActive = displayProperties?.[property.key] ?? true;
                 return (
                   <button

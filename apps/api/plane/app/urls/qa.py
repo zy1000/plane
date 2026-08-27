@@ -24,6 +24,10 @@ from plane.app.views.qa.case import (
     CaseLabelAPIView,
     CaseModuleView,
 )
+from plane.app.views.qa.case_requirement import (
+    CaseLinkableRequirementAPIView,
+    CaseRequirementAPIView,
+)
 from plane.app.views.qa.case_version import (
     CaseVersionAPIView,
     CaseVersionCompareAPIView,
@@ -44,6 +48,11 @@ from plane.app.views.qa.review import (
 )
 from plane.app.views.qa.execution_file import PlanCaseRecordFileAPI
 from plane.app.views.qa.report import TestReportAPIView, ReportView
+from plane.app.views.qa.template import (
+    TemplateCaseAPIView,
+    TemplateCaseIdsAPIView,
+    TemplateCaseImportAPIView,
+)
 
 router = SimpleRouter()
 router.register("review", CaseReviewView, basename="review")
@@ -123,6 +132,19 @@ urlpatterns = [
         CaseAPIView.as_view(),
         name="test-case",
     ),
+    # 用例侧的需求关联。项目作用域（而非 workspace 级的 CaseAPI）是为了吃现成的
+    # QA_CASE_* 权限 —— 另一扇门在产品侧要 can_edit_product_requirements，
+    # 这边裸奔就成了绕过口。见 views/qa/case_requirement.py
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/<uuid:case_id>/requirements/",
+        CaseRequirementAPIView.as_view(),
+        name="test-case-requirements",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/<uuid:case_id>/linkable-requirements/",
+        CaseLinkableRequirementAPIView.as_view(),
+        name="test-case-linkable-requirements",
+    ),
     path(
         "workspaces/<str:slug>/test/case/mindmap/",
         CaseMindmapAPIView.as_view(),
@@ -162,6 +184,21 @@ urlpatterns = [
         "workspaces/<str:slug>/test/repository/",
         RepositoryAPIView.as_view(),
         name="test-repository",
+    ),
+    path(
+        "workspaces/<str:slug>/test/template-case/",
+        TemplateCaseAPIView.as_view(),
+        name="test-template-case",
+    ),
+    path(
+        "workspaces/<str:slug>/test/template-case/import/",
+        TemplateCaseImportAPIView.as_view(),
+        name="test-template-case-import",
+    ),
+    path(
+        "workspaces/<str:slug>/test/template-case-ids/",
+        TemplateCaseIdsAPIView.as_view(),
+        name="test-template-case-ids",
     ),
     path(
         "workspaces/<str:slug>/test/enums/",

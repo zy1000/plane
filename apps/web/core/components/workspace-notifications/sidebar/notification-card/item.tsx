@@ -17,6 +17,7 @@ import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { NotificationContent } from "./content";
 import { NotificationOption } from "./options";
@@ -33,6 +34,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const { asJson: notification, markNotificationAsRead } = useNotification(notificationId);
   const { getIsIssuePeeked, setPeekIssue } = useIssueDetail();
   const { getWorkspaceBySlug } = useWorkspace();
+  const router = useAppRouter();
   // states
   const [isSnoozeStateModalOpen, setIsSnoozeStateModalOpen] = useState(false);
   const [customSnoozeModal, setCustomSnoozeModal] = useState(false);
@@ -45,6 +47,33 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const notificationField = notification?.data?.issue_activity.field || undefined;
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
   const isApprovalNotification = notification?.sender === "in_app:workflow_approval:requested";
+  /**
+   * 需求审批通知没有 project —— 需求归产品。下面的渲染闸门原本硬性要求 projectId，
+   * 不放开的话这类通知会静默不渲染（卡片直接 return <></>）。
+   */
+  const requirementChangeRequest = notification?.data?.requirement_change_request;
+  const isRequirementNotification = Boolean(requirementChangeRequest);
+
+  const markRead = async () => {
+    if (notification.read_at !== null) return;
+    try {
+      await markNotificationAsRead(workspaceSlug);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  /** 需求审批通知点开就去那张变更单 */
+  const handleRequirementNotification = async () => {
+    if (isSnoozeStateModalOpen || customSnoozeModal) return;
+    setCurrentSelectedNotificationId(notificationId);
+    await markRead();
+    const productId = requirementChangeRequest?.product_id;
+    if (!productId || !requirementChangeRequest) return;
+    router.push(
+      `/${workspaceSlug}/products/${productId}/requirements?tab=changes&cr=${requirementChangeRequest.id}`
+    );
+  };
 
   const handleNotificationIssuePeekOverview = async () => {
     if (workspaceSlug && projectId && issueId && !isSnoozeStateModalOpen && !customSnoozeModal) {
@@ -71,8 +100,9 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
     }
   };
 
-  if (!workspaceSlug || !notificationId || !notification?.id || !notificationField || !workspace?.id || !projectId)
-    return <></>;
+  if (!workspaceSlug || !notificationId || !notification?.id || !notificationField || !workspace?.id) return <></>;
+  // 工作项通知仍然要求 projectId —— 没有它连 peek 都打不开
+  if (!isRequirementNotification && !projectId) return <></>;
 
   return (
     <Row
@@ -83,7 +113,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
           "bg-accent-primary/5": notification.read_at === null,
         }
       )}
-      onClick={handleNotificationIssuePeekOverview}
+      onClick={isRequirementNotification ? handleRequirementNotification : handleNotificationIssuePeekOverview}
     >
       {notification.read_at === null && (
         <div className="absolute top-[50%] left-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-primary" />

@@ -46,6 +46,7 @@ CATEGORY_SLUG_MAP: dict[str, Tuple[str, str]] = {
     "RELEASES_CATEGORY":          ("发布",     "releases"),
     "CASES_CATEGORY":             ("测试用例", "cases"),
     "PLAN_CASE_RECORDS_CATEGORY": ("用例执行", "plan-case-records"),
+    "REQUIREMENTS_CATEGORY":      ("需求",     "requirements"),
     # 临时分类：业务实体未就绪时 FileAsset 先落入 ``_temp`` 子目录。
     # 用下划线前缀以与正式业务 slug 区分开。
     "TEMP_CATEGORY":              ("_temp",   "_temp"),
@@ -53,7 +54,8 @@ CATEGORY_SLUG_MAP: dict[str, Tuple[str, str]] = {
 
 # FileAsset.entity_type → 该业务在 FilePath 树里所属的分类节点。
 # 不在此表里的 entity_type（USER_AVATAR / WORKSPACE_LOGO / PROJECT_COVER /
-# PROJECT_DESCRIPTION / CASE_MINDMAP）按用户决策**不加分类层**，直接挂在父节点下。
+# PROJECT_DESCRIPTION / PRODUCT_DESCRIPTION / CASE_MINDMAP）按用户决策**不加分类层**，
+# 直接挂在父节点下。
 # 其中 PROJECT_FILESTORE 虽然也不走分类层，但会固定挂到 FILESTORE_ROOT 节点下。
 ENTITY_TO_CATEGORY: dict[str, str] = {
     "ISSUE_ATTACHMENT":         "ISSUES_CATEGORY",
@@ -66,6 +68,7 @@ ENTITY_TO_CATEGORY: dict[str, str] = {
     "RELEASE_FILE":             "RELEASES_CATEGORY",
     "CASE_ATTACHMENT":          "CASES_CATEGORY",
     "PLAN_CASE_RECORD_FILE":    "PLAN_CASE_RECORDS_CATEGORY",
+    "REQUIREMENT_ATTACHMENT":   "REQUIREMENTS_CATEGORY",
 }
 
 
@@ -132,6 +135,7 @@ ENTITY_IDENTIFIER_FIELD = {
     "DRAFT_ISSUE_ATTACHMENT": "draft_issue_id",
     "DRAFT_ISSUE_DESCRIPTION": "draft_issue_id",
     "COMMENT_DESCRIPTION": "comment_id",
+    "REQUIREMENT_ATTACHMENT": "requirement_id",
     "PAGE_DESCRIPTION": "page_id",
     "CASE_ATTACHMENT": "case_id",
 }

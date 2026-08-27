@@ -120,6 +120,7 @@ from .release import (
     ReleaseOverdueRecordSerializer,
     ReleaseCommentSerializer,
     ReleaseActivitySerializer,
+    ProductReleaseSerializer,
 )
 
 from .api import APITokenSerializer, APITokenReadSerializer
@@ -174,3 +175,37 @@ from .qa import (
 )
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
 from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer
+from .requirement import (
+    RequirementBatchSaveSerializer,
+    RequirementCreateSerializer,
+    RequirementFilterSerializer,
+    RequirementImportSerializer,
+    RequirementSerializer,
+    RequirementSetModuleSerializer,
+    RequirementStatusWriteSerializer,
+    RequirementUpdateSerializer,
+)
+from .requirement_library import RequirementLibrarySerializer
+from .requirement_module import (
+    RequirementModuleSerializer,
+    RequirementModuleWriteSerializer,
+)
+from .requirement_type import (
+    RequirementTypeConfigurationWriteSerializer,
+    RequirementTypeSerializer,
+)
+from .requirement_change import (
+    RequirementBaselineEntrySerializer,
+    RequirementBaselineSerializer,
+    RequirementBaselineWriteSerializer,
+    RequirementApprovalInboxSerializer,
+    RequirementChangeActionSerializer,
+    RequirementChangeApprovalSerializer,
+    RequirementChangeItemSerializer,
+    RequirementChangeRequestDetailSerializer,
+    RequirementChangeRequestSerializer,
+    RequirementChangeSubmitSerializer,
+    RequirementProjectChangeSubmitSerializer,
+    RequirementSchemaRevisionSerializer,
+    RequirementVersionSerializer,
+)

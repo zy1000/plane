@@ -143,7 +143,7 @@ export function OverviewWorkItemListModal({ open, onClose, metric, workspaceSlug
       footer={null}
       centered
       width={1200}
-      destroyOnClose
+      destroyOnHidden
       styles={{ body: { padding: 0, overflow: "hidden" } }}
     >
       <div className="flex h-[78vh] max-h-[78vh] flex-col bg-surface-1">

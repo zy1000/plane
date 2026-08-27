@@ -5,9 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TNavigationItem } from "./tab-navigation-root";
-
-export type TResponsiveTabLayout = {
+export type TResponsiveTabLayout<TNavigationItem> = {
   visibleItems: TNavigationItem[];
   overflowItems: TNavigationItem[];
   hasOverflow: boolean;
@@ -15,7 +13,7 @@ export type TResponsiveTabLayout = {
   containerRef: (node: HTMLDivElement | null) => void;
 };
 
-type UseResponsiveTabLayoutProps = {
+type UseResponsiveTabLayoutProps<TNavigationItem> = {
   visibleNavigationItems: TNavigationItem[];
   hiddenNavigationItems: TNavigationItem[];
   isActive: (item: TNavigationItem) => boolean;
@@ -31,11 +29,11 @@ type UseResponsiveTabLayoutProps = {
  * @param isActive - Function to check if a tab is active
  * @returns Layout information and refs for rendering
  */
-export const useResponsiveTabLayout = ({
+export const useResponsiveTabLayout = <TNavigationItem>({
   visibleNavigationItems,
   hiddenNavigationItems,
   isActive,
-}: UseResponsiveTabLayoutProps): TResponsiveTabLayout => {
+}: UseResponsiveTabLayoutProps<TNavigationItem>): TResponsiveTabLayout<TNavigationItem> => {
   // Refs for measuring items
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -94,7 +92,7 @@ export const useResponsiveTabLayout = ({
     let totalWidth = 0;
     let count = 0;
 
-    for (let i = 0; i < itemRefs.current.length; i++) {
+    for (let i = 0; i < visibleNavigationItems.length; i++) {
       const item = itemRefs.current[i];
       if (!item) continue;
 

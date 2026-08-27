@@ -11,6 +11,7 @@ from plane.app.views import BaseAPIView
 from plane.db.models import (
     Issue,
     IssueTransitionRecord,
+    RequirementIssue,
     State,
     TransitionRecordStatus,
     UserRecentVisit,
@@ -157,7 +158,18 @@ class IssueBatchUpdate(BaseAPIView):
 
     def delete(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])
-        for pk in issue_ids:
+        # 先做作用域校验，只保留本 workspace/project 下真实存在的 id —— 与
+        # base.py destroy 先取 scoped issue 的做法对齐。不能拿原始 issue_ids
+        # 直接删关联行：跨项目 id 会越权删掉其他项目的需求关联；无效/过期 id
+        # 会让下方删除循环中途 404，此时关联行已删而逐对重算还没跑到
+        valid_ids = list(
+            Issue.objects.filter(
+                workspace__slug=slug, project_id=project_id, pk__in=issue_ids
+            ).values_list("id", flat=True)
+        )
+        # 同步软删关联行，保证需求侧工作项计数准确 —— 不能等 Celery 级联清理
+        RequirementIssue.objects.filter(issue_id__in=valid_ids).delete()
+        for pk in valid_ids:
             issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
             issue.delete()
             # delete the issue from recent visits

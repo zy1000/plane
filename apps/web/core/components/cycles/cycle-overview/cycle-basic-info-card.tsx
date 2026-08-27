@@ -229,7 +229,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
             </CustomSelect>
           ) : statusInfo ? (
             <span
-              className="inline-flex min-w-0 flex-1 items-center rounded-md px-2.5 py-1 text-sm font-medium"
+              className="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium"
               style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
             >
               {t(statusInfo.i18n_title)}

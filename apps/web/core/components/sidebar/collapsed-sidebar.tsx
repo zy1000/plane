@@ -121,10 +121,7 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
     return mergedItems.filter((item) => hasPageAccess(slug, item.key));
   }, [hasPageAccess, personalPreferences, slug]);
 
-  const projectsSidebarItem = useMemo(
-    () => WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS.find((item) => item.key === "projects"),
-    []
-  );
+  const pinnedSidebarItems = useMemo(() => WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS, []);
 
   const isMentionsEnabled = unreadNotificationsCount.mention_unread_notifications_count > 0;
   const totalNotifications = isMentionsEnabled
@@ -184,8 +181,11 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
           </Tooltip>
         )}
 
-        {projectsSidebarItem && hasPageAccess(slug, projectsSidebarItem.key) && (
-          <NavIconItem slug={slug} pathname={pathname} item={projectsSidebarItem} t={t} />
+        {pinnedSidebarItems.map(
+          (item) =>
+            hasPageAccess(slug, item.key) && (
+              <NavIconItem key={item.key} slug={slug} pathname={pathname} item={item} t={t} />
+            )
         )}
 
         <Tooltip tooltipContent={t("timesheets")} position="right">

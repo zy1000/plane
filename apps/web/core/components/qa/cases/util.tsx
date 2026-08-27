@@ -502,20 +502,25 @@ export const StepsEditor: React.FC<{
     onBlur?.(rows);
   };
 
-  const tableBorder = "1px solid #d9d9d9";
+  const tableLine = "#e8eaed";
   const thStyle: React.CSSProperties = {
-    padding: 8,
-    border: tableBorder,
-    background: "#fafafa",
+    padding: "8px 10px",
+    border: "none",
+    background: "#f6f7f8",
+    color: "#6b7280",
     textAlign: "left",
-    fontWeight: "bold",
+    fontWeight: 500,
     fontSize: "14px",
   };
   const tdStyle: React.CSSProperties = {
-    padding: 5,
-    border: tableBorder,
+    padding: 10,
+    border: "none",
+    borderTop: `1px solid ${tableLine}`,
+    background: "#fff",
+    color: "#374151",
     verticalAlign: "top",
-    fontSize: "14px",
+    fontSize: "13px",
+    lineHeight: 1.5,
   };
 
   // 拖拽排序所需的引用
@@ -679,7 +684,7 @@ export const StepsEditor: React.FC<{
                 </Button>,
               ]
         }
-        destroyOnClose
+        destroyOnHidden
       >
         <Input.TextArea
           readOnly={!editable}
@@ -691,26 +696,27 @@ export const StepsEditor: React.FC<{
         />
       </Modal>
 
+      <div className="overflow-hidden rounded-lg" style={{ background: "#fff" }}>
       <table
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          border: "1px solid #d9d9d9",
           tableLayout: "fixed",
+          background: "#fff",
         }}
       >
         <colgroup>
-          <col style={{ width: 72 }} />
+          <col style={{ width: 48 }} />
           <col />
-          <col style={{ width: "30%" }} />
-          {editable && <col style={{ width: 50 }} />}
+          <col />
+          {editable && <col style={{ width: 40 }} />}
         </colgroup>
         <thead>
           <tr>
             <th style={thStyle}>编号</th>
             <th style={thStyle}>步骤描述</th>
             <th style={thStyle}>预期结果</th>
-            {editable && <th style={thStyle}>操作</th>}
+            {editable && <th style={thStyle} />}
           </tr>
         </thead>
         <tbody>
@@ -719,7 +725,7 @@ export const StepsEditor: React.FC<{
               key={idx}
               style={{
                 cursor: "default",
-                background: draggingIndex === idx ? "#fff" : hoveredIndex === idx ? "#f0f5ff" : undefined,
+                background: draggingIndex === idx ? "#fff" : hoveredIndex === idx ? "#fafafa" : "#fff",
                 transition: "background-color 120ms ease",
               }}
               className="transition-colors"
@@ -844,13 +850,14 @@ export const StepsEditor: React.FC<{
               <td
                 style={{
                   ...tdStyle,
-                  textAlign: "center",
+                  color: "#8b9198",
+                  textAlign: "left",
                   cursor: editable ? (draggingIndex === idx ? "grabbing" : "grab") : "default",
                   boxShadow:
                     dropTarget?.index === idx
                       ? dropTarget.edge === "top"
-                        ? "inset 0 1px 0 #3e79f7"
-                        : "inset 0 -1px 0 #3e79f7"
+                        ? "inset 0 1px 0 #d1d5db"
+                        : "inset 0 -1px 0 #d1d5db"
                       : undefined,
                 }}
                 onMouseDown={() => {
@@ -871,7 +878,7 @@ export const StepsEditor: React.FC<{
                     userSelect: "none",
                     width: "100%",
                     height: "100%",
-                    justifyContent: "center",
+                    justifyContent: "flex-start",
                   }}
                 >
                   {idx + 1}
@@ -883,8 +890,8 @@ export const StepsEditor: React.FC<{
                   boxShadow:
                     dropTarget?.index === idx
                       ? dropTarget.edge === "top"
-                        ? "inset 0 1px 0 #3e79f7"
-                        : "inset 0 -1px 0 #3e79f7"
+                        ? "inset 0 1px 0 #d1d5db"
+                        : "inset 0 -1px 0 #d1d5db"
                       : undefined,
                 }}
               >
@@ -916,8 +923,8 @@ export const StepsEditor: React.FC<{
                   boxShadow:
                     dropTarget?.index === idx
                       ? dropTarget.edge === "top"
-                        ? "inset 0 1px 0 #3e79f7"
-                        : "inset 0 -1px 0 #3e79f7"
+                        ? "inset 0 1px 0 #d1d5db"
+                        : "inset 0 -1px 0 #d1d5db"
                       : undefined,
                 }}
               >
@@ -951,8 +958,8 @@ export const StepsEditor: React.FC<{
                     boxShadow:
                       dropTarget?.index === idx
                         ? dropTarget.edge === "top"
-                          ? "inset 0 1px 0 #3e79f7"
-                          : "inset 0 -1px 0 #3e79f7"
+                          ? "inset 0 1px 0 #d1d5db"
+                          : "inset 0 -1px 0 #d1d5db"
                         : undefined,
                   }}
                 >
@@ -1035,6 +1042,7 @@ export const StepsEditor: React.FC<{
           ))}
         </tbody>
       </table>
+      </div>
 
       {editable && (
         <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-start" }}>

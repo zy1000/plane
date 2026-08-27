@@ -56,7 +56,7 @@ export const OverviewProjectMeta: FC<Props> = observer(({ project }) => {
     },
     {
       key: "product-type",
-      label: "项目类型",
+      label: "产品类型",
       icon: Shapes,
       iconClassName: "text-violet-500",
       value: <span className="truncate text-sm text-primary">{project.product_type ?? "-"}</span>,

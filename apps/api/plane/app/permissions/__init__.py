@@ -21,6 +21,7 @@ from .keys import PermissionKey
 from .base import (
     allow_permission,
     allow_fine_permission,
+    allow_fine_permission_or_template,
     allow_workspace_member,
     allow_workspace_self_or_permission,
     is_workspace_member,

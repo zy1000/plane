@@ -111,11 +111,19 @@ class ProjectViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
-            # 仅保留 cover_image_url property 真正需要的关联。
+            # 仅保留序列化真正需要的关联。
             # workspace / workspace__owner / default_assignee / project_lead 在
             # ProjectListSerializer 中都序列化为主键，DRF 的 pk-only 优化直接读行上的
             # *_id 列，不会触发关联加载，这些 JOIN 属于纯开销。
-            .select_related("cover_image_asset")
+            .select_related(
+                "cover_image_asset",
+                # 0348 扩展字段：ProjectExtendedDetailMixin 嵌套输出 *_detail，需要真实加载
+                "business_unit",
+                "status",
+                "project_type",
+                # product_manager_detail 要出头像 URL，一并把 avatar_asset 拉上，否则每行一条查询
+                "product_manager__avatar_asset",
+            )
             .annotate(
                 is_favorite=Exists(
                     UserFavorite.objects.filter(
@@ -497,6 +505,13 @@ class ProjectViewSet(BaseViewSet):
             "guest_view_all_features",
             "project_lead",
             "network",
+            "code",
+            "business_unit",
+            "status",
+            "project_type",
+            "product_manager",
+            "start_date",
+            "end_date",
             "created_at",
             "updated_at",
             "created_by",
@@ -650,7 +665,10 @@ class ProjectViewSet(BaseViewSet):
 
         workspace = Workspace.objects.get(slug=slug)
 
-        project = Project.objects.get(pk=pk, workspace=workspace)
+        # select_related 四个扩展 FK：下面 ProjectSerializer(project).data 的快照要出 *_detail
+        project = Project.objects.select_related(
+            "business_unit", "status", "project_type", "product_manager__avatar_asset"
+        ).get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(
             ProjectSerializer(project).data, cls=DjangoJSONEncoder
@@ -697,6 +715,23 @@ class ProjectViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.PROJECT_DELETE)
     def destroy(self, request, slug, pk):
         project = Project.objects.get(pk=pk, workspace__slug=slug)
+        # 项目下的需求关联行随级联软删,但级联是异步的;这里同步软删四张关联行,
+        # 让产品侧的需求数 / 关联项目立刻对得上。删除项目不改需求状态（只升不降）
+        from plane.db.models import (
+            RequirementCycle,
+            RequirementIssue,
+            RequirementProject,
+            RequirementRelease,
+            RequirementTestCase,
+        )
+
+        RequirementCycle.objects.filter(project_id=pk).delete()
+        RequirementRelease.objects.filter(project_id=pk).delete()
+        RequirementIssue.objects.filter(project_id=pk).delete()
+        # 用例关联没有 project 列（用例的作用域来自 repository），按用例库的项目筛;
+        # 共享用例库(repository.project 为空)的关联行不属于本项目,保留
+        RequirementTestCase.objects.filter(case__repository__project_id=pk).delete()
+        RequirementProject.objects.filter(project_id=pk).delete()
         project.delete()
         webhook_activity.delay(
             event="project",
@@ -894,7 +929,10 @@ class DeployBoardViewSet(BaseViewSet):
 
 class ProjectAPI(BaseViewSet):
     model = Project
-    queryset = Project.objects.all()
+    # ProjectListSerializer 现在带 4 个 *_detail，不 select_related 会 N+1
+    queryset = Project.objects.select_related(
+        "business_unit", "status", "project_type", "product_manager__avatar_asset"
+    )
     pagination_class = CustomPaginator
     filterset_fields = {"name": ["exact", "icontains", "in"], "id": ["exact"]}
     serializer_class = ProjectListSerializer
@@ -1305,7 +1343,9 @@ class ProjectAPI(BaseViewSet):
             member__member_workspace__is_active=True,
         ).values_list("project_id", flat=True)
 
-        query = Project.objects.filter(pk__in=project_id)
+        query = Project.objects.filter(pk__in=project_id).select_related(
+            "business_unit", "status", "project_type", "product_manager__avatar_asset"
+        )
         query = self.filter_queryset(query).order_by("-created_at")
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)

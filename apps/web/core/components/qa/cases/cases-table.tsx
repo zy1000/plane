@@ -14,7 +14,22 @@ import { Checkbox } from "@plane/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import type { TCaseDisplayProperties } from "@/components/qa/cases/cases-display-filters";
+import type { TCaseDisplayProperties, TCaseDisplayPropertyKey } from "@/components/qa/cases/cases-display-filters";
+
+const SELECT_HOST_ORDER: TCaseDisplayPropertyKey[] = [
+  "code",
+  "name",
+  "review",
+  "type",
+  "priority",
+  "module",
+  "last_execution_result",
+  "assignee",
+  "labels",
+  "updated_at",
+];
+
+const SELECT_HOST_PAD_CLASS = "pl-10 pr-page-x";
 
 type TModule = {
   name?: string;
@@ -47,6 +62,7 @@ export type TCaseTableRecord = {
 type TResizableHeadProps = {
   children: ReactNode;
   className?: string;
+  hostSelect?: boolean;
   minWidth?: number;
   onResize?: (width: number) => void;
   style?: CSSProperties;
@@ -71,7 +87,7 @@ type TCasesTableProps = {
   setColumnWidth: (key: string, width: number) => void;
 };
 
-const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: TResizableHeadProps) => {
+const ResizableHead = ({ children, className, hostSelect = false, minWidth = 80, onResize, style }: TResizableHeadProps) => {
   const thRef = useRef<HTMLTableCellElement>(null);
 
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -100,7 +116,8 @@ const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: 
     <TableHead
       ref={thRef}
       className={cn(
-        "relative h-12 border-r border-b border-subtle px-page-x py-0 align-middle text-13 font-medium text-secondary",
+        "relative h-12 border-r border-b border-subtle py-0 align-middle text-13 font-medium text-secondary",
+        hostSelect ? `group/header ${SELECT_HOST_PAD_CLASS}` : "px-page-x",
         className
       )}
       style={style}
@@ -162,6 +179,66 @@ export const CasesTable = ({
   });
 
   const isColumnVisible = (key: keyof TCaseDisplayProperties) => displayProperties?.[key] ?? true;
+  const selectHost = SELECT_HOST_ORDER.find((key) => isColumnVisible(key)) ?? null;
+  const hostCellClass = (key: TCaseDisplayPropertyKey) =>
+    cn(
+      "relative h-12 border-r border-b border-subtle py-0",
+      selectHost === key ? SELECT_HOST_PAD_CLASS : "px-page-x"
+    );
+
+  const renderHoverSelect = ({
+    checked,
+    forceVisible = false,
+    hoverGroup,
+    indeterminate,
+    onCheckedChange,
+  }: {
+    checked: boolean;
+    forceVisible?: boolean;
+    hoverGroup: "header" | "row";
+    indeterminate?: boolean;
+    onCheckedChange: (checked: boolean) => void;
+  }) => (
+    <div
+      className="absolute inset-y-0 left-1 z-[1] grid w-3.5 place-items-center"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Checkbox
+        className="size-3.5 !outline-none"
+        iconClassName="size-3"
+        checked={checked}
+        indeterminate={indeterminate}
+        onChange={(event) => onCheckedChange(event.target.checked)}
+        containerClassName={cn(
+          "pointer-events-none opacity-0 transition-opacity",
+          hoverGroup === "header"
+            ? "group-hover/header:pointer-events-auto group-hover/header:opacity-100"
+            : "group-hover:pointer-events-auto group-hover:opacity-100",
+          (forceVisible || checked) && "pointer-events-auto opacity-100"
+        )}
+      />
+    </div>
+  );
+
+  const renderHeaderSelect = (key: TCaseDisplayPropertyKey) =>
+    selectHost === key
+      ? renderHoverSelect({
+          checked: allSelectedOnCurrentPage,
+          forceVisible: selectedOnCurrentPage.length > 0,
+          hoverGroup: "header",
+          indeterminate: isIndeterminate,
+          onCheckedChange: handleSelectAllOnPage,
+        })
+      : null;
+
+  const renderRowSelect = (key: TCaseDisplayPropertyKey, recordId: string) =>
+    selectHost === key
+      ? renderHoverSelect({
+          checked: selectedKeySet.has(recordId),
+          hoverGroup: "row",
+          onCheckedChange: (checked) => handleSelectRow(recordId, checked),
+        })
+      : null;
 
   const renderLabels = (labels?: TLabel[]) => {
     if (!labels || labels.length === 0) return <span className="text-placeholder">-</span>;
@@ -188,85 +265,113 @@ export const CasesTable = ({
     >
       <TableHeader className="sticky top-0 z-[2] bg-layer-1">
         <TableRow>
-          <TableHead className="h-12 w-10 min-w-10 border-r border-b border-subtle px-0 py-0">
-            <div className="flex h-12 w-full items-center justify-center">
-              <Checkbox
-                checked={allSelectedOnCurrentPage}
-                indeterminate={isIndeterminate}
-                onChange={(event) => handleSelectAllOnPage(event.target.checked)}
-              />
-            </div>
-          </TableHead>
-
           {isColumnVisible("code") && (
-            <ResizableHead style={getWidthStyle("code", 160)} onResize={(width) => setColumnWidth("code", width)}>
+            <ResizableHead
+              hostSelect={selectHost === "code"}
+              style={getWidthStyle("code", 160)}
+              onResize={(width) => setColumnWidth("code", width)}
+            >
               用例编号
+              {renderHeaderSelect("code")}
             </ResizableHead>
           )}
 
           {isColumnVisible("name") && (
-            <ResizableHead style={getWidthStyle("name", 340)} onResize={(width) => setColumnWidth("name", width)}>
+            <ResizableHead
+              hostSelect={selectHost === "name"}
+              style={getWidthStyle("name", 340)}
+              onResize={(width) => setColumnWidth("name", width)}
+            >
               名称
+              {renderHeaderSelect("name")}
             </ResizableHead>
           )}
 
           {isColumnVisible("review") && (
-            <ResizableHead style={getWidthStyle("review", 100)} onResize={(width) => setColumnWidth("review", width)}>
+            <ResizableHead
+              hostSelect={selectHost === "review"}
+              style={getWidthStyle("review", 100)}
+              onResize={(width) => setColumnWidth("review", width)}
+            >
               评审
+              {renderHeaderSelect("review")}
             </ResizableHead>
           )}
 
           {isColumnVisible("type") && (
-            <ResizableHead style={getWidthStyle("type", 110)} onResize={(width) => setColumnWidth("type", width)}>
+            <ResizableHead
+              hostSelect={selectHost === "type"}
+              style={getWidthStyle("type", 110)}
+              onResize={(width) => setColumnWidth("type", width)}
+            >
               类型
+              {renderHeaderSelect("type")}
             </ResizableHead>
           )}
 
           {isColumnVisible("priority") && (
             <ResizableHead
+              hostSelect={selectHost === "priority"}
               style={getWidthStyle("priority", 100)}
               onResize={(width) => setColumnWidth("priority", width)}
             >
               优先级
+              {renderHeaderSelect("priority")}
             </ResizableHead>
           )}
 
           {isColumnVisible("module") && (
-            <ResizableHead style={getWidthStyle("module", 120)} onResize={(width) => setColumnWidth("module", width)}>
+            <ResizableHead
+              hostSelect={selectHost === "module"}
+              style={getWidthStyle("module", 120)}
+              onResize={(width) => setColumnWidth("module", width)}
+            >
               模块
+              {renderHeaderSelect("module")}
             </ResizableHead>
           )}
 
           {isColumnVisible("last_execution_result") && (
             <ResizableHead
+              hostSelect={selectHost === "last_execution_result"}
               style={getWidthStyle("last_execution_result", 140)}
               onResize={(width) => setColumnWidth("last_execution_result", width)}
             >
               最近执行结果
+              {renderHeaderSelect("last_execution_result")}
             </ResizableHead>
           )}
 
           {isColumnVisible("assignee") && (
             <ResizableHead
+              hostSelect={selectHost === "assignee"}
               style={getWidthStyle("assignee", 150)}
               onResize={(width) => setColumnWidth("assignee", width)}
             >
               维护人
+              {renderHeaderSelect("assignee")}
             </ResizableHead>
           )}
 
           {isColumnVisible("labels") && (
-            <ResizableHead style={getWidthStyle("labels", 130)} onResize={(width) => setColumnWidth("labels", width)}>
+            <ResizableHead
+              hostSelect={selectHost === "labels"}
+              style={getWidthStyle("labels", 130)}
+              onResize={(width) => setColumnWidth("labels", width)}
+            >
               标签
+              {renderHeaderSelect("labels")}
             </ResizableHead>
           )}
 
           {isColumnVisible("updated_at") && (
             <ResizableHead
+              hostSelect={selectHost === "updated_at"}
               style={getWidthStyle("updated_at", 180)}
               onResize={(width) => setColumnWidth("updated_at", width)}
             >
               更新时间
+              {renderHeaderSelect("updated_at")}
             </ResizableHead>
           )}
 
@@ -284,24 +389,13 @@ export const CasesTable = ({
 
           return (
             <TableRow key={recordId} className="group h-12 bg-surface-1 transition-colors hover:bg-surface-2">
-              <TableCell className="h-12 w-10 min-w-10 border-r border-b border-subtle px-0 py-0">
-                <div className="flex h-12 w-full items-center justify-center">
-                  <Checkbox
-                    checked={selectedKeySet.has(recordId)}
-                    onChange={(event) => handleSelectRow(recordId, event.target.checked)}
-                  />
-                </div>
-              </TableCell>
-
               {isColumnVisible("code") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("code", 160)}
-                >
+                <TableCell className={hostCellClass("code")} style={getWidthStyle("code", 160)}>
+                  {renderRowSelect("code", recordId)}
                   <button
                     type="button"
                     className="block truncate text-left hover:text-accent-primary hover:underline"
-                    style={{ maxWidth: Math.max(40, codeWidth - 20) }}
+                    style={{ maxWidth: Math.max(40, codeWidth - (selectHost === "code" ? 48 : 20)) }}
                     title={record.code || ""}
                     onClick={() => onViewCase(record)}
                   >
@@ -311,14 +405,12 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("name") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("name", 340)}
-                >
+                <TableCell className={hostCellClass("name")} style={getWidthStyle("name", 340)}>
+                  {renderRowSelect("name", recordId)}
                   <button
                     type="button"
                     className="block truncate text-left hover:text-accent-primary hover:underline"
-                    style={{ maxWidth: Math.max(40, nameWidth - 20) }}
+                    style={{ maxWidth: Math.max(40, nameWidth - (selectHost === "name" ? 48 : 20)) }}
                     title={record.name || ""}
                     onClick={() => onViewCase(record)}
                   >
@@ -328,51 +420,42 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("review") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("review", 100)}
-                >
+                <TableCell className={hostCellClass("review")} style={getWidthStyle("review", 100)}>
+                  {renderRowSelect("review", recordId)}
                   {renderReviewTag(record.review)}
                 </TableCell>
               )}
               {isColumnVisible("type") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("type", 110)}
-                >
+                <TableCell className={hostCellClass("type")} style={getWidthStyle("type", 110)}>
+                  {renderRowSelect("type", recordId)}
                   {renderTypeTag(record.type)}
                 </TableCell>
               )}
               {isColumnVisible("priority") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("priority", 100)}
-                >
+                <TableCell className={hostCellClass("priority")} style={getWidthStyle("priority", 100)}>
+                  {renderRowSelect("priority", recordId)}
                   {renderPriorityTag(record.priority)}
                 </TableCell>
               )}
               {isColumnVisible("module") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("module", 120)}
-                >
+                <TableCell className={hostCellClass("module")} style={getWidthStyle("module", 120)}>
+                  {renderRowSelect("module", recordId)}
                   {record.module?.name || "-"}
                 </TableCell>
               )}
               {isColumnVisible("last_execution_result") && (
                 <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  className={hostCellClass("last_execution_result")}
                   style={getWidthStyle("last_execution_result", 140)}
                 >
+                  {renderRowSelect("last_execution_result", recordId)}
                   {renderLastExecutionResult(record)}
                 </TableCell>
               )}
 
               {isColumnVisible("assignee") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("assignee", 150)}
-                >
+                <TableCell className={hostCellClass("assignee")} style={getWidthStyle("assignee", 150)}>
+                  {renderRowSelect("assignee", recordId)}
                   {record.assignee?.id ? (
                     <MemberDropdown
                       multiple={false}
@@ -394,18 +477,14 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("labels") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("labels", 130)}
-                >
+                <TableCell className={hostCellClass("labels")} style={getWidthStyle("labels", 130)}>
+                  {renderRowSelect("labels", recordId)}
                   {renderLabels(record.labels)}
                 </TableCell>
               )}
               {isColumnVisible("updated_at") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("updated_at", 180)}
-                >
+                <TableCell className={hostCellClass("updated_at")} style={getWidthStyle("updated_at", 180)}>
+                  {renderRowSelect("updated_at", recordId)}
                   {renderUpdatedAt(record.updated_at)}
                 </TableCell>
               )}

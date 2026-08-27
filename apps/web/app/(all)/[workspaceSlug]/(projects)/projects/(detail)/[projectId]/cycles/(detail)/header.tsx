@@ -16,6 +16,7 @@ import {
   EUserPermissionsLevel,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
   WORK_ITEM_TRACKER_ELEMENTS,
+  PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY,
   PROJECT_ERROR_MESSAGES,
   isProjectPermissionError,
@@ -41,6 +42,8 @@ import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
+import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
+import { useCycleRequirements } from "@/components/cycles/cycle-overview/use-cycle-requirements";
 import { CycleQuickActions } from "@/components/cycles/quick-actions";
 import {
   DisplayFiltersSelection,
@@ -56,6 +59,10 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import {
+  getCycleScopeSubTabStorageKey,
+  useScopeSubTab,
+} from "@/components/common/use-scope-sub-tab";
 import useLocalStorage from "@/hooks/use-local-storage";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
@@ -66,6 +73,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   // states
   const [analyticsModal, setAnalyticsModal] = useState(false);
   const [openExistingIssueListModal, setOpenExistingIssueListModal] = useState(false);
+  const [requirementLinkModalOpen, setRequirementLinkModalOpen] = useState(false);
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, cycleId } = useParams();
@@ -75,7 +83,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   // store hooks
   const {
     issuesFilter: { issueFilters, updateFilters },
-    issues: { getGroupIssueCount, addIssueToCycle },
+    issues: { addIssueToCycle },
   } = useIssues(EIssuesStoreType.CYCLE);
   const { currentProjectCycleIds, getCycleById } = useCycle();
   const { toggleCreateIssueModal } = useCommandPalette();
@@ -84,6 +92,18 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const workspaceSlugValue = workspaceSlug?.toString() ?? "";
   const projectIdValue = projectId?.toString() ?? "";
+  /**
+   * 只用它的 linkRequirements：SWR key 与页面那份相同，关联完页面列表会自己刷新。
+   *
+   * 这个 header 同时服务概览 / 迭代范围 / 附件三个 tab，只有迭代范围页有需求子页 ——
+   * 传空 cycleId 让另外两个路由上的 SWR key 变 null，不发这次请求。
+   */
+  const isCycleScopeRoute = !/\/(overview|attachments)\/?$/.test(pathname ?? "");
+  const { linkRequirements } = useCycleRequirements({
+    workspaceSlug: workspaceSlugValue,
+    projectId: projectIdValue,
+    cycleId: isCycleScopeRoute ? (cycleId?.toString() ?? "") : "",
+  });
 
   const activeLayout = issueFilters?.displayFilters?.layout;
 
@@ -132,6 +152,13 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   );
   const canCreateIssueInCycle = canUserCreateIssue && canManageSprintIssues;
   const canOpenCycleIssueActionMenu = canManageSprintIssues;
+  // 归档的迭代不允许再改关联，与页面里空状态 CTA 的判断保持一致
+  const canManageRequirements =
+    allowProjectPermissionKeys(
+      [PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY],
+      workspaceSlugValue,
+      projectIdValue
+    ) && !cycleDetails?.archived_at;
 
   const switcherOptions = currentProjectCycleIds
     ?.map((id) => {
@@ -145,7 +172,18 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
     })
     .filter((option) => option !== undefined) as ICustomSearchSelectOption[];
 
-  const workItemsCount = getGroupIssueCount(undefined, undefined, false);
+  /**
+   * 迭代的工作项总数，取自迭代详情而不是 issues store。
+   *
+   * store 里的 group count 只有工作项子页挂了 CycleLayoutRoot 才会被填上 —— 切到
+   * 需求子页时它变 undefined，徽标会当场消失，看着像信息丢了。
+   *
+   * 已完成的迭代优先读进度快照，与右侧统计栏（sidebar-details）同一口径，
+   * 免得同一屏上徽标和「工作项 5/8」对不上。
+   */
+  const workItemsCount = isCompletedCycle
+    ? (cycleDetails?.progress_snapshot?.total_issues ?? cycleDetails?.total_issues)
+    : cycleDetails?.total_issues;
   const cycleOverviewPath =
     workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/overview` : "";
   const cycleAttachmentsPath =
@@ -153,6 +191,14 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
       ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/attachments`
       : "";
   const cycleScopePath = workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}` : "";
+  /**
+   * 「迭代范围」页里的二级切换。右侧工具条（布局切换 / 筛选 / 添加工作项）只服务于
+   * 工作项子页，切到需求时必须整排隐藏。页面与 header 是两棵渲染树，靠
+   * useLocalStorage 的同 key 广播同步。
+   */
+  const { activeSubTab: activeScopeSubTab } = useScopeSubTab(
+    getCycleScopeSubTabStorageKey(cycleId?.toString() ?? "unknown")
+  );
   const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
   const isAttachmentsActive = /\/attachments\/?$/.test(pathname ?? "");
   const activeCycleTab = isOverviewActive
@@ -307,7 +353,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             ) : null}
           </div>
         </Header.LeftItem>
-        {activeCycleTab === "scope" && (
+        {activeCycleTab === "scope" && activeScopeSubTab === "work-items" && (
           <Header.RightItem className="items-center">
             <div className="hidden items-center gap-2 md:flex">
               <div className="hidden @4xl:flex">
@@ -418,7 +464,54 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             </div>
           </Header.RightItem>
         )}
+        {/*
+          需求子页的工具条。布局切换 / 筛选 / 分析只服务工作项，这里换成需求自己的
+          主操作，但面板开关与迭代菜单保持在原位 —— 它们跟子页无关，跟着一起消失
+          会让右上角整片空掉。
+        */}
+        {activeCycleTab === "scope" && activeScopeSubTab === "requirements" && (
+          <Header.RightItem className="items-center">
+            <div className="hidden items-center gap-2 md:flex">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => setRequirementLinkModalOpen(true)}
+                disabled={!canManageRequirements}
+              >
+                {t("project_requirements.container.link_button")}
+              </Button>
+              <IconButton
+                variant="tertiary"
+                size="lg"
+                icon={PanelRight}
+                onClick={toggleSidebar}
+                className={cn({
+                  "bg-accent-subtle text-accent-primary": !isSidebarCollapsed,
+                })}
+              />
+              <CycleQuickActions
+                parentRef={parentRef}
+                cycleId={cycleId}
+                projectId={projectId}
+                workspaceSlug={workspaceSlug}
+                customClassName="flex-shrink-0 flex items-center justify-center size-[26px] bg-layer-1/70 rounded-sm"
+              />
+            </div>
+          </Header.RightItem>
+        )}
       </Header>
+
+      {/* 详见页面里那份同款弹窗的注释：两份互不影响，提交后走同一个 SWR key */}
+      {workspaceSlugValue && projectIdValue && cycleId && (
+        <ProjectRequirementLinkModal
+          isOpen={requirementLinkModalOpen}
+          workspaceSlug={workspaceSlugValue}
+          projectId={projectIdValue}
+          excludeCycleId={cycleId.toString()}
+          handleClose={() => setRequirementLinkModalOpen(false)}
+          onSubmit={linkRequirements}
+        />
+      )}
     </>
   );
 });

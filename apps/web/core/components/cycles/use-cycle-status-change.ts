@@ -29,6 +29,12 @@ type TUseCycleStatusChangeArgs = {
 const shouldConfirmTestingDates = (currentStatus: ICycle["status"], nextStatus: TCycleGroups) =>
   currentStatus === "returned" && nextStatus === "testing";
 
+/*
+ * 完成迭代时曾经有一个「关联需求尚未进入发布单」的软提示。需求阶段改成两端派生、
+ * 研发段人工填之后，迭代与需求阶段彻底解耦（迭代事实只产出「已排期」一档），
+ * 那句提示已经不成立，整套连同翻页拉取一并删除。
+ */
+
 export function useCycleStatusChange(args: TUseCycleStatusChangeArgs) {
   const { workspaceSlug, projectId, cycleId, cycleDetails, canChangeStatus, onSuccess, onError } = args;
   const { t } = useTranslation();
@@ -70,7 +76,12 @@ export function useCycleStatusChange(args: TUseCycleStatusChangeArgs) {
     (nextStatus: TCycleGroups | string) => {
       if (!cycleDetails) return;
       const normalizedNextStatus = nextStatus as TCycleGroups;
-      if (!normalizedNextStatus || normalizedNextStatus === cycleDetails.status || isUpdatingStatus || !canChangeStatus)
+      if (
+        !normalizedNextStatus ||
+        normalizedNextStatus === cycleDetails.status ||
+        isUpdatingStatus ||
+        !canChangeStatus
+      )
         return;
 
       if (shouldConfirmTestingDates(cycleDetails.status, normalizedNextStatus)) {

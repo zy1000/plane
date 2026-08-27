@@ -373,6 +373,42 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
     return decorator
 
 
+def allow_fine_permission_or_template(*permission_keys: str):
+    """QA 用例端点专用：模板库操作放行工作区成员，否则走项目细粒度鉴权。
+
+    模板库（is_template=True，必然 project 为空）没有项目语境，项目分支必 403，
+    故对本工作区的模板库退化为工作区成员校验。
+    分支条件必须是 is_template 而非 project 为空——存量「跨项目共享库」
+    （project 为空且非模板）维持原有行为，不放宽安全面。
+    """
+
+    def decorator(view_func):
+        fine_wrapped = allow_fine_permission(*permission_keys)(view_func)
+
+        @wraps(view_func)
+        def _wrapped_view(instance, request, *args, **kwargs):
+            slug = kwargs.get("slug", "")
+            repository_id = (
+                request.query_params.get("repository_id")
+                or request.data.get("repository_id")
+                or request.query_params.get("repository")
+                or request.data.get("repository")
+            )
+            if repository_id:
+                is_template_repo = TestCaseRepository.objects.filter(
+                    pk=repository_id,
+                    workspace__slug=slug,
+                    is_template=True,
+                ).exists()
+                if is_template_repo and is_workspace_member(request.user, slug):
+                    return view_func(instance, request, *args, **kwargs)
+            return fine_wrapped(instance, request, *args, **kwargs)
+
+        return _wrapped_view
+
+    return decorator
+
+
 def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
     def decorator(view_func):
         @wraps(view_func)

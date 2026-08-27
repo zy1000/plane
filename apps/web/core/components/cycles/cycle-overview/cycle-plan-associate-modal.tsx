@@ -41,7 +41,7 @@ export const CyclePlanAssociateModal = ({
       loading: associatingPlans,
     }}
     width={720}
-    destroyOnClose
+    destroyOnHidden
   >
     <div className="mt-2">
       {selectablePlansLoading ? (

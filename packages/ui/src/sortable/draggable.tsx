@@ -37,9 +37,11 @@ function Draggable({ children, data, className }: Props) {
     const el = ref.current;
 
     if (el) {
-      combine(
+      const dragHandle = el.querySelector("[data-sortable-drag-handle]");
+      return combine(
         draggable({
           element: el,
+          ...(dragHandle ? { dragHandle } : {}),
           onDragStart: () => setDragging(true), // NEW
           onDrop: () => setDragging(false), // NEW
           getInitialData: () => data,

@@ -180,5 +180,7 @@ docs/需求功能设计gpt.md
 .impeccable/*
 
 output/*
+.*
+auth.txt
 .playwright*
 .claude*

@@ -53,6 +53,7 @@ from plane.db.models import (
     CycleIssue,
     CycleOverduePhase,
     CycleOverdueRecord,
+    RequirementCycle,
     UserFavorite,
     CycleUserProperties,
     Issue,
@@ -752,6 +753,9 @@ class CycleViewSet(BaseViewSet):
             project_id=str(project_id),
             epoch=int(timezone.now().timestamp()),
         )
+        # 同步软删需求关联行（不等异步级联，需求侧的迭代关联计数读的就是这张表）。
+        # 删除迭代不改需求状态
+        RequirementCycle.objects.filter(cycle_id=pk).delete()
         # TODO: Soft delete the cycle break the onetoone relationship with cycle issue
         cycle.delete()
 

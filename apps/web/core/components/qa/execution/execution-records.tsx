@@ -387,7 +387,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
       footer={null}
       width={1400}
       style={{ maxWidth: "95vw" }}
-      destroyOnClose
+      destroyOnHidden
       getContainer={() => document.body}
       zIndex={1200}
     >

@@ -21,6 +21,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
+import { workItemTypeName } from "../cases/work-item-category";
 import { ReviewRecordsPanel } from "../review/review-records";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { ExecutionRecordsPanel } from "./execution-records";
@@ -124,7 +125,7 @@ export default function TestExecutionPage() {
     isFiltering: isExecutionFiltering,
   } = useExecutionCaseFilter(cases, enumsData.plan_case_result, currentUser?.id);
   const [attachments, setAttachments] = React.useState<any[]>([]);
-  const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "attachment" | "history">("basic");
+  const [activeTab, setActiveTab] = React.useState<"basic" | "work" | "defect" | "attachment" | "history">("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<string | null>(null);
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
@@ -509,9 +510,8 @@ export default function TestExecutionPage() {
 
   React.useEffect(() => {
     const map: Record<string, string> = {
-      requirement: "史诗,特性,用户故事",
-      work: "任务",
-      defect: "缺陷",
+      work: workItemTypeName("Task"),
+      defect: workItemTypeName("Bug"),
     };
     const type_name = map[activeTab];
     if (!type_name || !workspaceSlug || !selectedCaseId) {
@@ -860,7 +860,7 @@ export default function TestExecutionPage() {
           value={v}
           onChange={(e) => setV(e.target.value)}
           onBlur={() => onCommit(v)}
-          bordered={false}
+          variant="borderless"
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
@@ -932,7 +932,7 @@ export default function TestExecutionPage() {
               onChange={(v) => onChangeExec(idx, String(v))}
               variant="borderless"
               className="w-full text-sm leading-5 font-medium [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
-              popupClassName="min-w-[100px]"
+              classNames={{ popup: { root: "min-w-[100px]" } }}
               suffixIcon={null}
             />
           ),
@@ -1112,7 +1112,7 @@ export default function TestExecutionPage() {
                           <Card
                             key={item.id}
                             data-case-id={caseId}
-                            bordered
+                            variant="outlined"
                             hoverable
                             onClick={() => {
                               setSelectedCaseId(caseId);
@@ -1170,18 +1170,6 @@ export default function TestExecutionPage() {
                           >
                             <LucideIcons.Info size={16} aria-hidden="true" />
                             基本信息
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("requirement")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "requirement"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.FileText size={16} aria-hidden="true" />
-                            需求
                           </button>
                           <button
                             type="button"
@@ -1389,22 +1377,6 @@ export default function TestExecutionPage() {
                                 />
                               </div>
 
-                            </div>
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "requirement"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "requirement" && selectedCaseId && (
-                            <div className="-mt-7 min-h-[550px]">
-                              <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
                             </div>
                           )}
                         </Transition>
@@ -1652,7 +1624,7 @@ export default function TestExecutionPage() {
           setReason(reasonDraft);
           setReasonModalOpen(false);
         }}
-        destroyOnClose
+        destroyOnHidden
         width={600}
       >
         <Input.TextArea

@@ -68,6 +68,7 @@ from plane.db.models import (
     Label,
     Project,
     ProjectMember,
+    RequirementIssue,
     CycleIssue,
     Workspace,
 )
@@ -789,6 +790,8 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
+        # 同步软删关联行，保证需求侧工作项计数准确 —— 不能等 Celery 级联清理
+        RequirementIssue.objects.filter(issue_id=pk).delete()
         issue.delete()
         issue_activity.delay(
             type="issue.activity.deleted",

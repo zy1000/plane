@@ -176,7 +176,7 @@ const TestCaseActivityRow = observer(function TestCaseActivityRow(props: {
 
   return (
     <li>
-      <div className="relative flex items-center gap-3 py-2 text-caption-sm-regular">
+      <div className="relative flex items-center gap-3 py-2 text-body-sm-regular">
         <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
         <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
           {isSystem ? (

@@ -83,3 +83,56 @@ class ProjectMemberFactory(factory.django.DjangoModelFactory):
     role = 20  # Admin role by default
     created_at = factory.LazyFunction(timezone.now)
     updated_at = factory.LazyFunction(timezone.now)
+
+
+def _dictionary_payload(workspace, field_keys, skip=()):
+    """按 字段 -> 系统字典 key 的映射，给每个字段取字典的首个值（没有预置值的临时建一条）。
+
+    pytest 跑 --nomigrations，0346 / 0348 的 seed 不会执行，所以这里显式 ensure。
+    """
+    from plane.db.models import DataDictionary, DataDictionaryItem
+    from plane.utils.data_dictionary import ensure_system_dictionaries
+
+    ensure_system_dictionaries(workspace)
+    payload = {}
+    for field, key in field_keys.items():
+        if field in skip:
+            continue
+        dictionary = DataDictionary.objects.get(workspace=workspace, key=key)
+        item = dictionary.items.first() or DataDictionaryItem.objects.create(
+            dictionary=dictionary, label=f"{key} default"
+        )
+        payload[field] = str(item.id)
+    return payload
+
+
+def product_required_payload(workspace, lead):
+    """Product POST 新增的必填字段（不含 code：代号工作区内唯一，由调用方给）。"""
+    from plane.utils.data_dictionary import PRODUCT_DICTIONARY_FIELD_KEYS
+
+    payload = {
+        "start_date": "2026-01-01",
+        "project_lead": str(lead.id),
+        "test_lead": str(lead.id),
+    }
+    payload.update(_dictionary_payload(workspace, PRODUCT_DICTIONARY_FIELD_KEYS))
+    return payload
+
+
+def project_required_payload(workspace, lead):
+    """Project POST（0348 之后）新增的必填字段。
+
+    不含 code（代号工作区内唯一，由调用方给）与 business_unit（选填）；
+    grade 也由调用方给（那是更早的必填项，不属于 0348）。
+    """
+    from plane.utils.data_dictionary import PROJECT_DICTIONARY_FIELD_KEYS
+
+    payload = {
+        "product_manager": str(lead.id),
+        "start_date": "2026-01-01",
+        "end_date": "2026-12-31",
+    }
+    payload.update(
+        _dictionary_payload(workspace, PROJECT_DICTIONARY_FIELD_KEYS, skip=("business_unit",))
+    )
+    return payload

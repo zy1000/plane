@@ -1,3 +1,4 @@
+import type { TLogoProps } from "../common";
 import type { ILinkDetails } from "../issues";
 import type { TIssue } from "../issues/issue";
 import type { IUserLite } from "../users";
@@ -150,4 +151,37 @@ export type TReleasePlotType = "burndown" | "points";
 export type TPublicRelease = {
   id: string;
   name: string;
+};
+
+/** 产品侧发布聚合列表行（GET /workspaces/:slug/products/:productId/releases/） */
+export type TProductRelease = {
+  id: string;
+  name: string;
+  status: TReleaseStatus;
+  start_date: string | null;
+  target_date: string | null;
+  test_handoff_date: string | null;
+  project_id: string;
+  project_detail: { id: string; name: string; identifier: string; logo_props?: TLogoProps } | null;
+  lead_id: string | null;
+  lead_detail: { id: string; display_name: string; avatar_url: string | null } | null;
+  /** 本产品有多少需求关联到这张发布单（软删需求/软删关联行不计） */
+  product_requirement_count: number;
+  total_issues: number;
+  completed_issues: number;
+  cancelled_issues: number;
+  has_active_overdue: boolean;
+  has_overdue_history: boolean;
+  active_overdue_phase: TReleaseOverduePhase | null;
+  has_active_dev_overdue: boolean;
+  has_active_test_overdue: boolean;
+  has_dev_overdue_history: boolean;
+  has_test_overdue_history: boolean;
+  created_at: string;
+};
+
+export type TProductReleasesResponse = {
+  /** 当前用户可见的关联项目数——为 0 时展示「未关联项目」空态而非「无发布单」 */
+  linked_project_count: number;
+  releases: TProductRelease[];
 };

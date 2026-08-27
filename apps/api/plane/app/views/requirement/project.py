@@ -1,0 +1,622 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
+"""项目侧的产品需求：引用、排序、改状态、提变更单。
+
+项目对需求内容**只读**。属于项目的可写数据只有三样：关联关系本身、
+RequirementProject 上的 sort_order，以及需求级的交付状态（Requirement.status，
+跨项目共享一份，走 utils.set_requirement_status，与产品侧同一个写入口）。
+需求内容的唯一权威在产品 —— 项目成员想改内容只能提变更单，评审人与规则由提交人
+本次指定。
+
+因此这里刻意不复用 BaseRequirementRowViewSet：那套基类的每一个写端点都以
+「能写这批行」为前提，而项目侧根本没有那个前提。
+"""
+
+import json
+
+from django.db import transaction
+from rest_framework import serializers as drf_serializers
+from rest_framework import status
+from rest_framework.response import Response
+
+from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.serializers.requirement import RequirementFilterSerializer
+from plane.app.serializers.requirement_change import (
+    RequirementChangeRequestSerializer,
+    RequirementProjectChangeSubmitSerializer,
+)
+from plane.app.serializers.requirement_project import (
+    MultiProductRequirementSerializer,
+    ProjectRequirementSerializer,
+    RequirementProjectLinkWriteSerializer,
+)
+from plane.app.views.base import BaseViewSet
+from plane.app.views.requirement.change import change_error_response
+from plane.app.views.requirement.mixins import get_scoped_product
+from plane.app.views.requirement.row_base import annotate_pending
+from plane.db.models import (
+    Product,
+    Project,
+    Requirement,
+    RequirementCycle,
+    RequirementIssue,
+    RequirementItemStatus,
+    RequirementProject,
+    RequirementRelease,
+)
+from plane.utils.requirement import (
+    field_specs_for_requirement_types,
+    field_tree_from_specs,
+    filter_requirement_row_ids,
+    get_referenced_requirement_type_ids,
+    requirement_types_field_payload_from_specs,
+    source_display_id_map,
+)
+from plane.utils.requirement_change import (
+    RequirementChangeError,
+    submit_change_request,
+)
+from plane.utils.requirement_project import (
+    RequirementLinkError,
+    apply_project_requirement_list_filters,
+    can_submit_change_from_project,
+    linkable_facets,
+    linkable_requirements_queryset,
+    linked_requirement_ids,
+    linked_requirements_queryset,
+    promote_on_project_link,
+    requirement_facets,
+    resolve_linkable_requirements,
+    resolve_scope_for_linked_requirement,
+    set_requirement_status,
+    split_query_csv,
+)
+from plane.utils.requirement_test_case import unlink_test_cases_for_projects
+
+DEFAULT_PER_PAGE = 20
+MAX_PER_PAGE = 100
+
+
+def _link_error_response(exc: RequirementLinkError):
+    payload = {"error": exc.message}
+    if exc.code:
+        payload["code"] = exc.code
+    payload.update(exc.detail)
+    return Response(payload, status=status.HTTP_409_CONFLICT)
+
+
+def scope_identifier_map(rows):
+    """这一页行的产品编号前缀：{product_id: identifier}。
+
+    产品页只需要一个常量前缀（一个 RowLayer 只服务一个产品），项目页不行 ——
+    一个项目可以同时引用多个产品的需求，同一页里混着 ECOM-1 和 PAY-3。
+    """
+    product_ids = {str(row.product_id) for row in rows if row.product_id}
+    if not product_ids:
+        return {}
+    return {
+        str(key): identifier
+        for key, identifier in Product.objects.filter(id__in=product_ids).values_list(
+            "id", "identifier"
+        )
+    }
+
+
+class ProjectRequirementViewSet(BaseViewSet):
+    """项目关联的产品需求。"""
+
+    model = RequirementProject
+    serializer_class = ProjectRequirementSerializer
+
+    # --- 共用 -----------------------------------------------------------
+
+    def _requirement_type_specs(self, project_id):
+        """本项目已关联需求所引用到的需求类型 + 字段。
+
+        搜索与筛选要靠它解析自定义字段，前端网格也要靠它渲染自定义列。
+        """
+        requirement_type_ids = get_referenced_requirement_type_ids(
+            model=Requirement, scope={"id__in": linked_requirement_ids(project_id)}
+        )
+        specs, by_requirement_type = field_specs_for_requirement_types(
+            requirement_type_ids
+        )
+        return requirement_type_ids, specs, by_requirement_type
+
+    def _row_context(self, rows):
+        return {
+            "request": self.request,
+            "scope_identifiers": scope_identifier_map(rows),
+            "source_display_ids": source_display_id_map(rows),
+            # 项目侧 can_write 的含义窄得多：不是「能改这批行」，而是
+            # 「能不能把它推进评审」。内容仍然一个字都改不了 —— 写端点根本不存在。
+            # RequirementSerializer.get_can_submit_review 是唯一的消费者。
+            "can_write": True,
+        }
+
+    def _serialize_rows(self, rows):
+        return ProjectRequirementSerializer(
+            rows, many=True, context=self._row_context(rows)
+        ).data
+
+    def _parse_filters(self, request):
+        raw_filters = request.query_params.get("filters", "[]")
+        try:
+            filter_payload = json.loads(raw_filters)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None, Response(
+                {"filters": "Filters must be a JSON array."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(filter_payload, list):
+            return None, Response(
+                {"filters": "Filters must be a JSON array."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return filter_payload, None
+
+    def _apply_common_query(self, request, queryset, *, specs, by_requirement_type):
+        """?requirement_type_id= / ?product_id= / ?ids= / ?search= / ?filters=
+
+        搜索与筛选在 Python 里做，与产品需求列表同一条路径
+        （filter_requirement_row_ids）—— 自定义字段的值在 JSON 里，推不进 SQL。
+        """
+        requirement_type_ids = split_query_csv(request.query_params.get("requirement_type_id"))
+        if requirement_type_ids:
+            queryset = queryset.filter(requirement_type_id__in=requirement_type_ids)
+
+        product_ids = split_query_csv(request.query_params.get("product_id"))
+        if product_ids:
+            queryset = queryset.filter(product_id__in=product_ids)
+
+        raw_ids = request.query_params.get("ids")
+        if raw_ids:
+            try:
+                row_ids = drf_serializers.ListField(
+                    child=drf_serializers.UUIDField()
+                ).run_validation([item for item in raw_ids.split(",") if item])
+            except drf_serializers.ValidationError as exc:
+                return None, Response(
+                    {"ids": exc.detail}, status=status.HTTP_400_BAD_REQUEST
+                )
+            queryset = queryset.filter(id__in=row_ids)
+
+        filter_payload, error = self._parse_filters(request)
+        if error is not None:
+            return None, error
+
+        filter_serializer = RequirementFilterSerializer(
+            data=filter_payload, many=True, context={"fields": specs}
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        normalized_filters = [
+            {
+                "field_id": str(item["field_id"]),
+                "operator": item["operator"],
+                **({"value": item.get("value")} if "value" in item else {}),
+            }
+            for item in filter_serializer.validated_data
+        ]
+
+        search = request.query_params.get("search", "")
+        if search.strip() or normalized_filters:
+            matching_ids = filter_requirement_row_ids(
+                fields=specs,
+                rows=queryset,
+                search=search,
+                filters=normalized_filters,
+                fields_by_requirement_type=by_requirement_type,
+            )
+            queryset = queryset.filter(id__in=matching_ids)
+
+        return queryset, None
+
+    # --- 读 -------------------------------------------------------------
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    def list(self, request, slug, project_id):
+        _, specs, by_requirement_type = self._requirement_type_specs(project_id)
+        queryset = linked_requirements_queryset(slug=slug, project_id=project_id)
+        # 审批态是派生列，必须先 annotate 才能用 Q 过滤
+        queryset = annotate_pending(queryset)
+        queryset, filter_error = apply_project_requirement_list_filters(
+            queryset, request.query_params
+        )
+        if filter_error is not None:
+            return Response(filter_error, status=status.HTTP_400_BAD_REQUEST)
+
+        # 关联选择器（迭代/发布关联需求弹窗）用：已关闭的需求不进任何选择器。
+        # 主列表默认不带 —— 项目页仍要看到已关闭的需求
+        if request.query_params.get("exclude_closed") in ("true", "1"):
+            queryset = queryset.exclude(status=RequirementItemStatus.CLOSED)
+
+        # 迭代/发布/工作项的「关联需求」选择器用：排除已关联进该容器的行。
+        # .order_by() 清默认排序，理由同 linked_requirement_ids。
+        # project_id 收窄是必须的：需求可被多个项目引用，不带它，别的项目里的
+        # 关联会错误排除本项目的行，还能被用来探测跨项目的排期事实
+        exclude_cycle_id = request.query_params.get("exclude_cycle_id")
+        if exclude_cycle_id:
+            queryset = queryset.exclude(
+                id__in=RequirementCycle.objects.filter(
+                    cycle_id=exclude_cycle_id, project_id=project_id
+                )
+                .order_by()
+                .values_list("requirement_id", flat=True)
+            )
+        exclude_release_id = request.query_params.get("exclude_release_id")
+        if exclude_release_id:
+            queryset = queryset.exclude(
+                id__in=RequirementRelease.objects.filter(
+                    release_id=exclude_release_id, project_id=project_id
+                )
+                .order_by()
+                .values_list("requirement_id", flat=True)
+            )
+        # 工作项只属于一个项目，这里的 project_id 只是与兄弟参数形状一致
+        exclude_issue_id = request.query_params.get("exclude_issue_id")
+        if exclude_issue_id:
+            queryset = queryset.exclude(
+                id__in=RequirementIssue.objects.filter(
+                    issue_id=exclude_issue_id, project_id=project_id
+                )
+                .order_by()
+                .values_list("requirement_id", flat=True)
+            )
+
+        queryset, error = self._apply_common_query(
+            request, queryset, specs=specs, by_requirement_type=by_requirement_type
+        )
+        if error is not None:
+            return error
+
+        product_ids = split_query_csv(request.query_params.get("product_id"))
+        facet_product_id = product_ids[0] if len(product_ids) == 1 else None
+
+        return self.paginate(
+            request=request,
+            queryset=queryset,
+            on_results=self._serialize_rows,
+            # 顶部产品 tab 与阶段条的计数搭列表一起回来，不另开端点、不多发请求。
+            # paginate 会把它原样放进响应信封的 extra_stats 字段。
+            extra_stats=requirement_facets(
+                project_id=project_id,
+                product_id=facet_product_id,
+            ),
+            default_per_page=DEFAULT_PER_PAGE,
+            max_per_page=MAX_PER_PAGE,
+        )
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    def linkable(self, request, slug, project_id):
+        """候选池：可以关联进本项目的需求。
+
+        只给有 manage 权限的人 —— 它会露出尚未进入本项目的需求，那是产品侧的内容。
+        """
+        queryset = linkable_requirements_queryset(slug=slug, project_id=project_id)
+
+        # 候选池的字段来源是**关联产品下的全部需求**，不是已关联的那批
+        requirement_type_ids = get_referenced_requirement_type_ids(
+            model=Requirement,
+            scope={"id__in": queryset.order_by().values_list("id", flat=True)},
+        )
+        specs, by_requirement_type = field_specs_for_requirement_types(
+            requirement_type_ids
+        )
+
+        queryset, error = self._apply_common_query(
+            request, queryset, specs=specs, by_requirement_type=by_requirement_type
+        )
+        if error is not None:
+            return error
+
+        return self.paginate(
+            request=request,
+            queryset=annotate_pending(queryset),
+            # 候选池同样横跨多个产品，必须用按 product_id 查前缀的那一支，
+            # 否则每一行的 display_id 都是 null，弹窗里两条同名需求分不出来
+            on_results=lambda rows: MultiProductRequirementSerializer(
+                rows, many=True, context=self._row_context(rows)
+            ).data,
+            # 左侧产品分面的计数搭列表一起回来（全集口径，不随搜索/产品筛选变化），
+            # 与 list 的 extra_stats 同一套路：不另开端点、不多发请求。
+            extra_stats=linkable_facets(slug=slug, project_id=project_id),
+            default_per_page=DEFAULT_PER_PAGE,
+            max_per_page=MAX_PER_PAGE,
+        )
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    def configuration(self, request, slug, project_id):
+        """网格渲染自定义列所需的需求类型与字段。
+
+        与产品的 requirement-configuration 形状一致，但 can_edit 恒为 False ——
+        需求内容的写入权在产品上，项目侧只有关联与状态。
+        """
+        requirement_type_ids, specs, by_requirement_type = self._requirement_type_specs(
+            project_id
+        )
+        return Response(
+            {
+                "can_edit": False,
+                "pending_change_request_count": 0,
+                "requirement_types": requirement_types_field_payload_from_specs(
+                    requirement_type_ids, by_requirement_type
+                ),
+                "fields": field_tree_from_specs(specs),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # --- 写：关联关系与阶段 ----------------------------------------------
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    def create(self, request, slug, project_id):
+        """把一批需求关联进本项目。"""
+        requirements = request.data.get("requirements", [])
+        if not requirements:
+            return Response(
+                {"error": "Requirements are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        try:
+            rows = resolve_linkable_requirements(
+                slug=slug, project_id=project_id, requirement_ids=requirements
+            )
+        except RequirementLinkError as exc:
+            return _link_error_response(exc)
+
+        with transaction.atomic():
+            RequirementProject.objects.bulk_create(
+                [
+                    RequirementProject(
+                        requirement_id=row.id,
+                        project_id=project_id,
+                        # bulk_create 不走 ProjectBaseModel.save()，workspace 不会被
+                        # 自动派生
+                        workspace_id=project.workspace_id,
+                        created_by_id=request.user.id,
+                        updated_by_id=request.user.id,
+                    )
+                    for row in rows
+                ],
+                batch_size=100,
+                ignore_conflicts=True,
+            )
+            # 关联进项目 = 只升不降的自动推进 (a)：not_started → projected
+            promote_on_project_link([row.id for row in rows])
+        return Response({"message": "success"}, status=status.HTTP_201_CREATED)
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    def partial_update(self, request, slug, project_id, requirement_id):
+        """改本项目内的排序，以及需求级交付状态。项目对需求唯一的行级写入口。
+
+        sort_order 写在关联行上；status 写在需求本体上（跨项目共享一份，与产品侧
+        set_status 同一个 util）。响应返回该行的项目侧整行（与 list 同口径），前端
+        直接就地替换。
+        """
+        serializer = RequirementProjectLinkWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = dict(serializer.validated_data)
+        new_status = payload.pop("status", None)
+
+        link = RequirementProject.objects.filter(
+            workspace__slug=slug, project_id=project_id, requirement_id=requirement_id
+        ).first()
+        if link is None:
+            return Response(
+                {"error": "This requirement is not linked to the project."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if payload:
+            for field, value in payload.items():
+                setattr(link, field, value)
+            link.updated_by_id = request.user.id
+            link.save(update_fields=[*payload.keys(), "updated_by", "updated_at"])
+
+        if new_status is not None:
+            set_requirement_status(
+                requirement_id, status=new_status, actor=request.user
+            )
+
+        # 重读口径必须与 list 相同（annotate_pending + linked_requirements_queryset
+        # + _row_context），否则 display_id / approval_state / pending_* 缺失
+        row = (
+            annotate_pending(linked_requirements_queryset(slug=slug, project_id=project_id))
+            .filter(id=requirement_id)
+            .first()
+        )
+        return Response(self._serialize_rows([row])[0], status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    def destroy(self, request, slug, project_id, requirement_id):
+        """解除关联。软删关联行 —— 需求本体、版本、审批历史一律不动。
+
+        该 (需求, 项目) 下的迭代/发布/工作项关联一并软删：它们是项目关联的子事实，
+        项目都退出了还留着，重新关联进来会带着旧关联复活。解除关联不改需求状态
+        （只升不降）。
+        """
+        link = RequirementProject.objects.filter(
+            workspace__slug=slug, project_id=project_id, requirement_id=requirement_id
+        )
+        if not link.exists():
+            return Response(
+                {"error": "This requirement is not linked to the project."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        RequirementCycle.objects.filter(
+            requirement_id=requirement_id, project_id=project_id
+        ).delete()
+        RequirementRelease.objects.filter(
+            requirement_id=requirement_id, project_id=project_id
+        ).delete()
+        RequirementIssue.objects.filter(
+            requirement_id=requirement_id, project_id=project_id
+        ).delete()
+        # 用例关联没有 project 列（用例的作用域来自 repository），按用例库的项目筛；
+        # 共享用例库（repository.project 为空）的关联行保留
+        unlink_test_cases_for_projects(
+            requirement_id=requirement_id, project_ids=[project_id]
+        )
+        link.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # --- 写：提变更单 ----------------------------------------------------
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    def submit_change(self, request, slug, project_id, requirement_id):
+        """项目侧发起变更单。
+
+        项目只是提单入口：单本身仍是 **product 作用域**，评审人与通过规则由提交人
+        本次指定，走的也是产品那份 submit_change_request，一行没有分叉。
+        """
+        serializer = RequirementProjectChangeSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        requirement = Requirement.objects.filter(
+            id=requirement_id, workspace__slug=slug
+        ).first()
+        if requirement is None:
+            return Response(
+                {"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        if not can_submit_change_from_project(request.user, requirement, project):
+            return Response(
+                {
+                    "error": "You cannot submit a change for this requirement from this project."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            with transaction.atomic():
+                scope = resolve_scope_for_linked_requirement(requirement, for_update=True)
+                if scope is None:
+                    return Response(
+                        {"error": "Product not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                change_request = submit_change_request(
+                    scope=scope,
+                    items=[{"requirement_id": requirement.id}],
+                    approver_ids=validated["approver_ids"],
+                    approval_type=validated["approval_type"],
+                    required_count=validated["required_count"],
+                    reason=validated["reason"],
+                    actor=request.user,
+                )
+        except RequirementChangeError as exc:
+            return change_error_response(exc)
+
+        return Response(
+            RequirementChangeRequestSerializer(
+                change_request, context={"request": request}
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RequirementProjectsViewSet(BaseViewSet):
+    """需求侧：一条需求进了哪些项目。
+
+    产品作用域的端点 —— 打开的是产品的需求详情，所以按产品的写权限判定
+    （can_edit_product_requirements），不是项目权限。
+    """
+
+    model = RequirementProject
+
+    def create(self, request, slug, product_id, requirement_id):
+        from plane.utils.product import can_edit_product_requirements
+
+        product = get_scoped_product(request.user, slug=slug, product_id=product_id)
+        if product is None:
+            return Response(
+                {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        if not can_edit_product_requirements(request.user, product):
+            return Response(
+                {"error": "You do not have permission to maintain product requirements."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        requirement = Requirement.objects.filter(
+            id=requirement_id, product_id=product.id
+        ).first()
+        if requirement is None:
+            return Response(
+                {"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        projects = request.data.get("projects", [])
+        removed_projects = request.data.get("removed_projects", [])
+
+        if projects:
+            # 目标项目必须已经关联了这个产品 —— 与项目侧关联走的是同一条规则，
+            # 换个方向进来不该松一格
+            allowed = set(
+                str(item)
+                for item in Project.objects.filter(
+                    id__in=[str(project) for project in projects],
+                    workspace__slug=slug,
+                    # 归档项目不再收需求，与 annotate_project_ids 的排除条件对齐
+                    archived_at__isnull=True,
+                    project_productproject__product_id=product.id,
+                    project_productproject__deleted_at__isnull=True,
+                ).values_list("id", flat=True)
+            )
+            rejected = [str(item) for item in projects if str(item) not in allowed]
+            if rejected:
+                return Response(
+                    {
+                        "error": "These projects have not linked this product.",
+                        "code": "PRODUCT_NOT_LINKED",
+                        "project_ids": rejected,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            with transaction.atomic():
+                RequirementProject.objects.bulk_create(
+                    [
+                        RequirementProject(
+                            requirement_id=requirement.id,
+                            project_id=project_id,
+                            workspace_id=product.workspace_id,
+                            created_by_id=request.user.id,
+                            updated_by_id=request.user.id,
+                        )
+                        for project_id in allowed
+                    ],
+                    batch_size=100,
+                    ignore_conflicts=True,
+                )
+                # 关联进项目 = 只升不降的自动推进 (a)：not_started → projected。
+                # 幂等：重复关联同一项目也算「关联事件」
+                promote_on_project_link([requirement.id])
+
+        if removed_projects:
+            removed_ids = [str(project) for project in removed_projects]
+            # 与项目侧 destroy 同一条规则：项目关联退出时，子事实一并软删
+            RequirementCycle.objects.filter(
+                requirement_id=requirement.id, project_id__in=removed_ids
+            ).delete()
+            RequirementRelease.objects.filter(
+                requirement_id=requirement.id, project_id__in=removed_ids
+            ).delete()
+            RequirementIssue.objects.filter(
+                requirement_id=requirement.id, project_id__in=removed_ids
+            ).delete()
+            unlink_test_cases_for_projects(
+                requirement_id=requirement.id, project_ids=removed_ids
+            )
+            RequirementProject.objects.filter(
+                requirement_id=requirement.id,
+                project_id__in=removed_ids,
+            ).delete()
+
+        return Response({"message": "success"}, status=status.HTTP_201_CREATED)
