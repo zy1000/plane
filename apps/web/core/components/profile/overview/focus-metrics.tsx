@@ -6,8 +6,10 @@
 
 import { useState } from "react";
 import type { ComponentType } from "react";
-import { Bug, ChevronRight } from "lucide-react";
+import { Bug, ChevronRight, ShieldCheck } from "lucide-react";
 import { useParams } from "next/navigation";
+import { useNavigate } from "react-router";
+import { useSWRConfig } from "swr";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { DueDatePropertyIcon, OverdueDatePropertyIcon, WorkflowsPropertyIcon } from "@plane/propel/icons";
@@ -15,6 +17,13 @@ import type { IUserProfileData, TProfileMetricKey } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
+import { ApprovalInboxModal } from "@/components/products/requirements/approval/approval-inbox-modal";
+// constants
+import { USER_PROFILE_DATA } from "@/constants/fetch-keys";
+// hooks
+import { useRequirementApprovalInbox } from "@/hooks/store/use-requirement-changes";
+import { useUser } from "@/hooks/store/user";
+// local
 import { ProfileMetricDetailModal } from "./metric-detail-modal";
 
 type Props = {
@@ -53,8 +62,17 @@ const toneClasses: Record<TTone, { icon: string; value: string }> = {
 
 export function ProfileFocusMetrics({ userProfile }: Props) {
   const { workspaceSlug, userId } = useParams();
+  const navigate = useNavigate();
+  const { mutate } = useSWRConfig();
   const { t } = useTranslation();
+  const { data: currentUser } = useUser();
   const [activeMetric, setActiveMetric] = useState<TProfileMetricKey | null>(null);
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
+  // 看自己的页时「待评审需求」直接打开评审收件箱就地审批；看别人的页只能看明细
+  const isOwnProfile = !!currentUser?.id && currentUser.id === String(userId);
+  const approvalInbox = useRequirementApprovalInbox({
+    workspaceSlug: isOwnProfile && workspaceSlug ? String(workspaceSlug) : undefined,
+  });
 
   if (!userProfile) {
     return (
@@ -101,6 +119,14 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
       value: userProfile.pending_approval_issues,
     },
     {
+      description: t("profile.stats.pending_requirement_approvals_description"),
+      icon: ShieldCheck,
+      key: "pending_requirement_approvals",
+      title: t("profile.stats.pending_requirement_approvals"),
+      tone: userProfile.pending_requirement_approvals > 0 ? "warning" : "neutral",
+      value: userProfile.pending_requirement_approvals,
+    },
+    {
       description: t("profile.stats.focus.defects_description"),
       icon: Bug,
       key: "open_defect_issues",
@@ -112,15 +138,23 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
 
   const activeMetricTitle = metrics.find((metric) => metric.key === activeMetric)?.title;
 
+  const handleSelectMetric = (key: TProfileMetricKey) => {
+    if (key === "pending_requirement_approvals" && isOwnProfile) {
+      setIsInboxOpen(true);
+      return;
+    }
+    setActiveMetric(key);
+  };
+
   return (
     <div className="space-y-2">
       <h3 className="text-16 font-medium">{t("profile.stats.focus.title")}</h3>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {metrics.map((metric) => (
           <button
             key={metric.key}
             type="button"
-            onClick={() => setActiveMetric(metric.key)}
+            onClick={() => handleSelectMetric(metric.key)}
             className="focus-visible:ring-accent-primary rounded-md border border-subtle bg-surface-1 px-4 py-3.5 text-left outline-none transition-colors hover:border-strong focus-visible:ring-2 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-2">
@@ -148,6 +182,18 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
           onClose={() => setActiveMetric(null)}
           workspaceSlug={String(workspaceSlug)}
           userId={String(userId)}
+        />
+      )}
+      {isOwnProfile && (
+        <ApprovalInboxModal
+          isOpen={isInboxOpen}
+          inbox={approvalInbox}
+          onClose={() => setIsInboxOpen(false)}
+          onSettled={() => void mutate(USER_PROFILE_DATA(String(workspaceSlug), String(userId)))}
+          onOpenChangeRequest={(item) => {
+            setIsInboxOpen(false);
+            navigate(`/${workspaceSlug}/products/${item.product_id}/requirements?tab=changes&cr=${item.id}`);
+          }}
         />
       )}
     </div>

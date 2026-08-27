@@ -101,6 +101,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/profile/:userId/activity",
             "./(all)/[workspaceSlug]/(projects)/profile/[userId]/activity/page.tsx"
           ),
+          route(
+            ":workspaceSlug/profile/:userId/requirements",
+            "./(all)/[workspaceSlug]/(projects)/profile/[userId]/requirements/page.tsx"
+          ),
         ]),
 
         // Stickies

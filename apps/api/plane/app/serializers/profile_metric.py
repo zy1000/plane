@@ -5,11 +5,17 @@
 from rest_framework import serializers
 
 from plane.db.models import CaseReviewRecord, CaseReviewThrough
-from plane.utils.profile_metrics import PROFILE_METRIC_KEYS
+from plane.utils.profile_metrics import (
+    PRODUCT_SCOPED_METRICS,
+    PROFILE_METRIC_KEYS,
+    REQUIREMENT_PROFILE_METRICS,
+)
+from plane.utils.requirement import requirement_display_id
 
 
 class WorkspaceUserMetricQuerySerializer(serializers.Serializer):
     project_id = serializers.UUIDField(required=False)
+    product_id = serializers.UUIDField(required=False)
     plan_id = serializers.UUIDField(required=False)
     review_id = serializers.UUIDField(required=False)
     page = serializers.IntegerField(default=1, min_value=1)
@@ -26,6 +32,8 @@ class WorkspaceUserMetricQuerySerializer(serializers.Serializer):
             raise serializers.ValidationError({"review_id": "This filter is not supported for the selected metric."})
         if attrs.get("plan_id") and attrs.get("review_id"):
             raise serializers.ValidationError("plan_id and review_id cannot be used together.")
+        if attrs.get("product_id") and metric not in PRODUCT_SCOPED_METRICS:
+            raise serializers.ValidationError({"product_id": "This filter is not supported for the selected metric."})
         return attrs
 
 
@@ -34,6 +42,14 @@ def _project_data(project):
         "id": project.id,
         "name": project.name,
         "identifier": project.identifier,
+    }
+
+
+def _product_data(product):
+    return {
+        "id": product.id,
+        "name": product.name,
+        "identifier": product.identifier,
     }
 
 
@@ -90,6 +106,36 @@ class WorkspaceUserMetricItemSerializer(serializers.Serializer):
                 "priority": instance.priority,
                 "target_date": instance.target_date,
                 "approval_to_state": target_state,
+            }
+
+        if metric in REQUIREMENT_PROFILE_METRICS:
+            return {
+                "entity_type": "requirement",
+                "id": instance.id,
+                "title": instance.title,
+                "display_id": requirement_display_id(instance),
+                "product": _product_data(instance.product),
+                "status": instance.status,
+                "approval_state": instance.approval_state,
+                "priority": instance.priority,
+                "start_date": instance.start_date,
+                "target_date": instance.target_date,
+            }
+
+        if metric == "pending_requirement_approvals":
+            return {
+                "entity_type": "requirement_change",
+                "id": instance.id,
+                "sequence_id": instance.sequence_id,
+                "product": _product_data(instance.product),
+                "status": instance.status,
+                "approval_type": instance.approval_type,
+                "required_count": instance.required_count,
+                "created_count": instance.created_count,
+                "updated_count": instance.updated_count,
+                "deleted_count": instance.deleted_count,
+                "created_by": _user_data(instance.created_by),
+                "created_at": instance.created_at,
             }
 
         if metric == "responsible_cycles":

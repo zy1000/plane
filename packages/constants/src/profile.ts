@@ -36,6 +36,12 @@ export const PROFILE_ADMINS_TAB = [
     selected: "/defects/",
   },
   {
+    key: "requirements",
+    route: "requirements",
+    i18n_label: "profile.tabs.requirements",
+    selected: "/requirements/",
+  },
+  {
     key: "created",
     route: "created",
     i18n_label: "profile.tabs.created",

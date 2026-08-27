@@ -7,6 +7,7 @@
 import type { TUserPermissions } from "./enums";
 import type { IIssueActivity, TIssuePriorities, TStateGroups } from ".";
 import type { TLoginMediums } from "./instance";
+import type { TRequirementApprovalState, TRequirementItemStatus, TRequirementPriority } from "./requirement";
 
 /**
  * @description The start of the week for the user
@@ -155,6 +156,8 @@ export type TOnboardingSteps = {
 
 export interface IUserProfileData {
   assigned_issues: number;
+  /** 我负责的产品需求总数（含已发布 / 已关闭） */
+  assigned_requirements: number;
   completed_issues: number;
   completed_this_week_issues: number;
   completed_today_issues: number;
@@ -165,18 +168,26 @@ export interface IUserProfileData {
   open_created_issues: number;
   open_subscribed_issues: number;
   open_defect_issues: number;
+  open_assigned_requirements: number;
   overdue_issues: number;
+  overdue_requirements: number;
   pending_issues: number;
   pending_approval_issues: number;
   pending_execution_cases: number;
+  pending_requirement_approvals: number;
   pending_review_cases: number;
   priority_distribution: IUserPriorityDistribution[];
+  requirement_approval_distribution: Record<TRequirementApprovalState, number>;
+  /** 挂在我负责的需求（不含已关闭）下的工作项，按工作项去重 */
+  requirement_issue_completion: { cancelled: number; completed: number; total: number };
+  requirement_status_distribution: Record<TRequirementItemStatus, number>;
   responsible_cycles: number;
   responsible_releases: number;
   state_distribution: IUserStateDistribution[];
   subscribed_issues: number;
   today_pending_issues: number;
   unscheduled_pending_issues: number;
+  unscheduled_requirements: number;
   week_pending_issues: number;
 }
 
@@ -197,9 +208,14 @@ export type TProfileMetricKey =
   | "open_created_issues"
   | "open_subscribed_issues"
   | "open_defect_issues"
-  | "open_assigned_non_defect_issues";
+  | "open_assigned_non_defect_issues"
+  | "open_assigned_requirements"
+  | "overdue_requirements"
+  | "unscheduled_requirements"
+  | "pending_requirement_approvals";
 
-export type TProfileMetricTreeNodeType = "project" | "plan" | "review";
+/** 需求侧指标的树按产品聚合，节点 type 为 product */
+export type TProfileMetricTreeNodeType = "project" | "plan" | "review" | "product";
 
 export interface IProfileMetricTreeNode {
   children?: IProfileMetricTreeNode[];
@@ -225,6 +241,41 @@ export interface IProfileMetricUser {
   avatar_url: string;
   display_name: string;
   id: string;
+}
+
+export interface IProfileMetricProduct {
+  id: string;
+  identifier: string;
+  name: string;
+}
+
+export interface IProfileMetricRequirement {
+  approval_state: TRequirementApprovalState;
+  /** 产品标识 + 序号（KF01A008-12） */
+  display_id: string | null;
+  entity_type: "requirement";
+  id: string;
+  priority: TRequirementPriority;
+  product: IProfileMetricProduct;
+  start_date: string | null;
+  status: TRequirementItemStatus;
+  target_date: string | null;
+  title: string;
+}
+
+export interface IProfileMetricRequirementChange {
+  approval_type: "none" | "any" | "all" | "n_of_m";
+  created_at: string;
+  created_by: IProfileMetricUser | null;
+  created_count: number;
+  deleted_count: number;
+  entity_type: "requirement_change";
+  id: string;
+  product: IProfileMetricProduct;
+  required_count: number | null;
+  sequence_id: number;
+  status: string;
+  updated_count: number;
 }
 
 export interface IProfileMetricWorkItem {
@@ -294,7 +345,9 @@ export type TProfileMetricItem =
   | IProfileMetricCycle
   | IProfileMetricRelease
   | IProfileMetricExecutionCase
-  | IProfileMetricReviewCase;
+  | IProfileMetricReviewCase
+  | IProfileMetricRequirement
+  | IProfileMetricRequirementChange;
 
 export interface IProfileMetricItemsResponse {
   count: number;
@@ -309,6 +362,14 @@ export interface IUserProfileProjectSegregation {
     created_issues: number;
     id: string;
     pending_issues: number;
+  }[];
+  /** 参与的产品：owner / 项目或测试负责人 / 产品成员 / 名下有未闭环需求 */
+  product_data: {
+    assigned_requirements: number;
+    id: string;
+    identifier: string;
+    logo_props: TLogoProps | null;
+    name: string;
   }[];
   user_data: Pick<IUser, "avatar_url" | "cover_image_url" | "display_name" | "first_name" | "last_name"> & {
     date_joined: Date;

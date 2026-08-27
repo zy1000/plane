@@ -12,15 +12,22 @@ import type {
   IProfileMetricCycle,
   IProfileMetricExecutionCase,
   IProfileMetricRelease,
+  IProfileMetricRequirement,
+  IProfileMetricRequirementChange,
   IProfileMetricReviewCase,
   IProfileMetricTreeNode,
   IProfileMetricWorkItem,
   TProfileMetricItem,
   TProfileMetricKey,
+  TRequirementChangeType,
 } from "@plane/types";
 import { cn, generateWorkItemLink, getDate, renderFormattedDate } from "@plane/utils";
+// components
+import { CHANGE_TYPE_PILL, PILL_BASE, approvalRuleLabel } from "@/components/products/requirements/change/styles";
 // hooks
 import { PROFILE_METRIC_PAGE_SIZE, useProfileMetricDetails } from "@/hooks/use-profile-metric-details";
+// local
+import { RequirementApprovalPill, RequirementStatusPill } from "./requirement-pills";
 
 type Props = {
   metric: TProfileMetricKey;
@@ -46,6 +53,14 @@ const WORK_ITEM_METRICS = new Set<TProfileMetricKey>([
   "open_defect_issues",
   "open_assigned_non_defect_issues",
 ]);
+
+/** 需求侧指标：树按产品聚合、行链到产品需求页 */
+const REQUIREMENT_METRICS = new Set<TProfileMetricKey>([
+  "open_assigned_requirements",
+  "overdue_requirements",
+  "unscheduled_requirements",
+]);
+const PRODUCT_SCOPED_METRICS = new Set<TProfileMetricKey>([...REQUIREMENT_METRICS, "pending_requirement_approvals"]);
 
 const DEFAULT_TREE_WIDTH = 256;
 const MIN_TREE_WIDTH = 220;
@@ -309,6 +324,117 @@ function QaCaseTable({
   );
 }
 
+function RequirementTable({ items, workspaceSlug }: { items: IProfileMetricRequirement[]; workspaceSlug: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <Table className="min-w-[850px] table-fixed" wrapperClassName="overflow-visible">
+      <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+        <TableRow>
+          <TableHead className="h-9 w-[32%]">{t("profile.stats.metric_details.columns.requirement")}</TableHead>
+          <TableHead className="h-9 w-[16%]">{t("profile.stats.metric_details.columns.product")}</TableHead>
+          <TableHead className="h-9 w-[12%]">{t("profile.stats.metric_details.columns.status")}</TableHead>
+          <TableHead className="h-9 w-[12%]">{t("profile.stats.metric_details.columns.approval")}</TableHead>
+          <TableHead className="h-9 w-[12%]">{t("profile.stats.metric_details.columns.priority")}</TableHead>
+          <TableHead className="h-9 w-[16%]">{t("profile.stats.metric_details.columns.target_date")}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {items.map((item) => (
+          <TableRow key={item.id} className="hover:bg-layer-1">
+            <TableCell className="min-w-0">
+              <TitleLink href={`/${workspaceSlug}/products/${item.product.id}/requirements/${item.id}`}>
+                {item.display_id && <span className="mr-2 text-secondary">{item.display_id}</span>}
+                {item.title || item.display_id}
+              </TitleLink>
+            </TableCell>
+            <TableCell className="truncate" title={item.product.name}>
+              {item.product.name}
+            </TableCell>
+            <TableCell>
+              <RequirementStatusPill status={item.status} />
+            </TableCell>
+            <TableCell>
+              <RequirementApprovalPill state={item.approval_state} />
+            </TableCell>
+            <TableCell className="capitalize">{item.priority}</TableCell>
+            <TableCell className="tabular-nums">{formatDate(item.target_date)}</TableCell>
+          </TableRow>
+        ))}
+        {!items.length && <EmptyTableRow colSpan={6} />}
+      </TableBody>
+    </Table>
+  );
+}
+
+function ChangeCountPills({ item }: { item: IProfileMetricRequirementChange }) {
+  const { t } = useTranslation();
+  const counts: Array<[TRequirementChangeType, number]> = [
+    ["create", item.created_count],
+    ["update", item.updated_count],
+    ["delete", item.deleted_count],
+  ];
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {counts
+        .filter(([, count]) => count > 0)
+        .map(([type, count]) => (
+          <span key={type} className={cn(PILL_BASE, CHANGE_TYPE_PILL[type])}>
+            {t(`workspace_products.requirements.change.filters.${type}`)} {count}
+          </span>
+        ))}
+    </span>
+  );
+}
+
+function RequirementChangeTable({
+  items,
+  workspaceSlug,
+}: {
+  items: IProfileMetricRequirementChange[];
+  workspaceSlug: string;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <Table className="min-w-[850px] table-fixed" wrapperClassName="overflow-visible">
+      <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+        <TableRow>
+          <TableHead className="h-9 w-[14%]">{t("profile.stats.metric_details.columns.change_request")}</TableHead>
+          <TableHead className="h-9 w-[20%]">{t("profile.stats.metric_details.columns.product")}</TableHead>
+          <TableHead className="h-9 w-[24%]">{t("profile.stats.metric_details.columns.changes")}</TableHead>
+          <TableHead className="h-9 w-[14%]">{t("profile.stats.metric_details.columns.submitter")}</TableHead>
+          <TableHead className="h-9 w-[14%]">{t("profile.stats.metric_details.columns.approval_rule")}</TableHead>
+          <TableHead className="h-9 w-[14%]">{t("profile.stats.metric_details.columns.submitted_at")}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {items.map((item) => (
+          <TableRow key={item.id} className="hover:bg-layer-1">
+            <TableCell className="min-w-0">
+              <TitleLink href={`/${workspaceSlug}/products/${item.product.id}/requirements?tab=changes&cr=${item.id}`}>
+                CR-{item.sequence_id}
+              </TitleLink>
+            </TableCell>
+            <TableCell className="truncate" title={item.product.name}>
+              {item.product.name}
+            </TableCell>
+            <TableCell>
+              <ChangeCountPills item={item} />
+            </TableCell>
+            <TableCell className="truncate" title={item.created_by?.display_name ?? "-"}>
+              {item.created_by?.display_name ?? "-"}
+            </TableCell>
+            <TableCell className="truncate">{approvalRuleLabel(t, item.approval_type, item.required_count)}</TableCell>
+            <TableCell className="tabular-nums">{formatDate(item.created_at)}</TableCell>
+          </TableRow>
+        ))}
+        {!items.length && <EmptyTableRow colSpan={6} />}
+      </TableBody>
+    </Table>
+  );
+}
+
 function EmptyTableRow({ colSpan }: { colSpan: number }) {
   const { t } = useTranslation();
   return (
@@ -333,6 +459,10 @@ function MetricTable({
 }) {
   if (WORK_ITEM_METRICS.has(metric))
     return <WorkItemTable items={items as IProfileMetricWorkItem[]} metric={metric} workspaceSlug={workspaceSlug} />;
+  if (REQUIREMENT_METRICS.has(metric))
+    return <RequirementTable items={items as IProfileMetricRequirement[]} workspaceSlug={workspaceSlug} />;
+  if (metric === "pending_requirement_approvals")
+    return <RequirementChangeTable items={items as IProfileMetricRequirementChange[]} workspaceSlug={workspaceSlug} />;
   if (metric === "responsible_cycles" || metric === "responsible_releases")
     return (
       <ResponsibilityTable
@@ -395,10 +525,12 @@ export function ProfileMetricDetailModal({ metric, metricTitle, onClose, open, u
     setTreeWidth((currentWidth) => clampTreeWidth(currentWidth + (event.key === "ArrowRight" ? 16 : -16)));
   };
 
-  const treeData = useMemo(
-    () => buildTreeData(tree?.nodes ?? [], t("profile.stats.metric_details.all_projects"), tree?.count ?? 0),
-    [t, tree]
+  const rootLabel = t(
+    PRODUCT_SCOPED_METRICS.has(metric)
+      ? "profile.stats.metric_details.all_products"
+      : "profile.stats.metric_details.all_projects"
   );
+  const treeData = useMemo(() => buildTreeData(tree?.nodes ?? [], rootLabel, tree?.count ?? 0), [rootLabel, tree]);
   const expandedKeys = useMemo(
     () => ["all", ...(tree?.nodes.filter((node) => node.children?.length).map((node) => node.id) ?? [])],
     [tree?.nodes]

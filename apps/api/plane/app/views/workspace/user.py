@@ -5,6 +5,7 @@
 # Python imports
 import copy
 from datetime import date, timedelta
+from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
 
@@ -51,8 +52,10 @@ from plane.db.models import (
     IssueActivity,
     FileAsset,
     IssueLink,
+    Product,
     Project,
     ProjectMember,
+    Requirement,
     User,
     Workspace,
     WorkspaceMember,
@@ -67,11 +70,30 @@ from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.profile_metrics import (
+    OPEN_REQUIREMENT_STATUSES,
     PROFILE_METRIC_KEYS,
+    accessible_product_ids,
+    annotate_requirement_issue_counts,
     apply_profile_metric_filters,
+    assigned_requirements_queryset,
     build_profile_metric_tree,
     get_profile_metric_queryset,
+    get_profile_requirement_summary,
+    profile_requirement_facets,
 )
+from plane.utils.requirement import (
+    field_specs_for_requirement_types,
+    get_referenced_requirement_type_ids,
+    requirement_types_field_payload_from_specs,
+    source_display_id_map,
+)
+from plane.utils.requirement_project import (
+    annotate_project_ids,
+    apply_project_requirement_list_filters,
+    split_query_csv,
+)
+from plane.app.serializers.requirement_project import ProjectRequirementSerializer
+from plane.app.views.requirement.row_base import annotate_pending
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
 
@@ -377,10 +399,42 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
                 )
             )
 
+        # 侧栏「参与的产品」：该成员是 owner / 项目负责人 / 测试负责人 / 产品成员，
+        # 或名下有未闭环需求的产品；范围限定在查看者可见的产品内。
+        visible_product_ids = accessible_product_ids(slug, request.user)
+        assigned_requirement_counts = {
+            row["product_id"]: row["count"]
+            for row in Requirement.objects.filter(
+                workspace__slug=slug,
+                assignee_id=user_id,
+                status__in=OPEN_REQUIREMENT_STATUSES,
+                product_id__in=visible_product_ids,
+            )
+            .order_by()
+            .values("product_id")
+            .annotate(count=Count("id"))
+        }
+        products = list(
+            Product.objects.filter(workspace__slug=slug, id__in=visible_product_ids)
+            .filter(
+                Q(owner_id=user_id)
+                | Q(project_lead_id=user_id)
+                | Q(test_lead_id=user_id)
+                | Q(member_product__member_id=user_id)
+                | Q(id__in=list(assigned_requirement_counts.keys()))
+            )
+            .distinct()
+            .order_by("name")
+            .values("id", "name", "identifier", "logo_props")
+        )
+        for product in products:
+            product["assigned_requirements"] = assigned_requirement_counts.get(product["id"], 0)
+
         return Response(
             {
                 "can_view_project_contributions": can_view_project_contributions,
                 "project_data": projects,
+                "product_data": products,
                 "user_data": {
                     "email": user_data.email,
                     "first_name": user_data.first_name,
@@ -418,6 +472,84 @@ class WorkspaceUserActivityEndpoint(BaseAPIView):
             request=request,
             queryset=queryset,
             on_results=lambda issue_activities: IssueActivitySerializer(issue_activities, many=True).data,
+        )
+
+
+class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
+    """profile「需求」tab：该成员负责的产品需求，跨产品聚合。
+
+    行结构沿用项目需求页的 ProjectRequirementSerializer，前端网格与详情可原样复用；
+    项目相关注解（link_sort_order / latest_release_name / linked_cycle_ids）在跨产品
+    视角没有意义，序列化器回落成 None / []。筛选参数与项目需求页同一套
+    （status / approval_state / priority / title / 日期区间 …），外加 product_id CSV。
+    """
+
+    DEFAULT_PER_PAGE = 20
+    MAX_PER_PAGE = 100
+
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    def get(self, request, slug, user_id):
+        base = assigned_requirements_queryset(slug, user_id, request.user)
+
+        try:
+            product_ids = [str(UUID(value)) for value in split_query_csv(request.query_params.get("product_id"))]
+            requirement_type_ids = [
+                str(UUID(value)) for value in split_query_csv(request.query_params.get("requirement_type_id"))
+            ]
+        except ValueError:
+            return Response({"error": "Invalid id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = annotate_pending(annotate_requirement_issue_counts(base))
+        queryset = annotate_project_ids(queryset)
+        queryset, error = apply_project_requirement_list_filters(queryset, request.query_params)
+        if error:
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+        if product_ids:
+            queryset = queryset.filter(product_id__in=product_ids)
+        if requirement_type_ids:
+            queryset = queryset.filter(requirement_type_id__in=requirement_type_ids)
+        # 搜索框只搜标题，走 SQL —— 项目页那套 Python 侧自定义字段搜索要把整个结果集
+        # 拉进内存，跨产品的个人视角不值得
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(title__icontains=search)
+        # 到期日升序（逾期优先、未排期置底），同产品内按编号
+        queryset = queryset.select_related("product", "module").order_by(
+            F("target_date").asc(nulls_last=True), "product__identifier", "sequence_id"
+        )
+
+        def serialize(rows):
+            rows = list(rows)
+            return ProjectRequirementSerializer(
+                rows,
+                many=True,
+                context={
+                    "request": request,
+                    "scope_identifiers": {str(row.product_id): row.product.identifier for row in rows},
+                    "source_display_ids": source_display_id_map(rows),
+                    "can_write": False,
+                },
+            ).data
+
+        # 网格渲染自定义列要靠需求类型的字段结构；随列表一起给，不另开配置接口
+        referenced_type_ids = get_referenced_requirement_type_ids(
+            model=Requirement, scope={"id__in": base.values("id")}
+        )
+        _specs, by_requirement_type = field_specs_for_requirement_types(referenced_type_ids)
+        extra_stats = {
+            **profile_requirement_facets(base, product_ids),
+            "requirement_types": requirement_types_field_payload_from_specs(
+                referenced_type_ids, by_requirement_type
+            ),
+        }
+
+        return self.paginate(
+            request=request,
+            queryset=queryset,
+            on_results=serialize,
+            extra_stats=extra_stats,
+            default_per_page=self.DEFAULT_PER_PAGE,
+            max_per_page=self.MAX_PER_PAGE,
         )
 
 
@@ -546,8 +678,15 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             issue__assignees__in=[user_id],
         ).values("cycle__name", "cycle__id", "cycle__project_id")
 
+        requirement_summary = get_profile_requirement_summary(slug, user_id, request.user)
+
         return Response(
             {
+                **requirement_summary,
+                "open_assigned_requirements": metric_counts["open_assigned_requirements"],
+                "overdue_requirements": metric_counts["overdue_requirements"],
+                "unscheduled_requirements": metric_counts["unscheduled_requirements"],
+                "pending_requirement_approvals": metric_counts["pending_requirement_approvals"],
                 "state_distribution": state_distribution,
                 "priority_distribution": priority_distribution,
                 "created_issues": metric_counts["created_issues"],
@@ -614,9 +753,12 @@ class WorkspaceUserProfileMetricItemsEndpoint(BaseAPIView):
             project_id=params.get("project_id"),
             plan_id=params.get("plan_id"),
             review_id=params.get("review_id"),
+            product_id=params.get("product_id"),
         )
-        # 到期日升序（逾期/今天到期优先，未排期置底），默认按创建时间倒序
-        if params.get("ordering") == "target_date":
+        # 到期日升序（逾期/今天到期优先，未排期置底），默认按创建时间倒序；
+        # 没有 target_date 列的实体（变更单）忽略该排序
+        has_target_date = any(field.name == "target_date" for field in queryset.model._meta.fields)
+        if params.get("ordering") == "target_date" and has_target_date:
             queryset = queryset.order_by(F("target_date").asc(nulls_last=True), "-created_at")
         else:
             queryset = queryset.order_by("-created_at")

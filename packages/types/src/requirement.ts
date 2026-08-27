@@ -488,6 +488,15 @@ export type TProjectRequirementsResponse = Omit<
   extra_stats?: TProjectRequirementFacets | null;
 };
 
+/** profile「需求」tab 的分面：没有需求类型计数，但把类型 schema 带上供网格渲染自定义列 */
+export type TProfileRequirementFacets = Pick<TProjectRequirementFacets, "by_product" | "by_status" | "total"> & {
+  requirement_types: TRequirementTypeSchema[];
+};
+
+export type TProfileRequirementsResponse = Omit<TPaginatedResponse<TProjectRequirement[]>, "extra_stats"> & {
+  extra_stats?: TProfileRequirementFacets | null;
+};
+
 /** 产品 ↔ 项目关联行。项目靠它确定自己能引用哪些产品的需求 */
 export type TProductProject = {
   id: string;

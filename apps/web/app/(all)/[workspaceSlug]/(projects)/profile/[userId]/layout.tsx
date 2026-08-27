@@ -56,7 +56,8 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
     pathname.includes("subscribed") ||
     pathname.includes("overdue") ||
     pathname.includes("work_items") ||
-    pathname.includes("defects");
+    pathname.includes("defects") ||
+    pathname.includes("requirements");
   const isIssuesTab =
     pathname.includes("assigned") ||
     pathname.includes("created") ||

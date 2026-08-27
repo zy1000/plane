@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import type { ComponentType } from "react";
-import { ChevronRight, ClipboardCheck } from "lucide-react";
+import { ChevronRight, ClipboardCheck, FileText, Rocket } from "lucide-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -95,6 +95,20 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       value: userProfile.pending_execution_cases,
       warn: false,
     },
+    {
+      icon: FileText,
+      key: "open_assigned_requirements",
+      title: t("profile.stats.open_assigned_requirements"),
+      value: userProfile.open_assigned_requirements,
+      warn: false,
+    },
+    {
+      icon: Rocket,
+      key: "responsible_releases",
+      title: t("profile.stats.responsible_releases"),
+      value: userProfile.responsible_releases,
+      warn: false,
+    },
   ];
 
   const activeMetricTitle = queueMetrics.find((metric) => metric.key === activeMetric)?.title;
@@ -153,7 +167,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
             <p className="mt-1 text-11 leading-4 text-placeholder">
               {t("profile.stats.overview_sections.queue.description")}
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
               {queueMetrics.map((metric) => (
                 <button
                   key={metric.key}

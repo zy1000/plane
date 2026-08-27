@@ -23,6 +23,7 @@ from plane.app.views import (
     WorkspaceUserActivityEndpoint,
     WorkspaceUserProfileEndpoint,
     WorkspaceUserProfileIssuesEndpoint,
+    WorkspaceUserProfileRequirementsEndpoint,
     WorkspaceLabelsEndpoint,
     WorkspaceProjectMemberEndpoint,
     WorkspaceUserPropertiesEndpoint,
@@ -260,6 +261,11 @@ urlpatterns = [
         "workspaces/<str:slug>/user-issues/<uuid:user_id>/",
         WorkspaceUserProfileIssuesEndpoint.as_view(),
         name="workspace-user-profile-issues",
+    ),
+    path(
+        "workspaces/<str:slug>/user-requirements/<uuid:user_id>/",
+        WorkspaceUserProfileRequirementsEndpoint.as_view(),
+        name="workspace-user-profile-requirements",
     ),
     path(
         "workspaces/<str:slug>/labels/",

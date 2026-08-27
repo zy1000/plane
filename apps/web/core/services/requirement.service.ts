@@ -7,6 +7,7 @@ import type {
   TProductProject,
   TProjectRequirement,
   TProjectRequirementModulesResponse,
+  TProfileRequirementsResponse,
   TProjectRequirementsResponse,
   TRequirement,
   TRequirementApprovalAction,
@@ -91,6 +92,66 @@ async function unwrapBlobError(error: any) {
 
 /** 需求接口的作用域。product = 归属（可写），project = 引用（只读） */
 export type TRequirementScope = { kind: "product" | "project"; id: string };
+
+/** 需求列表的查询参数：项目需求页与 profile 需求 tab 共用同一套 */
+export type TRequirementListParams = {
+  cursor?: string;
+  perPage?: number;
+  search?: string;
+  filters?: TRequirementFilter[];
+  requirementTypeId?: string;
+  /** 只看某个产品来的需求；逗号分隔多值 */
+  productId?: string;
+  /** 按需求级状态筛选；逗号分隔多值 */
+  status?: string;
+  title?: string;
+  approvalState?: string;
+  priority?: string;
+  assigneeId?: string;
+  startDate?: string;
+  startDateFrom?: string;
+  startDateTo?: string;
+  targetDate?: string;
+  targetDateFrom?: string;
+  targetDateTo?: string;
+  ids?: string[];
+  /** 关联选择器用：排除已关联到该迭代的行 */
+  exclude_cycle_id?: string;
+  /** 关联选择器用：排除已关联到该发布单的行 */
+  exclude_release_id?: string;
+  /** 关联选择器用：排除已关联到该工作项的行 */
+  exclude_issue_id?: string;
+  /** 关联选择器用：排除已关闭的需求（主列表不带 —— 项目页仍要看到已关闭需求） */
+  excludeClosed?: boolean;
+  /** 左侧模块树的过滤（含子模块）；模块归产品，项目侧只读 */
+  moduleId?: string;
+};
+
+const buildRequirementListParams = (params: TRequirementListParams) => ({
+  ...(params.cursor ? { cursor: params.cursor } : {}),
+  ...(params.perPage ? { per_page: params.perPage } : {}),
+  ...(params.search ? { search: params.search } : {}),
+  ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
+  ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
+  ...(params.productId ? { product_id: params.productId } : {}),
+  ...(params.status ? { status: params.status } : {}),
+  ...(params.title ? { title: params.title } : {}),
+  ...(params.approvalState ? { approval_state: params.approvalState } : {}),
+  ...(params.priority ? { priority: params.priority } : {}),
+  ...(params.assigneeId ? { assignee_id: params.assigneeId } : {}),
+  ...(params.startDate ? { start_date: params.startDate } : {}),
+  ...(params.startDateFrom ? { start_date_from: params.startDateFrom } : {}),
+  ...(params.startDateTo ? { start_date_to: params.startDateTo } : {}),
+  ...(params.targetDate ? { target_date: params.targetDate } : {}),
+  ...(params.targetDateFrom ? { target_date_from: params.targetDateFrom } : {}),
+  ...(params.targetDateTo ? { target_date_to: params.targetDateTo } : {}),
+  ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
+  ...(params.exclude_cycle_id ? { exclude_cycle_id: params.exclude_cycle_id } : {}),
+  ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),
+  ...(params.exclude_issue_id ? { exclude_issue_id: params.exclude_issue_id } : {}),
+  ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
+  ...(params.moduleId ? { module_id: params.moduleId } : {}),
+});
 
 export class RequirementService extends APIService {
   constructor() {
@@ -1057,65 +1118,25 @@ export class RequirementService extends APIService {
   async listProjectRequirements(
     workspaceSlug: string,
     projectId: string,
-    params: {
-      cursor?: string;
-      perPage?: number;
-      search?: string;
-      filters?: TRequirementFilter[];
-      requirementTypeId?: string;
-      /** 只看某个产品来的需求；逗号分隔多值 */
-      productId?: string;
-      /** 按需求级状态筛选；逗号分隔多值 */
-      status?: string;
-      title?: string;
-      approvalState?: string;
-      priority?: string;
-      assigneeId?: string;
-      startDate?: string;
-      startDateFrom?: string;
-      startDateTo?: string;
-      targetDate?: string;
-      targetDateFrom?: string;
-      targetDateTo?: string;
-      ids?: string[];
-      /** 关联选择器用：排除已关联到该迭代的行 */
-      exclude_cycle_id?: string;
-      /** 关联选择器用：排除已关联到该发布单的行 */
-      exclude_release_id?: string;
-      /** 关联选择器用：排除已关联到该工作项的行 */
-      exclude_issue_id?: string;
-      /** 关联选择器用：排除已关闭的需求（主列表不带 —— 项目页仍要看到已关闭需求） */
-      excludeClosed?: boolean;
-      /** 左侧模块树的过滤（含子模块）；模块归产品，项目侧只读 */
-      moduleId?: string;
-    } = {}
+    params: TRequirementListParams = {}
   ): Promise<TProjectRequirementsResponse> {
     return this.get(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/`, {
-      params: {
-        ...(params.cursor ? { cursor: params.cursor } : {}),
-        ...(params.perPage ? { per_page: params.perPage } : {}),
-        ...(params.search ? { search: params.search } : {}),
-        ...(params.filters?.length ? { filters: JSON.stringify(params.filters) } : {}),
-        ...(params.requirementTypeId ? { requirement_type_id: params.requirementTypeId } : {}),
-        ...(params.productId ? { product_id: params.productId } : {}),
-        ...(params.status ? { status: params.status } : {}),
-        ...(params.title ? { title: params.title } : {}),
-        ...(params.approvalState ? { approval_state: params.approvalState } : {}),
-        ...(params.priority ? { priority: params.priority } : {}),
-        ...(params.assigneeId ? { assignee_id: params.assigneeId } : {}),
-        ...(params.startDate ? { start_date: params.startDate } : {}),
-        ...(params.startDateFrom ? { start_date_from: params.startDateFrom } : {}),
-        ...(params.startDateTo ? { start_date_to: params.startDateTo } : {}),
-        ...(params.targetDate ? { target_date: params.targetDate } : {}),
-        ...(params.targetDateFrom ? { target_date_from: params.targetDateFrom } : {}),
-        ...(params.targetDateTo ? { target_date_to: params.targetDateTo } : {}),
-        ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
-        ...(params.exclude_cycle_id ? { exclude_cycle_id: params.exclude_cycle_id } : {}),
-        ...(params.exclude_release_id ? { exclude_release_id: params.exclude_release_id } : {}),
-        ...(params.exclude_issue_id ? { exclude_issue_id: params.exclude_issue_id } : {}),
-        ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
-        ...(params.moduleId ? { module_id: params.moduleId } : {}),
-      },
+      params: buildRequirementListParams(params),
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** profile「需求」tab：某成员负责的产品需求，跨产品；筛选参数与项目需求页同一套 */
+  async listUserRequirements(
+    workspaceSlug: string,
+    userId: string,
+    params: TRequirementListParams = {}
+  ): Promise<TProfileRequirementsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/user-requirements/${userId}/`, {
+      params: buildRequirementListParams(params),
     })
       .then((response) => response?.data)
       .catch((error) => {

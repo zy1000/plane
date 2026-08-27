@@ -75,6 +75,7 @@ from .workspace.state import WorkspaceStatesEndpoint
 from .workspace.user import (
     UserLastProjectWithWorkspaceEndpoint,
     WorkspaceUserProfileIssuesEndpoint,
+    WorkspaceUserProfileRequirementsEndpoint,
     WorkspaceUserPropertiesEndpoint,
     WorkspaceUserProfileEndpoint,
     WorkspaceUserActivityEndpoint,

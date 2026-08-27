@@ -56,11 +56,13 @@ export function useProfileMetricDetails({ metric, open, userId, workspaceSlug }:
       page: number;
       page_size: number;
       plan_id?: string;
+      product_id?: string;
       project_id?: string;
       review_id?: string;
     } = { page, page_size: PROFILE_METRIC_PAGE_SIZE };
 
     if (selectedNode.type === "project") params.project_id = selectedNode.id;
+    if (selectedNode.type === "product") params.product_id = selectedNode.id;
     if (selectedNode.type === "plan") {
       params.project_id = selectedNode.projectId;
       params.plan_id = selectedNode.id;

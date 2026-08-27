@@ -144,51 +144,96 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
                 </div>
               ))}
             </div>
-            <div className="mt-9 divide-y divide-subtle">
-              {userProjectsData.project_data.map((project, index) => {
-                const projectDetails = getProjectById(project.id);
+            <div className="mt-9">
+              <h5 className="mb-1 text-12 font-medium text-secondary">{t("profile.details.projects")}</h5>
+              <div className="divide-y divide-subtle">
+                {userProjectsData.project_data.map((project, index) => {
+                  const projectDetails = getProjectById(project.id);
 
-                const completedIssuePercentage =
-                  project.assigned_issues === 0
-                    ? 0
-                    : Math.round((project.completed_issues / project.assigned_issues) * 100);
+                  const completedIssuePercentage =
+                    project.assigned_issues === 0
+                      ? 0
+                      : Math.round((project.completed_issues / project.assigned_issues) * 100);
 
-                if (!projectDetails) return null;
+                  if (!projectDetails) return null;
 
-                return (
-                  <div key={project.id} className={`${index === 0 ? "pb-3" : "py-3"}`}>
-                    <Link
-                      href={`/${workspaceSlug}/projects/${project.id}/overview`}
-                      className="flex w-full items-center justify-between gap-2"
-                    >
-                      <div className="flex w-3/4 items-center gap-2">
-                        <span className="grid h-7 w-7 flex-shrink-0 place-items-center">
-                          <Logo logo={projectDetails.logo_props} />
-                        </span>
-                        <div className="truncate text-13 font-medium break-words">{projectDetails.name}</div>
-                      </div>
-                      <div className="flex flex-shrink-0 items-center gap-2">
-                        {project.assigned_issues > 0 && (
-                          <Tooltip tooltipContent="Completion percentage" position="left" isMobile={isMobile}>
-                            <div
-                              className={`rounded-sm px-1 py-0.5 text-11 font-medium ${
-                                completedIssuePercentage <= 35
-                                  ? "bg-danger-subtle text-danger-primary"
-                                  : completedIssuePercentage <= 70
-                                    ? "bg-yellow-500/10 text-yellow-500"
-                                    : "bg-success-subtle text-success-primary"
-                              }`}
-                            >
-                              {completedIssuePercentage}%
+                  return (
+                    <div key={project.id} className={`${index === 0 ? "pb-3" : "py-3"}`}>
+                      <Link
+                        href={`/${workspaceSlug}/projects/${project.id}/overview`}
+                        className="flex w-full items-center justify-between gap-2"
+                      >
+                        <div className="flex w-3/4 items-center gap-2">
+                          <span className="grid h-7 w-7 flex-shrink-0 place-items-center">
+                            <Logo logo={projectDetails.logo_props} />
+                          </span>
+                          <div className="truncate text-13 font-medium break-words">{projectDetails.name}</div>
+                        </div>
+                        <div className="flex flex-shrink-0 items-center gap-2">
+                          {project.assigned_issues > 0 && (
+                            <Tooltip tooltipContent="Completion percentage" position="left" isMobile={isMobile}>
+                              <div
+                                className={`rounded-sm px-1 py-0.5 text-11 font-medium ${
+                                  completedIssuePercentage <= 35
+                                    ? "bg-danger-subtle text-danger-primary"
+                                    : completedIssuePercentage <= 70
+                                      ? "bg-yellow-500/10 text-yellow-500"
+                                      : "bg-success-subtle text-success-primary"
+                                }`}
+                              >
+                                {completedIssuePercentage}%
+                              </div>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {userProjectsData.product_data.length > 0 && (
+              <div className="mt-7">
+                <h5 className="mb-1 text-12 font-medium text-secondary">{t("profile.details.products")}</h5>
+                <div className="divide-y divide-subtle">
+                  {userProjectsData.product_data.map((product, index) => (
+                    <div key={product.id} className={`${index === 0 ? "pb-3" : "py-3"}`}>
+                      <Link
+                        href={`/${workspaceSlug}/products/${product.id}/requirements`}
+                        className="flex w-full items-center justify-between gap-2"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="grid h-7 w-7 flex-shrink-0 place-items-center">
+                            {product.logo_props?.in_use ? (
+                              <Logo logo={product.logo_props} />
+                            ) : (
+                              <span className="grid size-5 place-items-center rounded-sm bg-accent-subtle text-10 font-semibold text-accent-primary uppercase">
+                                {product.identifier.slice(0, 1)}
+                              </span>
+                            )}
+                          </span>
+                          <div className="truncate text-13 font-medium">
+                            {product.name}
+                            <span className="ml-1.5 text-11 font-normal text-placeholder">{product.identifier}</span>
+                          </div>
+                        </div>
+                        {product.assigned_requirements > 0 && (
+                          <Tooltip
+                            tooltipContent={t("profile.stats.open_assigned_requirements")}
+                            position="left"
+                            isMobile={isMobile}
+                          >
+                            <div className="rounded-sm bg-accent-subtle px-1 py-0.5 text-11 font-medium text-accent-primary tabular-nums">
+                              {t("profile.details.requirement_count", { count: product.assigned_requirements })}
                             </div>
                           </Tooltip>
                         )}
-                      </div>
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (

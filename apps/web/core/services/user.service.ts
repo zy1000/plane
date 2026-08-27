@@ -197,6 +197,7 @@ export class UserService extends APIService {
       page_size: number;
       ordering?: "-created_at" | "target_date";
       plan_id?: string;
+      product_id?: string;
       project_id?: string;
       review_id?: string;
     }
