@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Outlet } from "react-router";
+import { LayoutDashboard } from "lucide-react";
 // plane imports
 import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
 // components
@@ -15,6 +16,8 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { WorkspaceManagementNavigation } from "@/components/navigation/workspace-management-header";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
+// plane-web imports
+import { useAnalyticsTabs } from "@/plane-web/components/analytics/use-analytics-tabs";
 
 const WorkspaceAnalyticsTabLayout = observer(function WorkspaceAnalyticsTabLayout() {
   const { workspaceSlug } = useParams();
@@ -27,12 +30,24 @@ const WorkspaceAnalyticsTabLayout = observer(function WorkspaceAnalyticsTabLayou
     allowWorkspacePermissionKeys([WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY], resolvedWorkspaceSlug)
   );
 
+  // 页头二级 Tab（概览 / 延期）与页面内容共用同一份 tab 定义
+  const analyticsTabs = useAnalyticsTabs(resolvedWorkspaceSlug ?? "");
+  const tabs = analyticsTabs.map((tab) => ({
+    key: tab.key,
+    label: tab.label,
+    href: `/${resolvedWorkspaceSlug}/analytics/${tab.key}`,
+  }));
+
   if (!resolvedWorkspaceSlug || !workspaceInfo) return null;
   if (!canViewAnalytics) return <NotAuthorizedView section="general" className="h-auto" />;
 
   return (
     <>
-      <WorkspaceManagementNavigation />
+      <WorkspaceManagementNavigation
+        icon={<LayoutDashboard className="size-4 flex-shrink-0" />}
+        title="看板"
+        tabs={tabs}
+      />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>

@@ -4,16 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
-import { useRouter } from "next/navigation";
 // plane package imports
 import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { Tabs } from "@plane/propel/tabs";
 // components
-import { cn } from "@plane/utils";
 import AnalyticsFilterActions from "@/components/analytics/analytics-filter-actions";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -27,9 +23,6 @@ import type { Route } from "./+types/page";
 
 function AnalyticsPage({ params }: Route.ComponentProps) {
   const { tabId } = params;
-
-  // hooks
-  const router = useRouter();
 
   // plane imports
   const { t } = useTranslation();
@@ -54,24 +47,15 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
   const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
   const ANALYTICS_TABS = useAnalyticsTabs(workspaceSlug.toString());
 
-  const [selectedTab, setSelectedTab] = useState(tabId || ANALYTICS_TABS[0]?.key);
-
-  useEffect(() => {
-    if (tabId) {
-      setSelectedTab(tabId);
-    }
-  }, [tabId]);
-
-  // Handle tab change
-  const handleTabChange = (value: string) => {
-    setSelectedTab(value);
-    router.push(`/${currentWorkspace?.slug}/analytics/${value}`);
-  };
+  // Tab 切换已上移到 layout 的页头（WorkspaceManagementNavigation），这里只按 URL 段渲染对应内容；
+  // 未知 tabId 回落到第一个 tab
+  const activeTab = ANALYTICS_TABS.find((tab) => tab.key === tabId) ?? ANALYTICS_TABS[0];
 
   if (!workspaceInfo) return null;
   if (!canViewAnalytics) {
     return <NotAuthorizedView section="general" className="h-auto" />;
   }
+  if (!activeTab) return null;
 
   return (
     <>
@@ -79,52 +63,19 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
       {workspaceProjectIds && (
         <>
           {workspaceProjectIds.length > 0 || loader === "init-loader" ? (
-            <div className="flex h-full overflow-hidden">
-              <Tabs value={selectedTab} onValueChange={handleTabChange} className="h-full w-full">
-                <div className={"flex h-full w-full flex-col"}>
-                  <div
-                    className={cn(
-                      "flex w-full items-center justify-between gap-4 overflow-hidden border-b border-subtle bg-surface-1 px-6 py-2"
-                    )}
-                  >
-                    <Tabs.List className={"flex h-7 w-fit overflow-x-auto"}>
-                      {ANALYTICS_TABS.map((tab) => (
-                        <Tabs.Trigger
-                          key={tab.key}
-                          value={tab.key}
-                          disabled={tab.isDisabled}
-                          size="md"
-                          className="h-6 px-3"
-                          onClick={() => {
-                            if (!tab.isDisabled) {
-                              handleTabChange(tab.key);
-                            }
-                          }}
-                        >
-                          {tab.label}
-                        </Tabs.Trigger>
-                      ))}
-                    </Tabs.List>
-
-                    <div className="flex-shrink-0">
-                      <AnalyticsFilterActions activeTab={selectedTab} />
-                    </div>
-                  </div>
-                  {ANALYTICS_TABS.map((tab) => (
-                    <Tabs.Content
-                      key={tab.key}
-                      value={tab.key}
-                      className={
-                        tab.key === "overdue"
-                          ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-                          : "h-full overflow-hidden overflow-y-auto px-2"
-                      }
-                    >
-                      <tab.content />
-                    </Tabs.Content>
-                  ))}
-                </div>
-              </Tabs>
+            <div className="flex h-full w-full flex-col overflow-hidden">
+              <div className="flex w-full items-center justify-end gap-4 overflow-hidden border-b border-subtle bg-surface-1 px-6 py-2">
+                <AnalyticsFilterActions activeTab={activeTab.key} />
+              </div>
+              <div
+                className={
+                  activeTab.key === "overdue"
+                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                    : "h-full overflow-hidden overflow-y-auto px-2"
+                }
+              >
+                <activeTab.content />
+              </div>
             </div>
           ) : (
             <EmptyStateDetailed

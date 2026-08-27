@@ -9,6 +9,8 @@ import { useParams } from "next/navigation";
 import { Outlet } from "react-router";
 // plane imports
 import { WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { ArchiveIcon } from "@plane/propel/icons";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -18,6 +20,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 
 const WorkspaceArchivesLayout = observer(function WorkspaceArchivesLayout() {
   const { workspaceSlug } = useParams();
+  const { t } = useTranslation();
   const { workspaceInfoBySlug, allowWorkspacePermissionKeys } = useUserPermissions();
 
   const resolvedWorkspaceSlug = workspaceSlug?.toString();
@@ -32,7 +35,7 @@ const WorkspaceArchivesLayout = observer(function WorkspaceArchivesLayout() {
 
   return (
     <>
-      <WorkspaceManagementNavigation />
+      <WorkspaceManagementNavigation icon={<ArchiveIcon className="size-4 flex-shrink-0" />} title={t("archives")} />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>

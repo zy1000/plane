@@ -8,20 +8,16 @@ import React, { useMemo } from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
-import { Clock, LayoutDashboard } from "lucide-react";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
-  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { SidebarFavoritesMenu } from "@/components/workspace/sidebar/favorites/favorites-menu";
+import { useSidebarCustomNavItems } from "@/components/workspace/sidebar/use-sidebar-custom-nav-items";
 import { useFavorite } from "@/hooks/store/use-favorite";
-import { useUserPermissions } from "@/hooks/store/user";
 import { usePersonalNavigationPreferences } from "@/hooks/use-navigation-preferences";
 // plane-web imports
 import { SidebarItem } from "@/plane-web/components/workspace/sidebar/sidebar-item";
@@ -29,17 +25,10 @@ import { SidebarItem } from "@/plane-web/components/workspace/sidebar/sidebar-it
 export const SidebarMenuItems = observer(function SidebarMenuItems() {
   // hooks
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
-  const { workspaceSlug } = useParams();
-  const pathname = usePathname();
-  const { t } = useTranslation();
-  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { groupedFavorites } = useFavorite();
+  const customNavItems = useSidebarCustomNavItems();
 
   // derived values
-  const canViewWorkspaceAnalytics = allowWorkspacePermissionKeys(
-    [WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY],
-    workspaceSlug?.toString()
-  );
   const isFavoriteEmpty = isEmpty(groupedFavorites);
 
   // Filter static navigation items based on personal preferences
@@ -97,37 +86,23 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
         </div>
 
         <hr className="my-3 border-subtle" />
-        {canViewWorkspaceAnalytics && (
-          <div className="flex flex-col gap-0.5">
-            <Link href={`/${workspaceSlug}/analytics`}>
-              <SidebarNavItem
-                isActive={
-                  !!pathname?.includes(`/${workspaceSlug}/analytics`) ||
-                  !!pathname?.includes(`/${workspaceSlug}/projects/archives`)
-                }
-              >
-                <div className="flex items-center gap-1.5 py-[1px]">
-                  <LayoutDashboard className="size-4 flex-shrink-0" />
-                  <p className="text-13 leading-5 font-medium">工作区</p>
-                </div>
-              </SidebarNavItem>
-            </Link>
-          </div>
-        )}
         <div className="flex flex-col gap-0.5">
           {pinnedSidebarItems.map((item) => (
             <SidebarItem key={`pinned_${item.key}`} item={item} />
           ))}
         </div>
+        {/* 自研入口：工时 / 看板 / 归档 */}
         <div className="flex flex-col gap-0.5">
-          <Link href={`/${workspaceSlug}/timesheets/overview/`}>
-            <SidebarNavItem isActive={!!pathname?.includes(`/${workspaceSlug}/timesheets`)}>
-              <div className="flex items-center gap-1.5 py-[1px]">
-                <Clock className="size-4 flex-shrink-0" />
-                <p className="text-13 leading-5 font-medium">{t("timesheets")}</p>
-              </div>
-            </SidebarNavItem>
-          </Link>
+          {customNavItems.map((item) => (
+            <Link key={`custom_${item.key}`} href={item.href}>
+              <SidebarNavItem isActive={item.isActive}>
+                <div className="flex items-center gap-1.5 py-[1px]">
+                  {item.icon}
+                  <p className="text-13 leading-5 font-medium">{item.label}</p>
+                </div>
+              </SidebarNavItem>
+            </Link>
+          ))}
         </div>
         {/* Favorites Menu */}
         {!isFavoriteEmpty && (

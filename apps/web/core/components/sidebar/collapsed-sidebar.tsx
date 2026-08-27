@@ -8,18 +8,18 @@ import React, { useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { Clock, LayoutDashboard, PanelLeft } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
-  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { cn, joinUrlPath } from "@plane/utils";
 import { Tooltip } from "@plane/ui";
 // components
 import { HelpMenuRoot } from "@/components/workspace/sidebar/help-section/root";
+import { useSidebarCustomNavItems } from "@/components/workspace/sidebar/use-sidebar-custom-nav-items";
 import { UserMenuRoot } from "@/components/workspace/sidebar/user-menu-root";
 import { WorkspaceMenuRoot } from "@/components/workspace/sidebar/workspace-menu-root";
 // hooks
@@ -75,14 +75,14 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
   const pathname = usePathname();
   const { t } = useTranslation();
   const { toggleSidebar } = useAppTheme();
-  const { allowWorkspacePermissionKeys, hasPageAccess } = useUserPermissions();
+  const { hasPageAccess } = useUserPermissions();
   const { data: currentUser } = useUser();
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
   const { unreadNotificationsCount } = useWorkspaceNotifications();
 
   const slug = workspaceSlug?.toString() || "";
 
-  const canViewWorkspaceAnalytics = allowWorkspacePermissionKeys([WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY], slug);
+  const customNavItems = useSidebarCustomNavItems();
 
   const filteredStaticNavigationItems = useMemo(() => {
     const items = [...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS];
@@ -167,20 +167,6 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
           );
         })}
 
-        {canViewWorkspaceAnalytics && (
-          <Tooltip tooltipContent="工作区" position="right">
-            <Link href={`/${slug}/analytics`} className="flex w-full justify-center">
-              <div
-                className={collapsedNavIconClass(
-                  !!(pathname?.includes(`/${slug}/analytics`) || pathname?.includes(`/${slug}/projects/archives`))
-                )}
-              >
-                <LayoutDashboard className="size-4 flex-shrink-0" />
-              </div>
-            </Link>
-          </Tooltip>
-        )}
-
         {pinnedSidebarItems.map(
           (item) =>
             hasPageAccess(slug, item.key) && (
@@ -188,13 +174,14 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
             )
         )}
 
-        <Tooltip tooltipContent={t("timesheets")} position="right">
-          <Link href={`/${slug}/timesheets/overview/`} className="flex w-full justify-center">
-            <div className={collapsedNavIconClass(!!pathname?.includes(`/${slug}/timesheets`))}>
-              <Clock className="size-4 flex-shrink-0" />
-            </div>
-          </Link>
-        </Tooltip>
+        {/* 自研入口：工时 / 看板 / 归档 */}
+        {customNavItems.map((item) => (
+          <Tooltip key={item.key} tooltipContent={item.label} position="right">
+            <Link href={item.href} className="flex w-full justify-center">
+              <div className={collapsedNavIconClass(item.isActive)}>{item.icon}</div>
+            </Link>
+          </Tooltip>
+        ))}
       </div>
 
       {/* Bottom area */}

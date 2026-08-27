@@ -4,45 +4,35 @@
  * See the LICENSE file for details.
  */
 
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
-import { LayoutDashboard } from "lucide-react";
-import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { usePathname } from "next/navigation";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
-import { useUserPermissions } from "@/hooks/store/user";
 
-export const WorkspaceManagementNavigation = observer(function WorkspaceManagementNavigation() {
-  const { workspaceSlug } = useParams();
+export type TWorkspaceManagementTab = {
+  key: string;
+  label: string;
+  href: string;
+};
+
+type Props = {
+  icon: ReactNode;
+  title: string;
+  /** 可选的二级 Tab，不传或为空时只渲染标题 */
+  tabs?: TWorkspaceManagementTab[];
+};
+
+export const WorkspaceManagementNavigation = observer(function WorkspaceManagementNavigation({
+  icon,
+  title,
+  tabs = [],
+}: Props) {
   const pathname = usePathname();
   const { sidebarCollapsed } = useAppTheme();
-  const { allowWorkspacePermissionKeys } = useUserPermissions();
-
-  const slug = workspaceSlug?.toString() || "";
-  const isAnalyticsActive = !!pathname?.includes("/analytics");
-  const isArchivesActive = !!pathname?.includes("/projects/archives");
-  const canViewAnalytics = allowWorkspacePermissionKeys([WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY], slug);
-  const canViewProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_VIEW_PERMISSION_KEY], slug);
-
-  const tabs = [
-    {
-      key: "analytics",
-      label: "分析",
-      href: `/${slug}/analytics`,
-      isActive: isAnalyticsActive,
-      shouldRender: canViewAnalytics,
-    },
-    {
-      key: "archives",
-      label: "归档",
-      href: `/${slug}/projects/archives`,
-      isActive: isArchivesActive,
-      shouldRender: canViewProjects,
-    },
-  ].filter((tab) => tab.shouldRender);
 
   return (
     <div className="z-20">
@@ -53,24 +43,31 @@ export const WorkspaceManagementNavigation = observer(function WorkspaceManageme
               <Header.LeftItem className="flex h-full max-w-full items-center gap-2">
                 <div className="flex size-full items-center gap-3 overflow-hidden">
                   <div className="flex flex-shrink-0 items-center gap-1.5 text-sm font-medium text-secondary">
-                    <LayoutDashboard className="size-4 flex-shrink-0" />
-                    <span>工作区</span>
+                    {icon}
+                    <span>{title}</span>
                   </div>
-                  <div className="h-5 w-px flex-shrink-0 bg-border-subtle" />
-                  <TabNavigationList className="h-full">
-                    {tabs.map((tab) => (
-                      <div key={tab.key} className="relative flex h-full items-center">
-                        {tab.isActive && (
-                          <span className="absolute -bottom-px left-1/2 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-(--text-color-icon-primary)" />
-                        )}
-                        <Link href={tab.href}>
-                          <TabNavigationItem isActive={tab.isActive}>
-                            <span>{tab.label}</span>
-                          </TabNavigationItem>
-                        </Link>
-                      </div>
-                    ))}
-                  </TabNavigationList>
+                  {tabs.length > 0 && (
+                    <>
+                      <div className="h-5 w-px flex-shrink-0 bg-border-subtle" />
+                      <TabNavigationList className="h-full">
+                        {tabs.map((tab) => {
+                          const isActive = !!pathname?.includes(tab.href);
+                          return (
+                            <div key={tab.key} className="relative flex h-full items-center">
+                              {isActive && (
+                                <span className="absolute -bottom-px left-1/2 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-(--text-color-icon-primary)" />
+                              )}
+                              <Link href={tab.href}>
+                                <TabNavigationItem isActive={isActive}>
+                                  <span>{tab.label}</span>
+                                </TabNavigationItem>
+                              </Link>
+                            </div>
+                          );
+                        })}
+                      </TabNavigationList>
+                    </>
+                  )}
                 </div>
               </Header.LeftItem>
             </Header>
