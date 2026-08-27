@@ -12,13 +12,16 @@ from rest_framework.response import Response
 from plane.app.permissions import allow_workspace_member
 from plane.app.serializers.qa import CaseCreateUpdateSerializer, CaseListSerializer
 from plane.app.views import BaseAPIView
-from plane.app.views.qa.case import get_or_create_case_module, sync_case_labels_by_name
+from plane.app.views.qa.case import (
+    build_source_module_path_resolver,
+    build_target_module_resolver,
+    enqueue_case_asset_copy,
+    sync_case_labels_by_name,
+)
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
 from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
-from plane.bgtasks.copy_case_assets_task import copy_case_assets
 from plane.bgtasks.test_case_activities_task import test_case_activity
-from plane.db.models import CaseModule, PlanCase, TestCase, TestCaseRepository
-from plane.utils.exception_logger import log_exception
+from plane.db.models import PlanCase, TestCase, TestCaseRepository
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -240,62 +243,13 @@ class TemplateCaseImportAPIView(BaseAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # 源模块 parent 链一次性载入内存，免逐级查库
-        source_repo_ids = {c.repository_id for c in source_cases}
-        module_map = {
-            str(m["id"]): (m["name"], str(m["parent_id"]) if m["parent_id"] else None)
-            for m in CaseModule.objects.filter(repository_id__in=source_repo_ids).values(
-                "id", "name", "parent_id"
-            )
-        }
-        path_memo: dict = {}
-
-        def source_module_path(module_id):
-            """回溯源模块的名称路径（自顶向下的元组）；模块已软删/查不到视为无模块。"""
-            if module_id is None:
-                return ()
-            key = str(module_id)
-            if key in path_memo:
-                return path_memo[key]
-            names = []
-            visited = set()
-            current = key
-            while current is not None and current in module_map and current not in visited:
-                visited.add(current)
-                name, parent = module_map[current]
-                names.append(name)
-                current = parent
-            if key not in module_map:
-                path = ()
-            else:
-                path = tuple(reversed(names))
-            path_memo[key] = path
-            return path
+        source_module_path = build_source_module_path_resolver({c.repository_id for c in source_cases})
 
         created_ids = []
         copied_pairs = []
 
-        def _enqueue_asset_copy(pairs, actor_id):
-            # 附件与富文本图片异步跟随复制；broker 不可用时降级为“导入成功但资产不跟随”
-            try:
-                for src_id, new_id in pairs:
-                    copy_case_assets.delay(src_id, new_id, actor_id)
-            except Exception as e:
-                log_exception(e)
-
         with transaction.atomic():
-            # 目标模块链缓存：路径元组 -> CaseModule；每级前缀都缓存，A/B 与 A/C 共享 A
-            target_module_cache: dict = {(): None}
-
-            def resolve_target_module(path):
-                if path in target_module_cache:
-                    return target_module_cache[path]
-                parent = resolve_target_module(path[:-1])
-                module = get_or_create_case_module(
-                    str(target_repository.id), path[-1], parent
-                )
-                target_module_cache[path] = module
-                return module
+            resolve_target_module = build_target_module_resolver(target_repository.id)
 
             for source_case in source_cases:
                 target_module = resolve_target_module(
@@ -328,7 +282,7 @@ class TemplateCaseImportAPIView(BaseAPIView):
 
             # on_commit 保证 worker 读到的是已提交的新用例行
             transaction.on_commit(
-                lambda: _enqueue_asset_copy(list(copied_pairs), str(request.user.id))
+                lambda: enqueue_case_asset_copy(list(copied_pairs), str(request.user.id))
             )
 
         return list_response(data=created_ids, count=len(created_ids))

@@ -685,8 +685,16 @@ export class CaseService extends APIService {
       });
 }
 
-  async copyCase(workspaceSlug: string, casesId: Array<string>, moduleId: string): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/case/copy-case/`, { cases_id: casesId, module_id: moduleId })
+  // module_id / repository_id 二选一：到模块为平铺复制；到用例库时后端按源模块结构在目标库匹配/创建同名模块链
+  async copyCase(
+    workspaceSlug: string,
+    casesId: Array<string>,
+    target: { moduleId?: string; repositoryId?: string }
+  ): Promise<any> {
+    const payload: Record<string, any> = { cases_id: casesId };
+    if (target.moduleId) payload.module_id = target.moduleId;
+    else if (target.repositoryId) payload.repository_id = target.repositoryId;
+    return this.post(`/api/workspaces/${workspaceSlug}/test/case/copy-case/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

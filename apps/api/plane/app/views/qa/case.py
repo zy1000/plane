@@ -73,6 +73,66 @@ def get_or_create_case_module(repository_id, name, parent):
         return CaseModule.objects.filter(**lookup).order_by("created_at", "id").first()
 
 
+def build_source_module_path_resolver(source_repo_ids):
+    """返回 module_id -> 源模块名称路径（自顶向下元组）的解析函数。
+
+    源模块 parent 链一次性载入内存，免逐级查库；模块为 None / 已软删 / 查不到视为无模块（空元组）。
+    供 copy_case（复制到用例库）/ 从模板导入共用。
+    """
+    module_map = {
+        str(m["id"]): (m["name"], str(m["parent_id"]) if m["parent_id"] else None)
+        for m in CaseModule.objects.filter(repository_id__in=source_repo_ids).values("id", "name", "parent_id")
+    }
+    path_memo: dict = {}
+
+    def source_module_path(module_id):
+        if module_id is None:
+            return ()
+        key = str(module_id)
+        if key in path_memo:
+            return path_memo[key]
+        names = []
+        visited = set()
+        current = key
+        while current is not None and current in module_map and current not in visited:
+            visited.add(current)
+            name, parent = module_map[current]
+            names.append(name)
+            current = parent
+        path = tuple(reversed(names)) if key in module_map else ()
+        path_memo[key] = path
+        return path
+
+    return source_module_path
+
+
+def build_target_module_resolver(target_repository_id):
+    """返回 名称路径元组 -> 目标库 CaseModule 的解析函数，逐级 get_or_create 同名模块链。
+
+    每级前缀都缓存（A/B 与 A/C 共享 A）；空元组返回 None（落库根）。会写库，需在 transaction.atomic() 内调用。
+    """
+    target_module_cache: dict = {(): None}
+
+    def resolve_target_module(path):
+        if path in target_module_cache:
+            return target_module_cache[path]
+        parent = resolve_target_module(path[:-1])
+        module = get_or_create_case_module(str(target_repository_id), path[-1], parent)
+        target_module_cache[path] = module
+        return module
+
+    return resolve_target_module
+
+
+def enqueue_case_asset_copy(pairs, actor_id):
+    """按 (源用例 id, 新用例 id) 派发附件与富文本图片的异步复制；broker 不可用时降级为“复制成功但资产不跟随”。"""
+    try:
+        for src_id, new_id in pairs:
+            copy_case_assets.delay(src_id, new_id, actor_id)
+    except Exception as e:
+        log_exception(e)
+
+
 class CaseAssetAPIView(BaseAPIView):
     model = FileAsset
     queryset = FileAsset.objects.all()
@@ -1504,67 +1564,92 @@ class CaseAPI(BaseViewSet):
     def copy_case(self, request, slug):
         cases_id = request.data.get('cases_id') or []
         module_id = request.data.get('module_id')
+        repository_id = request.data.get('repository_id')
 
-        if not module_id:
-            return Response({"error": "module_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not module_id and not repository_id:
+            return Response(
+                {"error": "module_id 和 repository_id 必须填写其中一个"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if module_id and repository_id:
+            return Response(
+                {"error": "module_id 和 repository_id 只能填写一个"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not isinstance(cases_id, list) or len(cases_id) == 0:
             return Response({"error": "cases_id must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
 
-        target_module = get_object_or_404(CaseModule, id=module_id, repository__workspace__slug=slug)
+        if module_id:
+            # 复制到指定模块：所有用例平铺进该模块，目标库从模块推断
+            target_module = get_object_or_404(CaseModule, id=module_id, repository__workspace__slug=slug)
+            target_repository_id = target_module.repository_id
+        else:
+            # 复制到指定用例库：按源用例的模块名称路径在目标库匹配/创建同名模块链，无模块的落库根
+            target_repository = get_object_or_404(TestCaseRepository, id=repository_id, workspace__slug=slug)
+            target_repository_id = target_repository.id
 
-        source_cases = (
+        source_cases = list(
             TestCase.objects.filter(id__in=cases_id, repository__workspace__slug=slug, deleted_at__isnull=True)
             .select_related("repository", "module", "assignee")
             .prefetch_related("labels", "issues", "review_cases")
         )
 
-        found_ids = set(str(i) for i in source_cases.values_list("id", flat=True))
+        found_ids = {str(c.id) for c in source_cases}
         missing_ids = [str(i) for i in cases_id if str(i) not in found_ids]
         if missing_ids:
             return Response({"error": f"TestCase not found: {','.join(missing_ids)}"}, status=status.HTTP_404_NOT_FOUND)
 
-        if source_cases.filter(repository_id__isnull=True).exists():
+        if any(c.repository_id is None for c in source_cases):
             return Response({"error": "Invalid source case repository"}, status=status.HTTP_400_BAD_REQUEST)
 
         created = []
         copied_pairs = []
-        target_repository_id = target_module.repository_id
-        for source_case in source_cases:
-            base_fields = dict(
-                name=source_case.name,
-                precondition=source_case.precondition,
-                steps=source_case.steps,
-                # 文本模式三件套必须一并复制，否则 mode=TEXT 的用例复制后丢正文
-                mode=source_case.mode,
-                text_description=source_case.text_description,
-                text_result=source_case.text_result,
-                remark=source_case.remark,
-                state=getattr(source_case, "state", None),
-                type=source_case.type,
-                priority=source_case.priority,
-                test_type=getattr(source_case, "test_type", None),
-                repository_id=target_repository_id,
-                module_id=target_module.id,
-                assignee_id=getattr(request.user, "id", None),
+        with transaction.atomic():
+            if module_id:
+                def target_module_for(source_case):
+                    return target_module
+            else:
+                source_module_path = build_source_module_path_resolver({c.repository_id for c in source_cases})
+                resolve_target_module = build_target_module_resolver(target_repository_id)
+
+                def target_module_for(source_case):
+                    return resolve_target_module(source_module_path(source_case.module_id))
+
+            for source_case in source_cases:
+                case_target_module = target_module_for(source_case)
+                base_fields = dict(
+                    name=source_case.name,
+                    precondition=source_case.precondition,
+                    steps=source_case.steps,
+                    # 文本模式三件套必须一并复制，否则 mode=TEXT 的用例复制后丢正文
+                    mode=source_case.mode,
+                    text_description=source_case.text_description,
+                    text_result=source_case.text_result,
+                    remark=source_case.remark,
+                    state=getattr(source_case, "state", None),
+                    type=source_case.type,
+                    priority=source_case.priority,
+                    test_type=getattr(source_case, "test_type", None),
+                    repository_id=target_repository_id,
+                    module_id=case_target_module.id if case_target_module else None,
+                    assignee_id=getattr(request.user, "id", None),
+                )
+                base_fields = {k: v for k, v in base_fields.items() if v is not None}
+
+                new_case = TestCase.objects.create(code="", **base_fields)
+
+                sync_case_labels_by_name(source_case, new_case, target_repository_id)
+                # 不复制评审与执行记录；问题关联保持原样
+                new_case.issues.set(list(source_case.issues.all()))
+
+                created.append(new_case)
+                copied_pairs.append((str(source_case.id), str(new_case.id)))
+
+            # on_commit 保证 worker 读到的是已提交的新用例行
+            transaction.on_commit(
+                lambda: enqueue_case_asset_copy(list(copied_pairs), str(request.user.id))
             )
-            base_fields = {k: v for k, v in base_fields.items() if v is not None}
-
-            new_case = TestCase.objects.create(code="", **base_fields)
-
-            sync_case_labels_by_name(source_case, new_case, target_repository_id)
-            # 不复制评审与执行记录；问题关联保持原样
-            new_case.issues.set(list(source_case.issues.all()))
-
-            created.append(new_case)
-            copied_pairs.append((str(source_case.id), str(new_case.id)))
-
-        # 附件与富文本图片异步跟随复制；broker 不可用时降级为“复制成功但资产不跟随”
-        try:
-            for src_id, new_id in copied_pairs:
-                copy_case_assets.delay(src_id, new_id, str(request.user.id))
-        except Exception as e:
-            log_exception(e)
 
         serializer = CaseListSerializer(created, many=True)
         return list_response(data=serializer.data, count=len(created))
@@ -1679,20 +1764,12 @@ class CaseModuleView(BaseViewSet):
                 _copy_module_recursive(child, new_mod, repo_id)
             return new_mod
 
-        def _enqueue_asset_copy(pairs, actor_id):
-            # 附件与富文本图片异步跟随复制；broker 不可用时降级为“复制成功但资产不跟随”
-            try:
-                for src_id, new_id in pairs:
-                    copy_case_assets.delay(src_id, new_id, actor_id)
-            except Exception as e:
-                log_exception(e)
-
         copied_pairs = []
         with transaction.atomic():
             new_root = _copy_module_recursive(source_module, target_parent, str(target_repository_id))
             # on_commit 保证 worker 读到的是已提交的新用例行
             transaction.on_commit(
-                lambda: _enqueue_asset_copy(list(copied_pairs), str(request.user.id))
+                lambda: enqueue_case_asset_copy(list(copied_pairs), str(request.user.id))
             )
 
         return Response(

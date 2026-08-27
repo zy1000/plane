@@ -171,11 +171,11 @@ type TProps = {
 
 /**
  * 变更轨迹。折叠交互与下方版本历史对齐：标题左侧 chevron，点一下收起/展开。
- * 默认展开 —— 轨迹数据随详情一起到齐，不像版本历史要等展开才去拉。
+ * 默认收起，避免详情页一进来就被历史列表占掉一截。
  */
 export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersion }: TProps) => {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   const rows = useMemo(
     () =>

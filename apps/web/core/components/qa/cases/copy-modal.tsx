@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Tree, message, Pagination, Empty, Spin } from "antd";
+import React, { useEffect, useMemo, useState } from "react";
+import { Modal, Tree, message, Empty, Spin } from "antd";
 import type { TreeProps } from "antd";
 import {
   Check,
@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { cn } from "@plane/utils";
 import { CaseService } from "@/services/qa/case.service";
-import { RepositoryService } from "@/services/qa/repository.service";
+import { CaseModuleService } from "@/services/qa/case-module.service";
+import { filterTree } from "./case-tree-utils";
 
 type Props = {
   isOpen: boolean;
@@ -34,184 +35,77 @@ type Props = {
   emptyProjectGroupLabel?: string;
 };
 
-type RepoRow = { id: string; name: string; modules: any[] };
-type ProjectGroup = { projectId: string; projectName: string; repositories: RepoRow[] };
+/** 复制目标：到模块为平铺复制；到用例库时按源模块结构在目标库匹配/创建同名模块链 */
+type CopyTarget = { kind: "module" | "repository"; id: string; name: string };
 
 const caseService = new CaseService();
-const repositoryService = new RepositoryService();
+const caseModuleService = new CaseModuleService();
 
-const DEFAULT_PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 350;
+const NO_PROJECT_KEY = "__no_project__";
+
+/** 收集过滤后树中所有非叶子节点的 key，搜索时全部展开以直接看到命中结果 */
+const collectExpandableKeys = (nodes: any[]): React.Key[] =>
+  (nodes || []).flatMap((n) => (n?.children?.length ? [n.key, ...collectExpandableKeys(n.children)] : []));
 
 export const CopyCaseModal: React.FC<Props> = ({
   isOpen,
   handleClose,
   workspaceSlug,
-  repositoryId,
-  projectId,
   selectedCaseIds,
   onSuccess,
   repositoryQuery,
   emptyProjectGroupLabel,
 }) => {
-  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
-  const [selectedModuleName, setSelectedModuleName] = useState<string>("");
+  const [target, setTarget] = useState<CopyTarget | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(["root"]);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
-  const [searchInput, setSearchInput] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
-  const [total, setTotal] = useState<number>(0);
-  const [repositoryTrees, setRepositoryTrees] = useState<ProjectGroup[]>([]);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [search, setSearch] = useState<string>("");
+  // 当前工作空间下 项目 -> 用例库 -> 模块 的全量数据：来自用户模块树接口一次拉全，不分页，
+  // 避免此前按用例库分页导致同一项目的库被分页边界切开而展示不全
+  const [projects, setProjects] = useState<any[]>([]);
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys);
     setAutoExpandParent(false);
   };
 
-  // 序列化后作为依赖，避免调用方内联对象字面量导致 fetchData 身份变化引发重复请求
+  // 序列化后作为依赖，避免调用方内联对象字面量导致重复请求
   const repositoryQueryKey = JSON.stringify(repositoryQuery ?? null);
-
-  // 服务端分页拉取用例库，并用 repository_id__in 一次性批量拉取当前页所有用例库的模块树
-  const fetchData = useCallback(
-    async (opts: { page: number; pageSize: number; search: string }) => {
-      if (!workspaceSlug) return;
-      setFetching(true);
-      try {
-        const params: any = {
-          page: opts.page,
-          page_size: opts.pageSize,
-          // 限定当前工作空间，支持跨项目复制，同时避免跨工作空间越权
-          workspace__slug: workspaceSlug,
-          // 调用方附加的查询参数（如模板场景 { is_template: true }）
-          ...(repositoryQuery ?? {}),
-        };
-        // search 在后端对「用例库名称」与「所属项目名称」做 OR 匹配
-        if (opts.search) params.search = opts.search;
-
-        const res = await repositoryService.getRepositories(workspaceSlug, params);
-        const repositories: any[] = Array.isArray(res) ? res : res?.data || res?.results || [];
-        const count = Number(res?.count ?? repositories.length ?? 0);
-
-        // 关键：一次请求批量拉取本页所有用例库的模块，替代逐个 repository 的 N 次请求
-        const repoIds = repositories.map((r) => String(r?.id)).filter(Boolean);
-        const modulesByRepo: Record<string, any[]> = {};
-        if (repoIds.length) {
-          const bulkModules = await caseService.getModulesByRepositoryIds(workspaceSlug, repoIds).catch(() => []);
-          (bulkModules || []).forEach((moduleNode: any) => {
-            const repoId = String(moduleNode?.repository ?? "");
-            if (!repoId) return;
-            if (!modulesByRepo[repoId]) modulesByRepo[repoId] = [];
-            modulesByRepo[repoId].push(moduleNode);
-          });
-        }
-
-        // 组装为 项目 -> 用例库 -> 模块 的层级（repo.project 由后端 depth=1 直接返回对象）
-        const byProject: Record<string, ProjectGroup> = {};
-        repositories.forEach((repo: any) => {
-          const proj = repo?.project;
-          const projId: string =
-            proj && typeof proj === "object" ? String(proj.id) : typeof proj === "string" ? proj : "unknown";
-          const projectName: string =
-            proj && typeof proj === "object"
-              ? String(proj.name || projId)
-              : typeof proj === "string"
-                ? proj
-                : emptyProjectGroupLabel || "未关联项目";
-          const repoRow: RepoRow = {
-            id: String(repo?.id),
-            name: String(repo?.name || "-"),
-            modules: modulesByRepo[String(repo?.id)] || [],
-          };
-          if (!byProject[projId]) {
-            byProject[projId] = { projectId: projId, projectName, repositories: [repoRow] };
-          } else {
-            byProject[projId].repositories.push(repoRow);
-          }
-        });
-        const projectTrees = Object.values(byProject).sort((a, b) => a.projectName.localeCompare(b.projectName));
-        setRepositoryTrees(projectTrees);
-        setTotal(count);
-
-        // 默认只展开根节点（仅显示第一层项目，项目保持折叠）；搜索时展开项目与用例库，便于直接看到命中结果
-        if (opts.search) {
-          const projectKeys = projectTrees.map((p) => `project:${p.projectId}`);
-          const repoKeys = projectTrees.flatMap((p) => p.repositories.map((r) => `repo:${r.id}`));
-          setExpandedKeys(["root", ...projectKeys, ...repoKeys]);
-        } else {
-          setExpandedKeys(["root"]);
-        }
-        setAutoExpandParent(true);
-      } catch (err) {
-        console.error("获取用例库/模块失败:", err);
-        message.error("获取用例库/模块失败");
-      } finally {
-        setFetching(false);
-      }
-    },
-    // repositoryQuery 以序列化 key 参与依赖，避免对象字面量身份抖动
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [workspaceSlug, repositoryQueryKey, emptyProjectGroupLabel]
-  );
 
   useEffect(() => {
     if (!isOpen) return;
-    setSelectedModuleId(null);
-    setSelectedModuleName("");
-    setSearchInput("");
-    setSearchQuery("");
-    setPage(1);
-    setPageSize(DEFAULT_PAGE_SIZE);
-    fetchData({ page: 1, pageSize: DEFAULT_PAGE_SIZE, search: "" });
-  }, [isOpen, workspaceSlug, repositoryId, projectId, fetchData]);
+    setTarget(null);
+    setSearch("");
+    setExpandedKeys(["root"]);
+    setAutoExpandParent(true);
+    setFetching(true);
+    caseModuleService
+      .getUserModuleTree(repositoryQuery)
+      .then((workspaces) => {
+        // 接口返回用户所在全部工作空间，这里限定当前工作空间：支持跨项目复制，同时避免跨工作空间越权
+        const current = (workspaces || []).find((ws: any) => ws?.slug === workspaceSlug);
+        setProjects(current?.projects || []);
+      })
+      .catch((err) => {
+        console.error("获取用例库/模块失败:", err);
+        message.error("获取用例库/模块失败");
+      })
+      .finally(() => setFetching(false));
+    // repositoryQuery 以序列化 key 参与依赖，避免对象字面量身份抖动
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, workspaceSlug, repositoryQueryKey]);
 
-  useEffect(
-    () => () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    },
-    []
+  const projectCount = projects.length;
+  const repoCount = useMemo(
+    () => projects.reduce((n: number, p: any) => n + (p?.repositories?.length || 0), 0),
+    [projects]
   );
-
-  const applySearch = useCallback(
-    (query: string) => {
-      const trimmed = query.trim();
-      setSearchQuery(trimmed);
-      setPage(1);
-      fetchData({ page: 1, pageSize, search: trimmed });
-    },
-    [fetchData, pageSize]
-  );
-
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => applySearch(value), SEARCH_DEBOUNCE_MS);
-  };
-
-  const handleSearchImmediate = () => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    applySearch(searchInput);
-  };
-
-  const handleSearchClear = () => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    setSearchInput("");
-    applySearch("");
-  };
-
-  const handlePageChange = (nextPage: number, nextPageSize: number) => {
-    setPage(nextPage);
-    setPageSize(nextPageSize);
-    fetchData({ page: nextPage, pageSize: nextPageSize, search: searchQuery });
-  };
 
   const handleOk = async () => {
-    if (!selectedModuleId) {
-      message.warning("请选择目标模块");
+    if (!target) {
+      message.warning("请选择目标用例库或模块");
       return;
     }
     if (selectedCaseIds.length === 0) {
@@ -221,24 +115,30 @@ export const CopyCaseModal: React.FC<Props> = ({
 
     setSubmitting(true);
     try {
-      await caseService.copyCase(workspaceSlug, selectedCaseIds, selectedModuleId);
+      await caseService.copyCase(
+        workspaceSlug,
+        selectedCaseIds,
+        target.kind === "module" ? { moduleId: target.id } : { repositoryId: target.id }
+      );
       message.success("复制成功");
       onSuccess();
       handleClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("复制用例失败:", error);
-      message.error("复制用例失败");
+      message.error(error?.error || error?.detail || "复制用例失败");
     } finally {
       setSubmitting(false);
     }
   };
 
   const onSelect: TreeProps["onSelect"] = (_selectedKeys, info) => {
+    // 再次点击已选中节点会触发 selected=false（expandAction=click 下只是折叠），忽略以保持当前目标
     if (!info.selected) return;
     const node: any = info.node;
     if (node?.kind === "module" && node?.moduleId) {
-      setSelectedModuleId(String(node.moduleId));
-      setSelectedModuleName(String(node.name || ""));
+      setTarget({ kind: "module", id: String(node.moduleId), name: String(node.name || "") });
+    } else if (node?.kind === "repository" && node?.repositoryId) {
+      setTarget({ kind: "repository", id: String(node.repositoryId), name: String(node.name || "") });
     }
   };
 
@@ -248,7 +148,7 @@ export const CopyCaseModal: React.FC<Props> = ({
       const nodeId = String(node?.id);
       const name = String(node?.name ?? "-");
       const childrenNodes = buildModuleNodes(node?.children || [], repositoryIdValue);
-      const isSelected = selectedModuleId === nodeId;
+      const isSelected = target?.kind === "module" && target.id === nodeId;
       const hasChildren = childrenNodes.length > 0;
       return {
         title: (
@@ -279,28 +179,44 @@ export const CopyCaseModal: React.FC<Props> = ({
     });
   };
 
-  const treeData = useMemo(() => {
-    const projectNodes = repositoryTrees.map((proj) => {
-      const projId = String(proj?.projectId || "unknown");
-      const projectName = String(proj?.projectName || "未知项目");
-      const repoNodes = (Array.isArray(proj?.repositories) ? proj.repositories : []).map((repo) => {
+  const projectNodes = useMemo(() => {
+    const named = projects.map((proj: any) => {
+      const hasProject = !!proj?.id;
+      const projId = hasProject ? String(proj.id) : NO_PROJECT_KEY;
+      // project 为空的分组（接口返回「未关联项目」），允许调用方自定义标签（如模板场景「模板库」）
+      const projectName = hasProject
+        ? String(proj?.name || projId)
+        : emptyProjectGroupLabel || String(proj?.name || "未关联项目");
+      return { proj, projId, projectName };
+    });
+    named.sort((a, b) => a.projectName.localeCompare(b.projectName));
+
+    return named.map(({ proj, projId, projectName }) => {
+      const repoNodes = (Array.isArray(proj?.repositories) ? proj.repositories : []).map((repo: any) => {
         const repoId = String(repo?.id);
+        const repoName = String(repo?.name ?? "-");
+        const isSelected = target?.kind === "repository" && target.id === repoId;
         const moduleNodes = buildModuleNodes(repo?.modules || [], repoId);
         return {
           title: (
-            <span className="flex w-full items-center gap-2">
-              <Library size={15} className="shrink-0 text-secondary" />
-              <span className="truncate text-[13px] font-medium text-primary">{repo?.name ?? "-"}</span>
-              {moduleNodes.length === 0 && (
-                <span className="shrink-0 text-[11px] text-tertiary">（空）</span>
-              )}
-            </span>
+            <div className="flex w-full items-center justify-between gap-2 pr-0.5">
+              <span className="flex min-w-0 items-center gap-2">
+                <Library size={15} className={cn("shrink-0", isSelected ? "text-accent-primary" : "text-secondary")} />
+                <span
+                  className={cn("truncate text-[13px] font-medium", isSelected ? "text-accent-primary" : "text-primary")}
+                >
+                  {repoName}
+                </span>
+                {moduleNodes.length === 0 && <span className="shrink-0 text-[11px] text-tertiary">（空）</span>}
+              </span>
+              {isSelected && <Check size={15} className="shrink-0 text-accent-primary" />}
+            </div>
           ),
           key: `repo:${repoId}`,
-          name: repo?.name ?? "-",
+          name: repoName,
           kind: "repository",
           repositoryId: repoId,
-          selectable: false,
+          selectable: true,
           children: moduleNodes,
         };
       });
@@ -324,16 +240,31 @@ export const CopyCaseModal: React.FC<Props> = ({
         children: repoNodes,
       };
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, target, emptyProjectGroupLabel]);
 
-    return [
+  const filteredProjectNodes = useMemo(() => filterTree(projectNodes, search), [projectNodes, search]);
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    const query = value.trim();
+    // 搜索时展开命中路径上的全部节点，便于直接看到结果；清空后回到只展开根节点
+    setExpandedKeys(query ? ["root", ...collectExpandableKeys(filterTree(projectNodes, query))] : ["root"]);
+    setAutoExpandParent(true);
+  };
+
+  const handleSearchClear = () => handleSearchChange("");
+
+  const treeData = useMemo(
+    () => [
       {
         title: (
           <span className="flex w-full items-center gap-2">
             <Layers size={15} className="shrink-0 text-secondary" />
             <span className="text-[13px] font-semibold text-primary">全部用例库</span>
-            {total > 0 && (
+            {repoCount > 0 && (
               <span className="shrink-0 rounded-full bg-layer-1 px-1.5 py-0.5 text-[11px] leading-none text-tertiary">
-                {total}
+                {repoCount}
               </span>
             )}
           </span>
@@ -342,13 +273,14 @@ export const CopyCaseModal: React.FC<Props> = ({
         name: "全部用例库",
         kind: "root",
         selectable: false,
-        children: projectNodes,
+        children: filteredProjectNodes,
       },
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repositoryTrees, selectedModuleId, total]);
+    ],
+    [filteredProjectNodes, repoCount]
+  );
 
-  const isEmpty = repositoryTrees.length === 0;
+  const isEmpty = filteredProjectNodes.length === 0;
+  const selectedKeys = target ? [target.kind === "module" ? `module:${target.id}` : `repo:${target.id}`] : [];
 
   return (
     <Modal
@@ -415,7 +347,7 @@ export const CopyCaseModal: React.FC<Props> = ({
               <FolderInput size={18} />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-[15px] font-semibold leading-tight tracking-tight text-primary">复制到模块</h3>
+              <h3 className="text-[15px] font-semibold leading-tight tracking-tight text-primary">复制到</h3>
             </div>
             <button
               type="button"
@@ -436,19 +368,18 @@ export const CopyCaseModal: React.FC<Props> = ({
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tertiary transition-colors group-focus-within:text-accent-primary"
             />
             <input
-              value={searchInput}
+              value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleSearchImmediate();
-                if (e.key === "Escape" && searchInput) {
+                if (e.key === "Escape" && search) {
                   e.stopPropagation();
                   handleSearchClear();
                 }
               }}
-              placeholder="搜索用例库或项目名称"
+              placeholder="搜索项目 / 用例库 / 模块"
               className="copy-module-search h-9 w-full rounded-lg border border-subtle bg-layer-1 pl-9 pr-9 text-[13px] text-primary outline-none transition-shadow placeholder:text-placeholder"
             />
-            {searchInput && (
+            {search && (
               <button
                 type="button"
                 aria-label="清空搜索"
@@ -471,7 +402,7 @@ export const CopyCaseModal: React.FC<Props> = ({
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={
                       <span className="text-xs text-tertiary">
-                        {searchQuery ? "未找到匹配的用例库 / 项目" : "暂无用例库"}
+                        {search.trim() ? "未找到匹配的项目 / 用例库 / 模块" : "暂无用例库"}
                       </span>
                     }
                   />
@@ -486,7 +417,7 @@ export const CopyCaseModal: React.FC<Props> = ({
                   expandedKeys={expandedKeys}
                   autoExpandParent={autoExpandParent}
                   treeData={treeData}
-                  selectedKeys={selectedModuleId ? [`module:${selectedModuleId}`] : []}
+                  selectedKeys={selectedKeys}
                   switcherIcon={({ expanded, isLeaf }: any) =>
                     isLeaf ? (
                       <span className="inline-block h-3.5 w-3.5" />
@@ -505,36 +436,26 @@ export const CopyCaseModal: React.FC<Props> = ({
 
         {/* Footer */}
         <div className="space-y-3 border-t border-subtle px-5 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-tertiary">
-              共 <span className="font-medium text-secondary">{total}</span> 个用例库
-            </span>
-            <Pagination
-              size="small"
-              current={page}
-              pageSize={pageSize}
-              total={total}
-              showSizeChanger
-              pageSizeOptions={["10", "20", "50", "100"]}
-              onChange={handlePageChange}
-            />
-          </div>
+          <span className="text-xs text-tertiary">
+            共 <span className="font-medium text-secondary">{projectCount}</span> 个项目 ·{" "}
+            <span className="font-medium text-secondary">{repoCount}</span> 个用例库
+          </span>
 
-          <div
-            className={cn(
-              "flex items-center gap-3",
-              selectedModuleId ? "justify-between" : "justify-end"
-            )}
-          >
-            {selectedModuleId && (
-              <div className="flex min-w-0 items-center gap-2 text-xs">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-primary text-on-color">
-                  <Check size={12} />
-                </span>
-                <span className="shrink-0 text-secondary">目标模块</span>
-                <span className="truncate font-medium text-primary" style={{ maxWidth: 220 }}>
-                  {selectedModuleName || "已选择"}
-                </span>
+          <div className={cn("flex items-center gap-3", target ? "justify-between" : "justify-end")}>
+            {target && (
+              <div className="flex min-w-0 flex-col gap-0.5 text-xs">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-primary text-on-color">
+                    <Check size={12} />
+                  </span>
+                  <span className="shrink-0 text-secondary">{target.kind === "module" ? "目标模块" : "目标用例库"}</span>
+                  <span className="truncate font-medium text-primary" style={{ maxWidth: 220 }}>
+                    {target.name || "已选择"}
+                  </span>
+                </div>
+                {target.kind === "repository" && (
+                  <span className="pl-7 text-[11px] text-tertiary">将按原模块结构复制到该用例库</span>
+                )}
               </div>
             )}
             <div className="flex shrink-0 items-center gap-2">
@@ -548,7 +469,7 @@ export const CopyCaseModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={handleOk}
-                disabled={!selectedModuleId || submitting}
+                disabled={!target || submitting}
                 className="flex items-center gap-1.5 rounded-lg bg-accent-primary px-3.5 py-1.5 text-sm font-medium text-on-color transition-colors hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <FolderInput size={14} />}

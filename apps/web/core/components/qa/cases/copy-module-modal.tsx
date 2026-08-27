@@ -6,6 +6,7 @@ import { AppstoreOutlined, GlobalOutlined, ProjectOutlined } from "@ant-design/i
 import { FolderOpenDot } from "lucide-react";
 import type { TreeProps } from "antd";
 import { CaseModuleService } from "@/services/qa/case-module.service";
+import { filterTree } from "./case-tree-utils";
 
 type Props = {
   isOpen: boolean;
@@ -184,23 +185,6 @@ export const CopyModuleModal: React.FC<Props> = ({
         children: projectNodes,
       };
     });
-
-  const filterTree = (nodes: any[], q: string): any[] => {
-    if (!q) return nodes;
-    const query = q.trim().toLowerCase();
-    const walk = (list: any[]): any[] =>
-      (list || [])
-        .map((n) => {
-          const childMatches = walk(n?.children || []);
-          const selfMatch = String(n?.name || "").toLowerCase().includes(query);
-          if (selfMatch || childMatches.length) {
-            return { ...n, children: selfMatch ? n?.children || [] : childMatches };
-          }
-          return null;
-        })
-        .filter(Boolean) as any[];
-    return walk(nodes);
-  };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const treeNodes = useMemo(() => buildTree(workspaceTrees), [workspaceTrees, emptyProjectGroupLabel]);
