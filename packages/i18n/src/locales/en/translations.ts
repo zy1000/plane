@@ -1606,7 +1606,7 @@ export default {
       add: "Add requirement",
       title_placeholder: "One line on what this requirement asks for",
       description_placeholder: "Add context, acceptance criteria…",
-      pick_type_hint: "Pick a requirement type and its fields will appear here",
+      pick_type_hint: "The type decides which fields appear next",
       context_library: "Requirement library",
       context_product: "Product requirements",
       required_legend: "Required",
@@ -1614,8 +1614,11 @@ export default {
       basic_section: "Basics",
       attributes_section: "Attributes",
       attributes_from_type: "From requirement type “{type}”",
+      properties_rail: "Properties",
+      pending_prefix: "Still needed: ",
+      date_none: "None",
       code_hint: "Unique within this library; you can change it later",
-      title_required: "Title is required",
+      title_required: "Add a title to save",
       field_required: "{field} is required",
       select_required: "Select a {field}",
       required_progress_all: "{count} required fields to fill",
@@ -1706,6 +1709,8 @@ export default {
         "For the assignee, use the member's display name (that is what export writes). If two members share a name, use their email instead. The same applies to custom member fields.",
       rule_parent:
         "Put the parent requirement's ID in the parent column (e.g. ECOM-12). If the parent is also new in this file and has no ID yet, use #excelrow (e.g. #5) — same sheet only. Leave it blank for no parent.",
+      rule_module:
+        "Put the module name in the module column; separate nested modules with / (e.g. Account/Login). Missing modules are created level by level. Leave it blank to keep the requirement under \"All requirements\"; clearing it on an existing requirement moves it back there. Modules whose own name contains / can only be referenced, not created.",
       rule_form:
         "Form fields use a two-row header: a requirement spans as many rows as it has sub-records, other columns are merged vertically, and continuation rows stay blank.",
       rule_skipped:

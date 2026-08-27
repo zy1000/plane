@@ -17,6 +17,11 @@
 3. **附件 / 图片字段不出列**。Excel 里没有它们的表示，塞个文件名回来也还原不成 asset。
    因此更新走的是「合并而非替换」data：只覆盖表里出现过的列，没出现的列（附件、图片、
    以及已停用的字段）保留原值 —— 否则一次导入就把它们全清空了。
+
+4. **模块列写名称路径**（`A/B` = A 下的子模块 B），与库→产品导入的模块映射同一口径。
+   模块不是内容，与状态同为旁路轴：新增行随创建载荷挂靠，更新行走 set_requirement_module，
+   不 bump version、不受评审中 / 已关闭闸门限制。路径不存在的模块在真正导入时逐级创建，
+   校验预览只给提示、不落库。
 """
 
 from __future__ import annotations
@@ -40,6 +45,7 @@ from openpyxl.utils import get_column_letter
 from plane.db.models import (
     RequirementFieldType,
     RequirementItemStatus,
+    RequirementModule,
     RequirementPriority,
 )
 from plane.utils.requirement import (
@@ -79,6 +85,12 @@ ALLOWED_EXTENSIONS = (".xlsx",)
 #: 编号列。它既是导出的可读标识，也是导入 upsert 的匹配键。
 SEQUENCE_COLUMN_KEY = "__sequence__"
 SEQUENCE_COLUMN_LABEL = "编号"
+
+#: 模块列。值是模块的名称路径（见模块头注释第 4 条），列名与前端 requirement_modules.column 一致。
+MODULE_COLUMN_KEY = "__module__"
+MODULE_COLUMN_LABEL = "模块"
+MODULE_PATH_SEPARATOR = "/"
+MODULE_NAME_MAX_LENGTH = RequirementModule._meta.get_field("name").max_length
 
 #: 内置列的中文名直接取筛选那份定义，避免两处各写一遍然后慢慢漂移。
 _BUILTIN_LABELS = {spec["id"]: spec["name"] for spec in builtin_filter_specs()}
@@ -196,6 +208,28 @@ def normalize_header(value):
     return str(value).replace("　", " ").replace("\xa0", " ").strip()
 
 
+def format_module_path(path):
+    """模块名称路径 → 单元格文本。导出渲染与导入的「格子没动」比对共用。"""
+    return MODULE_PATH_SEPARATOR.join(path or ())
+
+
+def parse_module_path(raw):
+    """单元格文本 → 模块名称路径元组，返回 (path, error)。空格子返回 ()。
+
+    按 `/` 切分、逐段去首尾空白；空段（`A//B`、`/A`、`A/`）与超长段直接报错，
+    而不是静默吞掉 —— 那会让「A/」悄悄变成「A」。
+    """
+    text = _cell_text(raw)
+    if not text:
+        return (), None
+    segments = [segment.strip() for segment in text.split(MODULE_PATH_SEPARATOR)]
+    if any(not segment for segment in segments):
+        return None, "模块路径格式不正确：各级名称之间用 / 分隔，且不能为空。"
+    if any(len(segment) > MODULE_NAME_MAX_LENGTH for segment in segments):
+        return None, f"模块每级名称最长 {MODULE_NAME_MAX_LENGTH} 个字符。"
+    return tuple(segments), None
+
+
 # ---------------------------------------------------------------------------
 # 列模型
 # ---------------------------------------------------------------------------
@@ -206,7 +240,7 @@ class ExcelColumn:
     """一个叶子列（真正占据 Excel 一列的东西）。"""
 
     key: str
-    #: sequence | builtin | field
+    #: sequence | module | builtin | field
     kind: str
     label: str
     spec: Optional[Any] = None
@@ -281,7 +315,7 @@ def build_sheet_spec(
 ):
     """把一个需求类型的字段定义摊成 Excel 的列清单。
 
-    列序与前端网格同一套规则：编号、标题锁定最前，随后内置列与自定义根字段按
+    列序与前端网格同一套规则：编号、标题、模块锁定最前，随后内置列与自定义根字段按
     builtin_field_layout 的 sort_order 归并（相等时内置在前 —— 旧客户端保存过的
     自定义 sort_order 可能与内置撞值）。builtin_layout 不传即缺省布局（内置在前）。
     """
@@ -291,6 +325,8 @@ def build_sheet_spec(
         ),
         # 标题与编号一样锁定在最前，不参与归并
         ExcelColumn(key="title", kind="builtin", label=_BUILTIN_LABELS.get("title", "title")),
+        # 模块不是内置内容列（不在 builtin_field_layout 里），库 / 产品两侧都出
+        ExcelColumn(key=MODULE_COLUMN_KEY, kind="module", label=MODULE_COLUMN_LABEL),
     ]
 
     builtin_entries = [
@@ -435,6 +471,14 @@ class ExportContext:
     is_library: bool = False
     #: requirement_id(str) -> code，库作用域的父项列用它
     code_by_id: dict = dataclass_field(default_factory=dict)
+    #: module_id(str) -> 名称路径文本。行查询没有 select_related("module")（要给
+    #: select_for_update 让路），所以必须一次建好索引，不能逐行取 requirement.module
+    module_path_by_id: dict = dataclass_field(default_factory=dict)
+
+    def module_text(self, module_id):
+        if not module_id:
+            return ""
+        return self.module_path_by_id.get(str(module_id), "")
 
     def display_id(self, sequence_id):
         if sequence_id is None:
@@ -623,6 +667,8 @@ def _write_requirement(worksheet, sheet_spec, requirement, ctx, start_row):
             continue
         if column.kind == "sequence":
             value = ctx.row_display_id(requirement)
+        elif column.kind == "module":
+            value = ctx.module_text(requirement.module_id)
         elif column.kind == "builtin":
             value = format_builtin_value(column.key, requirement, ctx)
         else:
@@ -713,6 +759,8 @@ class SheetLayout:
     present_field_ids: set
     #: 没能对上任何列的表头，原样回报给用户
     ignored_headers: list
+    #: 表里有没有模块列。没有就整列不动（旧版导出的文件天然如此），不算未知列
+    has_module_column: bool = False
 
     @property
     def index_by_column_key(self):
@@ -835,6 +883,9 @@ def _build_sheet_layout(worksheet, sheet_spec):
         present_builtin=present_builtin,
         present_field_ids=present_field_ids,
         ignored_headers=ignored_headers,
+        has_module_column=any(
+            column.kind == "module" for column in column_by_index.values()
+        ),
     )
 
 
@@ -1133,6 +1184,11 @@ class RowResult:
     #: 需要写的交付状态；None 表示这一行不动状态
     status_value: Optional[str] = None
     current_status: Optional[str] = None
+    #: 目标模块的名称路径：None = 这一行不动模块；() = 新增不挂 / 更新移回「全部」；
+    #: 非空 = 挂到该路径（不存在的在导入时逐级创建）
+    module_path: Optional[tuple] = None
+    #: 更新行：模块与现有行不同。与 status_value 同为旁路轴，不算内容
+    module_changed: bool = False
     #: 更新行：内容（内置内容列 + data）与现有行是否有实质差异。False 时不进批量写入
     content_changed: bool = True
     #: 更新行对应的现有行对象，只在解析期用，不进响应
@@ -1217,9 +1273,27 @@ class RequirementImportResolver:
     连 version 都不 bump。
     """
 
-    def __init__(self, *, scope_identifier, existing_rows, members, is_library):
+    def __init__(
+        self,
+        *,
+        scope_identifier,
+        existing_rows,
+        members,
+        is_library,
+        module_index=None,
+    ):
         self.scope_identifier = scope_identifier or ""
         self.is_library = is_library
+
+        # 作用域内的模块树（module_path_index 的产物）。id_by_text 让「名称里本身带 /」
+        # 的已有模块也能按整格文本精确命中，不被切分规则误伤
+        path_by_id, id_by_path = module_index or ({}, {})
+        self.module_path_by_id = dict(path_by_id)
+        self.module_id_by_path = dict(id_by_path)
+        self.module_id_by_text = {
+            format_module_path(path): module_id
+            for path, module_id in self.module_id_by_path.items()
+        }
 
         self.rows_by_sequence = {}
         self.rows_by_id = {}
@@ -1254,6 +1328,10 @@ class RequirementImportResolver:
             },
             is_library=is_library,
             code_by_id={str(row.id): row.code or "" for row in existing_rows},
+            module_path_by_id={
+                module_id: format_module_path(path)
+                for module_id, path in self.module_path_by_id.items()
+            },
         )
 
     # -- 成员 ---------------------------------------------------------------
@@ -1348,6 +1426,7 @@ class RequirementImportResolver:
         self._resolve_title(group, result, existing)
         self._resolve_builtin_columns(group, result, existing)
         self._resolve_status(group, result, existing)
+        self._resolve_module(group, result, existing)
         self._resolve_parent(group, result, existing)
         self._resolve_data(group, result, existing)
         if existing is None:
@@ -1365,16 +1444,21 @@ class RequirementImportResolver:
         if result.errors:
             return
 
-        if not result.content_changed and result.status_value is None:
+        if (
+            not result.content_changed
+            and result.status_value is None
+            and not result.module_changed
+        ):
             result.action = "unchanged"
             return
 
         if existing.pending_change_item_id:
-            # 评审中：内容只读，但状态轴与评审轴正交 —— 只改状态照样放行
+            # 评审中：内容只读，但状态轴 / 模块轴与评审轴正交 —— 只改状态或模块照样放行
             if result.content_changed:
                 pending_type = getattr(existing, "pending_change_type", None)
                 result.action = "skip"
                 result.status_value = None
+                self._drop_module_change(result)
                 result.skip_reason = (
                     "删除待审批中，内容只读。"
                     if pending_type == "delete"
@@ -1390,7 +1474,14 @@ class RequirementImportResolver:
         ):
             result.action = "skip"
             result.status_value = None
+            self._drop_module_change(result)
             result.skip_reason = "已关闭，内容只读。把「状态」列改成其它值即可重开并写入。"
+
+    @staticmethod
+    def _drop_module_change(result):
+        """整行被闸门跳过时，模块改动一并作废 —— 跳过就是整行不动。"""
+        result.module_path = None
+        result.module_changed = False
 
     def _content_differs(self, result, existing):
         before = builtin_values_from_row(existing)
@@ -1548,6 +1639,50 @@ class RequirementImportResolver:
             return
         if value != existing.status:
             result.status_value = value
+
+    def _resolve_module(self, group, result, existing):
+        """模块是旁路轴，不算内容：新增随创建载荷挂靠，更新走 set_requirement_module。
+
+        表里没有模块列就整列不动。空格子：新增不挂；更新且现有行挂着模块 → 移回「全部」
+        （与父项留空置 None 同款）。非空先按整格文本精确匹配已有模块，再按 `/` 切分。
+        """
+        layout = group.layout
+        if not layout.has_module_column:
+            return
+        raw = group.builtin_raw.get(MODULE_COLUMN_KEY)
+        existing_module_id = (
+            str(existing.module_id) if existing is not None and existing.module_id else None
+        )
+
+        if _is_blank(raw):
+            if existing is None:
+                result.module_path = ()
+            elif existing_module_id:
+                result.module_path = ()
+                result.module_changed = True
+            return
+
+        text = _cell_text(raw)
+        # 格子没动就不动：与导出渲染的现有路径比对（软删模块渲染为空，比不上就算改了）
+        if existing is not None and text == self.export_ctx.module_text(existing_module_id):
+            return
+
+        matched_id = self.module_id_by_text.get(text)
+        if matched_id is not None:
+            path = self.module_path_by_id[matched_id]
+        else:
+            path, error = parse_module_path(raw)
+            if error:
+                result.errors.append(f"「{MODULE_COLUMN_LABEL}」{error}")
+                return
+            if path not in self.module_id_by_path:
+                result.warnings.append(
+                    f"模块「{format_module_path(path)}」不存在，导入时将自动创建。"
+                )
+
+        result.module_path = path
+        if existing is not None:
+            result.module_changed = True
 
     def _resolve_parent(self, group, result, existing):
         layout = group.layout
@@ -1837,6 +1972,43 @@ def build_batch_payload(results, *, selected_keys=None):
     return chosen, creates, updates, parent_by_client_id
 
 
+def collect_module_paths(chosen):
+    """选中行里要挂靠的全部模块路径（去重、非空），供导入前逐级取或建。"""
+    return {
+        result.module_path for result in chosen if result.module_path
+    }
+
+
+def assign_create_modules(creates, chosen, module_id_by_path):
+    """把已创建好的模块 id 按 client_id **原位**写进 create 载荷。
+
+    不重建列表：`_excel_batch_error` 靠 creates 的下标把序列化器报错映射回行。
+    """
+    path_by_client_id = {
+        result.client_id: result.module_path
+        for result in chosen
+        if result.action == "create" and result.module_path
+    }
+    for item in creates:
+        path = path_by_client_id.get(item["client_id"])
+        if path:
+            item["module_id"] = module_id_by_path[path]
+
+
+def module_update_groups(chosen, module_id_by_path):
+    """更新行的模块改动按目标模块分组：{module_id | None: [requirement_id]}。
+
+    None 一组是「移回全部」。每组一次 set_requirement_module，与批量移动同一个写入口。
+    """
+    groups = {}
+    for result in chosen:
+        if result.action != "update" or not result.module_changed:
+            continue
+        target = module_id_by_path[result.module_path] if result.module_path else None
+        groups.setdefault(target, []).append(result.requirement_id)
+    return groups
+
+
 def split_status_changes(chosen):
     """状态改动分两拨，顺序是刻意的。
 
@@ -1905,6 +2077,7 @@ def flatten_serializer_errors(errors, sheet_spec=None, prefix=""):
         for group in sheet_spec.form_groups:
             labels[group.field_id] = group.label
     labels.update(_BUILTIN_LABELS)
+    labels["module_id"] = MODULE_COLUMN_LABEL
 
     messages = []
     if isinstance(errors, dict):

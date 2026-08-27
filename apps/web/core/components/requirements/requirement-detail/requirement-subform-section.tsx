@@ -170,7 +170,7 @@ export const RequirementSubformSection = (props: TProps) => {
   if (!forms.length) return null;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <div ref={setMenuPortalEl} />
       {forms.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
@@ -210,7 +210,7 @@ export const RequirementSubformSection = (props: TProps) => {
                 setPendingScrollId(null);
               }
             }}
-            className="overflow-hidden rounded-md border border-subtle"
+            className="min-w-0 rounded-md border border-subtle"
           >
             <div className="flex items-center gap-2 bg-layer-1 px-2.5 py-1.5">
               <button
@@ -244,10 +244,10 @@ export const RequirementSubformSection = (props: TProps) => {
             </div>
 
             {isOpen && columns.length > 0 && (rows.length > 0 || !readOnly) && (
-              // 子字段多时单块表格自己横滚，页面本身永远不横滚
+              // 子字段多时单块表格自己横滚（horizontal-scrollbar 才能看见条），页面本身不横滚
               // 可编辑的空表也要把表头和「添加行」露出来，否则没数据就等于没入口
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-full border-collapse text-left">
+              <div className="horizontal-scrollbar scrollbar-lg overflow-x-auto">
+                <table className="w-max min-w-max border-collapse text-left">
                   <thead>
                     <tr className="border-b border-subtle">
                       <th className="w-12 border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary">
@@ -256,7 +256,7 @@ export const RequirementSubformSection = (props: TProps) => {
                       {columns.map((child) => (
                         <th
                           key={child.id}
-                          className="min-w-32 border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary"
+                          className="min-w-36 whitespace-nowrap border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary"
                         >
                           {child.name}
                           {child.is_required && <span className="ml-0.5 text-danger-primary">*</span>}

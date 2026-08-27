@@ -10,7 +10,11 @@ import type { IUserLite, TRequirementBatchSavePayload, TRequirementItemStatus } 
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { MoveToModuleModal, RequirementModuleSidebar } from "@/components/requirements/module-tree";
+import {
+  findRequirementModuleName,
+  MoveToModuleModal,
+  RequirementModuleSidebar,
+} from "@/components/requirements/module-tree";
 import { RequirementCreateModal } from "@/components/requirements/requirement-create-modal";
 import { RequirementGrid, type TRequirementGridHandle } from "@/components/requirements/requirement-grid";
 import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
@@ -134,6 +138,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   // 与需求类型视图 / rich-filters 正交，切视图时过滤保持
   const urlModuleId = searchParams.get("moduleId");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
+  const selectedModuleName = useMemo(
+    () => findRequirementModuleName(moduleStore.modules, selectedModuleId),
+    [moduleStore.modules, selectedModuleId]
+  );
   const syncedModuleRef = useRef(urlModuleId);
 
   useEffect(() => {
@@ -266,8 +274,14 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   );
   // onImported 刻意不进 memo：refreshLayer 每次渲染都是新的，放进去要么让 memo 失效，
   // 要么捕获一个过期的闭包。导入可能引入本产品此前没引用过的需求类型，配置不重取的话
-  // 视图切换器不会出现新 tab
-  const excelProps = { ...excelArgs, onImported: refreshLayer };
+  // 视图切换器不会出现新 tab；模块列会按名称路径新建模块 / 改挂靠，左侧树也要跟上
+  const excelProps = {
+    ...excelArgs,
+    onImported: () => {
+      refreshLayer();
+      void refreshModules().catch(() => undefined);
+    },
+  };
 
   const approvalActions = useRequirementApprovalActions({
     changesStore,
@@ -523,6 +537,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onStatusChange={onStatusChange}
                   toolbarPortalEl={dataToolbarHost}
                   createModuleId={selectedModuleId}
+                  createModuleName={selectedModuleName}
                   onMoveToModule={canEdit ? setMoveIds : undefined}
                 />
               )}
@@ -612,6 +627,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           entityKind="product"
           allowTypeSelection
           moduleId={selectedModuleId}
+          moduleName={selectedModuleName}
           onClose={() => setIsCreateOpen(false)}
           onSave={handleBulkSave}
           onUpload={uploadAsset}

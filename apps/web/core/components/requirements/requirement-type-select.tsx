@@ -22,11 +22,11 @@ export const RequirementTypeSelect = ({ types, value, onChange, disabled }: TPro
   const { t } = useTranslation();
   const selected = types.find((requirementType) => requirementType.id === value);
 
-  // 与工作项创建弹窗 IssueTypeSelect（border-with-text）同高、同边框、同字号
+  // 建行弹窗左栏第一个字段：与标题 Input 同高、同边、全宽，不再是一颗小芯片
   const button = (
     <span
       className={cn(
-        "inline-flex h-7 max-w-56 items-center gap-1.5 rounded-sm border-[0.5px] border-strong px-2 text-13 text-primary transition-colors duration-150",
+        "flex h-[38px] w-full items-center gap-1.5 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 text-13 text-primary transition-colors duration-150",
         disabled ? "cursor-not-allowed opacity-60" : "hover:bg-layer-1"
       )}
     >
@@ -35,7 +35,7 @@ export const RequirementTypeSelect = ({ types, value, onChange, disabled }: TPro
       ) : (
         <Layers className="size-3.5 shrink-0 text-placeholder" />
       )}
-      <span className={cn("truncate", !selected && "text-placeholder")}>
+      <span className={cn("min-w-0 flex-1 truncate text-left", !selected && "text-placeholder")}>
         {selected?.name ?? t("workspace_products.requirements.requirement_type_picker.title")}
       </span>
       {!disabled && <ChevronDown className="size-3 shrink-0 text-tertiary" />}
@@ -43,7 +43,16 @@ export const RequirementTypeSelect = ({ types, value, onChange, disabled }: TPro
   );
 
   return (
-    <CustomMenu customButton={button} placement="bottom-start" maxHeight="lg" disabled={disabled} closeOnSelect>
+    <CustomMenu
+      className="w-full"
+      customButtonClassName="w-full"
+      customButton={button}
+      placement="bottom-start"
+      maxHeight="lg"
+      disabled={disabled}
+      closeOnSelect
+      ariaLabel={t("requirement_detail.requirement_type")}
+    >
       {types.length === 0 ? (
         <p className="px-1 py-1.5 text-12 text-secondary">
           {t("workspace_products.requirements.requirement_type_picker.empty")}

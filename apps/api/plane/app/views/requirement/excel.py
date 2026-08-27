@@ -30,6 +30,12 @@ from plane.utils.requirement import (
     field_specs_for_requirement_types,
     remap_imported_parents,
 )
+from plane.utils.requirement_module import (
+    make_module_path_ensurer,
+    module_path_index,
+    module_scope_filter,
+    set_requirement_module,
+)
 from plane.utils.requirement_project import set_requirement_status
 from plane.utils import requirement_excel as xl
 
@@ -131,10 +137,15 @@ class RequirementExcelMixin:
             builtin_layout_by_type={item_id: layout for item_id, _, layout in rows},
         )
 
+    def _excel_module_index(self, owner):
+        """作用域内的模块名称路径索引；导出渲染模块列与导入反查模块共用。"""
+        return module_path_index(module_scope_filter(owner))
+
     def _excel_export_context(self, owner, layer):
         # 父项列要拼父需求的编号，父项可能不在筛选结果里，所以取整个作用域；
         # 库作用域编号是行上手填的 code，一次 values_list 连它一起取
         rows = list(layer.queryset.values_list("id", "sequence_id", "code"))
+        module_path_by_id, _ = self._excel_module_index(owner)
         return xl.ExportContext(
             scope_identifier=layer.serializer_context.get("scope_identifier") or "",
             user_display={
@@ -148,6 +159,10 @@ class RequirementExcelMixin:
             },
             is_library=self.excel_is_library,
             code_by_id={str(row_id): code or "" for row_id, _, code in rows},
+            module_path_by_id={
+                module_id: xl.format_module_path(path)
+                for module_id, path in module_path_by_id.items()
+            },
         )
 
     # --- 导出 -------------------------------------------------------------
@@ -265,6 +280,7 @@ class RequirementExcelMixin:
             existing_rows=existing_rows,
             members=xl.workspace_member_rows(owner.workspace_id),
             is_library=self.excel_is_library,
+            module_index=self._excel_module_index(owner),
         )
         results = xl.resolve_groups(groups, resolver)
 
@@ -386,6 +402,19 @@ class RequirementExcelMixin:
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # 模块先于内容落库：新增行的 module_id 要过创建序列化器的存在性校验，
+            # 所以不存在的模块必须在这里（owner 行锁内）逐级建好。只为选中且通过的行建
+            ensure_module = make_module_path_ensurer(
+                scope_filter=module_scope_filter(owner),
+                workspace_id=owner.workspace_id,
+                actor=request.user,
+            )
+            module_id_by_path = {
+                path: str(ensure_module(path).id)
+                for path in xl.collect_module_paths(chosen)
+            }
+            xl.assign_create_modules(creates, chosen, module_id_by_path)
+
             reopen_first, close_after = xl.split_status_changes(chosen)
             for result in reopen_first:
                 set_requirement_status(
@@ -444,6 +473,18 @@ class RequirementExcelMixin:
                 created_rows=saved_rows,
                 parent_by_client_id=parent_by_client_id,
             )
+
+            # 更新行的模块改动：模块轴与内容正交，走批量移动同一个旁路写入口。放在
+            # creates/updates 分支之外 —— 一份只挪模块、不改内容的文件也得生效
+            for module_id, requirement_ids in xl.module_update_groups(
+                chosen, module_id_by_path
+            ).items():
+                set_requirement_module(
+                    layer.queryset,
+                    requirement_ids,
+                    module_id=module_id,
+                    actor=request.user,
+                )
 
             for result in close_after:
                 set_requirement_status(

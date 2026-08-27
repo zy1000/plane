@@ -24,6 +24,7 @@ const RULE_KEYS = [
   "requirement_excel.upload.rule_sequence",
   "requirement_excel.upload.rule_member",
   "requirement_excel.upload.rule_parent",
+  "requirement_excel.upload.rule_module",
   "requirement_excel.upload.rule_form",
   "requirement_excel.upload.rule_skipped",
 ];

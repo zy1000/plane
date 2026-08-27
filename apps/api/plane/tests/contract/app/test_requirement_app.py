@@ -740,6 +740,7 @@ class TestRequirementApp:
         assert [column.key for column in product_sheet.columns] == [
             xl.SEQUENCE_COLUMN_KEY,
             "title",
+            xl.MODULE_COLUMN_KEY,
             "priority",
             custom.id,
             "description_html",
@@ -762,6 +763,7 @@ class TestRequirementApp:
         assert [column.key for column in library_sheet.columns] == [
             xl.SEQUENCE_COLUMN_KEY,
             "title",
+            xl.MODULE_COLUMN_KEY,
             "priority",
             custom.id,
             "description_html",

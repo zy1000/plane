@@ -167,10 +167,10 @@ type TBuiltinEditorProps = {
   onAssetUpload?: (assetId: string) => void;
   /**
    * 控件所处的语境，决定静息长什么样：grid/detail 无底色，modal 走实边框
-   * （见 FIELD_INPUT_CLASS）。headline 与 chip 是建行弹窗里的两个特写位 ——
-   * 标题行和底部属性条，底子仍是 modal 那套。
+   * （见 FIELD_INPUT_CLASS）。headline / chip / rail 是建行弹窗里的特写位 ——
+   * 标题行、旧底部胶囊、右栏属性轨，底子仍是 modal 那套。
    */
-  variant?: "grid" | "detail" | "modal" | "headline" | "chip";
+  variant?: "grid" | "detail" | "modal" | "headline" | "chip" | "rail";
   /**
    * 标题 / 描述是否延后到失焦再提交。网格里必须开 —— 那里的 onChange 会直接打接口保存这一行，
    * 逐字符提交等于每敲一个字发一次请求。建行弹窗里 onChange 只写本地 state，不用开
@@ -197,17 +197,18 @@ export const BuiltinCellEditor = ({
   placeholder,
 }: TBuiltinEditorProps) => {
   const { t } = useTranslation();
-  /** headline / chip 只改这一个控件的取景，不另起一套底子 */
-  const base = variant === "headline" || variant === "chip" ? "modal" : variant;
+  /** headline / chip / rail 只改这一个控件的取景，不另起一套底子 */
+  const isCompact = variant === "chip" || variant === "rail";
+  const base = variant === "headline" || isCompact ? "modal" : variant;
   // 详情页跟着工作项侧栏走透明下拉；网格铺满整格后可编辑性交给 hover 底色，再画一圈
   // 按钮边框就又变回浮在格子里的小方框。只有建行弹窗还需要实边框把字段框出来
   const dropdownVariant = base === "modal" ? "border-with-text" : "transparent-with-text";
   const inputClass = variant === "headline" ? FIELD_HEADLINE_INPUT_CLASS : FIELD_INPUT_CLASS[base];
   // 网格有列头，空值不必再写「选择成员」「开始日期」这类提示；详情页与建行弹窗没有列头，才保留
   const isGrid = base === "grid";
-  // 属性条上的胶囊与工作项 IssueDefaultProperties 同高（h-7），别跟着字段行的 38px 跑。
-  // 边框由建行弹窗外层那个「字段名 + 控件」的壳来画，控件自己不再描边，否则是双层框
-  const isChip = variant === "chip";
+  // 胶囊 / 右栏属性轨与工作项 IssueDefaultProperties 同高（h-7），别跟着字段行的 38px 跑。
+  // 边框由外层壳来画，控件自己不再描边，否则是双层框
+  const isChip = isCompact;
   const dropdownClass = cn(
     FIELD_DROPDOWN_CLASS[base],
     isChip && "h-7 w-auto rounded-none !border-0 bg-transparent px-2 hover:bg-layer-transparent-hover"
@@ -307,7 +308,13 @@ export const BuiltinCellEditor = ({
         minDate={!isStart && values.start_date ? new Date(values.start_date) : undefined}
         maxDate={isStart && values.target_date ? new Date(values.target_date) : undefined}
         placeholder={
-          isGrid ? "" : base === "detail" ? t("requirement_detail.select_date") : t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)
+          isGrid
+            ? ""
+            : variant === "rail"
+              ? t("requirement_grid.data.date_none")
+              : base === "detail"
+                ? t("requirement_detail.select_date")
+                : t(`requirement_fields.builtin.${isStart ? "start_date" : "target_date"}`)
         }
         buttonVariant={dropdownVariant}
         buttonClassName={dropdownClass}
@@ -322,7 +329,7 @@ export const BuiltinCellEditor = ({
       onChange={(parentId) => onChange({ parent_id: parentId })}
       excludeId={rowId}
       // 胶囊带字段名标签（图标也在标签上），空值只写「未选择」
-      placeholder={isGrid ? "" : isChip ? t("requirement_grid.data.parent_none") : undefined}
+      placeholder={isGrid ? "" : isCompact ? t("requirement_grid.data.parent_none") : undefined}
       buttonClassName={cn(dropdownClass, isChip && "gap-1.5")}
       // 传了这个就得自己带颜色：下拉只在缺省分支里区分已选 / 占位
       buttonTextClassName={isChip ? (values.parent_id ? "text-12 text-primary" : "text-12 text-placeholder") : undefined}

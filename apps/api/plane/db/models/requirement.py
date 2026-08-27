@@ -646,6 +646,8 @@ class Requirement(BaseModel):
     # 挂靠变更不走审批、不 bump version。写入口只有三个：创建工厂
     # （utils.requirement 的两个 _new_* 工厂）、set-module 旁路写入
     # （utils.requirement_module.set_requirement_module）、库导入时的名称路径映射。
+    # Excel 导入不另开口子：新增行走创建工厂，更新行走 set_requirement_module，
+    # 模块列同样按名称路径解析（utils.requirement_excel）。
     # SET_NULL：删模块只解除挂靠，需求回「全部」。
     module = models.ForeignKey(
         "db.RequirementModule",

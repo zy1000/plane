@@ -140,18 +140,22 @@ def module_name_map(rows):
     }
 
 
-def get_or_create_requirement_module(*, product, name, parent, actor=None):
-    """按 (产品, 同级, 名称) 取或建一个产品模块，供导入映射逐级建链。
+def get_or_create_requirement_module(
+    *, scope_filter, workspace_id, name, parent, actor=None
+):
+    """按 (作用域, 同级, 名称) 取或建一个模块，供导入映射逐级建链。
 
-    并发下 get_or_create 可能撞出重复行（唯一约束兜底后一方拿到 IntegrityError
-    之前的窗口），与 QA 的同名工具口径一致：撞了取最早的那条。
+    `scope_filter` 是 module_scope_filter 的产物（`{"product_id": ..}` 或
+    `{"library_id": ..}`），库 / 产品通吃。并发下 get_or_create 可能撞出重复行
+    （唯一约束兜底后一方拿到 IntegrityError 之前的窗口），与 QA 的同名工具口径
+    一致：撞了取最早的那条。
     """
     lookup = {
-        "product_id": product.id,
+        **scope_filter,
         "name": name,
         "parent": parent,
     }
-    defaults = {"workspace_id": product.workspace_id}
+    defaults = {"workspace_id": workspace_id}
     if actor is not None:
         defaults["created_by"] = actor
     try:
@@ -163,6 +167,69 @@ def get_or_create_requirement_module(*, product, name, parent, actor=None):
             .order_by("created_at", "id")
             .first()
         )
+
+
+def module_path_index(scope_filter):
+    """一个库 / 产品的模块名称路径索引：`(path_by_id, id_by_path)`。
+
+    一次 values 查询把整棵树载入内存再回溯父链，Excel 导出渲染模块列、导入反查
+    模块、库→产品导入回溯源路径共用这一份口径。软删的模块不在
+    `RequirementModule.objects` 里，指向它们的行视为无模块（路径为空元组）。
+    """
+    module_map = {
+        str(m["id"]): (m["name"], str(m["parent_id"]) if m["parent_id"] else None)
+        for m in RequirementModule.objects.filter(**scope_filter).values(
+            "id", "name", "parent_id"
+        )
+    }
+    path_by_id = {}
+
+    def path_of(key):
+        if key in path_by_id:
+            return path_by_id[key]
+        names = []
+        visited = set()
+        current = key
+        while current is not None and current in module_map and current not in visited:
+            visited.add(current)
+            name, parent = module_map[current]
+            names.append(name)
+            current = parent
+        path = tuple(reversed(names))
+        path_by_id[key] = path
+        return path
+
+    for key in module_map:
+        path_of(key)
+    # 同级不重名由唯一约束保证，路径 -> id 因此不会撞
+    id_by_path = {path: key for key, path in path_by_id.items() if path}
+    return path_by_id, id_by_path
+
+
+def make_module_path_ensurer(*, scope_filter, workspace_id, actor=None):
+    """返回 `ensure(path) -> RequirementModule | None`：按名称路径逐级取或建模块。
+
+    每级前缀都缓存 —— 同一批里 A/B 与 A/C 共享 A，只 get_or_create 一次。空路径
+    返回 None（不挂模块）。
+    """
+    cache = {(): None}
+
+    def ensure(path):
+        path = tuple(path)
+        if path in cache:
+            return cache[path]
+        parent = ensure(path[:-1])
+        module = get_or_create_requirement_module(
+            scope_filter=scope_filter,
+            workspace_id=workspace_id,
+            name=path[-1],
+            parent=parent,
+            actor=actor,
+        )
+        cache[path] = module
+        return module
+
+    return ensure
 
 
 def map_library_modules_to_product(*, library, product, module_by_client_id, actor=None):
@@ -178,52 +245,16 @@ def map_library_modules_to_product(*, library, product, module_by_client_id, act
     if not source_module_ids:
         return {}
 
-    # 源模块 parent 链一次性载入内存，免逐级查库
-    module_map = {
-        str(m["id"]): (m["name"], str(m["parent_id"]) if m["parent_id"] else None)
-        for m in RequirementModule.objects.filter(library=library).values(
-            "id", "name", "parent_id"
-        )
-    }
-    path_memo = {}
-
-    def source_module_path(module_id):
-        """回溯源模块的名称路径（自顶向下的元组）；模块已软删/查不到视为无模块。"""
-        if module_id is None:
-            return ()
-        key = str(module_id)
-        if key in path_memo:
-            return path_memo[key]
-        names = []
-        visited = set()
-        current = key
-        while current is not None and current in module_map and current not in visited:
-            visited.add(current)
-            name, parent = module_map[current]
-            names.append(name)
-            current = parent
-        if key not in module_map:
-            path = ()
-        else:
-            path = tuple(reversed(names))
-        path_memo[key] = path
-        return path
-
-    # 目标模块链缓存：路径元组 -> RequirementModule；每级前缀都缓存
-    target_module_cache = {(): None}
-
-    def resolve_target_module(path):
-        if path in target_module_cache:
-            return target_module_cache[path]
-        parent = resolve_target_module(path[:-1])
-        module = get_or_create_requirement_module(
-            product=product, name=path[-1], parent=parent, actor=actor
-        )
-        target_module_cache[path] = module
-        return module
+    source_path_by_id, _ = module_path_index({"library_id": library.id})
+    ensure = make_module_path_ensurer(
+        scope_filter={"product_id": product.id},
+        workspace_id=product.workspace_id,
+        actor=actor,
+    )
 
     result = {}
     for client_id, source_module_id in module_by_client_id.items():
-        module = resolve_target_module(source_module_path(source_module_id))
+        path = source_path_by_id.get(str(source_module_id), ()) if source_module_id else ()
+        module = ensure(path)
         result[client_id] = module.id if module else None
     return result

@@ -12,7 +12,11 @@ import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { RequirementExcelMenu } from "@/components/requirements/excel";
-import { MoveToModuleModal, RequirementModuleSidebar } from "@/components/requirements/module-tree";
+import {
+  findRequirementModuleName,
+  MoveToModuleModal,
+  RequirementModuleSidebar,
+} from "@/components/requirements/module-tree";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
@@ -45,6 +49,10 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
   // ?moduleId= 与选中模块双向同步（与下面 peek 的同款写法）
   const urlModuleId = searchParams.get("moduleId");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
+  const selectedModuleName = useMemo(
+    () => findRequirementModuleName(moduleStore.modules, selectedModuleId),
+    [moduleStore.modules, selectedModuleId]
+  );
   const syncedModuleRef = useRef(urlModuleId);
 
   useEffect(() => {
@@ -165,7 +173,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                   filters={store.filters}
                   onImported={() => {
                     void store.fetchRequirements().catch(() => undefined);
-                    // Excel 导入的行不挂模块，但「全部」的总数变了
+                    // Excel 的模块列会按名称路径新建模块 / 改挂靠，左栏要跟上
                     void moduleStore.refresh().catch(() => undefined);
                   }}
                 />
@@ -245,6 +253,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 onOpenDetail={setPeekRequirement}
                 toolbarPortalEl={dataToolbarHost}
                 createModuleId={selectedModuleId}
+                createModuleName={selectedModuleName}
                 onMoveToModule={setMoveIds}
               />
             </div>

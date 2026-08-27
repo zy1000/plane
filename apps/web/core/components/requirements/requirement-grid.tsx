@@ -188,13 +188,15 @@ type TProps = {
   hideToolbarAdd?: boolean;
   /** 左侧模块树的当前选中：新建的行自动挂进该模块（null/不传 = 不挂靠） */
   createModuleId?: string | null;
+  /** 当前选中模块的名字，建行弹窗右栏回显用 */
+  createModuleName?: string | null;
   /** 建行弹窗标题栏下的上下文（库名 / 产品名、需求类型名）。不传只显示归属类别 */
   createModalContext?: TRequirementCreateContext;
   /** 勾选行的「移动到模块」入口；不传则不渲染该按钮 */
   onMoveToModule?: (requirementIds: string[]) => void;
 };
 
-/** 页头的「录入」要在类型视图里直接内联加一行，所以把 addRow 露出去 */
+/** 页头的「添加需求」打开建行弹窗，所以把 openCreateModal 以 addRow 这个名字露出去 */
 export type TRequirementGridHandle = { addRow: () => void };
 
 export const RequirementGrid = observer(
@@ -235,6 +237,7 @@ export const RequirementGrid = observer(
       toolbarPortalEl,
       hideToolbarAdd = false,
       createModuleId = null,
+      createModuleName = null,
       createModalContext,
       onMoveToModule,
     } = props;
@@ -295,12 +298,16 @@ export const RequirementGrid = observer(
     /**
      * 有必填字段的类型建不出空行：后端在 validate_requirement_data 里按
      * enforce_required=field.is_active 校验（serializers/requirement.py:629），
-     * 空值直接 400。这种类型仍旧走弹窗，填齐了一次落库。
+     * 空值直接 400。表底「在表格里加一行」遇到这种类型只能退回弹窗。
      *
      * 标准库不再例外：建行不带编号时服务端按「库标识-序号」补占位编号
      * （_new_library_item），空行落得了地，之后在编号格里改成正式编号即可。
      */
     const requiresCreateModal = useMemo(() => activeFields.some((field) => field.is_required), [activeFields]);
+
+    const openCreateModal = useCallback((seed: TRequirementCreateSeed = {}) => {
+      setCreateSeed(seed);
+    }, []);
 
     /**
      * 内联新增一行：直接建出来，随后它就是一条普通的自动保存行。
@@ -308,14 +315,10 @@ export const RequirementGrid = observer(
      * 不做「表格里的本地草稿行」—— 那需要把 保存更改 / 取消 / 离开页面提醒 整套暂存
      * 机制再请回来，而这一整套刚刚才随「改一格存一格」退休。空行落库是合法的：
      * title 允许留空（RequirementBuiltinWriteSerializer 的 allow_blank=True），
-     * 自定义字段只有标了必填才拦（那种类型走 requiresCreateModal 的弹窗）。
+     * 自定义字段只有标了必填才拦（那种类型只能走弹窗）。
      */
-    const addRow = useCallback(
+    const createInlineRow = useCallback(
       async (seed: TRequirementCreateSeed = {}) => {
-        if (requiresCreateModal) {
-          setCreateSeed(seed);
-          return;
-        }
         if (isCreatingRow) return;
         setIsCreatingRow(true);
         try {
@@ -347,11 +350,23 @@ export const RequirementGrid = observer(
           setIsCreatingRow(false);
         }
       },
-      [activeFields, createModuleId, createRequirementTypeId, isCreatingRow, onBulkSave, requiresCreateModal, t]
+      [activeFields, createModuleId, createRequirementTypeId, isCreatingRow, onBulkSave, t]
     );
 
-    // 页头的「录入」在类型视图里直接走这条内联路径，不再绕类型选择器
-    useImperativeHandle(ref, () => ({ addRow: () => void addRow() }), [addRow]);
+    /** 行菜单插入 / 复制：有必填就弹窗，没有就内联 */
+    const addRow = useCallback(
+      async (seed: TRequirementCreateSeed = {}) => {
+        if (requiresCreateModal) {
+          openCreateModal(seed);
+          return;
+        }
+        await createInlineRow(seed);
+      },
+      [createInlineRow, openCreateModal, requiresCreateModal]
+    );
+
+    // 页头「添加需求」一律开弹窗，不再跟表底虚线按钮抢同一条内联路径
+    useImperativeHandle(ref, () => ({ addRow: () => openCreateModal() }), [openCreateModal]);
 
     const scheduleSearchChange = useCallback(
       (value: string) => {
@@ -1289,7 +1304,7 @@ export const RequirementGrid = observer(
         </FiltersDropdown>
         {/* 单元格已经常驻可编辑，不再有「进入编辑态」这一步；这里改成新增入口 */}
         {!readOnly && !hideToolbarAdd && (
-          <Button variant="primary" size="lg" onClick={() => void addRow()} disabled={isLoading || isCreatingRow}>
+          <Button variant="primary" size="lg" onClick={() => openCreateModal()} disabled={isLoading}>
             {t("requirement_grid.data.add")}
           </Button>
         )}
@@ -1355,7 +1370,7 @@ export const RequirementGrid = observer(
                 <Plus className="mx-auto size-8 text-placeholder" />
                 <p className="mt-2 text-13 font-medium text-primary">{t("requirement_grid.data.empty")}</p>
                 {!readOnly && (
-                  <Button className="mt-3" variant="primary" onClick={() => void addRow()} disabled={isCreatingRow}>
+                  <Button className="mt-3" variant="primary" onClick={() => openCreateModal()}>
                     {t("requirement_grid.data.add")}
                   </Button>
                 )}
@@ -1562,7 +1577,9 @@ export const RequirementGrid = observer(
                     <td colSpan={totalColumnCount} className="border-b border-subtle px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => void addRow()}
+                        onClick={() =>
+                          void (requiresCreateModal ? openCreateModal() : createInlineRow())
+                        }
                         disabled={isCreatingRow}
                         className="inline-flex h-8 w-full items-center justify-start gap-1.5 rounded-md border border-dashed border-subtle px-page-x text-13 font-medium text-accent-primary transition-colors duration-150 hover:border-accent-subtle hover:bg-accent-subtle motion-reduce:transition-none"
                       >
@@ -1633,6 +1650,7 @@ export const RequirementGrid = observer(
           context={createModalContext}
           seed={createSeed ?? undefined}
           moduleId={createModuleId}
+          moduleName={createModuleName}
           onClose={() => setCreateSeed(null)}
           // onBulkSave 内部对 creates 已经重拉过一次，这里不用再来一遍
           onSave={onBulkSave}
