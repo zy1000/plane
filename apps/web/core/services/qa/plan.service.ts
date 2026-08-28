@@ -49,6 +49,14 @@ export type TPlanCaseListResponse = {
   data: TPlanCaseItem[];
 };
 
+export type TPlanListItem = {
+  id: string;
+  name: string;
+  begin_time?: string | null;
+  end_time?: string | null;
+  state?: string | null;
+};
+
 export type TPlanCaseCopyPayload = {
   source_plan_id: string;
   target_plan_id: string;
@@ -66,7 +74,7 @@ export class PlanService extends APIService {
     super(API_BASE_URL);
   }
 
-  async getPlanList(workspaceSlug: string, queries?: any): Promise<Array<{ id: string; name: string }>> {
+  async getPlanList(workspaceSlug: string, queries?: any): Promise<TPlanListItem[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/list/`, { params: queries })
       .then((response) => response?.data || [])
       .catch((error) => {

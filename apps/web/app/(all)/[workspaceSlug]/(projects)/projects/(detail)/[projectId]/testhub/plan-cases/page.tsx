@@ -16,7 +16,7 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Tree, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
-import { PlanService, type TPlanCaseItem } from "@/services/qa/plan.service";
+import { PlanService, type TPlanCaseItem, type TPlanListItem } from "@/services/qa/plan.service";
 import { AppstoreOutlined } from "@ant-design/icons";
 import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2, Copy } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
@@ -178,7 +178,7 @@ export default function PlanCasesPage() {
   const [bulkAssigneeUpdating, setBulkAssigneeUpdating] = useState<boolean>(false);
   const [updatingAssigneePlanCaseId, setUpdatingAssigneePlanCaseId] = useState<string | null>(null);
 
-  const [planList, setPlanList] = useState<Array<{ id: string; name: string }>>([]);
+  const [planList, setPlanList] = useState<TPlanListItem[]>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
 
   const caseTypeEnums = useMemo(
@@ -1204,6 +1204,7 @@ export default function PlanCasesPage() {
             workspaceSlug={String(workspaceSlug)}
             projectId={String(projectId || "")}
             sourcePlanId={String(planId || "")}
+            sourcePlanName={planList.find((p) => String(p.id) === String(planId))?.name}
             planOptions={planList.filter((p) => String(p.id) !== String(planId))}
             selectedPlanCaseIds={selectedCaseIds}
             onSuccess={() => {
