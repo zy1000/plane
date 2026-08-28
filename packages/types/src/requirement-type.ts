@@ -52,6 +52,8 @@ export type TRequirementTypeConfiguration = {
   builtin_fields?: TRequirementBuiltinFieldConfig[];
   /** 新建字段的 client_id -> 服务端 id */
   created_field_ids: Record<string, string>;
+  /** 字段 id -> 有非空值的需求条数（含子字段），字段回收站用。旧后端可能没有 */
+  field_value_counts?: Record<string, number>;
 };
 
 export type TRequirementTypeConfigurationPayload = {

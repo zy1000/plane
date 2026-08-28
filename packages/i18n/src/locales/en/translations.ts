@@ -1311,7 +1311,6 @@ export default {
     },
   },
   requirement_fields: {
-    inactive: "Disabled",
     builtin: {
       title: "Title",
       description: "Description",
@@ -1373,6 +1372,9 @@ export default {
       bulk_options_empty: "Enter at least one option.",
       bulk_options_duplicate: "Duplicate option name: {label}",
       bulk_options_too_long: "Option names must be 255 characters or fewer: {label}",
+      duplicate_field_name: 'Field name "{name}" is already used. Rename it before saving.',
+      duplicate_field_name_in_bin:
+        'Field name "{name}" conflicts with a field in the recycle bin. Rename it or delete the binned field permanently.',
     },
     builder: {
       field_library: "Field library",
@@ -1383,7 +1385,6 @@ export default {
       field_structure: "Field structure",
       field_structure_description: "Drag to reorder. Select a field to configure it on the right.",
       field_settings: "Field settings",
-      enabled_badge: "Enabled",
       done_editing: "Done",
       configuring: "Configuring",
       no_field_selected: "Select a field",
@@ -1397,13 +1398,12 @@ export default {
       required_library_only_hint:
         "A field kept out of the standard library cannot be required: the library never stores it, so requirements imported from a library would be missing this value and could no longer be saved.",
       library_title: "Include in standard library",
-      enabled_title: "Available for use",
-      enabled_description: "Disabled fields are retained but hidden from data entry.",
       duplicate_field: "Duplicate field",
       builtin_badge: "Built-in",
       builtin_locked_hint: "Built-in fields can't be deleted, and their type and enabled state are fixed.",
       builtin_type_locked: "Built-in field type is fixed.",
       delete_field: "Delete field",
+      move_to_bin: "Move to recycle bin",
       copy_suffix: " copy",
     empty_description: "Pick a field from the library on the left to start building the type.",
       root_drop_hint: "Drop here to add a top-level field",
@@ -1427,6 +1427,25 @@ export default {
         "One option per line. Removing a line deletes that option; options whose name is unchanged keep their saved values.",
       bulk_edit_placeholder: "High\nMedium\nLow",
       bulk_edit_count: "{count} options",
+    },
+    recycle_bin: {
+      title: "Recycle bin",
+      summary: "{count} fields moved here. Definitions and saved values are kept; restoring puts a field back into the structure immediately.",
+      empty: "The recycle bin is empty",
+      empty_hint: "Fields you move to the recycle bin from the field menu show up here.",
+      column_name: "Field",
+      column_type: "Type",
+      column_values: "With values",
+      column_actions: "Actions",
+      value_count: "{count} requirements",
+      no_values: "No data yet",
+      footer_hint: "Restore and permanent delete take effect when you save",
+      delete_permanently: "Delete permanently",
+      delete_title: "Delete field permanently",
+      delete_description:
+        'Permanently deleting "{name}" erases its saved values from every requirement when you save. This cannot be undone.',
+      delete_description_with_count:
+        '"{name}" has values in {count} requirements. Deleting it permanently and saving erases them. This cannot be undone.',
     },
     preview: {
       title: "Field preview",

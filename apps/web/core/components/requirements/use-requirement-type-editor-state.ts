@@ -69,6 +69,21 @@ const serializeDraft = (metadata: TRequirementTypeMetadataDraft, items: TRequire
 const customFieldsOf = (items: TRequirementBuilderItem[]): TRequirementFieldDraft[] =>
   items.flatMap((item) => (item.kind === "custom" ? [item.field] : []));
 
+/**
+ * 同级字段名重复（大小写不敏感，对齐后端 casefold）。后端的唯一性校验把回收站里的
+ * 字段也算在内，所以这里连停用的一起查，命中时能指出是和回收站撞了名。
+ */
+const findDuplicateFieldName = (fields: TRequirementFieldDraft[]) => {
+  const seen = new Map<string, TRequirementFieldDraft>();
+  for (const field of fields) {
+    const key = field.name.trim().toLocaleLowerCase();
+    const previous = seen.get(key);
+    if (previous) return { name: field.name.trim(), inBin: !previous.is_active || !field.is_active };
+    seen.set(key, field);
+  }
+  return null;
+};
+
 type TArgs = {
   workspaceSlug: string | undefined;
   requirementTypeId: string | undefined;
@@ -144,10 +159,13 @@ export const useRequirementTypeEditorState = ({
     [baseline, items, metadata]
   );
 
-  // 用草稿算而不是用后端的 field_count，未保存的增删也要反映出来。只数自定义字段
+  // 用草稿算而不是用后端的 field_count，未保存的增删也要反映出来。只数自定义字段，回收站里的不算
   const fieldSummary = useMemo(() => {
     const customFields = customFieldsOf(items);
-    return { topLevel: customFields.length, columns: countRequirementColumns(customFields) };
+    return {
+      topLevel: customFields.filter((field) => field.is_active).length,
+      columns: countRequirementColumns(customFields),
+    };
   }, [items]);
 
   useEffect(() => {
@@ -202,6 +220,23 @@ export const useRequirementTypeEditorState = ({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
           message: t("requirement_fields.validation.selector_options"),
+        });
+        return false;
+      }
+      const duplicate =
+        findDuplicateFieldName(customFields) ??
+        customFields.map((field) => findDuplicateFieldName(field.children)).find(Boolean) ??
+        null;
+      if (duplicate) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message: t(
+            duplicate.inBin
+              ? "requirement_fields.validation.duplicate_field_name_in_bin"
+              : "requirement_fields.validation.duplicate_field_name",
+            { name: duplicate.name }
+          ),
         });
         return false;
       }

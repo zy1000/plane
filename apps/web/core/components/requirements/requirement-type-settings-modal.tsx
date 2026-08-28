@@ -119,8 +119,7 @@ export function RequirementTypeSettingsModal(props: Props) {
             value={draft.description ?? ""}
             onChange={(event) => setDraft({ ...draft, description: event.target.value })}
             rows={4}
-            className="focus:border-accent-primary w-full resize-y rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t("workspace_templates.requirement_types.fields.description_placeholder")}
+            className="focus:border-accent-primary w-full resize-y rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none"
           />
         </label>
 

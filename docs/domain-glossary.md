@@ -34,6 +34,7 @@
 
 - **Requirement** — 需求条目本身，**就是唯一的可变副本**。没有影子表 / 工作副本表，人直接改它。三种归属共用一张表：`product` / `project` / `library` 三选一（CheckConstraint 强制）。
 - **RequirementType** — 字段定义源，**工作区级**。条目通过外键实时引用字段定义；字段结构变更**立即生效、不走审批**。
+  - **字段回收站（2026-08-28）= `RequirementField.is_active=false`**，没有独立的表或标记。编辑器里「移入回收站」只翻标志位（值原样留在 `Requirement.data`，所有录入/网格/详情面本来就过滤 `is_active`），「永久删除」才是从配置 PUT 里省略该字段 → 后端 `sync_requirement_type_fields` 清值 + 409 `REQUIREMENT_SCHEMA_DATA_LOSS` 确认。前端顺序不变量：停用根字段恒在 items 尾部、停用子字段恒在 children 尾部（`components/requirements/requirement-builder-items.ts`）。配置 GET/PUT 响应多带只读 `field_value_counts`（字段 id → 有非空值的需求数，`utils/requirement.py::count_requirement_field_values`）。后端字段同名校验把停用字段也算在内，前端保存前先查。
 - **RequirementVersion** — 每条需求各自的版本链（v1, v2…），**只在审批通过时写入**。
 - **approval** — **没有产品级的审批配置**（2026-08-25 改造，迁移 `0345` 删掉了 `RequirementApprovalPolicy` / `RequirementApprover`）。评审人名单与通过规则（`none` 无需评审 / `any` / `all` / `n_of_m`）由提交人在**每次提交评审时**给定，只对那一张变更单有效，直接落在 `RequirementChangeRequest.approval_type/required_count` 与 `RequirementChangeApproval` 行上。`none` 提交即通过（不建审批行、不锁行、不发通知，直接走 `_apply_approved_items`）。
 - **change**（`RequirementChangeRequest` + `RequirementChangeItem`）— **唯一的审批载体**。一张单覆盖 1..N 条需求，同批通过 / 同批驳回。审批单位是**变更单**，不是条目。

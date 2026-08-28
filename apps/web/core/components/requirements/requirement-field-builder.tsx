@@ -1,24 +1,17 @@
 import { useEffect, useState } from "react";
 import {
-  AlignLeft,
+  Archive,
   ArrowDownToLine,
   ArrowUpToLine,
   ChevronDown,
   Copy,
-  FileImage,
-  FormInput,
   GripVertical,
-  ListChecks,
   ListPlus,
   MoreHorizontal,
-  Paperclip,
   Plus,
   Search,
   Settings2,
-  ToggleLeft,
   Trash2,
-  Type,
-  UserRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
@@ -31,7 +24,19 @@ import type {
 } from "@plane/types";
 import { CustomMenu, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
+import {
+  FIELD_ICONS,
+  binEntryTarget,
+  collectRecycleBinEntries,
+  moveFieldToBin,
+  requirementFieldKey,
+  restoreFieldFromBin,
+  splitBuilderItems,
+  splitFieldsByActive,
+  type TRequirementBinEntry,
+} from "@/components/requirements/requirement-builder-items";
 import { RequirementBuiltinFieldRow } from "@/components/requirements/requirement-builtin-field-row";
+import { RequirementFieldRecycleBin } from "@/components/requirements/requirement-field-recycle-bin";
 import {
   getRequirementSelectMode,
   getRequirementSelectOptions,
@@ -76,6 +81,8 @@ type TRequirementFieldBuilderProps = {
   /** 统一混排列表：7 个可排序内置字段 + 自定义字段，顺序即列序。编号/标题不在其中（锁定最前） */
   items: TRequirementBuilderItem[];
   onChange: (items: TRequirementBuilderItem[]) => void;
+  /** 字段 id -> 有非空值的需求条数，回收站行与永久删除弹窗用 */
+  fieldValueCounts?: Record<string, number>;
   sidebarHeader?: React.ReactNode;
   compactLayout?: boolean;
   title?: string;
@@ -86,6 +93,9 @@ type TFieldLibraryProps = {
   compact?: boolean;
   onDragStart: (type: TRequirementFieldType) => void;
   onDragEnd: () => void;
+  /** 回收站里的字段数；为 0 时入口置灰 */
+  binCount: number;
+  onOpenBin: () => void;
 };
 
 type TFieldRowProps = {
@@ -144,20 +154,9 @@ const FIELD_LIBRARY_GROUPS: Array<{
   },
 ];
 
-export const FIELD_ICONS = {
-  text: Type,
-  member: UserRound,
-  select: ListChecks,
-  form: FormInput,
-  rich_text: AlignLeft,
-  attachment: Paperclip,
-  image: FileImage,
-  boolean: ToggleLeft,
-} satisfies Record<TRequirementFieldType, typeof Type>;
-
 const FIELD_LIBRARY_DRAG_TYPE = "application/x-requirement-field-type";
 
-const fieldKey = (field: TRequirementFieldDraft) => field.id ?? field.client_id ?? "";
+const fieldKey = requirementFieldKey;
 const getMenuPortalElement = () => (typeof document === "undefined" ? null : document.body);
 
 const createSelectOptions = (labels: string[]): TRequirementSelectOption[] =>
@@ -197,15 +196,36 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
     ...field,
     id: undefined,
     client_id: uuidv4(),
+    // 副本没有 id、进不了回收站：本体的停用状态与停用的子字段都不复制
+    is_active: true,
     name: `${field.name}${suffix}`,
     config,
     default_value: field.field_type === "select" ? (getRequirementSelectMode(field) === "multiple" ? [] : null) : null,
-    children: field.children.map((child) => duplicateField(child, suffix)),
+    children: field.children.filter((child) => child.is_active).map((child) => duplicateField(child, suffix)),
   };
 };
 
+/** 字段库底部的回收站入口：从这里拖出新字段，也从这里找回旧字段 */
+function FieldLibraryBinEntry({ count, onOpen }: { count: number; onOpen: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={count === 0}
+      className="group flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-12 font-medium text-primary transition-colors hover:bg-layer-transparent-hover disabled:cursor-default disabled:text-tertiary disabled:hover:bg-transparent"
+    >
+      <Archive className="size-4 shrink-0 text-secondary group-disabled:text-placeholder" />
+      <span className="flex-1 truncate">{t("requirement_fields.recycle_bin.title")}</span>
+      {count > 0 && (
+        <span className="rounded-full bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary">{count}</span>
+      )}
+    </button>
+  );
+}
+
 function FieldLibrary(props: TFieldLibraryProps) {
-  const { compact = false, onDragStart, onDragEnd } = props;
+  const { compact = false, onDragStart, onDragEnd, binCount, onOpenBin } = props;
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
@@ -238,6 +258,9 @@ function FieldLibrary(props: TFieldLibraryProps) {
               </div>
             );
           })}
+        </div>
+        <div className="mt-3 shrink-0 border-t border-subtle pt-3">
+          <FieldLibraryBinEntry count={binCount} onOpen={onOpenBin} />
         </div>
       </div>
     );
@@ -301,28 +324,12 @@ function FieldLibrary(props: TFieldLibraryProps) {
           );
         })}
       </div>
+      <div className="shrink-0 border-t border-subtle px-3 py-3">
+        <FieldLibraryBinEntry count={binCount} onOpen={onOpenBin} />
+      </div>
     </div>
   );
 }
-
-/** 与工作项属性行同款的状态胶囊 */
-const StatusBadge = ({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "neutral" | "success" | "warning";
-}) => (
-  <span
-    className={cn("inline-flex shrink-0 items-center rounded px-2 py-0.5 text-11 font-medium", {
-      "border border-subtle bg-surface-2 text-secondary": tone === "neutral",
-      "bg-success-subtle/35 text-success-primary": tone === "success",
-      "bg-warning-subtle/60 text-warning-primary": tone === "warning",
-    })}
-  >
-    {children}
-  </span>
-);
 
 function RequirementFieldRow(props: TFieldRowProps) {
   const {
@@ -341,6 +348,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
   } = props;
   const { t } = useTranslation();
   const isForm = field.field_type === "form" && !isChild;
+  const canBin = Boolean(field.id);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const fieldTypeDescription =
     field.field_type === "select"
@@ -422,9 +430,6 @@ function RequirementFieldRow(props: TFieldRowProps) {
             )}
           </button>
           <span className="shrink-0 text-xs text-secondary">{fieldTypeDescription}</span>
-          <StatusBadge tone={field.is_active ? "success" : "neutral"}>
-            {t(field.is_active ? "requirement_fields.builder.enabled_badge" : "requirement_fields.inactive")}
-          </StatusBadge>
           <CustomMenu
             customButton={
               <span
@@ -449,11 +454,12 @@ function RequirementFieldRow(props: TFieldRowProps) {
             <CustomMenu.MenuItem onClick={onDuplicate}>
               <MenuRowLabel icon={Copy} label={t("requirement_fields.builder.duplicate_field")} />
             </CustomMenu.MenuItem>
+            {/* 保存过的字段进回收站（可恢复）；没保存过的没有值要保，直接删 */}
             <CustomMenu.MenuItem onClick={onRemove}>
               <MenuRowLabel
-                icon={Trash2}
-                label={t("requirement_fields.builder.delete_field")}
-                tone="danger"
+                icon={canBin ? Archive : Trash2}
+                label={t(canBin ? "requirement_fields.builder.move_to_bin" : "requirement_fields.builder.delete_field")}
+                tone={canBin ? "default" : "danger"}
               />
             </CustomMenu.MenuItem>
           </CustomMenu>
@@ -465,7 +471,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
 }
 
 /**
- * 字段的内联编辑表单：左栏是「这个字段是什么」（名称/说明/必填/启用），
+ * 字段的内联编辑表单：左栏是「这个字段是什么」（名称/说明/纳入标准库/必填），
  * 右栏是「怎么填」（类型、选项、占位符）。与工作项属性的内联表单同构。
  *
  * 改动直接写进草稿 —— 整页由顶部的「保存配置」统一提交，所以这里没有「更新」。
@@ -579,15 +585,6 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
               className="size-3.5 rounded border border-subtle accent-accent-primary disabled:cursor-not-allowed"
             />
             {t("requirement_fields.builder.required_title")}
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={field.is_active}
-              onChange={(event) => onChange({ ...field, is_active: event.target.checked })}
-              className="size-3.5 rounded border border-subtle accent-accent-primary"
-            />
-            {t("requirement_fields.builder.enabled_title")}
           </label>
           {!canBeRequired && (
             <span className="basis-full text-11 leading-4 text-tertiary">
@@ -768,7 +765,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
 }
 
 export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
-  const { items, onChange, sidebarHeader, compactLayout = false, title, description } = props;
+  const { items, onChange, fieldValueCounts = {}, sidebarHeader, compactLayout = false, title, description } = props;
   const { t } = useTranslation();
   // selection = 当前原地展开成表单的那个字段，同时只能有一个。内置行不可展开，不进 selection
   const [selection, setSelection] = useState<TFieldSelection | null>(null);
@@ -776,8 +773,14 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   const [editSnapshot, setEditSnapshot] = useState<{ field: TRequirementFieldDraft; isNew: boolean } | null>(null);
   const [draggedLibraryFieldType, setDraggedLibraryFieldType] = useState<TRequirementFieldType | null>(null);
   const [dropTarget, setDropTarget] = useState<TFieldDropTarget | null>(null);
+  const [isBinOpen, setIsBinOpen] = useState(false);
 
-  const customFieldCount = items.reduce((count, item) => (item.kind === "custom" ? count + 1 : count), 0);
+  // 回收站里的根字段恒在 items 尾部，主列表只渲染 active 段（见 requirement-builder-items.ts）
+  const { active: activeItems, inactive: inactiveItems } = splitBuilderItems(items);
+  const binEntries = collectRecycleBinEntries(items);
+  const customFieldCount = activeItems.reduce((count, item) => (item.kind === "custom" ? count + 1 : count), 0);
+  /** 主列表的回写口：Sortable.onChange 给的是整个数组，回收站里的根字段要自己拼回尾部 */
+  const commitActive = (nextActive: TRequirementBuilderItem[]) => onChange([...nextActive, ...inactiveItems]);
   const findCustomField = (rootKey: string) =>
     items.find(
       (item): item is Extract<TRequirementBuilderItem, { kind: "custom" }> =>
@@ -858,16 +861,16 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     />
   );
 
-  /** index 是统一混排列表（items）里的下标 —— 新字段可以插在内置字段之间 */
+  /** index 是主列表（activeItems）里的下标 —— 新字段可以插在内置字段之间 */
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(
       type,
       t(`requirement_fields.field_types.${type}`),
       defaultSelectOptionLabels
     );
-    const nextItems = [...items];
+    const nextItems = [...activeItems];
     nextItems.splice(index, 0, { kind: "custom", field: nextField });
-    onChange(nextItems);
+    commitActive(nextItems);
     openEditor({ rootKey: fieldKey(nextField) }, nextField, true);
   };
 
@@ -879,9 +882,9 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     );
     onChange(
       mapCustomItem(rootKey, (field) => {
-        const children = [...field.children];
-        children.splice(index, 0, nextField);
-        return { ...field, children };
+        const { active, inactive } = splitFieldsByActive(field.children);
+        active.splice(index, 0, nextField);
+        return { ...field, children: [...active, ...inactive] };
       })
     );
     openEditor({ rootKey, childKey: fieldKey(nextField) }, nextField, true);
@@ -958,8 +961,28 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     closeEditor();
   };
 
+  /** 行菜单「删除」的统一入口：保存过的字段进回收站，没保存过的直接扔掉（没有值要保） */
+  const discardSelection = (target: TFieldSelection) => {
+    const root = findCustomField(target.rootKey);
+    const field = target.childKey ? root?.children.find((child) => fieldKey(child) === target.childKey) : root;
+    if (!field) return;
+    if (!field.id) {
+      removeSelection(target);
+      return;
+    }
+    onChange(moveFieldToBin(items, target));
+    // 字段还在 items 里，「选中项消失就收起」的 effect 不会触发，得自己收
+    closeEditor();
+  };
+
+  const restoreBinEntry = (entry: TRequirementBinEntry) =>
+    onChange(restoreFieldFromBin(items, binEntryTarget(entry)));
+  /** 确认弹窗在回收站组件里弹；这里就是原来的硬删，保存时再由后端的数据丢失确认把关 */
+  const deleteBinEntryForever = (entry: TRequirementBinEntry) => removeSelection(binEntryTarget(entry));
+
   const renderRootField = (field: TRequirementFieldDraft, rootIndex: number) => {
     const rootKey = fieldKey(field);
+    const { active: activeChildren } = splitFieldsByActive(field.children);
     const isEditing = selection?.rootKey === rootKey && !selection.childKey;
     const hasSelectedChild = selection?.rootKey === rootKey && Boolean(selection.childKey);
     const isChildDropTarget = dropTarget?.kind === "child" && dropTarget.rootKey === rootKey;
@@ -970,7 +993,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           if (field.field_type === "form") handleChildFieldDragOver(event, rootKey);
         }}
         onDrop={(event) => {
-          if (field.field_type === "form") handleChildFieldDrop(event, rootKey, field.children.length);
+          if (field.field_type === "form") handleChildFieldDrop(event, rootKey, activeChildren.length);
         }}
       >
         <RequirementFieldRow
@@ -983,7 +1006,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           onSelect={() => openEditor({ rootKey }, field)}
           onInsert={(position) => insertRootField(rootIndex + (position === "below" ? 1 : 0), "text")}
           onDuplicate={() => duplicateSelection({ rootKey })}
-          onRemove={() => removeSelection({ rootKey })}
+          onRemove={() => discardSelection({ rootKey })}
         >
           <div
             className={cn("border-t border-subtle bg-layer-1/50 px-3", compactLayout ? "py-2 sm:pl-7" : "py-3 sm:pl-9")}
@@ -993,13 +1016,21 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 {t("requirement_fields.builder.nested_form_not_supported")}
               </div>
             )}
-            {field.children.length > 0 && (
+            {activeChildren.length > 0 && (
               <Sortable
                 id={`requirement-form-${rootKey}`}
-                data={field.children}
+                data={activeChildren}
                 keyExtractor={fieldKey}
                 containerClassName="mb-2 last:mb-0"
-                onChange={(children) => onChange(mapCustomItem(rootKey, (item) => ({ ...item, children })))}
+                onChange={(children) =>
+                  onChange(
+                    mapCustomItem(rootKey, (item) => ({
+                      ...item,
+                      // 回收站里的子字段不在 Sortable 里，拼回尾部
+                      children: [...children, ...item.children.filter((child) => !child.is_active)],
+                    }))
+                  )
+                }
                 render={(child, childIndex) => {
                   const childKey = fieldKey(child);
                   const isChildEditing = selection?.rootKey === rootKey && selection.childKey === childKey;
@@ -1014,7 +1045,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                         insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")
                       }
                       onDuplicate={() => duplicateSelection({ rootKey, childKey })}
-                      onRemove={() => removeSelection({ rootKey, childKey })}
+                      onRemove={() => discardSelection({ rootKey, childKey })}
                     />
                   );
                 }}
@@ -1026,7 +1057,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                   className={cn(
                     "mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary hover:border-accent-subtle hover:bg-accent-subtle",
                     {
-                      "mt-0": field.children.length === 0,
+                      "mt-0": activeChildren.length === 0,
                       "border-accent-strong bg-accent-subtle": isChildDropTarget,
                     }
                   )}
@@ -1050,7 +1081,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 return (
                   <CustomMenu.MenuItem
                     key={type}
-                    onClick={() => insertChildField(rootKey, field.children.length, type)}
+                    onClick={() => insertChildField(rootKey, activeChildren.length, type)}
                   >
                     <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
                   </CustomMenu.MenuItem>
@@ -1078,11 +1109,22 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
       {ROOT_FIELD_TYPES.map((type) => {
         const Icon = FIELD_ICONS[type];
         return (
-          <CustomMenu.MenuItem key={type} onClick={() => insertRootField(items.length, type)}>
+          <CustomMenu.MenuItem key={type} onClick={() => insertRootField(activeItems.length, type)}>
             <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
           </CustomMenu.MenuItem>
         );
       })}
+      {/* 窄屏下字段库收进这个菜单，回收站入口也跟着进来 */}
+      <CustomMenu.MenuItem onClick={() => setIsBinOpen(true)} disabled={binEntries.length === 0}>
+        <MenuRowLabel
+          icon={Archive}
+          label={
+            binEntries.length > 0
+              ? `${t("requirement_fields.recycle_bin.title")} · ${binEntries.length}`
+              : t("requirement_fields.recycle_bin.title")
+          }
+        />
+      </CustomMenu.MenuItem>
     </CustomMenu>
   );
 
@@ -1103,6 +1145,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
               setDropTarget(null);
             }}
             onDragEnd={resetLibraryDrag}
+            binCount={binEntries.length}
+            onOpenBin={() => setIsBinOpen(true)}
           />
         </div>
       </aside>
@@ -1145,7 +1189,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
             const fieldType = event.dataTransfer.getData(FIELD_LIBRARY_DRAG_TYPE) as TRequirementFieldType;
             if (!ROOT_FIELD_TYPES.includes(fieldType)) return;
             event.preventDefault();
-            insertRootField(items.length, fieldType);
+            insertRootField(activeItems.length, fieldType);
             resetLibraryDrag();
           }}
         >
@@ -1159,10 +1203,10 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
             {/* 统一混排列表：内置字段与自定义字段交叉拖拽，顺序即网格列序 */}
             <Sortable
               id="requirement-root-fields"
-              data={items}
+              data={activeItems}
               keyExtractor={builderItemKey}
               containerClassName="mb-3 last:mb-0"
-              onChange={onChange}
+              onChange={commitActive}
               render={(item, index) =>
                 item.kind === "builtin" ? (
                   <RequirementBuiltinFieldRow
@@ -1207,6 +1251,14 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           </div>
         </div>
       </main>
+      <RequirementFieldRecycleBin
+        isOpen={isBinOpen}
+        onClose={() => setIsBinOpen(false)}
+        entries={binEntries}
+        valueCounts={fieldValueCounts}
+        onRestore={restoreBinEntry}
+        onDeleteForever={deleteBinEntryForever}
+      />
     </div>
   );
 }

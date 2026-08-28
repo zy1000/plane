@@ -504,6 +504,49 @@ def rows_affected_by_fields(requirement_type):
     return Requirement.objects.filter(requirement_type=requirement_type)
 
 
+def count_requirement_field_values(requirement_type):
+    """每个字段（含子字段）在多少条需求行里有非空值 —— 字段回收站的提示用，只读。
+
+    口径与 RequirementDataLossError 的 affected_requirement_count 一致：同一个
+    rows_affected_by_fields 查询集，含标准库条目与已审批行。一次流式扫描 data 列；
+    表单子字段的值在 data[parent_id][*]["values"][child_id] 里，同一条需求里任一
+    子行非空就算这条需求有值。
+    """
+    specs = get_requirement_type_field_specs(requirement_type)
+    counts = {spec.id: 0 for spec in specs}
+    root_ids = [spec.id for spec in specs if spec.parent_field_id is None]
+    children_by_parent = {}
+    for spec in specs:
+        if spec.parent_field_id is not None:
+            children_by_parent.setdefault(spec.parent_field_id, []).append(spec.id)
+
+    rows = rows_affected_by_fields(requirement_type).values_list("data", flat=True)
+    for data in rows.iterator(chunk_size=1000):
+        if not isinstance(data, dict):
+            continue
+        for root_id in root_ids:
+            value = data.get(root_id)
+            if _is_empty_requirement_value(value):
+                continue
+            counts[root_id] += 1
+            child_ids = children_by_parent.get(root_id)
+            if not child_ids or not isinstance(value, list):
+                continue
+            hit = set()
+            for row in value:
+                values = row.get("values") if isinstance(row, dict) else None
+                if not isinstance(values, dict):
+                    continue
+                hit.update(
+                    child_id
+                    for child_id in child_ids
+                    if not _is_empty_requirement_value(values.get(child_id))
+                )
+            for child_id in hit:
+                counts[child_id] += 1
+    return counts
+
+
 def _field_specs_of(owner):
     return field_specs_from_models(
         owner.fields.select_related("parent_field").order_by(

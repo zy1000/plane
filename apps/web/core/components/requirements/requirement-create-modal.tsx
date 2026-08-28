@@ -28,7 +28,7 @@ import {
   RequirementCreatePropertyRail,
   type TCreateRequiredEntry,
 } from "./requirement-create-property-rail";
-import { FIELD_ICONS } from "./requirement-field-builder";
+import { FIELD_ICONS } from "./requirement-builder-items";
 import { RequirementSubformSection } from "./requirement-detail/requirement-subform-section";
 import { isRequirementValueEmpty } from "./requirement-required";
 import { createEmptyRequirementData } from "./requirement-row-data";
