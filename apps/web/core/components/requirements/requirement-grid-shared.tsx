@@ -538,11 +538,22 @@ export const RequirementGridColumnResizer = ({
 /**
  * 表头单元格。不画上下边框 —— 底线由 thead 统一给一条，免得和行分隔线叠成双线。
  * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
+ *
+ * 叶子列（单列表头、表单子字段）钉 44px，和正文行高对齐。分组表头另走
+ * REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS，不能套 h-11，否则两行叠成 88px，
+ * 单列 rowSpan=2 会被一起拉高，列名漂在一格空白中间。
  */
 const HEADER_CELL_BASE =
   "group/header relative h-11 border-r border-strong bg-layer-1 text-left align-middle text-13 font-medium";
 export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
 export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
+/** 表单分组名那一行：压成细条，只给「这几列属于哪个表单」当标签。 */
+export const REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS =
+  "group/header relative h-6 border-r border-b border-strong bg-layer-1 text-center align-middle text-11 font-medium";
+/**
+ * 有二级表头时盖掉叶子格的 h-11。rowSpan 格高度改由两行相加，列名落在底部 44px 条带里。
+ */
+const HEADER_CELL_SPANNED_CLASS = "!h-auto align-bottom";
 
 /**
  * 正文单元格。横线走 border-b，竖线走 border-r，与工作项一致。
@@ -685,6 +696,7 @@ export const useRequirementGridScrollContainer = () => {
 
 /**
  * 二级表头：非表单根字段 rowSpan=2，表单字段作分组表头、子字段排在第二行。
+ * 分组行压成 24px 细条；单列标题底对齐到叶子行，避免 44+44 把一列表头撑成一块空高。
  * 首列与末列由调用方给（编辑态给编号等左固定列与「操作」，diff 模式给「变更」且没有末列）。
  */
 type TRequirementGridBuiltinHeader = {
@@ -765,17 +777,25 @@ export const RequirementGridHeader = ({
   const formFields = orderedRootFields.filter((field) => field.field_type === "form");
   const hasFormFields = formFields.length > 0;
   const spanRows = hasFormFields ? 2 : 1;
+  const spannedHeaderClass = spanRows > 1 ? HEADER_CELL_SPANNED_CLASS : undefined;
   const resolvedLeadingHeaders =
     leadingHeaders ??
     (leadingHeader ? [{ key: "leading", ...leadingHeader }] : []);
+
+  const renderSpannedContent = (content: React.ReactNode) =>
+    spanRows > 1 ? (
+      <div className="relative flex h-11 w-full min-w-0 items-center">{content}</div>
+    ) : (
+      content
+    );
 
   const renderBuiltinHeader = (header: TRequirementGridBuiltinHeader) => (
     <th
       key={header.key}
       rowSpan={spanRows}
-      className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, header.className)}
+      className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, header.className, spannedHeaderClass)}
     >
-      {header.content}
+      {renderSpannedContent(header.content)}
       {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
     </th>
   );
@@ -784,13 +804,19 @@ export const RequirementGridHeader = ({
       <th
         key={field.id}
         colSpan={getFormColumnCount(field, showActionGutter, showFormRowNumber)}
-        className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "border-b border-strong text-center")}
+        className={cn(REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS, "px-page-x")}
       >
-        <span className="truncate text-13 font-medium text-secondary">{field.name}</span>
+        <span className="truncate text-11 font-medium leading-none text-secondary">{field.name}</span>
       </th>
     ) : (
-      <th key={field.id} rowSpan={spanRows} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-        <RequirementGridHeaderLabel label={field.name} isRequired={field.is_required} />
+      <th
+        key={field.id}
+        rowSpan={spanRows}
+        className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, spannedHeaderClass)}
+      >
+        {renderSpannedContent(
+          <RequirementGridHeaderLabel label={field.name} isRequired={field.is_required} />
+        )}
         {onFieldResize && (
           <RequirementGridColumnResizer onMouseDown={(event) => onFieldResize(field.id, event)} />
         )}
@@ -804,11 +830,11 @@ export const RequirementGridHeader = ({
           <th
             key={header.key}
             rowSpan={spanRows}
-            className={header.className}
+            className={cn(header.className, spannedHeaderClass)}
             style={header.style}
             data-requirement-sticky-cell={header.stickyCell ? "" : undefined}
           >
-            {header.content}
+            {renderSpannedContent(header.content)}
             {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
           </th>
         ))}
@@ -819,14 +845,14 @@ export const RequirementGridHeader = ({
             )
           : rootFields.map(renderFieldHeader)}
         {extraHeaders?.map((header) => (
-          <th key={header.key} rowSpan={spanRows} className={header.className}>
-            {header.content}
+          <th key={header.key} rowSpan={spanRows} className={cn(header.className, spannedHeaderClass)}>
+            {renderSpannedContent(header.content)}
             {header.onResize && <RequirementGridColumnResizer onMouseDown={header.onResize} />}
           </th>
         ))}
         {trailingHeader && (
-          <th rowSpan={spanRows} className={trailingHeader.className}>
-            {trailingHeader.content}
+          <th rowSpan={spanRows} className={cn(trailingHeader.className, spannedHeaderClass)}>
+            {renderSpannedContent(trailingHeader.content)}
           </th>
         )}
       </tr>

@@ -51,7 +51,7 @@ export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }
                 <th
                   key={previewFieldKey(field)}
                   colSpan={Math.max(field.children.filter((child) => child.is_active).length, 1)}
-                  className="min-w-40 border-r border-subtle px-3 py-2 text-center text-primary"
+                  className="min-w-40 border-r border-subtle px-3 py-1 text-center text-11 font-medium text-primary"
                 >
                   {field.name || t("requirement_fields.fields.untitled")}
                 </th>
@@ -59,7 +59,7 @@ export function RequirementFieldsPreview({ fields }: { fields: TPreviewField[] }
                 <th
                   key={previewFieldKey(field)}
                   rowSpan={hasForms ? 2 : 1}
-                  className="min-w-40 border-r border-subtle px-3 py-2"
+                  className="min-w-40 border-r border-subtle px-3 py-2 align-bottom"
                 >
                   {field.name || t("requirement_fields.fields.untitled")}
                 </th>
