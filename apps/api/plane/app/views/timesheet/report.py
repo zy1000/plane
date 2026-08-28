@@ -303,8 +303,13 @@ class TimeSheetReportViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        queryset = self.get_queryset().filter(
-            date__gte=first_day, date__lt=next_month_first
+        queryset = (
+            self.get_queryset()
+            .filter(date__gte=first_day, date__lt=next_month_first)
+            .exclude(
+                Q(project__pms_project_name__isnull=True)
+                | Q(project__pms_project_name="")
+            )
         )
 
         user_param = (request.query_params.get("user") or "").strip()
@@ -337,8 +342,13 @@ class TimeSheetReportViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        queryset = self.get_queryset().filter(
-            date__gte=first_day, date__lt=next_month_first
+        queryset = (
+            self.get_queryset()
+            .filter(date__gte=first_day, date__lt=next_month_first)
+            .exclude(
+                Q(project__pms_project_name__isnull=True)
+                | Q(project__pms_project_name="")
+            )
         )
 
         user_param = (request.query_params.get("user") or "").strip()
