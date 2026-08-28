@@ -19,10 +19,10 @@ from django.conf import settings
 from plane.db.models import (
     Cycle,
     EmailNotificationLog,
-    ProjectMember,
     Release,
     User,
     UserNotificationPreference,
+    WorkspaceMember,
 )
 from plane.settings.redis import redis_instance
 from plane.utils.exception_logger import log_exception
@@ -80,13 +80,14 @@ CYCLE_ORIGIN_REDIS_PREFIX = "cycle_status_email_origin"
 RELEASE_ORIGIN_REDIS_PREFIX = "release_status_email_origin"
 
 
-def _filter_eligible_receivers(project_id, candidate_ids, actor_id):
+def _filter_eligible_receivers(workspace_id, candidate_ids, actor_id):
     """Narrow a set of candidate user ids down to people we should email.
 
     Rules:
     - Exclude the actor that triggered the change (if any).
-    - Must be an active member of the project (``ProjectMember.is_active``) -
-      protects against stale assignees who no longer belong to the project.
+    - Must be an active member of the workspace (``WorkspaceMember.is_active``).
+      Checked at workspace level rather than project level because the
+      project's ``product_manager`` is only required to be a workspace member.
     - Honour ``UserNotificationPreference.state_change``. Missing preference
       rows default to ``True`` (opt-out, not opt-in).
     """
@@ -98,8 +99,8 @@ def _filter_eligible_receivers(project_id, candidate_ids, actor_id):
 
     active_ids = set(
         str(mid)
-        for mid in ProjectMember.objects.filter(
-            project_id=project_id,
+        for mid in WorkspaceMember.objects.filter(
+            workspace_id=workspace_id,
             is_active=True,
             member_id__in=candidates,
         ).values_list("member_id", flat=True)
@@ -117,14 +118,14 @@ def _filter_eligible_receivers(project_id, candidate_ids, actor_id):
     return [mid for mid in active_ids if mid not in disabled]
 
 
-def _all_project_member_ids(project_id):
+def _stakeholder_ids(project, owner_id):
+    """Recipients for broadcast events: project lead, R&D product manager and
+    the cycle/release owner. Project-wide fan-out was dropped on purpose to
+    curb email volume."""
     return {
-        str(mid)
-        for mid in ProjectMember.objects.filter(
-            project_id=project_id,
-            is_active=True,
-        ).values_list("member_id", flat=True)
-        if mid is not None
+        str(uid)
+        for uid in (project.project_lead_id, project.product_manager_id, owner_id)
+        if uid is not None
     }
 
 
@@ -293,8 +294,8 @@ def dispatch_cycle_status_email(cycle_id, actor_id, old_status, new_status, orig
         _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
         effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            cycle.project_id,
-            _all_project_member_ids(cycle.project_id),
+            cycle.workspace_id,
+            _stakeholder_ids(cycle.project, cycle.owned_by_id),
             actor_id=actor_id,
         )
 
@@ -340,8 +341,8 @@ def dispatch_release_status_email(release_id, actor_id, old_status, new_status, 
         _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
         effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            release.project_id,
-            _all_project_member_ids(release.project_id),
+            release.workspace_id,
+            _stakeholder_ids(release.project, release.lead_id),
             actor_id=actor_id,
         )
 
@@ -383,8 +384,8 @@ def dispatch_cycle_created_email(cycle_id, actor_id, origin):
         _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
         effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            cycle.project_id,
-            _all_project_member_ids(cycle.project_id),
+            cycle.workspace_id,
+            _stakeholder_ids(cycle.project, cycle.owned_by_id),
             actor_id=actor_id,
         )
 
@@ -422,8 +423,8 @@ def dispatch_release_created_email(release_id, actor_id, origin):
         _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
         effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            release.project_id,
-            _all_project_member_ids(release.project_id),
+            release.workspace_id,
+            _stakeholder_ids(release.project, release.lead_id),
             actor_id=actor_id,
         )
 
@@ -480,8 +481,8 @@ def dispatch_cycle_schedule_email(cycle_id, actor_id, origin, old_start_date, ol
         _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
         effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            cycle.project_id,
-            _all_project_member_ids(cycle.project_id),
+            cycle.workspace_id,
+            _stakeholder_ids(cycle.project, cycle.owned_by_id),
             actor_id=actor_id,
         )
 
@@ -542,8 +543,8 @@ def dispatch_release_schedule_email(
         _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
         effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            release.project_id,
-            _all_project_member_ids(release.project_id),
+            release.workspace_id,
+            _stakeholder_ids(release.project, release.lead_id),
             actor_id=actor_id,
         )
 
@@ -583,8 +584,8 @@ def dispatch_cycle_overdue_email(cycle_id, phase=None, actor_id=None, origin=Non
         _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
         effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            cycle.project_id,
-            _all_project_member_ids(cycle.project_id),
+            cycle.workspace_id,
+            _stakeholder_ids(cycle.project, cycle.owned_by_id),
             actor_id=actor_id,
         )
 
@@ -626,8 +627,8 @@ def dispatch_release_overdue_email(release_id, phase, actor_id=None, origin=None
         _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
         effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            release.project_id,
-            _all_project_member_ids(release.project_id),
+            release.workspace_id,
+            _stakeholder_ids(release.project, release.lead_id),
             actor_id=actor_id,
         )
 
@@ -679,7 +680,7 @@ def dispatch_cycle_upcoming_overdue_email(
         _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
         effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            cycle.project_id,
+            cycle.workspace_id,
             {_normalize_user_id(cycle.owned_by_id)},
             actor_id=actor_id,
         )
@@ -739,7 +740,7 @@ def dispatch_release_upcoming_overdue_email(
         _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
         effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            release.project_id,
+            release.workspace_id,
             {_normalize_user_id(release.lead_id)},
             actor_id=actor_id,
         )
@@ -791,7 +792,7 @@ def dispatch_cycle_owner_email(cycle_id, actor_id, old_owner_id, new_owner_id, o
         _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
         effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            cycle.project_id,
+            cycle.workspace_id,
             {_normalize_user_id(new_owner_id)},
             actor_id=actor_id,
         )
@@ -839,7 +840,7 @@ def dispatch_release_lead_email(release_id, actor_id, old_lead_id, new_lead_id, 
         _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
         effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
-            release.project_id,
+            release.workspace_id,
             {_normalize_user_id(new_lead_id)},
             actor_id=actor_id,
         )

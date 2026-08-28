@@ -519,7 +519,12 @@ def _send_entity_status_email(
             f"{base_api}/{workspace_slug}/projects/{project_id}/{url_segment}/{entity_id}/overview"
         )
         project_url = f"{base_api}/{workspace_slug}/projects/{project_id}/{url_segment}/"
-        recipient_label = receiver_emails[0] if len(receiver_emails) == 1 else "所有成员"
+        entity_display_name = "迭代" if entity_kind == "cycle" else "发布"
+        recipient_label = (
+            receiver_emails[0]
+            if len(receiver_emails) == 1
+            else f"项目负责人、研发产品经理及{entity_display_name}负责人"
+        )
 
         context = {
             "entity_kind": entity_kind,
@@ -570,7 +575,6 @@ def _send_entity_status_email(
             "current_status_label": data.get("current_status_label"),
         }
 
-        entity_display_name = "迭代" if entity_kind == "cycle" else "发布"
         if event == "created":
             subject = f"[{project_name}] 新建{entity_display_name}：{entity_name}"
         elif event == "owner_changed":
