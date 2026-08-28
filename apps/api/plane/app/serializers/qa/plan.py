@@ -82,3 +82,19 @@ class PlanCaseRecordSerializer(ModelSerializer):
     class Meta:
         model = PlanCaseRecord
         fields = '__all__'
+
+
+class PlanCaseCopySerializer(serializers.Serializer):
+    """复制计划用例到另一个测试计划（按 PlanCase.id，而非 case id）"""
+
+    source_plan_id = serializers.UUIDField()
+    target_plan_id = serializers.UUIDField()
+    plan_case_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+    assignee = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        if attrs["source_plan_id"] == attrs["target_plan_id"]:
+            raise serializers.ValidationError("目标计划不能与当前计划相同")
+        # 去重并保序，避免同一计划用例被重复提交
+        attrs["plan_case_ids"] = list(dict.fromkeys(attrs["plan_case_ids"]))
+        return attrs

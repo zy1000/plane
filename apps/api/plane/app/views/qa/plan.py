@@ -46,6 +46,7 @@ from plane.app.serializers.qa.plan import (
     PlanCaseListSerializer,
     PlanCaseCardSerializer,
     PlanCaseRecordSerializer,
+    PlanCaseCopySerializer,
 )
 from plane.app.views.qa.filters import TestPlanFilter
 from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
@@ -1078,7 +1079,9 @@ class PlanView(BaseViewSet):
         ).exclude(deleted_at__isnull=True)
         soft_deleted_case_ids = set(soft_deleted_qs.values_list("case_id", flat=True))
         if soft_deleted_case_ids:
-            soft_deleted_qs.update(deleted_at=None, assignee_id=assignee_id)
+            soft_deleted_qs.update(
+                deleted_at=None, result=PlanCase.Result.NOT_START, assignee_id=assignee_id
+            )
 
         to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
         if to_create_case_ids:
@@ -1093,6 +1096,130 @@ class PlanView(BaseViewSet):
             )
 
         return Response(status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    @action(detail=False, methods=["post"], url_path="copy-cases")
+    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    def copy_cases(self, request, slug):
+        """将源计划中选中的计划用例复制到目标计划（同项目），执行结果重置为未执行。
+
+        不复制执行记录 / 缺陷关联；默认沿用各用例原执行人，传 assignee 则统一覆盖。
+        """
+        serializer = PlanCaseCopySerializer(data=request.data)
+        if not serializer.is_valid():
+            non_field_errors = serializer.errors.get("non_field_errors")
+            message = non_field_errors[0] if non_field_errors else "参数不合法"
+            return Response(
+                {"error": str(message), "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        data = serializer.validated_data
+        plan_case_ids = data["plan_case_ids"]
+        override_assignee_id = data.get("assignee")
+
+        project_id = request.query_params.get("project_id")
+        plan_lookup = {"deleted_at__isnull": True, "project__workspace__slug": slug}
+        if project_id:
+            plan_lookup["project_id"] = project_id
+        source_plan = get_object_or_404(TestPlan, id=data["source_plan_id"], **plan_lookup)
+        target_plan = get_object_or_404(TestPlan, id=data["target_plan_id"], **plan_lookup)
+        if source_plan.project_id != target_plan.project_id:
+            return Response(
+                {"error": "只能复制到同一项目下的测试计划"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if override_assignee_id is not None:
+            member_exists = WorkspaceMember.objects.filter(
+                workspace__slug=slug,
+                member_id=override_assignee_id,
+                deleted_at__isnull=True,
+                is_active=True,
+            ).exists()
+            if not member_exists:
+                return Response(
+                    {"error": "assignee is invalid"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        source_rows = list(
+            PlanCase.objects.filter(plan=source_plan, id__in=plan_case_ids).values_list(
+                "id", "case_id", "assignee_id", "case__deleted_at"
+            )
+        )
+        missing_ids = set(plan_case_ids) - {row[0] for row in source_rows}
+        if missing_ids:
+            missing_str = ",".join(sorted(str(i) for i in missing_ids))
+            return Response(
+                {"error": f"PlanCase not found: {missing_str}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # case_id -> 目标执行人；同一用例多行取首行，用例已删除的跳过
+        case_assignee_map = {}
+        deleted_case_count = 0
+        for _, case_id, assignee_id, case_deleted_at in source_rows:
+            if case_deleted_at is not None:
+                deleted_case_count += 1
+                continue
+            if case_id not in case_assignee_map:
+                case_assignee_map[case_id] = (
+                    override_assignee_id if override_assignee_id is not None else assignee_id
+                )
+        case_ids = list(case_assignee_map.keys())
+
+        existing_case_ids = set(
+            PlanCase.objects.filter(plan=target_plan, case_id__in=case_ids).values_list(
+                "case_id", flat=True
+            )
+        )
+
+        # 目标计划中已软删的行：复活并重置结果与执行人（按执行人分组批量更新）
+        soft_deleted_case_ids = set(
+            PlanCase.all_objects.filter(plan=target_plan, case_id__in=case_ids)
+            .exclude(deleted_at__isnull=True)
+            .exclude(case_id__in=existing_case_ids)
+            .values_list("case_id", flat=True)
+        )
+        if soft_deleted_case_ids:
+            revive_groups = defaultdict(list)
+            for case_id in soft_deleted_case_ids:
+                revive_groups[case_assignee_map[case_id]].append(case_id)
+            for assignee_id, group_case_ids in revive_groups.items():
+                PlanCase.all_objects.filter(
+                    plan=target_plan, case_id__in=group_case_ids
+                ).exclude(deleted_at__isnull=True).update(
+                    deleted_at=None,
+                    result=PlanCase.Result.NOT_START,
+                    assignee_id=assignee_id,
+                )
+
+        # 其余新建；不传 result 走模型默认（未执行），不复制 issue / 执行记录
+        to_create_case_ids = [
+            case_id
+            for case_id in case_ids
+            if case_id not in existing_case_ids and case_id not in soft_deleted_case_ids
+        ]
+        if to_create_case_ids:
+            PlanCase.objects.bulk_create(
+                [
+                    PlanCase(
+                        plan=target_plan,
+                        case_id=case_id,
+                        assignee_id=case_assignee_map[case_id],
+                    )
+                    for case_id in to_create_case_ids
+                ],
+                batch_size=1000,
+            )
+
+        return Response(
+            {
+                "copied": len(to_create_case_ids) + len(soft_deleted_case_ids),
+                "skipped": len(existing_case_ids) + deleted_case_count,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["post"], url_path="associate-modules")
     def associate_modules(self, request, slug):

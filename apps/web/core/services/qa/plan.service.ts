@@ -49,6 +49,18 @@ export type TPlanCaseListResponse = {
   data: TPlanCaseItem[];
 };
 
+export type TPlanCaseCopyPayload = {
+  source_plan_id: string;
+  target_plan_id: string;
+  plan_case_ids: string[];
+  assignee?: string | null;
+};
+
+export type TPlanCaseCopyResponse = {
+  copied: number;
+  skipped: number;
+};
+
 export class PlanService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -103,6 +115,20 @@ export class PlanService extends APIService {
     data: { plan_id: string; case_ids: string[]; assignee?: string | null }
   ): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/plan/add-cases/`, data, { params: { project_id: projectId } })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async copyPlanCases(
+    workspaceSlug: string,
+    projectId: string,
+    data: TPlanCaseCopyPayload
+  ): Promise<TPlanCaseCopyResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/copy-cases/`, data, {
+      params: { project_id: projectId },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

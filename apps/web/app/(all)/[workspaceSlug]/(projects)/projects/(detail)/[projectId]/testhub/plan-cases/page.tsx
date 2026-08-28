@@ -10,6 +10,7 @@ import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
 import PlanReleaseModal from "@/components/qa/plans/plan-release-modal";
 import PlanCasesExportModal from "@/components/qa/plans/plan-cases-export-modal";
+import PlanCasesCopyModal from "@/components/qa/plans/copy-to-plan-modal";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Tree, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
@@ -17,7 +18,7 @@ import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService, type TPlanCaseItem } from "@/services/qa/plan.service";
 import { AppstoreOutlined } from "@ant-design/icons";
-import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2 } from "lucide-react";
+import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2, Copy } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -169,6 +170,7 @@ export default function PlanCasesPage() {
   const [isIterationModalOpen, setIsIterationModalOpen] = useState(false);
   const [isReleaseModalOpen, setIsReleaseModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
   const [selectedPlanCaseToAssigneeMap, setSelectedPlanCaseToAssigneeMap] = useState<Record<string, string | null>>({});
@@ -1075,6 +1077,17 @@ export default function PlanCasesPage() {
                               </button>
                             </Popconfirm>
 
+                            {canEditPlan && (
+                              <button
+                                type="button"
+                                onClick={() => setIsCopyModalOpen(true)}
+                                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-primary"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                                复制到计划
+                              </button>
+                            )}
+
                             <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-[var(--border-color-subtle)]" />
 
                             <button
@@ -1183,6 +1196,20 @@ export default function PlanCasesPage() {
             onClosed={() => {
               fetchPlanTree();
               fetchCases(currentPage, pageSize);
+            }}
+          />
+          <PlanCasesCopyModal
+            open={isCopyModalOpen}
+            onClose={() => setIsCopyModalOpen(false)}
+            workspaceSlug={String(workspaceSlug)}
+            projectId={String(projectId || "")}
+            sourcePlanId={String(planId || "")}
+            planOptions={planList.filter((p) => String(p.id) !== String(planId))}
+            selectedPlanCaseIds={selectedCaseIds}
+            onSuccess={() => {
+              setSelectedCaseIds([]);
+              setSelectedPlanCaseToCaseIdMap({});
+              setSelectedPlanCaseToAssigneeMap({});
             }}
           />
         </>
