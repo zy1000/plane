@@ -10,7 +10,6 @@ import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_CREATE_PERMI
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 // components
-import AnalyticsFilterActions from "@/components/analytics/analytics-filter-actions";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 // hooks
@@ -64,9 +63,6 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
         <>
           {workspaceProjectIds.length > 0 || loader === "init-loader" ? (
             <div className="flex h-full w-full flex-col overflow-hidden">
-              <div className="flex w-full items-center justify-end gap-4 overflow-hidden border-b border-subtle bg-surface-1 px-6 py-2">
-                <AnalyticsFilterActions activeTab={activeTab.key} />
-              </div>
               <div
                 className={
                   activeTab.key === "overdue"

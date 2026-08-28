@@ -13,6 +13,7 @@ import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
+import AnalyticsFilterActions from "@/components/analytics/analytics-filter-actions";
 import { WorkspaceManagementNavigation } from "@/components/navigation/workspace-management-header";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
@@ -20,7 +21,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAnalyticsTabs } from "@/plane-web/components/analytics/use-analytics-tabs";
 
 const WorkspaceAnalyticsTabLayout = observer(function WorkspaceAnalyticsTabLayout() {
-  const { workspaceSlug } = useParams();
+  const { workspaceSlug, tabId } = useParams();
   const { workspaceInfoBySlug, allowWorkspacePermissionKeys } = useUserPermissions();
 
   const resolvedWorkspaceSlug = workspaceSlug?.toString();
@@ -37,6 +38,7 @@ const WorkspaceAnalyticsTabLayout = observer(function WorkspaceAnalyticsTabLayou
     label: tab.label,
     href: `/${resolvedWorkspaceSlug}/analytics/${tab.key}`,
   }));
+  const activeTab = analyticsTabs.find((tab) => tab.key === tabId) ?? analyticsTabs[0];
 
   if (!resolvedWorkspaceSlug || !workspaceInfo) return null;
   if (!canViewAnalytics) return <NotAuthorizedView section="general" className="h-auto" />;
@@ -47,6 +49,7 @@ const WorkspaceAnalyticsTabLayout = observer(function WorkspaceAnalyticsTabLayou
         icon={<LayoutDashboard className="size-4 flex-shrink-0" />}
         title="看板"
         tabs={tabs}
+        actions={activeTab ? <AnalyticsFilterActions activeTab={activeTab.key} /> : undefined}
       />
       <ContentWrapper>
         <Outlet />

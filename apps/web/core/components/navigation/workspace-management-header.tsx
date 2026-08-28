@@ -24,12 +24,15 @@ type Props = {
   title: string;
   /** 可选的二级 Tab，不传或为空时只渲染标题 */
   tabs?: TWorkspaceManagementTab[];
+  /** 页头右侧操作，例如分析页的项目筛选 */
+  actions?: ReactNode;
 };
 
 export const WorkspaceManagementNavigation = observer(function WorkspaceManagementNavigation({
   icon,
   title,
   tabs = [],
+  actions,
 }: Props) {
   const pathname = usePathname();
   const { sidebarCollapsed } = useAppTheme();
@@ -40,7 +43,7 @@ export const WorkspaceManagementNavigation = observer(function WorkspaceManageme
         <div className="flex h-full w-full items-center gap-2 divide-x divide-subtle">
           <div className="flex size-full flex-1 items-center gap-2">
             <Header className={cn("h-full", { "pl-1.5": !sidebarCollapsed })}>
-              <Header.LeftItem className="flex h-full max-w-full items-center gap-2">
+              <Header.LeftItem className="flex h-full min-w-0 items-center gap-2">
                 <div className="flex size-full items-center gap-3 overflow-hidden">
                   <div className="flex flex-shrink-0 items-center gap-1.5 text-sm font-medium text-secondary">
                     {icon}
@@ -70,6 +73,7 @@ export const WorkspaceManagementNavigation = observer(function WorkspaceManageme
                   )}
                 </div>
               </Header.LeftItem>
+              {actions ? <Header.RightItem className="shrink-0">{actions}</Header.RightItem> : null}
             </Header>
           </div>
         </div>
