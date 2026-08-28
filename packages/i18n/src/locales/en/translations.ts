@@ -1302,6 +1302,7 @@ export default {
     identifier: {
       copied: "Requirement ID copied to clipboard",
       source_tooltip: "Original ID from the standard library",
+      source_label: "From library",
       column: "ID",
       source_column: "Library ID",
       code_placeholder: "Enter an ID",
@@ -1492,6 +1493,13 @@ export default {
     link_copied: "Link copied",
     properties: "Properties",
     custom_fields: "Fields",
+    fields_section: {
+      defined_by: "Defined by “{name}” · {count} fields",
+      manage: "Manage fields",
+    },
+    history: {
+      label: "History",
+    },
     relations: "Relations",
     requirement_type: "Requirement type",
     no_description: "No description",
@@ -1500,16 +1508,21 @@ export default {
     select_date: "Select date",
     closed_hint: "This requirement is closed: content is read-only. Pick another status to reopen it.",
     modified_banner: {
-      title: "These edits have not been submitted for review. The approved version is v{version}.",
-      view_diff: "Compare with v{version}",
+      title: "Unsubmitted edits",
+      approved_version: "Approved version v{version}",
+      view_diff: "Compare",
       hide_diff: "Hide comparison",
-      discard: "Discard edits, back to v{version}",
+      discard: "Discard edits",
       discarded: "Edits discarded — back to v{version}",
       discard_title: "Discard edits?",
       discard_description: "The content of v{version} will overwrite what is there now, and everything you changed since will be lost.",
     },
     approved_diff: {
       unavailable: "The approved version could not be loaded",
+    },
+    in_review_banner: {
+      title: "In review — content is locked",
+      deletion_title: "Deletion pending review — content is locked",
     },
     untitled: "Untitled requirement",
     not_found: "This requirement could not be found",
@@ -1550,6 +1563,7 @@ export default {
     versions: {
       label: "Version history",
       current: "Current v{version}",
+      current_badge: "Current",
       /** 不能复用 trail.action —— 那几句是设计成后面接字段名的，单独用会变成悬空动词 */
       action: {
         create: "created this requirement",

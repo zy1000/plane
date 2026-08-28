@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { CornerDownRight, Lock, Trash2 } from "lucide-react";
+import { CornerDownRight, GitBranch, Lock, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import type {
@@ -36,9 +36,14 @@ import {
   RequirementRichTextValue,
 } from "@/components/requirements/requirement-rich-text";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
+import { TypeIcon } from "@/components/common/type-icon-picker";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
 import { RequirementChangeTrail } from "./requirement-change-trail";
+import { DetailSectionHeader } from "./requirement-detail-section";
+import { RequirementFieldsSection } from "./requirement-fields-section";
+import { RequirementHistorySection } from "./requirement-history-section";
+import { RequirementInReviewBanner } from "./requirement-in-review-banner";
 import { RequirementModifiedBanner } from "./requirement-modified-banner";
 import { RequirementProjectsSelect } from "./requirement-projects-select";
 import { RequirementPropertyBar } from "./requirement-property-bar";
@@ -116,23 +121,29 @@ type TProps = {
    * 传了就替换掉这里自带的子需求区块和 issuesSection / testCasesSection 三段竖排。
    */
   relationsSection?: React.ReactNode;
+  /**
+   * 抽屉横幅上的审批动作：提交评审（变更中）、查看变更单 / 撤回评审（评审中）。
+   * 弹窗与提交逻辑长在列表页上，这里只放入口；项目侧 / 范围抽屉不传则横幅只出说明。
+   * 整页不用这几个 —— 标题行右侧的 RequirementApprovalPanel 已经承担。
+   */
+  onSubmitReview?: () => void;
+  onWithdrawReview?: (changeRequestId: string) => void;
+  onOpenChangeRequest?: (changeRequestId: string) => void;
+  isApprovalMutating?: boolean;
 };
 
 /** 整页字段网格里独占一整行的字段类型：富文本、附件、图片展开后都比一格宽 */
 const WIDE_FIELD_TYPES = new Set<string>(["rich_text", "attachment", "image"]);
 
 /**
- * 叶子字段（非 form）的排布。
- * rows：标签左、值右的两列网格，全部字段共用一个网格，值列才有统一的 x 起点（抽屉用）。
- * 值列不能跟着 1fr 拉满抽屉：普通字段封顶 max-w-sm，空下拉才不会变成一条看不见的长带子。
- * grid：标签在上、值在下，三列铺开，宽字段独占一行（整页用 —— 版面宽，两列排会空掉一大半）。
+ * 整页的叶子字段（非 form）网格：标签在上、值在下，三列铺开，宽字段独占一行 ——
+ * 版面宽，两列排会空掉一大半。抽屉走 RequirementFieldsSection（标签左、值右的两列）。
  */
 const FieldRows = ({
   fields,
   requirement,
   workspaceSlug,
   readOnly,
-  layout,
   onChange,
   onUpload,
 }: {
@@ -140,7 +151,6 @@ const FieldRows = ({
   requirement: TRequirement;
   workspaceSlug: string;
   readOnly: boolean;
-  layout: "rows" | "grid";
   onChange: (data: TRequirementData) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
 }) => {
@@ -166,38 +176,18 @@ const FieldRows = ({
     </span>
   );
 
-  if (layout === "grid") {
-    return (
-      <div className="grid grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
-        {fields.map((field) => (
-          <div
-            key={field.id}
-            className={cn(
-              "flex min-w-0 flex-col gap-1",
-              WIDE_FIELD_TYPES.has(field.field_type) && "md:col-span-2 xl:col-span-3"
-            )}
-          >
-            {renderLabel(field, "text-caption-md-regular text-tertiary")}
-            <div className="min-w-0">{renderValue(field)}</div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-[minmax(4rem,max-content)_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5">
+    <div className="grid grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
       {fields.map((field) => (
-        <div key={field.id} className="contents">
-          {renderLabel(field, "pt-1.5 text-body-xs-regular text-tertiary")}
-          <div
-            className={cn(
-              "min-w-0",
-              WIDE_FIELD_TYPES.has(field.field_type) ? "max-w-[42rem]" : "max-w-sm"
-            )}
-          >
-            {readOnly ? <div className="pt-1.5">{renderValue(field)}</div> : renderValue(field)}
-          </div>
+        <div
+          key={field.id}
+          className={cn(
+            "flex min-w-0 flex-col gap-1",
+            WIDE_FIELD_TYPES.has(field.field_type) && "md:col-span-2 xl:col-span-3"
+          )}
+        >
+          {renderLabel(field, "text-caption-md-regular text-tertiary")}
+          <div className="min-w-0">{renderValue(field)}</div>
         </div>
       ))}
     </div>
@@ -250,32 +240,45 @@ export const RequirementSubRequirementList = ({
 };
 
 /**
- * 编号旁的审批徽标：状态胶囊 + 已通过的版本号。
+ * 编号旁的审批徽标：只有状态胶囊。
  *
- * 这是详情页第一个要回答的问题 —— 我看到的这些值，是不是评审通过的那一版。动作按钮
- * 不在这里（在 RequirementApprovalPanel），这一块只负责说清楚现在是什么状态。
+ * 这是详情页第一个要回答的问题 —— 我看到的这些值，是不是评审通过的那一版。已通过的版本号
+ * 不在这里重复：变更中由横幅说、版本历史里标「当前」，同一个 v2 在头部再出现一次只会
+ * 让人分不清哪个才是重点。动作按钮也不在这里（在横幅 / RequirementApprovalPanel）。
  */
 const RequirementApprovalBadge = ({ requirement }: { requirement: TRequirement }) => {
   const { t } = useTranslation();
   const state = requirement.approval_state;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span
-        className={cn(
-          "inline-flex h-5 items-center gap-1 rounded px-1.5 text-caption-sm-medium",
-          REQUIREMENT_APPROVAL_PILL[state]
-        )}
-      >
-        {state === "pending_deletion" && <Trash2 className="size-3" />}
-        {state === "in_review" && <Lock className="size-3" />}
-        {t(`requirement_approval.state.${state}`)}
-      </span>
-      {requirement.approved_version !== null && (
-        <span className="text-body-xs-regular text-tertiary tabular-nums">
-          {t("requirement_approval.approved_version", { version: requirement.approved_version })}
-        </span>
+    <span
+      className={cn(
+        "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-caption-sm-medium",
+        REQUIREMENT_APPROVAL_PILL[state]
       )}
-    </div>
+    >
+      {state === "pending_deletion" ? (
+        <Trash2 className="size-3" />
+      ) : state === "in_review" ? (
+        <Lock className="size-3" />
+      ) : (
+        <span aria-hidden className="size-1.5 rounded-full bg-current opacity-80" />
+      )}
+      {t(`requirement_approval.state.${state}`)}
+    </span>
+  );
+};
+
+/** 头部编号旁的需求类型 chip：图标 + 名称。它是这条需求的身份，下面字段区的字段就来自它 */
+const RequirementTypeChip = ({ requirementType }: { requirementType: TRequirementTypeSchema | null }) => {
+  if (!requirementType) return null;
+  return (
+    <span
+      className="inline-flex h-6 max-w-56 shrink-0 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 pr-2 pl-1 text-caption-sm-medium text-secondary"
+      title={requirementType.name}
+    >
+      <TypeIcon iconProps={requirementType.logo_props?.icon} className="size-4 rounded-sm" iconClassName="size-3" />
+      <span className="truncate">{requirementType.name}</span>
+    </span>
   );
 };
 
@@ -414,6 +417,10 @@ export const RequirementDetailContent = (props: TProps) => {
     testCasesSection,
     headerActions,
     relationsSection,
+    onSubmitReview,
+    onWithdrawReview,
+    onOpenChangeRequest,
+    isApprovalMutating,
   } = props;
   const { t } = useTranslation();
   const { uploadEditorAsset } = useEditorAsset();
@@ -503,8 +510,11 @@ export const RequirementDetailContent = (props: TProps) => {
             {isDrawer ? (
               <>
                 {parentLink}
+                {/* 身份行：类型 + 编号（+ 标准库来源）靠左，审批态靠右 —— 一行说清「这是什么、现在什么状态」 */}
                 <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
+                  <RequirementTypeChip requirementType={requirementType} />
                   {identifier}
+                  <span className="min-w-2 flex-1" />
                   {approvalBadge}
                 </div>
               </>
@@ -570,6 +580,17 @@ export const RequirementDetailContent = (props: TProps) => {
             builtinLayout={requirementType?.builtin_fields ?? null}
             readOnly={readOnly}
             onDiscarded={onRolledBack}
+            onSubmitReview={isDrawer ? onSubmitReview : undefined}
+          />
+        )}
+
+        {/* 评审中 / 删除待审：只读不是没权限，把原因和出口说出来。整页由标题行的审批面板承担 */}
+        {isDrawer && !isLibrary && productId && (
+          <RequirementInReviewBanner
+            requirement={requirement}
+            isMutating={isApprovalMutating}
+            onOpenChangeRequest={onOpenChangeRequest}
+            onWithdrawReview={onWithdrawReview}
           />
         )}
 
@@ -578,7 +599,6 @@ export const RequirementDetailContent = (props: TProps) => {
         {isDrawer && (
           <RequirementPropertyBar
             requirement={requirement}
-            requirementType={requirementType}
             readOnly={readOnly}
             parentScope={parentScope}
             onPatch={onPatch}
@@ -619,60 +639,79 @@ export const RequirementDetailContent = (props: TProps) => {
         </div>
       </header>
 
-      {leafFields.length > 0 &&
-        (isDrawer ? (
-          <FieldRows
-            fields={leafFields}
-            requirement={requirement}
-            workspaceSlug={workspaceSlug}
-            readOnly={readOnly}
-            layout="rows"
-            onChange={commitData}
-            onUpload={uploadAsset}
-          />
-        ) : (
-          // 整页的字段网格与描述之间要有个标题隔开，否则三列小字会像描述的尾巴
-          <Section label={t("requirement_detail.custom_fields")}>
-            <FieldRows
-              fields={leafFields}
-              requirement={requirement}
-              workspaceSlug={workspaceSlug}
-              readOnly={readOnly}
-              layout="grid"
-              onChange={commitData}
-              onUpload={uploadAsset}
-            />
-          </Section>
-        ))}
-
-      {formFields.length > 0 && (
-        <RequirementSubformSection
-          forms={formFields}
-          data={requirement.data}
+      {isDrawer ? (
+        // 抽屉：叶子字段与子表单收进同一个「字段」区块，标题写明来自哪个需求类型
+        <RequirementFieldsSection
           workspaceSlug={workspaceSlug}
-          entityId={requirement.id}
+          requirement={requirement}
+          requirementType={requirementType}
+          leafFields={leafFields}
+          formFields={formFields}
           readOnly={readOnly}
-          defaultOpenCount={layout === "page" ? 2 : 1}
-          defaultOpenEmpty={!readOnly}
-          storageKey={`requirement:subforms:${requirement.requirement_type_id}`}
           onChange={commitData}
           onUpload={uploadAsset}
         />
+      ) : (
+        <>
+          {leafFields.length > 0 && (
+            // 整页的字段网格与描述之间要有个标题隔开，否则三列小字会像描述的尾巴
+            <Section label={t("requirement_detail.custom_fields")}>
+              <FieldRows
+                fields={leafFields}
+                requirement={requirement}
+                workspaceSlug={workspaceSlug}
+                readOnly={readOnly}
+                onChange={commitData}
+                onUpload={uploadAsset}
+              />
+            </Section>
+          )}
+
+          {formFields.length > 0 && (
+            <RequirementSubformSection
+              forms={formFields}
+              data={requirement.data}
+              workspaceSlug={workspaceSlug}
+              entityId={requirement.id}
+              readOnly={readOnly}
+              defaultOpenCount={2}
+              defaultOpenEmpty={!readOnly}
+              storageKey={`requirement:subforms:${requirement.requirement_type_id}`}
+              onChange={commitData}
+              onUpload={uploadAsset}
+            />
+          )}
+        </>
       )}
 
       {relationsSection ? (
         relationsSection
       ) : (
         <>
-          {subRequirements.length > 0 && (
-            <Section label={t("requirement_detail.sub_requirements")}>
-              <RequirementSubRequirementList
-                items={subRequirements}
-                isLibrary={isLibrary}
-                onOpen={onOpenRequirement}
-              />
-            </Section>
-          )}
+          {subRequirements.length > 0 &&
+            (isDrawer ? (
+              <section className="flex flex-col gap-2">
+                <DetailSectionHeader
+                  icon={GitBranch}
+                  title={t("requirement_detail.sub_requirements")}
+                  meta={<span className="tabular-nums">{subRequirements.length}</span>}
+                />
+                <RequirementSubRequirementList
+                  items={subRequirements}
+                  isLibrary={isLibrary}
+                  framed={false}
+                  onOpen={onOpenRequirement}
+                />
+              </section>
+            ) : (
+              <Section label={t("requirement_detail.sub_requirements")}>
+                <RequirementSubRequirementList
+                  items={subRequirements}
+                  isLibrary={isLibrary}
+                  onOpen={onOpenRequirement}
+                />
+              </Section>
+            ))}
 
           {/* 关联工作项与子需求并列 —— 都在回答「这条需求现在被拆成了什么」 */}
           {issuesSection}
@@ -686,12 +725,26 @@ export const RequirementDetailContent = (props: TProps) => {
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。
         这一整块讲的是「过去」，与上面的「现在」之间给一条分隔线，其余区块之间只用留白。
       */}
-      {showHistory && !isLibrary && productId && (
+      {showHistory && !isLibrary && productId && isDrawer && (
+        // 抽屉：一个区块两个页签，轨迹默认展开；「当前 vN」标在版本行上
+        <RequirementHistorySection
+          workspaceSlug={workspaceSlug}
+          productId={productId}
+          requirementId={requirement.id}
+          requirementType={requirementType}
+          trail={trail}
+          approvedVersion={requirement.approved_version}
+          canRollback={!readOnly}
+          onRolledBack={onRolledBack}
+        />
+      )}
+
+      {showHistory && !isLibrary && productId && !isDrawer && (
         <div
           className={cn(
             "border-t border-subtle pt-6",
             // 整页左右分栏：轨迹讲「谁改的」、版本讲「哪版通过的」，并排才好对照
-            isDrawer ? "flex flex-col gap-6" : "grid grid-cols-1 gap-x-10 gap-y-6 xl:grid-cols-2 xl:items-start"
+            "grid grid-cols-1 gap-x-10 gap-y-6 xl:grid-cols-2 xl:items-start"
           )}
         >
           {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}

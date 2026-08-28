@@ -210,23 +210,24 @@ export const RequirementSubformSection = (props: TProps) => {
                 setPendingScrollId(null);
               }
             }}
-            className="min-w-0 rounded-md border border-subtle"
+            className="min-w-0 overflow-hidden rounded-md border border-subtle"
           >
+            {/* 标题行：折叠箭头 + 表名 + 行数，右侧「添加行」；与抽屉其它区块标题同一节奏 */}
             <div
               className={cn(
-                "flex items-center gap-2 bg-layer-1 px-2.5 py-1.5",
+                "flex h-10 items-center gap-2 bg-surface-2 px-3",
                 isOpen && "border-b border-subtle"
               )}
             >
               <button
                 type="button"
                 onClick={() => toggle(form.id)}
-                className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-body-sm-medium text-primary"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left text-body-sm-medium text-primary"
               >
                 {isOpen ? (
-                  <ChevronDown className="size-3 shrink-0 text-tertiary" />
+                  <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
                 ) : (
-                  <ChevronRight className="size-3 shrink-0 text-tertiary" />
+                  <ChevronRight className="size-3.5 shrink-0 text-tertiary" />
                 )}
                 <span className="truncate">{form.name}</span>
                 {form.is_required && <span className="shrink-0 text-danger-primary">*</span>}
@@ -240,9 +241,9 @@ export const RequirementSubformSection = (props: TProps) => {
                 <button
                   type="button"
                   onClick={() => addRow(form)}
-                  className="inline-flex shrink-0 items-center gap-1 text-body-xs-medium text-accent-primary hover:text-accent-primary-hover"
+                  className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-body-xs-medium text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-accent-primary"
                 >
-                  <Plus className="size-3" />
+                  <Plus className="size-3.5" />
                   {t("requirement_detail.subform.add_row")}
                 </button>
               )}
@@ -255,19 +256,20 @@ export const RequirementSubformSection = (props: TProps) => {
                 <table className="w-full min-w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-subtle">
-                      <th className="w-12 border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary">
+                      {/* 序号列与行尾操作列都定宽：让表格自动分配它们会长出一条像没画完的空列 */}
+                      <th className="w-11 px-3 py-2 text-center text-caption-sm-medium text-tertiary">
                         {t("requirement_detail.subform.row_number")}
                       </th>
                       {columns.map((child) => (
                         <th
                           key={child.id}
-                          className="min-w-36 whitespace-nowrap border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary"
+                          className="min-w-36 whitespace-nowrap px-3 py-2 text-caption-sm-medium text-tertiary"
                         >
                           {child.name}
                           {child.is_required && <span className="ml-0.5 text-danger-primary">*</span>}
                         </th>
                       ))}
-                      {!readOnly && <th className="w-9 px-1 py-1.5" />}
+                      {!readOnly && <th className="w-9 px-1 py-2" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -288,7 +290,7 @@ export const RequirementSubformSection = (props: TProps) => {
                              */
                             ref={readOnly ? undefined : getRowRef(rowKey, dragPayload)}
                             className={cn(
-                              "relative border-r border-subtle px-2.5 py-1.5 text-center align-top text-body-xs-regular text-tertiary tabular-nums",
+                              "relative px-3 py-2 text-center align-top text-body-xs-regular text-placeholder tabular-nums",
                               !readOnly && "cursor-grab active:cursor-grabbing",
                               dragClass
                             )}
@@ -303,7 +305,7 @@ export const RequirementSubformSection = (props: TProps) => {
                             <td
                               key={child.id}
                               ref={readOnly ? undefined : getDropRef(`${rowKey}#${child.id}`, dragPayload)}
-                              className={cn("border-r border-subtle px-2.5 py-1.5 align-top", dragClass)}
+                              className={cn("px-3 py-2 align-top", dragClass)}
                             >
                               {readOnly ? (
                                 <LeafValue
@@ -332,7 +334,7 @@ export const RequirementSubformSection = (props: TProps) => {
                           {!readOnly && (
                             <td
                               ref={getDropRef(`${rowKey}#actions`, dragPayload)}
-                              className={cn("px-1 py-1.5 text-center align-top", dragClass)}
+                              className={cn("px-1 py-2 text-center align-top", dragClass)}
                             >
                               <CustomMenu
                                 ariaLabel={t("requirement_detail.subform.row_actions")}

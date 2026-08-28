@@ -11,7 +11,8 @@
  * 跟着产品侧的 canManage 走（与同区域的添加操作条同一道门）。后端 DELETE 仍按项目级
  * 权限校验，无权时点了会收到 403 提示。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Split } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirement, TRequirementIssue } from "@plane/types";
@@ -128,11 +129,17 @@ export const RequirementIssuesByProject = ({
   onChanged,
   variant = "collapsible",
   onCountChange,
+  headerActions,
 }: {
   workspaceSlug: string;
   requirement: TRequirement;
   canManage: boolean;
   onChanged?: () => void;
+  /**
+   * 折叠头右侧的拆分 / 关联按钮（抽屉用）。传了就**始终**渲染这一块：空列表、甚至还没进
+   * 项目时也要把入口露出来，并用一句说明代替列表；不传则沿用「有行才出现」。
+   */
+  headerActions?: ReactNode;
   /**
    * collapsible：自带「工作项」折叠头，没进项目 / 还没关联时整块不出现（抽屉用）。
    * plain：只出行，没进项目 / 还没关联时用一句说明占位 —— 给整页的关联 Tab 卡片用，
@@ -203,6 +210,30 @@ export const RequirementIssuesByProject = ({
     );
   }
 
+  if (headerActions) {
+    return (
+      <>
+        <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")} icon={Split} actions={headerActions}>
+          {!projectIds.length ? (
+            <p className="px-2.5 py-2.5 text-body-xs-regular text-placeholder">
+              {t("project_requirements.issues.link_project_first")}
+            </p>
+          ) : (
+            <div className={cn("flex flex-col pb-1", "[&:has([data-requirement-issues])_[data-issues-empty]]:hidden")}>
+              {groups}
+              {allLoaded && (
+                <p data-issues-empty className="px-2.5 py-2.5 text-body-xs-regular text-placeholder">
+                  {t("project_requirements.issues.empty")}
+                </p>
+              )}
+            </div>
+          )}
+        </RequirementRelationCollapsible>
+        <IssuePeekOverview />
+      </>
+    );
+  }
+
   // 没进任何项目就整个 Section 不渲染。有项目但还没关联工作项时，靠
   // has-[[data-requirement-issues]] 把空折叠头藏掉 —— 行一到就显示。
   if (!projectIds.length) return null;
@@ -210,8 +241,8 @@ export const RequirementIssuesByProject = ({
   return (
     <>
       <div className="hidden has-[[data-requirement-issues]]:block">
-        <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")}>
-          <div className="flex flex-col pb-3">{groups}</div>
+        <RequirementRelationCollapsible title={t("project_requirements.issues.widget_title")} icon={Split}>
+          <div className="flex flex-col pb-1">{groups}</div>
         </RequirementRelationCollapsible>
       </div>
       <IssuePeekOverview />

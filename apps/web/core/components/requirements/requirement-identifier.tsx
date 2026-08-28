@@ -1,5 +1,6 @@
 "use client";
 
+import { Library } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TIdentifierTextVariant, TIssueIdentifierSize } from "@plane/types";
@@ -32,7 +33,7 @@ export const RequirementIdentifier = (props: TProps) => {
   if (!displayId) return null;
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-1">
+    <span className="inline-flex shrink-0 items-center gap-2">
       <IdentifierText
         identifier={displayId}
         size={size}
@@ -41,9 +42,14 @@ export const RequirementIdentifier = (props: TProps) => {
         copyToastTitle={t("requirements.identifier.copied")}
       />
       {sourceDisplayId && (
-        // 来源编号刻意比自身编号更弱：它是溯源信息，不是这条需求的身份
+        // 来源编号刻意比自身编号更弱：它是溯源信息，不是这条需求的身份。
+        // 写成「来自标准库 RJ-1」而不是「← RJ-1」—— 箭头方向没人能一眼读对
         <Tooltip tooltipContent={t("requirements.identifier.source_tooltip")} position="top">
-          <span className="text-caption-sm-regular whitespace-nowrap text-tertiary">←&nbsp;{sourceDisplayId}</span>
+          <span className="inline-flex items-center gap-1 whitespace-nowrap text-caption-sm-regular text-tertiary">
+            <Library className="size-3 shrink-0" />
+            {t("requirements.identifier.source_label")}
+            <span className="tabular-nums">{sourceDisplayId}</span>
+          </span>
         </Tooltip>
       )}
     </span>

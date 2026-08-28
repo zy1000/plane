@@ -1467,6 +1467,8 @@ export default {
     identifier: {
       copied: "需求编号已复制",
       source_tooltip: "来自标准库的原始编号",
+      /** 详情头部编号旁的溯源前缀：「来自标准库 RJ-1」 */
+      source_label: "来自标准库",
       column: "编号",
       source_column: "标准库编号",
       code_placeholder: "填写编号",
@@ -1659,8 +1661,17 @@ export default {
     copy_link: "复制链接",
     link_copied: "链接已复制",
     properties: "属性",
-    /** 整页主区自定义字段网格的区块标题 */
+    /** 主区自定义字段区块的标题 */
     custom_fields: "字段",
+    /** 抽屉字段区标题旁：字段来自哪个需求类型、有几项；右侧直达类型设置 */
+    fields_section: {
+      defined_by: "由「{name}」定义 · {count} 项",
+      manage: "管理字段",
+    },
+    /** 抽屉底部「历史」区块：变更轨迹与版本历史两个页签 */
+    history: {
+      label: "历史",
+    },
     /** 整页关联区曾用过的区块标题；现在操作条自己说明身份，不再单独出这一行 */
     relations: "关联",
     requirement_type: "需求类型",
@@ -1672,16 +1683,22 @@ export default {
     /** status=closed 时详情页顶部的只读提示 */
     closed_hint: "需求已关闭：内容只读，选择其它状态可重新打开",
     modified_banner: {
-      title: "当前内容尚未提交评审，已通过的是 v{version}",
-      view_diff: "查看与 v{version} 的差异",
+      title: "有未提交评审的改动",
+      approved_version: "已通过版本 v{version}",
+      view_diff: "查看差异",
       hide_diff: "收起差异",
-      discard: "放弃改动，回到 v{version}",
+      discard: "放弃改动",
       discarded: "已放弃改动，回到 v{version}",
       discard_title: "放弃改动？",
       discard_description: "会用 v{version} 的内容覆盖当前内容，你在这之后做的修改将丢失。",
     },
     approved_diff: {
       unavailable: "取不到已通过的那一版",
+    },
+    /** 评审中 / 删除待审时的锁定提示条 */
+    in_review_banner: {
+      title: "评审中，内容已锁定",
+      deletion_title: "删除待审，内容已锁定",
     },
     untitled: "未命名需求",
     not_found: "找不到这条需求",
@@ -1725,6 +1742,8 @@ export default {
     versions: {
       label: "版本历史",
       current: "当前 v{version}",
+      /** 抽屉版本列表里标在 approved_version 那一行上 */
+      current_badge: "当前",
       /** 不能复用 trail.action —— 那几句是设计成后面接字段名的，单独用会变成悬空动词 */
       action: {
         create: "创建了本条需求",

@@ -283,10 +283,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     },
   };
 
+  /** 抽屉之外的审批动作（提交 / 撤回）改了正在看的那一行时 +1，抽屉据此重拉并回灌 */
+  const [peekRefreshToken, setPeekRefreshToken] = useState(0);
   const approvalActions = useRequirementApprovalActions({
     changesStore,
     onSettled: refreshLayer,
-    onSubmitted: () => setTab("changes"),
+    onSubmitted: () => {
+      setTab("changes");
+      setPeekRefreshToken((token) => token + 1);
+    },
   });
 
   const isLoading = store.isConfigurationLoading || !store.configuration;
@@ -564,6 +569,20 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         canEdit={canEdit}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
+        // 横幅上的审批入口复用列表的提交弹窗与撤回逻辑；查看变更单要先关抽屉，变更记录页在它底下
+        onSubmitReview={canEdit ? (requirementId) => approvalActions.openSubmitModal([requirementId]) : undefined}
+        onWithdrawReview={
+          canEdit
+            ? (changeRequestId) =>
+                void approvalActions.withdraw(changeRequestId).then(() => setPeekRefreshToken((token) => token + 1))
+            : undefined
+        }
+        onOpenChangeRequest={(changeRequestId) => {
+          setPeekRequirement(null);
+          openChangeRequest(changeRequestId);
+        }}
+        isApprovalMutating={changesStore.isMutating}
+        refreshToken={peekRefreshToken}
         // 抽屉已经把改完的整行交回来了（内容 PATCH / 状态 / 模块改动都走这条），直接合并进
         // 当前页；重拉会让后面的网格整张闪一下。挂靠变了才顺带刷左侧树计数
         onRequirementUpdated={(requirement) => {

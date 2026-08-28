@@ -167,15 +167,22 @@ type TProps = {
   requirementType: TRequirementTypeSchema | null;
   /** 点轨迹里的版本徽章时，把下面的版本历史滚到那一版并展开 */
   onFocusVersion?: (version: number) => void;
+  /**
+   * collapsible：自带折叠标题（整页用，默认收起）。
+   * plain：只出时间线，标题由外层的「历史」页签代替（抽屉用）。
+   */
+  variant?: "collapsible" | "plain";
 };
 
 /**
  * 变更轨迹。折叠交互与下方版本历史对齐：标题左侧 chevron，点一下收起/展开。
  * 默认收起，避免详情页一进来就被历史列表占掉一截。
  */
-export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersion }: TProps) => {
+export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersion, variant = "collapsible" }: TProps) => {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const isPlain = variant === "plain";
+  const [isCollapsibleOpen, setIsCollapsibleOpen] = useState(false);
+  const isOpen = isPlain || isCollapsibleOpen;
 
   const rows = useMemo(
     () =>
@@ -191,18 +198,20 @@ export const RequirementChangeTrail = ({ entries, requirementType, onFocusVersio
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={() => setIsOpen((current) => !current)}
-        className="flex items-center gap-1.5 text-body-sm-semibold text-primary"
-      >
-        {isOpen ? (
-          <ChevronDown className="size-3 text-tertiary" />
-        ) : (
-          <ChevronRight className="size-3 text-tertiary" />
-        )}
-        {t("requirement_detail.change_trail")}
-      </button>
+      {!isPlain && (
+        <button
+          type="button"
+          onClick={() => setIsCollapsibleOpen((current) => !current)}
+          className="flex items-center gap-1.5 text-body-sm-semibold text-primary"
+        >
+          {isOpen ? (
+            <ChevronDown className="size-3 text-tertiary" />
+          ) : (
+            <ChevronRight className="size-3 text-tertiary" />
+          )}
+          {t("requirement_detail.change_trail")}
+        </button>
+      )}
 
       {isOpen &&
         (!entries.length ? (

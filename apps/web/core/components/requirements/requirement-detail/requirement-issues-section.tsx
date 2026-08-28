@@ -10,14 +10,13 @@
  */
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { Link2, Link2Off, Split } from "lucide-react";
+import { Link2Off, Split } from "lucide-react";
 import { STATE_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { ISearchIssueResponse, TIssue, TRequirement, TRequirementIssue } from "@plane/types";
-import { AlertModalCore, ControlLink, CustomMenu, Loader } from "@plane/ui";
+import { AlertModalCore, ControlLink, Loader } from "@plane/ui";
 import { cn, generateWorkItemLink } from "@plane/utils";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
@@ -28,6 +27,7 @@ import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
 import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-redirection";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
+import { RequirementIssueHeaderActions } from "./requirement-relation-action-buttons";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 
 /**
@@ -152,7 +152,8 @@ export const RequirementIssueRow = ({
               type="button"
               aria-label={t("project_requirements.issues.unlink")}
               onClick={() => onUnlink(issue)}
-              className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+              // 解除是破坏性的低频动作：hover 到这一行才浮出，不与每行的状态、头像抢眼
+              className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-layer-2 hover:text-secondary focus-visible:opacity-100"
             >
               <Link2Off className="size-3.5" />
             </button>
@@ -183,7 +184,7 @@ type TProps = {
   onChanged?: () => void;
   /** 外层已有快捷操作条时，空列表不再占一块折叠头 */
   hideWhenEmpty?: boolean;
-  /** 外层工具条已经承担新增时，折叠头不再放 + */
+  /** 外层工具条已经承担新增时，折叠头不再放拆分 / 关联按钮 */
   hideAddActions?: boolean;
   splitModalOpen?: boolean;
   onSplitModalOpenChange?: (open: boolean) => void;
@@ -291,6 +292,7 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
       {showList && (
         <RequirementRelationCollapsible
           title={t("project_requirements.issues.widget_title")}
+          icon={Split}
           progress={{
             completed: completedCount,
             total: issues.length,
@@ -298,25 +300,11 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
           }}
           actions={
             canManage && !hideAddActions ? (
-              <CustomMenu
-                customButton={<PlusIcon className="h-4 w-4" />}
-                customButtonClassName="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
-                placement="bottom-end"
-                closeOnSelect
-              >
-                <CustomMenu.MenuItem onClick={() => setIsSplitModalOpen(true)}>
-                  <div className="flex items-center gap-2">
-                    <Split className="h-3 w-3" />
-                    <span>{t("project_requirements.issues.split")}</span>
-                  </div>
-                </CustomMenu.MenuItem>
-                <CustomMenu.MenuItem onClick={() => setIsLinkModalOpen(true)}>
-                  <div className="flex items-center gap-2">
-                    <Link2 className="h-3 w-3" />
-                    <span>{t("project_requirements.issues.link_existing")}</span>
-                  </div>
-                </CustomMenu.MenuItem>
-              </CustomMenu>
+              // 项目侧语境已定，两个动作直接开弹窗，不必再选项目
+              <RequirementIssueHeaderActions
+                onSplit={() => setIsSplitModalOpen(true)}
+                onLinkIssue={() => setIsLinkModalOpen(true)}
+              />
             ) : undefined
           }
         >
@@ -340,7 +328,7 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
               ))}
             </div>
           ) : (
-            <p className="px-2.5 pb-3 text-body-xs-regular text-tertiary">{t("project_requirements.issues.empty")}</p>
+            <p className="px-2.5 py-2.5 text-body-xs-regular text-placeholder">{t("project_requirements.issues.empty")}</p>
           )}
         </RequirementRelationCollapsible>
       )}

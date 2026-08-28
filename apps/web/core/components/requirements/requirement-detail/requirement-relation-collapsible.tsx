@@ -1,9 +1,14 @@
 /**
- * 需求详情关联区块的折叠壳，版式对齐工作项详情的 CollapsibleButton：
- * 48px 标题行 + 左侧箭头 + 标题 + 计数/进度，展开后右侧才露出操作。
+ * 需求详情关联区块的折叠壳：与抽屉其它区块共用同一条标题行（DetailSectionHeader），
+ * 左侧箭头 + 图标 + 标题 + 计数/进度，右侧是该区块自己的操作。
+ *
+ * 操作在折叠态也保留 —— 「关联已有工作项」这类入口不该藏在展开之后；空列表时用户正是
+ * 要点它。
  */
 import { useState, type ReactNode } from "react";
-import { CircularProgressIndicator, Collapsible, CollapsibleButton } from "@plane/ui";
+import type { LucideIcon } from "lucide-react";
+import { CircularProgressIndicator } from "@plane/ui";
+import { DetailSectionHeader } from "./requirement-detail-section";
 
 type TProgress = {
   completed: number;
@@ -13,6 +18,7 @@ type TProgress = {
 
 type TProps = {
   title: string;
+  icon?: LucideIcon;
   defaultOpen?: boolean;
   count?: number;
   progress?: TProgress;
@@ -21,53 +27,35 @@ type TProps = {
 };
 
 export const RequirementRelationCollapsible = (props: TProps) => {
-  const { title, defaultOpen = true, count, progress, actions, children } = props;
+  const { title, icon, defaultOpen = true, count, progress, actions, children } = props;
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
-  const indicatorElement = progress ? (
-    <div className="flex items-center gap-1.5 text-body-sm-regular text-tertiary">
+  const meta = progress ? (
+    <span className="inline-flex items-center gap-1.5">
       <CircularProgressIndicator
-        size={18}
+        size={14}
         percentage={progress.total ? (progress.completed / progress.total) * 100 : 0}
         strokeWidth={3}
       />
-      <span>
+      <span className="tabular-nums">
         {progress.completed}/{progress.total} {progress.doneLabel}
       </span>
-    </div>
-  ) : typeof count === "number" ? (
-    <span className="flex items-center justify-center">
-      <span className="text-body-sm-regular text-tertiary">{count}</span>
     </span>
+  ) : typeof count === "number" ? (
+    <span className="tabular-nums">{count}</span>
   ) : undefined;
 
   return (
-    <Collapsible
-      isOpen={isOpen}
-      onToggle={() => setIsOpen((open) => !open)}
-      buttonClassName="w-full"
-      title={
-        <CollapsibleButton
-          isOpen={isOpen}
-          title={title}
-          indicatorElement={indicatorElement}
-          actionItemElement={
-            actions ? (
-              <div
-                className="flex items-center gap-2"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  event.preventDefault();
-                }}
-              >
-                {actions}
-              </div>
-            ) : undefined
-          }
-        />
-      }
-    >
-      {children}
-    </Collapsible>
+    <section className="flex flex-col">
+      <DetailSectionHeader
+        icon={icon}
+        title={title}
+        meta={meta}
+        actions={actions}
+        isOpen={isOpen}
+        onToggle={() => setIsOpen((open) => !open)}
+      />
+      {isOpen && <div className="pt-1">{children}</div>}
+    </section>
   );
 };

@@ -46,6 +46,7 @@ export const RequirementVersionHistory = ({
   canRollback = false,
   focusRequest,
   onRolledBack,
+  variant = "collapsible",
 }: {
   workspaceSlug: string;
   productId: string;
@@ -58,9 +59,16 @@ export const RequirementVersionHistory = ({
   /** 轨迹发来的跳转请求。token 变化即视为一次新请求，同一版重复点也能再跳一次 */
   focusRequest?: { version: number; token: number } | null;
   onRolledBack?: () => void;
+  /**
+   * collapsible：自带折叠标题 + 右侧「当前 vN」（整页用，默认收起、展开才拉数据）。
+   * plain：只出时间线，挂载即拉数据；标题由外层「历史」页签代替，「当前」标在版本行上（抽屉用）。
+   */
+  variant?: "collapsible" | "plain";
 }) => {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const isPlain = variant === "plain";
+  const [isCollapsibleOpen, setIsCollapsibleOpen] = useState(false);
+  const isOpen = isPlain || isCollapsibleOpen;
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [highlightedVersion, setHighlightedVersion] = useState<number | null>(null);
   const [versionToRollback, setVersionToRollback] = useState<number | null>(null);
@@ -77,7 +85,7 @@ export const RequirementVersionHistory = ({
   // 轨迹点过来：先展开自己（这才会触发拉取），拿到数据后再滚过去
   useEffect(() => {
     if (!focusRequest) return;
-    setIsOpen(true);
+    setIsCollapsibleOpen(true);
     setHighlightedVersion(focusRequest.version);
   }, [focusRequest]);
 
@@ -124,25 +132,27 @@ export const RequirementVersionHistory = ({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setIsOpen((current) => !current)}
-          className="flex items-center gap-1.5 text-body-sm-semibold text-primary"
-        >
-          {isOpen ? (
-            <ChevronDown className="size-3 text-tertiary" />
-          ) : (
-            <ChevronRight className="size-3 text-tertiary" />
+      {!isPlain && (
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setIsCollapsibleOpen((current) => !current)}
+            className="flex items-center gap-1.5 text-body-sm-semibold text-primary"
+          >
+            {isOpen ? (
+              <ChevronDown className="size-3 text-tertiary" />
+            ) : (
+              <ChevronRight className="size-3 text-tertiary" />
+            )}
+            {t("requirement_detail.versions.label")}
+          </button>
+          {approvedVersion !== null && (
+            <HistoryPill tone="version">
+              {t("requirement_detail.versions.current", { version: approvedVersion })}
+            </HistoryPill>
           )}
-          {t("requirement_detail.versions.label")}
-        </button>
-        {approvedVersion !== null && (
-          <HistoryPill tone="version">
-            {t("requirement_detail.versions.current", { version: approvedVersion })}
-          </HistoryPill>
-        )}
-      </div>
+        </div>
+      )}
 
       {isOpen &&
         (isLoading && !ordered.length ? (
@@ -170,6 +180,7 @@ export const RequirementVersionHistory = ({
                 isLast={index === ordered.length - 1}
                 isExpanded={expandedId === version.id}
                 isHighlighted={highlightedVersion === version.version}
+                isCurrent={version.version === approvedVersion}
                 canRollback={canRollback}
                 onToggle={() => setExpandedId(expandedId === version.id ? null : version.id)}
                 onRollback={() => setVersionToRollback(version.version)}
@@ -206,6 +217,7 @@ const VersionRow = ({
   isLast,
   isExpanded,
   isHighlighted,
+  isCurrent,
   canRollback,
   onToggle,
   onRollback,
@@ -219,6 +231,8 @@ const VersionRow = ({
   isLast: boolean;
   isExpanded: boolean;
   isHighlighted: boolean;
+  /** 就是 approved_version 那一版 —— 「当前」标在行上，读版本列表时不必再回头看标题 */
+  isCurrent: boolean;
   canRollback: boolean;
   onToggle: () => void;
   onRollback: () => void;
@@ -316,6 +330,7 @@ const VersionRow = ({
       <HistoryLine actor={version.created_by_detail?.display_name ?? "—"}>{sentence}</HistoryLine>
       <HistorySub>
         <HistoryPill tone="version">{t("requirement_detail.trail.version", { version: version.version })}</HistoryPill>
+        {isCurrent && <HistoryPill tone="added">{t("requirement_detail.versions.current_badge")}</HistoryPill>}
         {version.change_request_sequence_id !== null && (
           <HistoryPill>
             {t("requirement_detail.trail.change_request", { sequence: version.change_request_sequence_id })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
 import { Loader as LoaderIcon, MoveDiagonal, MoveRight } from "lucide-react";
@@ -62,6 +62,20 @@ type TProps = {
    * 范围抽屉不传则不渲染。
    */
   testCasesSection?: ReactNode;
+  /**
+   * 横幅上的审批动作，由产品需求页注入（弹窗与提交逻辑长在那一页上）：
+   * 提交评审（变更中）、查看变更单 / 撤回评审（评审中）。其它调用方不传则横幅只出说明。
+   */
+  onSubmitReview?: (requirementId: string) => void;
+  onWithdrawReview?: (changeRequestId: string) => void;
+  onOpenChangeRequest?: (changeRequestId: string) => void;
+  isApprovalMutating?: boolean;
+  /**
+   * 抽屉之外的动作（提交 / 撤回评审）改了这一行时，调用方把它 +1 —— 抽屉重新拉这一行并
+   * 回灌给列表。详情以本地状态为准、不跟随列表行变化（见 use-requirement-detail），
+   * 不这么做的话横幅会停在提交前的状态。
+   */
+  refreshToken?: number;
 };
 
 /**
@@ -88,6 +102,11 @@ export const RequirementPeekOverview = (props: TProps) => {
     productChip,
     issuesSection,
     testCasesSection,
+    onSubmitReview,
+    onWithdrawReview,
+    onOpenChangeRequest,
+    isApprovalMutating,
+    refreshToken,
   } = props;
   const { t } = useTranslation();
   const router = useAppRouter();
@@ -160,6 +179,14 @@ export const RequirementPeekOverview = (props: TProps) => {
     const row = await detail.refresh();
     if (row) onRequirementUpdated?.(row);
   }, [detail, onRequirementUpdated]);
+
+  // 抽屉之外的审批动作改了这一行：重拉并回灌。初值 0 不触发，避免打开抽屉时白拉一次
+  const lastRefreshTokenRef = useRef(refreshToken ?? 0);
+  useEffect(() => {
+    if (!refreshToken || refreshToken === lastRefreshTokenRef.current) return;
+    lastRefreshTokenRef.current = refreshToken;
+    if (activeId) void handleRolledBack();
+  }, [activeId, handleRolledBack, refreshToken]);
 
   /** 改状态走独立端点；返回的是只合并了 status / can_submit_review 的行，同样回灌给网格 */
   const handleStatusChange = useCallback(
@@ -315,6 +342,10 @@ export const RequirementPeekOverview = (props: TProps) => {
                   onRolledBack={() => void handleRolledBack()}
                   issuesSection={issuesSection}
                   testCasesSection={testCasesSection}
+                  onSubmitReview={onSubmitReview && activeId ? () => onSubmitReview(activeId) : undefined}
+                  onWithdrawReview={onWithdrawReview}
+                  onOpenChangeRequest={onOpenChangeRequest}
+                  isApprovalMutating={isApprovalMutating}
                 />
               )}
             </div>

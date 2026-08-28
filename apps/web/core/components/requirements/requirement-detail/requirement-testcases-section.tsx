@@ -17,9 +17,8 @@
  * 里，需求页先渲染时那个 map 是空的 —— 详见 requirement-testcase-link-modal.tsx。
  */
 import { useEffect, useState } from "react";
-import { CalendarDays, Link2Off } from "lucide-react";
+import { CalendarDays, FlaskConical, Link2Off } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirementTestCase } from "@plane/types";
@@ -27,6 +26,7 @@ import { AlertModalCore, Loader } from "@plane/ui";
 import { cn, renderFormattedDate } from "@plane/utils";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { useRequirementTestCases } from "@/hooks/store/use-requirement-test-cases";
+import { RequirementTestCaseHeaderAction } from "./requirement-relation-action-buttons";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 import { RequirementTestCaseLinkModal } from "./requirement-testcase-link-modal";
 
@@ -91,7 +91,8 @@ export const RequirementTestCaseRow = ({
               type="button"
               aria-label={t("requirement_detail.test_cases.unlink")}
               onClick={() => onUnlink(testCase)}
-              className="grid size-6 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
+              // 与关联工作项行同一口径：hover 到这一行才浮出解除按钮
+              className="grid size-6 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-layer-2 hover:text-secondary focus-visible:opacity-100"
             >
               <Link2Off className="size-3.5" />
             </button>
@@ -241,7 +242,7 @@ export const RequirementTestCasesSection = (props: TProps) => {
         ))}
       </div>
     ) : (
-      <p className={cn("text-body-xs-regular text-tertiary", isPlain ? "px-3 py-3" : "px-2.5 pb-3")}>
+      <p className={cn("text-body-xs-regular text-placeholder", isPlain ? "px-3 py-3" : "px-2.5 py-2.5")}>
         {t("requirement_detail.test_cases.empty")}
       </p>
     );
@@ -254,18 +255,11 @@ export const RequirementTestCasesSection = (props: TProps) => {
         showList && (
           <RequirementRelationCollapsible
             title={t("requirement_detail.test_cases.widget_title")}
+            icon={FlaskConical}
             count={testCases.length}
             actions={
               canManage && !hideAddActions ? (
-                <button
-                  type="button"
-                  aria-label={t("requirement_detail.test_cases.link_existing")}
-                  title={t("requirement_detail.test_cases.link_existing")}
-                  onClick={() => setIsLinkModalOpen(true)}
-                  className="grid size-6 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-secondary"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                </button>
+                <RequirementTestCaseHeaderAction onLink={() => setIsLinkModalOpen(true)} />
               ) : undefined
             }
           >

@@ -1,12 +1,10 @@
 /**
- * 项目侧需求抽屉的关联区：一条快捷操作条 + 两个折叠列表。
+ * 项目侧需求抽屉的关联区：两个折叠列表，动作各自挂在自己的标题行上。
  *
  * 产品侧没有项目语境，不能拆工作项，所以不走这里；产品页继续各自注入
  * RequirementIssuesByProject / RequirementTestCasesSection。
  */
-import { useState } from "react";
 import type { TRequirement } from "@plane/types";
-import { RequirementRelationActionButtons } from "./requirement-relation-action-buttons";
 import { RequirementIssuesSection } from "./requirement-issues-section";
 import { RequirementTestCasesSection } from "./requirement-testcases-section";
 
@@ -24,48 +22,29 @@ type TProps = {
 
 export const RequirementProjectRelations = (props: TProps) => {
   const { workspaceSlug, projectId, productId, requirementId, requirement, canManage, onChanged } = props;
-  const [isSplitOpen, setIsSplitOpen] = useState(false);
-  const [isLinkIssueOpen, setIsLinkIssueOpen] = useState(false);
-  const [isLinkCaseOpen, setIsLinkCaseOpen] = useState(false);
 
   return (
-    <div className="flex flex-col space-y-4">
-      {canManage && (
-        <RequirementRelationActionButtons
-          onSplit={() => setIsSplitOpen(true)}
-          onLinkIssue={() => setIsLinkIssueOpen(true)}
-          onLinkTestCase={productId ? () => setIsLinkCaseOpen(true) : undefined}
+    <div className="flex flex-col gap-6">
+      {/* 能管理时空列表也要出现 —— 拆分 / 关联的入口就在标题行上；只读时空列表没东西可看 */}
+      <RequirementIssuesSection
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        requirementId={requirementId}
+        requirement={requirement}
+        canManage={canManage}
+        onChanged={onChanged}
+        hideWhenEmpty={!canManage}
+      />
+      {productId && (
+        <RequirementTestCasesSection
+          workspaceSlug={workspaceSlug}
+          productId={productId}
+          requirementId={requirementId}
+          canManage={canManage}
+          scopeProjectId={projectId}
+          hideWhenEmpty={!canManage}
         />
       )}
-      <div className="flex flex-col">
-        <RequirementIssuesSection
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          requirementId={requirementId}
-          requirement={requirement}
-          canManage={canManage}
-          onChanged={onChanged}
-          hideWhenEmpty
-          hideAddActions
-          splitModalOpen={isSplitOpen}
-          onSplitModalOpenChange={setIsSplitOpen}
-          linkModalOpen={isLinkIssueOpen}
-          onLinkModalOpenChange={setIsLinkIssueOpen}
-        />
-        {productId && (
-          <RequirementTestCasesSection
-            workspaceSlug={workspaceSlug}
-            productId={productId}
-            requirementId={requirementId}
-            canManage={canManage}
-            scopeProjectId={projectId}
-            hideWhenEmpty
-            hideAddActions
-            linkModalOpen={isLinkCaseOpen}
-            onLinkModalOpenChange={setIsLinkCaseOpen}
-          />
-        )}
-      </div>
     </div>
   );
 };
