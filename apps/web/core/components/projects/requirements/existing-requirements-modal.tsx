@@ -17,11 +17,12 @@ import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TLinkableRequirementFacets, TRequirement } from "@plane/types";
-import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { RequirementService } from "@/services/requirement.service";
+import { useLinkableRequirementBulkSelect } from "./use-linkable-requirement-bulk-select";
 
 const requirementService = new RequirementService();
 const PAGE_SIZE = 50;
@@ -152,6 +153,19 @@ export const ExistingRequirementsModal = (props: TProps) => {
   useIntersectionObserver(optionsContainerRef, loadMoreElement, loadMore, "0px 0px 120px 0px");
 
   const selectedIds = useMemo(() => new Set(selected.map((row) => row.id)), [selected]);
+  const bulkSelect = useLinkableRequirementBulkSelect({
+    isOpen,
+    workspaceSlug,
+    projectId,
+    selected,
+    setSelected: (updater) => setSelected(updater),
+    facetCounts,
+    productFilter,
+    search: debouncedSearchTerm,
+    rows,
+    hasMore,
+    totalCount,
+  });
 
   const removeSelected = useCallback((requirementId: string) => {
     setSelected((previous) => previous.filter((item) => item.id !== requirementId));
@@ -220,73 +234,94 @@ export const ExistingRequirementsModal = (props: TProps) => {
                 {t("project_requirements.linkable.products_label")}
               </div>
               <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-                <button
-                  type="button"
-                  onClick={() => setProductFilter(undefined)}
+                <div
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 transition-colors",
-                    productFilter === undefined
-                      ? "bg-accent-primary/10 text-accent-primary"
-                      : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                    "relative flex items-center gap-1.5 rounded-md px-1.5 py-1.5",
+                    productFilter === undefined ? "bg-accent-primary/10 text-accent-primary" : "text-secondary"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "w-0.5 self-stretch rounded-full",
-                      productFilter === undefined ? "bg-accent-primary" : "bg-transparent"
-                    )}
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1 truncate">{t("project_requirements.all_products")}</span>
-                  {facetCounts && (
-                    <span
-                      className={cn(
-                        "tabular-nums text-caption-sm-medium",
-                        productFilter === undefined ? "text-accent-primary" : "text-placeholder"
-                      )}
-                    >
-                      {facetCounts.total}
-                    </span>
+                  {productFilter === undefined && (
+                    <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent-primary" />
                   )}
-                </button>
+                  <Checkbox
+                    checked={bulkSelect.allProductsState === "checked"}
+                    indeterminate={bulkSelect.allProductsState === "indeterminate"}
+                    disabled={!facetCounts?.total || bulkSelect.isSelecting}
+                    onChange={bulkSelect.toggleAllProducts}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={t("project_requirements.linkable.select_all_products")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setProductFilter(undefined)}
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-2 text-left text-13 transition-colors",
+                      productFilter === undefined ? "text-accent-primary" : "hover:text-primary"
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{t("project_requirements.all_products")}</span>
+                    {facetCounts && (
+                      <span
+                        className={cn(
+                          "tabular-nums text-caption-sm-medium",
+                          productFilter === undefined ? "text-accent-primary" : "text-placeholder"
+                        )}
+                      >
+                        {facetCounts.total}
+                      </span>
+                    )}
+                  </button>
+                </div>
                 {products.map((product) => {
                   const isActive = productFilter === product.id;
                   // 没有候选的产品不出现在 by_product 里，显示 0 比空白更明确
                   const count = facetCounts ? (facetCounts.by_product[product.id] ?? 0) : undefined;
+                  const productState = bulkSelect.productState(product.id);
                   return (
-                    <button
+                    <div
                       key={product.id}
-                      type="button"
-                      onClick={() => setProductFilter(product.id)}
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 transition-colors",
-                        isActive
-                          ? "bg-accent-primary/10 text-accent-primary"
-                          : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                        "relative flex items-center gap-1.5 rounded-md px-1.5 py-1.5",
+                        isActive ? "bg-accent-primary/10 text-accent-primary" : "text-secondary"
                       )}
                     >
-                      <span
-                        className={cn(
-                          "w-0.5 self-stretch rounded-full",
-                          isActive ? "bg-accent-primary" : "bg-transparent"
-                        )}
-                        aria-hidden
-                      />
-                      <Package className="size-3.5 shrink-0" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate" title={product.name}>
-                        {product.name || product.identifier}
-                      </span>
-                      {typeof count === "number" && (
-                        <span
-                          className={cn(
-                            "tabular-nums text-caption-sm-medium",
-                            isActive ? "text-accent-primary" : "text-placeholder"
-                          )}
-                        >
-                          {count}
-                        </span>
+                      {isActive && (
+                        <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent-primary" />
                       )}
-                    </button>
+                      <Checkbox
+                        checked={productState === "checked"}
+                        indeterminate={productState === "indeterminate"}
+                        disabled={!count || bulkSelect.isSelecting}
+                        onChange={() => bulkSelect.toggleProduct(product.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={t("project_requirements.linkable.select_all_product", {
+                          product: product.name || product.identifier,
+                        })}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setProductFilter(product.id)}
+                        className={cn(
+                          "flex min-w-0 flex-1 items-center gap-2 text-left text-13 transition-colors",
+                          isActive ? "text-accent-primary" : "hover:text-primary"
+                        )}
+                      >
+                        <Package className="size-3.5 shrink-0" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate" title={product.name}>
+                          {product.name || product.identifier}
+                        </span>
+                        {typeof count === "number" && (
+                          <span
+                            className={cn(
+                              "tabular-nums text-caption-sm-medium",
+                              isActive ? "text-accent-primary" : "text-placeholder"
+                            )}
+                          >
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -321,9 +356,23 @@ export const ExistingRequirementsModal = (props: TProps) => {
                   </button>
                 )}
               </div>
-              <p className="mt-2 text-caption-sm-regular text-tertiary">
-                {t("project_requirements.linkable.total_count", { count: totalCount })}
-              </p>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                {totalCount > 0 && (
+                  <label className="flex cursor-pointer items-center gap-1.5 text-caption-sm-medium text-secondary">
+                    <Checkbox
+                      checked={bulkSelect.viewState === "checked"}
+                      indeterminate={bulkSelect.viewState === "indeterminate"}
+                      disabled={isLoading || bulkSelect.isSelecting}
+                      onChange={bulkSelect.toggleCurrentView}
+                      aria-label={t("project_requirements.linkable.select_all")}
+                    />
+                    {t("issue.select.select_all")}
+                  </label>
+                )}
+                <p className="ml-auto text-caption-sm-regular text-tertiary">
+                  {t("project_requirements.linkable.total_count", { count: totalCount })}
+                </p>
+              </div>
             </div>
 
             <Combobox.Options

@@ -125,6 +125,8 @@ export type TRequirementListParams = {
   excludeClosed?: boolean;
   /** 左侧模块树的过滤（含子模块）；模块归产品，项目侧只读 */
   moduleId?: string;
+  /** 选择器「按编号或标题搜索」：只匹配 display_id / title，不扫自定义字段 */
+  searchIn?: "id_title";
 };
 
 const buildRequirementListParams = (params: TRequirementListParams) => ({
@@ -151,6 +153,7 @@ const buildRequirementListParams = (params: TRequirementListParams) => ({
   ...(params.exclude_issue_id ? { exclude_issue_id: params.exclude_issue_id } : {}),
   ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
   ...(params.moduleId ? { module_id: params.moduleId } : {}),
+  ...(params.searchIn ? { search_in: params.searchIn } : {}),
 });
 
 export class RequirementService extends APIService {

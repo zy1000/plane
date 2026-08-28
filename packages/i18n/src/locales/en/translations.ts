@@ -1997,7 +1997,6 @@ export default {
     no_products: {
       title: "No product linked to this project",
       description: "Requirements come from products. Link a product in the left sidebar first.",
-      sidebar: "No products linked yet. Link one to start referencing its requirements.",
     },
     linkable: {
       title: "Link requirements",
@@ -2005,6 +2004,9 @@ export default {
       search_placeholder: "Search by ID or title",
       products_label: "Products",
       total_count: "{count, plural, one{# requirement} other{# requirements}}",
+      select_all: "Select all",
+      select_all_product: "Select all linkable requirements in {product}",
+      select_all_products: "Select all linkable requirements",
       empty: "No requirements available to link (link a product first; requirements already in this project are hidden)",
       load_failed: "Failed to load requirements",
       selected: "{count} selected",

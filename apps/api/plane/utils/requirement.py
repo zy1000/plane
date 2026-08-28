@@ -1794,8 +1794,30 @@ def get_requirement_field_values(row_data, field):
     return [row_data.get(field_id)]
 
 
+def requirement_matches_id_or_title(row, normalized_search):
+    """编号或标题的子串匹配（不区分大小写）。
+
+    编号口径与 requirement_display_id 一致，也就是列表上看到的那串（如 ECOM-12）。
+    不扫描述、自定义字段、子表单 —— 给「按编号或标题搜索」的选择器用。
+    """
+    if not normalized_search:
+        return True
+    title = str(row.title or "")
+    display_id = requirement_display_id(row) or ""
+    return (
+        normalized_search in title.casefold()
+        or normalized_search in display_id.casefold()
+    )
+
+
 def filter_requirement_row_ids(
-    *, fields, rows, search="", filters=None, fields_by_requirement_type=None
+    *,
+    fields,
+    rows,
+    search="",
+    filters=None,
+    fields_by_requirement_type=None,
+    search_in="all",
 ):
     """按搜索词与筛选条件筛出命中的需求行 ID。
 
@@ -1809,6 +1831,8 @@ def filter_requirement_row_ids(
     内置列在这里被包装成一组「伪字段」（id 就是列名，不是 UUID，与自定义字段的
     key 天然不撞），行数据也按同样的 key 摊平，于是标题、状态、负责人这些和自定义
     字段走完全相同的搜索与筛选路径，不需要任何特例分支。
+
+    search_in="id_title" 时搜索只看编号与标题，不扫其余列。默认 "all" 维持全字段。
     """
     filters = filters or []
     fields = list(fields)
@@ -1880,16 +1904,20 @@ def filter_requirement_row_ids(
     for row in rows:
         own_field_ids = {str(field_attr(field, "id")) for field in row_fields(row)}
         if normalized_search:
-            haystack = []
-            for field in row_fields(row):
-                if field_attr(field, "field_type") == RequirementFieldType.FORM:
+            if search_in == "id_title":
+                if not requirement_matches_id_or_title(row, normalized_search):
                     continue
-                haystack.extend(
-                    searchable_value(field, value)
-                    for value in get_field_values(row, field)
-                )
-            if normalized_search not in " ".join(haystack).casefold():
-                continue
+            else:
+                haystack = []
+                for field in row_fields(row):
+                    if field_attr(field, "field_type") == RequirementFieldType.FORM:
+                        continue
+                    haystack.extend(
+                        searchable_value(field, value)
+                        for value in get_field_values(row, field)
+                    )
+                if normalized_search not in " ".join(haystack).casefold():
+                    continue
 
         matches = True
         for item in filters:

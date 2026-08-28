@@ -40,75 +40,60 @@ export const ProjectRequirementProductNav = (props: TProps) => {
           </button>
         )}
       </div>
-      <div className="space-y-0.5 px-2 pb-2">
-        {isLoading ? null : links.length === 0 ? (
-          <div className="mx-1 rounded-md border border-dashed border-strong px-2.5 py-2.5">
-            <p className="text-caption-sm text-tertiary">{t("project_requirements.no_products.sidebar")}</p>
-            {canManage && (
-              <button
-                type="button"
-                onClick={onManage}
-                className="mt-2 text-caption-sm-medium text-accent-primary hover:underline"
-              >
-                {t("project_products.link")}
-              </button>
+      {!isLoading && links.length > 0 && (
+        <div className="space-y-0.5 px-2 pb-2">
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 transition-colors",
+              isAllActive
+                ? "bg-accent-primary/10 text-accent-primary"
+                : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
             )}
-          </div>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => onSelect(null)}
+          >
+            <LayoutList className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate font-medium">{t("project_requirements.all_products")}</span>
+            <span
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 transition-colors",
-                isAllActive
-                  ? "bg-accent-primary/10 text-accent-primary"
-                  : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                "text-caption-sm-medium tabular-nums",
+                isAllActive ? "text-accent-primary" : "text-placeholder"
               )}
             >
-              <LayoutList className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate font-medium">{t("project_requirements.all_products")}</span>
-              <span
+              {totalCount}
+            </span>
+          </button>
+          {links.map((link) => {
+            const isActive = selectedProductId === link.product;
+            return (
+              <button
+                key={link.product}
+                type="button"
+                onClick={() => onSelect(isActive ? null : link.product)}
                 className={cn(
-                  "text-caption-sm-medium tabular-nums",
-                  isAllActive ? "text-accent-primary" : "text-placeholder"
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 transition-colors",
+                  isActive
+                    ? "bg-accent-primary/10 text-accent-primary"
+                    : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
                 )}
               >
-                {totalCount}
-              </span>
-            </button>
-            {links.map((link) => {
-              const isActive = selectedProductId === link.product;
-              return (
-                <button
-                  key={link.product}
-                  type="button"
-                  onClick={() => onSelect(isActive ? null : link.product)}
+                <Package className="size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate" title={link.product_name || link.product_identifier}>
+                  {link.product_name || link.product_identifier}
+                </span>
+                <span
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 transition-colors",
-                    isActive
-                      ? "bg-accent-primary/10 text-accent-primary"
-                      : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                    "text-caption-sm-medium tabular-nums",
+                    isActive ? "text-accent-primary" : "text-placeholder"
                   )}
                 >
-                  <Package className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate" title={link.product_name || link.product_identifier}>
-                    {link.product_name || link.product_identifier}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-caption-sm-medium tabular-nums",
-                      isActive ? "text-accent-primary" : "text-placeholder"
-                    )}
-                  >
-                    {link.requirement_count ?? 0}
-                  </span>
-                </button>
-              );
-            })}
-          </>
-        )}
-      </div>
+                  {link.requirement_count ?? 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

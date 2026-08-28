@@ -2176,7 +2176,6 @@ export default {
     no_products: {
       title: "本项目还没有关联产品",
       description: "需求来自产品。在左侧「产品」里把产品关联进来，才能引用它下面的需求。",
-      sidebar: "尚未关联产品，关联后才能引用需求。",
     },
     linkable: {
       title: "关联需求",
@@ -2184,6 +2183,9 @@ export default {
       search_placeholder: "按编号或标题搜索",
       products_label: "产品",
       total_count: "共 {count} 个需求",
+      select_all: "全选",
+      select_all_product: "选择「{product}」的全部可关联需求",
+      select_all_products: "选择全部可关联需求",
       empty: "没有可关联的需求（需先关联产品；已关联进本项目的需求不会出现）",
       load_failed: "加载失败",
       selected: "已选 {count} 条",

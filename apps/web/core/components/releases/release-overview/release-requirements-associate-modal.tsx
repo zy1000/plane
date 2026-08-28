@@ -91,6 +91,7 @@ export const ReleaseRequirementsAssociateModal = (props: TProps) => {
       try {
         const response = await requirementService.listProjectRequirements(workspaceSlug, projectId, {
           search: debouncedSearchTerm,
+          searchIn: "id_title",
           perPage: PAGE_SIZE,
           cursor: `${PAGE_SIZE}:${nextPage}:0`,
           exclude_release_id: releaseId,

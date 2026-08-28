@@ -86,9 +86,6 @@ export const ProjectRequirementModuleSidebar = (props: TProps) => {
             {moduleTotal}
           </span>
         </button>
-        {visibleGroups.length === 0 && !store.isLoading && (
-          <div className="text-caption-sm px-2 py-3 text-tertiary">{t("requirement_modules.empty")}</div>
-        )}
         {visibleGroups.map((group) => (
           <div key={group.product_id} className="mt-1">
             {showProductHeaders && (

@@ -157,11 +157,16 @@ class ProjectRequirementViewSet(BaseViewSet):
             )
         return filter_payload, None
 
-    def _apply_common_query(self, request, queryset, *, specs, by_requirement_type):
-        """?requirement_type_id= / ?product_id= / ?ids= / ?search= / ?filters=
+    def _apply_common_query(
+        self, request, queryset, *, specs, by_requirement_type, search_in=None
+    ):
+        """?requirement_type_id= / ?product_id= / ?ids= / ?search= / ?filters= / ?search_in=
 
         搜索与筛选在 Python 里做，与产品需求列表同一条路径
         （filter_requirement_row_ids）—— 自定义字段的值在 JSON 里，推不进 SQL。
+
+        search_in=id_title：只匹配编号与标题。选择器占位是「按编号或标题搜索」时走这条。
+        未传则扫全部内置列 + 自定义字段（主列表搜索框仍是这个口径）。
         """
         requirement_type_ids = split_query_csv(request.query_params.get("requirement_type_id"))
         if requirement_type_ids:
@@ -201,6 +206,10 @@ class ProjectRequirementViewSet(BaseViewSet):
         ]
 
         search = request.query_params.get("search", "")
+        if search_in is None:
+            search_in = request.query_params.get("search_in") or "all"
+        if search_in != "id_title":
+            search_in = "all"
         if search.strip() or normalized_filters:
             matching_ids = filter_requirement_row_ids(
                 fields=specs,
@@ -208,6 +217,7 @@ class ProjectRequirementViewSet(BaseViewSet):
                 search=search,
                 filters=normalized_filters,
                 fields_by_requirement_type=by_requirement_type,
+                search_in=search_in,
             )
             queryset = queryset.filter(id__in=matching_ids)
 
@@ -306,7 +316,11 @@ class ProjectRequirementViewSet(BaseViewSet):
         )
 
         queryset, error = self._apply_common_query(
-            request, queryset, specs=specs, by_requirement_type=by_requirement_type
+            request,
+            queryset,
+            specs=specs,
+            by_requirement_type=by_requirement_type,
+            search_in="id_title",
         )
         if error is not None:
             return error
