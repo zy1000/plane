@@ -248,7 +248,10 @@ export const LeafValue = ({
   const isDetail = variant === "detail";
   const shortValueClass = isDetail ? "text-body-xs-medium" : "text-13";
   const longValueClass = isDetail ? "text-body-sm-regular leading-5" : "text-13 leading-5";
-  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
+  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) {
+    // 详情抽屉没有格子线，空值直接不画等于这一行只有标签；网格里空格子保持干净
+    return isDetail ? <span className={cn("text-body-xs-medium text-placeholder", className)}>—</span> : null;
+  }
   if (field.field_type === "boolean") {
     return (
       <span
@@ -1015,8 +1018,8 @@ export const LeafEditor = ({
     const placeholder = field.config.placeholder ?? t("requirement_grid.data.select_option");
     // 建行弹窗跟工作项 ExtraFieldControl（compact=false）走同一套下拉皮
     const isModal = variant === "modal";
-    // 网格有列头，空值不必再写「请选择」；弹窗没有列头，才回落到占位文案
-    const emptyLabel = isModal ? placeholder : "";
+    // 网格有列头，空值不必再写「请选择」；详情抽屉和弹窗没有格子线，空着要看得见
+    const emptyLabel = isTableCell ? "" : placeholder;
     if (getRequirementSelectMode(field) === "multiple") {
       const currentValue = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
       const dropdownOptions: TDropdownOption[] = options.map((option) => ({
@@ -1088,7 +1091,7 @@ export const LeafEditor = ({
         // modal 不盖自定义边框，沿用 CustomSelect input 默认皮（与 ExtraFieldControl 一致）
         buttonClassName={isModal ? "w-full" : FIELD_DROPDOWN_CLASS[variant]}
         optionsClassName="w-60"
-        noChevron={!isModal && !selectedOption}
+        noChevron={isTableCell && !selectedOption}
         input
       >
         {!field.is_required && (

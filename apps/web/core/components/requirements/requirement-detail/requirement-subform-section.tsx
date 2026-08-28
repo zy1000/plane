@@ -212,7 +212,12 @@ export const RequirementSubformSection = (props: TProps) => {
             }}
             className="min-w-0 rounded-md border border-subtle"
           >
-            <div className="flex items-center gap-2 bg-layer-1 px-2.5 py-1.5">
+            <div
+              className={cn(
+                "flex items-center gap-2 bg-layer-1 px-2.5 py-1.5",
+                isOpen && "border-b border-subtle"
+              )}
+            >
               <button
                 type="button"
                 onClick={() => toggle(form.id)}
@@ -244,10 +249,10 @@ export const RequirementSubformSection = (props: TProps) => {
             </div>
 
             {isOpen && columns.length > 0 && (rows.length > 0 || !readOnly) && (
-              // 子字段多时单块表格自己横滚（horizontal-scrollbar 才能看见条），页面本身不横滚
+              // 列少时铺满卡片，避免两列表飘在整宽空白左边；列多时 min-w 把表撑出容器，这块自己横滚
               // 可编辑的空表也要把表头和「添加行」露出来，否则没数据就等于没入口
-              <div className="horizontal-scrollbar scrollbar-lg overflow-x-auto">
-                <table className="w-max min-w-max border-collapse text-left">
+              <div className="horizontal-scrollbar scrollbar-sm overflow-x-auto">
+                <table className="w-full min-w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-subtle">
                       <th className="w-12 border-r border-subtle px-2.5 py-1.5 text-body-xs-medium text-secondary">

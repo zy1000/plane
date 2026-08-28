@@ -124,6 +124,7 @@ const WIDE_FIELD_TYPES = new Set<string>(["rich_text", "attachment", "image"]);
 /**
  * 叶子字段（非 form）的排布。
  * rows：标签左、值右的两列网格，全部字段共用一个网格，值列才有统一的 x 起点（抽屉用）。
+ * 值列不能跟着 1fr 拉满抽屉：普通字段封顶 max-w-sm，空下拉才不会变成一条看不见的长带子。
  * grid：标签在上、值在下，三列铺开，宽字段独占一行（整页用 —— 版面宽，两列排会空掉一大半）。
  */
 const FieldRows = ({
@@ -185,11 +186,16 @@ const FieldRows = ({
   }
 
   return (
-    <div className="grid grid-cols-[minmax(6rem,11rem)_minmax(0,1fr)] items-start gap-x-4 gap-y-2.5">
+    <div className="grid grid-cols-[minmax(4rem,max-content)_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5">
       {fields.map((field) => (
         <div key={field.id} className="contents">
           {renderLabel(field, "pt-1.5 text-body-xs-regular text-tertiary")}
-          <div className="min-w-0">
+          <div
+            className={cn(
+              "min-w-0",
+              WIDE_FIELD_TYPES.has(field.field_type) ? "max-w-[42rem]" : "max-w-sm"
+            )}
+          >
             {readOnly ? <div className="pt-1.5">{renderValue(field)}</div> : renderValue(field)}
           </div>
         </div>
