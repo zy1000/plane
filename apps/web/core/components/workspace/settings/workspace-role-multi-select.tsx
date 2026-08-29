@@ -5,17 +5,12 @@
  */
 
 import { useMemo } from "react";
-import { Check, ChevronDown } from "lucide-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceRole } from "@plane/types";
-import { MultiSelectDropdown } from "@plane/ui";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
-
-type TWorkspaceRoleOption = {
-  value: string;
-  data: IWorkspaceRole;
-};
+// local imports
+import { WorkspaceRoleMultiSelectField } from "./workspace-role-multi-select-field";
 
 type Props = {
   workspaceSlug: string;
@@ -35,22 +30,6 @@ export function WorkspaceRoleMultiSelect(props: Props) {
   const { fetchWorkspacePermissionKeys } = useUserPermissions();
 
   const customRoles = useMemo(() => roles.filter((role) => !role.is_system), [roles]);
-  const options: TWorkspaceRoleOption[] = useMemo(
-    () => customRoles.map((role) => ({ value: role.id, data: role })),
-    [customRoles]
-  );
-
-  const buttonLabel = useMemo(() => {
-    if (isLoading) return <span className="text-placeholder">加载中...</span>;
-    const selectedNames = customRoles.filter((role) => selectedRoleIds.includes(role.id)).map((role) => role.name);
-    if (selectedNames.length === 0) return <span className="text-placeholder">选择角色</span>;
-    if (selectedNames.length === 1) return <span>{selectedNames[0]}</span>;
-    return (
-      <span>
-        {selectedNames[0]} +{selectedNames.length - 1}
-      </span>
-    );
-  }, [customRoles, isLoading, selectedRoleIds]);
 
   const selectedRoleNames = useMemo(
     () => customRoles.filter((role) => selectedRoleIds.includes(role.id)).map((role) => role.name),
@@ -83,34 +62,11 @@ export function WorkspaceRoleMultiSelect(props: Props) {
           {selectedRoleNames.length > 0 ? selectedRoleNames.join("、") : "—"}
         </span>
       ) : (
-        <MultiSelectDropdown
+        <WorkspaceRoleMultiSelectField
+          roles={roles}
+          isLoading={isLoading}
           value={selectedRoleIds}
           onChange={handleChange}
-          options={options}
-          disabled={isLoading}
-          disableSorting
-          keyExtractor={(option) => option.data.id}
-          queryArray={["name"]}
-          inputPlaceholder="搜索角色..."
-          buttonContent={() => (
-            <div className="flex w-full cursor-pointer items-center justify-between gap-1 text-13">
-              {buttonLabel}
-              <ChevronDown className="size-3 shrink-0 text-secondary" />
-            </div>
-          )}
-          buttonClassName="flex w-full items-center justify-between gap-1 rounded border-none px-0 py-1 text-13"
-          containerClassName="w-40 rounded-md p-0"
-          optionsContainerClassName="w-52"
-          renderItem={({ value, selected }) => {
-            const role = customRoles.find((item) => item.id === value);
-            if (!role) return null;
-            return (
-              <div className="flex w-full items-center justify-between gap-2 truncate text-13">
-                <span className="truncate">{role.name}</span>
-                {selected && <Check className="size-3 shrink-0" />}
-              </div>
-            );
-          }}
         />
       )}
     </div>

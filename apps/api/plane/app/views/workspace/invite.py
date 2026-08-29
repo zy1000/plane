@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 # Third party modules
@@ -22,6 +23,7 @@ from rest_framework.response import Response
 # Module imports
 from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers import (
+    UserAdminLiteSerializer,
     WorkspaceMemberCustomRolesSerializer,
     WorkSpaceMemberInviteSerializer,
     WorkSpaceMemberSerializer,
@@ -125,8 +127,10 @@ class WorkspaceInvitationsViewset(BaseViewSet):
                     WorkspaceMemberInvite(
                         email=email.get("email").strip().lower(),
                         workspace_id=workspace.id,
+                        # token 列为 varchar(255)，payload 只放邮箱字符串；
+                        # 若把整个邀请字典（含 custom_role_ids）编进去会超长
                         token=jwt.encode(
-                            {"email": email, "timestamp": datetime.now().timestamp()},
+                            {"email": email.get("email"), "timestamp": datetime.now().timestamp()},
                             settings.SECRET_KEY,
                             algorithm="HS256",
                         ),
@@ -201,6 +205,41 @@ class WorkspaceInvitationsViewset(BaseViewSet):
         workspace_member_invite = WorkspaceMemberInvite.objects.get(pk=pk, workspace__slug=slug)
         workspace_member_invite.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WorkspaceInvitableUsersEndpoint(BaseAPIView):
+    """本地 User 表中尚未加入该工作区、可被邀请的用户，供邀请弹窗下拉选择"""
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_INVITE, level="WORKSPACE")
+    def get(self, request, slug):
+        search = request.query_params.get("search", "").strip()
+
+        users = (
+            User.objects.filter(is_active=True, is_bot=False)
+            .exclude(email__isnull=True)
+            .exclude(email="")
+            .exclude(
+                id__in=WorkspaceMember.objects.filter(
+                    workspace__slug=slug, is_active=True
+                ).values("member_id")
+            )
+            .exclude(
+                email__in=WorkspaceMemberInvite.objects.filter(
+                    workspace__slug=slug, accepted=False
+                ).values("email")
+            )
+        )
+        if search:
+            users = users.filter(
+                Q(display_name__icontains=search)
+                | Q(email__icontains=search)
+                | Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+            )
+        users = users.select_related("avatar_asset").order_by("display_name")
+
+        serializer = UserAdminLiteSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class WorkspaceJoinEndpoint(BaseAPIView):

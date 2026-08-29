@@ -18,6 +18,7 @@ import { CountChip } from "@/components/common/count-chip";
 import { MembersSettingsLoader } from "@/components/ui/loader/settings/members";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
 // local imports
 import { WorkspaceInvitationsListItem } from "./invitations-list-item";
 import { WorkspaceMembersListItem } from "./members-list-item";
@@ -45,6 +46,9 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
     },
   } = useMember();
   const { t } = useTranslation();
+  // 待处理邀请的自定义角色候选（在父组件取一次，避免每个列表项各自请求）
+  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug?.toString(), "workspace");
+  useSWR(isAdmin && workspaceSlug ? `WORKSPACE_INVITATION_ASSIGNABLE_ROLES_${workspaceSlug.toString()}` : null, fetchRoles);
   // fetching workspace invitations
   useSWR(
     workspaceSlug
@@ -101,7 +105,12 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
           <Disclosure.Panel>
             <div className="ml-auto items-center gap-1.5 rounded-md bg-surface-1 py-1.5">
               {searchedInvitationsIds?.map((invitationId) => (
-                <WorkspaceInvitationsListItem key={invitationId} invitationId={invitationId} />
+                <WorkspaceInvitationsListItem
+                  key={invitationId}
+                  invitationId={invitationId}
+                  roles={roles}
+                  isRolesLoading={isRolesLoading}
+                />
               ))}
             </div>
           </Disclosure.Panel>

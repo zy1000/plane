@@ -12,6 +12,7 @@ from plane.app.views import (
     WorkspaceJoinEndpoint,
     WorkSpaceMemberViewSet,
     WorkspaceInvitationsViewset,
+    WorkspaceInvitableUsersEndpoint,
     WorkspaceMemberUserEndpoint,
     WorkspaceMemberUserViewsEndpoint,
     WorkSpaceAvailabilityCheckEndpoint,
@@ -86,6 +87,11 @@ urlpatterns = [
             {"delete": "destroy", "get": "retrieve", "patch": "partial_update"}
         ),
         name="workspace-invitations",
+    ),
+    path(
+        "workspaces/<str:slug>/invitable-users/",
+        WorkspaceInvitableUsersEndpoint.as_view(),
+        name="workspace-invitable-users",
     ),
     # user workspace invitations
     path(

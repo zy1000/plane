@@ -64,6 +64,11 @@ export interface IWorkspaceBulkInviteFormData {
   emails: { email: string; role: TUserPermissions; custom_role_ids?: string[] }[];
 }
 
+/** 尚未加入某工作区、可被邀请的本地用户（邀请弹窗下拉候选） */
+export type TWorkspaceInvitableUser = Pick<IUserLite, "id" | "display_name" | "first_name" | "last_name" | "avatar_url"> & {
+  email: string;
+};
+
 export type Properties = {
   assignee: boolean;
   start_date: boolean;

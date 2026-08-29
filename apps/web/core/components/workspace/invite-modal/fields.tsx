@@ -6,14 +6,17 @@
 
 import { observer } from "mobx-react";
 import type { Control, FieldArrayWithId, FormState } from "react-hook-form";
-import { Controller } from "react-hook-form";
+import { Controller, useWatch } from "react-hook-form";
 // plane imports
-import { ROLE } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
-import { CustomSelect, Input } from "@plane/ui";
+import type { IWorkspaceRole } from "@plane/types";
 import { cn } from "@plane/utils";
+// components
+import { WorkspaceRoleMultiSelectField } from "@/components/workspace/settings/workspace-role-multi-select-field";
 import type { InvitationFormValues } from "@/hooks/use-workspace-invitation";
+// local imports
+import { InvitationEmailCombobox } from "./email-combobox";
 
 type TInvitationFieldsProps = {
   workspaceSlug: string;
@@ -21,19 +24,26 @@ type TInvitationFieldsProps = {
   control: Control<InvitationFormValues>;
   formState: FormState<InvitationFormValues>;
   remove: (index: number) => void;
+  roles: IWorkspaceRole[];
+  isRolesLoading: boolean;
   className?: string;
 };
 
 export const InvitationFields = observer(function InvitationFields(props: TInvitationFieldsProps) {
   const {
+    workspaceSlug,
     fields,
     control,
     formState: { errors },
     remove,
+    roles,
+    isRolesLoading,
     className,
   } = props;
   // plane hooks
   const { t } = useTranslation();
+  // 其他行已填写的邮箱，从当前行的下拉候选里排除
+  const watchedEmails = useWatch({ control, name: "emails" });
   return (
     <div className={cn("mb-3 space-y-4", className)}>
       {fields.map((field, index) => (
@@ -54,16 +64,19 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
               }}
               render={({ field: { value, onChange, ref } }) => (
                 <>
-                  <Input
+                  <InvitationEmailCombobox
+                    workspaceSlug={workspaceSlug}
                     id={`emails.${index}.email`}
                     name={`emails.${index}.email`}
-                    type="text"
                     value={value}
                     onChange={onChange}
-                    ref={ref}
+                    inputRef={ref}
                     hasError={Boolean(errors.emails?.[index]?.email)}
                     placeholder={t("workspace_settings.settings.members.modal.placeholder")}
-                    className="w-full text-caption-sm-regular sm:text-body-xs-regular"
+                    excludeEmails={watchedEmails
+                      .filter((_, emailIndex) => emailIndex !== index)
+                      .map((item) => item.email)
+                      .filter(Boolean)}
                   />
                   {errors.emails?.[index]?.email && (
                     <span className="ml-1 text-caption-sm-regular text-danger-primary">
@@ -78,24 +91,27 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
             <div className="flex flex-col gap-1">
               <Controller
                 control={control}
-                name={`emails.${index}.role`}
-                rules={{ required: true }}
+                name={`emails.${index}.custom_role_ids`}
+                rules={{ validate: (value) => value.length > 0 || "请选择角色" }}
                 render={({ field: { value, onChange } }) => (
-                  <CustomSelect
+                  <WorkspaceRoleMultiSelectField
+                    roles={roles}
+                    isLoading={isRolesLoading}
                     value={value}
-                    label={<span className="text-caption-sm-regular sm:text-body-xs-regular">{ROLE[value]}</span>}
                     onChange={onChange}
-                    className="w-24 flex-grow"
-                    input
-                  >
-                    {Object.entries(ROLE).map(([key, roleLabel]) => (
-                      <CustomSelect.Option key={key} value={parseInt(key)}>
-                        {roleLabel}
-                      </CustomSelect.Option>
-                    ))}
-                  </CustomSelect>
+                    hasError={Boolean(errors.emails?.[index]?.custom_role_ids)}
+                    buttonClassName="rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 py-2 text-caption-sm-regular sm:text-body-xs-regular"
+                    buttonContainerClassName="w-full"
+                    containerClassName="w-40"
+                    optionsContainerClassName="w-60"
+                  />
                 )}
               />
+              {errors.emails?.[index]?.custom_role_ids && (
+                <span className="ml-1 text-caption-sm-regular text-danger-primary">
+                  {errors.emails?.[index]?.custom_role_ids?.message}
+                </span>
+              )}
             </div>
             {fields.length > 1 && (
               <div className="flex-item flex w-6">

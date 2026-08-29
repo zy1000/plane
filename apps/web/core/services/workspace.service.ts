@@ -14,6 +14,7 @@ import type {
   IWorkspaceSearchResults,
   IProductUpdateResponse,
   IWorkspaceBulkInviteFormData,
+  TWorkspaceInvitableUser,
   IWorkspaceViewProps,
   IUserProjectsRole,
   IWorkspaceView,
@@ -82,6 +83,17 @@ export class WorkspaceService extends APIService {
 
   async inviteWorkspace(workspaceSlug: string, data: IWorkspaceBulkInviteFormData): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/invitations/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchInvitableUsers(
+    workspaceSlug: string,
+    params: { search: string }
+  ): Promise<TWorkspaceInvitableUser[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/invitable-users/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

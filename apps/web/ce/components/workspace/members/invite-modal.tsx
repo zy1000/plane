@@ -7,6 +7,7 @@
 import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import useSWR from "swr";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { IWorkspaceBulkInviteFormData } from "@plane/types";
@@ -16,6 +17,7 @@ import { InvitationModalActions } from "@/components/workspace/invite-modal/acti
 import { InvitationFields } from "@/components/workspace/invite-modal/fields";
 import { InvitationForm } from "@/components/workspace/invite-modal/form";
 // hooks
+import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
 import { useWorkspaceInvitationActions } from "@/hooks/use-workspace-invitation";
 
 export type TSendWorkspaceInvitationModalProps = {
@@ -37,6 +39,9 @@ export const SendWorkspaceInvitationModal = observer(function SendWorkspaceInvit
     onSubmit,
     onClose,
   });
+  // 工作区自定义角色，供每行邀请选择
+  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug?.toString(), "workspace");
+  useSWR(isOpen && workspaceSlug ? `WORKSPACE_INVITE_MODAL_ROLES_${workspaceSlug.toString()}` : null, fetchRoles);
 
   return (
     <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXL}>
@@ -59,6 +64,8 @@ export const SendWorkspaceInvitationModal = observer(function SendWorkspaceInvit
           control={control}
           formState={formState}
           remove={remove}
+          roles={roles}
+          isRolesLoading={isRolesLoading}
         />
       </InvitationForm>
     </ModalCore>

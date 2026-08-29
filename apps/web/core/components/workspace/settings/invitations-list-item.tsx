@@ -8,25 +8,29 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ROLE, EUserPermissions, WORKSPACE_MEMBER_INVITE_PERMISSION_KEY } from "@plane/constants";
+import { WORKSPACE_MEMBER_INVITE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { LinkIcon, TrashIcon, ChevronDownIcon } from "@plane/propel/icons";
+import { LinkIcon, TrashIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { IWorkspaceRole } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
-import { CustomSelect, CustomMenu } from "@plane/ui";
+import { CustomMenu } from "@plane/ui";
 import { cn, copyTextToClipboard } from "@plane/utils";
 // components
 import { ConfirmWorkspaceMemberRemove } from "@/components/workspace/confirm-workspace-member-remove";
+import { WorkspaceRoleMultiSelectField } from "@/components/workspace/settings/workspace-role-multi-select-field";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
   invitationId: string;
+  roles: IWorkspaceRole[];
+  isRolesLoading: boolean;
 };
 
 export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitationsListItem(props: Props) {
-  const { invitationId } = props;
+  const { invitationId, roles, isRolesLoading } = props;
   // router
   const { workspaceSlug } = useParams();
   // states
@@ -67,6 +71,23 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
   };
 
   if (!invitationDetails || !currentWorkspaceMemberInfo) return null;
+
+  const selectedRoleIds = invitationDetails.custom_role_ids ?? [];
+  const selectedRoleNames = roles.filter((role) => selectedRoleIds.includes(role.id)).map((role) => role.name);
+
+  const handleUpdateRoles = (roleIds: string[]) => {
+    if (!workspaceSlug) return;
+    updateMemberInvitation(workspaceSlug.toString(), invitationDetails.id, { custom_role_ids: roleIds }).catch(
+      (err: unknown) => {
+        const error = err as { error?: string };
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "更新角色失败",
+          message: error?.error || "更新邀请角色时出现错误，请重试。",
+        });
+      }
+    );
+  };
 
   const handleCopyText = async () => {
     try {
@@ -128,44 +149,19 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
             <p>{t("common.pending")}</p>
           </div>
           {canManageInvitations ? (
-            <CustomSelect
-              customButton={
-                <div className="item-center flex gap-1 rounded-sm px-2 py-0.5">
-                  <span className="flex items-center rounded-sm text-caption-sm-medium">
-                    {ROLE[invitationDetails.role]}
-                  </span>
-                  <span className="grid place-items-center">
-                    <ChevronDownIcon className="h-3 w-3" />
-                  </span>
-                </div>
-              }
-              value={invitationDetails.role}
-              onChange={(value: EUserPermissions) => {
-                if (!workspaceSlug || !value) return;
-
-                updateMemberInvitation(workspaceSlug.toString(), invitationDetails.id, {
-                  role: value,
-                }).catch((err: unknown) => {
-                  const error = err as { error?: string };
-                  setToast({
-                    type: TOAST_TYPE.ERROR,
-                    title: "Error!",
-                    message: error?.error || "An error occurred while updating member role. Please try again.",
-                  });
-                });
-              }}
-              placement="bottom-end"
-            >
-              {Object.keys(ROLE).map((key) => {
-                return (
-                  <CustomSelect.Option key={key} value={parseInt(key, 10)}>
-                    <>{ROLE[parseInt(key) as keyof typeof ROLE]}</>
-                  </CustomSelect.Option>
-                );
-              })}
-            </CustomSelect>
+            <WorkspaceRoleMultiSelectField
+              roles={roles}
+              isLoading={isRolesLoading}
+              value={selectedRoleIds}
+              onChange={handleUpdateRoles}
+              buttonClassName="rounded-sm px-2 py-0.5 text-caption-sm-medium"
+              containerClassName="w-auto"
+              optionsContainerClassName="w-60"
+            />
           ) : (
-            <span className="px-2 py-0.5 text-caption-sm-medium">{ROLE[invitationDetails.role]}</span>
+            <span className="px-2 py-0.5 text-caption-sm-medium">
+              {selectedRoleNames.length > 0 ? selectedRoleNames.join("、") : "—"}
+            </span>
           )}
           {canManageInvitations && (
             <CustomMenu ellipsis placement="bottom-end" closeOnSelect>
