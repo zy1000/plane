@@ -1,15 +1,20 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementModule } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
+import { cn } from "@plane/utils";
 import type { TRequirementModulesStore } from "@/hooks/store/use-requirement-modules";
 import { RequirementModuleTree } from "./module-tree";
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 300;
+const COLLAPSED_WIDTH = 44;
+const COLLAPSE_STORAGE_KEY = "requirement_module_sidebar_collapsed";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === "object") {
@@ -51,11 +56,16 @@ type TProps = {
 
 /**
  * 库页 / 产品页左侧的可编辑模块树侧栏：建 / 重命名 / 删模块 + 点击过滤。
- * 宽度可拖拽（200–300px，与 QA 用例页一致）。
+ * 宽度可拖拽（200–300px，与 QA 用例页一致）；顶栏 chevron 折叠，偏好记在本地。
  */
 export const RequirementModuleSidebar = (props: TProps) => {
   const { store, selectedModuleId, onSelect, readonly = false } = props;
   const { t } = useTranslation();
+  const { storedValue: collapsedStored, setValue: setCollapsed } = useLocalStorage(
+    COLLAPSE_STORAGE_KEY,
+    false
+  );
+  const isCollapsed = collapsedStored === true;
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [width, setWidth] = useState(240);
@@ -130,26 +140,57 @@ export const RequirementModuleSidebar = (props: TProps) => {
 
   return (
     <aside
-      className="relative flex shrink-0 flex-col border-r border-subtle"
-      style={{ width, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH }}
+      className="relative flex shrink-0 flex-col border-r border-subtle bg-surface-1 transition-[width] duration-300 ease-in-out"
+      style={
+        isCollapsed
+          ? { width: COLLAPSED_WIDTH }
+          : { width, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH }
+      }
     >
-      <div
-        onMouseDown={onMouseDownResize}
-        className="absolute top-0 right-0 z-10 h-full w-1.5"
-        style={{ cursor: "col-resize" }}
-      />
-      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-2 pt-3 pb-3">
-        <RequirementModuleTree
-          modules={store.modules}
-          total={store.total}
-          selectedModuleId={selectedModuleId}
-          onSelect={onSelect}
-          readonly={readonly}
-          onCreate={handleCreate}
-          onRename={handleRename}
-          onDelete={setDeleteTarget}
-        />
+      <div className="flex h-9 min-h-9 flex-shrink-0 items-center border-b border-subtle px-1.5">
+        {!isCollapsed && (
+          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium tracking-wider text-tertiary">
+            {t("requirement_modules.sidebar_label")}
+          </span>
+        )}
+        <button
+          type="button"
+          className={cn(
+            "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-tertiary outline-none transition-colors duration-150 hover:bg-layer-transparent-hover hover:text-primary",
+            isCollapsed && "mx-auto"
+          )}
+          aria-expanded={!isCollapsed}
+          aria-label={isCollapsed ? "展开模块侧栏" : "收起模块侧栏"}
+          onClick={() => setCollapsed(!isCollapsed)}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="size-4" strokeWidth={2} />
+          ) : (
+            <ChevronLeft className="size-4" strokeWidth={2} />
+          )}
+        </button>
       </div>
+      {!isCollapsed && (
+        <>
+          <div
+            onMouseDown={onMouseDownResize}
+            className="absolute top-9 right-0 z-10 bottom-0 w-1.5"
+            style={{ cursor: "col-resize" }}
+          />
+          <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-2 pt-3 pb-3">
+            <RequirementModuleTree
+              modules={store.modules}
+              total={store.total}
+              selectedModuleId={selectedModuleId}
+              onSelect={onSelect}
+              readonly={readonly}
+              onCreate={handleCreate}
+              onRename={handleRename}
+              onDelete={setDeleteTarget}
+            />
+          </div>
+        </>
+      )}
       <AlertModalCore
         isOpen={deleteTarget !== null}
         handleClose={() => setDeleteTarget(null)}

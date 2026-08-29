@@ -1876,7 +1876,7 @@ export default {
     title: "Template management",
     navigation: {
       requirement_types: "Requirement types",
-      libraries: "Standard libraries",
+      libraries: "Standard requirement library",
       test_cases: "Test cases",
     },
     test_cases: {

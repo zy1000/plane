@@ -468,8 +468,8 @@ export const RequirementGrid = observer(
     const showActionGutter = !readOnly;
 
     /**
-     * 列宽与列序：编号在最左并左固定，勾选框折进它；模块、标题依次左固定，标题
-     * 吃掉容器剩余宽度，行操作折进标题列；来源编号与审批是结构列紧随其后。
+     * 列宽与列序：编号在最左并左固定，勾选框折进它；产品页再插模块列，标题接着
+     * 左固定并吃掉剩余宽度，行操作折进标题列；来源编号与审批是结构列紧随其后。
      * 之后是**统一列流**：内置属性列与自定义字段列按类型布局的 sort_order 交叉排列
      * （描述不再特殊置顶 —— 它跟着布局走，缺省布局下仍紧跟审批列）。
      */
@@ -483,12 +483,14 @@ export const RequirementGrid = observer(
 
     /** 产品需求才有来源标准库编号；标准库条目本身只有自己的编号 */
     const showSourceColumn = entityKind === "product";
+    /** 标准库左侧已有模块树，网格不再重复一列；产品类型视图仍展示 */
+    const showModuleColumn = entityKind === "product";
 
     const showSelectColumn = !readOnly;
     const defaultNonTitleColumnsWidth = useMemo(
       () =>
         DISPLAY_ID_COLUMN_WIDTH + // 编号（含行按钮组）
-        REQUIREMENT_GRID_COLUMN_WIDTH + // 模块（紧跟编号，同为左固定）
+        (showModuleColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         (showApprovalColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         builtinEntries.reduce((sum, entry) => sum + getRequirementColumnWidth(entry.key), 0) +
@@ -504,6 +506,7 @@ export const RequirementGrid = observer(
         builtinEntries,
         showActionGutter,
         showApprovalColumn,
+        showModuleColumn,
         showSourceColumn,
         visibleRootFields,
       ]
@@ -513,8 +516,8 @@ export const RequirementGrid = observer(
       const snapshot: Record<string, number> = {
         title: defaultTitleColumnWidth,
         display_id: DISPLAY_ID_COLUMN_WIDTH,
-        module_name: REQUIREMENT_GRID_COLUMN_WIDTH,
       };
+      if (showModuleColumn) snapshot.module_name = REQUIREMENT_GRID_COLUMN_WIDTH;
       if (showSourceColumn) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
       if (showApprovalColumn) snapshot.approval = REQUIREMENT_GRID_COLUMN_WIDTH;
       builtinEntries.forEach((entry) => {
@@ -530,12 +533,19 @@ export const RequirementGrid = observer(
         });
       });
       return snapshot;
-    }, [builtinEntries, defaultTitleColumnWidth, showApprovalColumn, showSourceColumn, visibleRootFields]);
+    }, [
+      builtinEntries,
+      defaultTitleColumnWidth,
+      showApprovalColumn,
+      showModuleColumn,
+      showSourceColumn,
+      visibleRootFields,
+    ]);
     const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
     const displayIdWidth = getWidth("display_id", DISPLAY_ID_COLUMN_WIDTH);
-    const moduleColumnWidth = getWidth("module_name", REQUIREMENT_GRID_COLUMN_WIDTH);
+    const moduleColumnWidth = showModuleColumn ? getWidth("module_name", REQUIREMENT_GRID_COLUMN_WIDTH) : 0;
     const displayIdStickyLeft = 0;
-    // 模块列插在编号与标题之间，三列同属左固定簇，offset 逐列累加
+    // 有模块列时插在编号与标题之间，左固定簇 offset 逐列累加
     const moduleStickyLeft = displayIdWidth;
     const titleStickyLeft = displayIdWidth + moduleColumnWidth;
     const gutterWidth = visibleRootFields.reduce((sum, field) => {
@@ -554,7 +564,7 @@ export const RequirementGrid = observer(
     const totalColumnCount = useMemo(
       () =>
         1 + // 编号列
-        1 + // 模块列
+        (showModuleColumn ? 1 : 0) +
         1 + // 标题列（左固定，行操作折在里面）
         (showSourceColumn ? 1 : 0) + // 标准库编号
         (showApprovalColumn ? 1 : 0) + // 审批态
@@ -568,6 +578,7 @@ export const RequirementGrid = observer(
         builtinEntries.length,
         showActionGutter,
         showApprovalColumn,
+        showModuleColumn,
         showSourceColumn,
         visibleRootFields,
       ]
@@ -877,8 +888,8 @@ export const RequirementGrid = observer(
                     )}
                   </td>
                 )}
-                {/* 模块列：紧跟编号，只读展示（挂靠走左侧树 / 批量移动，不在网格里改） */}
-                {isFirstRow && (
+                {/* 模块列：产品页紧跟编号，只读展示（挂靠走左侧树 / 批量移动） */}
+                {showModuleColumn && isFirstRow && (
                   <td
                     rowSpan={totalRows}
                     className={cn(
@@ -1380,7 +1391,7 @@ export const RequirementGrid = observer(
             <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
               <colgroup>
                 <col style={{ width: displayIdWidth }} />
-                <col style={{ width: moduleColumnWidth }} />
+                {showModuleColumn && <col style={{ width: moduleColumnWidth }} />}
                 <col style={{ width: titleColumnWidth }} />
                 {showSourceColumn && (
                   <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
@@ -1472,26 +1483,34 @@ export const RequirementGrid = observer(
                       </>
                     ),
                   },
-                  {
-                    key: "module-name",
-                    className: cn(
-                      "group/header relative",
-                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
-                      REQUIREMENT_GRID_STICKY_HEADER_CLASS
-                    ),
-                    style: {
-                      width: moduleColumnWidth,
-                      minWidth: moduleColumnWidth,
-                      maxWidth: moduleColumnWidth,
-                      left: moduleStickyLeft,
-                    },
-                    onResize: (event) => startResize("module_name", columnSnapshot, event),
-                    content: (
-                      <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
-                        <RequirementGridHeaderLabel icon={FolderOpenDot} label={t("requirement_modules.column")} />
-                      </div>
-                    ),
-                  },
+                  ...(showModuleColumn
+                    ? [
+                        {
+                          key: "module-name",
+                          className: cn(
+                            "group/header relative",
+                            REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                            REQUIREMENT_GRID_STICKY_HEADER_CLASS
+                          ),
+                          style: {
+                            width: moduleColumnWidth,
+                            minWidth: moduleColumnWidth,
+                            maxWidth: moduleColumnWidth,
+                            left: moduleStickyLeft,
+                          },
+                          onResize: (event: ReactMouseEvent<HTMLDivElement>) =>
+                            startResize("module_name", columnSnapshot, event),
+                          content: (
+                            <div className="flex h-full w-full min-w-0 items-center gap-1.5 px-page-x">
+                              <RequirementGridHeaderLabel
+                                icon={FolderOpenDot}
+                                label={t("requirement_modules.column")}
+                              />
+                            </div>
+                          ),
+                        },
+                      ]
+                    : []),
                   {
                     key: "title",
                     className: cn(

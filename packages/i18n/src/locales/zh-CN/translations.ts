@@ -2052,7 +2052,7 @@ export default {
     title: "模板管理",
     navigation: {
       requirement_types: "需求类型",
-      libraries: "标准库",
+      libraries: "标准需求库",
       test_cases: "测试用例",
     },
     test_cases: {
