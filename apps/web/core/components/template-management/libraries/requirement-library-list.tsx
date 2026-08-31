@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { AlertCircle, ChevronLeft, ChevronRight, Library, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Library, Pencil, Trash2 } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -24,7 +24,7 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const SKELETON_COLUMNS = ["select", "name", "requirement_type", "description", "fields", "requirements", "updated", "actions"];
 const SKELETON_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5", "row-6"];
 const GRID_TEMPLATE =
-  "grid-cols-[44px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(180px,1.3fr)_80px_96px_144px_56px]";
+  "grid-cols-[44px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(180px,1.3fr)_80px_96px_144px_80px]";
 
 export const RequirementLibraryList = observer(function RequirementLibraryList() {
   const { t } = useTranslation();
@@ -38,6 +38,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
     fetchLibraries,
     deleteLibraries,
     setIsCreateModalOpen,
+    setLibraryToEdit,
   } = useRequirementLibrariesContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -322,7 +323,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                     <th className="w-20 px-3 py-2.5">{t("requirement_libraries.fields.field_count")}</th>
                     <th className="w-24 px-3 py-2.5">{t("requirement_libraries.fields.item_count")}</th>
                     <th className="w-36 px-3 py-2.5">{t("requirement_libraries.list.updated_at")}</th>
-                    <th className="w-14 px-3 py-2.5">{t("requirement_libraries.fields.actions")}</th>
+                    <th className="w-20 px-3 py-2.5">{t("requirement_libraries.fields.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -374,20 +375,29 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                         <td className="px-3 py-2.5 text-11 whitespace-nowrap text-secondary">
                           {renderFormattedDateTime(library.updated_at)}
                         </td>
-                        <td
-                          className="px-3 py-2.5 text-center align-middle"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <Tooltip tooltipContent={t("delete")}>
-                            <button
-                              type="button"
-                              onClick={() => setLibrariesToDelete([library])}
-                              className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary"
-                              aria-label={t("requirement_libraries.list.delete_library", { name: library.name })}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </Tooltip>
+                        <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-0.5">
+                            <Tooltip tooltipContent={t("edit")}>
+                              <button
+                                type="button"
+                                onClick={() => setLibraryToEdit(library)}
+                                className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+                                aria-label={t("requirement_libraries.list.edit_library", { name: library.name })}
+                              >
+                                <Pencil className="size-3.5" />
+                              </button>
+                            </Tooltip>
+                            <Tooltip tooltipContent={t("delete")}>
+                              <button
+                                type="button"
+                                onClick={() => setLibrariesToDelete([library])}
+                                className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary"
+                                aria-label={t("requirement_libraries.list.delete_library", { name: library.name })}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </Tooltip>
+                          </div>
                         </td>
                       </tr>
                     );

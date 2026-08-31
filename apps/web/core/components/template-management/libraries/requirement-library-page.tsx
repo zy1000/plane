@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { AlertCircle, Info, Library } from "lucide-react";
+import { AlertCircle, Info, Library, Pencil } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { IconButton } from "@plane/propel/icon-button";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRequirementBatchSavePayload, TRequirementTypeSchema } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
@@ -33,13 +34,14 @@ import { useRequirementLibrariesContext } from "./context";
 export const RequirementLibraryPage = observer(function RequirementLibraryPage() {
   const { t } = useTranslation();
   const { libraryId } = useParams();
-  const { workspaceSlug, libraries } = useRequirementLibrariesContext();
+  const { workspaceSlug, libraries, setLibraryToEdit } = useRequirementLibrariesContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const store = useLibraryItems({ workspaceSlug, libraryId });
 
-  // 列表缓存能让刷新前的首屏不闪空标题，接口回来后以 store 为准
-  const library = store.library ?? libraries.find((item) => item.id === libraryId) ?? null;
+  // 编辑弹窗改完写回的是 context 里的列表缓存，所以以它为准；直接刷新详情页时
+  // 列表可能还没回来，先拿 configuration 里的兜底，两边是同一个序列化器的输出
+  const library = libraries.find((item) => item.id === libraryId) ?? store.library ?? null;
   const pageTitle = library?.name ?? t("requirement_libraries.title");
 
   const moduleStore = useRequirementModules(workspaceSlug, libraryId ? { kind: "library", libraryId } : undefined);
@@ -162,6 +164,17 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               <div className="flex min-w-0 items-center gap-2">
                 {/* 网格自己的工具栏（搜索 / 筛选 / 显示 / 新增）portal 进这里 */}
                 <div ref={setDataToolbarHost} className="flex min-w-0 items-center gap-2" />
+                {library && (
+                  <Tooltip tooltipContent={t("requirement_libraries.edit_action")} position="bottom">
+                    <IconButton
+                      variant="ghost"
+                      size="lg"
+                      icon={Pencil}
+                      onClick={() => setLibraryToEdit(library)}
+                      aria-label={t("requirement_libraries.edit_action")}
+                    />
+                  </Tooltip>
+                )}
                 <RequirementExcelMenu
                   workspaceSlug={workspaceSlug}
                   scope="library"

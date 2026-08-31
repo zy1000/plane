@@ -1995,6 +1995,8 @@ export default {
     create: "创建",
     create_action: "创建标准库",
     creating: "创建中…",
+    edit_action: "编辑标准库",
+    saving: "保存中…",
     create_description: "基于一个需求类型，沉淀一批结构一致的需求条目",
     fields: {
       name: "标准库名称",
@@ -2043,6 +2045,7 @@ export default {
       delete_many_title: "批量删除需求标准库？",
       delete_many_description: "确定要删除这 {count} 个需求标准库吗？此操作无法撤销。",
       delete_success: "已删除 {count} 个需求标准库。",
+      edit_library: "编辑{name}",
       delete_library: "删除{name}",
       delete_cascade_notice: "库内的 {count} 条条目将一并删除。",
       delete_title: "删除需求标准库？",
@@ -2062,6 +2065,7 @@ export default {
     },
     toast: {
       created: "需求标准库已创建。",
+      updated: "需求标准库已更新。",
       deleted: "需求标准库已删除。",
       failed: "操作失败，请稍后重试。",
     },

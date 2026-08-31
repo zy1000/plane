@@ -1817,6 +1817,8 @@ export default {
     create: "Create",
     create_action: "Create library",
     creating: "Creating…",
+    edit_action: "Edit library",
+    saving: "Saving…",
     create_description: "Collect a set of consistently structured items on one requirement type",
     fields: {
       name: "Library name",
@@ -1866,6 +1868,7 @@ export default {
       delete_many_title: "Delete these libraries?",
       delete_many_description: "Delete {count} requirement libraries? This cannot be undone.",
       delete_success: "Deleted {count} requirement libraries.",
+      edit_library: "Edit {name}",
       delete_library: "Delete {name}",
       delete_cascade_notice: "The {count} items in it will be deleted as well.",
       delete_title: "Delete standard library?",
@@ -1885,6 +1888,7 @@ export default {
     },
     toast: {
       created: "Standard library created.",
+      updated: "Standard library updated.",
       deleted: "Standard library deleted.",
       failed: "Something went wrong. Try again.",
     },
