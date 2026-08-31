@@ -430,9 +430,11 @@ class TestProjectAPIGet(TestProjectBase):
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        # Guest should only see projects they're members of
-        assert len(data) == 1
-        assert data[0]["name"] == "Project 1"
+        # 列表对工作区全员可见（含非成员项目），非成员项目的 member_role 为 null
+        assert len(data) == 2
+        roles_by_name = {row["name"]: row["member_role"] for row in data}
+        assert roles_by_name["Project 1"] == 10
+        assert roles_by_name["Project 2"] is None
 
     @pytest.mark.django_db
     def test_list_projects_unauthenticated(self, client, workspace):

@@ -17,6 +17,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { Logo } from "@plane/propel/emoji-icon-picker";
+import { LockIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Avatar, ContentWrapper, ERowVariant } from "@plane/ui";
@@ -371,6 +372,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
               <tbody>
                 {currentPageProjects.map((project) => {
                   const isArchived = !!project.archived_at;
+                  const isPrivateProject = project.network === 0;
+                  // 私有项目非成员：可见但不能进入 / 加入
+                  const isInviteOnly = isPrivateProject && !project.member_role;
                   const canManageProject = allowPermissions(
                     [EUserPermissions.ADMIN],
                     EUserPermissionsLevel.PROJECT,
@@ -408,11 +412,17 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     <Link
                       href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
                       className="flex items-center gap-2 text-primary"
-                      data-prevent-progress={isArchived}
+                      data-prevent-progress={isArchived || isInviteOnly}
                       onClick={(e) => {
-                        if (isArchived) {
+                        if (isArchived || isInviteOnly) {
                           e.preventDefault();
                           e.stopPropagation();
+                        }
+                        if (isInviteOnly) {
+                          setToast({
+                            type: TOAST_TYPE.INFO,
+                            title: t("workspace_projects.network.private.description"),
+                          });
                         }
                       }}
                     >
@@ -422,6 +432,13 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         </div>
                         <div className="flex min-w-0 flex-grow items-center gap-2">
                           <p className="min-w-0 truncate text-sm font-medium text-primary">{project.name}</p>
+                          {isPrivateProject && (
+                            <Tooltip tooltipContent={t("workspace_projects.network.private.title")} position="top">
+                              <span className="grid flex-shrink-0 place-items-center">
+                                <LockIcon className="h-3 w-3 text-placeholder" />
+                              </span>
+                            </Tooltip>
+                          )}
                         </div>
                       </div>
                     </Link>

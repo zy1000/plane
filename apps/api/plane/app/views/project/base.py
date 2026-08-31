@@ -417,24 +417,9 @@ class ProjectViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
     def list_detail(self, request, slug):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
+        # 项目列表对工作区全员可见（含私有项目，非成员的 member_role 为 null）；
+        # 私有项目能否加入由 invite.py 的加入接口控制。
         projects = self.get_queryset().order_by("sort_order", "name")
-        # 用子查询替代跨多值关联的 OR：原写法会把 project_projectmember 提升为
-        # LEFT JOIN，公开项目的每个成员行都会产生一条重复行，且所有注解子查询在
-        # 去重前逐行求值；随后的 DISTINCT 还要在含 JSON 大字段的宽行上做去重排序。
-        # 改成子查询后既无行放大也不再需要 DISTINCT，返回的行集完全一致。
-        #
-        # 必须用 all_objects：Django 跨关联过滤走的是裸 SQL JOIN，不会应用关联模型
-        # 的默认管理器，因此原写法能匹配到软删除的 ProjectMember 行。改用默认的
-        # objects（SoftDeletionManager）会收紧可见性，属于行为变更。
-        projects = projects.filter(
-            Q(
-                id__in=ProjectMember.all_objects.filter(
-                    member=self.request.user,
-                    is_active=True,
-                ).values("project_id")
-            )
-            | Q(network=ProjectNetwork.PUBLIC.value)
-        )
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -518,13 +503,7 @@ class ProjectViewSet(BaseViewSet):
             "updated_by",
         )
 
-        projects = projects.filter(
-            Q(
-                project_projectmember__member=self.request.user,
-                project_projectmember__is_active=True,
-            )
-            | Q(network=ProjectNetwork.PUBLIC.value)
-        ).distinct()
+        # 同 list_detail：不按成员 / network 收窄，工作区全员可见
         project_rows = list(projects)
         stats_by_project = self._get_project_list_stats(
             [row["id"] for row in project_rows]

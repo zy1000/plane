@@ -12,6 +12,7 @@ import { ArchiveRestoreIcon, Settings, UserPlus } from "lucide-react";
 // plane imports
 import { EUserPermissions, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { LinkIcon, LockIcon, NewTabIcon, TrashIcon, CheckIcon } from "@plane/propel/icons";
@@ -55,6 +56,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const { getUserDetails } = useMember();
   const { addProjectToFavorites, removeProjectFromFavorites } = useProject();
   // hooks
+  const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
   // derived values
   const projectMembersIds = project.members;
@@ -62,6 +64,8 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const isMemberOfProject = !!project.member_role;
   const hasAdminRole = project.member_role === EUserPermissions.ADMIN;
   const hasMemberRole = project.member_role === EUserPermissions.MEMBER;
+  // 私有项目非成员：可见但不能自助加入
+  const isInviteOnly = project.network === 0 && !isMemberOfProject;
   // archive
   const isArchived = !!project.archived_at;
   const workspaceSlugString = workspaceSlug?.toString();
@@ -139,14 +143,14 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       action: () => setJoinProjectModal(true),
       title: "Join",
       icon: UserPlus,
-      shouldRender: !isMemberOfProject && !isArchived,
+      shouldRender: !isMemberOfProject && !isArchived && !isInviteOnly,
     },
     {
       key: "open-new-tab",
       action: handleOpenInNewTab,
       title: "Open in new tab",
       icon: NewTabIcon,
-      shouldRender: !isMemberOfProject && !isArchived,
+      shouldRender: !isMemberOfProject && !isArchived && !isInviteOnly,
     },
     {
       key: "copy-link",
@@ -205,7 +209,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
           if (!isMemberOfProject || isArchived) {
             e.preventDefault();
             e.stopPropagation();
-            if (!isArchived) setJoinProjectModal(true);
+            if (!isArchived && !isInviteOnly) setJoinProjectModal(true);
           }
         }}
         data-prevent-progress={!isMemberOfProject || isArchived}
@@ -353,7 +357,13 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       Joined
                     </span>
                   ))}
-                {!isMemberOfProject && (
+                {isInviteOnly && (
+                  <span className="flex items-center gap-1 text-13 text-placeholder">
+                    <LockIcon className="h-3.5 w-3.5" />
+                    {t("workspace_projects.network.private.description")}
+                  </span>
+                )}
+                {!isMemberOfProject && !isInviteOnly && (
                   <div className="flex items-center">
                     <Button
                       variant="link"
