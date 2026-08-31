@@ -257,7 +257,7 @@ export const RequirementSubformSection = (props: TProps) => {
                   <thead>
                     <tr className="border-b border-subtle">
                       {/* 序号列与行尾操作列都定宽：让表格自动分配它们会长出一条像没画完的空列 */}
-                      <th className="w-11 px-3 py-2 text-center text-caption-sm-medium text-tertiary">
+                      <th className="w-14 whitespace-nowrap px-3 py-2 text-center text-caption-sm-medium text-tertiary">
                         {t("requirement_detail.subform.row_number")}
                       </th>
                       {columns.map((child) => (
