@@ -141,9 +141,6 @@ export const ProductsRoot = observer(function ProductsRoot() {
                       {t("workspace_products.fields.status")}
                     </th>
                     <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
-                      {t("workspace_products.fields.project_lead")}
-                    </th>
-                    <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
                       {t("workspace_products.fields.owner")}
                     </th>
                     <th className="hidden w-24 px-4 py-3 text-left font-medium text-secondary xl:table-cell">
@@ -190,9 +187,6 @@ export const ProductsRoot = observer(function ProductsRoot() {
                         </td>
                         <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
                           <span className="block truncate">{product.status_detail?.label ?? "-"}</span>
-                        </td>
-                        <td className="hidden px-4 py-3 lg:table-cell">
-                          <ProductUserCell user={product.project_lead_detail} />
                         </td>
                         <td className="hidden px-4 py-3 lg:table-cell">
                           <ProductUserCell user={product.owner_detail} />
