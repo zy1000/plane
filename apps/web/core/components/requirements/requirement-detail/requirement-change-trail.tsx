@@ -168,8 +168,8 @@ type TProps = {
   /** 点轨迹里的版本徽章时，把下面的版本历史滚到那一版并展开 */
   onFocusVersion?: (version: number) => void;
   /**
-   * collapsible：自带折叠标题（整页用，默认收起）。
-   * plain：只出时间线，标题由外层的「历史」页签代替（抽屉用）。
+   * collapsible：自带折叠标题，默认收起。
+   * plain：只出时间线，标题由外层的「历史」页签代替。
    */
   variant?: "collapsible" | "plain";
 };

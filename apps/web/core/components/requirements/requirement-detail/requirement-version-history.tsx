@@ -60,8 +60,8 @@ export const RequirementVersionHistory = ({
   focusRequest?: { version: number; token: number } | null;
   onRolledBack?: () => void;
   /**
-   * collapsible：自带折叠标题 + 右侧「当前 vN」（整页用，默认收起、展开才拉数据）。
-   * plain：只出时间线，挂载即拉数据；标题由外层「历史」页签代替，「当前」标在版本行上（抽屉用）。
+   * collapsible：自带折叠标题 + 右侧「当前 vN」（默认收起、展开才拉数据）。
+   * plain：只出时间线，挂载即拉数据；标题由外层「历史」页签代替，「当前」标在版本行上。
    */
   variant?: "collapsible" | "plain";
 }) => {

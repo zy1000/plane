@@ -39,7 +39,6 @@ import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/ap
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
-import { RequirementChangeTrail } from "./requirement-change-trail";
 import { DetailSectionHeader } from "./requirement-detail-section";
 import { RequirementFieldsSection } from "./requirement-fields-section";
 import { RequirementHistorySection } from "./requirement-history-section";
@@ -48,7 +47,6 @@ import { RequirementModifiedBanner } from "./requirement-modified-banner";
 import { RequirementProjectsSelect } from "./requirement-projects-select";
 import { RequirementPropertyBar } from "./requirement-property-bar";
 import { RequirementSubformSection } from "./requirement-subform-section";
-import { RequirementVersionHistory } from "./requirement-version-history";
 
 /**
  * 标题与描述在主区自成一段，其余六个内置列走属性区（抽屉的属性条 / 整页的右栏）。
@@ -427,12 +425,6 @@ export const RequirementDetailContent = (props: TProps) => {
   // 文本类先落本地、失焦再提交：每敲一个字打一次 PATCH 既慢又会把 version 打乱。
   // 描述与富文本字段把这套约定收进了 RequirementRichTextEditor 内部。
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
-  // 轨迹里点版本徽章 -> 让下面的版本历史展开并滚过去。token 保证同一版重复点也能再触发一次
-  const [versionFocus, setVersionFocus] = useState<{ version: number; token: number } | null>(null);
-  const focusVersion = useCallback(
-    (version: number) => setVersionFocus((prev) => ({ version, token: (prev?.token ?? 0) + 1 })),
-    []
-  );
 
   const isLibrary = Boolean(libraryId) && !productId;
   const scopeEntityId = productId ?? libraryId ?? "";
@@ -723,10 +715,9 @@ export const RequirementDetailContent = (props: TProps) => {
 
       {/*
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。
-        这一整块讲的是「过去」，与上面的「现在」之间给一条分隔线，其余区块之间只用留白。
+        整页和抽屉同一套：一个区块两个页签，默认停在轨迹。
       */}
-      {showHistory && !isLibrary && productId && isDrawer && (
-        // 抽屉：一个区块两个页签，轨迹默认展开；「当前 vN」标在版本行上
+      {showHistory && !isLibrary && productId && (
         <RequirementHistorySection
           workspaceSlug={workspaceSlug}
           productId={productId}
@@ -737,30 +728,6 @@ export const RequirementDetailContent = (props: TProps) => {
           canRollback={!readOnly}
           onRolledBack={onRolledBack}
         />
-      )}
-
-      {showHistory && !isLibrary && productId && !isDrawer && (
-        <div
-          className={cn(
-            "border-t border-subtle pt-6",
-            // 整页左右分栏：轨迹讲「谁改的」、版本讲「哪版通过的」，并排才好对照
-            "grid grid-cols-1 gap-x-10 gap-y-6 xl:grid-cols-2 xl:items-start"
-          )}
-        >
-          {/* 轨迹与版本历史各自带折叠标题，不再外包一层 Section，免得标题叠两层 */}
-          <RequirementChangeTrail entries={trail} requirementType={requirementType} onFocusVersion={focusVersion} />
-
-          <RequirementVersionHistory
-            workspaceSlug={workspaceSlug}
-            productId={productId}
-            requirementId={requirement.id}
-            requirementType={requirementType}
-            approvedVersion={requirement.approved_version}
-            canRollback={!readOnly}
-            focusRequest={versionFocus}
-            onRolledBack={onRolledBack}
-          />
-        </div>
       )}
     </div>
   );
@@ -828,12 +795,6 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
   return (
     <div className="flex flex-col gap-5">
       <RailGroup label={t("requirement_detail.properties")}>
-        <p className="-mt-1 text-caption-sm-regular text-placeholder">
-          {t("requirement_detail.delivery_status_hint", {
-            status: t(`requirement_fields.statuses.${requirement.status}`),
-            approval: t(`requirement_approval.state.${requirement.approval_state}`),
-          })}
-        </p>
         <PropertyGrid
           requirement={requirement}
           readOnly={readOnly}

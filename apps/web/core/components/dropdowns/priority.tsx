@@ -103,9 +103,11 @@ function BorderButton(props: ButtonProps) {
         {!hideIcon &&
           (priority ? (
             <div
-              className={cn({
+              className={cn("inline-flex shrink-0 self-center items-center justify-center", {
                 // highlight just the icon if text is visible and priority is urgent
                 "rounded-sm border border-priority-urgent p-0.5": priority === "urgent" && !hideText && highlightUrgent,
+                "[&_svg]:size-3.5": hideText,
+                "[&_svg]:size-3": !hideText,
               })}
             >
               <PriorityIcon
@@ -127,7 +129,7 @@ function BorderButton(props: ButtonProps) {
           ))}
         {!hideText && (
           <span
-            className={cn("flex-grow truncate text-body-xs-medium", {
+            className={cn("min-w-0 flex-grow truncate text-left text-body-xs-medium", {
               "text-secondary": priority && priority !== "none",
               "text-placeholder": !priority || priority === "none",
             })}
@@ -194,9 +196,11 @@ function BackgroundButton(props: ButtonProps) {
         {!hideIcon &&
           (priority ? (
             <div
-              className={cn({
+              className={cn("inline-flex shrink-0 self-center items-center justify-center", {
                 // highlight just the icon if text is visible and priority is urgent
                 "rounded-sm border border-priority-urgent p-0.5": priority === "urgent" && !hideText && highlightUrgent,
+                "[&_svg]:size-3.5": hideText,
+                "[&_svg]:size-3": !hideText,
               })}
             >
               <PriorityIcon
@@ -218,7 +222,7 @@ function BackgroundButton(props: ButtonProps) {
           ))}
         {!hideText && (
           <span
-            className={cn("flex-grow truncate text-body-xs-medium", {
+            className={cn("min-w-0 flex-grow truncate text-left text-body-xs-medium", {
               "text-secondary": priority && priority !== "none",
               "text-placeholder": !priority || priority === "none",
             })}
@@ -278,9 +282,11 @@ function TransparentButton(props: ButtonProps) {
         {!hideIcon &&
           (priority ? (
             <div
-              className={cn({
+              className={cn("inline-flex shrink-0 self-center items-center justify-center", {
                 // highlight just the icon if text is visible and priority is urgent
                 "rounded-sm border border-priority-urgent p-0.5": priority === "urgent" && !hideText && highlightUrgent,
+                "[&_svg]:size-3.5": hideText,
+                "[&_svg]:size-3": !hideText,
               })}
             >
               <PriorityIcon
@@ -302,7 +308,7 @@ function TransparentButton(props: ButtonProps) {
           ))}
         {!hideText && (
           <span
-            className={cn("flex-grow truncate text-body-xs-medium", {
+            className={cn("min-w-0 flex-grow truncate text-left text-body-xs-medium", {
               "text-secondary": priority && priority !== "none",
               "text-placeholder": !priority || priority === "none",
             })}
@@ -404,7 +410,7 @@ export function PriorityDropdown(props: Props) {
         <button
           ref={setReferenceElement}
           type="button"
-          className={cn("clickable block h-full w-full outline-none", buttonContainerClassName)}
+          className={cn("clickable block h-full w-full text-left outline-none", buttonContainerClassName)}
           onClick={handleOnClick}
           disabled={disabled}
           tabIndex={tabIndex}
@@ -416,7 +422,7 @@ export function PriorityDropdown(props: Props) {
           ref={setReferenceElement}
           type="button"
           className={cn(
-            "clickable block h-full max-w-full outline-none",
+            "clickable block h-full max-w-full text-left outline-none",
             {
               "cursor-not-allowed text-secondary": disabled,
               "cursor-pointer": !disabled,

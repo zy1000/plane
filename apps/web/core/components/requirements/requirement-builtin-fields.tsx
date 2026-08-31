@@ -213,7 +213,8 @@ export const BuiltinCellEditor = ({
     FIELD_DROPDOWN_CLASS[base],
     isChip && "h-7 w-auto rounded-none !border-0 bg-transparent px-2 hover:bg-layer-transparent-hover"
   );
-  const containerClass = isChip ? "min-w-0" : "w-full min-w-0";
+  // 原生 button 默认居中，必须显式 text-left（与 MULTI_SELECT_CLASS / 工作项侧栏一致）
+  const containerClass = isChip ? "min-w-0" : "w-full min-w-0 text-left";
 
   if (columnKey === "title") {
     return deferTextCommit ? (
