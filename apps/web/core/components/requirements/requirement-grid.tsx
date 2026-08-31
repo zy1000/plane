@@ -91,6 +91,7 @@ import {
   REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
+  REQUIREMENT_GRID_TABLE_CLASS,
   RequirementGridHeader,
   RequirementGridHoverSelect,
   RequirementGridHeaderLabel,
@@ -1388,7 +1389,7 @@ export const RequirementGrid = observer(
               </div>
             </div>
           ) : (
-            <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
+            <table className={REQUIREMENT_GRID_TABLE_CLASS} style={{ width: tableWidth }}>
               <colgroup>
                 <col style={{ width: displayIdWidth }} />
                 {showModuleColumn && <col style={{ width: moduleColumnWidth }} />}

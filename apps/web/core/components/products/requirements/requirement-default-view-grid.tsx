@@ -61,6 +61,7 @@ import {
   REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
+  REQUIREMENT_GRID_TABLE_CLASS,
   RequirementGridColumnResizer,
   RequirementGridHoverSelect,
   RequirementGridHeaderLabel,
@@ -560,7 +561,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           —— 既不会短一截露出背景，也不会因为定宽相加超出而把最右边的列（「所属
           类型」正是总览视图的立身之本）挤到屏幕外。放不下时整表横滚，前两列留在原地。
         */}
-        <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
+        <table className={REQUIREMENT_GRID_TABLE_CLASS} style={{ width: tableWidth }}>
           <colgroup>
             {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
             {isModuleVisible && <col style={{ width: moduleWidth }} />}

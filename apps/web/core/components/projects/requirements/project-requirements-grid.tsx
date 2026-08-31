@@ -43,6 +43,7 @@ import {
   REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
+  REQUIREMENT_GRID_TABLE_CLASS,
   RequirementGridColumnResizer,
   RequirementGridHoverSelect,
   RequirementGridHeaderLabel,
@@ -559,7 +560,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             )}
           </div>
         ) : (
-          <table className="table-fixed border-collapse bg-surface-1 text-left text-13" style={{ width: tableWidth }}>
+          <table className={REQUIREMENT_GRID_TABLE_CLASS} style={{ width: tableWidth }}>
             <colgroup>
               {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
               {isModuleVisible && <col style={{ width: moduleWidth }} />}

@@ -1796,8 +1796,8 @@ export default {
     },
   },
   requirement_libraries: {
-    title: "Standard libraries",
-    create: "New library",
+    title: "Standard requirement library",
+    create: "Create",
     create_action: "Create library",
     creating: "Creating…",
     create_description: "Collect a set of consistently structured items on one requirement type",
@@ -1877,11 +1877,11 @@ export default {
     navigation: {
       requirement_types: "Requirement types",
       libraries: "Standard requirement library",
-      test_cases: "Test cases",
+      test_cases: "Test case library",
     },
     test_cases: {
-      title: "Template case repositories",
-      create: "New template repository",
+      title: "Test case library",
+      create: "Create",
       search_placeholder: "Search template repositories",
       error_title: "Failed to load template repositories",
       empty: {

@@ -1973,8 +1973,8 @@ export default {
     },
   },
   requirement_libraries: {
-    title: "需求标准库",
-    create: "新建标准库",
+    title: "标准需求库",
+    create: "创建",
     create_action: "创建标准库",
     creating: "创建中…",
     create_description: "基于一个需求类型，沉淀一批结构一致的需求条目",
@@ -2053,11 +2053,11 @@ export default {
     navigation: {
       requirement_types: "需求类型",
       libraries: "标准需求库",
-      test_cases: "测试用例",
+      test_cases: "测试用例库",
     },
     test_cases: {
-      title: "模板用例库",
-      create: "新建模板库",
+      title: "测试用例库",
+      create: "创建",
       search_placeholder: "搜索模板库",
       error_title: "模板库加载失败",
       empty: {

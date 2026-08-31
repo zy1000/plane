@@ -131,7 +131,7 @@ export function RequirementLibraryCreateModal() {
             <Library className="size-4" />
           </span>
           <div>
-            <h2 className="text-14 font-medium text-primary">{t("requirement_libraries.create")}</h2>
+            <h2 className="text-14 font-medium text-primary">{t("requirement_libraries.create_action")}</h2>
           </div>
         </div>
         <button

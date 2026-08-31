@@ -444,9 +444,6 @@ export const FORM_GUTTER_COLUMN_WIDTH = 56;
  */
 export const FORM_ROW_NUMBER_COLUMN_WIDTH = 48;
 
-/** border-collapse 下最右侧单元格的外边框会多撑出约 1px，自动填充时要预留 */
-const COLLAPSED_BORDER_WIDTH = 1;
-
 export const getRequirementColumnWidth = (columnKey: string) =>
   columnKey === "description_html" ? REQUIREMENT_GRID_DESCRIPTION_COLUMN_WIDTH : REQUIREMENT_GRID_COLUMN_WIDTH;
 
@@ -458,7 +455,7 @@ export const getRequirementColumnWidth = (columnKey: string) =>
  * 把每列压扁。
  */
 export const resolveRequirementTitleColumnWidth = (containerWidth: number, otherColumnsWidth: number) =>
-  Math.max(REQUIREMENT_GRID_TITLE_MIN_WIDTH, Math.floor(containerWidth - otherColumnsWidth - COLLAPSED_BORDER_WIDTH));
+  Math.max(REQUIREMENT_GRID_TITLE_MIN_WIDTH, Math.floor(containerWidth - otherColumnsWidth));
 
 /** 用户拖窄标题列的下限。自动撑开时仍走 REQUIREMENT_GRID_TITLE_MIN_WIDTH */
 export const REQUIREMENT_GRID_RESIZE_TITLE_MIN_WIDTH = 160;
@@ -539,7 +536,8 @@ export const RequirementGridColumnResizer = ({
 );
 
 /**
- * 表头单元格。不画上下边框 —— 底线由 thead 统一给一条，免得和行分隔线叠成双线。
+ * 表头单元格。底线画在格子自己身上，不画在 thead 上 —— 见 REQUIREMENT_GRID_TABLE_CLASS：
+ * 表格走 border-separate，行组（thead / tbody）上的 border 在这个模型下根本不渲染。
  * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
  *
  * 叶子列（单列表头、表单子字段）钉 44px，和正文行高对齐。分组表头另走
@@ -547,7 +545,7 @@ export const RequirementGridColumnResizer = ({
  * 单列 rowSpan=2 会被一起拉高，列名漂在一格空白中间。
  */
 const HEADER_CELL_BASE =
-  "group/header relative h-11 border-r border-strong bg-layer-1 text-left align-middle text-13 font-medium";
+  "group/header relative h-11 border-r border-b border-strong bg-layer-1 text-left align-middle text-13 font-medium";
 export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
 export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
 /** 表单分组名那一行：压成细条，只给「这几列属于哪个表单」当标签。 */
@@ -600,12 +598,23 @@ export const REQUIREMENT_GRID_CELL_PAD_CLASS = "min-w-0 px-page-x";
  * 两档，而 accent-subtle 是 brand-300（浅色主题下 oklch 亮度 0.94，近乎白），1px 画在
  * 聚焦转白的底色上等于没画。降透明度才能同时做到「淡」和「看得见」。
  *
- * 颜色不能写 accent-primary：它只在 background-color / text-color / stroke / fill 四个
- * 命名空间里有定义，没有 --ring-color-accent-primary。写了不报错，但 --tw-ring-color
- * 会落回 currentcolor，描边渲染成近黑色。
+ * 描边用 outline 而不是 ring：横滚时左固定列会写 inline box-shadow 打投影，ring 也是
+ * box-shadow，一滚就被盖掉，蓝框消失。outline 是另一条绘制通道，互不影响。
+ * --outline-color-accent-strong 在 design token 里有定义，可以带透明度。
  */
 export const REQUIREMENT_GRID_CELL_EDITABLE_CLASS =
-  "hover:bg-layer-1 focus-within:bg-surface-1 focus-within:ring-1 focus-within:ring-accent-strong/60 focus-within:ring-inset";
+  "hover:bg-layer-1 focus-within:bg-surface-1 focus-within:outline focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-accent-strong/60";
+
+/**
+ * 表格本体。border-separate + border-spacing-0 是硬要求，不能换回 border-collapse。
+ *
+ * collapse 模型下格线归表格画、不归单元格画：左固定列一横滚就被 sticky 挪到别处，
+ * 格线却留在原处（随即被右边的列盖住），冻结的编号 / 标题列于是一滚就整片没了线。
+ * separate 模型下每个格子画自己的 border-r / border-b，跟着 sticky 一起走。
+ * 每格只画右 + 下两条边、spacing 归零，线宽与 collapse 时一致，不会叠成双线。
+ */
+export const REQUIREMENT_GRID_TABLE_CLASS =
+  "table-fixed border-separate border-spacing-0 bg-surface-1 text-left text-13";
 
 /** 左固定列。z 值要压过普通单元格，否则横滚时被盖住 */
 export const REQUIREMENT_GRID_STICKY_HEADER_CLASS = "left-0 z-[15] md:sticky";
@@ -672,6 +681,11 @@ export const useRequirementGridScrollContainer = () => {
    *
    * 直接改 DOM style 而不是走 state —— 与工作项同理：滚动一像素就重渲染整张表
    * 的代价太大，而这里要改的只是若干个单元格的 box-shadow。
+   *
+   * 只要 4px 模糊、不给 y 偏移也不给扩散：冻结列的竖线本来就在（见
+   * REQUIREMENT_GRID_TABLE_CLASS），边界靠线读，投影只补一点「下面还压着东西」的
+   * 纵深，重了就成了浮在表格上的一层。扩散一旦大于 0，影子会从表头顶上和末行底下
+   * 漏到表格外面糊成一片，也就是工作项那套要拿 ±22px 的 y 偏移去躲的东西。
    */
   useEffect(() => {
     if (!scrollContainer) return;
@@ -682,11 +696,7 @@ export const useRequirementGridScrollContainer = () => {
       isScrolled.current = hasScrolled;
 
       scrollContainer.querySelectorAll<HTMLElement>("[data-requirement-sticky-cell]").forEach((cell) => {
-        cell.style.boxShadow = hasScrolled
-          ? cell.tagName === "TH"
-            ? "8px -22px 22px 10px rgba(0, 0, 0, 0.05)"
-            : "8px 22px 22px 10px rgba(0, 0, 0, 0.05)"
-          : "none";
+        cell.style.boxShadow = hasScrolled ? "4px 0 4px 0 rgba(0, 0, 0, 0.05)" : "none";
       });
     };
 
@@ -827,7 +837,7 @@ export const RequirementGridHeader = ({
     );
 
   return (
-    <thead className="sticky top-0 z-[12] border-b border-strong text-13 font-medium">
+    <thead className="sticky top-0 z-[12] text-13 font-medium">
       <tr>
         {resolvedLeadingHeaders.map((header) => (
           <th
