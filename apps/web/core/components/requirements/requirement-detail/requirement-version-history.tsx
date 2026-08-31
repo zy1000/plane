@@ -12,7 +12,7 @@ import {
   REQUIREMENT_BUILTIN_TITLE_COLUMN,
   resolveBuiltinLayout,
 } from "@/components/requirements/requirement-builtin-layout";
-import { LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { LeafValue, RequirementAttachmentChips } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { diffSnapshotFieldNames } from "./requirement-change-trail";
 import {
@@ -306,6 +306,19 @@ const VersionRow = ({
                   </span>
                 </div>
               ))}
+              {/* 需求级附件：算内容但不是内置列；这一版没有附件就不占一行 */}
+              {(version.snapshot.attachments?.length ?? 0) > 0 && (
+                <div className="contents">
+                  <span className="text-tertiary">{t("requirement_detail.attachments.title")}</span>
+                  <span className="min-w-0">
+                    <RequirementAttachmentChips
+                      assets={version.snapshot.attachments ?? []}
+                      workspaceSlug={workspaceSlug}
+                      className="text-13"
+                    />
+                  </span>
+                </div>
+              )}
               {fields.map((field) => (
                 <div key={field.id} className="contents">
                   <span className="text-tertiary">{field.name}</span>

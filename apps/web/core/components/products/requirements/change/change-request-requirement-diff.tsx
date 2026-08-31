@@ -11,6 +11,7 @@ import { Fragment, useMemo, useState } from "react";
 import { isEqual } from "lodash-es";
 import { useTranslation } from "@plane/i18n";
 import type {
+  TRequirementAssetRef,
   TRequirementBuiltinFieldConfig,
   TRequirementBuiltinKey,
   TRequirementDiffItem,
@@ -27,7 +28,7 @@ import {
   REQUIREMENT_BUILTIN_TITLE_COLUMN,
   type TBuiltinColumnMeta,
 } from "@/components/requirements/requirement-builtin-layout";
-import { getFormRows, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { getFormRows, LeafValue, RequirementAttachmentChips } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
@@ -53,18 +54,26 @@ const EmptyValue = () => {
 const SideValue = ({
   field,
   columnKey,
+  isAttachments,
   value,
   workspaceSlug,
   tone,
 }: {
   field?: TRequirementField;
   columnKey?: TRequirementBuiltinKey;
+  /** 需求级附件行：既不是内置列也不是自定义字段 */
+  isAttachments?: boolean;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
   tone?: "old" | "new";
 }) => {
   const className = tone === "old" ? DIFF_OLD_VALUE : tone === "new" ? DIFF_NEW_VALUE : undefined;
   if (value === undefined || value === null || value === "") return <EmptyValue />;
+  if (isAttachments) {
+    const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
+    if (!assets.length) return <EmptyValue />;
+    return <RequirementAttachmentChips assets={assets} workspaceSlug={workspaceSlug} className={cn("text-13", className)} />;
+  }
   if (columnKey) {
     return (
       <span className={className}>
@@ -84,6 +93,7 @@ type TRow = {
   after: TRequirementValue | undefined;
   field?: TRequirementField;
   columnKey?: TRequirementBuiltinKey;
+  isAttachments?: boolean;
 };
 
 const readValue = (snapshot: TRequirementChangeSnapshot | null, key: string, isBuiltin: boolean) => {
@@ -189,7 +199,16 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
           : []
         : [customRow(descriptor.field)]
     );
-    return [builtinRow(REQUIREMENT_BUILTIN_TITLE_COLUMN), ...merged];
+    // 需求级附件算内容但不是内置列，排在所有标量行之后；key 与后端 changed_field_ids 里的一致
+    const attachmentsRow: TRow = {
+      key: "attachments",
+      label: t("requirement_detail.attachments.title"),
+      changed: !isEqual(before?.attachments ?? [], after?.attachments ?? []),
+      before: before?.attachments ?? [],
+      after: after?.attachments ?? [],
+      isAttachments: true,
+    };
+    return [builtinRow(REQUIREMENT_BUILTIN_TITLE_COLUMN), ...merged, attachmentsRow];
   }, [after, before, builtinLayout, scalarFields, t]);
 
   const changedCount = rows.filter((row) => row.changed).length;
@@ -258,6 +277,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                 <SideValue
                   field={row.field}
                   columnKey={row.columnKey}
+                  isAttachments={row.isAttachments}
                   value={row.after}
                   workspaceSlug={workspaceSlug}
                   tone="new"
@@ -266,6 +286,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                 <SideValue
                   field={row.field}
                   columnKey={row.columnKey}
+                  isAttachments={row.isAttachments}
                   value={row.before}
                   workspaceSlug={workspaceSlug}
                   tone="old"
@@ -275,6 +296,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                   <SideValue
                     field={row.field}
                     columnKey={row.columnKey}
+                    isAttachments={row.isAttachments}
                     value={row.before}
                     workspaceSlug={workspaceSlug}
                     tone={row.changed ? "old" : undefined}
@@ -282,6 +304,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                   <SideValue
                     field={row.field}
                     columnKey={row.columnKey}
+                    isAttachments={row.isAttachments}
                     value={row.after}
                     workspaceSlug={workspaceSlug}
                     tone={row.changed ? "new" : undefined}

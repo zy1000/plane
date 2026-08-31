@@ -68,6 +68,9 @@ export type TRequirementAssetRef = {
   name: string;
   type: string;
   size: number;
+  /** 只有需求级附件（TRequirement.attachments）带这两个键；附件字段的值没有 */
+  created_by?: string | null;
+  created_at?: string | null;
 };
 
 export type TRequirementFormRow = {
@@ -178,6 +181,11 @@ export type TRequirement = TRequirementBuiltinValues & {
   /** 模块名，服务端随行拍平（网格模块列 / 详情抽屉直接用） */
   module_name: string | null;
   data: TRequirementData;
+  /**
+   * 需求级附件，每条需求天然自带。算内容（进版本快照 / 变更单 diff、评审中只读），
+   * 但不在 TRequirementBuiltinValues 里 —— 写入走更新载荷顶层的 attachments。
+   */
+  attachments: TRequirementAssetRef[];
   sort_order: number;
   /**
    * 乐观锁计数器，每次写入 +1。**不是**审批版本号 —— 那是 approved_version，两者
@@ -763,6 +771,8 @@ export type TRequirementChangeSnapshot = TRequirementBuiltinValues & {
   source_library_id?: string | null;
   source_sequence_id?: number | null;
   data: TRequirementData;
+  /** 需求级附件；上线前的旧快照没有这个键 */
+  attachments?: TRequirementAssetRef[];
   sort_order: number;
 };
 

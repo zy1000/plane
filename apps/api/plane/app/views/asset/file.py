@@ -7,6 +7,7 @@ import uuid
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.http import HttpResponseRedirect, StreamingHttpResponse
 from django.utils import timezone
@@ -25,8 +26,15 @@ from plane.app.permissions import (
 from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.app.views import BaseAPIView
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
-from plane.db.models import FileAsset, FileAssetVersion, Workspace
+from plane.db.models import (
+    FileAsset,
+    FileAssetVersion,
+    Product,
+    RequirementLibrary,
+    Workspace,
+)
 from plane.settings.storage import S3Storage
+from plane.utils.product import can_view_product
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.utils.host import base_host
@@ -67,6 +75,22 @@ FILESTORE_ENTITY_TYPE = FileAsset.EntityTypeContext.PROJECT_FILESTORE
 ONLYOFFICE_ENTITY_TYPES = (
     FILESTORE_ENTITY_TYPE,
     FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+)
+# 能交给 OnlyOffice 打开的扩展名；项目级编辑/预览与工作区级需求附件预览共用
+ONLYOFFICE_PREVIEW_EXTENSIONS = (
+    "doc",
+    "docx",
+    "odt",
+    "rtf",
+    "txt",
+    "xls",
+    "xlsx",
+    "ods",
+    "csv",
+    "ppt",
+    "pptx",
+    "odp",
+    "pdf",
 )
 
 
@@ -923,21 +947,7 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
 
         filename = (asset.attributes or {}).get("name") or "file"
         ext = _file_extension(filename)
-        if ext not in [
-            "doc",
-            "docx",
-            "odt",
-            "rtf",
-            "txt",
-            "xls",
-            "xlsx",
-            "ods",
-            "csv",
-            "ppt",
-            "pptx",
-            "odp",
-            "pdf",
-        ]:
+        if ext not in ONLYOFFICE_PREVIEW_EXTENSIONS:
             return Response(
                 {"error": "该文件类型不支持在线编辑/预览"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1168,6 +1178,148 @@ class FilestoreAssetOnlyOfficeDownloadProxyAPIView(BaseAPIView):
         )
         response["Content-Disposition"] = (
             f'attachment; filename="{(source_version.filename if source_version else None) or (asset.attributes or {}).get("name") or "file"}"'
+        )
+        return response
+
+
+def _get_requirement_onlyoffice_asset(pk, slug):
+    return FileAsset.objects.filter(
+        id=pk,
+        workspace__slug=slug,
+        entity_type=FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+        is_uploaded=True,
+        is_deleted=False,
+    ).first()
+
+
+def _can_view_requirement_asset_owner(user, asset) -> bool:
+    """需求附件挂在产品或标准库上（entity_identifier）。产品要对当前用户可见；
+    库是工作区级资源，工作区成员即可（与 views/requirement/library_item.py 同口径）。"""
+    owner_id = asset.entity_identifier
+    if not owner_id:
+        return False
+    try:
+        product = (
+            Product.objects.filter(id=owner_id, workspace_id=asset.workspace_id)
+            .select_related("workspace")
+            .prefetch_related("reviewers")
+            .first()
+        )
+        if product is not None:
+            return can_view_product(user, product)
+        return RequirementLibrary.objects.filter(
+            id=owner_id, workspace_id=asset.workspace_id
+        ).exists()
+    except (DjangoValidationError, ValueError):
+        return False
+
+
+class RequirementAssetOnlyOfficePreviewConfigAPIView(BaseAPIView):
+    """需求级附件的 OnlyOffice **只读**预览配置。
+
+    需求附件挂在产品 / 标准库上，没有 project_id，项目级的 config 端点用不了。只读预览
+    不需要回调（view 模式的 config 本来就不带 callbackUrl），所以工作区级只有 config +
+    download 两个端点，也不碰编辑会话状态。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def get(self, request, slug, pk):
+        asset = _get_requirement_onlyoffice_asset(pk, slug)
+        if asset is None or not _can_view_requirement_asset_owner(request.user, asset):
+            return Response(
+                {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        filename = (asset.attributes or {}).get("name") or "file"
+        ext = _file_extension(filename)
+        if ext not in ONLYOFFICE_PREVIEW_EXTENSIONS:
+            return Response(
+                {"error": "该文件类型不支持在线预览"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        doc_key = _compute_doc_key(asset)
+        download_sig = _onlyoffice_hmac_signature("download", str(asset.id), doc_key)
+        document_url = (
+            f"{_api_base_for_onlyoffice(request)}/api/workspaces/{slug}/requirement-assets/{pk}/onlyoffice/download/"
+            f"?{urlencode({'key': doc_key, 'sig': download_sig})}"
+        )
+
+        config = {
+            "type": "desktop",
+            "documentType": _onlyoffice_document_type(ext),
+            "document": {
+                "title": filename,
+                "url": document_url,
+                "fileType": ext,
+                "key": doc_key,
+                # 能看到这条需求就能下载附件，与工作区级资产下载端点同口径
+                "permissions": {"download": True, "print": True, "edit": False},
+            },
+            "editorConfig": {
+                "mode": "view",
+                "lang": "zh-CN",
+                "user": {
+                    "id": str(request.user.id),
+                    "name": request.user.display_name or request.user.email,
+                },
+                "customization": {"autosave": False, "forcesave": False},
+            },
+        }
+        if _onlyoffice_jwt_enabled():
+            config["token"] = _jwt_encode_browser_config(config)
+
+        return Response(
+            {
+                "document_server_url": settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip(
+                    "/"
+                ),
+                "config": config,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class RequirementAssetOnlyOfficeDownloadProxyAPIView(BaseAPIView):
+    """Document Server 取文件用；与项目级代理同款签名，去掉了 project 与历史版本分支。"""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, slug, pk):
+        doc_key = (request.query_params.get("key") or "").split(";", 1)[0]
+        sig = (request.query_params.get("sig") or "").split(";", 1)[0]
+        if not doc_key or not sig:
+            return Response(
+                {"error": "missing key/sig"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if sig != _onlyoffice_hmac_signature("download", str(pk), doc_key):
+            return Response(
+                {"error": "invalid signature"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        asset = _get_requirement_onlyoffice_asset(pk, slug)
+        if asset is None:
+            return Response(
+                {"error": "file not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        storage = S3Storage()
+        obj = storage.get_object(object_name=asset.storage_key)
+        if not obj or "Body" not in obj:
+            return Response(
+                {"error": "file not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        content_type = (
+            obj.get("ContentType")
+            or (asset.attributes or {}).get("type")
+            or "application/octet-stream"
+        )
+        response = StreamingHttpResponse(obj["Body"], content_type=content_type)
+        response["Content-Length"] = str(obj.get("ContentLength") or asset.size or "")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{(asset.attributes or {}).get("name") or "file"}"'
         )
         return response
 

@@ -189,6 +189,21 @@ export class FilestoreService extends APIService {
       });
   }
 
+  /**
+   * 需求级附件的 OnlyOffice **只读**预览配置。需求附件挂在产品 / 标准库上没有 project_id，
+   * 所以走工作区级端点；只有 view 模式，没有编辑与回调。
+   */
+  async getRequirementAssetOnlyOfficePreviewConfig(
+    workspaceSlug: string,
+    assetId: string
+  ): Promise<TOnlyOfficeConfigResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-assets/${assetId}/onlyoffice/config/`)
+      .then((response) => response?.data ?? { document_server_url: "", config: {} })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getOnlyOfficeStatus(
     workspaceSlug: string,
     projectId: string,

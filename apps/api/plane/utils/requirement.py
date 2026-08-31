@@ -253,6 +253,8 @@ def requirement_content_values(row):
     return (
         tuple(values[column] for column in CONTENT_BUILTIN_COLUMNS),
         deepcopy(row.data or {}),
+        # 需求级附件算内容但不是内置列，显式带上（见模型字段注释）
+        deepcopy(row.attachments or []),
     )
 
 
@@ -1527,6 +1529,9 @@ def save_requirement_row_batch(
             # 恒为 None（绕过时工厂 ValueError + DB check 双保险）
             code=item.get("code"),
         )
+        # 需求级附件只可能由 build_library_import_creates 放进来 ——
+        # RequirementBatchSaveSerializer 没有这个字段，所以客户端伪造不了。
+        row.attachments = deepcopy(item.get("attachments") or [])
         row.save()
         ordered_rows.insert(insert_at, row)
         created_rows.append((item["client_id"], row))
@@ -1608,6 +1613,8 @@ def build_library_import_creates(*, library, item_ids, before_id=None, after_id=
                 "client_id": item_id,
                 "data": prune_requirement_data_to_fields(deepcopy(item.data), specs),
                 "builtin": builtin,
+                # 需求级附件按引用带过去（asset 只按 workspace 收窄，与附件字段的导入同口径）
+                "attachments": deepcopy(item.attachments or []),
                 "requirement_type_id": library.requirement_type_id,
                 # 溯源：目标行记住自己来自 SEC-12。库条目侧不写任何东西 ——
                 # 数据模型上一条库条目可以被导入多次，反向指针没有单值可存。

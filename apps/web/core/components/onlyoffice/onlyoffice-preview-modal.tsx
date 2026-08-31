@@ -14,7 +14,8 @@ type TOnlyOfficePreviewModalProps = {
   onClose: () => void;
   afterOpenChange?: (open: boolean) => void;
   workspaceSlug: string;
-  projectId: string;
+  /** 不传 = 需求级附件：走工作区级只读预览端点（那类资产没有 project_id） */
+  projectId?: string;
   assetId: string;
   fileName?: string;
 };
@@ -81,11 +82,13 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
   }, [containerId]);
 
   const initPreview = useCallback(async (runId: number) => {
-    if (!workspaceSlug || !projectId || !assetId) return;
+    if (!workspaceSlug || !assetId) return;
     setLoading(true);
     setError("");
     try {
-      const res = await service.getOnlyOfficeConfig(workspaceSlug, projectId, assetId, "view");
+      const res = projectId
+        ? await service.getOnlyOfficeConfig(workspaceSlug, projectId, assetId, "view")
+        : await service.getRequirementAssetOnlyOfficePreviewConfig(workspaceSlug, assetId);
       const serverUrl = String(res?.document_server_url ?? "");
       const config = (res?.config ?? {}) as Record<string, any>;
       await loadOnlyOfficeScript(serverUrl);

@@ -1725,6 +1725,24 @@ export default {
       toast_link_failed: "关联测试用例失败",
       toast_unlink_failed: "解除用例关联失败",
     },
+    /** 需求级附件区（详情抽屉 / 整页）；也用作变更单 diff、版本历史里那一行的标签 */
+    attachments: {
+      title: "附件",
+      upload: "上传",
+      download_selected: "下载已选 ({count})",
+      empty: "还没有附件",
+      drop_hint: "松开鼠标上传文件",
+      preview: "预览",
+      download: "下载",
+      delete: "删除",
+      delete_confirm_title: "删除附件",
+      /** 附件算内容：删了要走评审，这句得把这件事说清 */
+      delete_confirm_description: "「{name}」将从这条需求上移除。这算一次内容改动，与其他编辑一样走评审。",
+      uploaded_by: "{name} 上传于 {date}",
+      toast_upload_failed: "附件上传失败",
+      toast_batch_download_failed: "批量下载失败",
+      preview_unsupported: "暂不支持预览此文件类型",
+    },
     change_trail: "变更轨迹",
     subform: {
       row_count: "{count} 行",

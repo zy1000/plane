@@ -1,5 +1,6 @@
 export * from "./requirement-approval-panel";
 export * from "./requirement-approved-diff";
+export * from "./requirement-attachments-section";
 export * from "./requirement-change-trail";
 export * from "./requirement-detail-content";
 export * from "./requirement-detail-section";

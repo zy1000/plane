@@ -13,7 +13,8 @@ type TXmindPreviewModalProps = {
   open: boolean;
   asset: TXmindPreviewAsset | null;
   workspaceSlug: string;
-  projectId: string;
+  /** 需求级附件没有项目；那种场景必须同时传 getFileURL 并隐藏「在新标签页打开」 */
+  projectId?: string;
   onClose: () => void;
   // 可选：自定义获取文件 URL（issue 附件等非 filestore 场景透传到内容组件）
   getFileURL?: () => Promise<string>;
@@ -37,7 +38,7 @@ export const XmindPreviewModal = ({
   }, []);
 
   const handleOpenInNewTab = useCallback(() => {
-    if (!asset?.id) return;
+    if (!asset?.id || !projectId) return;
     const name = getAssetDisplayName(asset);
     const url =
       `/${encodeURIComponent(workspaceSlug)}` +

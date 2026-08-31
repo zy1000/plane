@@ -24,10 +24,11 @@ export const useRequirementAssetUpload = ({
   const { uploadEditorAsset } = useEditorAsset();
 
   return useCallback(
-    async (file: globalThis.File, imageOnly: boolean): Promise<TRequirementAssetRef> => {
+    /** blockId 由调用方给时，可以拿它去 editor asset store 读上传进度（需求级附件区要显示进度） */
+    async (file: globalThis.File, imageOnly: boolean, blockId?: string): Promise<TRequirementAssetRef> => {
       if (imageOnly && !file.type.startsWith("image/")) throw new Error("Only images are supported.");
       const response = await uploadEditorAsset({
-        blockId: uuidv4(),
+        blockId: blockId ?? uuidv4(),
         data: {
           entity_identifier: entityId,
           entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT,

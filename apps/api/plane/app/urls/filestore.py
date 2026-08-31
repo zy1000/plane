@@ -16,10 +16,23 @@ from plane.app.views.asset.file import (
     FilestoreAssetOnlyOfficeRestoreVersionAPIView,
     FilestoreAssetOnlyOfficeStatusAPIView,
     FilestoreAssetOnlyOfficeVersionsAPIView,
+    RequirementAssetOnlyOfficeDownloadProxyAPIView,
+    RequirementAssetOnlyOfficePreviewConfigAPIView,
 )
 from plane.app.views.asset.file_explorer import FilestoreExplorerViewSet
 
 urlpatterns = [
+    # 需求级附件的工作区级 OnlyOffice 只读预览（需求附件没有 project_id，项目级端点用不了）
+    path(
+        "workspaces/<str:slug>/requirement-assets/<uuid:pk>/onlyoffice/config/",
+        RequirementAssetOnlyOfficePreviewConfigAPIView.as_view(),
+        name="workspace-requirement-asset-onlyoffice-config",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-assets/<uuid:pk>/onlyoffice/download/",
+        RequirementAssetOnlyOfficeDownloadProxyAPIView.as_view(),
+        name="workspace-requirement-asset-onlyoffice-download",
+    ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/",
         FilestoreAssetAPIView.as_view(),

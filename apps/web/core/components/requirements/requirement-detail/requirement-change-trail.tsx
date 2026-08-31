@@ -50,6 +50,10 @@ export const diffSnapshotFieldNames = (
     const key = column.key as keyof TRequirementChangeSnapshot;
     if (JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) names.push(labelOf(column.labelKey));
   }
+  // 需求级附件算内容但不是内置列；旧快照没有这个键，按空数组比
+  if (JSON.stringify(before.attachments ?? []) !== JSON.stringify(after.attachments ?? [])) {
+    names.push(labelOf("requirement_detail.attachments.title"));
+  }
   const fieldNames = new Map((requirementType?.fields ?? []).map((field) => [field.id, field.name]));
   const fieldIds = new Set([...Object.keys(before.data ?? {}), ...Object.keys(after.data ?? {})]);
   for (const fieldId of fieldIds) {

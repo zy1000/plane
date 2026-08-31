@@ -11,6 +11,7 @@
 
 import json
 from typing import NamedTuple
+from uuid import UUID
 
 from django.db import IntegrityError, transaction
 from rest_framework import status
@@ -28,7 +29,13 @@ from plane.app.serializers.requirement import (
 )
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.excel import RequirementExcelMixin
-from plane.db.models import Requirement, RequirementItemStatus, RequirementModule
+from plane.db.models import (
+    FileAsset,
+    Requirement,
+    RequirementItemStatus,
+    RequirementModule,
+)
+from plane.utils.asset_zip import build_assets_zip_response
 from plane.utils.requirement import (
     CONTENT_BUILTIN_COLUMNS,
     RequirementBatchConflict,
@@ -482,6 +489,10 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             if code_touched:
                 row.code = serializer.validated_data["code"]
             row.data = serializer.validated_data["data"]
+            # 需求级附件：不带 = 不改（与 code 同语义）；它算内容，走这条闸门齐全的路径
+            attachments_touched = "attachments" in serializer.validated_data
+            if attachments_touched:
+                row.attachments = serializer.validated_data["attachments"]
             row.version += 1
             row.updated_by = request.user
             resync_approved_row_version(row, before=before, was_approved=was_approved)
@@ -490,6 +501,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                     *CONTENT_BUILTIN_COLUMNS,
                     *(["code"] if code_touched else []),
                     "data",
+                    *(["attachments"] if attachments_touched else []),
                     "version",
                     "approved_row_version",
                     "updated_at",
@@ -502,6 +514,63 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 row, context=self._row_context(layer, owner, [row])
             ).data,
             status=status.HTTP_200_OK,
+        )
+
+    def batch_download_attachments(self, request, *args, pk=None, **kwargs):
+        """需求级附件多选打 ZIP。`?asset_ids=a,b`，只认这一行 attachments 里引用的资产。
+
+        读路径：产品可见 / 库存在即可，与单个下载（工作区级资产端点）同口径。
+        """
+        owner, error = self._owner_or_error(require_write=False)
+        if error is not None:
+            return error
+        layer = self.resolve_layer(owner)
+        row = layer.queryset.filter(id=pk).only("id", "attachments").first()
+        if row is None:
+            return Response(
+                {"error": "Requirement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            asset_ids = [
+                UUID(item.strip())
+                for item in (request.query_params.get("asset_ids") or "").split(",")
+                if item.strip()
+            ]
+        except ValueError:
+            return Response(
+                {"error": "Invalid asset_ids"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not asset_ids:
+            return Response(
+                {"error": "asset_ids is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        referenced = {
+            str(item.get("asset_id"))
+            for item in (row.attachments or [])
+            if isinstance(item, dict)
+        }
+        if any(str(asset_id) not in referenced for asset_id in asset_ids):
+            return Response(
+                {"error": "Some assets do not belong to this requirement."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        assets = list(
+            FileAsset.objects.filter(
+                pk__in=asset_ids,
+                workspace_id=owner.workspace_id,
+                entity_type=FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+                is_deleted=False,
+                is_uploaded=True,
+            ).order_by("-created_at")
+        )
+        if not assets:
+            return Response(
+                {"error": "No downloadable files found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return build_assets_zip_response(
+            request=request, assets=assets, zip_filename="requirement-attachments.zip"
         )
 
     def _check_deletable(self, rows):

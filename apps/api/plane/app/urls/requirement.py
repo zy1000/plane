@@ -116,6 +116,12 @@ urlpatterns = [
         ),
         name="requirement-library-item",
     ),
+    # 需求级附件多选打 ZIP；单个下载走工作区级资产端点，不在这里
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/<uuid:pk>/attachments/batch-download/",
+        RequirementLibraryItemViewSet.as_view({"get": "batch_download_attachments"}),
+        name="requirement-library-item-attachments-batch-download",
+    ),
     # --- 需求模块：库 / 产品各一棵独立的树 -------------------------------
     path(
         "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/modules/",
@@ -206,6 +212,12 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/status/",
         RequirementViewSet.as_view({"patch": "set_status"}),
         name="product-requirement-status",
+    ),
+    # 需求级附件多选打 ZIP；单个下载走工作区级资产端点，不在这里
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/attachments/batch-download/",
+        RequirementViewSet.as_view({"get": "batch_download_attachments"}),
+        name="product-requirement-attachments-batch-download",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:requirement_id>/trail/",

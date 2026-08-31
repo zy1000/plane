@@ -14,7 +14,8 @@ export type TXmindPreviewAsset = {
 type TXmindPreviewContentProps = {
   asset: TXmindPreviewAsset | null;
   workspaceSlug: string;
-  projectId: string;
+  /** 不传时必须给 getFileURL —— filestore 的取址接口是项目级的 */
+  projectId?: string;
   // Modal 模式由 afterOpenChange 控制为 true；独立页直接传 true。
   ready: boolean;
   // 可选：自定义获取文件 URL（如 issue 附件场景下走 issue 附件下载接口）；
@@ -345,7 +346,10 @@ export const XmindPreviewContent = ({
   const handleDownload = useCallback(async () => {
     if (!asset?.id) return;
     try {
-      const url = await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "attachment");
+      // 非 filestore 场景（issue / 需求附件）没有项目级取址接口，下载也走调用方给的地址
+      const url = getFileURL
+        ? await getFileURL()
+        : await service.getAssetPresignedURL(workspaceSlug, projectId ?? "", asset.id, "attachment");
       if (!url) {
         setError("下载失败");
         return;
@@ -354,7 +358,7 @@ export const XmindPreviewContent = ({
     } catch (err: any) {
       setError(err?.message || "下载失败");
     }
-  }, [asset?.id, projectId, service, workspaceSlug]);
+  }, [asset?.id, getFileURL, projectId, service, workspaceSlug]);
 
   const cancelExpandAll = useCallback(() => {
     pendingDepthRef.current = null;
@@ -627,7 +631,7 @@ export const XmindPreviewContent = ({
       try {
         const url = getFileURL
           ? await getFileURL()
-          : await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "inline");
+          : await service.getAssetPresignedURL(workspaceSlug, projectId ?? "", asset.id, "inline");
         if (!url) throw new Error("获取文件地址失败");
 
         const res = await fetch(url, { signal: abortController.signal });

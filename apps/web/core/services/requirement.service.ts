@@ -12,6 +12,7 @@ import type {
   TRequirement,
   TRequirementApprovalAction,
   TRequirementApprovalInboxResponse,
+  TRequirementAssetRef,
   TRequirementBaseline,
   TRequirementBaselineCompareResponse,
   TRequirementBaselineCreated,
@@ -425,6 +426,8 @@ export class RequirementService extends APIService {
       version: number;
       /** 手填编号；不带 = 不改 */
       code?: string;
+      /** 需求级附件整组替换；不带 = 不改 */
+      attachments?: TRequirementAssetRef[];
     }
   ): Promise<TRequirement> {
     return this.patch(
@@ -674,7 +677,13 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     productId: string,
     requirementId: string,
-    payload: { data: TRequirementData; builtin: TRequirementBuiltinValues; version: number }
+    payload: {
+      data: TRequirementData;
+      builtin: TRequirementBuiltinValues;
+      version: number;
+      /** 需求级附件整组替换；不带 = 不改 */
+      attachments?: TRequirementAssetRef[];
+    }
   ): Promise<TRequirement> {
     return this.patch(`${this.requirementsRoot(workspaceSlug, productId)}/${requirementId}/`, payload)
       .then((response) => response?.data)
@@ -1520,6 +1529,33 @@ export class RequirementService extends APIService {
   ): Promise<void> {
     return this.delete(`${this.requirementTestCasesRoot(workspaceSlug, productId, requirementId)}/${caseId}/`)
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 需求级附件 --------------------------------------------------------- */
+
+  /**
+   * 多选打 ZIP。产品需求与标准库条目共用同一个 handler（挂在 BaseRequirementRowViewSet 上），
+   * 这里只是把两条路径收敛成一个分派。上传 / 单个下载走工作区级资产端点，不在这里。
+   */
+  async batchDownloadRequirementAttachments(
+    workspaceSlug: string,
+    scope: { kind: "product" | "library"; id: string },
+    requirementId: string,
+    assetIds: string[]
+  ): Promise<Blob> {
+    const root =
+      scope.kind === "product"
+        ? `${this.requirementsRoot(workspaceSlug, scope.id)}/${requirementId}`
+        : `/api/workspaces/${workspaceSlug}/requirement-libraries/${scope.id}/items/${requirementId}`;
+    return this.get(
+      `${root}/attachments/batch-download/`,
+      { params: { asset_ids: assetIds.join(",") } },
+      { responseType: "blob" }
+    )
+      .then((response) => response?.data as Blob)
       .catch((error) => {
         throw error?.response?.data;
       });

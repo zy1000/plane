@@ -133,6 +133,41 @@ export const RequirementMemberValue = observer(function RequirementMemberValue({
   );
 });
 
+/**
+ * 附件的只读展示：一叠可点击下载的文件片。附件字段值、需求级附件的 diff / 版本快照共用，
+ * 三处的视觉才不会各长各的。
+ */
+export const RequirementAttachmentChips = ({
+  assets,
+  workspaceSlug,
+  className,
+}: {
+  assets: TRequirementAssetRef[];
+  workspaceSlug: string;
+  className?: string;
+}) => (
+  <span className="flex max-w-48 flex-wrap gap-1">
+    {assets.map((asset) => (
+      <a
+        key={asset.asset_id}
+        href={getEditorAssetDownloadSrc({
+          assetId: asset.asset_id,
+          workspaceSlug,
+        })}
+        target="_blank"
+        rel="noreferrer noopener"
+        className={cn(
+          "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-primary hover:text-accent-primary",
+          className
+        )}
+      >
+        <File className="size-3" />
+        <span className="truncate">{asset.name}</span>
+      </a>
+    ))}
+  </span>
+);
+
 const RequirementImageValue = ({
   assets,
   workspaceSlug,
@@ -308,27 +343,11 @@ export const LeafValue = ({
       return <RequirementImageValue assets={assets} workspaceSlug={workspaceSlug} className={className} />;
     }
     return (
-      <span className="flex max-w-48 flex-wrap gap-1">
-        {assets.map((asset) => (
-          <a
-            key={asset.asset_id}
-            href={getEditorAssetDownloadSrc({
-              assetId: asset.asset_id,
-              workspaceSlug,
-            })}
-            target="_blank"
-            rel="noreferrer noopener"
-            className={cn(
-              "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-primary hover:text-accent-primary",
-              shortValueClass,
-              className
-            )}
-          >
-            <File className="size-3" />
-            <span className="truncate">{asset.name}</span>
-          </a>
-        ))}
-      </span>
+      <RequirementAttachmentChips
+        assets={assets}
+        workspaceSlug={workspaceSlug}
+        className={cn(shortValueClass, className)}
+      />
     );
   }
   if (field.field_type === "rich_text" && variant === "detail") {

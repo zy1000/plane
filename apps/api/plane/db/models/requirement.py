@@ -658,6 +658,16 @@ class Requirement(BaseModel):
         verbose_name="所属需求模块",
     )
     data = models.JSONField(default=dict, blank=True, verbose_name="自定义字段数据")
+    # 需求级附件：每条需求天然自带，不依赖需求类型配的附件字段。值形状与附件字段一致
+    # `[{asset_id, name, type, size, created_by, created_at}]`，asset 按引用存（物理文件
+    # 仍是 REQUIREMENT_ATTACHMENT 资产，挂在产品/标准库上）。
+    #
+    # 它**算内容**：进版本快照 / 变更单 diff / 回滚、触发重新评审、评审中与已关闭时只读
+    # —— 与标题描述同口径。但它**不是内置列**：不进 BUILTIN_COLUMNS（否则会漏进网格
+    # 布局与 Excel），各内容消费点显式带上它（utils/requirement.requirement_content_values、
+    # utils/requirement_change 的快照 / 比较 / 回滚）。删除附件只是从列表里去掉，不软删
+    # 资产 —— 旧版本快照仍引用它，回滚后要能下载。
+    attachments = models.JSONField(default=list, blank=True, verbose_name="需求级附件")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
     version = models.PositiveIntegerField(default=1, verbose_name="乐观锁计数（每次写入 +1）")
     approved_version = models.PositiveIntegerField(

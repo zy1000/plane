@@ -1546,6 +1546,23 @@ export default {
       toast_link_failed: "Failed to link test cases",
       toast_unlink_failed: "Failed to unlink the test case",
     },
+    attachments: {
+      title: "Attachments",
+      upload: "Upload",
+      download_selected: "Download selected ({count})",
+      empty: "No attachments yet",
+      drop_hint: "Drop files here to upload",
+      preview: "Preview",
+      download: "Download",
+      delete: "Delete",
+      delete_confirm_title: "Delete attachment",
+      delete_confirm_description:
+        "\"{name}\" will be removed from this requirement. This counts as a content change and goes through review like any other edit.",
+      uploaded_by: "{name} uploaded on {date}",
+      toast_upload_failed: "Failed to upload the attachment",
+      toast_batch_download_failed: "Failed to download the attachments",
+      preview_unsupported: "Preview is not supported for this file type",
+    },
     change_trail: "Change trail",
     subform: {
       row_count: "{count} rows",

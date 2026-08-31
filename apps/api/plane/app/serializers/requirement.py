@@ -168,7 +168,13 @@ class RequirementFieldNodeWriteSerializer(RequirementFieldWriteSerializer):
         return attrs
 
 
-def _canonical_asset_values(owner, value, *, image_only=False):
+def _canonical_asset_values(owner, value, *, image_only=False, with_meta=False):
+    """附件 / 图片值 -> 规范化的 `[{asset_id, name, type, size}]`。
+
+    with_meta 只给需求级附件用（多带上传人与时间）。附件**字段**的值每次 PATCH 都会经
+    这里重新规范化，默认不带 meta 才能让老行的存储形状逐字节不变 —— 多出两个键会让
+    整份 data 比对把「没改」判成「内容变了」。
+    """
     if value in (None, ""):
         return []
     if not isinstance(value, list):
@@ -199,14 +205,16 @@ def _canonical_asset_values(owner, value, *, image_only=False):
         file_type = str((asset.attributes or {}).get("type") or "")
         if image_only and not file_type.startswith("image/"):
             raise serializers.ValidationError("Image fields only accept image files.")
-        result.append(
-            {
-                "asset_id": str(asset.id),
-                "name": (asset.attributes or {}).get("name") or asset.filename,
-                "type": file_type,
-                "size": int(asset.size or 0),
-            }
-        )
+        item = {
+            "asset_id": str(asset.id),
+            "name": (asset.attributes or {}).get("name") or asset.filename,
+            "type": file_type,
+            "size": int(asset.size or 0),
+        }
+        if with_meta:
+            item["created_by"] = str(asset.created_by_id) if asset.created_by_id else None
+            item["created_at"] = asset.created_at.isoformat() if asset.created_at else None
+        result.append(item)
     return result
 
 
@@ -594,6 +602,8 @@ ROW_FIELDS = [
     "module_id",
     "module_name",
     "data",
+    # 需求级附件（只读输出）。算内容但不是内置列，写入口是更新载荷顶层的 attachments。
+    "attachments",
     "sort_order",
     # 乐观锁计数器。与审批版本链（approved_version）是两个完全不同的数字，前端把它
     # 叫 lock_version 以免混淆。
@@ -837,6 +847,8 @@ class RequirementUpdateSerializer(
     version = serializers.IntegerField(min_value=1)
     # 库条目手填编号；不带 = 不改。产品/项目路径不接受。
     code = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    # 需求级附件整组替换；不带 = 不改。产品与库条目两侧都收。
+    attachments = serializers.JSONField(required=False)
 
     def validate_data(self, value):
         current_row = self.context.get("current_row")
@@ -846,6 +858,9 @@ class RequirementUpdateSerializer(
             fields=self.context["fields"],
             current_data=getattr(current_row, "data", None),
         )
+
+    def validate_attachments(self, value):
+        return _canonical_asset_values(self.context["owner"], value, with_meta=True)
 
     def validate(self, attrs):
         attrs["builtin"] = self.resolve_builtin(

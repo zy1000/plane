@@ -91,6 +91,8 @@ def requirement_row_snapshot(row):
         "source_sequence_id": row.source_sequence_id,
         **serialize_builtin_values(row),
         "data": deepcopy(row.data or {}),
+        # 需求级附件算内容但不是内置列（见 Requirement.attachments 注释）
+        "attachments": deepcopy(row.attachments or []),
         "sort_order": row.sort_order,
     }
 
@@ -128,6 +130,8 @@ def _row_compare_values(row):
     row = row or {}
     return {
         **{column: row.get(column) for column in CONTENT_BUILTIN_COLUMNS},
+        # 上线前的旧快照没有这个键，落成 [] 才不会把「没有附件」判成变了
+        "attachments": row.get("attachments") or [],
         **(row.get("data") or {}),
     }
 
@@ -843,6 +847,8 @@ def rollback_requirement_to_version(*, requirement, version_number, actor):
     requirement.data = prune_requirement_data_to_fields(
         deepcopy(snapshot.get("data") or {}), specs
     )
+    # 上线前的版本没有这个键：那一版就是没有附件，回滚照样清掉
+    requirement.attachments = deepcopy(snapshot.get("attachments") or [])
     requirement.version += 1
     requirement.updated_by = actor
     # 回到已通过的那一版 = 放弃改动，内容与已批准的重新一致，行判回 approved。
@@ -854,6 +860,7 @@ def rollback_requirement_to_version(*, requirement, version_number, actor):
         update_fields=[
             *ROLLBACK_RESTORED_COLUMNS,
             "data",
+            "attachments",
             "version",
             "approved_row_version",
             "updated_at",

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   TRequirement,
+  TRequirementAssetRef,
   TRequirementBuiltinValues,
   TRequirementItemStatus,
   TRequirementTrailEntry,
@@ -14,6 +15,15 @@ import { RequirementService } from "@/services/requirement.service";
 const requirementService = new RequirementService();
 
 /** 后端乐观锁冲突的 code，见 apps/api/plane/app/views/requirement/row_base.py */
+/** 详情侧一次内容 PATCH 能改的东西；每个键都是「不带 = 不改」 */
+export type TRequirementDetailPatch = {
+  builtin?: Partial<TRequirementBuiltinValues>;
+  data?: TRequirementData;
+  code?: string;
+  /** 需求级附件整组替换。给的是更新函数而不是新数组，见 sendPatch 里的说明 */
+  attachments?: (current: TRequirementAssetRef[]) => TRequirementAssetRef[];
+};
+
 const VERSION_CONFLICT_CODE = "REQUIREMENT_VERSION_CONFLICT";
 
 const isVersionConflict = (error: unknown) =>
@@ -171,7 +181,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
    * 连续冲突说明是真的多端并发，交给调用方处理。
    */
   const sendPatch = useCallback(
-    async (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData; code?: string }) => {
+    async (patch: TRequirementDetailPatch) => {
       const current = requirementRef.current;
       if (!workspaceSlug || !entityId || !current) return null;
 
@@ -182,6 +192,9 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
         // 库条目手填编号：只在这次 patch 改它时才带上（不带 = 不改）；
         // 产品行没有改编号的入口，永远不会带
         ...(patch.code !== undefined ? { code: patch.code } : {}),
+        // 需求级附件同样「不带 = 不改」。函数式：排队等待与冲突重放时都按当时最新的行算，
+        // 两次连着上传不会互相覆盖
+        ...(patch.attachments ? { attachments: patch.attachments(row.attachments ?? []) } : {}),
       });
 
       const persist = (id: string, payload: ReturnType<typeof payloadFor>) =>
@@ -216,7 +229,7 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const submitPatch = useCallback(
-    (patch: { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData; code?: string }) => {
+    (patch: TRequirementDetailPatch) => {
       const next = queueRef.current.then(
         () => sendPatch(patch),
         () => sendPatch(patch)

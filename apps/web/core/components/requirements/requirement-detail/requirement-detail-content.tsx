@@ -10,7 +10,6 @@ import type {
   TRequirementAssetRef,
   TRequirementBuiltinFieldConfig,
   TRequirementBuiltinKey,
-  TRequirementBuiltinValues,
   TRequirementItemStatus,
   TRequirementTrailEntry,
   TRequirementData,
@@ -39,6 +38,7 @@ import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/ap
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
+import { RequirementAttachmentsSection } from "./requirement-attachments-section";
 import { DetailSectionHeader } from "./requirement-detail-section";
 import { RequirementFieldsSection } from "./requirement-fields-section";
 import { RequirementHistorySection } from "./requirement-history-section";
@@ -47,6 +47,7 @@ import { RequirementModifiedBanner } from "./requirement-modified-banner";
 import { RequirementProjectsSelect } from "./requirement-projects-select";
 import { RequirementPropertyBar } from "./requirement-property-bar";
 import { RequirementSubformSection } from "./requirement-subform-section";
+import type { TRequirementDetailPatch } from "./use-requirement-detail";
 
 /**
  * 标题与描述在主区自成一段，其余六个内置列走属性区（抽屉的属性条 / 整页的右栏）。
@@ -61,7 +62,7 @@ const PROPERTY_COLUMN_KEYS: TRequirementBuiltinKey[] = [
   "parent_id",
 ];
 
-type TPatch = { builtin?: Partial<TRequirementBuiltinValues>; data?: TRequirementData; code?: string };
+type TPatch = TRequirementDetailPatch;
 
 type TParentScope = { workspaceSlug: string; productId?: string; libraryId?: string };
 
@@ -712,6 +713,20 @@ export const RequirementDetailContent = (props: TProps) => {
           {testCasesSection}
         </>
       )}
+
+      {/*
+        需求级附件：产品需求与库条目都有，放在关联区之后、历史区之前。
+        附件算内容（走 onPatch 进版本快照与评审），所以读写直接跟 readOnly。
+      */}
+      <RequirementAttachmentsSection
+        workspaceSlug={workspaceSlug}
+        entityId={scopeEntityId}
+        entityKind={isLibrary ? "library" : "product"}
+        requirementId={requirement.id}
+        attachments={requirement.attachments ?? []}
+        readOnly={readOnly}
+        onChange={(updater) => void onPatch({ attachments: updater })}
+      />
 
       {/*
         历史区：轨迹含待审与被驳回的改动，版本只有通过审批的那些。
