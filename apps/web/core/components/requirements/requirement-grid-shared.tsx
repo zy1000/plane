@@ -282,7 +282,7 @@ export const LeafValue = ({
   const { t } = useTranslation();
   const isDetail = variant === "detail";
   const shortValueClass = isDetail ? "text-body-xs-medium" : "text-13";
-  const longValueClass = isDetail ? "text-body-sm-regular leading-5" : "text-13 leading-5";
+  const longValueClass = isDetail ? "text-body-sm-regular leading-6" : "text-13 leading-5";
   if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) {
     // 详情抽屉没有格子线，空值直接不画等于这一行只有标签；网格里空格子保持干净
     return isDetail ? <span className={cn("text-body-xs-medium text-placeholder", className)}>—</span> : null;

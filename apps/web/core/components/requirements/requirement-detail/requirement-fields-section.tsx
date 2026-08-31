@@ -14,7 +14,7 @@ import type {
 } from "@plane/types";
 import { cn } from "@plane/utils";
 import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
-import { DetailSectionHeader } from "./requirement-detail-section";
+import { DetailSectionHeader, SECTION_ACTION_BUTTON } from "./requirement-detail-section";
 import { RequirementSubformSection } from "./requirement-subform-section";
 
 /**
@@ -73,9 +73,9 @@ export const RequirementFieldsSection = ({
               href={`/${workspaceSlug}/settings/requirement-types/${requirementType.id}`}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-caption-sm-regular text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-accent-primary"
+              className={SECTION_ACTION_BUTTON}
             >
-              <Settings2 className="size-3" />
+              <Settings2 className="size-3.5" />
               {t("requirement_detail.fields_section.manage")}
             </a>
           ) : undefined

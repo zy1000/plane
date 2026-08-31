@@ -310,7 +310,7 @@ export const RequirementPeekOverview = (props: TProps) => {
               </div>
             </div>
 
-            <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-6 pt-1 pb-12 text-body-sm-regular">
+            <div className="requirement-drawer-body vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-6 pt-1 pb-12 text-body-sm-regular">
               {!isBodyMounted || (detail.isLoading && !requirement) ? (
                 <Loader className="flex flex-col gap-3 py-2">
                   <Loader.Item height="28px" width="60%" />

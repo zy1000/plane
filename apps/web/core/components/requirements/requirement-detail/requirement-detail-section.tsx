@@ -36,7 +36,7 @@ export const DetailSectionHeader = ({
     <>
       {Icon && <Icon className="size-4 shrink-0 text-tertiary" />}
       <span className="truncate text-body-sm-semibold text-primary">{title}</span>
-      {meta && <span className="min-w-0 truncate text-caption-sm-regular text-tertiary">{meta}</span>}
+      {meta && <span className="min-w-0 truncate text-caption-md-regular text-tertiary">{meta}</span>}
     </>
   );
   return (

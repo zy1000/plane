@@ -227,3 +227,26 @@
 .scrollbar-always-visible::-webkit-scrollbar-thumb:hover {
   background-color: #bfbfbf;
 }
+
+/*
+ * 需求详情抽屉里的编辑器正文（描述、富文本字段）：与抽屉其它文字同一档（14px），
+ * 不用编辑器默认的 16px（large-font）—— 抽屉里描述比字段值大出一圈，读起来像两份文档。
+ * 编辑器把字号变量写在 .editor-container.large-font 自己身上，从祖先覆盖进不去，
+ * 只能以更高特异度盖掉；标题按同一比例收一档，列表 / 行高变量引用 regular，自动跟随。
+ */
+.requirement-drawer-body .editor-container.large-font {
+  --font-size-regular: 0.875rem;
+  --line-height-regular: 1.5rem;
+  --font-size-h1: 1.375rem;
+  --font-size-h2: 1.25rem;
+  --font-size-h3: 1.125rem;
+  --font-size-h4: 1rem;
+  --font-size-h5: 0.9375rem;
+  --font-size-h6: 0.875rem;
+  --line-height-h1: 1.875rem;
+  --line-height-h2: 1.75rem;
+  --line-height-h3: 1.625rem;
+  --line-height-h4: 1.5rem;
+  --line-height-h5: 1.5rem;
+  --line-height-h6: 1.5rem;
+}

@@ -89,9 +89,9 @@ const AttachmentRow = ({
       >
         <span className="flex shrink-0 items-center">{getFileIcon(getFileExtension(asset.name), 18)}</span>
         <Tooltip tooltipContent={asset.name} isMobile={isMobile}>
-          <span className="truncate text-body-xs-medium text-secondary">{asset.name}</span>
+          <span className="truncate text-body-xs-medium text-primary">{asset.name}</span>
         </Tooltip>
-        <span className="shrink-0 text-body-xs-regular text-placeholder">{convertBytesToSize(asset.size)}</span>
+        <span className="shrink-0 text-caption-md-regular text-tertiary">{convertBytesToSize(asset.size)}</span>
       </button>
       {asset.created_by && (
         <Tooltip

@@ -224,7 +224,7 @@ export const RequirementSubRequirementList = ({
             </span>
           )}
           <span className="shrink-0">
-            <RequirementIdentifier displayId={child.display_id} size="xs" />
+            <RequirementIdentifier displayId={child.display_id} size="md" />
           </span>
           <span className="min-w-0 flex-1 truncate text-primary">{child.title || t("requirement_detail.untitled")}</span>
           {!isLibrary && (
@@ -251,7 +251,7 @@ const RequirementApprovalBadge = ({ requirement }: { requirement: TRequirement }
   return (
     <span
       className={cn(
-        "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-caption-sm-medium",
+        "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-caption-md-medium",
         REQUIREMENT_APPROVAL_PILL[state]
       )}
     >
@@ -272,7 +272,7 @@ const RequirementTypeChip = ({ requirementType }: { requirementType: TRequiremen
   if (!requirementType) return null;
   return (
     <span
-      className="inline-flex h-6 max-w-56 shrink-0 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 pr-2 pl-1 text-caption-sm-medium text-secondary"
+      className="inline-flex h-6 max-w-56 shrink-0 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 pr-2 pl-1 text-caption-md-medium text-secondary"
       title={requirementType.name}
     >
       <TypeIcon iconProps={requirementType.logo_props?.icon} className="size-4 rounded-sm" iconClassName="size-3" />
@@ -464,7 +464,7 @@ export const RequirementDetailContent = (props: TProps) => {
     <button
       type="button"
       onClick={() => onOpenRequirement(requirement.parent_id as string)}
-      className="flex min-w-0 max-w-full items-center gap-1.5 self-start text-caption-sm-regular text-tertiary transition-colors hover:text-primary"
+      className="flex min-w-0 max-w-full items-center gap-1.5 self-start text-caption-md-regular text-tertiary transition-colors hover:text-primary"
     >
       <CornerDownRight className="size-3 shrink-0 rotate-180" />
       <span className="truncate">
@@ -482,14 +482,14 @@ export const RequirementDetailContent = (props: TProps) => {
       <RequirementCodeInput
         value={requirement.code ?? ""}
         onCommit={(code) => void onPatch({ code })}
-        className="-mx-1 w-full max-w-60 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-caption-sm-medium text-tertiary outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1"
+        className="-mx-1 w-full max-w-60 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-caption-md-medium text-tertiary outline-none placeholder:text-placeholder hover:border-subtle focus:border-accent-primary focus:bg-surface-1"
         placeholder={t("requirements.identifier.code_placeholder")}
       />
     ) : (
       <RequirementIdentifier
         displayId={requirement.display_id}
         sourceDisplayId={requirement.source_display_id}
-        size="sm"
+        size="md"
         enableClickToCopy
       />
     );
@@ -530,7 +530,7 @@ export const RequirementDetailContent = (props: TProps) => {
             {readOnly ? (
               <h1
                 className={cn(
-                  "font-medium text-balance text-primary",
+                  "font-semibold text-balance text-primary",
                   isDrawer ? "text-20 leading-snug" : "text-24 leading-tight"
                 )}
               >
@@ -548,7 +548,7 @@ export const RequirementDetailContent = (props: TProps) => {
                 maxLength={255}
                 placeholder={t("requirement_detail.untitled")}
                 className={cn(
-                  "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-medium text-primary",
+                  "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-semibold text-primary",
                   "focus:border-accent-primary outline-none placeholder:text-placeholder hover:border-subtle focus:bg-surface-1",
                   isDrawer ? "text-20 leading-snug" : "text-24 leading-tight"
                 )}

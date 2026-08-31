@@ -45,7 +45,7 @@ export const RequirementIdentifier = (props: TProps) => {
         // 来源编号刻意比自身编号更弱：它是溯源信息，不是这条需求的身份。
         // 写成「来自标准库 RJ-1」而不是「← RJ-1」—— 箭头方向没人能一眼读对
         <Tooltip tooltipContent={t("requirements.identifier.source_tooltip")} position="top">
-          <span className="inline-flex items-center gap-1 whitespace-nowrap text-caption-sm-regular text-tertiary">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap text-caption-md-regular text-tertiary">
             <Library className="size-3 shrink-0" />
             {t("requirements.identifier.source_label")}
             <span className="tabular-nums">{sourceDisplayId}</span>

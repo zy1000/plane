@@ -182,7 +182,7 @@ export const RequirementSubformSection = (props: TProps) => {
                 type="button"
                 onClick={() => jumpTo(form.id)}
                 className={cn(
-                  "inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-caption-sm-medium transition-colors",
+                  "inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-caption-md-medium transition-colors",
                   "border-subtle bg-surface-1 text-secondary hover:border-accent-subtle hover:text-primary",
                   count === 0 && "text-placeholder"
                 )}
@@ -222,7 +222,7 @@ export const RequirementSubformSection = (props: TProps) => {
               <button
                 type="button"
                 onClick={() => toggle(form.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left text-body-sm-medium text-primary"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left text-body-xs-semibold text-primary"
               >
                 {isOpen ? (
                   <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
@@ -231,7 +231,7 @@ export const RequirementSubformSection = (props: TProps) => {
                 )}
                 <span className="truncate">{form.name}</span>
                 {form.is_required && <span className="shrink-0 text-danger-primary">*</span>}
-                <span className="shrink-0 text-caption-sm-regular font-normal text-tertiary">
+                <span className="shrink-0 text-caption-md-regular font-normal text-tertiary">
                   {filledCount
                     ? t("requirement_detail.subform.row_count", { count: filledCount })
                     : t("requirement_detail.subform.empty")}
@@ -257,13 +257,13 @@ export const RequirementSubformSection = (props: TProps) => {
                   <thead>
                     <tr className="border-b border-subtle">
                       {/* 序号列与行尾操作列都定宽：让表格自动分配它们会长出一条像没画完的空列 */}
-                      <th className="w-14 whitespace-nowrap px-3 py-2 text-center text-caption-sm-medium text-tertiary">
+                      <th className="w-14 whitespace-nowrap px-3 py-2 text-center text-caption-md-medium text-tertiary">
                         {t("requirement_detail.subform.row_number")}
                       </th>
                       {columns.map((child) => (
                         <th
                           key={child.id}
-                          className="min-w-36 whitespace-nowrap px-3 py-2 text-caption-sm-medium text-tertiary"
+                          className="min-w-36 whitespace-nowrap px-3 py-2 text-caption-md-medium text-tertiary"
                         >
                           {child.name}
                           {child.is_required && <span className="ml-0.5 text-danger-primary">*</span>}
