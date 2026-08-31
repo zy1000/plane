@@ -82,8 +82,9 @@ export const RequirementFieldsSection = ({
       />
 
       {leafFields.length > 0 && (
-        // 两列只在抽屉够宽时开（lg 视口下抽屉 ≥ 820px）；窄屏退回单列，标签列仍然对齐
-        <div className="grid grid-cols-1 gap-x-10 gap-y-3 lg:grid-cols-2">
+        // 标签和值拆成独立格子，同一列共用一条标签轨，值才能对齐；
+        // 轨宽跟该列最长名称走，不会为短名称空出一截。两列只在抽屉够宽时开。
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-8 gap-y-3 lg:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
           {leafFields.map((field) => (
             <RequirementFieldRow
               key={field.id}
@@ -119,9 +120,8 @@ export const RequirementFieldsSection = ({
 };
 
 /**
- * 一个字段：标签左、值右。标签列定宽 7.5rem，同一列里所有值的 x 起点一致。
- * 必填标红星；字段说明（config.description）收成标签后的 ⓘ —— 此前只在类型编辑器里可见，
- * 填写的人反而看不到。
+ * 一个字段：标签左、值右。自身不建网格，交给外层共用标签轨，值才能对齐。
+ * 超长名称截到 6rem。必填标红星；字段说明收成标签后的 ⓘ。
  */
 const RequirementFieldRow = ({
   field,
@@ -144,8 +144,13 @@ const RequirementFieldRow = ({
 }) => {
   const description = field.config?.description?.trim();
   return (
-    <div className={cn("grid min-w-0 grid-cols-[7.5rem_minmax(0,1fr)] items-start gap-x-3", wide && "lg:col-span-2")}>
-      <span className="flex min-w-0 items-center gap-1 pt-1.5 text-body-xs-regular leading-5 text-tertiary">
+    <>
+      <span
+        className={cn(
+          "flex min-w-0 max-w-24 items-center gap-1 pt-1.5 text-body-xs-regular leading-5 text-tertiary",
+          wide && "lg:col-start-1"
+        )}
+      >
         <span className="truncate" title={field.name}>
           {field.name}
         </span>
@@ -156,7 +161,7 @@ const RequirementFieldRow = ({
           </Tooltip>
         )}
       </span>
-      <div className={cn("min-w-0", wide ? "max-w-[42rem]" : "max-w-sm")}>
+      <div className={cn("min-w-0", wide ? "max-w-[42rem] lg:col-span-3" : "max-w-sm")}>
         {readOnly ? (
           <div className="pt-1.5">
             <LeafValue field={field} value={value} workspaceSlug={workspaceSlug} variant="detail" />
@@ -173,6 +178,6 @@ const RequirementFieldRow = ({
           />
         )}
       </div>
-    </div>
+    </>
   );
 };

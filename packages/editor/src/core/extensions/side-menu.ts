@@ -94,8 +94,17 @@ const SideMenu = (options: SideMenuPluginProps) => {
         dragHandleView(view, editorSideMenu);
       }
 
+      // the side menu is fixed positioned using viewport coordinates, so any scroll invalidates them.
+      // the mousewheel handler below only covers wheeling over the editor itself, scrollbar drags,
+      // keyboard paging and programmatic scrolls never reach it, hence the capture phase listener.
+      const scrollHandler = () => hideSideMenu();
+      document.addEventListener("scroll", scrollHandler, true);
+
       return {
-        destroy: () => hideSideMenu(),
+        destroy: () => {
+          document.removeEventListener("scroll", scrollHandler, true);
+          hideSideMenu();
+        },
       };
     },
     props: {
