@@ -765,6 +765,7 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
   canEdit,
   workspaceSlug,
   productId,
+  libraryId,
   resolveParentTitle,
   onPatch,
   onStatusChange,
@@ -783,7 +784,13 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
    */
   canEdit: boolean;
   workspaceSlug: string;
-  productId: string;
+  /** 产品需求详情；与 libraryId 二选一 */
+  productId?: string;
+  /**
+   * 标准库条目详情：没有交付状态、审批与所属项目，属性行按类型布局的 show_in_library
+   * 过滤（与库网格的列一致）。
+   */
+  libraryId?: string;
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
   /** 改需求级交付状态；不传则状态格只读（见 RequirementDetailContent 同名 prop） */
@@ -795,16 +802,18 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
 }) {
   const { t } = useTranslation();
   const { getUserDetails } = useMember();
-  const parentScope = useMemo(() => ({ workspaceSlug, productId }), [productId, workspaceSlug]);
+  const isLibrary = Boolean(libraryId) && !productId;
+  const parentScope = useMemo(() => ({ workspaceSlug, productId, libraryId }), [libraryId, productId, workspaceSlug]);
   const creatorName = requirement.created_by ? getUserDetails(requirement.created_by)?.display_name : undefined;
   const updaterName = requirement.updated_by ? getUserDetails(requirement.updated_by)?.display_name : undefined;
-  // 属性行顺序跟类型布局走（描述在主区，不进属性行）；拿不到布局时解析层回退现状顺序
+  // 属性行顺序跟类型布局走（描述在主区，不进属性行）；拿不到布局时解析层回退现状顺序。
+  // 库条目只出 show_in_library 的列 —— 状态 / 负责人这些产品侧的轴在库里不存在
   const propertyColumnKeys = useMemo(
     () =>
       resolveBuiltinLayout(builtinLayout)
-        .filter((entry) => entry.key !== "description_html")
+        .filter((entry) => entry.key !== "description_html" && (!isLibrary || entry.show_in_library))
         .map((entry) => entry.key as TRequirementBuiltinKey),
-    [builtinLayout]
+    [builtinLayout, isLibrary]
   );
 
   return (
@@ -831,15 +840,17 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
         所以不进 PropertyGrid —— 那一栅格里的每一项都会走 onPatch 写回需求本体，而
         这里写的是关联表。
       */}
-      <RailGroup label={t("requirement_detail.projects.label")}>
-        <RequirementProjectsSelect
-          workspaceSlug={workspaceSlug}
-          productId={productId}
-          requirement={requirement}
-          readOnly={!canEdit}
-          onChanged={onProjectsChanged}
-        />
-      </RailGroup>
+      {!isLibrary && productId && (
+        <RailGroup label={t("requirement_detail.projects.label")}>
+          <RequirementProjectsSelect
+            workspaceSlug={workspaceSlug}
+            productId={productId}
+            requirement={requirement}
+            readOnly={!canEdit}
+            onChanged={onProjectsChanged}
+          />
+        </RailGroup>
+      )}
 
       {/* 创建 / 更新人按工作区成员表解析；解析不到（已离开工作区）只留日期 */}
       <RailGroup label={t("requirement_detail.meta.label")}>
@@ -852,7 +863,7 @@ export const RequirementDetailProperties = observer(function RequirementDetailPr
             {t("requirement_detail.meta.updated_at", { date: requirement.updated_at?.slice(0, 10) ?? "—" })}
             {updaterName ? ` · ${updaterName}` : ""}
           </span>
-          {requirement.approved_version !== null && (
+          {!isLibrary && requirement.approved_version !== null && (
             <span>{t("requirement_approval.approved_version", { version: requirement.approved_version })}</span>
           )}
         </div>

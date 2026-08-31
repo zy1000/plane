@@ -286,7 +286,6 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
         requirementTypes={requirementTypes}
         rows={store.requirementsPage.results}
         canEdit
-        showDetailAction={false}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
         onRequirementUpdated={(requirement) => {

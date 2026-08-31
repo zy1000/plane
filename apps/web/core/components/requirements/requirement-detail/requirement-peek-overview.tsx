@@ -24,7 +24,7 @@ type TProps = {
   workspaceSlug: string;
   /** 产品需求详情；与 libraryId 二选一 */
   productId?: string;
-  /** 标准库条目详情。库没有整页路由，抽屉就是详情入口 */
+  /** 标准库条目详情；「打开整页」落到 templates/libraries/:id/requirements/:rid */
   libraryId?: string;
   /** 打开哪一条；null = 关闭。上层会把它同步到 URL 的 ?peek=，刷新和分享都能还原 */
   requirementId: string | null;
@@ -267,7 +267,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                     <MoveRight className="h-4 w-4 text-tertiary hover:text-secondary" />
                   </button>
                 </Tooltip>
-                {showDetailAction && entityKind === "product" && entityId && (
+                {showDetailAction && entityId && (
                   <Tooltip tooltipContent={t("requirement_detail.open_full_page")}>
                     <button
                       type="button"
@@ -275,7 +275,11 @@ export const RequirementPeekOverview = (props: TProps) => {
                       onClick={() => {
                         if (!activeId) return;
                         onClose();
-                        router.push(`/${workspaceSlug}/products/${entityId}/requirements/${activeId}`);
+                        router.push(
+                          entityKind === "library"
+                            ? `/${workspaceSlug}/templates/libraries/${entityId}/requirements/${activeId}`
+                            : `/${workspaceSlug}/products/${entityId}/requirements/${activeId}`
+                        );
                       }}
                     >
                       <MoveDiagonal className="h-4 w-4 text-tertiary hover:text-secondary" />
