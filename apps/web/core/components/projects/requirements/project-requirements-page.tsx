@@ -118,29 +118,26 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   }, [urlProductId]);
 
   useEffect(() => {
-    const raw = searchParams.get(PRODUCT_PARAM);
-    if (raw === selectedProductId) return;
-    syncedProductRef.current = selectedProductId;
-    const next = new URLSearchParams(searchParams);
-    if (selectedProductId) next.set(PRODUCT_PARAM, selectedProductId);
-    else next.delete(PRODUCT_PARAM);
-    setSearchParams(next, { replace: true });
-  }, [selectedProductId, searchParams, setSearchParams]);
-
-  useEffect(() => {
     if (urlModuleId === syncedModuleRef.current) return;
     syncedModuleRef.current = urlModuleId;
     setSelectedModuleId(urlModuleId);
   }, [urlModuleId]);
 
+  // 产品和模块会在同一次点击里一起变（树节点：全部需求 / 产品 / 模块），必须一次写入 URL
   useEffect(() => {
-    if (urlModuleId === selectedModuleId) return;
+    const urlProduct = searchParams.get(PRODUCT_PARAM);
+    const productMatches = urlProduct === selectedProductId;
+    const moduleMatches = urlModuleId === selectedModuleId;
+    if (productMatches && moduleMatches) return;
+    syncedProductRef.current = selectedProductId;
     syncedModuleRef.current = selectedModuleId;
     const next = new URLSearchParams(searchParams);
+    if (selectedProductId) next.set(PRODUCT_PARAM, selectedProductId);
+    else next.delete(PRODUCT_PARAM);
     if (selectedModuleId) next.set("moduleId", selectedModuleId);
     else next.delete("moduleId");
     setSearchParams(next, { replace: true });
-  }, [selectedModuleId, urlModuleId, searchParams, setSearchParams]);
+  }, [selectedModuleId, selectedProductId, urlModuleId, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!selectedProductId || !selectedModuleId || moduleStore.isLoading) return;

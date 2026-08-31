@@ -1,12 +1,26 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EllipsisOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Input, Tree } from "antd";
 import type { TreeProps } from "antd";
-import { FolderOpenDot, Layers } from "lucide-react";
+import { FolderOpenDot, Layers, Package } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TRequirementModule } from "@plane/types";
+import type { TProjectRequirementModuleGroup, TRequirementModule } from "@plane/types";
+import { cn } from "@plane/utils";
+
+const PRODUCT_KEY_PREFIX = "product:";
+
+const toProductTreeKey = (productId: string) => `${PRODUCT_KEY_PREFIX}${productId}`;
+
+const parseProductTreeKey = (key: string): string | null =>
+  key.startsWith(PRODUCT_KEY_PREFIX) ? key.slice(PRODUCT_KEY_PREFIX.length) : null;
+
+const treeContainsModule = (modules: TRequirementModule[], moduleId: string): boolean =>
+  modules.some((item) => item.id === moduleId || treeContainsModule(item.children ?? [], moduleId));
+
+const findProductIdForModule = (groups: TProjectRequirementModuleGroup[], moduleId: string): string | null =>
+  groups.find((group) => treeContainsModule(group.modules, moduleId))?.product_id ?? null;
 
 /** 独立的输入组件，避免 Tree 重渲染导致输入法中断（与 QA 用例模块树同款） */
 const ModuleNameInput = ({
@@ -53,10 +67,14 @@ export type TRequirementModuleTreeProps = {
   onSelect: (moduleId: string | null) => void;
   /** 项目页只读：不渲染 hover 菜单与临时输入节点 */
   readonly?: boolean;
-  /** 项目页多产品分组时由外层统一渲染「全部」，这里关掉根节点 */
+  /** 关掉根节点「全部」；项目页三级树保持默认 true */
   showAllNode?: boolean;
   /** 「全部」根节点的文案，默认「全部需求」 */
   allLabel?: string;
+  /** 传入后树为「全部需求 → 产品 → 模块」；不传则「全部 → 模块」 */
+  productGroups?: TProjectRequirementModuleGroup[];
+  selectedProductId?: string | null;
+  onSelectProduct?: (productId: string | null) => void;
   onCreate?: (parentId: string | null, name: string) => Promise<unknown>;
   onRename?: (moduleId: string, name: string) => Promise<unknown>;
   /** 只上抛目标，删除确认弹窗由外层渲染 */
@@ -78,6 +96,9 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
     readonly = false,
     showAllNode = true,
     allLabel,
+    productGroups,
+    selectedProductId = null,
+    onSelectProduct,
     onCreate,
     onRename,
     onDelete,
@@ -87,6 +108,18 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
+
+  useEffect(() => {
+    if (!productGroups?.length) return;
+    const productKeys = productGroups.map((group) => toProductTreeKey(group.product_id));
+    setExpandedKeys((current) => {
+      const next = new Set(current);
+      next.add("all");
+      for (const key of productKeys) next.add(key);
+      if (next.size === current.length && productKeys.every((key) => current.includes(key))) return current;
+      return Array.from(next);
+    });
+  }, [productGroups]);
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
@@ -116,13 +149,31 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
   const handleSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
     const key = String(info?.node?.key ?? "");
     if (key.startsWith("__creating__")) return;
+    const productId = parseProductTreeKey(key);
     // 再次点击同一节点是「取消选择」——忽略，保持当前选中不变
     if (!info.selected) {
-      if (key === "all") onSelect(null);
+      if (key === "all") {
+        onSelect(null);
+        onSelectProduct?.(null);
+      }
       return;
     }
     const next = selectedKeys[0] as string | undefined;
-    onSelect(!next || next === "all" ? null : next);
+    if (!next || next === "all") {
+      onSelect(null);
+      onSelectProduct?.(null);
+      return;
+    }
+    if (productId) {
+      onSelect(null);
+      onSelectProduct?.(productId);
+      return;
+    }
+    onSelect(next);
+    if (onSelectProduct && productGroups) {
+      const parentProductId = findProductIdForModule(productGroups, next);
+      if (parentProductId) onSelectProduct(parentProductId);
+    }
   };
 
   const renderNodeTitle = (module: TRequirementModule) => {
@@ -168,16 +219,26 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
         ),
       },
     ];
+    const active = selectedModuleId === module.id;
     return (
       <div className="group flex w-full items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-secondary">
+          <span
+            className={cn(
+              "inline-flex h-5 w-5 shrink-0 items-center justify-center",
+              active ? "text-accent-primary" : "text-secondary"
+            )}
+          >
             <FolderOpenDot size={14} />
           </span>
-          <span className="truncate text-sm text-primary">{module.name}</span>
+          <span className={cn("truncate text-sm", active ? "font-medium text-accent-primary" : "text-primary")}>
+            {module.name}
+          </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <span className="text-xs text-secondary tabular-nums">{module.count}</span>
+          <span className={cn("text-xs tabular-nums", active ? "text-accent-primary" : "text-secondary")}>
+            {module.count}
+          </span>
           {!readonly && (
             <Dropdown trigger={["hover"]} menu={{ items: menuItems }}>
               <Button
@@ -199,6 +260,33 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
       onCommit={(value) => handleCreateCommit(parentId, value)}
     />
   );
+
+  const renderProductTitle = (group: TProjectRequirementModuleGroup) => {
+    const active = !selectedModuleId && selectedProductId === group.product_id;
+    return (
+      <div className="group flex w-full items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "inline-flex h-5 w-5 shrink-0 items-center justify-center",
+              active ? "text-accent-primary" : "text-secondary"
+            )}
+          >
+            <Package size={14} />
+          </span>
+          <span
+            className={cn("truncate text-sm", active ? "font-medium text-accent-primary" : "text-primary")}
+            title={group.product_name}
+          >
+            {group.product_name}
+          </span>
+        </div>
+        <span className={cn("text-xs tabular-nums", active ? "text-accent-primary" : "text-secondary")}>
+          {group.total}
+        </span>
+      </div>
+    );
+  };
 
   const buildTreeNodes = (list: TRequirementModule[]): NonNullable<TreeProps["treeData"]> =>
     list.map((node) => {
@@ -222,21 +310,46 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
 
   const treeData = useMemo(() => {
     const moduleNodes = buildTreeNodes(modules);
-    if (!showAllNode) return moduleNodes;
+    const childNodes = productGroups
+      ? productGroups.map((group) => ({
+          title: renderProductTitle(group),
+          key: toProductTreeKey(group.product_id),
+          children: buildTreeNodes(group.modules),
+        }))
+      : moduleNodes;
+    if (!showAllNode) return childNodes;
+    const isAllActive = !selectedModuleId && !selectedProductId;
     return [
       {
         title: (
           <div className="group flex w-full items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-secondary">
+              <span
+                className={cn(
+                  "inline-flex h-5 w-5 shrink-0 items-center justify-center",
+                  isAllActive ? "text-accent-primary" : "text-secondary"
+                )}
+              >
                 <Layers size={14} />
               </span>
-              <span className="truncate text-sm font-medium text-primary">
+              <span
+                className={cn(
+                  "truncate text-sm font-medium",
+                  isAllActive ? "text-accent-primary" : "text-primary"
+                )}
+              >
                 {allLabel ?? t("requirement_modules.all")}
               </span>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <span className="text-xs text-secondary tabular-nums">{total}</span>
+              <span
+                className={cn(
+                  "text-xs tabular-nums",
+                  isAllActive ? "text-accent-primary" : "text-secondary"
+                )}
+              >
+                {total}
+              </span>
               {!readonly && (
                 <Dropdown
                   trigger={["hover"]}
@@ -276,13 +389,25 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
                 },
               ]
             : []),
-          ...moduleNodes,
+          ...childNodes,
         ],
       },
     ];
     // buildTreeNodes 捕获了下面这些状态，逐一列出让 memo 正确失效
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modules, total, showAllNode, allLabel, readonly, creatingParentId, renamingModuleId, selectedModuleId, t]);
+  }, [
+    modules,
+    productGroups,
+    total,
+    showAllNode,
+    allLabel,
+    readonly,
+    creatingParentId,
+    renamingModuleId,
+    selectedModuleId,
+    selectedProductId,
+    t,
+  ]);
 
   return (
     <>
@@ -322,7 +447,15 @@ export const RequirementModuleTree = (props: TRequirementModuleTreeProps) => {
         expandedKeys={expandedKeys}
         autoExpandParent={autoExpandParent}
         treeData={treeData}
-        selectedKeys={selectedModuleId ? [selectedModuleId] : showAllNode ? ["all"] : []}
+        selectedKeys={
+          selectedModuleId
+            ? [selectedModuleId]
+            : selectedProductId
+              ? [toProductTreeKey(selectedProductId)]
+              : showAllNode
+                ? ["all"]
+                : []
+        }
         className="requirement-module-tree py-1"
       />
     </>

@@ -37,9 +37,14 @@ def replace_legacy_project_group_grant_permissions(RoleModel, filters=None):
             key in permission_keys for key in LEGACY_PROJECT_GROUP_GRANT_PERMISSION_KEYS
         )
         next_permission_keys = [
-            key for key in permission_keys if key not in LEGACY_PROJECT_GROUP_GRANT_PERMISSION_KEYS
+            key
+            for key in permission_keys
+            if key not in LEGACY_PROJECT_GROUP_GRANT_PERMISSION_KEYS
         ]
-        if has_legacy_permission and "project.group_grant.edit" not in next_permission_keys:
+        if (
+            has_legacy_permission
+            and "project.group_grant.edit" not in next_permission_keys
+        ):
             next_permission_keys.append("project.group_grant.edit")
 
         if next_permission_keys != permission_keys:
@@ -73,7 +78,9 @@ def activate_project_group_grant_permissions(apps, schema_editor):
         WorkspaceRole,
         {"type": "project_template"},
     )
-    Permission.objects.filter(key__in=LEGACY_PROJECT_GROUP_GRANT_PERMISSION_KEYS).delete()
+    Permission.objects.filter(
+        key__in=LEGACY_PROJECT_GROUP_GRANT_PERMISSION_KEYS
+    ).delete()
 
 
 def deactivate_project_group_grant_permissions(apps, schema_editor):
@@ -85,7 +92,7 @@ def deactivate_project_group_grant_permissions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("db", "0304_requirementapprover"),
+        ("db", "0293_seed_default_workspace_roles"),
     ]
 
     operations = [

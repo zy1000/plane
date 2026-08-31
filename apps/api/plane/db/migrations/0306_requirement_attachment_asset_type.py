@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("db", "0305_activate_project_group_grant_permissions"),
+        ("db", "0304_requirementapprover"),
     ]
 
     operations = [
