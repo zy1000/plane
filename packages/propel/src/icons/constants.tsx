@@ -53,6 +53,7 @@ export const ProjectIconsMap = [
   { icon: <Icon name="project.intake" />, title: "IntakeIcon" },
   { icon: <Icon name="project.module" />, title: "ModuleIcon" },
   { icon: <Icon name="project.page" />, title: "PageIcon" },
+  { icon: <Icon name="project.requirement" />, title: "RequirementIcon" },
   { icon: <Icon name="project.view" />, title: "ViewIcon" },
   { icon: <Icon name="project.work-items" />, title: "WorkItemsIcon" },
 ];

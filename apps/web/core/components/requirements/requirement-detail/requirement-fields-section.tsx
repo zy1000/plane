@@ -1,7 +1,8 @@
 "use client";
 
-import { Info, ListChecks, Settings2 } from "lucide-react";
+import { Info, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { RequirementIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import type {
   TRequirement,
@@ -58,7 +59,7 @@ export const RequirementFieldsSection = ({
   return (
     <section className="flex flex-col gap-4">
       <DetailSectionHeader
-        icon={ListChecks}
+        icon={RequirementIcon}
         title={t("requirement_detail.custom_fields")}
         meta={
           requirementType

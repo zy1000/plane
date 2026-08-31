@@ -1,4 +1,5 @@
-import { BookOpenText, LayoutList } from "lucide-react";
+import { LayoutList } from "lucide-react";
+import { RequirementIcon } from "@plane/propel/icons";
 import useLocalStorage from "@/hooks/use-local-storage";
 
 /**
@@ -35,9 +36,9 @@ export const useScopeSubTab = (storageKey: string) => {
 
 /**
  * 两个页面的页签图标一致；label 由调用方传 t() 结果。
- * 需求用 BookOpenText，与项目左侧导航的「需求」项同图标，避免同一概念两个符号。
+ * 需求用 RequirementIcon，与项目左侧导航的「需求」项同图标，避免同一概念两个符号。
  */
 export const SCOPE_SUB_TAB_ICONS = {
   "work-items": LayoutList,
-  requirements: BookOpenText,
+  requirements: RequirementIcon,
 } as const;

@@ -35,8 +35,9 @@ import {
   ViewsIcon,
   WorkItemsIcon,
   TestManagementIcon,
+  RequirementIcon,
 } from "@plane/propel/icons";
-import { BookOpenText, Bug, Clock } from "lucide-react";
+import { Bug, Clock } from "lucide-react";
 import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
@@ -135,7 +136,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         key: "requirements",
         name: "需求",
         href: `/${workspaceSlug}/projects/${projectId}/requirements`,
-        icon: BookOpenText,
+        icon: RequirementIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY],
         shouldRender: true,

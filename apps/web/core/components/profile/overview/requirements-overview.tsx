@@ -8,10 +8,10 @@ import { useState } from "react";
 import type { UIEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { PriorityIcon } from "@plane/propel/icons";
+import { PriorityIcon, RequirementIcon } from "@plane/propel/icons";
 import { REQUIREMENT_STATUSES } from "@plane/types";
 import type {
   IProfileMetricRequirement,
@@ -235,7 +235,7 @@ export function ProfileRequirementsOverview({ userProfile }: Props) {
           <section className="flex min-h-0 flex-col border-t border-subtle xl:col-span-7 xl:border-t-0">
             <div className="flex items-center gap-2.5 border-b border-subtle px-5 pt-4 pb-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-md bg-accent-subtle text-accent-primary">
-                <FileText className="size-4" />
+                <RequirementIcon className="size-4" />
               </span>
               <h4 className="text-14 font-medium text-primary">{t("profile.stats.requirements.list_title")}</h4>
               <span className="text-11 text-placeholder">{t("profile.stats.requirements.list_hint")}</span>

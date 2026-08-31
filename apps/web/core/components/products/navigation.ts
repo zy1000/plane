@@ -1,11 +1,12 @@
-import type { LucideIcon } from "lucide-react";
-import { FolderKanban, ListChecks, Rocket } from "lucide-react";
+import type { ComponentType } from "react";
+import { FolderKanban, Rocket } from "lucide-react";
+import { RequirementIcon } from "@plane/propel/icons";
 
 export type TProductTabKey = "dashboard" | "requirements" | "projects" | "releases";
 
 export type TProductNavigationItem = {
   key: TProductTabKey;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   i18nKey: string;
   managerOnly: boolean;
 };
@@ -13,7 +14,7 @@ export type TProductNavigationItem = {
 export const PRODUCT_NAVIGATION_ITEMS: TProductNavigationItem[] = [
   {
     key: "requirements",
-    icon: ListChecks,
+    icon: RequirementIcon,
     i18nKey: "workspace_products.navigation.requirements",
     managerOnly: false,
   },

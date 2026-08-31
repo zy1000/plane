@@ -5,9 +5,9 @@
  */
 
 import { observer } from "mobx-react";
-import { BookOpenText } from "lucide-react";
 import { useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { RequirementIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "@/components/projects/requirements/project-requirement-filters";
@@ -37,7 +37,7 @@ export const ProjectRequirementsHeader = observer(function ProjectRequirementsHe
               <BreadcrumbLink
                 label={t("project_requirements.title")}
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/requirements/`}
-                icon={<BookOpenText className="h-4 w-4 text-secondary" />}
+                icon={<RequirementIcon className="h-4 w-4 text-secondary" />}
                 isLast
               />
             }

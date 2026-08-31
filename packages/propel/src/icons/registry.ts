@@ -42,7 +42,16 @@ import {
 // Misc icons
 import { InfoIcon } from "./misc";
 // Project icons
-import { CycleIcon, EpicIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon, WorkItemsIcon } from "./project";
+import {
+  CycleIcon,
+  EpicIcon,
+  IntakeIcon,
+  ModuleIcon,
+  PageIcon,
+  RequirementIcon,
+  ViewsIcon,
+  WorkItemsIcon,
+} from "./project";
 // Property icons
 import {
   BooleanPropertyIcon,
@@ -109,6 +118,7 @@ export const ICON_REGISTRY = {
   "project.intake": IntakeIcon,
   "project.module": ModuleIcon,
   "project.page": PageIcon,
+  "project.requirement": RequirementIcon,
   "project.view": ViewsIcon,
   "project.work-items": WorkItemsIcon,
 

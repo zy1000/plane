@@ -2,10 +2,10 @@
 
 import type { SyntheticEvent } from "react";
 import { useMemo, useState } from "react";
-import { BookOpenText, Layers, Rocket } from "lucide-react";
+import { Layers, Rocket } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { DueDatePropertyIcon } from "@plane/propel/icons";
+import { DueDatePropertyIcon, RequirementIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProjectRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader, Row } from "@plane/ui";
@@ -95,7 +95,7 @@ export const ScopeRequirementsSection = (props: TProps) => {
       ) : requirements.length === 0 ? (
         <div className="grid min-h-0 flex-1 place-items-center px-4">
           <div className="flex max-w-md flex-col items-center gap-2 text-center">
-            <BookOpenText className="mb-2 size-10 text-placeholder" strokeWidth={1.2} aria-hidden />
+            <RequirementIcon className="mb-2 size-10 text-placeholder" aria-hidden />
             <h4 className="text-body-md-semibold text-primary">
               {t("project_requirements.container.empty_title")}
             </h4>

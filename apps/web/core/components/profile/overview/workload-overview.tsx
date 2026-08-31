@@ -6,11 +6,11 @@
 
 import { useState } from "react";
 import type { ComponentType } from "react";
-import { ChevronRight, ClipboardCheck, FileText, Rocket } from "lucide-react";
+import { ChevronRight, ClipboardCheck, Rocket } from "lucide-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { CycleIcon, DueDatePropertyIcon, WorkflowsPropertyIcon } from "@plane/propel/icons";
+import { CycleIcon, DueDatePropertyIcon, RequirementIcon, WorkflowsPropertyIcon } from "@plane/propel/icons";
 import type { IUserProfileData, TProfileMetricKey } from "@plane/types";
 import { Card, ECardVariant, LinearProgressIndicator, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -96,7 +96,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       warn: false,
     },
     {
-      icon: FileText,
+      icon: RequirementIcon,
       key: "open_assigned_requirements",
       title: t("profile.stats.open_assigned_requirements"),
       value: userProfile.open_assigned_requirements,

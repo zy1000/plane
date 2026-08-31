@@ -12,7 +12,6 @@ import {
   Building,
   FolderKanban,
   Layers,
-  ListChecks,
   ScrollText,
   ShieldCheck,
   UsersRound,
@@ -20,6 +19,7 @@ import {
   Webhook,
 } from "lucide-react";
 // plane imports
+import { RequirementIcon } from "@plane/propel/icons";
 import type { ISvgIcons } from "@plane/propel/icons";
 import type { TWorkspaceSettingsTabs } from "@plane/types";
 
@@ -33,7 +33,7 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   export: ArrowUpToLine,
   webhooks: Webhook,
   "issue-type-categories": Layers,
-  "requirement-types": ListChecks,
+  "requirement-types": RequirementIcon,
   "data-dictionaries": BookText,
   changelog: ScrollText,
 };

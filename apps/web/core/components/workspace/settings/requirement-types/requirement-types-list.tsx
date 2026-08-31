@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { RequirementIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TCreateRequirementTypePayload, TRequirementType, TUpdateRequirementTypePayload } from "@plane/types";
@@ -187,7 +188,7 @@ export function RequirementTypesList(props: Props) {
       return (
         <div className="flex flex-col items-center rounded-lg border border-dashed border-subtle px-6 py-12 text-center">
           <span className="grid size-10 place-items-center rounded-lg bg-layer-2 text-secondary">
-            <ListChecks className="size-5" />
+            <RequirementIcon className="size-5" />
           </span>
           <p className="mt-3 text-13 font-medium text-primary">
             {t("workspace_templates.requirement_types.empty.title")}

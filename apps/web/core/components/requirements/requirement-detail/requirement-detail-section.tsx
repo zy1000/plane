@@ -5,7 +5,8 @@
  * 抽屉从上到下只有一种「区块开始了」的信号。
  */
 import type { ReactNode } from "react";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@plane/utils";
 
 /** 区块标题行右侧的文字按钮：透明底，hover 才浮出，避免和正文里的主按钮抢眼 */
@@ -21,7 +22,7 @@ export const DetailSectionHeader = ({
   onToggle,
   isOpen,
 }: {
-  icon?: LucideIcon;
+  icon?: ComponentType<{ className?: string }>;
   title: ReactNode;
   /** 标题右侧的次要信息：计数、来源说明 */
   meta?: ReactNode;

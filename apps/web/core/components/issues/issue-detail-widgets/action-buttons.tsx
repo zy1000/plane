@@ -8,10 +8,10 @@
 
 import React from "react";
 import { observer } from "mobx-react";
-import { Paperclip, FlaskConical, FileText } from "lucide-react";
+import { Paperclip, FlaskConical } from "lucide-react";
 import { PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { LinkIcon, ViewsIcon, RelationPropertyIcon } from "@plane/propel/icons";
+import { LinkIcon, ViewsIcon, RelationPropertyIcon, RequirementIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 // plane imports
 import type { TIssueServiceType, TWorkItemWidgets } from "@plane/types";
@@ -146,7 +146,7 @@ export const IssueDetailWidgetActionButtons = observer(function IssueDetailWidge
                     asContentOnly
                     showLabel={false}
                     title={t("project_requirements.container.link_button")}
-                    icon={<FileText className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+                    icon={<RequirementIcon className="h-3.5 w-3.5 flex-shrink-0" />}
                     disabled={disabled}
                   />
                 }

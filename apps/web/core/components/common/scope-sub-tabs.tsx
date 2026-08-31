@@ -6,7 +6,7 @@
 
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import { cn } from "@plane/utils";
 
 /**
@@ -25,7 +25,7 @@ import { cn } from "@plane/utils";
 export type TScopeSubTab<K extends string> = {
   key: K;
   label: string;
-  icon?: LucideIcon;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   count?: number;
 };
 

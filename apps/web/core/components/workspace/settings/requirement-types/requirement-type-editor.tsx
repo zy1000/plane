@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronDown, ListChecks, Save, Settings2 } from "lucide-react";
+import { ChevronDown, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { RequirementIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Breadcrumbs, Header, Loader } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -87,7 +88,7 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
                     <button type="button" onClick={handleBack}>
                       <BreadcrumbLink
                         label={t("workspace_settings.settings.requirement_types.title")}
-                        icon={<ListChecks className="size-4 text-secondary" />}
+                        icon={<RequirementIcon className="size-4 text-secondary" />}
                       />
                     </button>
                   }
