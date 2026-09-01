@@ -130,6 +130,7 @@ const FieldRows = ({
   fields,
   requirement,
   workspaceSlug,
+  entityId,
   readOnly,
   onChange,
   onUpload,
@@ -137,6 +138,8 @@ const FieldRows = ({
   fields: TRequirementField[];
   requirement: TRequirement;
   workspaceSlug: string;
+  /** 富文本内联资源的归属方：产品或标准库 id（后端只认这两种，不认需求 id） */
+  entityId: string;
   readOnly: boolean;
   onChange: (data: TRequirementData) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
@@ -150,7 +153,7 @@ const FieldRows = ({
         field={field}
         value={requirement.data[field.id]}
         workspaceSlug={workspaceSlug}
-        entityId={requirement.id}
+        entityId={entityId}
         onChange={(value) => onChange({ ...requirement.data, [field.id]: value })}
         onUpload={onUpload}
         variant="detail"
@@ -557,7 +560,7 @@ export const RequirementDetailContent = (props: TProps) => {
           ) : (
             <RequirementRichTextEditor
               workspaceSlug={workspaceSlug}
-              entityId={requirement.id}
+              entityId={scopeEntityId}
               editorId={`requirement-description-${requirement.id}`}
               value={descriptionBlank ? "" : (requirement.description_html ?? "")}
               onChange={(html) => {
@@ -576,6 +579,7 @@ export const RequirementDetailContent = (props: TProps) => {
         <RequirementFieldsSection
           workspaceSlug={workspaceSlug}
           requirement={requirement}
+          entityId={scopeEntityId}
           requirementType={requirementType}
           leafFields={leafFields}
           formFields={formFields}
@@ -592,6 +596,7 @@ export const RequirementDetailContent = (props: TProps) => {
                 fields={leafFields}
                 requirement={requirement}
                 workspaceSlug={workspaceSlug}
+                entityId={scopeEntityId}
                 readOnly={readOnly}
                 onChange={commitData}
                 onUpload={uploadAsset}
@@ -605,6 +610,7 @@ export const RequirementDetailContent = (props: TProps) => {
               data={requirement.data}
               workspaceSlug={workspaceSlug}
               entityId={requirement.id}
+              assetEntityId={scopeEntityId}
               readOnly={readOnly}
               defaultOpenCount={2}
               defaultOpenEmpty={!readOnly}

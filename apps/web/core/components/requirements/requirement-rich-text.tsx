@@ -133,7 +133,7 @@ const useRequirementEditorAssets = ({
 
 type TFieldProps = {
   workspaceSlug: string;
-  /** 资源归属实体：网格传产品/标准库 id，详情页传需求 id */
+  /** 资源归属实体：产品或标准库 id（后端只认这两种，详情页也不能传需求 id） */
   entityId: string;
   /** 编辑器实例 id，同一屏内必须唯一 */
   editorId: string;

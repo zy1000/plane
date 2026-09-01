@@ -1009,7 +1009,7 @@ export const LeafEditor = ({
   field: TRequirementField;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
-  /** 富文本内联资源的归属实体：网格传产品/标准库 id，详情页传需求 id */
+  /** 富文本内联资源的归属实体：产品或标准库 id（后端只认这两种，详情页也不能传需求 id） */
   entityId: string;
   onChange: (value: TRequirementValue) => void;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;

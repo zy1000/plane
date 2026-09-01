@@ -34,6 +34,7 @@ const WIDE_FIELD_TYPES = new Set<string>(["rich_text", "attachment", "image"]);
 export const RequirementFieldsSection = ({
   workspaceSlug,
   requirement,
+  entityId,
   requirementType,
   leafFields,
   formFields,
@@ -43,6 +44,8 @@ export const RequirementFieldsSection = ({
 }: {
   workspaceSlug: string;
   requirement: TRequirement;
+  /** 富文本内联资源的归属方：产品或标准库 id（后端只认这两种，不认需求 id） */
+  entityId: string;
   requirementType: TRequirementTypeSchema | null;
   /** 已按 sort_order 排好的非 form 字段 */
   leafFields: TRequirementField[];
@@ -92,7 +95,7 @@ export const RequirementFieldsSection = ({
               field={field}
               value={requirement.data[field.id]}
               workspaceSlug={workspaceSlug}
-              entityId={requirement.id}
+              entityId={entityId}
               readOnly={readOnly}
               wide={WIDE_FIELD_TYPES.has(field.field_type)}
               onChange={(value) => onChange({ ...requirement.data, [field.id]: value })}
@@ -108,6 +111,7 @@ export const RequirementFieldsSection = ({
           data={requirement.data}
           workspaceSlug={workspaceSlug}
           entityId={requirement.id}
+          assetEntityId={entityId}
           readOnly={readOnly}
           defaultOpenCount={1}
           defaultOpenEmpty={!readOnly}

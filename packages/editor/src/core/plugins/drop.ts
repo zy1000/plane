@@ -17,6 +17,16 @@ type Props = {
   editor: Editor;
 };
 
+/** 浏览器里「复制图片」得到的 HTML 只会有这些标签；出现别的元素或文本，说明剪贴板主体是文档内容 */
+const IMAGE_ONLY_TAGS = new Set(["IMG", "META", "BR"]);
+
+const hasNonImageContent = (html: string): boolean => {
+  if (!html) return false;
+  const { body } = new DOMParser().parseFromString(html, "text/html");
+  if (body.textContent?.trim()) return true;
+  return Array.from(body.querySelectorAll("*")).some((element) => !IMAGE_ONLY_TAGS.has(element.tagName));
+};
+
 export const DropHandlerPlugin = (props: Props): Plugin => {
   const { disabledExtensions, flaggedExtensions, editor } = props;
 
@@ -30,6 +40,10 @@ export const DropHandlerPlugin = (props: Props): Plugin => {
           event.clipboardData.files &&
           event.clipboardData.files.length > 0
         ) {
+          // Excel / Word 复制表格时，剪贴板里除了 HTML 还带一张位图快照（Chrome 暴露为 image.png）。
+          // 只要 HTML 里有位图以外的内容就交给 ProseMirror 默认解析，否则表格会被当成截图上传；
+          // 「复制图片」得到的 HTML 只有一个 <img>，仍走文件上传。
+          if (hasNonImageContent(event.clipboardData.getData("text/html"))) return false;
           event.preventDefault();
           const files = Array.from(event.clipboardData.files);
           const acceptedFiles = files.filter(

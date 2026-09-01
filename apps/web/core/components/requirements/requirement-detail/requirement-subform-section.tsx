@@ -40,8 +40,13 @@ type TProps = {
   forms: TRequirementField[];
   data: TRequirementData;
   workspaceSlug: string;
-  /** 富文本内联资源的归属实体 */
+  /** 这份子表单区的作用域 id（拖拽分组的命名空间），同时是内联资源的默认归属 */
   entityId: string;
+  /**
+   * 富文本内联资源的归属方：产品或标准库 id。详情页的 entityId 是需求 id（要与盖在
+   * 上面的建行弹窗区分开），但后端只认产品/标准库，所以归属方得单独给。
+   */
+  assetEntityId?: string;
   readOnly: boolean;
   /** 默认展开几块：抽屉 1、整页 2 —— 版面宽窄不同，能一眼看到的量也不同 */
   defaultOpenCount: number;
@@ -62,6 +67,7 @@ export const RequirementSubformSection = (props: TProps) => {
     data,
     workspaceSlug,
     entityId,
+    assetEntityId = entityId,
     readOnly,
     defaultOpenCount,
     defaultOpenEmpty = false,
@@ -326,7 +332,7 @@ export const RequirementSubformSection = (props: TProps) => {
                                   field={child}
                                   value={row.values?.[child.id]}
                                   workspaceSlug={workspaceSlug}
-                                  entityId={entityId}
+                                  entityId={assetEntityId}
                                   onChange={(value) => setCell(form, row.id, child.id, value)}
                                   onUpload={onUpload}
                                   deferTextCommit
