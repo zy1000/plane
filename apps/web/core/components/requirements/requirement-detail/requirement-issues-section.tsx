@@ -27,7 +27,6 @@ import { useRequirementIssues } from "@/hooks/store/use-requirement-issues";
 import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-redirection";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
-import { RequirementIssueHeaderActions } from "./requirement-relation-action-buttons";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 
 /**
@@ -184,8 +183,6 @@ type TProps = {
   onChanged?: () => void;
   /** 外层已有快捷操作条时，空列表不再占一块折叠头 */
   hideWhenEmpty?: boolean;
-  /** 外层工具条已经承担新增时，折叠头不再放拆分 / 关联按钮 */
-  hideAddActions?: boolean;
   splitModalOpen?: boolean;
   onSplitModalOpenChange?: (open: boolean) => void;
   linkModalOpen?: boolean;
@@ -203,7 +200,6 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
     canManage,
     onChanged,
     hideWhenEmpty = false,
-    hideAddActions = false,
     splitModalOpen,
     onSplitModalOpenChange,
     linkModalOpen,
@@ -298,15 +294,6 @@ export const RequirementIssuesSection = observer(function RequirementIssuesSecti
             total: issues.length,
             doneLabel: t("common.done"),
           }}
-          actions={
-            canManage && !hideAddActions ? (
-              // 项目侧语境已定，两个动作直接开弹窗，不必再选项目
-              <RequirementIssueHeaderActions
-                onSplit={() => setIsSplitModalOpen(true)}
-                onLinkIssue={() => setIsLinkModalOpen(true)}
-              />
-            ) : undefined
-          }
         >
           {isLoading && !issues.length ? (
             <div className="px-2.5 pb-2.5">

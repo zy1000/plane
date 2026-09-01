@@ -2,6 +2,10 @@
  * 需求级附件区。每条需求天然自带，不依赖需求类型配的附件字段；只在详情抽屉与整页出现，
  * 网格里没有它。
  *
+ * 与关联区其它折叠块同一口径：有附件（或正在上传）才出现，空的不占位 —— 上传入口在
+ * 关联操作条上（见 requirement-relations-area.tsx），折叠头只放「下载已选」。上传状态
+ * 由外层的 useRequirementAttachmentUploads 持有，操作条按钮与这里的拖放区共用一份。
+ *
  * 附件**算内容**：列表存在行上的 attachments 列，增删都走 onPatch（乐观锁 + 评审中 / 已关闭
  * 闸门 + 版本快照），所以这里的读写权限就是 readOnly，不另开一道门。删除只是从列表里去掉，
  * 不删资产 —— 旧版本快照还引用着它，回滚后要能下载。
@@ -10,12 +14,10 @@
  * 附件字段同一份（useRequirementAssetUpload）；单个下载走工作区级资产端点，只有多选打
  * ZIP 才需要需求侧自己的端点。
  */
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { Download, Eye, Paperclip, Trash2, Upload, UploadCloud } from "lucide-react";
-import type { FileRejection } from "react-dropzone";
+import { Download, Eye, Paperclip, Trash2, UploadCloud } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -25,17 +27,16 @@ import { cn, convertBytesToSize, getEditorAssetDownloadSrc, getFileExtension, re
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
-import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
 import { useAttachmentBatchDownload } from "@/hooks/use-attachment-batch-download";
 import { useFileSelection } from "@/hooks/use-file-selection";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-import { useFileSize } from "@/plane-web/hooks/use-file-size";
 import { RequirementService } from "@/services/requirement.service";
 import { SECTION_ACTION_BUTTON } from "./requirement-detail-section";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 import { useRequirementAttachmentPreview } from "./use-requirement-attachment-preview";
+import type { TRequirementAttachmentUploads } from "./use-requirement-attachment-uploads";
 
 const requirementService = new RequirementService();
 
@@ -49,6 +50,8 @@ type TProps = {
   readOnly: boolean;
   /** 整组替换；给更新函数而不是新数组，排队与冲突重放都按最新的行算 */
   onChange: (updater: (current: TRequirementAssetRef[]) => TRequirementAssetRef[]) => void;
+  /** 与操作条上的上传按钮共用的上传状态 */
+  uploads: TRequirementAttachmentUploads;
 };
 
 const AttachmentRow = ({
@@ -142,16 +145,14 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
   attachments,
   readOnly,
   onChange,
+  uploads,
 }: TProps) {
   const { t } = useTranslation();
-  const { maxFileSize } = useFileSize();
-  const uploadAsset = useRequirementAssetUpload({ workspaceSlug, entityId });
   const { getAssetUploadStatusByEditorBlockId } = useEditorAsset();
   const { requestPreview, previewModals } = useRequirementAttachmentPreview({ workspaceSlug });
 
-  // 上传中的 blockId；进度本身在 editor asset store 里，这里只记「有哪些在飞」
-  const [uploadingIds, setUploadingIds] = useState<string[]>([]);
-  const uploadStatuses = uploadingIds
+  // 进度在 editor asset store 里，按外层记下的 blockId 读
+  const uploadStatuses = uploads.uploadingIds
     .map((blockId) => getAssetUploadStatusByEditorBlockId(blockId))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
@@ -178,44 +179,10 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
     onSuccess: selection.clear,
   });
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      const blockId = uuidv4();
-      setUploadingIds((current) => [...current, blockId]);
-      try {
-        const ref = await uploadAsset(file, false, blockId);
-        onChange((current) => [...current, ref]);
-      } catch (error) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("requirement_detail.attachments.toast_upload_failed"),
-          message: (error as { error?: string } | null)?.error ?? file.name,
-        });
-      } finally {
-        setUploadingIds((current) => current.filter((id) => id !== blockId));
-      }
-    },
-    [onChange, t, uploadAsset]
-  );
-
-  const onDrop = useCallback(
-    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-      if (rejectedFiles.length) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("toast.error"),
-          message: t("attachment.file_size_limit", { size: maxFileSize / 1024 / 1024 }),
-        });
-      }
-      acceptedFiles.forEach((file) => void uploadFile(file));
-    },
-    [maxFileSize, t, uploadFile]
-  );
-
-  // noClick：行本身要响应预览点击，选文件只从「上传」按钮走
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    onDrop,
-    maxSize: maxFileSize,
+  // 这里只管拖放；noClick：行本身要响应预览点击，选文件从操作条上的按钮走
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: uploads.onDrop,
+    maxSize: uploads.maxFileSize,
     multiple: true,
     disabled: readOnly,
     noClick: true,
@@ -229,28 +196,21 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
     setAssetToDelete(null);
   };
 
-  // 折叠头的动作区在折叠态也保留；只读且没选中任何附件时什么都不放，免得留个空容器
+  // 与工作项详情同一口径：没附件也没有在传的，整块不出现 —— 上传入口在操作条上
+  if (!attachments.length && !uploadStatuses.length) return null;
+
+  // 折叠头的动作区在折叠态也保留；没选中任何附件时什么都不放，免得留个空容器
   const actions =
-    selection.selectedCount > 0 || !readOnly ? (
-      <>
-        {selection.selectedCount > 0 && (
-          <button
-            type="button"
-            className={SECTION_ACTION_BUTTON}
-            disabled={isBatchDownloading}
-            onClick={() => void batchDownload(selection.selectedIds)}
-          >
-            <Download className="size-3.5" />
-            {t("requirement_detail.attachments.download_selected", { count: selection.selectedCount })}
-          </button>
-        )}
-        {!readOnly && (
-          <button type="button" className={SECTION_ACTION_BUTTON} onClick={open}>
-            <Upload className="size-3.5" />
-            {t("requirement_detail.attachments.upload")}
-          </button>
-        )}
-      </>
+    selection.selectedCount > 0 ? (
+      <button
+        type="button"
+        className={SECTION_ACTION_BUTTON}
+        disabled={isBatchDownloading}
+        onClick={() => void batchDownload(selection.selectedIds)}
+      >
+        <Download className="size-3.5" />
+        {t("requirement_detail.attachments.download_selected", { count: selection.selectedCount })}
+      </button>
     ) : undefined;
 
   return (
@@ -275,7 +235,7 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
             </div>
           )}
           <FileUploadProgressList uploadStatuses={uploadStatuses} className="flex flex-col gap-1 px-2.5 pt-1" />
-          {attachments.length ? (
+          {attachments.length > 0 && (
             <div className="pb-1">
               {attachments.map((asset) => (
                 <AttachmentRow
@@ -289,12 +249,6 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
                 />
               ))}
             </div>
-          ) : (
-            !uploadStatuses.length && (
-              <p className="px-2.5 py-2.5 text-body-xs-regular text-placeholder">
-                {t("requirement_detail.attachments.empty")}
-              </p>
-            )
           )}
         </div>
       </RequirementRelationCollapsible>

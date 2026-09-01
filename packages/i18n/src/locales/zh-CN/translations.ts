@@ -1728,9 +1728,8 @@ export default {
     /** 需求级附件区（详情抽屉 / 整页）；也用作变更单 diff、版本历史里那一行的标签 */
     attachments: {
       title: "附件",
-      upload: "上传",
+      upload: "上传附件",
       download_selected: "下载已选 ({count})",
-      empty: "还没有附件",
       drop_hint: "松开鼠标上传文件",
       preview: "预览",
       download: "下载",

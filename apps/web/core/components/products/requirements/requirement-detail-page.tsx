@@ -17,7 +17,6 @@ import {
   RequirementApprovalPanel,
   RequirementDetailContent,
   RequirementDetailProperties,
-  RequirementRelationsTabs,
   useRequirementDetail,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
@@ -181,17 +180,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                       </Tooltip>
                     </>
                   }
-                  relationsSection={
-                    <RequirementRelationsTabs
-                      workspaceSlug={slug}
-                      productId={product}
-                      requirement={requirement}
-                      subRequirements={detail.children}
-                      canManage={canEdit}
-                      onChanged={() => void detail.refresh()}
-                      onOpenRequirement={openRequirement}
-                    />
-                  }
+                  /* 关联不是内容、不走评审：拆分 / 关联 / 解除只看页面级写权限 */
+                  relations={{ canManage: canEdit, onChanged: () => void detail.refresh() }}
                 />
                 {/* 窄屏没有右栏，属性回落到主列底部 —— 与工作项详情同款处理 */}
                 <div className="mt-8 border-t border-subtle pt-6 lg:hidden">

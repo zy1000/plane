@@ -18,6 +18,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
 import { RequirementDetailContent } from "./requirement-detail-content";
+import type { TRequirementRelationsConfig } from "./requirement-relations-area";
 import { useRequirementDetail } from "./use-requirement-detail";
 
 type TProps = {
@@ -53,15 +54,11 @@ type TProps = {
   /** 头部的所属产品标识。项目侧一页可能混着多个产品的需求，不标出来根本分不清 */
   productChip?: ReactNode;
   /**
-   * 透传给正文的「关联工作项」区块。项目需求页传入可操作的 Section（拆分/关联/解除
-   * 要项目语境与 link 管理权限，都长在那一页上）；产品侧抽屉不传则不渲染。
+   * 透传给正文的关联区配置（工作项 / 用例）。产品需求页给 canManage，项目需求页再给
+   * projectId（拆分 / 关联要项目语境与 link 管理权限，都长在那一页上）；迭代 / 发布的
+   * 范围抽屉、个人页不传则只剩子需求与附件。
    */
-  issuesSection?: ReactNode;
-  /**
-   * 透传给正文的「关联测试用例」区块。产品侧与项目侧的需求列表都注入；迭代 / 发布的
-   * 范围抽屉不传则不渲染。
-   */
-  testCasesSection?: ReactNode;
+  relations?: TRequirementRelationsConfig;
   /**
    * 横幅上的审批动作，由产品需求页注入（弹窗与提交逻辑长在那一页上）：
    * 提交评审（变更中）、查看变更单 / 撤回评审（评审中）。其它调用方不传则横幅只出说明。
@@ -100,8 +97,7 @@ export const RequirementPeekOverview = (props: TProps) => {
     shareHref,
     showDetailAction = true,
     productChip,
-    issuesSection,
-    testCasesSection,
+    relations,
     onSubmitReview,
     onWithdrawReview,
     onOpenChangeRequest,
@@ -344,8 +340,7 @@ export const RequirementPeekOverview = (props: TProps) => {
                   }
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void handleRolledBack()}
-                  issuesSection={issuesSection}
-                  testCasesSection={testCasesSection}
+                  relations={relations}
                   onSubmitReview={onSubmitReview && activeId ? () => onSubmitReview(activeId) : undefined}
                   onWithdrawReview={onWithdrawReview}
                   onOpenChangeRequest={onOpenChangeRequest}

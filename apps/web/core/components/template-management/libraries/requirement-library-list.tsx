@@ -376,7 +376,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                           {renderFormattedDateTime(library.updated_at)}
                         </td>
                         <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-0.5">
+                          <div className="-ml-1.5 flex items-center justify-start gap-0.5">
                             <Tooltip tooltipContent={t("edit")}>
                               <button
                                 type="button"

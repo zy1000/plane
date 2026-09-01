@@ -26,7 +26,6 @@ import { AlertModalCore, Loader } from "@plane/ui";
 import { cn, renderFormattedDate } from "@plane/utils";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { useRequirementTestCases } from "@/hooks/store/use-requirement-test-cases";
-import { RequirementTestCaseHeaderAction } from "./requirement-relation-action-buttons";
 import { RequirementRelationCollapsible } from "./requirement-relation-collapsible";
 import { RequirementTestCaseLinkModal } from "./requirement-testcase-link-modal";
 
@@ -115,14 +114,12 @@ type TProps = {
   scopeProjectId?: string;
   /** 外层已有快捷操作条时，空列表不再占一块折叠头 */
   hideWhenEmpty?: boolean;
-  /** 外层工具条已经承担新增时，折叠头不再放 + */
-  hideAddActions?: boolean;
+  /** 关联弹窗的开关由外层的操作条持有；不传则自己管 */
   linkModalOpen?: boolean;
   onLinkModalOpenChange?: (open: boolean) => void;
   /**
-   * collapsible：自带「用例」折叠头（抽屉用）。
-   * plain：只出行与空态，折叠头由整页关联 Tab 卡片的 Tab 代替；hideWhenEmpty / hideAddActions
-   * 在这个变体下不起作用 —— 空态必须占位，新增走 Tab 行右侧的操作条。
+   * collapsible：自带「用例」折叠头（关联区用）。
+   * plain：只出行与空态，折叠头由外层代替；hideWhenEmpty 在这个变体下不起作用 —— 空态必须占位。
    */
   variant?: "collapsible" | "plain";
   /** 关联用例数，加载完才报；给 Tab 计数 */
@@ -137,7 +134,6 @@ export const RequirementTestCasesSection = (props: TProps) => {
     canManage,
     scopeProjectId,
     hideWhenEmpty = false,
-    hideAddActions = false,
     linkModalOpen,
     onLinkModalOpenChange,
     variant = "collapsible",
@@ -257,11 +253,6 @@ export const RequirementTestCasesSection = (props: TProps) => {
             title={t("requirement_detail.test_cases.widget_title")}
             icon={FlaskConical}
             count={testCases.length}
-            actions={
-              canManage && !hideAddActions ? (
-                <RequirementTestCaseHeaderAction onLink={() => setIsLinkModalOpen(true)} />
-              ) : undefined
-            }
           >
             {list}
           </RequirementRelationCollapsible>

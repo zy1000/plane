@@ -1,15 +1,16 @@
 /**
  * 需求详情关联区的快捷操作条，视觉对齐工作项的 IssueDetailWidgetActionButtons：
- * 同一条分段边框里放「拆分 / 关联工作项 / 关联用例」。
+ * 同一条分段边框里放「拆分 / 关联工作项 / 关联用例 / 上传附件」。每一段都按传没传回调
+ * 决定出不出现；一段都没有就整条不渲染。
  */
 import type { ReactNode } from "react";
-import { ChevronDown, FlaskConical, Link2, Split } from "lucide-react";
+import { FlaskConical, Link2, Paperclip, Split } from "lucide-react";
+import { useDropzone } from "react-dropzone";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import { CustomMenu } from "@plane/ui";
-import { cn } from "@plane/utils";
 import { IssueDetailWidgetButton } from "@/components/issues/issue-detail-widgets/widget-button";
-import { SECTION_ACTION_BUTTON } from "./requirement-detail-section";
+import type { TRequirementAttachmentUploads } from "./use-requirement-attachment-uploads";
 
 const WIDGET_GROUP_LAYOUT =
   "inline-flex w-fit max-w-full flex-nowrap items-stretch self-start divide-x divide-subtle overflow-hidden rounded-md border border-subtle bg-layer-1 shadow-raised-100";
@@ -27,14 +28,56 @@ const GroupTooltip = ({ content, children }: { content: string; children: React.
 type TIssueProjectOption = { id: string; name: string };
 
 type TProps = {
-  onSplit: (projectId?: string) => void;
-  onLinkIssue: (projectId?: string) => void;
+  /** 拆分 / 关联工作项：不传就没有这两段（没有关联权限，或库条目这类没有工作项的地方） */
+  onSplit?: (projectId?: string) => void;
+  onLinkIssue?: (projectId?: string) => void;
   onLinkTestCase?: () => void;
   /**
    * 产品侧拆分/关联工作项要落到具体项目。多于一个时按钮展开项目菜单；
    * 不传（项目侧）则直接回调。
    */
   issueProjects?: TIssueProjectOption[];
+  /** 上传附件：传了才有这一段（内容可编辑时）。选完文件直接交给它的 onDrop */
+  attachmentUploads?: TRequirementAttachmentUploads;
+};
+
+/**
+ * 操作条上的「上传附件」：自己开一个只点选、不接拖放的 dropzone（拖放区在附件列表上），
+ * 上传状态与附件区共用同一份。照工作项的 IssueAttachmentActionButton 做的。
+ */
+const AttachmentUploadAction = ({
+  uploads,
+  showLabel,
+}: {
+  uploads: TRequirementAttachmentUploads;
+  /** 它是操作条上唯一一段时带文字（库条目就是这种情况），否则与其它段一样只出图标 */
+  showLabel: boolean;
+}) => {
+  const { t } = useTranslation();
+  const label = t("requirement_detail.attachments.upload");
+  const { getRootProps, getInputProps } = useDropzone({
+    onDrop: uploads.onDrop,
+    maxSize: uploads.maxFileSize,
+    multiple: true,
+    noDrag: true,
+  });
+
+  return (
+    <GroupTooltip content={label}>
+      <button
+        type="button"
+        {...getRootProps({ className: showLabel ? WIDGET_GROUP_TRIGGER_CLASS : `${WIDGET_GROUP_TRIGGER_CLASS} !px-2` })}
+      >
+        <input {...getInputProps()} />
+        <IssueDetailWidgetButton
+          asContentOnly
+          showLabel={showLabel}
+          title={label}
+          icon={<Paperclip className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+        />
+      </button>
+    </GroupTooltip>
+  );
 };
 
 const IssueProjectAction = ({
@@ -96,33 +139,39 @@ const IssueProjectAction = ({
 };
 
 export const RequirementRelationActionButtons = (props: TProps) => {
-  const { onSplit, onLinkIssue, onLinkTestCase, issueProjects } = props;
+  const { onSplit, onLinkIssue, onLinkTestCase, issueProjects, attachmentUploads } = props;
   const { t } = useTranslation();
   const splitLabel = t("project_requirements.issues.split");
   const linkIssueLabel = t("project_requirements.issues.link_existing");
   const linkCaseLabel = t("requirement_detail.test_cases.link_existing");
+  const hasIssueActions = Boolean(onSplit || onLinkIssue || onLinkTestCase);
+  if (!hasIssueActions && !attachmentUploads) return null;
 
   return (
     <div className={WIDGET_GROUP_LAYOUT} role="group" aria-label={t("project_requirements.relations_toolbar")}>
-      <div className={WIDGET_GROUP_SEGMENT}>
-        <IssueProjectAction
-          projects={issueProjects}
-          tooltip={splitLabel}
-          title={splitLabel}
-          icon={<Split className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
-          onPick={onSplit}
-        />
-      </div>
-      <div className={WIDGET_GROUP_SEGMENT}>
-        <IssueProjectAction
-          projects={issueProjects}
-          tooltip={linkIssueLabel}
-          title={linkIssueLabel}
-          showLabel={false}
-          icon={<Link2 className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
-          onPick={onLinkIssue}
-        />
-      </div>
+      {onSplit && (
+        <div className={WIDGET_GROUP_SEGMENT}>
+          <IssueProjectAction
+            projects={issueProjects}
+            tooltip={splitLabel}
+            title={splitLabel}
+            icon={<Split className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+            onPick={onSplit}
+          />
+        </div>
+      )}
+      {onLinkIssue && (
+        <div className={WIDGET_GROUP_SEGMENT}>
+          <IssueProjectAction
+            projects={issueProjects}
+            tooltip={linkIssueLabel}
+            title={linkIssueLabel}
+            showLabel={false}
+            icon={<Link2 className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+            onPick={onLinkIssue}
+          />
+        </div>
+      )}
       {onLinkTestCase && (
         <div className={WIDGET_GROUP_SEGMENT}>
           <GroupTooltip content={linkCaseLabel}>
@@ -137,94 +186,11 @@ export const RequirementRelationActionButtons = (props: TProps) => {
           </GroupTooltip>
         </div>
       )}
+      {attachmentUploads && (
+        <div className={WIDGET_GROUP_SEGMENT}>
+          <AttachmentUploadAction uploads={attachmentUploads} showLabel={!hasIssueActions} />
+        </div>
+      )}
     </div>
-  );
-};
-
-/**
- * 抽屉里区块标题行上的动作（带文字的轻按钮）。与上面的分段工具条是同一组动作、同一套
- * 项目落点规则，只是换了个位置：拆分 / 关联挂在「工作项」标题右侧，关联用例挂在「测试用例」
- * 标题右侧 —— 动作紧贴它作用的列表，不再是一排孤零零的图标。
- */
-const HeaderProjectAction = ({
-  projects,
-  label,
-  icon,
-  onPick,
-}: {
-  projects?: TIssueProjectOption[];
-  label: string;
-  icon: ReactNode;
-  onPick: (projectId?: string) => void;
-}) => {
-  const { t } = useTranslation();
-  const isMenu = Boolean(projects && projects.length > 1);
-  if (!isMenu) {
-    return (
-      <button
-        type="button"
-        className={SECTION_ACTION_BUTTON}
-        onClick={() => onPick(projects?.length === 1 ? projects[0].id : undefined)}
-      >
-        {icon}
-        {label}
-      </button>
-    );
-  }
-  return (
-    <CustomMenu
-      className="relative !w-auto min-w-0 text-left !max-w-none"
-      customButton={
-        <span className={cn(SECTION_ACTION_BUTTON, "pr-1.5")}>
-          {icon}
-          {label}
-          <ChevronDown className="size-3 text-placeholder" />
-        </span>
-      }
-      placement="bottom-end"
-      closeOnSelect
-      maxHeight="md"
-    >
-      <div className="px-2 py-1 text-caption-sm-regular text-tertiary">{t("project_requirements.issues.pick_project")}</div>
-      {projects?.map((project) => (
-        <CustomMenu.MenuItem key={project.id} onClick={() => onPick(project.id)}>
-          {project.name}
-        </CustomMenu.MenuItem>
-      ))}
-    </CustomMenu>
-  );
-};
-
-export const RequirementIssueHeaderActions = ({
-  issueProjects,
-  onSplit,
-  onLinkIssue,
-}: Pick<TProps, "issueProjects" | "onSplit" | "onLinkIssue">) => {
-  const { t } = useTranslation();
-  return (
-    <>
-      <HeaderProjectAction
-        projects={issueProjects}
-        label={t("project_requirements.issues.split")}
-        icon={<Split className="size-3.5 shrink-0" />}
-        onPick={onSplit}
-      />
-      <HeaderProjectAction
-        projects={issueProjects}
-        label={t("project_requirements.issues.link_existing")}
-        icon={<Link2 className="size-3.5 shrink-0" />}
-        onPick={onLinkIssue}
-      />
-    </>
-  );
-};
-
-export const RequirementTestCaseHeaderAction = ({ onLink }: { onLink: () => void }) => {
-  const { t } = useTranslation();
-  return (
-    <button type="button" className={SECTION_ACTION_BUTTON} onClick={onLink}>
-      <FlaskConical className="size-3.5 shrink-0" />
-      {t("requirement_detail.test_cases.link_existing")}
-    </button>
   );
 };

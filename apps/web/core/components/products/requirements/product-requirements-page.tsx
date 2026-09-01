@@ -38,7 +38,7 @@ import {
   resolveRequirementDataView,
   type TRequirementDataView,
 } from "./requirement-data-views";
-import { RequirementPeekOverview, RequirementProductRelations } from "@/components/requirements/requirement-detail";
+import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
 
 const TABS = ["data", "changes", "baselines"] as const;
@@ -88,10 +88,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
    */
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
-  const peekRow = useMemo(
-    () => store.requirementsPage.results.find((row) => row.id === peekRequirementId) ?? null,
-    [peekRequirementId, store.requirementsPage.results]
-  );
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
   const canEdit = store.canEdit;
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
@@ -593,19 +589,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           store.syncRequirements([requirement]);
         }}
         /*
-         * 产品侧抽屉补上与项目侧同一组关联操作。拆分/挂工作项要先落到具体项目
+         * 产品侧抽屉的关联区与整页同一套（操作条 + 折叠块）。拆分/挂工作项要先落到具体项目
          * （需求未进项目时按钮会提示）；用例关联仍是需求级，不需要项目。
          */
-        issuesSection={
-          peekRow && activeTab !== "baselines" ? (
-            <RequirementProductRelations
-              workspaceSlug={workspaceSlug ?? ""}
-              productId={productId ?? ""}
-              requirement={peekRow}
-              canManage={canEdit}
-            />
-          ) : null
-        }
+        relations={{ canManage: canEdit }}
       />
 
       {/*

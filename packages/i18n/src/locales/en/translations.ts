@@ -1548,9 +1548,8 @@ export default {
     },
     attachments: {
       title: "Attachments",
-      upload: "Upload",
+      upload: "Upload attachment",
       download_selected: "Download selected ({count})",
-      empty: "No attachments yet",
       drop_hint: "Drop files here to upload",
       preview: "Preview",
       download: "Download",

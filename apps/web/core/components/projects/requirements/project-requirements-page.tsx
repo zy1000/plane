@@ -25,7 +25,7 @@ import { ProductChip } from "@/components/products/product-chip";
 import { PageHead } from "@/components/core/page-title";
 import { isRequirementClosed } from "@/components/requirements";
 import { ProjectRequirementModuleSidebar } from "@/components/requirements/module-tree";
-import { RequirementPeekOverview, RequirementProjectRelations } from "@/components/requirements/requirement-detail";
+import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useProject } from "@/hooks/store/use-project";
@@ -482,21 +482,16 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             <ProductChip hideIdentifier identifier={peekRow.product_identifier} name={peekRow.product_name} />
           }
           /*
-           * 项目侧把工作项 / 用例收进同一组关联区（快捷操作条 + 折叠列表）。
-           * 拆分/关联/解除都要项目语境，产品侧抽屉不注入这一块。
+           * 项目侧的关联区与产品侧同一套（快捷操作条 + 有内容才出的折叠块），只是拆分 /
+           * 关联直接落到本项目、用例候选池收窄到本项目。关联权限看项目，与内容可编辑是两道门。
            * 已关闭的需求不再拆分或新增关联（closed 行的解除靠服务端 409 兜底）。
            */
-          issuesSection={
-            <RequirementProjectRelations
-              workspaceSlug={slug}
-              projectId={project}
-              productId={peekRow.product_id}
-              requirementId={peekRow.id}
-              requirement={peekRow}
-              canManage={canManage && !isRequirementClosed(peekRow)}
-              onChanged={() => void refreshRequirementRow(peekRow.id)}
-            />
-          }
+          relations={{
+            projectId: project,
+            canManage: canManage && !isRequirementClosed(peekRow),
+            onChanged: () => void refreshRequirementRow(peekRow.id),
+            linkedCycleIds: peekRow.linked_cycle_ids,
+          }}
         />
       )}
 

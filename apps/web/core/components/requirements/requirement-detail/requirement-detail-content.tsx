@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { CornerDownRight, GitBranch, Lock, Trash2 } from "lucide-react";
+import { CornerDownRight, Lock, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import type {
@@ -38,8 +38,7 @@ import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/ap
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
-import { RequirementAttachmentsSection } from "./requirement-attachments-section";
-import { DetailSectionHeader } from "./requirement-detail-section";
+import { RequirementRelationsArea, type TRequirementRelationsConfig } from "./requirement-relations-area";
 import { RequirementFieldsSection } from "./requirement-fields-section";
 import { RequirementHistorySection } from "./requirement-history-section";
 import { RequirementInReviewBanner } from "./requirement-in-review-banner";
@@ -99,27 +98,16 @@ type TProps = {
   /** 回滚写的是活行而不是版本链，所以要让调用方重新拉一次这一行 */
   onRolledBack?: () => void;
   /**
-   * 「关联工作项」区块，由调用方按侧别注入：项目侧抽屉给可操作的 Section（拆分/
-   * 关联/解除），产品侧整页给按项目分组的只读变体。这里不自己挂 —— 两个变体需要的
-   * 作用域（projectId、link 管理权限、linked_cycle_ids 注解）都长在调用方的行数据上。
+   * 关联区里的工作项 / 用例（操作条 + 有内容才出的折叠块，整页与抽屉同一套，见
+   * RequirementRelationsArea）。产品侧给 canManage 就够，项目侧再给 projectId —— 拆分 /
+   * 关联的落点与 link 管理权限都长在调用方那一页上。迭代 / 发布的范围抽屉、个人页、库条目
+   * 不传：那些地方只有子需求与附件。
    */
-  issuesSection?: React.ReactNode;
-  /**
-   * 「关联测试用例」区块，同样由调用方注入。与 issuesSection 不同的是它是**需求级**的
-   * （关联行不带 project，用例的作用域来自 repository 且可空），所以产品侧整页、产品侧
-   * 抽屉、项目侧抽屉都给可写变体 —— 项目侧走后端的第二道权限门。迭代 / 发布的范围抽屉
-   * 不传：那两处是纯范围清单，连关联工作项都不显示。
-   */
-  testCasesSection?: React.ReactNode;
+  relations?: TRequirementRelationsConfig;
   /**
    * 整页标题行右侧的动作（提交 / 撤回评审、复制链接）。抽屉自己有顶部工具条，不用这个。
    */
   headerActions?: React.ReactNode;
-  /**
-   * 整页把子需求 / 关联工作项 / 关联测试用例交给调用方（操作条 + 有内容才出的折叠块）。
-   * 传了就替换掉这里自带的子需求区块和 issuesSection / testCasesSection 三段竖排。
-   */
-  relationsSection?: React.ReactNode;
   /**
    * 抽屉横幅上的审批动作：提交评审（变更中）、查看变更单 / 撤回评审（评审中）。
    * 弹窗与提交逻辑长在列表页上，这里只放入口；项目侧 / 范围抽屉不传则横幅只出说明。
@@ -188,51 +176,6 @@ const FieldRows = ({
           {renderLabel(field, "text-caption-md-regular text-tertiary")}
           <div className="min-w-0">{renderValue(field)}</div>
         </div>
-      ))}
-    </div>
-  );
-};
-
-/**
- * 子需求列表：编号 + 标题 + 状态 / 负责人，一个外框 + 分隔线而不是 N 张小卡片。
- * framed=false 给整页的关联 Tab 卡片用 —— 卡片自己已经有外框。
- */
-export const RequirementSubRequirementList = ({
-  items,
-  isLibrary = false,
-  framed = true,
-  onOpen,
-}: {
-  items: TRequirement[];
-  isLibrary?: boolean;
-  framed?: boolean;
-  onOpen: (requirementId: string) => void;
-}) => {
-  const { t } = useTranslation();
-  return (
-    <div className={cn("divide-y divide-subtle", framed && "overflow-hidden rounded-md border border-subtle")}>
-      {items.map((child) => (
-        <button
-          key={child.id}
-          type="button"
-          onClick={() => onOpen(child.id)}
-          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-xs-medium transition-colors hover:bg-layer-1"
-        >
-          {!isLibrary && (
-            <span className="shrink-0">
-              <BuiltinCellValue columnKey="status" values={child} />
-            </span>
-          )}
-          <span className="shrink-0">
-            <RequirementIdentifier displayId={child.display_id} size="md" />
-          </span>
-          <span className="min-w-0 flex-1 truncate text-primary">{child.title || t("requirement_detail.untitled")}</span>
-          {!isLibrary && (
-            <span className="shrink-0">
-              <BuiltinCellValue columnKey="assignee_id" values={child} />
-            </span>
-          )}
-        </button>
       ))}
     </div>
   );
@@ -412,10 +355,8 @@ export const RequirementDetailContent = (props: TProps) => {
     onModuleChange,
     onOpenRequirement,
     onRolledBack,
-    issuesSection,
-    testCasesSection,
+    relations,
     headerActions,
-    relationsSection,
     onSubmitReview,
     onWithdrawReview,
     onOpenChangeRequest,
@@ -677,55 +618,20 @@ export const RequirementDetailContent = (props: TProps) => {
         </>
       )}
 
-      {relationsSection ? (
-        relationsSection
-      ) : (
-        <>
-          {subRequirements.length > 0 &&
-            (isDrawer ? (
-              <section className="flex flex-col gap-2">
-                <DetailSectionHeader
-                  icon={GitBranch}
-                  title={t("requirement_detail.sub_requirements")}
-                  meta={<span className="tabular-nums">{subRequirements.length}</span>}
-                />
-                <RequirementSubRequirementList
-                  items={subRequirements}
-                  isLibrary={isLibrary}
-                  framed={false}
-                  onOpen={onOpenRequirement}
-                />
-              </section>
-            ) : (
-              <Section label={t("requirement_detail.sub_requirements")}>
-                <RequirementSubRequirementList
-                  items={subRequirements}
-                  isLibrary={isLibrary}
-                  onOpen={onOpenRequirement}
-                />
-              </Section>
-            ))}
-
-          {/* 关联工作项与子需求并列 —— 都在回答「这条需求现在被拆成了什么」 */}
-          {issuesSection}
-
-          {/* 关联测试用例紧跟其后 —— 回答「这条需求怎么验」，和「被拆成什么」是一组 */}
-          {testCasesSection}
-        </>
-      )}
-
       {/*
-        需求级附件：产品需求与库条目都有，放在关联区之后、历史区之前。
-        附件算内容（走 onPatch 进版本快照与评审），所以读写直接跟 readOnly。
+        关联区：子需求 / 工作项 / 用例 / 附件，整页与抽屉同一套 —— 操作条在上，
+        折叠块有内容才出现。放在字段之后、历史区之前。
       */}
-      <RequirementAttachmentsSection
+      <RequirementRelationsArea
         workspaceSlug={workspaceSlug}
         entityId={scopeEntityId}
         entityKind={isLibrary ? "library" : "product"}
-        requirementId={requirement.id}
-        attachments={requirement.attachments ?? []}
+        requirement={requirement}
+        subRequirements={subRequirements}
+        relations={relations}
         readOnly={readOnly}
-        onChange={(updater) => void onPatch({ attachments: updater })}
+        onAttachmentsChange={(updater) => void onPatch({ attachments: updater })}
+        onOpenRequirement={onOpenRequirement}
       />
 
       {/*
