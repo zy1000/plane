@@ -173,9 +173,9 @@ export const RequirementLibraryItemPage = observer(function RequirementLibraryIt
           </div>
         ) : (
           <div className="flex h-full w-full overflow-hidden">
-            {/* 主列只封顶不居中：1440px 之外才留白，而且留在右侧一处（与产品需求整页同款） */}
+            {/* 主列从左铺到右栏，与产品需求整页同款，大屏也不封顶 */}
             <div className="vertical-scrollbar scrollbar-sm h-full min-w-0 flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-7">
-              <div className="w-full max-w-[90rem]">
+              <div className="w-full">
                 <RequirementDetailContent
                   workspaceSlug={workspaceSlug}
                   libraryId={currentLibraryId}
