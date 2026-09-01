@@ -1,6 +1,8 @@
 .table-wrapper {
   overflow-x: auto;
-  padding-bottom: 26px;
+  /* 16px add-row control sits in this padding; 26px left it flush with the scrollbar */
+  padding-bottom: 44px;
+  cursor: pointer;
 
   table {
     border-collapse: collapse;
@@ -8,6 +10,7 @@
     margin: 0.5rem 0 0 0;
     @apply relative border border-subtle;
     width: 100%;
+    cursor: text;
 
     td,
     th {
