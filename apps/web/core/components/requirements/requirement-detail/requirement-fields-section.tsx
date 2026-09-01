@@ -162,7 +162,7 @@ const RequirementFieldRow = ({
           </Tooltip>
         )}
       </span>
-      <div className={cn("min-w-0", wide ? "max-w-[42rem] lg:col-span-3" : "max-w-sm")}>
+      <div className={cn("min-w-0", wide ? "lg:col-span-3" : "max-w-sm")}>
         {readOnly ? (
           <div className="pt-1.5">
             <LeafValue field={field} value={value} workspaceSlug={workspaceSlug} variant="detail" />

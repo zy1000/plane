@@ -541,10 +541,8 @@ export const RequirementDetailContent = (props: TProps) => {
           />
         )}
 
-        {/* 描述紧跟标题，不给它单独的小标题 —— 位置已经说明了它是什么。
-            抽屉里限宽到 42rem，正文行长超过这个数就开始需要用手指指着读了；
-            整页跟主列一样铺满 —— 主列本身已经封顶（见 requirement-detail-page），不再二次限宽 */}
-        <div className={cn(isDrawer && "max-w-[42rem]")}>
+        {/* 描述紧跟标题，不给它单独的小标题 —— 位置已经说明了它是什么。 */}
+        <div>
           {readOnly ? (
             descriptionBlank ? (
               <p className="text-body-sm-regular text-placeholder">{t("requirement_detail.no_description")}</p>
