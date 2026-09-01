@@ -12,7 +12,7 @@ import type {
   TRequirementFormRow,
   TRequirementValue,
 } from "@plane/types";
-import { CustomMenu } from "@plane/ui";
+import { AlertModalCore, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 import {
   getFormRows,
@@ -77,6 +77,8 @@ export const RequirementSubformSection = (props: TProps) => {
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
   /** 已存的全空行默认不展示；点「添加行」才把其中一行露出来，避免预置空格子 */
   const [visibleEmptyRowIds, setVisibleEmptyRowIds] = useState<Set<string>>(() => new Set());
+  /** 待删除的子表单行；菜单点删除只是暂存，真正的过滤要等确认弹窗提交 */
+  const [rowToDelete, setRowToDelete] = useState<{ form: TRequirementField; rowId: string } | null>(null);
 
   const rowsByForm = useMemo(
     () => Object.fromEntries(forms.map((form) => [form.id, getFormRows(data, form.id)])),
@@ -142,6 +144,12 @@ export const RequirementSubformSection = (props: TProps) => {
       form.id,
       (rowsByForm[form.id] ?? []).filter((row) => row.id !== rowId)
     );
+
+  const confirmRemoveRow = () => {
+    if (!rowToDelete) return;
+    removeRow(rowToDelete.form, rowToDelete.rowId);
+    setRowToDelete(null);
+  };
 
   const setCell = (form: TRequirementField, rowId: string, childId: string, value: TRequirementValue) =>
     writeRows(
@@ -358,7 +366,7 @@ export const RequirementSubformSection = (props: TProps) => {
                                     label={t("requirement_detail.subform.insert_below")}
                                   />
                                 </CustomMenu.MenuItem>
-                                <CustomMenu.MenuItem onClick={() => removeRow(form, row.id)}>
+                                <CustomMenu.MenuItem onClick={() => setRowToDelete({ form, rowId: row.id })}>
                                   <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
                                 </CustomMenu.MenuItem>
                               </CustomMenu>
@@ -395,6 +403,17 @@ export const RequirementSubformSection = (props: TProps) => {
           </div>
         );
       })}
+
+      <AlertModalCore
+        isOpen={rowToDelete !== null}
+        isSubmitting={false}
+        handleClose={() => setRowToDelete(null)}
+        handleSubmit={confirmRemoveRow}
+        title={t("requirement_detail.subform.delete_row_title")}
+        content={t("requirement_detail.subform.delete_row_description")}
+        primaryButtonText={{ default: t("delete"), loading: t("deleting") }}
+        secondaryButtonText={t("cancel")}
+      />
     </div>
   );
 };

@@ -295,6 +295,12 @@ export const RequirementGrid = observer(
     const [isCreatingRow, setIsCreatingRow] = useState(false);
     /** 待确认删除的行。删除是即时的，没有撤销，所以一律二次确认 */
     const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
+    /** 待确认删除的子表单行。同样是自动保存、没有撤销，理由与上面一致 */
+    const [childRowToDelete, setChildRowToDelete] = useState<{
+      requirementId: string;
+      formId: string;
+      rowId: string;
+    } | null>(null);
 
     /**
      * 有必填字段的类型建不出空行：后端在 validate_requirement_data 里按
@@ -629,6 +635,13 @@ export const RequirementGrid = observer(
           [formId]: getFormRows(data, formId).filter((row) => row.id !== rowId),
         };
       });
+    };
+
+    /** 子表单行确认删除后才真正落地，弹窗关闭方式与 confirmDelete 一致 */
+    const confirmDeleteFormRow = () => {
+      if (!childRowToDelete) return;
+      deleteFormRow(childRowToDelete.requirementId, childRowToDelete.formId, childRowToDelete.rowId);
+      setChildRowToDelete(null);
     };
 
     /**
@@ -1220,7 +1233,9 @@ export const RequirementGrid = observer(
                               <CustomMenu.MenuItem onClick={() => insertFormRow(key, form, rowIndex + 1)}>
                                 <MenuRowLabel icon={ArrowDownToLine} label={t("requirement_grid.data.insert_below")} />
                               </CustomMenu.MenuItem>
-                              <CustomMenu.MenuItem onClick={() => deleteFormRow(key, form.id, row.id)}>
+                              <CustomMenu.MenuItem
+                                onClick={() => setChildRowToDelete({ requirementId: key, formId: form.id, rowId: row.id })}
+                              >
                                 <MenuRowLabel icon={Trash2} label={t("delete")} tone="danger" />
                               </CustomMenu.MenuItem>
                             </CustomMenu>
@@ -1694,6 +1709,17 @@ export const RequirementGrid = observer(
             { count: idsToDelete.length }
           )}
           // AlertModalCore 的按钮默认是英文硬编码
+          primaryButtonText={{ default: t("delete"), loading: t("deleting") }}
+          secondaryButtonText={t("cancel")}
+        />
+
+        <AlertModalCore
+          isOpen={childRowToDelete !== null}
+          isSubmitting={isMutating}
+          handleClose={() => setChildRowToDelete(null)}
+          handleSubmit={confirmDeleteFormRow}
+          title={t("requirement_grid.data.delete_child_title")}
+          content={t("requirement_grid.data.delete_child_description")}
           primaryButtonText={{ default: t("delete"), loading: t("deleting") }}
           secondaryButtonText={t("cancel")}
         />

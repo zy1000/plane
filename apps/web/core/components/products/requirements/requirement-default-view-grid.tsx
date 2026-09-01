@@ -85,9 +85,13 @@ import { useRequirementTitles } from "@/components/requirements/use-requirement-
  *
  * 表格骨架照搬工作项的电子表格布局（issues/issue-layouts/spreadsheet）：
  * 编号、标题依次左固定，标题列吃掉容器剩余宽度；其余列定宽 144px、行高 44px。
- * 勾选叠在首列上，不占独立格子，行操作折进标题格，悬停才显形。量化与样式常量都在
- * requirement-grid-shared.tsx，三个需求网格共用。
+ * 勾选叠在首列上，不占独立格子；行操作折进编号格（编号隐藏时回退到标题格），
+ * 悬停才显形。量化与样式常量都在 requirement-grid-shared.tsx，三个需求网格共用。
  */
+
+/** 编号列要给悬停行菜单留位，比默认属性列宽一截（类型视图同理） */
+const DISPLAY_ID_COLUMN_WIDTH = REQUIREMENT_GRID_COLUMN_WIDTH + 32;
+
 type TProps = {
   /** 父项列要把 UUID 换成标题，跨页的父项得回头查接口 */
   workspaceSlug: string;
@@ -180,7 +184,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   /**
-   * 行菜单要 portal 出滚动容器：标题列 sticky 会自建层叠上下文，菜单若留在格内会被
+   * 行菜单要 portal 出滚动容器：编号列 sticky 会自建层叠上下文，菜单若留在格内会被
    * 下面几行的 sticky 格盖住（和工作项电子表格同一套修法）。
    */
   const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
@@ -337,7 +341,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
         : "title";
   /** 标题列之外的所有列默认宽，用来反推标题列该吃掉多少 */
   const defaultPropertyColumnsWidth =
-    (isDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
+    (isDisplayIdVisible ? DISPLAY_ID_COLUMN_WIDTH : 0) +
     (isModuleVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isSourceDisplayIdVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
     (isApprovalVisible ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
@@ -357,7 +361,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     const snapshot: Record<string, number> = {
       title: defaultTitleColumnWidth,
     };
-    if (isDisplayIdVisible) snapshot.display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
+    if (isDisplayIdVisible) snapshot.display_id = DISPLAY_ID_COLUMN_WIDTH;
     if (isModuleVisible) snapshot.module = REQUIREMENT_GRID_COLUMN_WIDTH;
     if (isSourceDisplayIdVisible) snapshot.source_display_id = REQUIREMENT_GRID_COLUMN_WIDTH;
     if (isApprovalVisible) snapshot.approval = REQUIREMENT_GRID_COLUMN_WIDTH;
@@ -379,7 +383,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     propertyBuiltinColumns,
   ]);
   const titleColumnWidth = getWidth("title", defaultTitleColumnWidth);
-  const displayIdWidth = getWidth("display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
+  const displayIdWidth = getWidth("display_id", DISPLAY_ID_COLUMN_WIDTH);
   const moduleWidth = getWidth("module", REQUIREMENT_GRID_COLUMN_WIDTH);
   const sourceDisplayIdWidth = getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH);
   const displayIdStickyLeft = 0;
@@ -465,6 +469,58 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
       afterId: requirement.id,
     });
   };
+
+  const renderRowActionMenu = (requirement: TRequirement) => (
+    <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
+      {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
+      <CustomMenu
+        ellipsis
+        placement="bottom-end"
+        buttonClassName="text-tertiary hover:text-primary"
+        portalElement={menuPortalEl}
+      >
+        <CustomMenu.MenuItem onClick={() => void handleDuplicate(requirement)} disabled={isMutating}>
+          <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
+        </CustomMenu.MenuItem>
+        {requirement.can_submit_review && onSubmitReview && (
+          <CustomMenu.MenuItem onClick={() => onSubmitReview([requirement.id])}>
+            <MenuRowLabel icon={Send} label={t("requirement_approval.submit_review")} />
+          </CustomMenu.MenuItem>
+        )}
+        {requirement.can_withdraw && requirement.pending_change_request_id && onWithdrawReview && (
+          <CustomMenu.MenuItem onClick={() => onWithdrawReview(requirement.pending_change_request_id as string)}>
+            <MenuRowLabel icon={Undo2} label={t("requirement_approval.withdraw_review")} />
+          </CustomMenu.MenuItem>
+        )}
+        {requirement.pending_change_request_id && onOpenChangeRequest && (
+          <CustomMenu.MenuItem onClick={() => onOpenChangeRequest(requirement.pending_change_request_id as string)}>
+            <MenuRowLabel icon={History} label={t("requirement_approval.view_change_request")} />
+          </CustomMenu.MenuItem>
+        )}
+        {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」 */}
+        {!requirement.is_locked && (
+          <CustomMenu.MenuItem
+            onClick={() => {
+              if (requirement.approved_version !== null && onSubmitReview) {
+                onSubmitReview([requirement.id]);
+                return;
+              }
+              setIdsToDelete([requirement.id]);
+            }}
+            disabled={isMutating}
+          >
+            <MenuRowLabel
+              icon={Trash2}
+              label={
+                requirement.approved_version !== null ? t("requirement_approval.request_delete") : t("delete")
+              }
+              tone={requirement.approved_version !== null ? undefined : "danger"}
+            />
+          </CustomMenu.MenuItem>
+        )}
+      </CustomMenu>
+    </span>
+  );
 
   if (isLoading && !requirements.length) {
     return (
@@ -770,7 +826,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   )}
                 >
                   {/*
-                    编号 / 标题依次左固定。勾选叠在首列，行操作仍折进标题列。
+                    编号 / 标题依次左固定。勾选叠在首列，行操作折进编号列。
                     左固定列底色必须不透明，选中/悬停着色铺在内层 div。
                   */}
                   {isDisplayIdVisible && (
@@ -800,13 +856,14 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                           <button
                             type="button"
                             onClick={() => onOpenDetail(requirement.id)}
-                            className="min-w-0 truncate text-left hover:text-accent-primary"
+                            className="min-w-0 flex-1 truncate text-left hover:text-accent-primary"
                           >
                             <RequirementIdentifier displayId={requirement.display_id} />
                           </button>
                         ) : (
-                          <span className="text-placeholder">—</span>
+                          <span className="min-w-0 flex-1 text-placeholder">—</span>
                         )}
+                        {!readOnly && renderRowActionMenu(requirement)}
                       </div>
                       {selectHost === "display_id" && (
                         <RequirementGridHoverSelect
@@ -898,66 +955,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                           <BuiltinCellValue columnKey="title" values={requirement} />
                         </button>
                       </Tooltip>
-                      {!readOnly && (
-                        <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
-                          {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
-                          <CustomMenu
-                            ellipsis
-                            placement="bottom-end"
-                            buttonClassName="text-tertiary hover:text-primary"
-                            portalElement={menuPortalEl}
-                          >
-                            <CustomMenu.MenuItem
-                              onClick={() => void handleDuplicate(requirement)}
-                              disabled={isMutating}
-                            >
-                              <MenuRowLabel icon={Copy} label={t("requirement_grid.data.copy")} />
-                            </CustomMenu.MenuItem>
-                            {requirement.can_submit_review && onSubmitReview && (
-                              <CustomMenu.MenuItem onClick={() => onSubmitReview([requirement.id])}>
-                                <MenuRowLabel icon={Send} label={t("requirement_approval.submit_review")} />
-                              </CustomMenu.MenuItem>
-                            )}
-                            {requirement.can_withdraw && requirement.pending_change_request_id && onWithdrawReview && (
-                              <CustomMenu.MenuItem
-                                onClick={() => onWithdrawReview(requirement.pending_change_request_id as string)}
-                              >
-                                <MenuRowLabel icon={Undo2} label={t("requirement_approval.withdraw_review")} />
-                              </CustomMenu.MenuItem>
-                            )}
-                            {requirement.pending_change_request_id && onOpenChangeRequest && (
-                              <CustomMenu.MenuItem
-                                onClick={() => onOpenChangeRequest(requirement.pending_change_request_id as string)}
-                              >
-                                <MenuRowLabel icon={History} label={t("requirement_approval.view_change_request")} />
-                              </CustomMenu.MenuItem>
-                            )}
-                            {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」 */}
-                            {!requirement.is_locked && (
-                              <CustomMenu.MenuItem
-                                onClick={() => {
-                                  if (requirement.approved_version !== null && onSubmitReview) {
-                                    onSubmitReview([requirement.id]);
-                                    return;
-                                  }
-                                  setIdsToDelete([requirement.id]);
-                                }}
-                                disabled={isMutating}
-                              >
-                                <MenuRowLabel
-                                  icon={Trash2}
-                                  label={
-                                    requirement.approved_version !== null
-                                      ? t("requirement_approval.request_delete")
-                                      : t("delete")
-                                  }
-                                  tone={requirement.approved_version !== null ? undefined : "danger"}
-                                />
-                              </CustomMenu.MenuItem>
-                            )}
-                          </CustomMenu>
-                        </span>
-                      )}
+                      {!readOnly && !isDisplayIdVisible && renderRowActionMenu(requirement)}
                     </div>
                   </td>
                   {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}

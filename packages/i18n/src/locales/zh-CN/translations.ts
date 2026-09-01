@@ -1755,6 +1755,8 @@ export default {
       empty_add: "还没有行。需要时再添加。",
       empty_add_required: "至少需要 1 行，点右上角「添加行」开始填写",
       no_fields: "这个子表单还没有配置字段",
+      delete_row_title: "删除这一行子数据？",
+      delete_row_description: "删除后无法恢复，确定继续吗？",
     },
     versions: {
       label: "版本历史",
@@ -1889,6 +1891,8 @@ export default {
       add_child: "新增子记录",
       child_actions: "子记录操作",
       reorder_child: "拖动调整子记录顺序",
+      delete_child_title: "删除这条子记录？",
+      delete_child_description: "删除后无法恢复，确定继续吗？",
       row_number: "编号",
       delete_confirm: "确定删除选中的需求记录吗？",
       delete_selected: "删除已选（{count}）",

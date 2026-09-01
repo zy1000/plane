@@ -1575,6 +1575,8 @@ export default {
       empty_add: "No rows yet. Add one when you need it.",
       empty_add_required: "At least one row is required. Use “Add row” above to start",
       no_fields: "This sub form has no fields yet",
+      delete_row_title: "Delete this row?",
+      delete_row_description: "This can't be undone. Continue?",
     },
     versions: {
       label: "Version history",
@@ -1709,6 +1711,8 @@ export default {
       add_child: "Add child row",
       child_actions: "Child row actions",
       reorder_child: "Drag to reorder child row",
+      delete_child_title: "Delete this child row?",
+      delete_child_description: "This can't be undone. Continue?",
       row_number: "No.",
       delete_confirm: "Delete the selected requirement records?",
       delete_selected: "Delete selected ({count})",
