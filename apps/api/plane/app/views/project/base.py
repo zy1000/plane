@@ -86,6 +86,7 @@ from plane.db.models.issue_type import (
 )
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
+from plane.utils.requirement_project import linked_products_by_project
 from plane.utils.project.defaults import (
     bulk_create_issue_state,
     create_default_bug_workflow,
@@ -332,11 +333,17 @@ class ProjectViewSet(BaseViewSet):
                 project_rows, many=True, fields=fields if fields else None
             ).data
         ]
+        # 列表页「项目 → 关联产品」展开行的数据源，与 permission_keys 同样在这里合入：
+        # 两条列表路径（values 白名单 / serializer）共用一次分组查询
+        products_by_project = linked_products_by_project(
+            [self._get_project_row_value(row, "id") for row in project_rows]
+        )
         for index, row in enumerate(serialized_projects):
             project_id = self._get_project_row_value(project_rows[index], "id")
             row["permission_keys"] = list(
                 permission_keys_by_project.get(project_id, set())
             )
+            row["products"] = products_by_project.get(project_id, [])
         return serialized_projects
 
     def _get_project_list_stats(self, project_ids):
@@ -511,11 +518,15 @@ class ProjectViewSet(BaseViewSet):
         permission_keys_by_project = self._get_permission_keys_by_project(
             slug, project_rows
         )
+        products_by_project = linked_products_by_project(
+            [row["id"] for row in project_rows]
+        )
         for row in project_rows:
             row.update(stats_by_project[row["id"]])
             row["permission_keys"] = list(
                 permission_keys_by_project.get(str(row["id"]), set())
             )
+            row["products"] = products_by_project.get(str(row["id"]), [])
         return Response(project_rows, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")

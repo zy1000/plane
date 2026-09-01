@@ -559,7 +559,7 @@ export const RequirementGridColumnResizer = ({
  * 表格走 border-separate，行组（thead / tbody）上的 border 在这个模型下根本不渲染。
  * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
  *
- * 叶子列（单列表头、表单子字段）钉 44px，和正文行高对齐。分组表头另走
+ * 单列表头钉 44px，和正文行高对齐。表单子字段叶子行另盖成 40px。分组表头另走
  * REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS，不能套 h-11，否则两行叠成 88px，
  * 单列 rowSpan=2 会被一起拉高，列名漂在一格空白中间。
  */
@@ -567,12 +567,14 @@ const HEADER_CELL_BASE =
   "group/header relative h-11 border-r border-b border-strong bg-layer-1 text-left align-middle text-13 font-medium";
 export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
 export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
-/** 表单分组名那一行：压成细条，只给「这几列属于哪个表单」当标签。 */
+/** 表单分组名那一行：略高于细条，字号与叶子列对齐，行高仍靠 leading-none 压住。 */
 export const REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS =
-  "group/header relative h-6 border-r border-b border-strong bg-layer-1 text-center align-middle text-11 font-medium";
+  "group/header relative h-7 border-r border-b border-strong bg-layer-1 text-center align-middle text-13 font-medium";
 /**
- * 有二级表头时盖掉叶子格的 h-11。rowSpan 格高度改由两行相加，列名落在底部 44px 条带里。
+ * 二级表头的叶子行：比正文行略矮，把 4px 让给上面的分组条。
+ * 有二级表头时盖掉叶子格的 h-11。rowSpan 格高度改由两行相加，列名落在这条带里。
  */
+const HEADER_FORM_LEAF_ROW_CLASS = "h-10";
 const HEADER_CELL_SPANNED_CLASS = "!h-auto align-bottom";
 
 /**
@@ -728,7 +730,7 @@ export const useRequirementGridScrollContainer = () => {
 
 /**
  * 二级表头：非表单根字段 rowSpan=2，表单字段作分组表头、子字段排在第二行。
- * 分组行压成 24px 细条；单列标题底对齐到叶子行，避免 44+44 把一列表头撑成一块空高。
+ * 分组行 28px、叶子行 40px；单列标题底对齐到叶子行，避免两行同高把一列表头撑成一块空高。
  * 首列与末列由调用方给（编辑态给编号等左固定列与「操作」，diff 模式给「变更」且没有末列）。
  */
 type TRequirementGridBuiltinHeader = {
@@ -816,7 +818,7 @@ export const RequirementGridHeader = ({
 
   const renderSpannedContent = (content: React.ReactNode) =>
     spanRows > 1 ? (
-      <div className="relative flex h-11 w-full min-w-0 items-center">{content}</div>
+      <div className={cn("relative flex w-full min-w-0 items-center", HEADER_FORM_LEAF_ROW_CLASS)}>{content}</div>
     ) : (
       content
     );
@@ -838,7 +840,7 @@ export const RequirementGridHeader = ({
         colSpan={getFormColumnCount(field, showActionGutter, showFormRowNumber)}
         className={cn(REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS, "px-page-x")}
       >
-        <span className="truncate text-11 font-medium leading-none text-secondary">{field.name}</span>
+        <span className="truncate text-13 font-medium leading-none text-secondary">{field.name}</span>
       </th>
     ) : (
       <th
@@ -897,6 +899,7 @@ export const RequirementGridHeader = ({
                   <th
                     className={cn(
                       REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                      HEADER_FORM_LEAF_ROW_CLASS,
                       "px-1 text-center font-medium text-secondary"
                     )}
                   >
@@ -906,7 +909,7 @@ export const RequirementGridHeader = ({
                 {field.children.map((child) => (
                   <th
                     key={child.id}
-                    className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "font-normal")}
+                    className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, HEADER_FORM_LEAF_ROW_CLASS, "font-normal")}
                   >
                     <RequirementGridHeaderLabel label={child.name} isRequired={child.is_required} />
                     {onFieldResize && (
@@ -915,13 +918,20 @@ export const RequirementGridHeader = ({
                   </th>
                 ))}
                 {showActionGutter && (
-                  <th aria-hidden className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "px-0.5")} />
+                  <th
+                    aria-hidden
+                    className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, HEADER_FORM_LEAF_ROW_CLASS, "px-0.5")}
+                  />
                 )}
               </Fragment>
             ) : (
               <th
                 key={`${field.id}-empty`}
-                className={cn(REQUIREMENT_GRID_HEADER_CELL_CLASS, "font-normal text-placeholder")}
+                className={cn(
+                  REQUIREMENT_GRID_HEADER_CELL_CLASS,
+                  HEADER_FORM_LEAF_ROW_CLASS,
+                  "font-normal text-placeholder"
+                )}
               >
                 {t("requirement_fields.fields.no_children")}
               </th>

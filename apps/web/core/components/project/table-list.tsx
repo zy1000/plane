@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
@@ -32,6 +32,11 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
 import { ArchiveRestoreProjectModal } from "@/components/project/archive-restore-modal";
 import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
+import {
+  ProjectProductRows,
+  ProjectProductsToggle,
+  ProjectProductsTogglePlaceholder,
+} from "@/components/project/project-product-rows";
 import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import type { TProject } from "@plane/types";
 
@@ -45,6 +50,9 @@ type TSortDirection = "asc" | "desc";
 
 const isSortKey = (key: string): key is TSortKey =>
   key === "name" || key === "created_at" || key === "status";
+
+/** 表头列数；产品子行用 colSpan 占满整行，加减列时同步改这里 */
+const TABLE_COLUMN_COUNT = 7;
 
 export const ProjectTableList = observer(function ProjectTableList(props: Props) {
   const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
@@ -87,6 +95,8 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   const [publishProjectId, setPublishProjectId] = useState<string | null>(null);
   const [archiveProjectId, setArchiveProjectId] = useState<string | null>(null);
   const [restoreProjectId, setRestoreProjectId] = useState<string | null>(null);
+  // 展开了关联产品子行的项目；按 id 记，翻页 / 排序不清空
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!workspaceSlugString) return;
@@ -204,6 +214,15 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     },
     [addProjectToFavorites, getProjectById, removeProjectFromFavorites, workspaceSlugString]
   );
+
+  const toggleProjectExpanded = useCallback((projectId: string) => {
+    setExpandedProjectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }, []);
 
   const handleOpenPublishModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
     e.preventDefault();
@@ -399,19 +418,31 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                   const projectSettingsPath = workspaceSlugString
                     ? buildProjectSettingsPath({ workspaceSlug: workspaceSlugString, projectId: project.id, currentPath })
                     : "#";
+                  const linkedProducts = project.products ?? [];
+                  const isProductsExpanded = linkedProducts.length > 0 && expandedProjectIds.has(project.id);
 
                   return (
+                    <Fragment key={project.id}>
                     <tr
-                      key={project.id}
                       className={cn("hover:bg-layer-1-hover", {
                         "bg-layer-1": isArchived,
                         "opacity-70": isArchived,
                       })}
                     >
                   <td className="px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-1">
+                    {linkedProducts.length > 0 ? (
+                      <ProjectProductsToggle
+                        count={linkedProducts.length}
+                        isExpanded={isProductsExpanded}
+                        onToggle={() => toggleProjectExpanded(project.id)}
+                      />
+                    ) : (
+                      <ProjectProductsTogglePlaceholder />
+                    )}
                     <Link
                       href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
-                      className="flex items-center gap-2 text-primary"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-primary"
                       data-prevent-progress={isArchived || isInviteOnly}
                       onClick={(e) => {
                         if (isArchived || isInviteOnly) {
@@ -442,6 +473,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         </div>
                       </div>
                     </Link>
+                    </div>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     {projectLead ? (
@@ -615,6 +647,14 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     </div>
                   </td>
                 </tr>
+                {isProductsExpanded && workspaceSlugString && (
+                  <ProjectProductRows
+                    workspaceSlug={workspaceSlugString}
+                    products={linkedProducts}
+                    colSpan={TABLE_COLUMN_COUNT}
+                  />
+                )}
+                </Fragment>
               );
                 })}
             </tbody>

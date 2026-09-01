@@ -223,6 +223,43 @@ def linked_requirement_ids(project_id):
     )
 
 
+def linked_products_by_project(project_ids):
+    """项目列表用：每个项目关联了哪些产品，按 str(project_id) 分组。
+
+    一次查询覆盖所有项目，视图按 project_id 取用 —— 不要每行查一次。只出列表页
+    画产品子行需要的四列（id / name / identifier / logo_props），完整产品对象走
+    products/<pk>/。没有关联的项目也占一个空列表的键，消费方不必再判 None。
+    """
+    products_by_project = {str(project_id): [] for project_id in project_ids}
+    if not products_by_project:
+        return products_by_project
+
+    rows = (
+        ProductProject.objects.filter(
+            project_id__in=project_ids,
+            product__deleted_at__isnull=True,
+        )
+        .order_by("product__identifier")
+        .values(
+            "project_id",
+            "product_id",
+            "product__name",
+            "product__identifier",
+            "product__logo_props",
+        )
+    )
+    for row in rows:
+        products_by_project[str(row["project_id"])].append(
+            {
+                "id": str(row["product_id"]),
+                "name": row["product__name"],
+                "identifier": row["product__identifier"],
+                "logo_props": row["product__logo_props"],
+            }
+        )
+    return products_by_project
+
+
 def linkable_requirements_queryset(*, slug, project_id):
     """候选池：本项目关联产品下、且尚未关联进来的需求。
 

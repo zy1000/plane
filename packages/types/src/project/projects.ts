@@ -45,6 +45,14 @@ export type TProjectProductType =
   | "RS485"
   | "其他";
 
+/** 项目关联的产品（ProductProject 关联表，只表达引用关系）；列表接口按 identifier 排序返回 */
+export type TProjectLinkedProduct = {
+  id: string;
+  name: string;
+  identifier: string;
+  logo_props: TLogoProps | null;
+};
+
 export interface IPartialProject {
   id: string;
   name: string;
@@ -84,6 +92,8 @@ export interface IPartialProject {
   grade?: TProjectGrade | null;
   /** 项目产品类型（列表/详情接口可能返回） */
   product_type?: TProjectProductType | null;
+  /** 项目关联的产品（两个列表接口返回；与 product_type 无关） */
+  products?: TProjectLinkedProduct[];
   // ---- 0348 扩展字段：API 创建时必填（business_unit 除外），但 DB 可空（迁移前的存量项目为 null，编辑时必须补齐）----
   /** 项目代号，工作区内唯一 */
   code?: string | null;
