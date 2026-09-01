@@ -30,7 +30,7 @@ type TPlanCasesTableProps = {
   columnWidths: Record<string, number>;
   currentUserId?: string;
   displayProperties: TPlanCaseDisplayProperties;
-  onAssigneeChange: (planCaseId: string, assignee: string | null) => void;
+  onAssigneeChange: (planCaseId: string, assignees: string[]) => void;
   onCancelRelation: (planCaseId: string) => void;
   onOpenCase: (caseId?: string) => void;
   onRowSelectChange: (selectedKeysOnCurrentPage: string[]) => void;
@@ -42,7 +42,6 @@ type TPlanCasesTableProps = {
   renderUpdatedAt: (value?: string | null) => ReactNode;
   selectedPlanCaseIds: string[];
   setColumnWidth: (key: string, width: number) => void;
-  updatingAssigneePlanCaseId?: string | null;
 };
 
 const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: TResizableHeadProps) => {
@@ -109,7 +108,6 @@ export const PlanCasesTable = ({
   renderUpdatedAt,
   selectedPlanCaseIds,
   setColumnWidth,
-  updatingAssigneePlanCaseId,
 }: TPlanCasesTableProps) => {
   const selectedKeySet = useMemo(
     () => new Set(selectedPlanCaseIds.map((id) => String(id))),
@@ -246,8 +244,8 @@ export const PlanCasesTable = ({
         {cases.map((record) => {
           const recordId = String(record.id);
           const caseId = record.case?.id ? String(record.case.id) : undefined;
-          const isAssignedToCurrentUser =
-            Boolean(record?.assignee) && Boolean(currentUserId) && String(record.assignee) === String(currentUserId);
+          const assigneeIds = (record?.assignees ?? []).map(String);
+          const isAssignedToCurrentUser = Boolean(currentUserId) && assigneeIds.includes(String(currentUserId));
           const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
 
           return (
@@ -331,15 +329,15 @@ export const PlanCasesTable = ({
                   style={getWidthStyle("assignee", 170)}
                 >
                   <MemberDropdown
-                    multiple={false}
-                    value={record?.assignee ?? null}
-                    onChange={(value) => onAssigneeChange(recordId, value ? String(value) : null)}
-                    disabled={bulkAssigneeUpdating || updatingAssigneePlanCaseId === recordId}
+                    multiple
+                    value={assigneeIds}
+                    onChange={(value) => onAssigneeChange(recordId, value)}
+                    disabled={bulkAssigneeUpdating}
                     projectId={projectId}
                     placeholder="请选择执行人"
                     className="w-full text-sm"
                     buttonContainerClassName="w-full text-left p-0"
-                    buttonVariant="transparent-with-text"
+                    buttonVariant={assigneeIds.length > 1 ? "transparent-without-text" : "transparent-with-text"}
                     buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                     showUserDetails
                     optionsClassName="z-[80]"

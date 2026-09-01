@@ -48,7 +48,7 @@ from plane.app.serializers.qa.plan import (
     PlanCaseRecordSerializer,
     PlanCaseCopySerializer,
 )
-from plane.app.views.qa.filters import TestPlanFilter
+from plane.app.views.qa.filters import TestPlanFilter, PlanCaseFilter
 from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
 from plane.db.models import (
     TestPlan,
@@ -319,15 +319,7 @@ class PlanListAPIView(BaseAPIView):
 class PlanCaseAPIView(BaseAPIView):
     queryset = PlanCase.objects.all()
     pagination_class = CustomPaginator
-    filterset_fields = {
-        "plan_id": ["exact", "in"],
-        "case__repository_id": ["exact", "in"],
-        "case__module_id": ["exact", "in"],
-        "case__type": ["exact", "in"],
-        "case__priority": ["exact", "in"],
-        "assignee_id": ["exact", "in"],
-        "result": ["exact", "in"],
-    }
+    filterset_class = PlanCaseFilter
     serializer_class = PlanCaseListSerializer
     filter_backends = (
         DjangoFilterBackend,
@@ -342,8 +334,7 @@ class PlanCaseAPIView(BaseAPIView):
             "case",
             "case__repository",
             "case__module",
-            "assignee",
-        )
+        ).prefetch_related("assignees")
         if slug:
             queryset = queryset.filter(plan__project__workspace__slug=slug)
 
@@ -351,7 +342,6 @@ class PlanCaseAPIView(BaseAPIView):
             "id",
             "plan_id",
             "case_id",
-            "assignee_id",
             "result",
             "created_at",
             "updated_at",
@@ -368,7 +358,6 @@ class PlanCaseAPIView(BaseAPIView):
             "case__module__id",
             "case__module__name",
             "case__assignee_id",
-            "assignee__id",
         )
 
     def get(self, request, slug):
@@ -520,21 +509,70 @@ class PlanModuleCountAPIView(BaseAPIView):
         return Response(data=result)
 
 
+def _invalid_workspace_member_ids(slug, member_ids):
+    """返回不是该工作区活跃成员的 id 集合（字符串），空集合即全部合法；非法 UUID 也视为不合法。"""
+    wanted = set()
+    invalid = set()
+    for member_id in member_ids:
+        try:
+            wanted.add(str(uuid.UUID(str(member_id))))
+        except (ValueError, TypeError, AttributeError):
+            invalid.add(str(member_id))
+    if wanted:
+        valid = {
+            str(member_id)
+            for member_id in WorkspaceMember.objects.filter(
+                workspace__slug=slug,
+                member_id__in=wanted,
+                deleted_at__isnull=True,
+                is_active=True,
+            ).values_list("member_id", flat=True)
+        }
+        invalid |= wanted - valid
+    return invalid
+
+
+def _set_plan_case_assignees(plan_case_ids, assignee_ids):
+    """整体覆盖一批计划用例的执行人。
+
+    必须先删再插：软删不会清 through 行，复活的计划用例会残留旧执行人。
+    """
+    plan_case_ids = list(plan_case_ids)
+    if not plan_case_ids:
+        return
+    through = PlanCase.assignees.through
+    through.objects.filter(plancase_id__in=plan_case_ids).delete()
+    assignee_ids = list(dict.fromkeys(assignee_ids or []))
+    if assignee_ids:
+        through.objects.bulk_create(
+            [
+                through(plancase_id=plan_case_id, user_id=user_id)
+                for plan_case_id in plan_case_ids
+                for user_id in assignee_ids
+            ],
+            batch_size=1000,
+        )
+
+
 class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
     def _filtered_plan_case_qs(self, request):
-        query = PlanCase.objects.select_related("case", "assignee").filter(
-            plan_id=request.query_params["plan_id"]
+        query = (
+            PlanCase.objects.select_related("case")
+            .prefetch_related("assignees")
+            .filter(plan_id=request.query_params["plan_id"])
         )
         if name := request.query_params.get("name__icontains"):
             query = query.filter(case__name__icontains=name)
 
+        # getlist 对单值也返回 [x]；执行人是 M2M，走 through 表子查询避免重复行
         assignee_ids = request.query_params.getlist("assignee_id")
         if assignee_ids:
-            query = query.filter(assignee_id__in=assignee_ids)
-        elif assignee_id := request.query_params.get("assignee_id"):
-            query = query.filter(assignee_id=assignee_id)
+            through = PlanCase.assignees.through
+            query = query.filter(
+                id__in=through.objects.filter(user_id__in=assignee_ids).values("plancase_id")
+            )
 
         repository_ids = (
             request.query_params.getlist("repository_id")
@@ -630,24 +668,23 @@ class PlanView(BaseViewSet):
             queryset = queryset.filter(plan__project_id=project_id)
         plan_case = get_object_or_404(queryset)
 
-        assignee_id = request.data.get("assignee")
-        if assignee_id in ("", None):
-            plan_case.assignee = None
-        else:
-            member_exists = WorkspaceMember.objects.filter(
-                workspace__slug=slug,
-                member_id=assignee_id,
-                deleted_at__isnull=True,
-                is_active=True,
-            ).exists()
-            if not member_exists:
-                return Response(
-                    {"error": "assignee is invalid"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            plan_case.assignee_id = assignee_id
+        # 整体覆盖执行人列表；空列表即清空
+        assignee_ids = request.data.get("assignees")
+        if assignee_ids is None:
+            assignee_ids = []
+        if not isinstance(assignee_ids, list):
+            return Response(
+                {"error": "assignees must be a list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if _invalid_workspace_member_ids(slug, assignee_ids):
+            return Response(
+                {"error": "assignee is invalid"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        plan_case.save(update_fields=["assignee", "updated_at"])
+        plan_case.assignees.set(list(dict.fromkeys(assignee_ids)))
+        plan_case.save(update_fields=["updated_at"])
         return Response(PlanCaseCardSerializer(plan_case).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="execute")
@@ -681,12 +718,16 @@ class PlanView(BaseViewSet):
                 case_id=case_id,
                 deleted_at__isnull=True,
             )
-            if not plan_case.assignee_id:
+            # 任一执行人都可提交；结果按最后一次执行覆盖（见下方 plan_case.result = result）
+            assignee_ids = {
+                str(user_id) for user_id in plan_case.assignees.values_list("id", flat=True)
+            }
+            if not assignee_ids:
                 return Response(
                     status=status.HTTP_403_FORBIDDEN,
                     data={"msg": f'用例"{plan_case.case.name}"尚未设置执行人'},
                 )
-            if str(plan_case.assignee_id) != str(request.user.id):
+            if str(request.user.id) not in assignee_ids:
                 return Response(
                     status=status.HTTP_403_FORBIDDEN,
                     data={"msg": f'你没有权限执行"{plan_case.case.name}"'},
@@ -998,7 +1039,7 @@ class PlanView(BaseViewSet):
     def add_cases(self, request, slug):
         plan_id = request.data.get("plan_id")
         raw_case_ids = request.data.get("case_ids")
-        assignee_id = request.data.get("assignee")
+        assignee_ids = request.data.get("assignees") or []
 
         if not plan_id:
             return Response(
@@ -1008,6 +1049,12 @@ class PlanView(BaseViewSet):
         if not isinstance(raw_case_ids, list) or len(raw_case_ids) == 0:
             return Response(
                 {"error": "case_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(assignee_ids, list):
+            return Response(
+                {"error": "assignees must be a list"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1034,18 +1081,11 @@ class PlanView(BaseViewSet):
             plan_lookup["project_id"] = project_id
         plan = get_object_or_404(TestPlan, **plan_lookup)
 
-        if assignee_id not in (None, ""):
-            member_exists = WorkspaceMember.objects.filter(
-                workspace__slug=slug,
-                member_id=assignee_id,
-                deleted_at__isnull=True,
-                is_active=True,
-            ).exists()
-            if not member_exists:
-                return Response(
-                    {"error": "assignee is invalid"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if _invalid_workspace_member_ids(slug, assignee_ids):
+            return Response(
+                {"error": "assignee is invalid"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         repo_ids = list(
             TestCaseRepository.objects.filter(
@@ -1077,23 +1117,25 @@ class PlanView(BaseViewSet):
         soft_deleted_qs = PlanCase.all_objects.filter(
             plan=plan, case_id__in=list(found_case_ids)
         ).exclude(deleted_at__isnull=True)
-        soft_deleted_case_ids = set(soft_deleted_qs.values_list("case_id", flat=True))
-        if soft_deleted_case_ids:
-            soft_deleted_qs.update(
-                deleted_at=None, result=PlanCase.Result.NOT_START, assignee_id=assignee_id
-            )
+        soft_deleted_rows = list(soft_deleted_qs.values_list("id", "case_id"))
+        soft_deleted_case_ids = {case_id for _, case_id in soft_deleted_rows}
+        if soft_deleted_rows:
+            soft_deleted_qs.update(deleted_at=None, result=PlanCase.Result.NOT_START)
 
         to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
+        created_plan_cases = []
         if to_create_case_ids:
-            PlanCase.objects.bulk_create(
-                [
-                    PlanCase(plan=plan, case_id=case_id)
-                    if assignee_id in (None, "")
-                    else PlanCase(plan=plan, case_id=case_id, assignee_id=assignee_id)
-                    for case_id in to_create_case_ids
-                ],
+            created_plan_cases = PlanCase.objects.bulk_create(
+                [PlanCase(plan=plan, case_id=case_id) for case_id in to_create_case_ids],
                 batch_size=1000,
             )
+
+        # 复活行 + 新建行统一覆盖执行人（复活行会残留旧执行人）
+        _set_plan_case_assignees(
+            [plan_case_id for plan_case_id, _ in soft_deleted_rows]
+            + [plan_case.id for plan_case in created_plan_cases],
+            assignee_ids,
+        )
 
         return Response(status=status.HTTP_200_OK)
 
@@ -1103,7 +1145,7 @@ class PlanView(BaseViewSet):
     def copy_cases(self, request, slug):
         """将源计划中选中的计划用例复制到目标计划（同项目），执行结果重置为未执行。
 
-        不复制执行记录 / 缺陷关联；默认沿用各用例原执行人，传 assignee 则统一覆盖。
+        不复制执行记录 / 缺陷关联；默认沿用各用例原执行人，传 assignees 列表则统一覆盖。
         """
         serializer = PlanCaseCopySerializer(data=request.data)
         if not serializer.is_valid():
@@ -1115,7 +1157,8 @@ class PlanView(BaseViewSet):
             )
         data = serializer.validated_data
         plan_case_ids = data["plan_case_ids"]
-        override_assignee_id = data.get("assignee")
+        # None = 沿用源执行人；list（含空列表）= 统一覆盖
+        override_assignee_ids = data.get("assignees")
 
         project_id = request.query_params.get("project_id")
         plan_lookup = {"deleted_at__isnull": True, "project__workspace__slug": slug}
@@ -1129,22 +1172,15 @@ class PlanView(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if override_assignee_id is not None:
-            member_exists = WorkspaceMember.objects.filter(
-                workspace__slug=slug,
-                member_id=override_assignee_id,
-                deleted_at__isnull=True,
-                is_active=True,
-            ).exists()
-            if not member_exists:
-                return Response(
-                    {"error": "assignee is invalid"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if override_assignee_ids and _invalid_workspace_member_ids(slug, override_assignee_ids):
+            return Response(
+                {"error": "assignee is invalid"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         source_rows = list(
             PlanCase.objects.filter(plan=source_plan, id__in=plan_case_ids).values_list(
-                "id", "case_id", "assignee_id", "case__deleted_at"
+                "id", "case_id", "case__deleted_at"
             )
         )
         missing_ids = set(plan_case_ids) - {row[0] for row in source_rows}
@@ -1155,18 +1191,28 @@ class PlanView(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # case_id -> 目标执行人；同一用例多行取首行，用例已删除的跳过
-        case_assignee_map = {}
+        through = PlanCase.assignees.through
+        source_assignees_map = defaultdict(list)
+        if override_assignee_ids is None:
+            for plan_case_id, user_id in through.objects.filter(
+                plancase_id__in=plan_case_ids
+            ).values_list("plancase_id", "user_id"):
+                source_assignees_map[plan_case_id].append(user_id)
+
+        # case_id -> 目标执行人列表；同一用例多行取首行，用例已删除的跳过
+        case_assignees_map = {}
         deleted_case_count = 0
-        for _, case_id, assignee_id, case_deleted_at in source_rows:
+        for plan_case_id, case_id, case_deleted_at in source_rows:
             if case_deleted_at is not None:
                 deleted_case_count += 1
                 continue
-            if case_id not in case_assignee_map:
-                case_assignee_map[case_id] = (
-                    override_assignee_id if override_assignee_id is not None else assignee_id
+            if case_id not in case_assignees_map:
+                case_assignees_map[case_id] = (
+                    list(override_assignee_ids)
+                    if override_assignee_ids is not None
+                    else source_assignees_map.get(plan_case_id, [])
                 )
-        case_ids = list(case_assignee_map.keys())
+        case_ids = list(case_assignees_map.keys())
 
         existing_case_ids = set(
             PlanCase.objects.filter(plan=target_plan, case_id__in=case_ids).values_list(
@@ -1174,25 +1220,18 @@ class PlanView(BaseViewSet):
             )
         )
 
-        # 目标计划中已软删的行：复活并重置结果与执行人（按执行人分组批量更新）
-        soft_deleted_case_ids = set(
+        # 目标计划中已软删的行：复活并重置结果（执行人在下方与新建行一起覆盖）
+        soft_deleted_rows = list(
             PlanCase.all_objects.filter(plan=target_plan, case_id__in=case_ids)
             .exclude(deleted_at__isnull=True)
             .exclude(case_id__in=existing_case_ids)
-            .values_list("case_id", flat=True)
+            .values_list("id", "case_id")
         )
-        if soft_deleted_case_ids:
-            revive_groups = defaultdict(list)
-            for case_id in soft_deleted_case_ids:
-                revive_groups[case_assignee_map[case_id]].append(case_id)
-            for assignee_id, group_case_ids in revive_groups.items():
-                PlanCase.all_objects.filter(
-                    plan=target_plan, case_id__in=group_case_ids
-                ).exclude(deleted_at__isnull=True).update(
-                    deleted_at=None,
-                    result=PlanCase.Result.NOT_START,
-                    assignee_id=assignee_id,
-                )
+        soft_deleted_case_ids = {case_id for _, case_id in soft_deleted_rows}
+        if soft_deleted_rows:
+            PlanCase.all_objects.filter(
+                id__in=[plan_case_id for plan_case_id, _ in soft_deleted_rows]
+            ).update(deleted_at=None, result=PlanCase.Result.NOT_START)
 
         # 其余新建；不传 result 走模型默认（未执行），不复制 issue / 执行记录
         to_create_case_ids = [
@@ -1200,18 +1239,21 @@ class PlanView(BaseViewSet):
             for case_id in case_ids
             if case_id not in existing_case_ids and case_id not in soft_deleted_case_ids
         ]
+        created_plan_cases = []
         if to_create_case_ids:
-            PlanCase.objects.bulk_create(
-                [
-                    PlanCase(
-                        plan=target_plan,
-                        case_id=case_id,
-                        assignee_id=case_assignee_map[case_id],
-                    )
-                    for case_id in to_create_case_ids
-                ],
+            created_plan_cases = PlanCase.objects.bulk_create(
+                [PlanCase(plan=target_plan, case_id=case_id) for case_id in to_create_case_ids],
                 batch_size=1000,
             )
+
+        # 复活行 + 新建行按执行人组合分组覆盖（复活行会残留旧执行人）
+        assignee_groups = defaultdict(list)
+        for plan_case_id, case_id in soft_deleted_rows + [
+            (plan_case.id, plan_case.case_id) for plan_case in created_plan_cases
+        ]:
+            assignee_groups[tuple(case_assignees_map[case_id])].append(plan_case_id)
+        for group_assignee_ids, group_plan_case_ids in assignee_groups.items():
+            _set_plan_case_assignees(group_plan_case_ids, list(group_assignee_ids))
 
         return Response(
             {

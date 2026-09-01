@@ -1210,8 +1210,7 @@ class ProjectAPI(BaseViewSet):
                     "plan_cases",
                     queryset=PlanCase.objects.filter(
                         deleted_at__isnull=True,
-                        assignee__isnull=False,
-                    ).select_related("assignee"),
+                    ).prefetch_related("assignees"),
                     to_attr="active_plan_cases_with_assignee",
                 )
             )
@@ -1223,8 +1222,9 @@ class ProjectAPI(BaseViewSet):
         for plan in test_plan_queryset[plan_offset:plan_limit]:
             first_assignee = None
             for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
-                if plan_case.assignee:
-                    first_assignee = plan_case.assignee
+                assignees = list(plan_case.assignees.all())
+                if assignees:
+                    first_assignee = assignees[0]
                     break
             test_plan_data.append(
                 {

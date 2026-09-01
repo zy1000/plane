@@ -373,8 +373,7 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                     "plan_cases",
                     queryset=PlanCase.objects.filter(
                         deleted_at__isnull=True,
-                        assignee__isnull=False,
-                    ).select_related("assignee"),
+                    ).prefetch_related("assignees"),
                     to_attr="active_plan_cases_with_assignee",
                 )
             )
@@ -388,20 +387,18 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             assignees: List[Dict[str, str]] = []
             seen_assignee_ids = set()
             for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
-                assignee = getattr(plan_case, "assignee", None)
-                if assignee is None:
-                    continue
-                assignee_id = str(assignee.id)
-                if assignee_id in seen_assignee_ids:
-                    continue
-                seen_assignee_ids.add(assignee_id)
-                assignees.append(
-                    {
-                        "id": assignee_id,
-                        "display_name": self._resolve_user_name(assignee),
-                        "avatar_url": assignee.avatar_url or "",
-                    }
-                )
+                for assignee in plan_case.assignees.all():
+                    assignee_id = str(assignee.id)
+                    if assignee_id in seen_assignee_ids:
+                        continue
+                    seen_assignee_ids.add(assignee_id)
+                    assignees.append(
+                        {
+                            "id": assignee_id,
+                            "display_name": self._resolve_user_name(assignee),
+                            "avatar_url": assignee.avatar_url or "",
+                        }
+                    )
 
             if not assignees and plan.created_by:
                 assignees.append(

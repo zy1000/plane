@@ -173,10 +173,14 @@ export default function PlanCasesPage() {
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
-  const [selectedPlanCaseToAssigneeMap, setSelectedPlanCaseToAssigneeMap] = useState<Record<string, string | null>>({});
+  const [selectedPlanCaseToAssigneeMap, setSelectedPlanCaseToAssigneeMap] = useState<Record<string, string[]>>({});
   const [bulkExecuteLoading, setBulkExecuteLoading] = useState<boolean>(false);
   const [bulkAssigneeUpdating, setBulkAssigneeUpdating] = useState<boolean>(false);
-  const [updatingAssigneePlanCaseId, setUpdatingAssigneePlanCaseId] = useState<string | null>(null);
+  // 批量分配执行人的待应用选择，点「应用」后整体覆盖选中行的执行人
+  const [bulkAssignees, setBulkAssignees] = useState<string[]>([]);
+  useEffect(() => {
+    if (selectedCaseIds.length === 0) setBulkAssignees([]);
+  }, [selectedCaseIds.length]);
 
   const [planList, setPlanList] = useState<TPlanListItem[]>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
@@ -617,8 +621,8 @@ export default function PlanCasesPage() {
     }
     const currentUserId = String(currentUser.id);
     const unauthorizedPlanCases = selectedCaseIds.filter((planCaseId) => {
-      const assigned = selectedPlanCaseToAssigneeMap[String(planCaseId)];
-      return !assigned || String(assigned) !== currentUserId;
+      const assigned = selectedPlanCaseToAssigneeMap[String(planCaseId)] ?? [];
+      return !assigned.map(String).includes(currentUserId);
     });
     if (unauthorizedPlanCases.length > 0) {
       message.warning("选中用例中包含非本人执行项或未设置执行人的项，请调整后重试");
@@ -657,35 +661,33 @@ export default function PlanCasesPage() {
     }
   };
 
-  const handlePlanCaseAssigneeChange = async (planCaseId: string, assignee: string | null) => {
+  const handlePlanCaseAssigneeChange = async (planCaseId: string, assignees: string[]) => {
     if (!workspaceSlug || !projectId) return;
-    try {
-      setUpdatingAssigneePlanCaseId(String(planCaseId));
-      const updated = await planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
-        plan_case_id: String(planCaseId),
-        assignee,
-      });
-      const nextAssignee = updated?.assignee ?? assignee;
+    const id = String(planCaseId);
+    const nextAssignees = assignees.map(String);
+    const previousAssignees = ((cases || []).find((item) => String(item.id) === id)?.assignees ?? []).map(String);
+    const applyLocalAssignees = (value: string[]) => {
       setCases((prev) =>
-        (prev || []).map((item) =>
-          String(item.id) === String(planCaseId)
-            ? Object.assign({}, item, { assignee: nextAssignee ? String(nextAssignee) : null })
-            : item
-        )
+        (prev || []).map((item) => (String(item.id) === id ? Object.assign({}, item, { assignees: value }) : item))
       );
-      setSelectedPlanCaseToAssigneeMap((prev) => ({
-        ...prev,
-        [String(planCaseId)]: nextAssignee ? String(nextAssignee) : null,
-      }));
+      setSelectedPlanCaseToAssigneeMap((prev) => ({ ...prev, [id]: value }));
+    };
+    // 多选逐个勾选时先乐观更新，避免上一次请求未返回前用旧值发起下一次请求
+    applyLocalAssignees(nextAssignees);
+    try {
+      await planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
+        plan_case_id: id,
+        assignees: nextAssignees,
+      });
       qaCaseSetToastSuccess("执行人已更新");
     } catch (e: unknown) {
+      applyLocalAssignees(previousAssignees);
       qaCaseSetToastError(e, t, "更新执行人失败");
-    } finally {
-      setUpdatingAssigneePlanCaseId(null);
     }
   };
 
-  const handleBulkPlanCaseAssigneeChange = async (assignee: string | null) => {
+  // 批量分配：选中行的执行人整体覆盖为所选人员
+  const handleBulkPlanCaseAssigneeChange = async (assignees: string[]) => {
     if (!workspaceSlug || !projectId) return;
     const targetPlanCaseIds = Array.from(new Set((selectedCaseIds || []).map((id) => String(id))));
     if (targetPlanCaseIds.length === 0) {
@@ -699,7 +701,7 @@ export default function PlanCasesPage() {
         targetPlanCaseIds.map((planCaseId) =>
           planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
             plan_case_id: String(planCaseId),
-            assignee,
+            assignees,
           })
         )
       );
@@ -716,23 +718,24 @@ export default function PlanCasesPage() {
 
       if (successPlanCaseIds.length > 0) {
         const successIdSet = new Set(successPlanCaseIds.map((id) => String(id)));
-        const nextAssignee = assignee ? String(assignee) : null;
+        const nextAssignees = assignees.map(String);
 
         setCases((prev) =>
           (prev || []).map((item) =>
-            successIdSet.has(String(item.id)) ? Object.assign({}, item, { assignee: nextAssignee }) : item
+            successIdSet.has(String(item.id)) ? Object.assign({}, item, { assignees: nextAssignees }) : item
           )
         );
         setSelectedPlanCaseToAssigneeMap((prev) => {
-          const next = { ...prev } as Record<string, string | null>;
+          const next = { ...prev } as Record<string, string[]>;
           successPlanCaseIds.forEach((planCaseId) => {
-            next[String(planCaseId)] = nextAssignee;
+            next[String(planCaseId)] = nextAssignees;
           });
           return next;
         });
       }
 
       if (failedErrors.length === 0) {
+        setBulkAssignees([]);
         qaCaseSetToastSuccess("批量更新执行人成功");
       } else if (successPlanCaseIds.length > 0) {
         message.warning(`已更新 ${successPlanCaseIds.length} 条，${failedErrors.length} 条失败`);
@@ -772,13 +775,13 @@ export default function PlanCasesPage() {
     });
 
     setSelectedPlanCaseToAssigneeMap((prev) => {
-      const next = { ...prev } as Record<string, string | null>;
+      const next = { ...prev } as Record<string, string[]>;
       currentPageIds.forEach((planCaseId) => {
         if (!currentPageSelected.has(planCaseId)) delete next[planCaseId];
       });
       currentPageSelected.forEach((planCaseId) => {
         const row = (cases || []).find((item) => String(item.id) === planCaseId);
-        next[planCaseId] = row?.assignee ? String(row.assignee) : null;
+        next[planCaseId] = (row?.assignees ?? []).map(String);
       });
       return next;
     });
@@ -1005,7 +1008,6 @@ export default function PlanCasesPage() {
                         onViewExecution={handleViewExecution}
                         projectId={projectId ? String(projectId) : undefined}
                         bulkAssigneeUpdating={bulkAssigneeUpdating}
-                        updatingAssigneePlanCaseId={updatingAssigneePlanCaseId}
                         renderResultTag={renderResultTag}
                         renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
                         renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
@@ -1026,9 +1028,9 @@ export default function PlanCasesPage() {
                             <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-[var(--border-color-subtle)]" />
 
                             <MemberDropdown
-                              multiple={false}
-                              value={null}
-                              onChange={(value) => handleBulkPlanCaseAssigneeChange(value ? String(value) : null)}
+                              multiple
+                              value={bulkAssignees}
+                              onChange={(value) => setBulkAssignees(value)}
                               disabled={bulkAssigneeUpdating}
                               projectId={projectId ? String(projectId) : undefined}
                               buttonVariant="transparent-with-text"
@@ -1041,10 +1043,24 @@ export default function PlanCasesPage() {
                                   ) : (
                                     <UserCog className="h-3.5 w-3.5" />
                                   )}
-                                  {bulkAssigneeUpdating ? "更新中" : "分配执行人"}
+                                  {bulkAssigneeUpdating
+                                    ? "更新中"
+                                    : bulkAssignees.length > 0
+                                      ? `分配执行人（${bulkAssignees.length}）`
+                                      : "分配执行人"}
                                 </span>
                               }
                             />
+                            {bulkAssignees.length > 0 && !bulkAssigneeUpdating && (
+                              <button
+                                type="button"
+                                className="inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-colors hover:bg-accent-subtle"
+                                onClick={() => handleBulkPlanCaseAssigneeChange(bulkAssignees)}
+                              >
+                                <CheckCheck className="h-3.5 w-3.5" />
+                                应用
+                              </button>
+                            )}
 
                             <Popconfirm
                               title="确定将选中用例全部标记为执行成功？"

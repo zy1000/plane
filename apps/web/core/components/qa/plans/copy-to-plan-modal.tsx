@@ -26,7 +26,7 @@ type Props = {
 
 const ASSIGNEE_MODE_OPTIONS: Array<{ value: TAssigneeMode; title: string; description: string }> = [
   { value: "keep", title: "沿用原执行人", description: "每条用例保留在当前计划中的执行人" },
-  { value: "override", title: "统一指定", description: "所有用例指派给同一位成员" },
+  { value: "override", title: "统一指定", description: "所有用例指派给同一批执行人" },
 ];
 
 // 与 TestPlan.State（未开始/进行中/已完成）对应的标签配色
@@ -63,7 +63,7 @@ export default function PlanCasesCopyModal({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [targetPlanId, setTargetPlanId] = useState<string | null>(null);
   const [assigneeMode, setAssigneeMode] = useState<TAssigneeMode>("keep");
-  const [assignee, setAssignee] = useState<string | null>(null);
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [errors, setErrors] = useState<{ target?: string; assignee?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,7 +71,7 @@ export default function PlanCasesCopyModal({
     if (open) {
       setTargetPlanId(null);
       setAssigneeMode("keep");
-      setAssignee(null);
+      setAssignees([]);
       setErrors({});
     }
   }, [open]);
@@ -123,7 +123,7 @@ export default function PlanCasesCopyModal({
     }
     const nextErrors: { target?: string; assignee?: string } = {};
     if (!targetPlanId) nextErrors.target = "请选择目标计划";
-    if (assigneeMode === "override" && !assignee) nextErrors.assignee = "请选择执行人";
+    if (assigneeMode === "override" && assignees.length === 0) nextErrors.assignee = "请选择执行人";
     setErrors(nextErrors);
     if (nextErrors.target || nextErrors.assignee) return;
 
@@ -134,7 +134,7 @@ export default function PlanCasesCopyModal({
         source_plan_id: sourcePlanId,
         target_plan_id: String(targetPlanId),
         plan_case_ids: planCaseIds,
-        assignee: assigneeMode === "override" ? assignee : null,
+        assignees: assigneeMode === "override" ? assignees : null,
       });
       const copied = Number(res?.copied ?? 0);
       const skipped = Number(res?.skipped ?? 0);
@@ -264,11 +264,11 @@ export default function PlanCasesCopyModal({
             {assigneeMode === "override" && (
               <div className="flex flex-col gap-1.5">
                 <MemberDropdown
-                  multiple={false}
+                  multiple
                   projectId={projectId || undefined}
-                  value={assignee}
+                  value={assignees}
                   onChange={(value) => {
-                    setAssignee(value ? String(value) : null);
+                    setAssignees(value);
                     setErrors((prev) => ({ ...prev, assignee: undefined }));
                   }}
                   placeholder="选择执行人"

@@ -146,7 +146,8 @@ class ReportView(BaseViewSet):
         report = self._get_report(request, slug)
         plan_ids = list(report.plans.filter(deleted_at__isnull=True).values_list("id", flat=True))
         query = (
-            PlanCase.objects.select_related("case", "assignee", "plan", "case__module")
+            PlanCase.objects.select_related("case", "plan", "case__module")
+            .prefetch_related("assignees")
             .filter(plan_id__in=plan_ids, deleted_at__isnull=True, plan__deleted_at__isnull=True)
             .annotate(
                 defect_count=Count(
@@ -175,6 +176,10 @@ class ReportView(BaseViewSet):
 
     def _serialize_case_row(self, plan_case):
         case = plan_case.case
+        assignees = list(plan_case.assignees.all())
+        assignee_names = [
+            name for name in (user.display_name or user.email for user in assignees) if name
+        ]
         return {
             "id": str(plan_case.id),
             "case_id": str(case.id) if case else None,
@@ -183,8 +188,8 @@ class ReportView(BaseViewSet):
             "priority": case.priority if case else None,
             "result": plan_case.result,
             "module": case.module.name if case and case.module else "",
-            "assignee_id": str(plan_case.assignee_id) if plan_case.assignee_id else None,
-            "assignee_name": getattr(plan_case.assignee, "display_name", None) or getattr(plan_case.assignee, "email", None) if plan_case.assignee_id else None,
+            "assignee_ids": [str(user.id) for user in assignees],
+            "assignee_name": "、".join(assignee_names) or None,
             "defect_count": getattr(plan_case, "defect_count", 0) if case else 0,
             "plan_name": plan_case.plan.name if plan_case.plan else "",
             "created_at": plan_case.created_at,

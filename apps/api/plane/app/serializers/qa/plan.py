@@ -47,12 +47,12 @@ class PlanCaseListSerializer(ModelSerializer):
                       'assignee' ]
 
     plan = serializers.UUIDField(source="plan_id", read_only=True)
-    assignee = serializers.UUIDField(source="assignee_id", read_only=True)
+    assignees = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     case = TestCaseLiteSerializer(read_only=True)
 
     class Meta:
         model = PlanCase
-        fields = ["id", "plan", "case", "assignee", "result", "created_at", "updated_at"]
+        fields = ["id", "plan", "case", "assignees", "result", "created_at", "updated_at"]
 
 
 class PlanCaseCardSerializer(ModelSerializer):
@@ -90,7 +90,12 @@ class PlanCaseCopySerializer(serializers.Serializer):
     source_plan_id = serializers.UUIDField()
     target_plan_id = serializers.UUIDField()
     plan_case_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
-    assignee = serializers.UUIDField(required=False, allow_null=True)
+    assignees = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_null=True,
+        help_text="缺省 / null 沿用源计划用例的执行人；传列表（含空列表）则统一覆盖",
+    )
 
     def validate(self, attrs):
         if attrs["source_plan_id"] == attrs["target_plan_id"]:

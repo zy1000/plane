@@ -394,7 +394,7 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
     if metric == "pending_execution_cases":
         return (
             PlanCase.objects.filter(
-                assignee_id=user_id,
+                assignees__id=user_id,
                 result=PlanCase.Result.NOT_START,
                 case__deleted_at__isnull=True,
                 case__repository__deleted_at__isnull=True,
@@ -402,7 +402,8 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
                 plan__project__workspace__slug=slug,
                 plan__project_id__in=accessible_project_ids,
             )
-            .select_related("case", "plan", "plan__project", "assignee")
+            .select_related("case", "plan", "plan__project")
+            .prefetch_related("assignees")
             .distinct()
         )
 

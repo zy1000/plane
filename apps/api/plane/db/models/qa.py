@@ -397,12 +397,11 @@ class PlanCase(BaseModel):
 
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="plan_cases")
     plan = models.ForeignKey(TestPlan, on_delete=models.CASCADE, related_name="plan_cases")
-    assignee = models.ForeignKey(
+    # 执行人（多选）：任一执行人提交执行即视为本用例结果，后一次执行覆盖前一次
+    assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
         blank=True,
-        null=True,
-        related_name="plan_case_assignees",
+        related_name="assigned_plan_cases",
     )
     result = models.CharField(choices=Result.choices, default=Result.NOT_START,
                               verbose_name="PlanCase Execute Result")

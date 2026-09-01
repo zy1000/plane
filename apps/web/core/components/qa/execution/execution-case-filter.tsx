@@ -16,7 +16,7 @@ const COLOR_NAME_TO_HEX: Record<string, string> = {
 
 type ExecutionCaseFilterTarget = {
   result: string;
-  assignee?: string | number | null;
+  assignees?: Array<string | number | null>;
 };
 
 const orderStatuses = (statuses: string[]): string[] => {
@@ -39,6 +39,9 @@ const toDotColor = (colorName?: string) => {
 
 const isPendingExecution = (result: string) => String(result || "") === "未执行";
 const normalizeUserId = (id?: string | number | null) => (id === null || id === undefined ? "" : String(id));
+// 多执行人：当前用户在执行人列表中即视为「我的」用例
+const isAssignedTo = (item: ExecutionCaseFilterTarget, userId: string) =>
+  Boolean(userId) && (item.assignees ?? []).some((id) => normalizeUserId(id) === userId);
 
 export const useExecutionCaseFilter = <T extends ExecutionCaseFilterTarget>(
   cases: T[],
@@ -52,13 +55,11 @@ export const useExecutionCaseFilter = <T extends ExecutionCaseFilterTarget>(
 
   const items = React.useMemo<QuickFilterItem[]>(() => {
     const mineTodoCount = cases.reduce((count, item) => {
-      const isMine = userId && normalizeUserId(item.assignee) === userId;
-      if (!isMine) return count;
+      if (!isAssignedTo(item, userId)) return count;
       return isPendingExecution(String(item.result || "")) ? count + 1 : count;
     }, 0);
     const mineDoneCount = cases.reduce((count, item) => {
-      const isMine = userId && normalizeUserId(item.assignee) === userId;
-      if (!isMine) return count;
+      if (!isAssignedTo(item, userId)) return count;
       return isPendingExecution(String(item.result || "")) ? count : count + 1;
     }, 0);
 
@@ -86,17 +87,11 @@ export const useExecutionCaseFilter = <T extends ExecutionCaseFilterTarget>(
     if (activeKey === "all") return cases;
     if (activeKey === "mine_todo") {
       if (!userId) return [];
-      return cases.filter((item) => {
-        const isMine = normalizeUserId(item.assignee) === userId;
-        return isMine && isPendingExecution(String(item.result || ""));
-      });
+      return cases.filter((item) => isAssignedTo(item, userId) && isPendingExecution(String(item.result || "")));
     }
     if (activeKey === "mine_done") {
       if (!userId) return [];
-      return cases.filter((item) => {
-        const isMine = normalizeUserId(item.assignee) === userId;
-        return isMine && !isPendingExecution(String(item.result || ""));
-      });
+      return cases.filter((item) => isAssignedTo(item, userId) && !isPendingExecution(String(item.result || "")));
     }
     return cases.filter((item) => String(item.result || "") === activeKey);
   }, [activeKey, cases, userId]);

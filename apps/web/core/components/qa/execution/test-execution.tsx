@@ -43,10 +43,14 @@ type PlanCaseRow = {
   case: string | number;
   name: string;
   priority: number;
-  assignee: string | null;
+  assignees: string[];
   result: string;
   created_by: string | number | null;
 };
+
+// 多执行人：当前用户在执行人列表中即可提交执行结果
+const isPlanCaseAssignee = (row: PlanCaseRow | undefined, userId?: string | number | null) =>
+  Boolean(userId) && (row?.assignees ?? []).map(String).includes(String(userId));
 
 const StepTypeSwitcher: React.FC<{ mode: number; onChange: (mode: number) => void }> = ({ mode, onChange }) => (
   <Dropdown
@@ -539,9 +543,7 @@ export default function TestExecutionPage() {
 
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
-    const assigneeId = row?.assignee ? String(row.assignee) : null;
-    const isReviewer = currentUser?.id ? assigneeId === String(currentUser.id) : false;
-    setIsCurrentUserReviewer(isReviewer);
+    setIsCurrentUserReviewer(isPlanCaseAssignee(row, currentUser?.id));
   }, [cases, selectedCaseId, currentUser?.id]);
 
   React.useEffect(() => {
@@ -551,8 +553,7 @@ export default function TestExecutionPage() {
   React.useEffect(() => {
     if (!selectedCaseId) return;
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
-    const assigneeId = row?.assignee ? String(row.assignee) : null;
-    const isReviewer = currentUser?.id ? assigneeId === String(currentUser.id) : false;
+    const isReviewer = isPlanCaseAssignee(row, currentUser?.id);
     const map = enumsData?.plan_case_result || {};
     const keys = Object.keys(map).filter((k) => k !== "未执行");
     let def: string | null = null;
@@ -1107,7 +1108,10 @@ export default function TestExecutionPage() {
                       filteredCases.map((item) => {
                         const caseId = String(item.case);
                         const isActive = String(selectedCaseId || "") === caseId;
-                        const assigneeName = item.assignee ? getUserDetails(String(item.assignee))?.display_name || "未知用户" : "未分配";
+                        const assigneeName =
+                          (item.assignees ?? [])
+                            .map((id) => getUserDetails(String(id))?.display_name || "未知用户")
+                            .join("、") || "未分配";
                         return (
                           <Card
                             key={item.id}

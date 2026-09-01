@@ -22,7 +22,8 @@ export type TPlanCaseItem = {
   id: string;
   plan?: string;
   case?: TPlanCaseNestedCase | null;
-  assignee?: string | null;
+  /** 执行人（多选）：任一执行人提交执行即视为本用例结果，后一次执行覆盖前一次 */
+  assignees?: string[];
   result?: string;
   created_at?: string;
   updated_at?: string;
@@ -61,7 +62,8 @@ export type TPlanCaseCopyPayload = {
   source_plan_id: string;
   target_plan_id: string;
   plan_case_ids: string[];
-  assignee?: string | null;
+  /** 缺省 / null 沿用源执行人；传数组（含空数组）则统一覆盖 */
+  assignees?: string[] | null;
 };
 
 export type TPlanCaseCopyResponse = {
@@ -120,7 +122,7 @@ export class PlanService extends APIService {
   async addPlanCases(
     workspaceSlug: string,
     projectId: string,
-    data: { plan_id: string; case_ids: string[]; assignee?: string | null }
+    data: { plan_id: string; case_ids: string[]; assignees?: string[] }
   ): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/plan/add-cases/`, data, { params: { project_id: projectId } })
       .then((response) => response?.data)
@@ -238,7 +240,7 @@ export class PlanService extends APIService {
       case: string;
       name: string;
       priority: number;
-      assignee: string | null;
+      assignees: string[];
       result: string;
       created_by: string | null;
     }>;
@@ -255,7 +257,7 @@ export class PlanService extends APIService {
   async updatePlanCaseAssignee(
     workspaceSlug: string,
     projectId: string,
-    data: { plan_case_id: string; assignee: string | null }
+    data: { plan_case_id: string; assignees: string[] }
   ): Promise<any> {
     return this.patch(`/api/workspaces/${workspaceSlug}/test/plan/case-assignee/`, data, {
       params: { project_id: projectId },
