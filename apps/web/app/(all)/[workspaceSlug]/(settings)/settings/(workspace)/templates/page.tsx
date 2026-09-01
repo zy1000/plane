@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { Search, X } from "lucide-react";
+import { RefreshCw, Search, X } from "lucide-react";
 // plane imports
 import {
   WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
@@ -15,7 +15,8 @@ import {
   WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
   WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
-import type { TWorkspaceRoleType } from "@plane/types";
+import { Button } from "@plane/propel/button";
+import type { IWorkspaceRole, TWorkspaceRoleType } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -27,6 +28,7 @@ import {
   type PermissionScope,
 } from "@/components/workspace/settings/roles/permissions-panel";
 import { RolesSidebar } from "@/components/workspace/settings/roles/roles-sidebar";
+import { SyncTemplateToProjectsModal } from "@/components/workspace/settings/roles/sync-template-to-projects-modal";
 // hooks
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -43,6 +45,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeScope, setActiveScope] = useState<PermissionScope>("project");
+  const [syncTargetRole, setSyncTargetRole] = useState<IWorkspaceRole | null>(null);
 
   // store hooks
   const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
@@ -64,6 +67,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
     updateRole,
     deleteRole,
     togglePermission,
+    syncRoleToProjects,
   } = useWorkspaceRoles(workspaceSlug, ROLE_TYPE);
 
   useSWR(canView ? `WORKSPACE_ROLES_${workspaceSlug}` : null, canView ? fetchRoles : null);
@@ -104,6 +108,10 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
     ? (roles.find((r) => r.id === effectiveSelectedRoleId) ?? null)
     : null;
   const rolePermissionState = effectiveSelectedRoleId ? getRolePermissionState(effectiveSelectedRoleId) : null;
+  // 空模板同步等于清空所有同名项目角色的权限，后端会拒绝，这里直接置灰
+  const isTemplateEmpty = Boolean(
+    rolePermissionState?.loaded && (rolePermissionState.data?.permission_keys.length ?? 0) === 0
+  );
 
   const activeScopeSummary = useMemo(
     () =>
@@ -177,6 +185,18 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
                   <p className="truncate text-13 font-medium leading-4 text-tertiary">{selectedRole.description}</p>
                 )}
               </div>
+              {canEdit && (
+                <Button
+                  variant="secondary"
+                  size="base"
+                  prependIcon={<RefreshCw />}
+                  disabled={isTemplateEmpty}
+                  title={isTemplateEmpty ? "模板未绑定任何权限" : undefined}
+                  onClick={() => setSyncTargetRole(selectedRole)}
+                >
+                  同步权限到项目
+                </Button>
+              )}
               <div
                 className={cn(
                   "flex w-52 shrink-0 items-center gap-1.5 rounded-md border py-1.5 pl-2.5 pr-1.5 transition-colors duration-150",
@@ -231,6 +251,13 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
           </div>
         </div>
       </section>
+
+      <SyncTemplateToProjectsModal
+        isOpen={Boolean(syncTargetRole)}
+        role={syncTargetRole}
+        onClose={() => setSyncTargetRole(null)}
+        onSync={syncRoleToProjects}
+      />
     </SettingsContentWrapper>
   );
 });

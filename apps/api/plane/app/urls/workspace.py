@@ -43,6 +43,7 @@ from plane.app.views import (
     WorkspaceUserPreferenceViewSet,
     WorkspaceRoleViewSet,
     WorkspaceRolePermissionAPIView,
+    WorkspaceRoleSyncToProjectsAPIView,
     WorkspaceGroupViewSet,
     WorkspaceGroupMemberViewSet,
     WorkspaceGroupRoleViewSet,
@@ -200,6 +201,11 @@ urlpatterns = [
         "workspaces/<str:slug>/roles/<uuid:pk>/permissions/",
         WorkspaceRolePermissionAPIView.as_view(),
         name="workspace-role-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/roles/<uuid:pk>/sync-projects/",
+        WorkspaceRoleSyncToProjectsAPIView.as_view(),
+        name="workspace-role-sync-projects",
     ),
     path(
         "workspaces/<str:slug>/groups/",

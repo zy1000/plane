@@ -5,7 +5,13 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { IPermission, IRolePermissionData, IWorkspaceRole, TWorkspaceRoleType } from "@plane/types";
+import type {
+  IPermission,
+  IRolePermissionData,
+  IWorkspaceRole,
+  IWorkspaceRoleSyncToProjectsResult,
+  TWorkspaceRoleType,
+} from "@plane/types";
 import { WorkspaceService } from "@/services/workspace.service";
 
 const workspaceService = new WorkspaceService();
@@ -254,6 +260,15 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
     [workspaceSlug, updatePermissionByRoleId]
   );
 
+  const syncRoleToProjects = useCallback(
+    async (roleId: string): Promise<IWorkspaceRoleSyncToProjectsResult> => {
+      if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
+      // 只改各项目的同名角色，模板本身没变，本地状态无需更新
+      return workspaceService.syncWorkspaceRoleToProjects(workspaceSlug, roleId);
+    },
+    [workspaceSlug]
+  );
+
   return {
     roles,
     isLoading: rolesState.isLoading,
@@ -265,5 +280,6 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
     updateRole,
     deleteRole,
     togglePermission,
+    syncRoleToProjects,
   };
 };

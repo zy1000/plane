@@ -94,6 +94,7 @@ from .workspace.sticky import WorkspaceStickyViewSet
 from .workspace.role import (
     PermissionViewSet,
     WorkspaceRolePermissionAPIView,
+    WorkspaceRoleSyncToProjectsAPIView,
     WorkspaceRoleViewSet,
 )
 from .workspace.group import (

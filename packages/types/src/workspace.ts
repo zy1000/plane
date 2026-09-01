@@ -411,6 +411,12 @@ export interface IRolePermissionData {
   permissions: IPermission[];
 }
 
+// 角色模板「同步权限到项目」结果：updated 被覆盖的同名项目角色数，skipped 没有同名角色的项目数
+export interface IWorkspaceRoleSyncToProjectsResult {
+  updated: number;
+  skipped: number;
+}
+
 // Project Role — 项目内实际生效的自定义角色
 export interface IProjectRole {
   id: string;

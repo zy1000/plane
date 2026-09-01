@@ -26,6 +26,10 @@ from plane.db.models.issue_type import (
     build_issue_type_template_permission_key,
     parse_issue_type_permission_key,
 )
+from plane.utils.project.role_import import (
+    TemplatePermissionScopeError,
+    sync_workspace_role_permissions_to_project_roles,
+)
 
 
 WORKSPACE_ROLE_LOOKUP_PERMISSIONS = (
@@ -307,3 +311,44 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
             return Response(self.build_response_data(role), status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WorkspaceRoleSyncToProjectsAPIView(BaseAPIView):
+    """把项目角色模板的权限覆盖到本工作区所有同名的项目角色；没有同名角色的项目跳过，不新建。"""
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_ROLE_EDIT, level="WORKSPACE")
+    def post(self, request, slug, pk):
+        role = (
+            WorkspaceRole.objects.filter(workspace__slug=slug, pk=pk)
+            .select_related("workspace")
+            .first()
+        )
+        if not role:
+            return Response({"error": "Workspace role not found."}, status=status.HTTP_404_NOT_FOUND)
+        if role.type != WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+            return Response(
+                {"error": "只有项目角色模板可以同步到项目。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        permission_keys = (
+            role.permissions.get("permission_keys") if isinstance(role.permissions, dict) else None
+        )
+        if not isinstance(permission_keys, list) or not permission_keys:
+            # 空模板同步等于清空所有同名项目角色的权限，几乎必是误操作
+            return Response(
+                {"error": "模板未绑定任何权限，无法同步。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = sync_workspace_role_permissions_to_project_roles(role)
+        except TemplatePermissionScopeError as exc:
+            return Response(
+                {
+                    "error": f"角色模板包含非项目权限，无法同步：{'、'.join(exc.bad_keys)}",
+                    "bad_keys": exc.bad_keys,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(result, status=status.HTTP_200_OK)

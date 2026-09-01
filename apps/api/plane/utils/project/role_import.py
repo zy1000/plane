@@ -11,7 +11,9 @@ permissions JSON 会留下一批指向别的项目的死 key。
 
 from uuid import UUID
 
-from plane.db.models import IssueType, Permission
+from django.db import transaction
+
+from plane.db.models import IssueType, Permission, Project, ProjectRole
 from plane.db.models.issue_type import (
     ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY,
     build_issue_type_permission_key,
@@ -148,3 +150,60 @@ def build_project_role_permissions(project, workspace_role):
     project_permissions["permission_keys"] = permission_keys
     project_permissions.pop(ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY, None)
     return project_permissions, bad_keys
+
+
+class TemplatePermissionScopeError(Exception):
+    """模板里含非 project scope 的权限 key，无法下发到项目。"""
+
+    def __init__(self, bad_keys):
+        self.bad_keys = list(bad_keys)
+        super().__init__("、".join(self.bad_keys))
+
+
+def sync_workspace_role_permissions_to_project_roles(workspace_role):
+    """把模板权限覆盖到本工作区所有同名 ProjectRole，返回 {"updated": n, "skipped": m}。
+
+    只替换 permission_keys：不新建角色、不改描述、不动 source_template；项目角色里已有的
+    project.issue_type.<uuid>.* key 保留（与模板映射出来的取并集）。没有同名角色的项目计入 skipped。
+    与管理命令 sync_workspace_role_to_projects 不同：那边会新建角色并覆盖描述。
+    """
+    project_total = Project.objects.filter(workspace=workspace_role.workspace).count()
+    project_roles = list(
+        ProjectRole.objects.filter(
+            workspace=workspace_role.workspace, name=workspace_role.name
+        ).select_related("project", "project__workspace")
+    )
+
+    with transaction.atomic():
+        for project_role in project_roles:
+            project_permissions, bad_keys = build_project_role_permissions(
+                project_role.project, workspace_role
+            )
+            if bad_keys:
+                raise TemplatePermissionScopeError(bad_keys)
+
+            existing = (
+                project_role.permissions if isinstance(project_role.permissions, dict) else {}
+            )
+            existing_keys = existing.get("permission_keys", [])
+            existing_keys = existing_keys if isinstance(existing_keys, list) else []
+            # 工作项类型权限按项目各自维护，模板没勾的也不能删；create_default_role 直接抄模板
+            # 留下的死 key（issue_type_template.* / workspace.*）不满足解析条件，顺手清掉
+            kept_issue_type_keys = [
+                key
+                for key in existing_keys
+                if isinstance(key, str) and parse_issue_type_permission_key(key)
+            ]
+            project_role.permissions = {
+                **existing,
+                "permission_keys": list(
+                    dict.fromkeys(
+                        [*project_permissions["permission_keys"], *kept_issue_type_keys]
+                    )
+                ),
+            }
+            # 请求上下文里 BaseModel.save() 会自动把 request.user 写进 updated_by
+            project_role.save(update_fields=["permissions", "updated_by", "updated_at"])
+
+    updated = len(project_roles)
+    return {"updated": updated, "skipped": project_total - updated}

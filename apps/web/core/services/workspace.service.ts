@@ -569,6 +569,17 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  async syncWorkspaceRoleToProjects(
+    workspaceSlug: string,
+    roleId: string
+  ): Promise<import("@plane/types").IWorkspaceRoleSyncToProjectsResult> {
+    return this.post(`/api/workspaces/${workspaceSlug}/roles/${roleId}/sync-projects/`, {})
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   // workspace groups
   async fetchWorkspaceGroups(workspaceSlug: string): Promise<IWorkspaceGroup[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/groups/`)
