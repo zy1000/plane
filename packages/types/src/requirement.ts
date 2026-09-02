@@ -513,6 +513,9 @@ export type TProductProject = {
   workspace: string;
   product_name: string;
   product_identifier: string;
+  /** 产品代号（与开发编号 identifier 是两个字段） */
+  product_code: string;
+  product_logo_props: TLogoProps | null;
   project_detail: {
     id: string;
     name: string;

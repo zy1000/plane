@@ -29,12 +29,12 @@ import { RequirementPeekOverview } from "@/components/requirements/requirement-d
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useProject } from "@/hooks/store/use-project";
-import { useProducts } from "@/hooks/store/use-products";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useProductRequirementCanEdit } from "@/hooks/store/use-product-requirement-can-edit";
 import { useProjectRequirements } from "@/hooks/store/use-project-requirements";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useUserPermissions } from "@/hooks/store/user";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { RequirementService } from "@/services/requirement.service";
 import { ExistingRequirementsModal } from "./existing-requirements-modal";
 import {
@@ -47,7 +47,6 @@ import {
   useProjectRequirementFiltersConfig,
   type TProjectRequirementFilterExpression,
 } from "./filters";
-import { ProjectProductsModal } from "./project-products-modal";
 import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "./project-requirement-filters";
 import {
   PRODUCT_PARAM,
@@ -61,6 +60,7 @@ const requirementService = new RequirementService();
 
 export const ProjectRequirementsPage = observer(function ProjectRequirementsPage() {
   const { t } = useTranslation();
+  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const slug = workspaceSlug?.toString();
@@ -70,7 +70,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
 
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
-  const [isProductsModalOpen, setIsProductsModalOpen] = useState(false);
   /** 待确认解除的行；非空即弹确认框，单行与批量共用同一条链路 */
   const [idsToUnlink, setIdsToUnlink] = useState<string[]>([]);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
@@ -87,14 +86,12 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     projectId: project,
     initialListQuery,
   });
-  const {
-    links: productLinks,
-    isLoading: isProductLinksLoading,
-    isMutating: isProductLinksMutating,
-    updateProducts,
-  } = useProjectProducts({ workspaceSlug: slug, projectId: project });
-  // 关联产品弹窗的候选项。列表接口已按可见性过滤，后端还会再校验一次
-  const { products, isLoading: isProductsLoading } = useProducts(slug);
+  const { links: productLinks, isLoading: isProductLinksLoading } = useProjectProducts({
+    workspaceSlug: slug,
+    projectId: project,
+  });
+  /** 产品关联的增删在项目「产品」子菜单页；本页空态的「关联产品」只负责把人带过去 */
+  const goToProducts = () => router.push(`/${slug}/projects/${project}/products`);
 
   const moduleStore = useRequirementModules(slug, project ? { kind: "project", projectId: project } : undefined);
 
@@ -173,8 +170,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
    */
   const facets = store.requirementsPage.extra_stats ?? null;
   /**
-   * 项目侧 /products/ 不喂 status_counts，TProductProject.requirement_count 恒为 0。
-   * 名单仍用关联行（0 条需求的产品也在）；条数叠 by_product，对得上 facets.total。
+   * 左栏名单用关联行（0 条需求的产品也在）；条数叠 by_product 而不是直接用接口回的
+   * requirement_count —— 分面随列表一起刷新，关联/解除需求后左栏计数才跟得上。
    */
   const productNavLinks = useMemo(() => {
     const counts = new Map((facets?.by_product ?? []).map((item) => [item.product_id, item.count]));
@@ -392,8 +389,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             isProductsLoading={isProductLinksLoading}
             selectedProductId={selectedProductId}
             onSelectProduct={setSelectedProductId}
-            canManageProducts={canManageProducts}
-            onManageProducts={() => setIsProductsModalOpen(true)}
           />
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ProjectRequirementsGrid
@@ -420,7 +415,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               projectId={project}
               canManage={canManage}
               canManageProducts={canManageProducts}
-              onManageProducts={() => setIsProductsModalOpen(true)}
+              onManageProducts={goToProducts}
               /*
                * 请求还在飞、或者请求挂了的时候按「有产品」处理：这个标志只用来决定空态
                * 说哪句话、以及要不要禁用「关联需求」。宁可让人点开一个空的候选池，也
@@ -514,25 +509,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
         count={idsToUnlink.length}
         handleClose={() => setIdsToUnlink([])}
         handleSubmit={() => void handleUnlink()}
-      />
-
-      {/*
-        关联产品是整条链路的入口：不先把产品关联进来，需求候选池必然是空的。
-        改完要把需求列表也刷一遍 —— 解除某个产品后，它下面的需求不该继续留在页面上
-        （后端已经挡住了「还有需求关联着就不许解除」，这里刷新是为了拿到最新的候选池）。
-      */}
-      <ProjectProductsModal
-        isOpen={isProductsModalOpen}
-        products={products}
-        isProductsLoading={isProductsLoading}
-        links={productNavLinks}
-        isSubmitting={isProductLinksMutating}
-        handleClose={() => setIsProductsModalOpen(false)}
-        onSubmit={async (payload) => {
-          await updateProducts(payload);
-          await store.fetchRequirements();
-          void moduleStore.refresh().catch(() => undefined);
-        }}
       />
     </>
   );

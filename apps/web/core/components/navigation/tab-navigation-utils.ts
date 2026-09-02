@@ -72,6 +72,7 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
     // docs/project-requirement-link-requirements.md 7.1 第 6 条。研发需求页
     // （dev_requirements）已下线，存量偏好走下方 /issues 兜底。
     requirements: `${baseUrl}/requirements`,
+    products: `${baseUrl}/products`,
     defects: `${baseUrl}/defects`,
     cycles: `${baseUrl}/cycles`,
     modules: `${baseUrl}/modules`,

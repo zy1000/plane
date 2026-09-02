@@ -232,6 +232,12 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/requirements/(list)/page.tsx"
             ),
           ]),
+          // Project Products — 本项目关联的产品（ProductProject），需求候选池的入口。
+          // 页头由页面组件自己渲染（同产品侧「关联项目」页），不套 layout。
+          route(
+            ":workspaceSlug/projects/:projectId/products",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/products/page.tsx"
+          ),
           // Defects List (bug / defect)
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/defects/(list)/layout.tsx", [
             route(

@@ -18,6 +18,7 @@ import {
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
   PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
+  PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
@@ -47,7 +48,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { Rss, Milestone, Folder, Rocket } from "lucide-react";
+import { Rss, Milestone, Folder, Package, Rocket } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -119,6 +120,19 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 0.75,
+      },
+      {
+        // 本项目关联的产品：需求候选池按它过滤，排在「工作项」「需求」前面
+        i18n_key: "sidebar.products",
+        key: "products",
+        name: "产品",
+        href: `/${workspaceSlug}/projects/${projectId}/products`,
+        icon: Package,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        // 与后端 ProjectProductViewSet.list 同一组 key：能看需求页或能管产品关联的都能进
+        permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY, PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY],
+        shouldRender: true,
+        sortOrder: 0.9,
       },
       {
         i18n_key: "sidebar.work_items",

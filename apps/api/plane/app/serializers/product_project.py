@@ -21,6 +21,10 @@ class ProductProjectSerializer(BaseSerializer):
     product_identifier = serializers.CharField(
         source="product.identifier", read_only=True
     )
+    product_code = serializers.CharField(source="product.code", read_only=True)
+    product_logo_props = serializers.JSONField(
+        source="product.logo_props", read_only=True
+    )
     project_detail = ProjectLiteSerializer(source="project", read_only=True)
     status_counts = serializers.SerializerMethodField()
     requirement_count = serializers.SerializerMethodField()
@@ -34,6 +38,8 @@ class ProductProjectSerializer(BaseSerializer):
             "workspace",
             "product_name",
             "product_identifier",
+            "product_code",
+            "product_logo_props",
             "project_detail",
             "requirement_count",
             "status_counts",
@@ -45,14 +51,20 @@ class ProductProjectSerializer(BaseSerializer):
         read_only_fields = fields
 
     def _counts(self, obj):
-        """本产品有多少需求进了这个项目，各状态各多少（需求级状态，跨项目共享）。
+        """这条关联上有多少需求、各状态各多少（需求级状态，跨项目共享）。
 
-        context["status_counts"] 由视图一次分组查询喂进来（见
-        utils/requirement_project.status_counts_by_project）。拿不到就返回全 0 而不是
-        报错 —— 项目侧那份 ProductProjectSerializer 不需要统计，不该被这两个字段拖着
-        多打一次查询。
+        context["status_counts"] 由视图一次分组查询喂进来。产品侧按 project_id 分桶
+        （utils/requirement_project.status_counts_by_project），项目侧按 product_id
+        分桶（status_counts_by_product），用 context["status_counts_by"] = "product"
+        切换取桶的键。拿不到就返回全 0 而不是报错。
         """
-        return (self.context.get("status_counts") or {}).get(str(obj.project_id))
+        counts = self.context.get("status_counts") or {}
+        key = (
+            obj.product_id
+            if self.context.get("status_counts_by") == "product"
+            else obj.project_id
+        )
+        return counts.get(str(key))
 
     def get_status_counts(self, obj):
         return self._counts(obj) or {}

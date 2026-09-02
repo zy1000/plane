@@ -14,12 +14,12 @@ type TProps = {
   isProductsLoading: boolean;
   selectedProductId: string | null;
   onSelectProduct: (productId: string | null) => void;
-  canManageProducts: boolean;
-  onManageProducts: () => void;
 };
 
 /**
  * 项目需求页左侧浏览栏：上半产品、下半只读模块树。
+ *
+ * 只做浏览与筛选。产品关联的增删在项目「产品」子菜单页（components/projects/products）。
  *
  * 树为三级：全部需求 → 产品 → 该产品模块。数据来自「已关联需求所涉及的
  * 产品模块」（祖先闭包 + 子树计数），项目本身不落模块字段。
@@ -33,8 +33,6 @@ export const ProjectRequirementModuleSidebar = (props: TProps) => {
     isProductsLoading,
     selectedProductId,
     onSelectProduct,
-    canManageProducts,
-    onManageProducts,
   } = props;
   const { t } = useTranslation();
 
@@ -45,8 +43,6 @@ export const ProjectRequirementModuleSidebar = (props: TProps) => {
         isLoading={isProductsLoading}
         selectedProductId={selectedProductId}
         onSelect={onSelectProduct}
-        canManage={canManageProducts}
-        onManage={onManageProducts}
       />
       <div className="mx-3 border-t border-subtle" />
       <div className="px-3 pt-3 pb-1.5 text-caption-sm-medium text-tertiary">

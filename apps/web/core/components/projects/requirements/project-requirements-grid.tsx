@@ -81,6 +81,7 @@ type TProps = {
   canManage: boolean;
   /** 有 project.product_link.manage 才能改「本项目引用哪些产品」 */
   canManageProducts: boolean;
+  /** 「没关联产品」空态的 CTA：关联在项目「产品」页做，这里只负责跳过去 */
   onManageProducts: () => void;
   search: string;
   onSearchChange: (value: string) => void;

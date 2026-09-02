@@ -10,35 +10,24 @@ type TProps = {
   isLoading: boolean;
   selectedProductId: string | null;
   onSelect: (productId: string | null) => void;
-  canManage: boolean;
-  onManage: () => void;
 };
 
 /**
- * 项目需求页左侧栏的产品区：看关联、点选范围、打开管理弹窗。
+ * 项目需求页左侧栏的产品区：看关联、点选范围。
  *
- * 名单用 ProductProject 关联行（含 0 条需求的产品）。项目侧接口不填
- * requirement_count，页面会先叠上 facets.by_product 再传入；分面不当名单。
+ * 名单用 ProductProject 关联行（含 0 条需求的产品）。requirement_count 由页面先叠上
+ * facets.by_product 再传入（分面随需求列表一起刷新）；分面不当名单。
  */
 export const ProjectRequirementProductNav = (props: TProps) => {
-  const { links, isLoading, selectedProductId, onSelect, canManage, onManage } = props;
+  const { links, isLoading, selectedProductId, onSelect } = props;
   const { t } = useTranslation();
   const isAllActive = selectedProductId === null;
   const totalCount = links.reduce((sum, link) => sum + (link.requirement_count ?? 0), 0);
 
   return (
     <div className="shrink-0">
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1.5">
+      <div className="px-3 pt-3 pb-1.5">
         <h3 className="text-caption-sm-medium text-tertiary">{t("project_requirements.sidebar_products")}</h3>
-        {canManage && (
-          <button
-            type="button"
-            onClick={onManage}
-            className="text-caption-sm-medium text-secondary transition-colors hover:text-primary"
-          >
-            {t("project_requirements.sidebar_manage")}
-          </button>
-        )}
       </div>
       {!isLoading && links.length > 0 && (
         <div className="space-y-0.5 px-2 pb-2">

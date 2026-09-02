@@ -478,62 +478,62 @@ def requirement_facets(*, project_id, product_id=None):
     }
 
 
-def status_counts_by_project(*, product_id, project_ids):
-    """产品侧「关联项目」列表用：每个项目引用了本产品多少需求、各状态各多少。
+def _requirement_status_counts(*, group_field, keys, scope):
+    """按 group_field 分桶统计需求状态分布 + 工作项聚合，产品侧与项目侧共用。
 
-    状态是需求级的（跨项目共享一份），所以同一条需求进了几个项目就会在几个项目的
-    bucket 里各计一次 —— 这里统计的是「该项目引用的本产品需求，按需求状态的分布」。
+    scope 同时套在 RequirementProject 与 RequirementIssue 上（两张表都有 project 与
+    requirement 外键，同一组 lookup 两边都成立）。
 
     每个 bucket 在五个状态键之外另带 issue_total / issue_completed /
-    issue_cancelled 三个工作项聚合键（本产品需求在该项目下的 live 关联工作项，
-    按 State.group 分桶），供前端按任务完成率展示 —— 状态键与工作项键混在同一个
-    dict 里，消费方按键取用，不要对整个 bucket 求和。
+    issue_cancelled 三个工作项聚合键（live 关联工作项，按 State.group 分桶），
+    供前端按任务完成率展示 —— 状态键与工作项键混在同一个 dict 里，消费方按键取用，
+    不要对整个 bucket 求和。
 
-    一次分组查询覆盖所有项目，序列化器按 project_id 取用 —— 不要每行查一次。
+    一次分组查询覆盖所有 key，序列化器按 key 取用 —— 不要每行查一次。
     """
     from django.db.models import Count
 
     counts = {
-        str(project_id): {
+        str(key): {
             **{value: 0 for value in RequirementItemStatus.values},
             "issue_total": 0,
             "issue_completed": 0,
             "issue_cancelled": 0,
         }
-        for project_id in project_ids
+        for key in keys
     }
     rows = (
         RequirementProject.objects.filter(
-            project_id__in=project_ids,
-            requirement__product_id=product_id,
-            # 同上：软删的需求不该计进产品侧的需求数与完成率
+            # 软删的需求不该计进需求数与完成率（关联行与需求行分两步软删，见
+            # requirement_facets 的说明）
             requirement__deleted_at__isnull=True,
+            **scope,
         )
-        .values("project_id", "requirement__status")
+        .order_by()
+        .values(group_field, "requirement__status")
         .annotate(count=Count("id"))
     )
     for row in rows:
-        bucket = counts.get(str(row["project_id"]))
+        bucket = counts.get(str(row[group_field]))
         if bucket is not None and row["requirement__status"] in bucket:
             bucket[row["requirement__status"]] = row["count"]
 
-    # 工作项聚合同样一次分组覆盖所有项目。issue__/requirement__deleted_at 显式
+    # 工作项聚合同样一次分组覆盖所有 key。issue__/requirement__deleted_at 显式
     # 过滤理由同上：FK 穿透不走软删 manager，窗口期里已删行不能再计进完成率。
-    # 按 issue_id 去重：需求 ↔ 工作项是多对多，一条工作项挂本产品下多条需求时
+    # 按 issue_id 去重：需求 ↔ 工作项是多对多，一条工作项挂同一桶下多条需求时
     # 只算一个工作项（一条工作项只有一个 state，落在唯一一个分组桶里）
     issue_rows = (
         RequirementIssue.objects.filter(
-            project_id__in=project_ids,
-            requirement__product_id=product_id,
             requirement__deleted_at__isnull=True,
             issue__deleted_at__isnull=True,
+            **scope,
         )
         .order_by()
-        .values("project_id", "issue__state__group")
+        .values(group_field, "issue__state__group")
         .annotate(count=Count("issue_id", distinct=True))
     )
     for row in issue_rows:
-        bucket = counts.get(str(row["project_id"]))
+        bucket = counts.get(str(row[group_field]))
         if bucket is None:
             continue
         bucket["issue_total"] += row["count"]
@@ -542,6 +542,33 @@ def status_counts_by_project(*, product_id, project_ids):
         elif row["issue__state__group"] == StateGroup.CANCELLED:
             bucket["issue_cancelled"] += row["count"]
     return counts
+
+
+def status_counts_by_project(*, product_id, project_ids):
+    """产品侧「关联项目」列表用：每个项目引用了本产品多少需求、各状态各多少。
+
+    状态是需求级的（跨项目共享一份），所以同一条需求进了几个项目就会在几个项目的
+    bucket 里各计一次 —— 这里统计的是「该项目引用的本产品需求，按需求状态的分布」。
+    bucket 形状见 _requirement_status_counts。
+    """
+    return _requirement_status_counts(
+        group_field="project_id",
+        keys=project_ids,
+        scope={"project_id__in": project_ids, "requirement__product_id": product_id},
+    )
+
+
+def status_counts_by_product(*, project_id, product_ids):
+    """项目侧「产品」页用：本项目从每个产品引用了多少需求、各状态各多少。
+
+    与 status_counts_by_project 是同一份统计换个分桶方向：那边固定产品、按项目分桶，
+    这边固定项目、按产品分桶。bucket 形状相同，前端两张表共用同一套状态条与完成率算法。
+    """
+    return _requirement_status_counts(
+        group_field="requirement__product_id",
+        keys=product_ids,
+        scope={"project_id": project_id, "requirement__product_id__in": product_ids},
+    )
 
 
 def resolve_linkable_requirements(*, slug, project_id, requirement_ids):

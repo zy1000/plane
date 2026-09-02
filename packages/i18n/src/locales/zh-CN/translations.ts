@@ -19,6 +19,7 @@ export default {
     views: "视图",
     analytics: "分析",
     work_items: "工作项",
+    products: "产品",
     requirements: "需求",
     defects: "缺陷",
     cycles: "迭代",
@@ -2191,7 +2192,6 @@ export default {
     submit_change: "提交变更",
     product_column: "所属产品",
     sidebar_products: "产品",
-    sidebar_manage: "管理",
     all_products: "全部产品",
     all_statuses: "全部状态",
     empty: {
@@ -2200,7 +2200,7 @@ export default {
     },
     no_products: {
       title: "本项目还没有关联产品",
-      description: "需求来自产品。在左侧「产品」里把产品关联进来，才能引用它下面的需求。",
+      description: "需求来自产品。先在「产品」页把产品关联进来，才能引用它下面的需求。",
     },
     linkable: {
       title: "关联需求",
@@ -2279,13 +2279,32 @@ export default {
     },
     relations_toolbar: "需求关联操作",
   },
-  /** 项目关联的产品。它决定了项目能引用哪些产品的需求 */
+  /** 项目「产品」页（/projects/:id/products）：本项目关联的产品及其需求交付进度 */
   project_products: {
     no_visible_products: "当前工作区没有你可见的产品",
-    title: "关联产品",
+    title: "产品",
     link: "关联产品",
     unlink: "解除关联",
-    empty: "尚未关联任何产品",
+    columns: {
+      product: "产品",
+      code: "产品代号",
+      requirement_count: "需求数",
+      status_distribution: "状态分布",
+      completion: "完成率",
+      linked_at: "关联时间",
+    },
+    completion_hint:
+      "有关联工作项时按工作项完成率计算：已完成 / (工作项数 − 已取消)；否则按需求状态计算：已发布 / (总数 − 已关闭)。",
+    error_title: "无法加载关联产品",
+    empty: {
+      title: "本项目还没有关联产品",
+      description: "需求来自产品。先把产品关联进来，才能在「需求」页引用它下面的需求，并在这里查看各产品需求的交付进度。",
+    },
+    unlink_confirm_title: "解除产品关联",
+    unlink_confirm_description:
+      "解除后本项目将不能再引用「{name}」的需求。若该产品下仍有需求关联在本项目中，需先解除那些需求的关联。",
+    toast_unlinked: "已解除关联",
+    toast_updated: "关联产品已更新",
     manage: "管理产品",
     manage_subtitle: "勾选要关联到本项目的产品。关联后才能引用其下的需求。",
     search_placeholder: "搜索产品名称或编号",

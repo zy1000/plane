@@ -2011,7 +2011,6 @@ export default {
     submit_change: "Submit change",
     product_column: "Product",
     sidebar_products: "Products",
-    sidebar_manage: "Manage",
     all_products: "All products",
     all_statuses: "All statuses",
     empty: {
@@ -2020,7 +2019,7 @@ export default {
     },
     no_products: {
       title: "No product linked to this project",
-      description: "Requirements come from products. Link a product in the left sidebar first.",
+      description: "Requirements come from products. Link a product on the Products page first.",
     },
     linkable: {
       title: "Link requirements",
@@ -2093,12 +2092,33 @@ export default {
     },
     relations_toolbar: "Requirement relation actions",
   },
+  /** Project "Products" page (/projects/:id/products): linked products and their delivery progress */
   project_products: {
     no_visible_products: "No product in this workspace is visible to you",
-    title: "Linked products",
+    title: "Products",
     link: "Link products",
     unlink: "Unlink",
-    empty: "No product linked yet",
+    columns: {
+      product: "Product",
+      code: "Product code",
+      requirement_count: "Requirements",
+      status_distribution: "Status distribution",
+      completion: "Done",
+      linked_at: "Linked on",
+    },
+    completion_hint:
+      "With linked work items: completed / (work items − cancelled). Otherwise by requirement status: Released / (total − Closed).",
+    error_title: "Unable to load linked products",
+    empty: {
+      title: "No product linked to this project yet",
+      description:
+        "Requirements come from products. Link a product first to reference its requirements on the Requirements page and track their delivery here.",
+    },
+    unlink_confirm_title: "Unlink this product",
+    unlink_confirm_description:
+      "This project will no longer be able to reference requirements from {name}. If any are still linked in this project, unlink those requirements first.",
+    toast_unlinked: "Product unlinked",
+    toast_updated: "Linked products updated",
     manage: "Manage products",
     manage_subtitle:
       "Select products to link to this project. You can then reference their requirements.",
@@ -5021,6 +5041,7 @@ export default {
     views: "Views",
     analytics: "Analytics",
     work_items: "Work items",
+    products: "Products",
     requirements: "Requirements",
     defects: "Defects",
     cycles: "Cycles",

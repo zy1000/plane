@@ -22,6 +22,7 @@ from plane.utils.requirement_project import (
     RequirementLinkError,
     resolve_linkable_products,
     resolve_linkable_projects,
+    status_counts_by_product,
     status_counts_by_project,
     unlink_product_from_project,
 )
@@ -56,8 +57,18 @@ class ProjectProductViewSet(BaseViewSet):
         PermissionKey.PROJECT_PRODUCT_LINK_MANAGE,
     )
     def list(self, request, slug, project_id):
+        rows = list(self.get_queryset())
+        # 项目「产品」页要回答「从每个产品引了多少需求、做到哪了」：一次分组查询覆盖
+        # 所有产品，序列化器按 product_id 取桶（与产品侧按 project_id 取桶对称）
+        status_counts = status_counts_by_product(
+            project_id=project_id, product_ids=[row.product_id for row in rows]
+        )
         return Response(
-            ProductProjectSerializer(self.get_queryset(), many=True).data,
+            ProductProjectSerializer(
+                rows,
+                many=True,
+                context={"status_counts": status_counts, "status_counts_by": "product"},
+            ).data,
             status=status.HTTP_200_OK,
         )
 
