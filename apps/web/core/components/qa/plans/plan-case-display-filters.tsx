@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { cn } from "@plane/utils";
 import { FilterHeader, FilterOption, FiltersDropdown } from "@/components/issues/issue-layouts/filters";
+import type { TPlanCaseEnumGroupBy } from "@/services/qa/plan.service";
 
 export type TPlanCaseDisplayPropertyKey =
   | "code"
@@ -25,7 +26,7 @@ export type TPlanCaseDisplayProperties = Record<TPlanCaseDisplayPropertyKey, boo
 
 export type TPlanCaseOrderBy = "case__code" | "-case__code" | "-case__updated_at" | "case__updated_at";
 
-export type TPlanCaseGroupBy = "module" | "assignee";
+export type TPlanCaseGroupBy = "module" | "assignee" | TPlanCaseEnumGroupBy;
 
 type Props = {
   disabled?: boolean;
@@ -81,7 +82,14 @@ export const DEFAULT_PLAN_CASE_GROUP_BY: TPlanCaseGroupBy = "module";
 const GROUP_BY_OPTIONS: TGroupByOption[] = [
   { key: "module", label: "模块" },
   { key: "assignee", label: "执行人" },
+  { key: "type", label: "类型" },
+  { key: "priority", label: "优先级" },
+  { key: "result", label: "执行结果" },
 ];
+
+/** URL 等外部来源的分组值是否合法，用于执行页解析 group_by */
+export const isPlanCaseGroupBy = (value: string | null | undefined): value is TPlanCaseGroupBy =>
+  GROUP_BY_OPTIONS.some((option) => option.key === value);
 
 const ORDER_BY_OPTIONS: TOrderByOption[] = [
   { key: "case__code", label: "用例编号升序" },

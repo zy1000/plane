@@ -35,8 +35,11 @@ export type TPlanCaseQueryParams = {
   plan_id?: string;
   search?: string;
   ordering?: "case__code" | "-case__code" | "case__updated_at" | "-case__updated_at" | string;
+  result?: string;
   result__in?: string;
+  case__type?: string;
   case__type__in?: string;
+  case__priority?: string;
   case__priority__in?: string;
   assignee_id?: string;
   assignee_id__in?: string;
@@ -78,6 +81,37 @@ export type TPlanAssigneeTree = {
   kind: "root";
   count: number;
   children: TPlanAssigneeTreeNode[];
+};
+
+/** 计划用例按枚举字段分组的维度：类型 / 优先级 / 执行结果 */
+export type TPlanCaseEnumGroupBy = "type" | "priority" | "result";
+
+type TPlanCaseEnumGroupQueryParam = "case__type" | "case__priority" | "result";
+
+/** 枚举分组维度 → 左树选中值对应的列表精确过滤参数 */
+export const PLAN_CASE_ENUM_GROUP_QUERY_PARAM: Record<TPlanCaseEnumGroupBy, TPlanCaseEnumGroupQueryParam> = {
+  type: "case__type",
+  priority: "case__priority",
+  result: "result",
+};
+
+export const isPlanCaseEnumGroupBy = (groupBy: string): groupBy is TPlanCaseEnumGroupBy =>
+  Object.prototype.hasOwnProperty.call(PLAN_CASE_ENUM_GROUP_QUERY_PARAM, groupBy);
+
+export type TPlanGroupTreeNode = {
+  /** 枚举值（类型/优先级为数字字符串，执行结果为中文） */
+  id: string;
+  name: string;
+  kind: TPlanCaseEnumGroupBy;
+  count: number;
+};
+
+export type TPlanGroupTree = {
+  id: string;
+  name: string;
+  kind: "root";
+  count: number;
+  children: TPlanGroupTreeNode[];
 };
 
 export type TPlanCaseCopyPayload = {
@@ -234,6 +268,17 @@ export class PlanService extends APIService {
       });
   }
 
+  async getPlanGroupTree(
+    workspaceSlug: string,
+    queries: { plan_id: string; group_by: TPlanCaseEnumGroupBy }
+  ): Promise<TPlanGroupTree> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/group-tree/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getPlanCases(workspaceSlug: string, queries?: TPlanCaseQueryParams): Promise<TPlanCaseListResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/plane/case/`, {
       params: queries,
@@ -262,6 +307,10 @@ export class PlanService extends APIService {
       repository_id?: string | null;
       module_id?: string | null;
       assignee_id?: string | null;
+      assignee_isnull?: boolean;
+      result?: string;
+      case__type?: string;
+      case__priority?: string;
       name__icontains?: string;
     }
   ): Promise<{

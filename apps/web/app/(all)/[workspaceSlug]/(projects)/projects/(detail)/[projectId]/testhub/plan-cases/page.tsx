@@ -16,7 +16,13 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Tree, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
-import { PlanService, type TPlanCaseItem, type TPlanListItem } from "@/services/qa/plan.service";
+import {
+  PLAN_CASE_ENUM_GROUP_QUERY_PARAM,
+  PlanService,
+  isPlanCaseEnumGroupBy,
+  type TPlanCaseItem,
+  type TPlanListItem,
+} from "@/services/qa/plan.service";
 import { AppstoreOutlined } from "@ant-design/icons";
 import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2, Copy } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
@@ -44,6 +50,8 @@ import {
 } from "@/components/qa/plans/plan-case-display-filters";
 import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
+import { PlanCaseGroupTree } from "@/components/qa/plans/plan-case-group-tree";
+import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
 import {
   planCaseExpressionToQueryParams,
@@ -162,6 +170,17 @@ export default function PlanCasesPage() {
     workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
     planId,
     enabled: groupBy === "assignee",
+  });
+  // 类型/优先级/执行结果分组下左树的选中值（枚举值字符串），null 表示「全部」
+  const [selectedGroupValue, setSelectedGroupValue] = useState<string | null>(null);
+  const {
+    tree: groupTree,
+    loading: groupTreeLoading,
+    refresh: refreshGroupTree,
+  } = usePlanGroupTree({
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+    planId,
+    groupBy,
   });
 
   const [cases, setCases] = useState<TPlanCaseItem[]>([]);
@@ -391,6 +410,7 @@ export default function PlanCasesPage() {
     options?: {
       assigneeKey?: string | null;
       filtersParam?: TPlanCaseListFilters;
+      groupValue?: string | null;
       moduleId?: string | null;
       orderingParam?: TPlanCaseOrderBy | null;
       repositoryId?: string | null;
@@ -403,9 +423,11 @@ export default function PlanCasesPage() {
       const hasRepositoryOverride = Object.prototype.hasOwnProperty.call(options || {}, "repositoryId");
       const hasModuleOverride = Object.prototype.hasOwnProperty.call(options || {}, "moduleId");
       const hasAssigneeOverride = Object.prototype.hasOwnProperty.call(options || {}, "assigneeKey");
+      const hasGroupValueOverride = Object.prototype.hasOwnProperty.call(options || {}, "groupValue");
       const effectiveRepositoryId = hasRepositoryOverride ? options?.repositoryId : selectedRepositoryId;
       const effectiveModuleId = hasModuleOverride ? options?.moduleId : selectedModuleId;
       const effectiveAssigneeKey = hasAssigneeOverride ? options?.assigneeKey : selectedAssigneeKey;
+      const effectiveGroupValue = hasGroupValueOverride ? options?.groupValue : selectedGroupValue;
       const effectiveOrdering = options?.orderingParam === undefined ? ordering : (options.orderingParam ?? undefined);
       const effectiveFilters = options?.filtersParam ?? filters;
       const { search, case__module_id__in: moduleFilter, ...filterParams } = effectiveFilters;
@@ -425,6 +447,9 @@ export default function PlanCasesPage() {
       // 执行人分组的树选择：exact 过滤与富过滤器的 assignee_id__in 由后端 AND 组合，天然取交集
       if (effectiveAssigneeKey === "unassigned") params.assignee_isnull = true;
       else if (effectiveAssigneeKey) params.assignee_id = effectiveAssigneeKey;
+      // 类型/优先级/执行结果分组的树选择：同样是 exact 过滤，与富过滤器的 __in 条件由后端 AND 组合
+      if (isPlanCaseEnumGroupBy(groupBy) && effectiveGroupValue != null)
+        params[PLAN_CASE_ENUM_GROUP_QUERY_PARAM[groupBy]] = effectiveGroupValue;
 
       const response = await planService.getPlanCases(workspaceSlug as string, params);
       setCases(response?.data || []);
@@ -486,8 +511,8 @@ export default function PlanCasesPage() {
     setPlanCaseDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
   };
 
-  // 模块树始终要刷（富过滤器的用例库/模块选项依赖它）；执行人树在未启用时 refresh 为 no-op
-  const refreshGroupTrees = () => Promise.all([fetchPlanTree(), refreshAssigneeTree()]);
+  // 模块树始终要刷（富过滤器的用例库/模块选项依赖它）；执行人树 / 枚举分组树在未启用时 refresh 为 no-op
+  const refreshGroupTrees = () => Promise.all([fetchPlanTree(), refreshAssigneeTree(), refreshGroupTree()]);
 
   const handleGroupByChange = (nextGroupBy: TPlanCaseGroupBy) => {
     if (nextGroupBy === groupBy) return;
@@ -496,7 +521,8 @@ export default function PlanCasesPage() {
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
     setSelectedAssigneeKey(null);
-    fetchCases(1, pageSize, { repositoryId: null, moduleId: null, assigneeKey: null });
+    setSelectedGroupValue(null);
+    fetchCases(1, pageSize, { repositoryId: null, moduleId: null, assigneeKey: null, groupValue: null });
   };
 
   const handleAssigneeTreeSelect = (key: string) => {
@@ -504,6 +530,14 @@ export default function PlanCasesPage() {
     const nextAssigneeKey = key === "root" ? null : key === "unassigned" ? "unassigned" : key.replace(/^assignee:/, "");
     setSelectedAssigneeKey(nextAssigneeKey);
     fetchCases(1, pageSize, { assigneeKey: nextAssigneeKey });
+  };
+
+  const handleGroupTreeSelect = (key: string) => {
+    setSelectedTreeKey(key);
+    // key 形如 "<kind>:<枚举值>"；执行结果的枚举值是中文，不含冒号，取首个冒号后的整段即可
+    const nextGroupValue = key === "root" ? null : key.slice(key.indexOf(":") + 1);
+    setSelectedGroupValue(nextGroupValue);
+    fetchCases(1, pageSize, { groupValue: nextGroupValue });
   };
 
   const handleRichFiltersChange = (expression: TPlanCaseFilterExpression) => {
@@ -849,10 +883,12 @@ export default function PlanCasesPage() {
   const handleViewExecution = (record: TPlanCaseItem) => {
     const caseId = record?.case?.id;
     if (!caseId) return;
+    // 分组方式随 URL 带到执行页，让执行页左树沿用当前结构；模块分组是默认值，不带参数
+    const groupByQuery = groupBy !== "module" ? `&group_by=${encodeURIComponent(groupBy)}` : "";
     router.push(
       `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(
         String(caseId)
-      )}&plan_id=${encodeURIComponent(String(planId || ""))}`
+      )}&plan_id=${encodeURIComponent(String(planId || ""))}${groupByQuery}`
     );
   };
 
@@ -931,12 +967,20 @@ export default function PlanCasesPage() {
                 selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
                 className="custom-tree-indent pr-2 pb-2"
               />
-            ) : (
+            ) : groupBy === "assignee" ? (
               <PlanCaseAssigneeTree
                 tree={assigneeTree}
                 loading={assigneeTreeLoading}
                 selectedKey={selectedTreeKey}
                 onSelect={handleAssigneeTreeSelect}
+              />
+            ) : (
+              <PlanCaseGroupTree
+                tree={groupTree}
+                loading={groupTreeLoading}
+                selectedKey={selectedTreeKey}
+                onSelect={handleGroupTreeSelect}
+                resultColors={planCaseResultEnums}
               />
             )}
           </div>
@@ -1322,6 +1366,8 @@ export default function PlanCasesPage() {
         onClose={() => {
           setIsUpdateModalOpen(false);
           setActiveCase(null);
+          // 弹窗内可能提交了执行结果，「执行结果」分组树的计数需要同步（未启用时 no-op）
+          void refreshGroupTree();
           fetchCases(currentPage, pageSize);
         }}
         caseId={activeCase?.id}

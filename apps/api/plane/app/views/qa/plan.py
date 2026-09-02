@@ -564,6 +564,16 @@ def _set_plan_case_assignees(plan_case_ids, assignee_ids):
         )
 
 
+# 计划用例枚举分组维度 → (PlanCase 上的查询字段, 有序的 (值, 展示名) 列表)
+PLAN_CASE_ENUM_GROUPS = {
+    "type": ("case__type", list(TestCase.Type.choices)),
+    # 高 → 中 → 低
+    "priority": ("case__priority", list(reversed(TestCase.Priority.choices))),
+    # Result 的 value 即中文，label 位存的是颜色，所以展示名直接用 value
+    "result": ("result", [(v, v) for v in PlanCase.Result.values]),
+}
+
+
 class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
@@ -583,6 +593,25 @@ class PlanView(BaseViewSet):
             query = query.filter(
                 id__in=through.objects.filter(user_id__in=assignee_ids).values("plancase_id")
             )
+
+        # 执行页分组树「未分配」：没有任何执行人
+        assignee_isnull = str(request.query_params.get("assignee_isnull", "")).strip().lower()
+        if assignee_isnull in {"1", "true", "yes"}:
+            through = PlanCase.assignees.through
+            query = query.filter(
+                ~Exists(through.objects.filter(plancase_id=OuterRef("id")))
+            )
+
+        # 执行页分组树 类型/优先级/执行结果 的 exact 过滤；非法值直接忽略，不让手写过滤抛 500
+        for param, cast in (("result", str), ("case__type", int), ("case__priority", int)):
+            raw = request.query_params.get(param)
+            if raw in (None, ""):
+                continue
+            try:
+                value = cast(raw)
+            except ValueError:
+                continue
+            query = query.filter(**{param: value})
 
         repository_ids = (
             request.query_params.getlist("repository_id")
@@ -693,6 +722,51 @@ class PlanView(BaseViewSet):
         ).count()
         children = assignees + [
             {"id": "unassigned", "name": "未分配", "kind": "unassigned", "count": unassigned_count}
+        ]
+        return Response(
+            {
+                "id": "all",
+                "name": "全部",
+                "kind": "root",
+                "count": base.count(),
+                "children": children,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"], url_path="group-tree")
+    def group_tree(self, request, slug):
+        """计划用例按 类型/优先级/执行结果 分组的统计树：全部 / 各枚举值（含数量，零填充）"""
+        plan_id = request.query_params.get("plan_id")
+        group_by = request.query_params.get("group_by")
+        if not plan_id:
+            return Response(
+                {"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if group_by not in PLAN_CASE_ENUM_GROUPS:
+            return Response(
+                {"error": f"group_by must be one of {', '.join(PLAN_CASE_ENUM_GROUPS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        base = PlanCase.objects.filter(
+            plan_id=plan_id,
+            plan__project__workspace__slug=slug,
+            case__deleted_at__isnull=True,
+        )
+        field, choices = PLAN_CASE_ENUM_GROUPS[group_by]
+        counts = {
+            row[field]: row["count"]
+            for row in base.values(field).annotate(count=Count("id"))
+        }
+        children = [
+            {
+                "id": str(value),
+                "name": label,
+                "kind": group_by,
+                "count": counts.get(value, 0),
+            }
+            for value, label in choices
         ]
         return Response(
             {

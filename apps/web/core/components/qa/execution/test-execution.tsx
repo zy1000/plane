@@ -31,6 +31,15 @@ import { ExecutionRecordsPanel } from "./execution-records";
 import { usePendingExecutionFiles } from "./use-pending-execution-files";
 import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
 import { ExecutionCaseFilterBar, useExecutionCaseFilter } from "./execution-case-filter";
+import {
+  DEFAULT_PLAN_CASE_GROUP_BY,
+  isPlanCaseGroupBy,
+  type TPlanCaseGroupBy,
+} from "@/components/qa/plans/plan-case-display-filters";
+import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
+import { PlanCaseGroupTree } from "@/components/qa/plans/plan-case-group-tree";
+import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
+import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
 
 type ReviewCaseRow = {
   id: string | number;
@@ -89,6 +98,9 @@ export default function TestExecutionPage() {
   const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
   const reviewId = searchParams.get("review_id") ?? "";
   const repositoryId = searchParams.get("repositoryId") ?? "";
+  // 列表页「显示 → 分组方式」经 URL 带过来；直接进 URL 或值非法时回落到默认的模块树
+  const groupByParam = searchParams.get("group_by");
+  const groupBy: TPlanCaseGroupBy = isPlanCaseGroupBy(groupByParam) ? groupByParam : DEFAULT_PLAN_CASE_GROUP_BY;
 
   const [planName, setPlanName] = React.useState<string>(() => {
     if (typeof window !== "undefined") return sessionStorage.getItem("selectedPlanName") || "";
@@ -115,6 +127,22 @@ export default function TestExecutionPage() {
   const [selectedRepositoryId, setSelectedRepositoryId] = React.useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
   const [planTree, setPlanTree] = React.useState<any | null>(null);
+  // 执行人 / 类型 / 优先级 / 执行结果 分组下左树的选中值（执行人为用户 id 或 "unassigned"），null 表示「全部」
+  const [selectedGroupValue, setSelectedGroupValue] = React.useState<string | null>(null);
+  const { tree: assigneeTree, loading: assigneeTreeLoading } = usePlanAssigneeTree({
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+    planId: planId || null,
+    enabled: groupBy === "assignee",
+  });
+  const {
+    tree: groupTree,
+    loading: groupTreeLoading,
+    refresh: refreshGroupTree,
+  } = usePlanGroupTree({
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+    planId: planId || null,
+    groupBy,
+  });
 
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
   const [caseDetail, setCaseDetail] = React.useState<any>(null);
@@ -218,12 +246,25 @@ export default function TestExecutionPage() {
     e.preventDefault();
   };
 
+  // 分组树选中值 → 中间列表的精确过滤参数；模块分组或未选中时为空
+  const buildGroupFilterParams = (groupValue: string | null) => {
+    if (!groupValue) return {};
+    if (groupBy === "assignee") {
+      return groupValue === "unassigned" ? { assignee_isnull: true } : { assignee_id: groupValue };
+    }
+    if (groupBy === "type") return { case__type: groupValue };
+    if (groupBy === "priority") return { case__priority: groupValue };
+    if (groupBy === "result") return { result: groupValue };
+    return {};
+  };
+
   const fetchCases = async (
     kw?: string,
     repoId: string | null = selectedRepositoryId,
     moduleId: string | null = selectedModuleId,
     autoSelectFirst?: boolean,
-    silent = false
+    silent = false,
+    groupValue: string | null = selectedGroupValue
   ) => {
     if (!workspaceSlug) return;
     try {
@@ -236,6 +277,7 @@ export default function TestExecutionPage() {
         all: true,
         ...(repoId ? { repository_id: repoId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
+        ...buildGroupFilterParams(groupValue),
         ...(input ? { name__icontains: input } : {}),
       });
       const nextCases = Array.isArray(res?.data) ? (res.data as PlanCaseRow[]) : [];
@@ -379,7 +421,8 @@ export default function TestExecutionPage() {
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
-    fetchCases(undefined, null, null);
+    setSelectedGroupValue(null);
+    fetchCases(undefined, null, null, undefined, false, null);
     fetchPlanTree();
     fetchEnums();
     if (workspaceSlug) {
@@ -390,7 +433,7 @@ export default function TestExecutionPage() {
         message.error(msg);
       }
     }
-  }, [workspaceSlug, planId, initialCaseId]);
+  }, [workspaceSlug, planId, initialCaseId, groupBy]);
 
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
@@ -449,6 +492,17 @@ export default function TestExecutionPage() {
       setCaseDetail(null);
       fetchCases(keyword, repoId, moduleId, true);
     }
+  };
+
+  // 执行人树 / 枚举分组树共用：key 形如 root、assignee:<id>、unassigned、<kind>:<枚举值>
+  const handleGroupTreeSelect = (key: string) => {
+    setSelectedTreeKey(key);
+    // "unassigned" 不含冒号，indexOf 为 -1，slice(0) 仍是自身
+    const nextGroupValue = key === "root" ? null : key.slice(key.indexOf(":") + 1);
+    setSelectedGroupValue(nextGroupValue);
+    setSelectedCaseId(undefined);
+    setCaseDetail(null);
+    fetchCases(keyword, null, null, true, false, nextGroupValue);
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -706,6 +760,8 @@ export default function TestExecutionPage() {
           setStepActualResultMap({});
           setStepExecResultMap({});
           await fetchCases(keyword, selectedRepositoryId, selectedModuleId, false, true);
+          // 执行结果变了，「执行结果」分组树的计数要同步（非枚举分组时 no-op）
+          void refreshGroupTree();
           if (autoNextRef.current) {
             await goToNextCaseRef.current();
           } else {
@@ -721,7 +777,17 @@ export default function TestExecutionPage() {
           setSubmitLoading(false);
         }
       }, 500),
-    [workspaceSlug, keyword, selectedCaseId, selectedRepositoryId, selectedModuleId, uploadPendingFiles, clearPendingFiles]
+    [
+      workspaceSlug,
+      keyword,
+      selectedCaseId,
+      selectedRepositoryId,
+      selectedModuleId,
+      selectedGroupValue,
+      refreshGroupTree,
+      uploadPendingFiles,
+      clearPendingFiles,
+    ]
   );
 
   React.useEffect(() => {
@@ -1058,25 +1124,42 @@ export default function TestExecutionPage() {
               }}
             />
             <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2 pl-1">
-              <Tree
-                showLine={false}
-                defaultExpandAll
-                switcherIcon={(nodeProps) => (
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                    <ChevronDownIcon
-                      className={`size-4 transition-transform rotate-0`}
-                      strokeWidth={2.5}
-                    />
-                  </span>
-                )}
-                onSelect={onSelect}
-                onExpand={onExpand}
-                expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                treeData={treeData}
-                selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                className="pb-2 pl-2 custom-tree-indent"
-              />
+              {groupBy === "module" ? (
+                <Tree
+                  showLine={false}
+                  defaultExpandAll
+                  switcherIcon={(nodeProps) => (
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
+                      <ChevronDownIcon
+                        className={`size-4 transition-transform rotate-0`}
+                        strokeWidth={2.5}
+                      />
+                    </span>
+                  )}
+                  onSelect={onSelect}
+                  onExpand={onExpand}
+                  expandedKeys={expandedKeys}
+                  autoExpandParent={autoExpandParent}
+                  treeData={treeData}
+                  selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+                  className="pb-2 pl-2 custom-tree-indent"
+                />
+              ) : groupBy === "assignee" ? (
+                <PlanCaseAssigneeTree
+                  tree={assigneeTree}
+                  loading={assigneeTreeLoading}
+                  selectedKey={selectedTreeKey}
+                  onSelect={handleGroupTreeSelect}
+                />
+              ) : (
+                <PlanCaseGroupTree
+                  tree={groupTree}
+                  loading={groupTreeLoading}
+                  selectedKey={selectedTreeKey}
+                  onSelect={handleGroupTreeSelect}
+                  resultColors={enumsData.plan_case_result}
+                />
+              )}
             </div>
             {/* Resize Handle */}
             <div
