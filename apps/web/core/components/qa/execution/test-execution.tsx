@@ -14,8 +14,11 @@ import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { PlanService as PlanApiService } from "@/services/qa/plan.service";
 import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
-import { RichTextEditor } from "../cases/util";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { RichTextEditor, STEPS_TABLE_TH_STYLE, STEPS_TABLE_TD_STYLE } from "../cases/util";
+import { TitleInput } from "../cases/update-modal/title-input";
+import { CaseMetaForm } from "../cases/update-modal/case-meta-form";
+import { RequirementDisplayPanel } from "../cases/requirement-display-panel";
+import { CaseReviewRecordsTable } from "../cases/case-review-records-table";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
@@ -128,8 +131,37 @@ export default function TestExecutionPage() {
     filteredCases,
     isFiltering: isExecutionFiltering,
   } = useExecutionCaseFilter(cases, enumsData.plan_case_result, currentUser?.id);
+  // 详情页同款属性行的数据准备：将 id/枚举值规范化为字符串，保证与下拉 options 的 value 类型一致
+  const normalizeId = (v: any): string | undefined => {
+    if (v === null || v === undefined) return undefined;
+    if (typeof v === "object") {
+      const id = v.id ?? v.value ?? v.uuid;
+      return id ? String(id) : undefined;
+    }
+    return String(v);
+  };
+  const caseTypeOptions = React.useMemo(
+    () =>
+      Object.entries(enumsData.case_type || {}).map(([value, label]) => ({
+        value,
+        label,
+        title: String(label),
+      })),
+    [enumsData.case_type]
+  );
+  const casePriorityOptions = React.useMemo(
+    () =>
+      Object.entries(enumsData.case_priority || {}).map(([value, label]) => ({
+        value,
+        label,
+        title: String(label),
+      })),
+    [enumsData.case_priority]
+  );
   const [attachments, setAttachments] = React.useState<any[]>([]);
-  const [activeTab, setActiveTab] = React.useState<"basic" | "work" | "defect" | "attachment" | "history">("basic");
+  const [activeTab, setActiveTab] = React.useState<
+    "basic" | "req-link" | "work" | "defect" | "history" | "review" | "attachment"
+  >("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<string | null>(null);
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
@@ -819,8 +851,8 @@ export default function TestExecutionPage() {
     if (!Array.isArray(steps) || steps.length === 0) {
       return <span className="text-secondary">暂无内容</span>;
     }
-    const headerStyle = { backgroundColor: "var(--bg-layer-1)", padding: 12, border: "1px solid var(--border-subtle)" } as const;
-    const cellStyle = { padding: 12, border: "1px solid var(--border-subtle)" } as const;
+    const headerStyle = STEPS_TABLE_TH_STYLE;
+    const cellStyle = STEPS_TABLE_TD_STYLE;
     const resultOptions = React.useMemo(() => {
       const map = enumsData?.plan_case_result || {};
       const options = Object.keys(map).map((key) => ({
@@ -865,7 +897,7 @@ export default function TestExecutionPage() {
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
-          className="text-sm leading-5 font-medium resize-none !p-3 !bg-transparent focus:!shadow-none"
+          className="resize-none !p-2.5 text-[13px] !bg-transparent focus:!shadow-none"
         />
       );
     };
@@ -879,7 +911,7 @@ export default function TestExecutionPage() {
           title: "序号",
           key: "index",
           width: 60,
-          render: (_: any, __: any, idx: number) => <span className="text-sm leading-5 font-medium">{idx + 1}</span>,
+          render: (_: any, __: any, idx: number) => <span>{idx + 1}</span>,
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
         },
@@ -889,7 +921,7 @@ export default function TestExecutionPage() {
           key: "description",
           width: "30%",
           render: (text: any) => (
-            <span className="whitespace-pre-wrap break-words text-sm leading-5 font-medium">{String(text || "")}</span>
+            <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>
           ),
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
@@ -900,7 +932,7 @@ export default function TestExecutionPage() {
           key: "result",
           width: "30%",
           render: (text: any) => (
-            <span className="whitespace-pre-wrap break-words text-secondary text-sm leading-5 font-medium">
+            <span className="whitespace-pre-wrap break-words">
               {String(text || "")}
             </span>
           ),
@@ -932,7 +964,7 @@ export default function TestExecutionPage() {
               value={record.execValue || undefined}
               onChange={(v) => onChangeExec(idx, String(v))}
               variant="borderless"
-              className="w-full text-sm leading-5 font-medium [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
+              className="w-full [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
               classNames={{ popup: { root: "min-w-[100px]" } }}
               suffixIcon={null}
             />
@@ -944,12 +976,13 @@ export default function TestExecutionPage() {
       [resultOptions, onChangeActual, onChangeExec]
     );
     return (
-      <div className="rounded border border-subtle">
+      <div className="overflow-hidden rounded-lg" style={{ background: "#fff" }}>
         <Table
           size="small"
           pagination={false}
           bordered={false}
           tableLayout="fixed"
+          className="[&_.ant-table-thead_.ant-table-cell::before]:!hidden [&_.ant-table-cell]:!border-b-0"
           rowKey={(r: any) => String(r?.__key)}
           dataSource={dataSource}
           columns={columns as any}
@@ -1161,77 +1194,62 @@ export default function TestExecutionPage() {
                     <div className="text-secondary py-12 text-center">未获取到用例详情</div>
                   ) : (
                     <div className="flex flex-col gap-4">
+                      <div>
+                        <TitleInput
+                          disabled
+                          value={String(caseDetail?.name ?? "")}
+                          onChange={() => {}}
+                          onBlur={() => {}}
+                          code={String(caseDetail?.code ?? "")}
+                        />
+                        <CaseMetaForm
+                          disabled
+                          projectId={projectId ? String(projectId) : undefined}
+                          assignee={normalizeId(caseDetail?.assignee)}
+                          onAssigneeChange={() => {}}
+                          onAssigneeBlur={() => {}}
+                          assigneeOptions={[]}
+                          stateValue={undefined}
+                          onStateChange={() => {}}
+                          onStateBlur={() => {}}
+                          caseStateOptions={[]}
+                          typeValue={normalizeId(caseDetail?.type)}
+                          onTypeChange={() => {}}
+                          onTypeBlur={() => {}}
+                          caseTypeOptions={caseTypeOptions}
+                          priorityValue={normalizeId(caseDetail?.priority)}
+                          onPriorityChange={() => {}}
+                          onPriorityBlur={() => {}}
+                          casePriorityOptions={casePriorityOptions}
+                          labelList={Array.isArray(caseDetail?.labels) ? caseDetail.labels : []}
+                        />
+                      </div>
                       <div className="border-b border-gray-200">
                         <nav className="flex gap-4 overflow-x-auto">
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("basic")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "basic"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.Info size={16} aria-hidden="true" />
-                            基本信息
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("work")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "work"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.ListTodo size={16} aria-hidden="true" />
-                            工作项
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("defect")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "defect"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.Bug size={16} aria-hidden="true" />
-                            缺陷
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("attachment")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "attachment"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.Paperclip size={16} aria-hidden="true" />
-                            附件
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              setActiveTab("history");
-                              if (!workspaceSlug || !planId || !selectedCaseId) return;
-                              try {
-                                await planService.getPlanCaseRecord(String(workspaceSlug), {
-                                  plan_id: String(planId),
-                                  case_id: String(selectedCaseId),
-                                });
-                              } catch {}
-                            }}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "history"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.History size={16} aria-hidden="true" />
-                            执行历史
-                          </button>
+                          {(
+                            [
+                              { key: "basic", label: "基本信息" },
+                              { key: "req-link", label: "需求" },
+                              { key: "work", label: "工作项" },
+                              { key: "defect", label: "缺陷" },
+                              { key: "history", label: "执行" },
+                              { key: "review", label: "评审" },
+                              { key: "attachment", label: "附件" },
+                            ] as const
+                          ).map((tab) => (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setActiveTab(tab.key)}
+                              className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 whitespace-nowrap transition-colors ${
+                                activeTab === tab.key
+                                  ? "text-accent-primary border-accent-strong"
+                                  : "text-secondary border-transparent hover:text-accent-primary"
+                              }`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
                         </nav>
                       </div>
 
@@ -1247,64 +1265,8 @@ export default function TestExecutionPage() {
                         >
                           {activeTab === "basic" && (
                             <div className="flex flex-col gap-4 min-h-[550px]">
-                              <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                                <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">维护人</div>
-                                  {caseDetail?.assignee ? (
-                                    <MemberDropdown
-                                      multiple={false}
-                                      value={caseDetail.assignee.id}
-                                      onChange={() => {}}
-                                      disabled={true}
-                                      placeholder={getUserDetails(caseDetail.assignee)?.display_name || "未知用户"}
-                                      className="w-full text-sm h-8"
-                                      buttonContainerClassName="w-full text-left p-0 cursor-default h-8 flex items-center"
-                                      buttonVariant="transparent-with-text"
-                                      buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit h-8"
-                                      showUserDetails={true}
-                                      optionsClassName="z-[60]"
-                                    />
-                                  ) : (
-                                    <div className="text-sm text-secondary h-8 flex items-center">未设置维护人</div>
-                                  )}
-                                </div>
-                                <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">用例编号</div>
-                                  <div className="h-8 flex items-center text-sm">
-                                    {caseDetail?.sequence_id ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}` : (caseDetail?.code ?? "-")}
-                                  </div>
-                                </div>
-                                <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">类型</div>
-                                  <div className="h-8 flex items-center">
-                                    <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
-                                  </div>
-                                </div>
-                                <div className="col-span-1">
-                                  <div className="text-xs text-secondary mb-1">等级</div>
-                                  <div className="h-8 flex items-center">
-                                    <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
-                                  </div>
-                                </div>
-                                <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">标签</div>
-                                  <div className="flex flex-wrap items-center gap-1 min-h-[32px]">
-                                     {Array.isArray(caseDetail?.labels) && caseDetail.labels.length > 0 ? (
-                                       caseDetail.labels.map((label: any) => (
-                                         <div key={label?.id || label} className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs border border-blue-100">
-                                           {label?.name || label}
-                                         </div>
-                                       ))
-                                     ) : (
-                                       <span className="text-sm text-secondary">-</span>
-                                     )}
-                                  </div>
-                                </div>
-                              </div>
-
                               <div>
-                                <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                                   前置条件
                                 </label>
                                 <RichTextEditor
@@ -1314,6 +1276,7 @@ export default function TestExecutionPage() {
                                   aria-label="前置条件"
                                   placeholder="暂无内容"
                                   editable={false}
+                                  readonlyTextClassName="text-base leading-6 text-primary"
                                 />
                               </div>
 
@@ -1321,7 +1284,7 @@ export default function TestExecutionPage() {
                                 <>
                                   <div>
                                     <div className="mb-2 flex items-center justify-between gap-6">
-                                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                      <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                                         文本描述
                                       </label>
                                       <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
@@ -1333,10 +1296,11 @@ export default function TestExecutionPage() {
                                       aria-label="文本描述"
                                       placeholder="暂无内容"
                                       editable={false}
+                                      readonlyTextClassName="text-base leading-6 text-primary"
                                     />
                                   </div>
                                   <div>
-                                    <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                    <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                                       预期结果
                                     </label>
                                     <RichTextEditor
@@ -1346,13 +1310,14 @@ export default function TestExecutionPage() {
                                       aria-label="预期结果"
                                       placeholder="暂无内容"
                                       editable={false}
+                                      readonlyTextClassName="text-base leading-6 text-primary"
                                     />
                                   </div>
                                 </>
                               ) : (
                                 <div>
                                   <div className="mb-2 flex items-center justify-between gap-6">
-                                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                    <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                                       测试步骤
                                     </label>
                                     <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
@@ -1368,7 +1333,7 @@ export default function TestExecutionPage() {
                               )}
 
                               <div>
-                                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                                   备注
                                 </label>
                                 <RichTextEditor
@@ -1378,9 +1343,30 @@ export default function TestExecutionPage() {
                                   aria-label="备注"
                                   placeholder="暂无内容"
                                   editable={false}
+                                  readonlyTextClassName="text-base leading-6 text-primary"
                                 />
                               </div>
 
+                            </div>
+                          )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "req-link"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "req-link" && selectedCaseId && (
+                            <div className="min-h-[550px]">
+                              <RequirementDisplayPanel
+                                caseId={String(selectedCaseId)}
+                                projectId={projectId ? String(projectId) : undefined}
+                                canEdit={false}
+                              />
                             </div>
                           )}
                         </Transition>
@@ -1486,6 +1472,25 @@ export default function TestExecutionPage() {
                               reviewId={reviewId}
                               caseId={selectedCaseId}
                             />
+                          )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "review"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "review" && selectedCaseId && (
+                            <div className="min-h-[550px]">
+                              <CaseReviewRecordsTable
+                                workspaceSlug={String(workspaceSlug ?? "")}
+                                caseId={String(selectedCaseId)}
+                              />
+                            </div>
                           )}
                         </Transition>
 

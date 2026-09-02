@@ -78,12 +78,15 @@ export const RichTextEditor = ({
   onBlur,
   placeholder = "请输入内容...",
   editable = true,
+  readonlyTextClassName = "leading-7 text-gray-700",
 }: {
   value?: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
   placeholder?: string;
   editable?: boolean;
+  /** 只读渲染的文字样式（字号/行高/颜色）。默认保持旧观感；需要对齐详情页正文时传 "text-base leading-6 text-primary" */
+  readonlyTextClassName?: string;
 }) => {
   const [editing, setEditing] = useState(false);
   const quillRef = useRef<ReactQuill | null>(null);
@@ -407,7 +410,7 @@ export const RichTextEditor = ({
         />
       ) : (
         <div
-          className={`relative min-h-[60px] py-2 px-3 leading-7 text-gray-700 rounded-md ${
+          className={`relative min-h-[60px] py-2 px-3 rounded-md ${readonlyTextClassName} ${
             editable ? "cursor-text" : ""
           }`}
           onMouseDown={() => editable && setEditing(true)}
@@ -472,6 +475,28 @@ export const RichTextEditor = ({
   );
 };
 
+// 步骤表共享样式：详情页 StepsEditor 与执行页只读步骤表（test-execution）共用同一套视觉
+export const STEPS_TABLE_LINE = "#e8eaed";
+export const STEPS_TABLE_TH_STYLE: React.CSSProperties = {
+  padding: "8px 10px",
+  border: "none",
+  background: "#f6f7f8",
+  color: "#6b7280",
+  textAlign: "left",
+  fontWeight: 500,
+  fontSize: "14px",
+};
+export const STEPS_TABLE_TD_STYLE: React.CSSProperties = {
+  padding: 10,
+  border: "none",
+  borderTop: `1px solid ${STEPS_TABLE_LINE}`,
+  background: "#fff",
+  color: "#374151",
+  verticalAlign: "top",
+  fontSize: "13px",
+  lineHeight: 1.5,
+};
+
 export const StepsEditor: React.FC<{
   value?: { description?: string; result?: string }[];
   onChange?: (v: { description?: string; result?: string }[]) => void;
@@ -502,26 +527,8 @@ export const StepsEditor: React.FC<{
     onBlur?.(rows);
   };
 
-  const tableLine = "#e8eaed";
-  const thStyle: React.CSSProperties = {
-    padding: "8px 10px",
-    border: "none",
-    background: "#f6f7f8",
-    color: "#6b7280",
-    textAlign: "left",
-    fontWeight: 500,
-    fontSize: "14px",
-  };
-  const tdStyle: React.CSSProperties = {
-    padding: 10,
-    border: "none",
-    borderTop: `1px solid ${tableLine}`,
-    background: "#fff",
-    color: "#374151",
-    verticalAlign: "top",
-    fontSize: "13px",
-    lineHeight: 1.5,
-  };
+  const thStyle = STEPS_TABLE_TH_STYLE;
+  const tdStyle = STEPS_TABLE_TD_STYLE;
 
   // 拖拽排序所需的引用
   const dragItem = React.useRef<number | null>(null);
