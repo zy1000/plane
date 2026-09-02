@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { IUserLite, TRequirementApprovalSpec } from "@plane/types";
+import type { IUserLite, TRequirementApprovalSpec, TRequirementChangeType } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useUser } from "@/hooks/store/user";
@@ -18,6 +18,7 @@ export function SubmitReviewModal({
   isSubmitting,
   workspaceSlug,
   productId,
+  changeType,
   onClose,
   onSubmit,
 }: {
@@ -25,6 +26,8 @@ export function SubmitReviewModal({
   isSubmitting: boolean;
   workspaceSlug: string | undefined;
   productId: string | undefined;
+  /** "delete" 时这张单是删除评审：标题要说清楚，通过即删行 */
+  changeType?: TRequirementChangeType;
   onClose: () => void;
   onSubmit: (payload: TRequirementApprovalSpec & { reason: string }) => void;
 }) {
@@ -45,7 +48,11 @@ export function SubmitReviewModal({
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
       <div className="p-5">
         <h2 className="text-16 font-semibold text-primary">
-          {t("workspace_products.requirements.approval.submit.title")}
+          {t(
+            changeType === "delete"
+              ? "workspace_products.requirements.approval.submit.delete_title"
+              : "workspace_products.requirements.approval.submit.title"
+          )}
         </h2>
 
         <RequirementApprovalRuleFields

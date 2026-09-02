@@ -2357,6 +2357,7 @@ export default {
         },
         submit: {
           title: "Submit requirements for review",
+          delete_title: "Submit delete review",
           reason: "Reason",
           confirm: "Submit for review",
           approvers_required: "Select at least one reviewer",
@@ -2386,6 +2387,7 @@ export default {
         deleted: "Requirement deleted.",
         configuration_saved: "Field configuration saved.",
         failed: "The requirement could not be saved. Please try again.",
+        delete_needs_review: "Approved requirements can't be deleted directly. Use \"Request deletion\" to submit a delete review.",
       },
       empty: {
         title: "No requirements yet",

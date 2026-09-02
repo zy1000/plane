@@ -114,6 +114,7 @@ export const useRequirementApprovalActions = ({
   return {
     isSubmitModalOpen,
     pendingSelection,
+    pendingChangeType,
     openSubmitModal,
     closeSubmitModal,
     submit,

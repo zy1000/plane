@@ -645,6 +645,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         isSubmitting={changesStore.isMutating}
         workspaceSlug={workspaceSlug}
         productId={productId}
+        changeType={approvalActions.pendingChangeType}
         onClose={approvalActions.closeSubmitModal}
         onSubmit={(payload) => void approvalActions.submit(payload)}
       />

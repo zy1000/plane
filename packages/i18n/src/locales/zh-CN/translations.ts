@@ -2541,6 +2541,7 @@ export default {
         },
         submit: {
           title: "提交需求评审",
+          delete_title: "提交删除评审",
           reason: "变更原因",
           confirm: "提交评审",
           approvers_required: "请至少选择一名评审人",
@@ -2570,6 +2571,7 @@ export default {
         deleted: "需求删除成功。",
         configuration_saved: "字段配置已保存。",
         failed: "需求保存失败，请稍后重试。",
+        delete_needs_review: "已通过审批的需求不能直接删除，请通过行菜单的「申请删除」提交删除评审。",
       },
       empty: {
         title: "暂无产品需求",

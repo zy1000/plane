@@ -21,9 +21,11 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type {
   TRequirement,
+  TRequirementChangeType,
   TRequirementData,
   TRequirementField,
   TRequirementFilter,
@@ -128,8 +130,8 @@ type TProps = {
   onOpenDetail: (requirementId: string) => void;
   /** 审批列上的待审胶囊点进去看那张变更单 */
   onOpenChangeRequest?: (changeRequestId: string) => void;
-  /** 提交 1..N 条需求进入评审。默认视图是唯一能组装跨需求类型变更单的地方 */
-  onSubmitReview?: (requirementIds: string[]) => void;
+  /** 提交 1..N 条需求进入评审。默认视图是唯一能组装跨需求类型变更单的地方；changeType 传 "delete" 时开的是删除评审单 */
+  onSubmitReview?: (requirementIds: string[], changeType?: TRequirementChangeType) => void;
   onWithdrawReview?: (changeRequestId: string) => void;
   /**
    * 改需求级交付状态。总览虽然是只读视图，状态是唯一例外 —— 它不属于「对应类型才能填
@@ -429,12 +431,19 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
    * 用已见过的行缓存判断，删除则本来就按 selectedIds，两边一致。
    */
   const canSubmitReviewByIdRef = useRef<Map<string, boolean>>(new Map());
+  const deletableByIdRef = useRef<Map<string, boolean>>(new Map());
   for (const item of requirements) {
     canSubmitReviewByIdRef.current.set(item.id, Boolean(item.can_submit_review));
+    deletableByIdRef.current.set(item.id, !item.is_locked && item.approved_version === null);
   }
   /** 可提交的选中行。撤回不做批量 —— 撤回作用在变更单上，一个选区可能跨多张单 */
   const submittableSelectedIds = useMemo(
     () => selectedIds.filter((id) => canSubmitReviewByIdRef.current.get(id)),
+    [requirements, selectedIds]
+  );
+  /** 只有从未通过审批的草稿能直接删；已确认的走「申请删除」评审（与类型视图同一条规则） */
+  const deletableSelectedIds = useMemo(
+    () => selectedIds.filter((id) => deletableByIdRef.current.get(id)),
     [requirements, selectedIds]
   );
 
@@ -451,9 +460,24 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
    */
   const confirmDelete = async () => {
     if (!idsToDelete.length) return;
-    await onDelete(idsToDelete);
-    setSelectedIds((current) => current.filter((id) => !idsToDelete.includes(id)));
-    setIdsToDelete([]);
+    try {
+      await onDelete(idsToDelete);
+      setSelectedIds((current) => current.filter((id) => !idsToDelete.includes(id)));
+    } catch (requestError) {
+      // 删除端点是全有或全无：本地数据过期时（行刚被别人审批通过）仍可能整批 409。
+      // 已通过审批的行要走删除评审，映射成可行动的提示；其余错误回退到后端文案
+      const payload = requestError as { code?: string; error?: string };
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message:
+          payload?.code === "REQUIREMENT_DELETE_NEEDS_APPROVAL"
+            ? t("workspace_products.requirements.toast.delete_needs_review")
+            : (payload?.error ?? t("workspace_products.requirements.toast.failed")),
+      });
+    } finally {
+      setIdsToDelete([]);
+    }
   };
 
   /**
@@ -502,7 +526,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           <CustomMenu.MenuItem
             onClick={() => {
               if (requirement.approved_version !== null && onSubmitReview) {
-                onSubmitReview([requirement.id]);
+                onSubmitReview([requirement.id], "delete");
                 return;
               }
               setIdsToDelete([requirement.id]);
@@ -1056,7 +1080,8 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
             onClearSelection={() => setSelectedIds([])}
             submitReviewCount={submittableSelectedIds.length}
             onSubmitReview={onSubmitReview ? () => onSubmitReview(submittableSelectedIds) : undefined}
-            onDelete={() => setIdsToDelete(selectedIds)}
+            deleteCount={deletableSelectedIds.length}
+            onDelete={() => setIdsToDelete(deletableSelectedIds)}
           />
         )}
         <div className="flex items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">

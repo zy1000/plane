@@ -42,6 +42,7 @@ import type {
   TRequirementBatchSavePayload,
   TRequirementBatchSaveResponse,
   TRequirementBuiltinFieldConfig,
+  TRequirementChangeType,
   TRequirementFilter,
   TRequirementItemStatus,
   TRequirementValue,
@@ -138,8 +139,8 @@ type TProps = {
   showApprovalColumn?: boolean;
   /** 打开这一行所在的变更单 */
   onOpenChangeRequest?: (changeRequestId: string) => void;
-  /** 提交这几条需求进入评审；不传则不渲染提交入口（标准库不走审批） */
-  onSubmitReview?: (requirementIds: string[]) => void;
+  /** 提交这几条需求进入评审；不传则不渲染提交入口（标准库不走审批）。changeType 传 "delete" 时开的是删除评审单 */
+  onSubmitReview?: (requirementIds: string[], changeType?: TRequirementChangeType) => void;
   onWithdrawReview?: (changeRequestId: string) => void;
   readOnly?: boolean;
   /**
@@ -677,12 +678,17 @@ export const RequirementGrid = observer(
         setSelectedIds((current) => current.filter((id) => !idsToDelete.includes(id)));
         setIdsToDelete([]);
       } catch (requestError) {
-        const payload = requestError as { code?: string; error?: string };
+        const payload = requestError as { code?: string; error?: string; conflicts?: { reason?: string }[] };
+        // 冲突里混着「已通过审批」的行时，真实原因是要走删除评审，别用「数据过期」的话术误导
+        const needsApproval =
+          payload?.code === "REQUIREMENT_BATCH_CONFLICT" &&
+          payload?.conflicts?.some((conflict) => conflict.reason === "needs_approval");
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
-          message:
-            payload?.code === "REQUIREMENT_BATCH_CONFLICT"
+          message: needsApproval
+            ? t("workspace_products.requirements.toast.delete_needs_review")
+            : payload?.code === "REQUIREMENT_BATCH_CONFLICT"
               ? t("requirement_grid.data.conflict")
               : (payload?.error ?? t("workspace_products.requirements.toast.failed")),
         });
@@ -747,7 +753,7 @@ export const RequirementGrid = observer(
             <CustomMenu.MenuItem
               onClick={() => {
                 if (requirement.approved_version !== null && onSubmitReview) {
-                  onSubmitReview([requirement.id]);
+                  onSubmitReview([requirement.id], "delete");
                   return;
                 }
                 setIdsToDelete([requirement.id]);
