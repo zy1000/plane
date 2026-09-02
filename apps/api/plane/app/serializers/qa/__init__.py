@@ -119,9 +119,23 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
 
 
 class PlanListSerializer(ModelSerializer):
+    module_path = serializers.SerializerMethodField()
+
+    def get_module_path(self, obj: TestPlan):
+        """根 → 计划所属模块的 [{id, name}]；依赖 context["module_map"]（id -> (name, parent_id)），缺省返回 []。"""
+        module_map = self.context.get("module_map") or {}
+        path, visited, current = [], set(), obj.module_id
+        while current and current in module_map and current not in visited:
+            visited.add(current)
+            name, parent_id = module_map[current]
+            path.append({"id": str(current), "name": name})
+            current = parent_id
+        path.reverse()
+        return path
+
     class Meta:
         model = TestPlan
-        fields = ["name", "id", "begin_time", "end_time", "state"]
+        fields = ["name", "id", "begin_time", "end_time", "state", "module", "module_path"]
 
 
 class CaseDetailSerializer(ModelSerializer):

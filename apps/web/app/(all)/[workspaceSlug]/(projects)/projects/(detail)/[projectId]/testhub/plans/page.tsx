@@ -60,6 +60,7 @@ export default function TestPlanDetailPage() {
   const searchParams = useSearchParams();
   const Enums = globalEnums.Enums;
   const repositoryIdFromUrl = searchParams.get("repositoryId");
+  const moduleIdFromUrl = searchParams.get("moduleId");
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryName = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryName") : "";
@@ -146,6 +147,7 @@ export default function TestPlanDetailPage() {
     []
   );
 
+  const appliedModuleIdFromUrlRef = useRef<string | null>(null);
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (!permissionsFetched) return;
@@ -156,8 +158,15 @@ export default function TestPlanDetailPage() {
       }
     } catch {}
     fetchModules();
-    fetchTestPlans(1, pageSize);
-  }, [workspaceSlug, projectId, permissionsFetched, hasPermission, repositoryIdFromUrl, pageSize]);
+    // URL 带 moduleId（如从计划用例页面包屑跳入）时只应用一次，之后以用户手动选择为准
+    if (moduleIdFromUrl && appliedModuleIdFromUrlRef.current !== moduleIdFromUrl) {
+      appliedModuleIdFromUrlRef.current = moduleIdFromUrl;
+      setSelectedModuleId(moduleIdFromUrl);
+      fetchTestPlans(1, pageSize, filters, moduleIdFromUrl);
+    } else {
+      fetchTestPlans(1, pageSize);
+    }
+  }, [workspaceSlug, projectId, permissionsFetched, hasPermission, repositoryIdFromUrl, moduleIdFromUrl, pageSize]);
 
   const batchUpdateModuleCounts = (list: any[], countsMap: Record<string, number>): any[] => {
     return (list || []).map((m: any) => {
@@ -807,6 +816,34 @@ export default function TestPlanDetailPage() {
     }
     return false;
   };
+
+  const collectAncestorIds = (list: PlanModule[], targetId: string, trail: string[] = []): string[] | null => {
+    for (const item of list || []) {
+      const id = String(item.id);
+      if (id === targetId) return trail;
+      const found = collectAncestorIds(item.children || [], targetId, [...trail, id]);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  // URL moduleId 对应的树节点在模块加载完成后展开其祖先并保持选中；只处理一次
+  const expandedForUrlModuleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!moduleIdFromUrl || modules.length === 0) return;
+    if (expandedForUrlModuleRef.current === moduleIdFromUrl) return;
+    expandedForUrlModuleRef.current = moduleIdFromUrl;
+    const ancestors = collectAncestorIds(modules, moduleIdFromUrl);
+    if (!ancestors) {
+      // URL 指向的模块已不存在：回退到「全部计划」
+      setSelectedModuleId(null);
+      fetchTestPlans(1, pageSize, filters, null);
+      return;
+    }
+    setExpandedKeys((prev) => Array.from(new Set([...prev, "all", ...ancestors])));
+    setAutoExpandParent(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modules, moduleIdFromUrl]);
 
   const treeData = [
     {

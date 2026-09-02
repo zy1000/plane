@@ -1,4 +1,5 @@
 # filters.py
+from django.db.models import Exists, OuterRef
 from django_filters import rest_framework as filters
 
 from plane.db.models import TestPlan, PlanModule, PlanCase, CaseReview, CaseReviewModule
@@ -41,6 +42,14 @@ class PlanCaseFilter(filters.FilterSet):
     # 执行人是 M2M，用 through 表子查询过滤，避免 join 产生重复行再 distinct
     assignee_id = filters.UUIDFilter(method="filter_assignee_id")
     assignee_id__in = UUIDInFilter(method="filter_assignee_id_in")
+    assignee_isnull = filters.BooleanFilter(method="filter_assignee_isnull")
+
+    def filter_assignee_isnull(self, queryset, name, value):
+        if value is None:
+            return queryset
+        through = PlanCase.assignees.through
+        has_assignee = Exists(through.objects.filter(plancase_id=OuterRef("id")))
+        return queryset.filter(~has_assignee if value else has_assignee)
 
     def filter_assignee_id(self, queryset, name, value):
         return self._filter_by_assignees(queryset, [value])

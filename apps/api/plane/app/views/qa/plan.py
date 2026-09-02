@@ -14,6 +14,7 @@ from django.db.models import (
     Case,
     CharField,
     Count,
+    Exists,
     F,
     Func,
     IntegerField,
@@ -312,7 +313,16 @@ class PlanListAPIView(BaseAPIView):
         queryset = self.filter_queryset(
             self.queryset.filter(project__workspace__slug=slug)
         ).distinct()
-        serializer = self.serializer_class(queryset, many=True)
+        # 一次查出工作区内全部计划模块，序列化时在内存中回溯祖先链，避免逐计划查询
+        module_map = {
+            mid: (name, parent_id)
+            for mid, name, parent_id in PlanModule.objects.filter(
+                project__workspace__slug=slug, deleted_at__isnull=True
+            ).values_list("id", "name", "parent_id")
+        }
+        serializer = self.serializer_class(
+            queryset, many=True, context={"module_map": module_map}
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -646,6 +656,54 @@ class PlanView(BaseViewSet):
         paginated_queryset = paginator.paginate_queryset(query, request)
         serializer = PlanCaseCardSerializer(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
+
+    @action(detail=False, methods=["get"], url_path="assignee-tree")
+    def assignee_tree(self, request, slug):
+        """计划用例按执行人分组的统计树：全部 / 各执行人 / 未分配（含数量）"""
+        plan_id = request.query_params.get("plan_id")
+        if not plan_id:
+            return Response(
+                {"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        base = PlanCase.objects.filter(
+            plan_id=plan_id,
+            plan__project__workspace__slug=slug,
+            case__deleted_at__isnull=True,
+        )
+        through = PlanCase.assignees.through
+        # 软删的计划用例不会清 through 行，必须按存活的 plancase_id 收敛
+        rows = (
+            through.objects.filter(plancase_id__in=base.values("id"))
+            .values("user_id", "user__display_name", "user__email")
+            .annotate(count=Count("plancase_id"))
+        )
+        assignees = [
+            {
+                "id": str(r["user_id"]),
+                "name": r["user__display_name"] or r["user__email"] or str(r["user_id"]),
+                "kind": "assignee",
+                "count": r["count"],
+            }
+            for r in rows
+        ]
+        assignees.sort(key=lambda x: x["name"].lower())
+        unassigned_count = base.filter(
+            ~Exists(through.objects.filter(plancase_id=OuterRef("id")))
+        ).count()
+        children = assignees + [
+            {"id": "unassigned", "name": "未分配", "kind": "unassigned", "count": unassigned_count}
+        ]
+        return Response(
+            {
+                "id": "all",
+                "name": "全部",
+                "kind": "root",
+                "count": base.count(),
+                "children": children,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["patch"], url_path="case-assignee")
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)

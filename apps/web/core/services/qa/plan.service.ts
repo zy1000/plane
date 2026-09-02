@@ -38,7 +38,9 @@ export type TPlanCaseQueryParams = {
   result__in?: string;
   case__type__in?: string;
   case__priority__in?: string;
+  assignee_id?: string;
   assignee_id__in?: string;
+  assignee_isnull?: boolean;
   case__repository_id__in?: string;
   case__module_id__in?: string;
   "case__repository_id"?: string;
@@ -50,12 +52,32 @@ export type TPlanCaseListResponse = {
   data: TPlanCaseItem[];
 };
 
+export type TPlanModulePathItem = { id: string; name: string };
+
 export type TPlanListItem = {
   id: string;
   name: string;
   begin_time?: string | null;
   end_time?: string | null;
   state?: string | null;
+  module?: string | null;
+  /** 计划所属模块的祖先链（根 → 计划所属模块），无模块时为空数组 */
+  module_path?: TPlanModulePathItem[];
+};
+
+export type TPlanAssigneeTreeNode = {
+  id: string;
+  name: string;
+  kind: "assignee" | "unassigned";
+  count: number;
+};
+
+export type TPlanAssigneeTree = {
+  id: string;
+  name: string;
+  kind: "root";
+  count: number;
+  children: TPlanAssigneeTreeNode[];
 };
 
 export type TPlanCaseCopyPayload = {
@@ -198,6 +220,14 @@ export class PlanService extends APIService {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/plane/`, {
       ids: planIds,
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getPlanAssigneeTree(workspaceSlug: string, queries: { plan_id: string }): Promise<TPlanAssigneeTree> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/assignee-tree/`, { params: queries })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

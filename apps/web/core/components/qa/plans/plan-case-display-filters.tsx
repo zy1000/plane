@@ -25,16 +25,25 @@ export type TPlanCaseDisplayProperties = Record<TPlanCaseDisplayPropertyKey, boo
 
 export type TPlanCaseOrderBy = "case__code" | "-case__code" | "-case__updated_at" | "case__updated_at";
 
+export type TPlanCaseGroupBy = "module" | "assignee";
+
 type Props = {
   disabled?: boolean;
   displayProperties: TPlanCaseDisplayProperties;
+  groupBy: TPlanCaseGroupBy;
   ordering?: string;
   onDisplayPropertiesChange: (updatedDisplayProperties: Partial<TPlanCaseDisplayProperties>) => void;
+  onGroupByChange: (groupBy: TPlanCaseGroupBy) => void;
   onOrderByChange: (orderBy: TPlanCaseOrderBy) => void;
 };
 
 type TDisplayPropertyOption = {
   key: TPlanCaseDisplayPropertyKey;
+  label: string;
+};
+
+type TGroupByOption = {
+  key: TPlanCaseGroupBy;
   label: string;
 };
 
@@ -67,6 +76,13 @@ const DISPLAY_PROPERTY_OPTIONS: TDisplayPropertyOption[] = [
   { key: "updated_at", label: "更新时间" },
 ];
 
+export const DEFAULT_PLAN_CASE_GROUP_BY: TPlanCaseGroupBy = "module";
+
+const GROUP_BY_OPTIONS: TGroupByOption[] = [
+  { key: "module", label: "模块" },
+  { key: "assignee", label: "执行人" },
+];
+
 const ORDER_BY_OPTIONS: TOrderByOption[] = [
   { key: "case__code", label: "用例编号升序" },
   { key: "-case__code", label: "用例编号降序" },
@@ -77,11 +93,14 @@ const ORDER_BY_OPTIONS: TOrderByOption[] = [
 export const PlanCaseDisplayFilters = ({
   disabled = false,
   displayProperties,
+  groupBy,
   ordering,
   onDisplayPropertiesChange,
+  onGroupByChange,
   onOrderByChange,
 }: Props) => {
   const [displayPropertiesExpanded, setDisplayPropertiesExpanded] = useState(true);
+  const [groupByExpanded, setGroupByExpanded] = useState(true);
   const [orderByExpanded, setOrderByExpanded] = useState(true);
 
   const activeOrderBy: TPlanCaseOrderBy = (ordering as TPlanCaseOrderBy) || "-case__updated_at";
@@ -132,6 +151,26 @@ export const PlanCaseDisplayFilters = ({
                   </button>
                 );
               })}
+            </div>
+          )}
+        </div>
+        <div className="py-2">
+          <FilterHeader
+            title="分组方式"
+            isPreviewEnabled={groupByExpanded}
+            handleIsPreviewEnabled={() => setGroupByExpanded((prev) => !prev)}
+          />
+          {groupByExpanded && (
+            <div>
+              {GROUP_BY_OPTIONS.map((option) => (
+                <FilterOption
+                  key={option.key}
+                  isChecked={groupBy === option.key}
+                  title={option.label}
+                  multiple={false}
+                  onClick={() => onGroupByChange(option.key)}
+                />
+              ))}
             </div>
           )}
         </div>

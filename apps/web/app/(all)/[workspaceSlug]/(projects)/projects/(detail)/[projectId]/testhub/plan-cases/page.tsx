@@ -36,10 +36,14 @@ import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import {
   DEFAULT_PLAN_CASE_DISPLAY_PROPERTIES,
+  DEFAULT_PLAN_CASE_GROUP_BY,
   PlanCaseDisplayFilters,
   type TPlanCaseDisplayProperties,
+  type TPlanCaseGroupBy,
   type TPlanCaseOrderBy,
 } from "@/components/qa/plans/plan-case-display-filters";
+import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
+import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
 import {
   planCaseExpressionToQueryParams,
@@ -146,6 +150,19 @@ export default function PlanCasesPage() {
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [planTree, setPlanTree] = useState<any | null>(null);
+  // 分组方式：每次进入页面都回到默认「模块」，不做持久化
+  const [groupBy, setGroupBy] = useState<TPlanCaseGroupBy>(DEFAULT_PLAN_CASE_GROUP_BY);
+  // 执行人分组下左树的选中项：用户 id 或 "unassigned"
+  const [selectedAssigneeKey, setSelectedAssigneeKey] = useState<string | null>(null);
+  const {
+    tree: assigneeTree,
+    loading: assigneeTreeLoading,
+    refresh: refreshAssigneeTree,
+  } = usePlanAssigneeTree({
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+    planId,
+    enabled: groupBy === "assignee",
+  });
 
   const [cases, setCases] = useState<TPlanCaseItem[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -184,6 +201,7 @@ export default function PlanCasesPage() {
 
   const [planList, setPlanList] = useState<TPlanListItem[]>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
+  const currentPlan = useMemo(() => planList.find((p) => String(p.id) === String(planId)), [planList, planId]);
 
   const caseTypeEnums = useMemo(
     () =>
@@ -274,13 +292,15 @@ export default function PlanCasesPage() {
   const selectionContextKey = useMemo(() => {
     return JSON.stringify({
       planId,
+      groupBy,
       selectedRepositoryId,
       selectedModuleId,
+      selectedAssigneeKey,
       ordering,
       filters,
       filterExpression,
     });
-  }, [planId, selectedRepositoryId, selectedModuleId, ordering, filters, filterExpression]);
+  }, [planId, groupBy, selectedRepositoryId, selectedModuleId, selectedAssigneeKey, ordering, filters, filterExpression]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -301,10 +321,11 @@ export default function PlanCasesPage() {
     if (!workspaceSlug || !planId) return;
     setLoading(true);
     fetchPlanTree();
-    fetchCases(1, pageSize, { repositoryId: null, moduleId: null });
+    fetchCases(1, pageSize, { repositoryId: null, moduleId: null, assigneeKey: null });
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
+    setSelectedAssigneeKey(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, planId]);
 
@@ -368,6 +389,7 @@ export default function PlanCasesPage() {
     page: number = currentPage,
     size: number = pageSize,
     options?: {
+      assigneeKey?: string | null;
       filtersParam?: TPlanCaseListFilters;
       moduleId?: string | null;
       orderingParam?: TPlanCaseOrderBy | null;
@@ -380,8 +402,10 @@ export default function PlanCasesPage() {
       setError(null);
       const hasRepositoryOverride = Object.prototype.hasOwnProperty.call(options || {}, "repositoryId");
       const hasModuleOverride = Object.prototype.hasOwnProperty.call(options || {}, "moduleId");
+      const hasAssigneeOverride = Object.prototype.hasOwnProperty.call(options || {}, "assigneeKey");
       const effectiveRepositoryId = hasRepositoryOverride ? options?.repositoryId : selectedRepositoryId;
       const effectiveModuleId = hasModuleOverride ? options?.moduleId : selectedModuleId;
+      const effectiveAssigneeKey = hasAssigneeOverride ? options?.assigneeKey : selectedAssigneeKey;
       const effectiveOrdering = options?.orderingParam === undefined ? ordering : (options.orderingParam ?? undefined);
       const effectiveFilters = options?.filtersParam ?? filters;
       const { search, case__module_id__in: moduleFilter, ...filterParams } = effectiveFilters;
@@ -398,6 +422,9 @@ export default function PlanCasesPage() {
       if (effectiveRepositoryId) params["case__repository_id"] = effectiveRepositoryId;
       if (effectiveModuleIds.length > 0) params["case__module_id__in"] = effectiveModuleIds.join(",");
       if (effectiveOrdering) params.ordering = effectiveOrdering;
+      // 执行人分组的树选择：exact 过滤与富过滤器的 assignee_id__in 由后端 AND 组合，天然取交集
+      if (effectiveAssigneeKey === "unassigned") params.assignee_isnull = true;
+      else if (effectiveAssigneeKey) params.assignee_id = effectiveAssigneeKey;
 
       const response = await planService.getPlanCases(workspaceSlug as string, params);
       setCases(response?.data || []);
@@ -457,6 +484,26 @@ export default function PlanCasesPage() {
 
   const handleDisplayPropertiesUpdate = (updatedDisplayProperties: Partial<TPlanCaseDisplayProperties>) => {
     setPlanCaseDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
+  };
+
+  // 模块树始终要刷（富过滤器的用例库/模块选项依赖它）；执行人树在未启用时 refresh 为 no-op
+  const refreshGroupTrees = () => Promise.all([fetchPlanTree(), refreshAssigneeTree()]);
+
+  const handleGroupByChange = (nextGroupBy: TPlanCaseGroupBy) => {
+    if (nextGroupBy === groupBy) return;
+    setGroupBy(nextGroupBy);
+    setSelectedTreeKey("root");
+    setSelectedRepositoryId(null);
+    setSelectedModuleId(null);
+    setSelectedAssigneeKey(null);
+    fetchCases(1, pageSize, { repositoryId: null, moduleId: null, assigneeKey: null });
+  };
+
+  const handleAssigneeTreeSelect = (key: string) => {
+    setSelectedTreeKey(key);
+    const nextAssigneeKey = key === "root" ? null : key === "unassigned" ? "unassigned" : key.replace(/^assignee:/, "");
+    setSelectedAssigneeKey(nextAssigneeKey);
+    fetchCases(1, pageSize, { assigneeKey: nextAssigneeKey });
   };
 
   const handleRichFiltersChange = (expression: TPlanCaseFilterExpression) => {
@@ -587,7 +634,7 @@ export default function PlanCasesPage() {
         setSelectedPlanCaseToCaseIdMap({});
         setSelectedPlanCaseToAssigneeMap({});
       }
-      await fetchPlanTree();
+      await refreshGroupTrees();
       await fetchCases(1, pageSize);
       qaCaseSetToastSuccess("取消关联成功");
     } catch (e: unknown) {
@@ -651,7 +698,7 @@ export default function PlanCasesPage() {
       setSelectedCaseIds([]);
       setSelectedPlanCaseToCaseIdMap({});
       setSelectedPlanCaseToAssigneeMap({});
-      await fetchPlanTree();
+      await refreshGroupTrees();
       await fetchCases(currentPage, pageSize);
     } catch (e: any) {
       const msg = e?.message || e?.detail || e?.error || "批量提交结果失败";
@@ -680,6 +727,9 @@ export default function PlanCasesPage() {
         assignees: nextAssignees,
       });
       qaCaseSetToastSuccess("执行人已更新");
+      void refreshAssigneeTree();
+      // 左树选中了某执行人/未分配时，行的归属可能已变化，按当前筛选重取
+      if (selectedAssigneeKey) fetchCases(currentPage, pageSize);
     } catch (e: unknown) {
       applyLocalAssignees(previousAssignees);
       qaCaseSetToastError(e, t, "更新执行人失败");
@@ -741,6 +791,11 @@ export default function PlanCasesPage() {
         message.warning(`已更新 ${successPlanCaseIds.length} 条，${failedErrors.length} 条失败`);
       } else {
         qaCaseSetToastError(failedErrors[0], t, "批量更新执行人失败");
+      }
+
+      if (successPlanCaseIds.length > 0) {
+        void refreshAssigneeTree();
+        if (selectedAssigneeKey) fetchCases(currentPage, pageSize);
       }
     } catch (e: unknown) {
       qaCaseSetToastError(e, t, "批量更新执行人失败");
@@ -859,22 +914,31 @@ export default function PlanCasesPage() {
               `,
               }}
             />
-            <Tree
-              showLine={false}
-              defaultExpandAll
-              switcherIcon={() => (
-                <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-                  <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
-                </span>
-              )}
-              onSelect={onSelect}
-              onExpand={onExpand}
-              expandedKeys={expandedKeys}
-              autoExpandParent={autoExpandParent}
-              treeData={treeData}
-              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="custom-tree-indent pr-2 pb-2"
-            />
+            {groupBy === "module" ? (
+              <Tree
+                showLine={false}
+                defaultExpandAll
+                switcherIcon={() => (
+                  <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
+                    <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
+                  </span>
+                )}
+                onSelect={onSelect}
+                onExpand={onExpand}
+                expandedKeys={expandedKeys}
+                autoExpandParent={autoExpandParent}
+                treeData={treeData}
+                selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+                className="custom-tree-indent pr-2 pb-2"
+              />
+            ) : (
+              <PlanCaseAssigneeTree
+                tree={assigneeTree}
+                loading={assigneeTreeLoading}
+                selectedKey={selectedTreeKey}
+                onSelect={handleAssigneeTreeSelect}
+              />
+            )}
           </div>
           <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
             <div className="flex h-full min-w-0 flex-col">
@@ -889,6 +953,17 @@ export default function PlanCasesPage() {
                         />
                       }
                     />
+                    {(currentPlan?.module_path ?? []).map((m) => (
+                      <Breadcrumbs.Item
+                        key={m.id}
+                        component={
+                          <BreadcrumbLink
+                            href={`/${workspaceSlug}/projects/${projectId}/testhub/plans?moduleId=${m.id}`}
+                            label={m.name}
+                          />
+                        }
+                      />
+                    ))}
                     <Breadcrumbs.Item
                       component={
                         <div className="flex h-full items-center">
@@ -929,8 +1004,10 @@ export default function PlanCasesPage() {
                   <PlanCaseDisplayFilters
                     disabled={!planId}
                     displayProperties={planCaseDisplayProperties}
+                    groupBy={groupBy}
                     ordering={ordering}
                     onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+                    onGroupByChange={handleGroupByChange}
                     onOrderByChange={handleSortChange}
                   />
                   <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
@@ -1188,7 +1265,7 @@ export default function PlanCasesPage() {
             initialSelectedCaseIds={(cases || []).map((c) => c?.case?.id).filter((id): id is string => Boolean(id))}
             onClosed={() => {
               // 关闭后刷新列表，保留当前查询参数与筛选
-              fetchPlanTree();
+              refreshGroupTrees();
               fetchCases(currentPage, pageSize);
             }}
           />
@@ -1199,7 +1276,7 @@ export default function PlanCasesPage() {
             projectId={String(projectId)}
             planId={String(planId || "")}
             onClosed={() => {
-              fetchPlanTree();
+              refreshGroupTrees();
               fetchCases(currentPage, pageSize);
             }}
           />
@@ -1210,7 +1287,7 @@ export default function PlanCasesPage() {
             projectId={String(projectId)}
             planId={String(planId || "")}
             onClosed={() => {
-              fetchPlanTree();
+              refreshGroupTrees();
               fetchCases(currentPage, pageSize);
             }}
           />
