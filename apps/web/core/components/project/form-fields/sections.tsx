@@ -53,7 +53,7 @@ export function ProjectClassificationSection(props: TClassificationSectionProps)
           name="project_type"
           required
           dictionaries={dictionaries}
-          fallbackLabel={project?.project_type_detail?.label}
+          fallbackItem={project?.project_type_detail}
           tabIndex={getIndex?.("project_type")}
         />
         <ProjectDictionaryField
@@ -61,7 +61,7 @@ export function ProjectClassificationSection(props: TClassificationSectionProps)
           name="status"
           required
           dictionaries={dictionaries}
-          fallbackLabel={project?.status_detail?.label}
+          fallbackItem={project?.status_detail}
           tabIndex={getIndex?.("status")}
         />
         <ProjectGradeField {...base} required={requireGradeAndProductType} tabIndex={getIndex?.("grade")} />

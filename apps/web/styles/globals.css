@@ -250,3 +250,135 @@
   --line-height-h5: 1.5rem;
   --line-height-h6: 1.5rem;
 }
+
+/* data dictionary value colors: 10 presets as bg / fg / dot pairs (light + dark), see components/data-dictionaries */
+:root {
+  --dict-color-gray-bg: oklch(0.94 0.004 231);
+  --dict-color-gray-fg: oklch(0.42 0.012 231);
+  --dict-color-gray-dot: oklch(0.72 0.012 231);
+  --dict-color-red-bg: oklch(0.945 0.038 22);
+  --dict-color-red-fg: oklch(0.46 0.16 26);
+  --dict-color-red-dot: oklch(0.68 0.19 25);
+  --dict-color-orange-bg: oklch(0.95 0.045 55);
+  --dict-color-orange-fg: oklch(0.48 0.14 46);
+  --dict-color-orange-dot: oklch(0.73 0.17 50);
+  --dict-color-amber-bg: oklch(0.96 0.065 90);
+  --dict-color-amber-fg: oklch(0.47 0.11 72);
+  --dict-color-amber-dot: oklch(0.83 0.16 86);
+  --dict-color-green-bg: oklch(0.95 0.05 152);
+  --dict-color-green-fg: oklch(0.42 0.12 150);
+  --dict-color-green-dot: oklch(0.70 0.17 150);
+  --dict-color-teal-bg: oklch(0.95 0.045 190);
+  --dict-color-teal-fg: oklch(0.42 0.09 193);
+  --dict-color-teal-dot: oklch(0.72 0.12 192);
+  --dict-color-blue-bg: oklch(0.945 0.035 240);
+  --dict-color-blue-fg: oklch(0.44 0.13 245);
+  --dict-color-blue-dot: oklch(0.67 0.15 245);
+  --dict-color-indigo-bg: oklch(0.945 0.035 275);
+  --dict-color-indigo-fg: oklch(0.44 0.15 275);
+  --dict-color-indigo-dot: oklch(0.64 0.17 275);
+  --dict-color-purple-bg: oklch(0.945 0.04 305);
+  --dict-color-purple-fg: oklch(0.44 0.15 305);
+  --dict-color-purple-dot: oklch(0.66 0.17 305);
+  --dict-color-pink-bg: oklch(0.95 0.04 350);
+  --dict-color-pink-fg: oklch(0.46 0.15 350);
+  --dict-color-pink-dot: oklch(0.70 0.17 350);
+}
+[data-theme*="dark"] {
+  --dict-color-gray-bg: oklch(0.31 0.005 231);
+  --dict-color-gray-fg: oklch(0.86 0.005 231);
+  --dict-color-gray-dot: oklch(0.62 0.01 231);
+  --dict-color-red-bg: oklch(0.31 0.07 24);
+  --dict-color-red-fg: oklch(0.88 0.07 22);
+  --dict-color-red-dot: oklch(0.68 0.17 25);
+  --dict-color-orange-bg: oklch(0.32 0.065 50);
+  --dict-color-orange-fg: oklch(0.89 0.07 60);
+  --dict-color-orange-dot: oklch(0.72 0.15 50);
+  --dict-color-amber-bg: oklch(0.33 0.06 80);
+  --dict-color-amber-fg: oklch(0.91 0.09 90);
+  --dict-color-amber-dot: oklch(0.80 0.14 86);
+  --dict-color-green-bg: oklch(0.31 0.06 152);
+  --dict-color-green-fg: oklch(0.89 0.09 150);
+  --dict-color-green-dot: oklch(0.70 0.15 150);
+  --dict-color-teal-bg: oklch(0.31 0.05 192);
+  --dict-color-teal-fg: oklch(0.89 0.07 192);
+  --dict-color-teal-dot: oklch(0.70 0.10 192);
+  --dict-color-blue-bg: oklch(0.31 0.06 245);
+  --dict-color-blue-fg: oklch(0.89 0.06 240);
+  --dict-color-blue-dot: oklch(0.68 0.13 245);
+  --dict-color-indigo-bg: oklch(0.31 0.07 275);
+  --dict-color-indigo-fg: oklch(0.89 0.06 275);
+  --dict-color-indigo-dot: oklch(0.66 0.15 275);
+  --dict-color-purple-bg: oklch(0.31 0.07 305);
+  --dict-color-purple-fg: oklch(0.89 0.06 305);
+  --dict-color-purple-dot: oklch(0.67 0.15 305);
+  --dict-color-pink-bg: oklch(0.31 0.065 350);
+  --dict-color-pink-fg: oklch(0.89 0.06 350);
+  --dict-color-pink-dot: oklch(0.70 0.15 350);
+}
+.dict-color-gray {
+  --dict-bg: var(--dict-color-gray-bg);
+  --dict-fg: var(--dict-color-gray-fg);
+  --dict-dot: var(--dict-color-gray-dot);
+}
+.dict-color-red {
+  --dict-bg: var(--dict-color-red-bg);
+  --dict-fg: var(--dict-color-red-fg);
+  --dict-dot: var(--dict-color-red-dot);
+}
+.dict-color-orange {
+  --dict-bg: var(--dict-color-orange-bg);
+  --dict-fg: var(--dict-color-orange-fg);
+  --dict-dot: var(--dict-color-orange-dot);
+}
+.dict-color-amber {
+  --dict-bg: var(--dict-color-amber-bg);
+  --dict-fg: var(--dict-color-amber-fg);
+  --dict-dot: var(--dict-color-amber-dot);
+}
+.dict-color-green {
+  --dict-bg: var(--dict-color-green-bg);
+  --dict-fg: var(--dict-color-green-fg);
+  --dict-dot: var(--dict-color-green-dot);
+}
+.dict-color-teal {
+  --dict-bg: var(--dict-color-teal-bg);
+  --dict-fg: var(--dict-color-teal-fg);
+  --dict-dot: var(--dict-color-teal-dot);
+}
+.dict-color-blue {
+  --dict-bg: var(--dict-color-blue-bg);
+  --dict-fg: var(--dict-color-blue-fg);
+  --dict-dot: var(--dict-color-blue-dot);
+}
+.dict-color-indigo {
+  --dict-bg: var(--dict-color-indigo-bg);
+  --dict-fg: var(--dict-color-indigo-fg);
+  --dict-dot: var(--dict-color-indigo-dot);
+}
+.dict-color-purple {
+  --dict-bg: var(--dict-color-purple-bg);
+  --dict-fg: var(--dict-color-purple-fg);
+  --dict-dot: var(--dict-color-purple-dot);
+}
+.dict-color-pink {
+  --dict-bg: var(--dict-color-pink-bg);
+  --dict-fg: var(--dict-color-pink-fg);
+  --dict-dot: var(--dict-color-pink-dot);
+}
+/* custom hex: the element sets --dict-h / --dict-s (0-100) / --dict-dot inline; bg / fg derive per theme here */
+.dict-color-custom {
+  --dict-bg: hsl(var(--dict-h) calc(var(--dict-s) * 0.55%) 94%);
+  --dict-fg: hsl(var(--dict-h) calc(var(--dict-s) * 0.9%) 32%);
+}
+[data-theme*="dark"] .dict-color-custom {
+  --dict-bg: hsl(var(--dict-h) calc(var(--dict-s) * 0.45%) 24%);
+  --dict-fg: hsl(var(--dict-h) calc(var(--dict-s) * 0.6%) 84%);
+}
+.dict-tag {
+  background-color: var(--dict-bg);
+  color: var(--dict-fg);
+}
+.dict-dot {
+  background-color: var(--dict-dot);
+}

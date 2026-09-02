@@ -121,9 +121,9 @@ export function DataDictionariesRoot(props: Props) {
     [createItem, runMutation]
   );
 
-  const handleRenameItem = useCallback(
-    (dictionaryId: string, itemId: string, label: string) =>
-      runMutation(() => updateItem(dictionaryId, itemId, { label }), "item_updated"),
+  const handleUpdateItem = useCallback(
+    (dictionaryId: string, itemId: string, payload: TUpdateDataDictionaryItemPayload) =>
+      runMutation(() => updateItem(dictionaryId, itemId, payload), "item_updated"),
     [runMutation, updateItem]
   );
 
@@ -206,7 +206,7 @@ export function DataDictionariesRoot(props: Props) {
             onUpdate={handleUpdate}
             onDelete={setPendingDeleteDictionary}
             onCreateItem={handleCreateItem}
-            onRenameItem={handleRenameItem}
+            onUpdateItem={handleUpdateItem}
             onDeleteItem={setPendingDeleteItem}
             onReorder={handleReorder}
           />

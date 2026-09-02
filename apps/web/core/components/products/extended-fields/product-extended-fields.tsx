@@ -16,6 +16,7 @@ import {
   getFormGridClassName,
 } from "@/components/common/form-section";
 import type { TFormVariant } from "@/components/common/form-section";
+import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { PRODUCT_DICTIONARY_FIELDS, PRODUCT_REQUIRED_EXTENDED_FIELDS } from "./constants";
@@ -160,13 +161,15 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
                 disabled={empty}
                 placeholder={t("workspace_products.fields.select_placeholder")}
                 hasError={Boolean(errors[key])}
-                fallbackLabel={detail?.label}
+                fallbackItem={detail}
                 isLoading={isLoading}
                 buttonClassName={styles.dropdownButton}
               />
             </div>
           ) : (
-            <p className={cn(styles.text, "truncate")}>{detail?.label ?? "—"}</p>
+            <p className={cn(styles.text, "flex min-w-0 items-center")}>
+              <DictionaryValueTag label={detail?.label ?? "—"} color={resolveDictionaryItemColor(detail, dictionary)} />
+            </p>
           )}
         </FormFieldShell>
       );

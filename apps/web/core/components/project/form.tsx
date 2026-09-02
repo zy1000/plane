@@ -377,7 +377,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               name="business_unit"
               required={false}
               dictionaries={dictionaries}
-              fallbackLabel={project.business_unit_detail?.label}
+              fallbackItem={project.business_unit_detail}
             />
             <FormFieldShell
               className="md:col-span-2"

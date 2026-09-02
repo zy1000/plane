@@ -6,6 +6,7 @@ import type {
   TCreateDataDictionaryItemPayload,
   TDataDictionary,
   TDataDictionaryItem,
+  TUpdateDataDictionaryItemPayload,
   TUpdateDataDictionaryPayload,
 } from "@plane/types";
 import { Input, TextArea } from "@plane/ui";
@@ -18,7 +19,11 @@ type Props = {
   onUpdate: (dictionaryId: string, payload: TUpdateDataDictionaryPayload) => Promise<TDataDictionary>;
   onDelete: (dictionary: TDataDictionary) => void;
   onCreateItem: (dictionaryId: string, payload: TCreateDataDictionaryItemPayload) => Promise<TDataDictionaryItem>;
-  onRenameItem: (dictionaryId: string, itemId: string, label: string) => Promise<TDataDictionaryItem>;
+  onUpdateItem: (
+    dictionaryId: string,
+    itemId: string,
+    payload: TUpdateDataDictionaryItemPayload
+  ) => Promise<TDataDictionaryItem>;
   onDeleteItem: (item: TDataDictionaryItem) => void;
   onReorder: (
     dictionaryId: string,
@@ -29,7 +34,7 @@ type Props = {
 
 /** 调用方用 key={dictionary.id} 挂载，切换字典时靠重新挂载重置草稿，不用 effect 同步 */
 export function DictionaryDetailPanel(props: Props) {
-  const { dictionary, canEdit, onUpdate, onDelete, onCreateItem, onRenameItem, onDeleteItem, onReorder } = props;
+  const { dictionary, canEdit, onUpdate, onDelete, onCreateItem, onUpdateItem, onDeleteItem, onReorder } = props;
   const { t } = useTranslation();
   const [draftName, setDraftName] = useState(dictionary?.name ?? "");
   const [draftDescription, setDraftDescription] = useState(dictionary?.description ?? "");
@@ -135,8 +140,9 @@ export function DictionaryDetailPanel(props: Props) {
         dictionary={dictionary}
         canEdit={canEdit}
         onCreateItem={onCreateItem}
-        onRenameItem={onRenameItem}
+        onUpdateItem={onUpdateItem}
         onDeleteItem={onDeleteItem}
+        onToggleColored={(isColored) => onUpdate(dictionary.id, { is_colored: isColored })}
         onReorder={onReorder}
       />
     </div>

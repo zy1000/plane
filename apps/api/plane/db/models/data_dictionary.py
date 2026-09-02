@@ -13,6 +13,7 @@ class DataDictionary(BaseModel):
     系统字典（is_system=True）由 plane/utils/data_dictionary.py 预置：key 不可改、不可删，
     name / description 可改；用户也可以自建字典（is_system=False）。
     产品的阶段 / 类别 / 状态 / 三个研发等级引用 DataDictionaryItem。
+    is_colored 是字典级开关：开着时该字典的值在所有使用处渲染成彩色标签（颜色见 item.color）。
     """
 
     workspace = models.ForeignKey(
@@ -25,6 +26,7 @@ class DataDictionary(BaseModel):
     name = models.CharField(max_length=255, verbose_name="字典名称")
     description = models.TextField(blank=True, default="", verbose_name="描述")
     is_system = models.BooleanField(default=False, verbose_name="是否系统预置")
+    is_colored = models.BooleanField(default=False, verbose_name="彩色显示")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
 
     class Meta:
@@ -67,6 +69,9 @@ class DataDictionaryItem(BaseModel):
         verbose_name="所属工作区",
     )
     label = models.CharField(max_length=255, verbose_name="字典值")
+    # 预设色 key（gray / red / …，见 serializer 的 DATA_DICTIONARY_COLOR_KEYS）或 #rrggbb 小写；
+    # 空串 = 未指定，字典开了彩色时按灰渲染
+    color = models.CharField(max_length=255, blank=True, default="", verbose_name="颜色")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
 
     class Meta:

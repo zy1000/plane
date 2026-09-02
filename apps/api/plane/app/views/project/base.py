@@ -118,10 +118,14 @@ class ProjectViewSet(BaseViewSet):
             # *_id 列，不会触发关联加载，这些 JOIN 属于纯开销。
             .select_related(
                 "cover_image_asset",
-                # 0348 扩展字段：ProjectExtendedDetailMixin 嵌套输出 *_detail，需要真实加载
+                # 0348 扩展字段：ProjectExtendedDetailMixin 嵌套输出 *_detail，需要真实加载；
+                # *_detail 还要出所属字典的 is_colored，字典头一并 JOIN
                 "business_unit",
+                "business_unit__dictionary",
                 "status",
+                "status__dictionary",
                 "project_type",
+                "project_type__dictionary",
                 # product_manager_detail 要出头像 URL，一并把 avatar_asset 拉上，否则每行一条查询
                 "product_manager__avatar_asset",
             )
@@ -657,7 +661,13 @@ class ProjectViewSet(BaseViewSet):
 
         # select_related 四个扩展 FK：下面 ProjectSerializer(project).data 的快照要出 *_detail
         project = Project.objects.select_related(
-            "business_unit", "status", "project_type", "product_manager__avatar_asset"
+            "business_unit",
+            "business_unit__dictionary",
+            "status",
+            "status__dictionary",
+            "project_type",
+            "project_type__dictionary",
+            "product_manager__avatar_asset",
         ).get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(
@@ -921,7 +931,13 @@ class ProjectAPI(BaseViewSet):
     model = Project
     # ProjectListSerializer 现在带 4 个 *_detail，不 select_related 会 N+1
     queryset = Project.objects.select_related(
-        "business_unit", "status", "project_type", "product_manager__avatar_asset"
+        "business_unit",
+        "business_unit__dictionary",
+        "status",
+        "status__dictionary",
+        "project_type",
+        "project_type__dictionary",
+        "product_manager__avatar_asset",
     )
     pagination_class = CustomPaginator
     filterset_fields = {"name": ["exact", "icontains", "in"], "id": ["exact"]}
@@ -1334,7 +1350,13 @@ class ProjectAPI(BaseViewSet):
         ).values_list("project_id", flat=True)
 
         query = Project.objects.filter(pk__in=project_id).select_related(
-            "business_unit", "status", "project_type", "product_manager__avatar_asset"
+            "business_unit",
+            "business_unit__dictionary",
+            "status",
+            "status__dictionary",
+            "project_type",
+            "project_type__dictionary",
+            "product_manager__avatar_asset",
         )
         query = self.filter_queryset(query).order_by("-created_at")
         paginator = self.pagination_class()

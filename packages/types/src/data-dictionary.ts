@@ -23,13 +23,17 @@ export type TDataDictionaryItem = {
   id: string;
   dictionary: string;
   label: string;
+  /** 预设色 key（见 @plane/constants 的 DATA_DICTIONARY_COLOR_KEYS）或 #rrggbb 小写；空串 = 未指定 */
+  color: string;
   sort_order: number;
   created_at: string;
   updated_at: string;
 };
 
-/** 产品 `*_detail` 只回 id / label / dictionary */
-export type TDataDictionaryItemLite = Pick<TDataDictionaryItem, "id" | "label" | "dictionary">;
+/** 产品 / 项目 `*_detail`：id / label / dictionary / color，外加所属字典的彩色开关（列表页拿不到字典头） */
+export type TDataDictionaryItemLite = Pick<TDataDictionaryItem, "id" | "label" | "dictionary" | "color"> & {
+  is_colored: boolean;
+};
 
 export type TDataDictionary = {
   id: string;
@@ -37,6 +41,8 @@ export type TDataDictionary = {
   name: string;
   description: string | null;
   is_system: boolean;
+  /** 开启后该字典的值在所有使用处渲染成彩色标签；关着时一律纯文本 */
+  is_colored: boolean;
   sort_order: number;
   /** 后端已按 sort_order 排好 */
   items: TDataDictionaryItem[];
@@ -50,14 +56,20 @@ export type TCreateDataDictionaryPayload = {
   description?: string | null;
 };
 
-export type TUpdateDataDictionaryPayload = Partial<Pick<TCreateDataDictionaryPayload, "name" | "description">>;
+export type TUpdateDataDictionaryPayload = Partial<{
+  name: string;
+  description: string | null;
+  is_colored: boolean;
+}>;
 
 export type TCreateDataDictionaryItemPayload = {
   label: string;
+  color?: string;
 };
 
 export type TUpdateDataDictionaryItemPayload = {
   label?: string;
+  color?: string;
   sort_order?: number;
 };
 

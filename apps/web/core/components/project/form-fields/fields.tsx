@@ -9,7 +9,7 @@ import type { Control } from "react-hook-form";
 import { Link } from "react-router";
 import { NETWORK_CHOICES, PROJECT_GRADE_OPTIONS, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { TProjectGrade, TProjectProductType } from "@plane/types";
+import type { TDataDictionaryItemLite, TProjectGrade, TProjectProductType } from "@plane/types";
 import { CustomSelect, Input } from "@plane/ui";
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
 import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-section";
@@ -151,12 +151,12 @@ type TProjectDictionaryFieldProps = TProjectFieldProps & {
   name: TProjectDictionaryFieldKey;
   required: boolean;
   dictionaries: TProjectDictionaries;
-  /** 字典列表还没回来时兜住当前值，设置页传 project[`${name}_detail`]?.label */
-  fallbackLabel?: string | null;
+  /** 字典列表还没回来时兜住当前值，设置页传 project[`${name}_detail`]（含颜色） */
+  fallbackItem?: TDataDictionaryItemLite | null;
 };
 
 export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
-  const { control, variant, disabled = false, tabIndex, name, required, dictionaries, fallbackLabel } = props;
+  const { control, variant, disabled = false, tabIndex, name, required, dictionaries, fallbackItem } = props;
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
   const dictionary = dictionaries.get(name);
   const empty = dictionaries.isEmpty(name);
@@ -194,7 +194,7 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
               disabled={disabled || empty}
               placeholder={t("workspace_projects.fields.select_placeholder")}
               hasError={Boolean(error)}
-              fallbackLabel={fallbackLabel}
+              fallbackItem={fallbackItem}
               isLoading={dictionaries.isLoading}
               buttonClassName={styles.dropdownButton}
               tabIndex={tabIndex}

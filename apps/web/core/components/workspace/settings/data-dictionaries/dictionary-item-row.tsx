@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
+import { DEFAULT_DATA_DICTIONARY_COLOR } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { TDataDictionaryItem } from "@plane/types";
+import type { TDataDictionaryItem, TUpdateDataDictionaryItemPayload } from "@plane/types";
 import { cn } from "@plane/utils";
+import { DictionaryColorDot } from "@/components/data-dictionaries";
+import { DictionaryColorPicker } from "./dictionary-color-picker";
 import { getDataDictionaryFieldErrorI18nKey } from "./helpers";
 
 type Props = {
   item: TDataDictionaryItem;
   index: number;
   canEdit: boolean;
-  onRename: (item: TDataDictionaryItem, label: string) => Promise<unknown>;
+  /** 字典开了「彩色显示」才渲染色点 */
+  showColor: boolean;
+  onUpdate: (item: TDataDictionaryItem, payload: TUpdateDataDictionaryItemPayload) => Promise<unknown>;
   onDelete: (item: TDataDictionaryItem) => void;
 };
 
 export function DictionaryItemRow(props: Props) {
-  const { item, index, canEdit, onRename, onDelete } = props;
+  const { item, index, canEdit, showColor, onUpdate, onDelete } = props;
   const { t } = useTranslation();
   const [draft, setDraft] = useState(item.label);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +41,7 @@ export function DictionaryItemRow(props: Props) {
       return;
     }
     try {
-      await onRename(item, nextLabel);
+      await onUpdate(item, { label: nextLabel });
     } catch (requestError) {
       const i18nKey = getDataDictionaryFieldErrorI18nKey(requestError);
       if (i18nKey) setError(t(i18nKey));
@@ -62,6 +67,19 @@ export function DictionaryItemRow(props: Props) {
         <span className="grid size-5 shrink-0 place-items-center rounded bg-layer-2 text-10 font-medium text-secondary">
           {index + 1}
         </span>
+        {showColor &&
+          (canEdit ? (
+            <DictionaryColorPicker
+              value={item.color}
+              previewLabel={item.label}
+              // 改色失败时 root 已 toast，这里没有表单可承接
+              onChange={(color) => onUpdate(item, { color }).catch(() => undefined)}
+            />
+          ) : (
+            <span className="grid size-6 shrink-0 place-items-center">
+              <DictionaryColorDot color={item.color || DEFAULT_DATA_DICTIONARY_COLOR} />
+            </span>
+          ))}
         <input
           value={draft}
           maxLength={255}

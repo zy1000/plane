@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { ChevronDownIcon } from "@plane/propel/icons";
-import type { TDataDictionary } from "@plane/types";
+import type { TDataDictionary, TDataDictionaryItemLite } from "@plane/types";
 import { CustomSearchSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { DictionaryColorDot, DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 
 type Props = {
   dictionary?: TDataDictionary;
@@ -11,8 +12,8 @@ type Props = {
   disabled?: boolean;
   placeholder?: string;
   hasError?: boolean;
-  /** 字典列表还没回来时用调用方自带的 *_detail.label 兜住当前值 */
-  fallbackLabel?: string | null;
+  /** 字典列表还没回来时用调用方自带的 *_detail 兜住当前值（含颜色与所属字典的彩色开关） */
+  fallbackItem?: TDataDictionaryItemLite | null;
   isLoading?: boolean;
   className?: string;
   buttonClassName?: string;
@@ -27,7 +28,7 @@ export function DictionaryItemSelect(props: Props) {
     disabled = false,
     placeholder = "",
     hasError = false,
-    fallbackLabel,
+    fallbackItem,
     isLoading = false,
     className,
     buttonClassName,
@@ -37,15 +38,25 @@ export function DictionaryItemSelect(props: Props) {
 
   const options = useMemo(
     () =>
-      items?.map((item) => ({
-        value: item.id,
-        query: item.label,
-        content: <span className="truncate">{item.label}</span>,
-      })),
-    [items]
+      items?.map((item) => {
+        const color = resolveDictionaryItemColor(item, dictionary);
+        return {
+          value: item.id,
+          query: item.label,
+          content: color ? (
+            <span className="flex min-w-0 items-center gap-2">
+              <DictionaryColorDot color={color} size="sm" />
+              <span className="truncate">{item.label}</span>
+            </span>
+          ) : (
+            <span className="truncate">{item.label}</span>
+          ),
+        };
+      }),
+    [items, dictionary]
   );
 
-  const selectedLabel = value ? (items?.find((item) => item.id === value)?.label ?? fallbackLabel ?? null) : null;
+  const selectedItem = value ? (items?.find((item) => item.id === value) ?? fallbackItem ?? null) : null;
 
   return (
     <CustomSearchSelect
@@ -67,8 +78,15 @@ export function DictionaryItemSelect(props: Props) {
             buttonClassName
           )}
         >
-          <span className={cn("min-w-0 flex-1 truncate", !selectedLabel && "text-placeholder")}>
-            {selectedLabel ?? placeholder}
+          <span className={cn("flex min-w-0 flex-1 items-center", !selectedItem && "text-placeholder")}>
+            {selectedItem ? (
+              <DictionaryValueTag
+                label={selectedItem.label}
+                color={resolveDictionaryItemColor(selectedItem, dictionary)}
+              />
+            ) : (
+              <span className="truncate">{placeholder}</span>
+            )}
           </span>
           <ChevronDownIcon className="size-3 shrink-0 text-secondary" aria-hidden="true" />
         </div>

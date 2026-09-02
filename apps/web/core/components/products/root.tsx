@@ -13,6 +13,7 @@ import { EUserWorkspaceRoles } from "@plane/types";
 import { Avatar, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
 import { PageHead } from "@/components/core/page-title";
+import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { DeleteProductModal } from "./delete-modal";
 import { ProductModal } from "./modal";
@@ -183,10 +184,16 @@ export const ProductsRoot = observer(function ProductsRoot() {
                           <span className="block truncate">{product.identifier}</span>
                         </td>
                         <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
-                          <span className="block truncate">{product.stage_detail?.label ?? "-"}</span>
+                          <DictionaryValueTag
+                            label={product.stage_detail?.label ?? "-"}
+                            color={resolveDictionaryItemColor(product.stage_detail)}
+                          />
                         </td>
                         <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
-                          <span className="block truncate">{product.status_detail?.label ?? "-"}</span>
+                          <DictionaryValueTag
+                            label={product.status_detail?.label ?? "-"}
+                            color={resolveDictionaryItemColor(product.status_detail)}
+                          />
                         </td>
                         <td className="hidden px-4 py-3 lg:table-cell">
                           <ProductUserCell user={product.owner_detail} />
