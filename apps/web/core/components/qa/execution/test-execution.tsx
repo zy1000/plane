@@ -897,7 +897,7 @@ export default function TestExecutionPage() {
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
-          className="resize-none !p-2.5 text-[13px] !bg-transparent focus:!shadow-none"
+          className="resize-none !p-2.5 text-sm !bg-transparent focus:!shadow-none"
         />
       );
     };
@@ -982,7 +982,7 @@ export default function TestExecutionPage() {
           pagination={false}
           bordered={false}
           tableLayout="fixed"
-          className="[&_.ant-table-thead_.ant-table-cell::before]:!hidden [&_.ant-table-cell]:!border-b-0"
+          className="text-sm [&_.ant-table]:text-sm [&_.ant-table-thead_.ant-table-cell::before]:!hidden [&_.ant-table-cell]:!border-b-0"
           rowKey={(r: any) => String(r?.__key)}
           dataSource={dataSource}
           columns={columns as any}
@@ -1276,7 +1276,7 @@ export default function TestExecutionPage() {
                                   aria-label="前置条件"
                                   placeholder="暂无内容"
                                   editable={false}
-                                  readonlyTextClassName="text-base leading-6 text-primary"
+                                  readonlyTextClassName="text-sm leading-5 text-primary"
                                 />
                               </div>
 
@@ -1296,7 +1296,7 @@ export default function TestExecutionPage() {
                                       aria-label="文本描述"
                                       placeholder="暂无内容"
                                       editable={false}
-                                      readonlyTextClassName="text-base leading-6 text-primary"
+                                      readonlyTextClassName="text-sm leading-5 text-primary"
                                     />
                                   </div>
                                   <div>
@@ -1310,7 +1310,7 @@ export default function TestExecutionPage() {
                                       aria-label="预期结果"
                                       placeholder="暂无内容"
                                       editable={false}
-                                      readonlyTextClassName="text-base leading-6 text-primary"
+                                      readonlyTextClassName="text-sm leading-5 text-primary"
                                     />
                                   </div>
                                 </>
@@ -1343,7 +1343,7 @@ export default function TestExecutionPage() {
                                   aria-label="备注"
                                   placeholder="暂无内容"
                                   editable={false}
-                                  readonlyTextClassName="text-base leading-6 text-primary"
+                                  readonlyTextClassName="text-sm leading-5 text-primary"
                                 />
                               </div>
 

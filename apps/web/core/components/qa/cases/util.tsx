@@ -493,7 +493,7 @@ export const STEPS_TABLE_TD_STYLE: React.CSSProperties = {
   background: "#fff",
   color: "#374151",
   verticalAlign: "top",
-  fontSize: "13px",
+  fontSize: "14px",
   lineHeight: 1.5,
 };
 
