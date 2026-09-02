@@ -133,6 +133,67 @@ def enqueue_case_asset_copy(pairs, actor_id):
         log_exception(e)
 
 
+def copy_cases_to_module(
+    source_cases, target_module, target_repository_id, copied_pairs, *, assignee_id=None, keep_assignee=False
+):
+    """把一批源用例逐条复制到目标库的 target_module 下（None = 库根）。
+
+    复制语义与 copy_case / 从模板导入一致：code 重新生成、标签按名同步、关联工作项照搬，
+    不带评审 / 执行 / 版本 / 活动流。维护人默认改为 assignee_id；keep_assignee=True 时保留源用例维护人
+    （存量数据迁移用）。附件与富文本图片由调用方在事务提交后按 copied_pairs 派发复制。
+    """
+    for sc in source_cases:
+        new_case = TestCase.objects.create(
+            code="",
+            name=sc.name,
+            precondition=sc.precondition,
+            steps=sc.steps,
+            mode=sc.mode,
+            text_description=sc.text_description,
+            text_result=sc.text_result,
+            remark=sc.remark,
+            type=sc.type,
+            test_type=sc.test_type,
+            priority=sc.priority,
+            repository_id=target_repository_id,
+            module=target_module,
+            assignee_id=sc.assignee_id if keep_assignee else assignee_id,
+        )
+        sync_case_labels_by_name(sc, new_case, target_repository_id)
+        new_case.issues.set(list(sc.issues.all()))
+        copied_pairs.append((str(sc.id), str(new_case.id)))
+
+
+def copy_module_subtree(
+    source_module, target_parent, target_repository_id, copied_pairs, *, assignee_id=None, keep_assignee=False
+):
+    """把 source_module 整棵子树（模块 + 用例）复制到目标库的 target_parent 下（None = 根级），返回新建的根模块。
+
+    不检查目标同级重名，由调用方保证；会写库，需在 transaction.atomic() 内调用。
+    供模块复制接口 / 项目用例库迁移模板库命令共用。
+    """
+    new_module = CaseModule.objects.create(
+        name=source_module.name,
+        sort_order=source_module.sort_order,
+        repository_id=target_repository_id,
+        parent=target_parent,
+    )
+    source_cases = (
+        TestCase.objects.filter(module=source_module, deleted_at__isnull=True)
+        .prefetch_related("labels", "issues")
+    )
+    copy_cases_to_module(
+        source_cases, new_module, target_repository_id, copied_pairs,
+        assignee_id=assignee_id, keep_assignee=keep_assignee,
+    )
+    for child in source_module.children.filter(deleted_at__isnull=True).order_by("sort_order"):
+        copy_module_subtree(
+            child, new_module, target_repository_id, copied_pairs,
+            assignee_id=assignee_id, keep_assignee=keep_assignee,
+        )
+    return new_module
+
+
 class CaseAssetAPIView(BaseAPIView):
     model = FileAsset
     queryset = FileAsset.objects.all()
@@ -1726,47 +1787,15 @@ class CaseModuleView(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        def _copy_cases(source_mod, new_mod, repo_id):
-            source_cases = (
-                TestCase.objects.filter(module=source_mod, deleted_at__isnull=True)
-                .prefetch_related("labels", "issues")
-            )
-            for sc in source_cases:
-                new_case = TestCase.objects.create(
-                    code="",
-                    name=sc.name,
-                    precondition=sc.precondition,
-                    steps=sc.steps,
-                    mode=sc.mode,
-                    text_description=sc.text_description,
-                    text_result=sc.text_result,
-                    remark=sc.remark,
-                    type=sc.type,
-                    test_type=sc.test_type,
-                    priority=sc.priority,
-                    repository_id=repo_id,
-                    module=new_mod,
-                    assignee_id=getattr(request.user, "id", None),
-                )
-                sync_case_labels_by_name(sc, new_case, repo_id)
-                new_case.issues.set(list(sc.issues.all()))
-                copied_pairs.append((str(sc.id), str(new_case.id)))
-
-        def _copy_module_recursive(source_mod, parent_mod, repo_id):
-            new_mod = CaseModule.objects.create(
-                name=source_mod.name,
-                sort_order=source_mod.sort_order,
-                repository_id=repo_id,
-                parent=parent_mod,
-            )
-            _copy_cases(source_mod, new_mod, repo_id)
-            for child in source_mod.children.filter(deleted_at__isnull=True).order_by("sort_order"):
-                _copy_module_recursive(child, new_mod, repo_id)
-            return new_mod
-
         copied_pairs = []
         with transaction.atomic():
-            new_root = _copy_module_recursive(source_module, target_parent, str(target_repository_id))
+            new_root = copy_module_subtree(
+                source_module,
+                target_parent,
+                str(target_repository_id),
+                copied_pairs,
+                assignee_id=getattr(request.user, "id", None),
+            )
             # on_commit 保证 worker 读到的是已提交的新用例行
             transaction.on_commit(
                 lambda: enqueue_case_asset_copy(list(copied_pairs), str(request.user.id))
