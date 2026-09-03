@@ -7,6 +7,7 @@
 import { useWatch } from "react-hook-form";
 import type { Control } from "react-hook-form";
 import { useTranslation } from "@plane/i18n";
+import type { TTranslationStore } from "@plane/i18n";
 import { getDate } from "@plane/utils";
 import type { TFormVariant } from "@/components/common/form-section";
 import type { TProject } from "@/plane-web/types/projects";
@@ -28,6 +29,17 @@ export type TProjectSharedFieldsProps = {
    */
   projectId?: string;
 };
+
+/**
+ * 完成日期不早于开始日期。minDate 挡住日历里的选择；用户先选完成日期再把开始日期改晚时靠这里兜。
+ * 创建弹窗（分组布局）与设置页（平铺）各自拼日期字段，校验共用这一处。
+ */
+export const validateEndDate =
+  (startDate: Date | undefined, t: TTranslationStore["t"]) =>
+  (value: string | null | undefined): true | string => {
+    const end = getDate(value);
+    return startDate && end && end < startDate ? t("workspace_projects.validation.end_before_start") : true;
+  };
 
 /**
  * 创建弹窗与设置页共用的中段字段，按两列网格的顺序平铺：
@@ -76,11 +88,7 @@ export function ProjectSharedFields(props: TProjectSharedFieldsProps) {
         name="end_date"
         required
         minDate={startDate}
-        // minDate 挡住日历里的选择；用户先选完成日期再把开始日期改晚时靠这里兜
-        validate={(value) => {
-          const end = getDate(value);
-          return startDate && end && end < startDate ? t("workspace_projects.validation.end_before_start") : true;
-        }}
+        validate={validateEndDate(startDate, t)}
         tabIndex={getIndex?.("end_date")}
       />
     </>

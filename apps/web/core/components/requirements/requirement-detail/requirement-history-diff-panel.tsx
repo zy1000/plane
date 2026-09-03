@@ -14,7 +14,7 @@ import type { TRequirementAssetRef, TRequirementValue } from "@plane/types";
 import { cn, stripAndTruncateHTML } from "@plane/utils";
 import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
 import { LeafValue } from "@/components/requirements/requirement-grid-shared";
-import { RequirementInlineTextDiff } from "./requirement-inline-text-diff";
+import { InlineTextDiff } from "@/components/common/inline-text-diff";
 import type { TSnapshotDiff, TSnapshotDiffMode, TSnapshotDiffRow } from "./requirement-snapshot-diff";
 
 const DEFAULT_LIMIT = 3;
@@ -121,10 +121,11 @@ const DiffRow = ({ row, mode, workspaceSlug }: { row: TSnapshotDiffRow; mode: TS
     content = <SideValue row={row} value={row.before} tone="old" workspaceSlug={workspaceSlug} />;
   } else if (row.isRichText) {
     content = (
-      <RequirementInlineTextDiff
+      <InlineTextDiff
         before={row.before as string | null | undefined}
         after={row.after as string | null | undefined}
         isHtml
+        formatOnlyLabel={t("requirement_detail.history.diff.format_only")}
       />
     );
   } else {

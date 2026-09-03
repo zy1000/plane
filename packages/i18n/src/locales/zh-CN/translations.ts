@@ -3198,6 +3198,17 @@ export default {
     label: "{count, plural, one {项目管理} other {项目管理}}",
     create: {
       label: "添加项目",
+      name_placeholder: "给项目起个名字",
+      identifier_placeholder: "例如 PROJ",
+      description_placeholder: "这个项目要解决什么问题？交付什么？",
+      footer_hint: "ID 与可见性创建后仍可在项目设置中修改",
+      duration_days: "共 {count} 天",
+      groups: {
+        basic: "基本信息",
+        team: "团队",
+        schedule: "排期",
+        description: "描述",
+      },
     },
     nav: {
       joined: "已加入项目",

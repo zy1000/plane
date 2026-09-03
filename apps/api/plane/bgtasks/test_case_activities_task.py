@@ -11,7 +11,7 @@ from plane.db.models import (
     User,
 )
 from plane.utils.exception_logger import log_exception
-from plane.utils.html_processor import strip_tags
+from plane.utils.html_processor import strip_tags, strip_tags_preserving_blocks
 from plane.utils.uuid import is_valid_uuid
 
 
@@ -107,6 +107,23 @@ def _append(activities, **kwargs):
     activities.append(TestCaseActivity(**kwargs))
 
 
+#: old_value / new_value 里的可读摘要上限；正文对照走 extra
+_SUMMARY_MAX_CHARS = 512
+#: 单侧原文上限，超了就不带原文，前端回落到纯文本摘要
+_RICH_TEXT_MAX_CHARS = 8000
+
+
+def _content_extra(old_raw: str, new_raw: str, **payload):
+    """改动两侧的原文塞进 extra，供前端还原表格/步骤结构做对照。
+
+    strip 后的摘要读不出表格改了哪一格，所以正文必须原样带上；
+    过大的内容不带，前端只显示摘要。
+    """
+    if len(old_raw) > _RICH_TEXT_MAX_CHARS or len(new_raw) > _RICH_TEXT_MAX_CHARS:
+        return {"too_large": True}
+    return payload
+
+
 def _track_simple_text(
     field: str,
     *,
@@ -183,11 +200,12 @@ def _track_html_field(
 ):
     if field not in requested:
         return
-    old_value = current.get(field)
-    new_value = requested.get(field)
-    old_stripped = _strip_html(old_value)
-    new_stripped = _strip_html(new_value)
-    if (old_stripped or None) == (new_stripped or None):
+    old_html = str(current.get(field) or "")
+    new_html = str(requested.get(field) or "")
+    # 比对走保留块级边界的纯文本：strip_tags 把表格粘成一串，改了结构也比不出来
+    old_text = strip_tags_preserving_blocks(old_html)
+    new_text = strip_tags_preserving_blocks(new_html)
+    if (old_text or None) == (new_text or None):
         return
     label = _label_for_field(field)
     _append(
@@ -196,9 +214,48 @@ def _track_html_field(
         actor_id=actor_id,
         verb="updated",
         field=field,
-        old_value=old_stripped[:512],
-        new_value=new_stripped[:512],
+        old_value=old_text[:_SUMMARY_MAX_CHARS],
+        new_value=new_text[:_SUMMARY_MAX_CHARS],
         comment=f"更新了{label}",
+        extra=_content_extra(old_html, new_html, old_html=old_html, new_html=new_html),
+        epoch=epoch,
+    )
+
+
+def _steps_rows(value) -> list:
+    """steps 是 JSONField 且 default=dict，存量行可能是 {} 或 None，统一归一成列表。"""
+    return value if isinstance(value, list) else []
+
+
+def _track_steps(
+    *,
+    requested,
+    current,
+    case_id,
+    actor_id,
+    activities,
+    epoch,
+):
+    """步骤变更。old_value / new_value 只存条数，逐步骤对照的原文走 extra。"""
+    if "steps" not in requested:
+        return
+    old_rows = _steps_rows(current.get("steps"))
+    new_rows = _steps_rows(requested.get("steps"))
+    old_json = json.dumps(old_rows, sort_keys=True, ensure_ascii=False)
+    new_json = json.dumps(new_rows, sort_keys=True, ensure_ascii=False)
+    if old_json == new_json:
+        return
+    label = _label_for_field("steps")
+    _append(
+        activities,
+        case_id=case_id,
+        actor_id=actor_id,
+        verb="updated",
+        field="steps",
+        old_value=str(len(old_rows)),
+        new_value=str(len(new_rows)),
+        comment=f"更新了{label}",
+        extra=_content_extra(old_json, new_json, old_steps=old_rows, new_steps=new_rows),
         epoch=epoch,
     )
 
@@ -275,6 +332,7 @@ def update_case_activity(
 
     _track_simple_text("name", requested=requested, current=current, **common)
     _track_html_field("precondition", requested=requested, current=current, **common)
+    _track_steps(requested=requested, current=current, **common)
     _track_html_field("text_description", requested=requested, current=current, **common)
     _track_html_field("text_result", requested=requested, current=current, **common)
     _track_html_field("remark", requested=requested, current=current, **common)

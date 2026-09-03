@@ -3021,6 +3021,17 @@ export default {
     label: "{count, plural, one {Project} other {Projects}}",
     create: {
       label: "Add Project",
+      name_placeholder: "Name your project",
+      identifier_placeholder: "e.g. PROJ",
+      description_placeholder: "What problem does this project solve, and what will it deliver?",
+      footer_hint: "You can change the ID and visibility later in project settings",
+      duration_days: "{count, plural, one {# day} other {# days}}",
+      groups: {
+        basic: "Basics",
+        team: "Team",
+        schedule: "Schedule",
+        description: "Description",
+      },
     },
     nav: {
       joined: "Joined projects",

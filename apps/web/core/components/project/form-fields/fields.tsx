@@ -266,6 +266,7 @@ export function ProjectMemberField(props: TProjectMemberFieldProps) {
               className="h-full w-full"
               buttonContainerClassName="h-full w-full"
               buttonClassName={cn(styles.dropdownButton, error && "border-danger-strong")}
+              labelClassName={styles.dropdownLabel}
               disabled={disabled}
               tabIndex={tabIndex}
             />
@@ -284,10 +285,27 @@ type TProjectDateFieldProps = TProjectFieldProps & {
   maxDate?: Date;
   /** 必填校验之后的额外校验（如完成日期不早于开始日期） */
   validate?: (value: string | null | undefined) => true | string;
+  /** 起止日期并排时隐藏 label，用 placeholder 区分开始 / 完成 */
+  labelHidden?: boolean;
+  placeholder?: string;
+  className?: string;
 };
 
 export function ProjectDateField(props: TProjectDateFieldProps) {
-  const { control, variant, disabled = false, tabIndex, name, required, minDate, maxDate, validate } = props;
+  const {
+    control,
+    variant,
+    disabled = false,
+    tabIndex,
+    name,
+    required,
+    minDate,
+    maxDate,
+    validate,
+    labelHidden,
+    placeholder,
+    className,
+  } = props;
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
   return (
     <Controller
@@ -300,7 +318,15 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
         },
       }}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormFieldShell label={label(name)} required={required} editable={!disabled} error={error?.message} styles={styles}>
+        <FormFieldShell
+          label={label(name)}
+          labelHidden={labelHidden}
+          required={required}
+          editable={!disabled}
+          error={error?.message}
+          styles={styles}
+          className={className}
+        >
           <div className={styles.control}>
             <DateDropdown
               value={getDate(value)}
@@ -309,10 +335,11 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
               isClearable={!required}
               minDate={minDate}
               maxDate={maxDate}
-              placeholder={t("workspace_projects.fields.date_placeholder")}
+              placeholder={placeholder ?? t("workspace_projects.fields.date_placeholder")}
               className="h-full w-full"
               buttonContainerClassName="h-full w-full"
               buttonClassName={cn(styles.dropdownButton, error && "border-danger-strong")}
+              labelClassName={styles.dropdownLabel}
               disabled={disabled}
               tabIndex={tabIndex}
             />
@@ -324,11 +351,15 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
 }
 
 // ---- 项目 logo（emoji / icon）----
-type TProjectLogoFieldProps = Pick<TProjectFieldProps, "control" | "disabled">;
+type TProjectLogoFieldProps = Pick<TProjectFieldProps, "control" | "disabled"> & {
+  /** 覆盖 logo 块的尺寸 / 底色（创建弹窗身份区用 64px 的大块） */
+  tileClassName?: string;
+  logoSize?: number;
+};
 
-/** 名称输入框左侧的 logo 选择器，创建弹窗与设置页共用；按钮与 h-10 控件同高 */
+/** 名称输入框左侧的 logo 选择器，创建弹窗与设置页共用；默认与 h-10 控件同高 */
 export function ProjectLogoField(props: TProjectLogoFieldProps) {
-  const { control, disabled = false } = props;
+  const { control, disabled = false, tileClassName, logoSize = 18 } = props;
   const [isOpen, setIsOpen] = useState(false);
   return (
     <Controller
@@ -342,8 +373,13 @@ export function ProjectLogoField(props: TProjectLogoFieldProps) {
           className="flex shrink-0 items-center justify-center"
           buttonClassName="flex items-center justify-center"
           label={
-            <span className="grid h-10 w-10 place-items-center rounded-md border border-subtle bg-layer-2">
-              <Logo logo={value} size={18} />
+            <span
+              className={cn(
+                "grid h-10 w-10 place-items-center rounded-md border border-subtle bg-layer-2",
+                tileClassName
+              )}
+            >
+              <Logo logo={value} size={logoSize} />
             </span>
           }
           onChange={(val: any) => {

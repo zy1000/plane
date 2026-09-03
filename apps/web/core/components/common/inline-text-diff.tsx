@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * 描述 / 富文本字段的行内文字 diff：把改动的词标成红删除线与绿底，不变的只留前后几个词。
+ * 富文本字段的行内文字 diff：把改动的词标成红删除线与绿底，不变的只留前后几个词。
  *
  * 历史行里整段红一遍、整段绿一遍读不出改了哪几个字。
  * 中文没有空格，按「CJK 单字 / 拉丁与数字连续串 / 空白 / 单个标点」切 token，再交给 jsdiff。
  */
 import { useMemo } from "react";
 import { diffArrays, type ArrayChange } from "diff";
-import { useTranslation } from "@plane/i18n";
 import { cn, sanitizeHTML, truncateText } from "@plane/utils";
-import { DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "@/components/products/requirements/change/styles";
 
 export type TTextDiffSegment = { type: "same" | "del" | "ins" | "gap"; text: string };
+
+const DIFF_OLD_VALUE = "text-danger-secondary line-through";
+const DIFF_NEW_VALUE = "text-success-secondary";
 
 /** 超过就不算了：几千字的描述配上编辑距离上限，jsdiff 本来也会放弃 */
 const MAX_TOKENS = 4000;
@@ -24,12 +25,15 @@ const FALLBACK_LENGTH = 180;
 
 /** sanitizeHTML 会把所有空白折成一个空格，段落边界丢了 —— 先把块级闭合标签换成换行 */
 const BLOCK_END_RE = /<\/(?:p|div|li|h[1-6]|tr|blockquote|pre)>|<br\s*\/?>/gi;
+/** 单元格之间也要有分隔符，否则 `<td>a</td><td>b</td>` 会粘成 "ab"，表格改了哪一格看不出来 */
+const CELL_END_RE = /<\/(?:td|th)>/gi;
 
 export const htmlToPlainText = (html: string) =>
   html
+    .replace(CELL_END_RE, " | ")
     .replace(BLOCK_END_RE, "\n")
     .split("\n")
-    .map((line) => sanitizeHTML(line))
+    .map((line) => sanitizeHTML(line).replace(/\s*\|\s*$/, "").trim())
     .filter(Boolean)
     .join("\n");
 
@@ -77,18 +81,16 @@ export const diffPlainText = (before: string, after: string): TTextDiffSegment[]
   return segments;
 };
 
-export const RequirementInlineTextDiff = ({
-  before,
-  after,
-  isHtml = false,
-  className,
-}: {
+type Props = {
   before: string | null | undefined;
   after: string | null | undefined;
   isHtml?: boolean;
+  /** 纯文本没变、只动了格式时显示的说明，各业务域自己给文案 */
+  formatOnlyLabel?: React.ReactNode;
   className?: string;
-}) => {
-  const { t } = useTranslation();
+};
+
+export const InlineTextDiff = ({ before, after, isHtml = false, formatOnlyLabel, className }: Props) => {
   const { oldText, newText, segments } = useMemo(() => {
     const left = isHtml ? htmlToPlainText(before ?? "") : (before ?? "");
     const right = isHtml ? htmlToPlainText(after ?? "") : (after ?? "");
@@ -104,11 +106,8 @@ export const RequirementInlineTextDiff = ({
     );
   }
   if (segments.length === 0) {
-    return (
-      <span className={cn("text-body-xs-regular text-tertiary", className)}>
-        {t("requirement_detail.history.diff.format_only")}
-      </span>
-    );
+    if (!formatOnlyLabel) return null;
+    return <span className={cn("text-body-xs-regular text-tertiary", className)}>{formatOnlyLabel}</span>;
   }
   return (
     <span className={cn("text-body-xs-regular leading-5 break-words whitespace-pre-wrap text-primary", className)}>

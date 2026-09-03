@@ -49,19 +49,20 @@ export const INTAKE_ISSUE_CREATE_FORM_TAB_INDICES = [
 export const CREATE_LABEL_TAB_INDICES = ["name", "color", "cancel", "submit"];
 
 // 顺序即创建弹窗的视觉顺序：基本信息 → 分类 → 团队 → 计划 → 按钮
+/** 创建项目弹窗的 Tab 顺序，与身份区 → 基本信息 → 团队 → 排期 → 描述 → 页脚的视觉顺序一致 */
 export const PROJECT_CREATE_TAB_INDICES = [
   "name",
   "identifier",
+  "network",
   "code",
   "project_type",
-  "lead",
-  "product_manager",
   "business_unit",
   "status",
+  "lead",
+  "product_manager",
   "start_date",
   "end_date",
   "description",
-  "network",
   "cancel",
   "submit",
   "close",

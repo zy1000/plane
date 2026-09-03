@@ -46,6 +46,7 @@ def build_case_activity_snapshot(case):
         "module_id": str(case.module_id) if case.module_id else None,
         "labels": [str(l) for l in case.labels.values_list("id", flat=True)],
         "precondition": case.precondition,
+        "steps": case.steps,
         "text_description": case.text_description,
         "text_result": case.text_result,
         "remark": case.remark,

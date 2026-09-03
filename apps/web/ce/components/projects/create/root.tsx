@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
+import type { MutableRefObject } from "react";
 import { observer } from "mobx-react";
 import { FormProvider, useForm } from "react-hook-form";
 // plane imports
@@ -30,10 +31,12 @@ export type TCreateProjectFormProps = {
   handleNextStep: (projectId: string) => void;
   data?: Partial<TProject>;
   templateId?: string;
+  /** 弹窗打开时聚焦名称输入框，避免 Headless UI 默认聚焦到 logo 按钮 */
+  initialFocusRef?: MutableRefObject<HTMLInputElement | null>;
 };
 
 export const CreateProjectForm = observer(function CreateProjectForm(props: TCreateProjectFormProps) {
-  const { setToFavorite, workspaceSlug, data, onClose, handleNextStep } = props;
+  const { setToFavorite, workspaceSlug, data, onClose, handleNextStep, initialFocusRef } = props;
   // store
   const { t } = useTranslation();
   const { addProjectToFavorites, createProject } = useProject();
@@ -114,26 +117,20 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
 
   return (
     <FormProvider {...methods}>
-      {/* 头部固定、中间字段滚动、底部按钮固定（同产品创建弹窗） */}
-      <div className="flex max-h-[min(88vh,52rem)] min-h-0 flex-col">
-        <div className="shrink-0">
-          <ProjectCreateHeader handleClose={handleClose} isMobile={isMobile} />
+      {/* 身份区固定、中间分组字段滚动、页脚固定；名称输入框在 form 内，回车即提交 */}
+      <form onSubmit={handleSubmit(onSubmit)} className="flex max-h-[min(88vh,52rem)] min-h-0 flex-col">
+        <ProjectCreateHeader
+          handleClose={handleClose}
+          isMobile={isMobile}
+          shouldAutoSyncIdentifier={shouldAutoSyncIdentifier}
+          setShouldAutoSyncIdentifier={setShouldAutoSyncIdentifier}
+          nameInputRef={initialFocusRef}
+        />
+        <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-8">
+          <ProjectCommonAttributes isMobile={isMobile} dictionaries={dictionaries} />
         </div>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
-          <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-7">
-            <div className="pt-6 pb-6">
-              <ProjectCommonAttributes
-                setValue={setValue}
-                isMobile={isMobile}
-                shouldAutoSyncIdentifier={shouldAutoSyncIdentifier}
-                setShouldAutoSyncIdentifier={setShouldAutoSyncIdentifier}
-                dictionaries={dictionaries}
-              />
-            </div>
-          </div>
-          <ProjectCreateButtons handleClose={handleClose} isMobile={isMobile} />
-        </form>
-      </div>
+        <ProjectCreateButtons handleClose={handleClose} isMobile={isMobile} />
+      </form>
     </FormProvider>
   );
 });

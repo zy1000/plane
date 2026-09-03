@@ -23,11 +23,14 @@ import { useMember } from "@/hooks/store/use-member";
 import { useTestCaseActivity } from "@/hooks/store/use-test-case-activity";
 import { useUser } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { buildTestCaseActivityMessage } from "./test-case-activity-message";
+import { TEST_CASE_FIELD_LABELS, buildTestCaseActivityMessage } from "./test-case-activity-message";
+import { isContentChangeActivity } from "./test-case-change-model";
+import { TestCaseContentChange } from "./test-case-content-change";
 
 type Props = {
   workspaceSlug: string;
-  projectId: string;
+  /** 模板用例没有项目语境，不传；只用于渲染评论富文本 */
+  projectId?: string;
   caseId: string;
   activities?: TTestCaseActivity[];
   emptyHint?: string;
@@ -133,6 +136,7 @@ const iconForActivity = (activity: TTestCaseActivity): React.ReactNode => {
     case "case":
     case "name":
     case "precondition":
+    case "steps":
     case "text_description":
     case "text_result":
       return <FileText size={12} aria-hidden />;
@@ -145,13 +149,13 @@ const TestCaseActivityRow = observer(function TestCaseActivityRow(props: {
   activity: TTestCaseActivity;
   workspaceSlug: string;
   workspaceId: string;
-  projectId: string;
+  projectId?: string;
 }) {
   const { activity, workspaceSlug, workspaceId, projectId } = props;
   const { getUserDetails } = useMember();
   const { data: currentUser } = useUser();
 
-  if (activity.field === "comment" && typeof activity.extra?.comment_html === "string") {
+  if (projectId && activity.field === "comment" && typeof activity.extra?.comment_html === "string") {
     return (
       <TestCaseCommentBlock
         activity={activity}
@@ -171,6 +175,40 @@ const TestCaseActivityRow = observer(function TestCaseActivityRow(props: {
       ? "你"
       : (actorDetail?.display_name ?? activity.actor_detail?.display_name ?? "未知用户");
   const avatarUrl = actorDetail?.avatar_url ?? activity.actor_detail?.avatar_url ?? null;
+
+  // 富文本与步骤的正文进不了标题行：换成「字段 + 规模徽章 + 展开」，对照面板另起一行
+  if (isContentChangeActivity(activity)) {
+    return (
+      <li>
+        <div className="relative flex gap-3 py-2 text-body-sm-regular">
+          <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
+          <div className="z-[4] mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
+            {isSystem ? (
+              iconForActivity(activity)
+            ) : (
+              <Avatar
+                size="sm"
+                name={displayName}
+                src={getFileURL(avatarUrl ?? undefined)}
+                fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor()}
+              />
+            )}
+          </div>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-2 text-secondary">
+            <span className="font-medium text-secondary">{displayName}</span>
+            <span>更新了</span>
+            <span className="font-medium text-primary">
+              {TEST_CASE_FIELD_LABELS[activity.field ?? ""] ?? activity.field}
+            </span>
+            <TestCaseContentChange activity={activity} />
+            <span className="ml-auto flex-shrink-0 self-start whitespace-nowrap text-tertiary">
+              {calculateTimeAgo(activity.created_at)}
+            </span>
+          </div>
+        </div>
+      </li>
+    );
+  }
 
   const message = buildTestCaseActivityMessage(activity);
 

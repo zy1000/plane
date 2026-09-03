@@ -1089,12 +1089,13 @@ function UpdateModalBody({
                 remarkValue={remarkValue ?? ""}
                 onSave={handleSaveBasicInfo}
                 activityContent={
-                  // 活动 feed 依赖项目语境（projectId），模板库模式隐藏
-                  !templateMode && caseId && workspaceSlug && projectIdStr ? (
+                  // 活动读接口是 workspace 级，模板库同样可用；projectId 只喂评论富文本，模板模式不传
+                  caseId && workspaceSlug && (templateMode || projectIdStr) ? (
                     <TestCaseActivityTab
                       workspaceSlug={String(workspaceSlug)}
-                      projectId={projectIdStr}
+                      projectId={templateMode ? undefined : projectIdStr}
                       caseId={String(caseId)}
+                      templateMode={templateMode}
                     />
                   ) : null
                 }

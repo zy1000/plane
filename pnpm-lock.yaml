@@ -30,6 +30,9 @@ catalogs:
     '@react-router/serve':
       specifier: 7.13.1
       version: 7.13.1
+    '@tanstack/react-virtual':
+      specifier: 3.13.12
+      version: 3.13.12
     '@tiptap/core':
       specifier: ^2.22.3
       version: 2.26.3
@@ -1381,6 +1384,9 @@ importers:
       '@radix-ui/react-scroll-area':
         specifier: ^1.2.3
         version: 1.2.10(@types/react-dom@18.3.1)(@types/react@18.3.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tanstack/react-virtual':
+        specifier: 'catalog:'
+        version: 3.13.12(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       clsx:
         specifier: ^2.0.0
         version: 2.1.1

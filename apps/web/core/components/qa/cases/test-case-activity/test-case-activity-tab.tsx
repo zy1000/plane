@@ -17,8 +17,11 @@ type SubTabKey = "all" | "activity" | "comment" | "transition";
 
 type Props = {
   workspaceSlug: string;
-  projectId: string;
+  /** 模板用例没有项目语境，不传；只用于评论区与评论富文本 */
+  projectId?: string;
   caseId: string;
+  /** 模板库模式：只展示活动流，不展示评论/转换（模板用例没有评论入口，也没有评审与执行语境） */
+  templateMode?: boolean;
 };
 
 const SECTION_CARD = "rounded-xl bg-surface-1";
@@ -60,9 +63,12 @@ const flattenComments = (comments: TTestCaseComment[]): TTestCaseComment[] => {
   return flattened.sort((a, b) => toTimestamp(a.created_at) - toTimestamp(b.created_at));
 };
 
-export const TestCaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, projectId, caseId }) => {
-  const [active, setActive] = useState<SubTabKey>("all");
+export const TestCaseActivityTab: React.FC<Props> = observer((props) => {
+  const { workspaceSlug, projectId, caseId, templateMode = false } = props;
+  const [selectedTab, setSelectedTab] = useState<SubTabKey>("all");
   const [sortOrder, setSortOrder] = useState<E_SORT_ORDER>(E_SORT_ORDER.ASC);
+  // 模板模式固定走「活动」口径：复用 isActivityField 过滤掉评论与转换，不另开分支
+  const active: SubTabKey = templateMode ? "activity" : selectedTab;
 
   const { getActivitiesByCaseId, fetchActivities } = useTestCaseActivity();
   const allActivities = getActivitiesByCaseId(caseId);
@@ -70,7 +76,9 @@ export const TestCaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, p
   const comments = getCommentsByCaseId(caseId);
 
   useSWR(
-    workspaceSlug && caseId ? ["test-case-comments-for-activity-tab", workspaceSlug, caseId] : null,
+    !templateMode && workspaceSlug && caseId
+      ? ["test-case-comments-for-activity-tab", workspaceSlug, caseId]
+      : null,
     () => fetchComments(workspaceSlug, caseId)
   );
 
@@ -129,28 +137,32 @@ export const TestCaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, p
   return (
     <section className={`${SECTION_CARD} flex min-h-[440px] flex-col`}>
       <div className="flex items-center justify-between gap-2 border-b border-subtle pr-2">
-        <div className="flex items-center gap-1" role="tablist" aria-label="用例动态筛选">
-          {SUB_TABS.map((tab) => {
-            const isTabActive = tab.key === active;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={isTabActive}
-                className={cn(
-                  "inline-flex cursor-pointer items-center gap-1 border-b-2 px-2 py-2.5 text-14 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent-primary",
-                  isTabActive
-                    ? "border-accent-primary text-primary"
-                    : "border-transparent text-placeholder hover:text-secondary"
-                )}
-                onClick={() => setActive(tab.key)}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        {templateMode ? (
+          <span className="px-2 py-2.5 text-14 font-medium text-primary">活动轨迹</span>
+        ) : (
+          <div className="flex items-center gap-1" role="tablist" aria-label="用例动态筛选">
+            {SUB_TABS.map((tab) => {
+              const isTabActive = tab.key === active;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isTabActive}
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-1 border-b-2 px-2 py-2.5 text-14 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent-primary",
+                    isTabActive
+                      ? "border-accent-primary text-primary"
+                      : "border-transparent text-placeholder hover:text-secondary"
+                  )}
+                  onClick={() => setSelectedTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {isFeedTab && (
           <div className="flex shrink-0 items-center gap-2">
@@ -160,7 +172,7 @@ export const TestCaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, p
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {active === "comment" ? (
+        {active === "comment" && projectId ? (
           <TestCaseCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} caseId={caseId} />
         ) : (
           <div className="px-2 py-5">
