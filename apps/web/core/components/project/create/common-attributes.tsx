@@ -16,13 +16,8 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { Input, TextArea } from "@plane/ui";
 import { cn, projectIdentifierSanitizer, getTabIndex } from "@plane/utils";
 // components
-import { FORM_VARIANT_STYLES, FormFieldShell, FormSection, getFormGridClassName } from "@/components/common/form-section";
-import {
-  ProjectClassificationSection,
-  ProjectCodeField,
-  ProjectDictionaryField,
-  ProjectNetworkField,
-} from "@/components/project/form-fields";
+import { FORM_VARIANT_STYLES, FormFieldShell, getFormGridClassName } from "@/components/common/form-section";
+import { ProjectLogoField, ProjectNetworkField, ProjectSharedFields } from "@/components/project/form-fields";
 import type { TProjectDictionaries } from "@/components/project/form-fields";
 // plane-web types
 import type { TProject } from "@/plane-web/types/projects";
@@ -36,7 +31,7 @@ type Props = {
   handleFormOnChange?: () => void;
 };
 
-/** 创建弹窗的「基本信息」+「分类」两个分区；「团队」「计划」在 plane-web 的 ProjectAttributes */
+/** 创建弹窗的全部字段：两列平铺（名称+logo | 项目 ID，代号 | 类型，负责人 | 产品经理，所属BU | 状态，起止日期，描述整行，可见性） */
 function ProjectCommonAttributes(props: Props) {
   const { setValue, isMobile, shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier, dictionaries, handleFormOnChange } =
     props;
@@ -71,142 +66,125 @@ function ProjectCommonAttributes(props: Props) {
   };
 
   return (
-    <>
-      <FormSection title={t("workspace_projects.sections.basic")}>
-        <div className={grid}>
-          <FormFieldShell
-            className="md:col-span-2"
-            label={t("workspace_projects.fields.name")}
-            required
-            editable
-            error={errors.name?.message}
-            styles={styles}
-          >
-            <Controller
-              control={control}
-              name="name"
-              rules={{
-                required: t("name_is_required"),
-                maxLength: {
-                  value: 255,
-                  message: t("title_should_be_less_than_255_characters"),
-                },
-              }}
-              render={({ field: { value, onChange, ref } }) => (
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  ref={ref}
-                  value={value}
-                  onChange={handleNameChange(onChange)}
-                  hasError={Boolean(errors.name)}
-                  placeholder={t("project_name")}
-                  className={styles.input}
-                  tabIndex={getIndex("name")}
-                />
-              )}
-            />
-          </FormFieldShell>
-          <FormFieldShell
-            label={t("workspace_projects.fields.identifier")}
-            required
-            editable
-            error={errors.identifier?.message}
-            styles={styles}
-          >
-            <div className="relative">
-              <Controller
-                control={control}
-                name="identifier"
-                rules={{
-                  required: t("project_id_is_required"),
-                  // allow only alphanumeric & non-latin characters
-                  validate: (value) =>
-                    /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) ||
-                    t("only_alphanumeric_non_latin_characters_allowed"),
-                  minLength: {
-                    value: 1,
-                    message: t("project_id_min_char"),
-                  },
-                  maxLength: {
-                    value: 10,
-                    message: t("project_id_max_char"),
-                  },
-                }}
-                render={({ field: { value, onChange, ref } }) => (
-                  <Input
-                    id="identifier"
-                    name="identifier"
-                    type="text"
-                    ref={ref}
-                    value={value}
-                    onChange={handleIdentifierChange(onChange)}
-                    hasError={Boolean(errors.identifier)}
-                    placeholder={t("project_id")}
-                    className={cn(styles.input, "pr-7", { uppercase: value })}
-                    tabIndex={getIndex("identifier")}
-                  />
-                )}
-              />
-              <Tooltip
-                isMobile={isMobile}
-                tooltipContent={t("project_id_tooltip_content")}
-                className="text-13"
-                position="right-start"
-              >
-                <InfoIcon className="absolute top-1/2 right-2 h-3 w-3 -translate-y-1/2 text-placeholder" />
-              </Tooltip>
-            </div>
-          </FormFieldShell>
-          <ProjectCodeField control={control} variant="modal" tabIndex={getIndex("code")} />
-          <ProjectNetworkField control={control} variant="modal" tabIndex={getIndex("network")} />
-          <ProjectDictionaryField
+    <div className={grid}>
+      <FormFieldShell
+        label={t("workspace_projects.fields.name")}
+        required
+        editable
+        error={errors.name?.message}
+        styles={styles}
+      >
+        <div className="flex items-center gap-2">
+          <ProjectLogoField control={control} />
+          <Controller
             control={control}
-            variant="modal"
-            name="business_unit"
-            required={false}
-            dictionaries={dictionaries}
-            tabIndex={getIndex("business_unit")}
+            name="name"
+            rules={{
+              required: t("name_is_required"),
+              maxLength: {
+                value: 255,
+                message: t("title_should_be_less_than_255_characters"),
+              },
+            }}
+            render={({ field: { value, onChange, ref } }) => (
+              <Input
+                id="name"
+                name="name"
+                type="text"
+                ref={ref}
+                value={value}
+                onChange={handleNameChange(onChange)}
+                hasError={Boolean(errors.name)}
+                placeholder={t("project_name")}
+                className={cn(styles.input, "min-w-0 flex-1")}
+                tabIndex={getIndex("name")}
+              />
+            )}
           />
-          <FormFieldShell
-            className="md:col-span-2"
-            label={t("workspace_projects.fields.description")}
-            required={false}
-            editable
-            error={errors.description?.message}
-            styles={styles}
-          >
-            <Controller
-              name="description"
-              control={control}
-              render={({ field: { value, onChange } }) => (
-                <TextArea
-                  id="description"
-                  name="description"
-                  value={value}
-                  placeholder={t("description")}
-                  onChange={(e) => {
-                    onChange(e);
-                    handleFormOnChange?.();
-                  }}
-                  className="focus:border-blue-400 !h-24 text-13"
-                  hasError={Boolean(errors?.description)}
-                  tabIndex={getIndex("description")}
-                />
-              )}
-            />
-          </FormFieldShell>
         </div>
-      </FormSection>
-      <ProjectClassificationSection
-        control={control}
-        variant="modal"
-        dictionaries={dictionaries}
-        getIndex={getIndex}
-        requireGradeAndProductType
-      />
-    </>
+      </FormFieldShell>
+      <FormFieldShell
+        label={t("workspace_projects.fields.identifier")}
+        required
+        editable
+        error={errors.identifier?.message}
+        styles={styles}
+      >
+        <div className="relative">
+          <Controller
+            control={control}
+            name="identifier"
+            rules={{
+              required: t("project_id_is_required"),
+              // allow only alphanumeric & non-latin characters
+              validate: (value) =>
+                /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) ||
+                t("only_alphanumeric_non_latin_characters_allowed"),
+              minLength: {
+                value: 1,
+                message: t("project_id_min_char"),
+              },
+              maxLength: {
+                value: 10,
+                message: t("project_id_max_char"),
+              },
+            }}
+            render={({ field: { value, onChange, ref } }) => (
+              <Input
+                id="identifier"
+                name="identifier"
+                type="text"
+                ref={ref}
+                value={value}
+                onChange={handleIdentifierChange(onChange)}
+                hasError={Boolean(errors.identifier)}
+                placeholder={t("project_id")}
+                className={cn(styles.input, "pr-7", { uppercase: value })}
+                tabIndex={getIndex("identifier")}
+              />
+            )}
+          />
+          <Tooltip
+            isMobile={isMobile}
+            tooltipContent={t("project_id_tooltip_content")}
+            className="text-13"
+            position="right-start"
+          >
+            <InfoIcon className="absolute top-1/2 right-2 h-3 w-3 -translate-y-1/2 text-placeholder" />
+          </Tooltip>
+        </div>
+      </FormFieldShell>
+      <ProjectSharedFields control={control} variant="modal" dictionaries={dictionaries} getIndex={getIndex} />
+      <FormFieldShell
+        className="md:col-span-2"
+        label={t("workspace_projects.fields.description")}
+        required={false}
+        editable
+        error={errors.description?.message}
+        styles={styles}
+      >
+        <Controller
+          name="description"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <TextArea
+              id="description"
+              name="description"
+              value={value}
+              placeholder={t("description")}
+              onChange={(e) => {
+                onChange(e);
+                handleFormOnChange?.();
+              }}
+              className="focus:border-blue-400 !h-24 text-13"
+              hasError={Boolean(errors?.description)}
+              tabIndex={getIndex("description")}
+            />
+          )}
+        />
+      </FormFieldShell>
+      <ProjectNetworkField control={control} variant="modal" tabIndex={getIndex("network")} />
+    </div>
   );
 }
 

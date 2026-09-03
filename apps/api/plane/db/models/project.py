@@ -85,14 +85,6 @@ def get_default_preferences():
     return {"pages": {"block_display": True}, "navigation": {"default_tab": "work_items", "hide_in_more_menu": []}}
 
 
-PROJECT_GRADE_CHOICES = (
-    ("P+", "P+"),
-    ("P", "P"),
-    ("A", "A"),
-    ("B", "B"),
-    ("C", "C"),
-)
-
 PROJECT_PRODUCT_TYPE_CHOICES = (
     ("电表", "电表"),
     ("水表", "水表"),
@@ -185,14 +177,6 @@ class Project(BaseModel):
         ],
         verbose_name="Estimated Hours",
         help_text="Total estimated working hours for this project (default: 100h)",
-    )
-    grade = models.CharField(
-        max_length=4,
-        choices=PROJECT_GRADE_CHOICES,
-        null=True,
-        blank=True,
-        default='B',
-        verbose_name="Project Grade",
     )
     product_type = models.CharField(
         max_length=32,

@@ -8,14 +8,21 @@ import { EProjectDictionaryKey } from "@plane/types";
 import type { IUserLite } from "@plane/types";
 import type { TProject } from "@/plane-web/types/projects";
 
-/** 项目字典字段 → 对应的系统字典 key */
+/** 项目字典 FK 字段 → 对应的系统字典 key */
 export const PROJECT_DICTIONARY_FIELDS = {
   business_unit: EProjectDictionaryKey.BUSINESS_UNIT,
   status: EProjectDictionaryKey.STATUS,
   project_type: EProjectDictionaryKey.PROJECT_TYPE,
 } as const;
 
+/** 表单里所有从字典取值的字段：3 个 FK + 项目代号（code 是字符串列，存字典值的 label 而不是 id） */
+export const PROJECT_FORM_DICTIONARY_KEYS = {
+  ...PROJECT_DICTIONARY_FIELDS,
+  code: EProjectDictionaryKey.CODE,
+} as const;
+
 export type TProjectDictionaryFieldKey = keyof typeof PROJECT_DICTIONARY_FIELDS;
+export type TProjectFormDictionaryKey = keyof typeof PROJECT_FORM_DICTIONARY_KEYS;
 export type TProjectMemberFieldKey = "project_lead" | "product_manager";
 export type TProjectDateFieldKey = "start_date" | "end_date";
 
@@ -29,8 +36,6 @@ export type TProjectFormFieldKey =
   | "description_html"
   | "pms_project_name"
   | "timezone"
-  | "grade"
-  | "product_type"
   | TProjectDictionaryFieldKey
   | TProjectMemberFieldKey
   | TProjectDateFieldKey;
@@ -47,8 +52,6 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
   "timezone",
   "project_type",
   "status",
-  "grade",
-  "product_type",
   "project_lead",
   "product_manager",
   "start_date",
@@ -57,7 +60,7 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
 
 /**
  * API 创建必填、但 DB 可空的字段（0348 之前的存量项目为 null）。
- * 设置页用它算「缺哪些必填」的横幅；grade / product_type 不在其中 —— 设置页仍允许「未设置」。
+ * 设置页用它算「缺哪些必填」的横幅。
  */
 export const PROJECT_REQUIRED_FIELDS = [
   "code",
@@ -90,8 +93,7 @@ export const PROJECT_SERVER_ERROR_I18N: Record<string, string> = {
   PROJECT_NAME_ALREADY_EXIST: "project_name_already_taken",
   PROJECT_IDENTIFIER_ALREADY_EXIST: "project_identifier_already_taken",
   PROJECT_CODE_ALREADY_EXIST: "workspace_projects.validation.code_already_exists",
-  PROJECT_GRADE_REQUIRED: "project_grade_required",
-  INVALID_PROJECT_GRADE: "workspace_projects.validation.invalid_option",
+  PROJECT_CODE_NOT_IN_DICTIONARY: "workspace_projects.validation.code_not_in_dictionary",
   PROJECT_DICTIONARY_ITEM_INVALID: "workspace_projects.validation.invalid_option",
   PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER: "workspace_projects.validation.invalid_option",
   PROJECT_END_DATE_BEFORE_START_DATE: "workspace_projects.validation.end_before_start",

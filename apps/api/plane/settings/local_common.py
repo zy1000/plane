@@ -313,6 +313,7 @@ CELERY_IMPORTS = (
     "plane.bgtasks.email_notification_task",
     "plane.bgtasks.cleanup_task",
     "plane.bgtasks.upcoming_overdue_reminder_task",
+    "plane.bgtasks.external_integration_sync_task",
     "plane.license.bgtasks.tracer",
     # management tasks
     "plane.bgtasks.dummy_data_task",
@@ -327,6 +328,13 @@ FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 52428800))
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
 # Github Access Token
 GITHUB_ACCESS_TOKEN = os.environ.get("GITHUB_ACCESS_TOKEN", False)
+# 简道云（经公司网关）：项目代号等第三方数据来源，见 plane/integrations/。与 common.py 保持一致
+JIANDAOYUN_API_BASE_URL = os.environ.get("JIANDAOYUN_API_BASE_URL", "")
+JIANDAOYUN_API_TOKEN = os.environ.get("JIANDAOYUN_API_TOKEN", "")
+JIANDAOYUN_APP_KEY = os.environ.get("JIANDAOYUN_APP_KEY", "")
+JIANDAOYUN_PROJECT_CODE_APP_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_APP_ID", "")
+JIANDAOYUN_PROJECT_CODE_ENTRY_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_ENTRY_ID", "")
+JIANDAOYUN_TIMEOUT_SECONDS = int(os.environ.get("JIANDAOYUN_TIMEOUT_SECONDS", "30"))
 
 # Analytics
 ANALYTICS_SECRET_KEY = os.environ.get("ANALYTICS_SECRET_KEY", False)

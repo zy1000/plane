@@ -31,7 +31,6 @@ import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useUserPermissions } from "@/hooks/store/user";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
 import { ArchiveRestoreProjectModal } from "@/components/project/archive-restore-modal";
-import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 import {
   ProjectProductRows,
   ProjectProductsToggle,
@@ -52,7 +51,7 @@ const isSortKey = (key: string): key is TSortKey =>
   key === "name" || key === "created_at" || key === "status";
 
 /** 表头列数；产品子行用 colSpan 占满整行，加减列时同步改这里 */
-const TABLE_COLUMN_COUNT = 7;
+const TABLE_COLUMN_COUNT = 5;
 
 export const ProjectTableList = observer(function ProjectTableList(props: Props) {
   const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
@@ -359,12 +358,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     </button>
                   </th>
                   <th className="px-4 py-3 text-left font-medium text-secondary hidden sm:table-cell">负责人</th>
-                  <th className="px-4 py-3 text-center font-medium text-secondary w-28 whitespace-nowrap">
-                    项目等级
-                  </th>
-                  <th className="px-4 py-3 text-center font-medium text-secondary w-32 whitespace-nowrap">
-                    产品类型
-                  </th>
                   <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     <button
                       type="button"
@@ -493,16 +486,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         </span>
                       </div>
                     ) : null}
-                  </td>
-                  <td className="px-4 py-3 align-middle text-center">
-                    {project.grade ? (
-                      <ProjectGradeBadge grade={project.grade} />
-                    ) : (
-                      <span className="text-secondary">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    {project.product_type ?? <span className="text-secondary">-</span>}
                   </td>
                   <td className="px-4 py-3 pl-1 hidden md:table-cell">
                     <span

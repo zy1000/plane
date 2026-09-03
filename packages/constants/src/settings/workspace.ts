@@ -46,5 +46,6 @@ export const GROUPED_WORKSPACE_SETTINGS = {
     WORKSPACE_SETTINGS["data-dictionaries"],
   ],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
-  [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"]],
+  // 「开发者」分区：Webhooks + 第三方集成（简道云等外部系统的数据同步）
+  [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"], WORKSPACE_SETTINGS["integrations"]],
 } as Record<WORKSPACE_SETTINGS_CATEGORY, TWorkspaceSettingsItem[]>;

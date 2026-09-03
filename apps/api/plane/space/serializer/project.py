@@ -18,7 +18,6 @@ class ProjectLiteSerializer(BaseSerializer):
             "icon_prop",
             "emoji",
             "description",
-            "grade",
             "product_type",
             "pms_project_name",
         ]

@@ -10,8 +10,6 @@ import type { TProjectAppliedDisplayFilterKeys, TProjectOrderByOptions } from "@
 
 export type TNetworkChoiceIconKey = "Lock" | "Globe2";
 
-/** 与后端 `Project.grade` 选项一致 */
-export const PROJECT_GRADE_OPTIONS = ["P+", "P", "A", "B", "C"] as const;
 /** 与后端 `Project.product_type` 选项一致 */
 export const PROJECT_PRODUCT_TYPE_OPTIONS = [
   "电表",

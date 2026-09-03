@@ -518,6 +518,11 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/webhooks/:webhookId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/webhooks/[webhookId]/page.tsx"
           ),
+          // Workspace third-party integrations
+          route(
+            ":workspaceSlug/settings/integrations",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/integrations/page.tsx"
+          ),
           route(
             ":workspaceSlug/settings/releasenote",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/releasenote/page.tsx"

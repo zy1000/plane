@@ -1,6 +1,7 @@
 /**
  * 工作区级数据字典：字典头（DataDictionary）+ 字典值（DataDictionaryItem）。
- * 9 个系统字典由后端预置（is_system=true，key 不可改、不可删）：产品的阶段/类别/状态/研发等级、项目的所属BU/状态/类型引用其值。
+ * 10 个系统字典由后端预置（is_system=true，key 不可改、不可删）：产品的阶段/类别/状态/研发等级、项目的所属BU/状态/类型引用其值，
+ * 项目代号（Project.code，字符串列）按 label 取自 project_code。
  */
 
 export enum EProductDictionaryKey {
@@ -12,11 +13,12 @@ export enum EProductDictionaryKey {
   SOFTWARE_LEVEL = "product_software_level",
 }
 
-/** 项目引用的 3 个系统字典 */
+/** 项目引用的 4 个系统字典（CODE 不是 FK：Project.code 存的是它某个值的 label） */
 export enum EProjectDictionaryKey {
   BUSINESS_UNIT = "project_business_unit",
   STATUS = "project_status",
   PROJECT_TYPE = "project_type",
+  CODE = "project_code",
 }
 
 export type TDataDictionaryItem = {

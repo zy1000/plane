@@ -27,7 +27,10 @@ from plane.db.models import (
     User,
     WorkspaceMember,
 )
-from plane.utils.data_dictionary import PROJECT_DICTIONARY_FIELD_KEYS
+from plane.utils.data_dictionary import (
+    PROJECT_DICTIONARY_FIELD_KEYS,
+    is_project_code_in_dictionary,
+)
 from .data_dictionary import DataDictionaryItemLiteSerializer
 from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
@@ -36,7 +39,6 @@ from plane.db.models.issue_type import (
 )
 from plane.utils.content_validator import validate_html_content
 from ...db.models.project import (
-    PROJECT_GRADE_CHOICES,
     ProjectAnnouncement,
     ProjectMemberRole,
     ProjectPmsInfo,
@@ -133,7 +135,7 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
         read_only_fields = ["workspace", "deleted_at"]
 
     def validate_code(self, value):
-        # DRF 的 CharField 已先 trim 并拒绝空串，这里只做查重
+        # DRF 的 CharField 已先 trim 并拒绝空串，这里做查重与字典校验
         code = value.strip()
         # 与 DB 条件唯一约束同口径：未软删行全部参与，包括 is_template=True 的模板项目
         queryset = Project.all_objects.filter(
@@ -143,6 +145,11 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
             raise serializers.ValidationError("PROJECT_CODE_ALREADY_EXIST")
+        # 代号必须来自 project_code 字典。值没变就不查：0355 之前的存量代号不在字典里，不该因此改不了别的字段
+        if self.instance is not None and self.instance.code == code:
+            return code
+        if not is_project_code_in_dictionary(self.context["workspace_id"], code):
+            raise serializers.ValidationError("PROJECT_CODE_NOT_IN_DICTIONARY")
         return code
 
     def validate_product_manager(self, user):
@@ -217,14 +224,6 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
                     {"error": "html content is not valid"}
                 )
 
-        if self.instance is None:
-            allowed_grades = {c[0] for c in PROJECT_GRADE_CHOICES}
-            grade = data.get("grade")
-            if grade is None or grade == "":
-                raise serializers.ValidationError({"grade": "PROJECT_GRADE_REQUIRED"})
-            if grade not in allowed_grades:
-                raise serializers.ValidationError({"grade": "INVALID_PROJECT_GRADE"})
-
         # 字典值必须属于本工作区、且来自对应的系统字典（状态字段不能塞一个「项目类型」的值）
         workspace_id = str(self.context["workspace_id"])
         errors = {}
@@ -268,7 +267,6 @@ class ProjectLiteSerializer(BaseSerializer):
             "cover_image_url",
             "logo_props",
             "description",
-            "grade",
             "product_type",
         ]
         read_only_fields = fields

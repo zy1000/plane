@@ -1,59 +1,46 @@
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
 import { observer } from "mobx-react";
-import useSWR from "swr";
+// plane imports
+import { WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY, WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // components
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
-import { SingleIntegrationCard } from "@/components/integration/single-integration-card";
-import { IntegrationAndImportExportBanner } from "@/components/ui/integration-and-import-export-banner";
-import { IntegrationsSettingsLoader } from "@/components/ui/loader/settings/integration";
-// constants
-import { APP_INTEGRATIONS } from "@/constants/fetch-keys";
+import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
+import { IntegrationsRoot } from "@/components/workspace/settings/integrations";
 // hooks
+import { useExternalIntegrations } from "@/hooks/store/use-external-integrations";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
-// services
-import { IntegrationService } from "@/services/integrations";
+// local imports
+import type { Route } from "./+types/page";
+import { IntegrationsWorkspaceSettingsHeader } from "./header";
 
-const integrationService = new IntegrationService();
-
-function WorkspaceIntegrationsPage() {
-  // store hooks
+const WorkspaceIntegrationsPage = observer(function WorkspaceIntegrationsPage({ params }: Route.ComponentProps) {
+  const { workspaceSlug } = params;
+  const { t } = useTranslation();
+  const { allowWorkspacePermissionKeys, workspaceUserInfo } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
-  const { allowPermissions } = useUserPermissions();
 
-  // derived values
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Integrations` : undefined;
-  const { data: appIntegrations } = useSWR(isAdmin ? APP_INTEGRATIONS : null, () =>
-    isAdmin ? integrationService.getAppIntegrationsList() : null
-  );
+  // 侧边栏只是隐藏入口，直接敲 URL 仍能进来：与后端 GET / POST 的权限 key 一一对应再判一次
+  const canView = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canSync = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlug);
+  const integrationsState = useExternalIntegrations(canView ? workspaceSlug : undefined);
 
-  if (!isAdmin) return <NotAuthorizedView section="settings" className="h-auto" />;
+  if (workspaceUserInfo[workspaceSlug] && !canView)
+    return <NotAuthorizedView section="settings" className="h-auto" />;
 
   return (
-    <>
-      <PageHead title={pageTitle} />
-      <section className="w-full overflow-y-auto">
-        <IntegrationAndImportExportBanner bannerName="Integrations" />
-        <div>
-          {appIntegrations ? (
-            appIntegrations.map((integration) => (
-              <SingleIntegrationCard key={integration.id} integration={integration} />
-            ))
-          ) : (
-            <IntegrationsSettingsLoader />
-          )}
-        </div>
-      </section>
-    </>
+    <SettingsContentWrapper header={<IntegrationsWorkspaceSettingsHeader />} hugging>
+      <PageHead
+        title={
+          currentWorkspace?.name
+            ? `${currentWorkspace.name} - ${t("workspace_settings.settings.integrations.title")}`
+            : undefined
+        }
+      />
+      <IntegrationsRoot workspaceSlug={workspaceSlug} canSync={canSync} {...integrationsState} />
+    </SettingsContentWrapper>
   );
-}
+});
 
-export default observer(WorkspaceIntegrationsPage);
+export default WorkspaceIntegrationsPage;

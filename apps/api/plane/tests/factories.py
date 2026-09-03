@@ -119,11 +119,22 @@ def product_required_payload(workspace, lead):
     return payload
 
 
+def project_code_label(workspace, label=None):
+    """把代号写进 project_code 系统字典并返回 label：0355 之后代号必须来自字典（--nomigrations，显式 ensure）。"""
+    from plane.db.models import DataDictionary, DataDictionaryItem
+    from plane.utils.data_dictionary import PROJECT_CODE_DICTIONARY_KEY, ensure_system_dictionaries
+
+    ensure_system_dictionaries(workspace)
+    label = (label or f"C-{uuid4().hex[:8]}").strip()
+    dictionary = DataDictionary.objects.get(workspace=workspace, key=PROJECT_CODE_DICTIONARY_KEY)
+    DataDictionaryItem.objects.get_or_create(dictionary=dictionary, label=label)
+    return label
+
+
 def project_required_payload(workspace, lead):
     """Project POST（0348 之后）新增的必填字段。
 
-    不含 code（代号工作区内唯一，由调用方给）与 business_unit（选填）；
-    grade 也由调用方给（那是更早的必填项，不属于 0348）。
+    不含 code（代号工作区内唯一，由调用方给）与 business_unit（选填）。
     """
     from plane.utils.data_dictionary import PROJECT_DICTIONARY_FIELD_KEYS
 

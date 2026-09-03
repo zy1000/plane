@@ -1,10 +1,9 @@
-import { type FC, type ReactNode } from "react";
+import { type ComponentType, type FC, type ReactNode } from "react";
 import { observer } from "mobx-react";
-import { Award, Shapes, UserCircle2 } from "lucide-react";
+import { UserCircle2 } from "lucide-react";
 import { DoubleCircleIcon } from "@plane/propel/icons";
 import type { IProject } from "@plane/types";
 import { getDate, renderFormattedDate } from "@plane/utils";
-import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 import { useMember } from "@/hooks/store/use-member";
 
 type Props = {
@@ -14,12 +13,12 @@ type Props = {
 type TMetaFact = {
   key: string;
   label: string;
-  icon: typeof Award;
+  icon: ComponentType<{ className?: string }>;
   iconClassName: string;
   value: ReactNode;
 };
 
-/** 项目静态信息（状态/负责人/等级/类型/创建时间），用于概览 Hero 左侧区域。 */
+/** 项目静态信息（状态/负责人/创建时间），用于概览 Hero 左侧区域。 */
 export const OverviewProjectMeta: FC<Props> = observer(({ project }) => {
   const { getUserDetails } = useMember();
 
@@ -46,20 +45,6 @@ export const OverviewProjectMeta: FC<Props> = observer(({ project }) => {
       ) : (
         <span className="text-sm text-placeholder">未指定</span>
       ),
-    },
-    {
-      key: "grade",
-      label: "项目等级",
-      icon: Award,
-      iconClassName: "text-amber-500",
-      value: project.grade ? <ProjectGradeBadge grade={project.grade} /> : <span className="text-sm text-placeholder">-</span>,
-    },
-    {
-      key: "product-type",
-      label: "产品类型",
-      icon: Shapes,
-      iconClassName: "text-violet-500",
-      value: <span className="truncate text-sm text-primary">{project.product_type ?? "-"}</span>,
     },
   ];
   const createdAt = project.created_at ? renderFormattedDate(getDate(project.created_at), "yyyy-MM-dd") : "-";

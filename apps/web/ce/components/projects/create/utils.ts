@@ -6,10 +6,8 @@
 
 import { RANDOM_EMOJI_CODES } from "@plane/constants";
 import type { IProject } from "@plane/types";
-import { getRandomCoverImage } from "@/helpers/cover-image.helper";
 
 export const getProjectFormValues = (projectLead?: string | null): Partial<IProject> => ({
-  cover_image_url: getRandomCoverImage(),
   description: "",
   logo_props: {
     in_use: "emoji",
@@ -19,8 +17,6 @@ export const getProjectFormValues = (projectLead?: string | null): Partial<IProj
   },
   identifier: "",
   name: "",
-  grade: null,
-  product_type: null,
   network: 0,
   project_lead: projectLead ?? null,
   /** 0348 扩展字段：不在 defaultValues 里的键不会进 formData，RHF 的校验也不会跑 */

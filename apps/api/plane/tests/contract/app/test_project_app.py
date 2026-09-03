@@ -20,7 +20,7 @@ from plane.db.models import (
     WorkflowTransition,
     User,
 )
-from plane.tests.factories import project_required_payload
+from plane.tests.factories import project_code_label, project_required_payload
 
 
 class TestProjectBase:
@@ -50,13 +50,10 @@ class TestProjectBase:
         return base_url
 
     def project_payload(self, workspace, lead, **fields):
-        """POST /projects/ 的完整合法载荷：grade（旧必填）+ 0348 新增必填 + 随机代号。"""
-        return {
-            "grade": "B",
-            "code": f"C-{uuid.uuid4().hex[:8]}",
-            **project_required_payload(workspace, lead),
-            **fields,
-        }
+        """POST /projects/ 的完整合法载荷：0348 新增必填 + 随机代号（先把代号写进 project_code 字典，0355）。"""
+        code = fields.pop("code", None) or f"C-{uuid.uuid4().hex[:8]}"
+        project_code_label(workspace, code)
+        return {"code": code, **project_required_payload(workspace, lead), **fields}
 
     def dictionary_item(self, workspace, key, label=None):
         """取（或临时建）某个系统字典的一个值。"""

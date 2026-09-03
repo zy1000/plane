@@ -1,7 +1,7 @@
 """数据字典：系统字典规格、幂等预置、产品 / 项目引用检查。
 
 迁移里有 SYSTEM_DICTIONARIES 的副本（迁移不能 import 运行时代码）：产品六项在 0346，项目三项在 0348，
-改这里要同步改那边。
+项目代号在 0355，改这里要同步改那边。
 """
 
 from django.db import IntegrityError, transaction
@@ -96,6 +96,8 @@ SYSTEM_DICTIONARIES = (
         "description": "",
         "items": ("开拓型项目", "交付型项目", "预研型项目", "维护型项目"),
     },
+    # ---- 项目代号（0355）：Project.code 仍是字符串列，取值必须是这个字典里某个值的 label；无预置值 ----
+    {"key": "project_code", "name": "项目代号", "description": "", "items": ()},
 )
 SYSTEM_DICTIONARY_KEYS = tuple(spec["key"] for spec in SYSTEM_DICTIONARIES)
 
@@ -115,6 +117,9 @@ PROJECT_DICTIONARY_FIELD_KEYS = {
     "status": "project_status",
     "project_type": "project_type",
 }
+
+# Project.code 不是 FK：存的是 project_code 字典里某个值的 label，所以不进上面的映射（引用检查按 id 查会漏）。
+PROJECT_CODE_DICTIONARY_KEY = "project_code"
 
 
 def system_dictionary_name(workspace, spec):
@@ -174,6 +179,15 @@ def ensure_system_dictionaries(workspace):
         except IntegrityError:
             # 并发首次调用彼此撞 key / name：跳过，下次调用会补上，别让列表接口 500
             continue
+
+
+def is_project_code_in_dictionary(workspace_id, code):
+    """项目代号是否是本工作区 project_code 字典里的某个值（label 精确匹配）。"""
+    return DataDictionaryItem.objects.filter(
+        workspace_id=workspace_id,
+        dictionary__key=PROJECT_CODE_DICTIONARY_KEY,
+        label=code,
+    ).exists()
 
 
 def _reference_filter(field_keys, item_ids):

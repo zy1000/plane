@@ -167,6 +167,15 @@ export const WORKSPACE_SETTINGS = {
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
+  integrations: {
+    key: "integrations",
+    i18n_label: "workspace_settings.settings.integrations.title",
+    href: `/settings/integrations`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    // 与后端 GET external-integrations 的权限 key 一致；「立即同步」另看 WORKSPACE_SETTINGS_EDIT
+    permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/integrations`),
+  },
   "issue-type-categories": {
     key: "issue-type-categories",
     i18n_label: "workspace_settings.settings.issue_type_categories.title",

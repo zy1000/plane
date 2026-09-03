@@ -22,77 +22,24 @@ function FieldSkeleton(props: { span2?: boolean; height?: string }) {
   );
 }
 
-/** 分区骨架：标题 + 2 列 grid，与 FormSection / getFormGridClassName("settings") 同尺寸 */
-function SectionSkeleton(props: { children: React.ReactNode }) {
-  return (
-    <div className="space-y-3.5">
-      <div className="border-b border-subtle pb-2">
-        <Loader>
-          <Loader.Item height="16px" width="64px" />
-        </Loader>
-      </div>
-      <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">{props.children}</div>
-    </div>
-  );
-}
-
+/** 与 ProjectDetailsForm 同结构的两列平铺骨架：5 行字段 + 描述整行 + 可见性 / PMS + 时区 */
 export function ProjectDetailsFormLoader() {
   return (
-    <>
-      <div className="relative mt-6 h-44 w-full">
-        <Loader>
-          <Loader.Item height="auto" width="46px" />
+    <div className="my-8 space-y-8">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
+        {Array.from({ length: 10 }, (_, index) => (
+          <FieldSkeleton key={index} />
+        ))}
+        <FieldSkeleton span2 height="120px" />
+        <FieldSkeleton />
+        <FieldSkeleton />
+        <FieldSkeleton />
+      </div>
+      <div className="flex items-center justify-between py-2">
+        <Loader className="mt-2 w-full">
+          <Loader.Item height="34px" width="100px" />
         </Loader>
-        <div className="absolute bottom-4 flex w-full items-end justify-between gap-3 px-4">
-          <div className="flex flex-grow gap-3 truncate">
-            <div className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-lg bg-surface-2">
-              <Loader>
-                <Loader.Item height="46px" width="46px" />
-              </Loader>
-            </div>
-          </div>
-          <div className="flex flex-shrink-0 justify-center">
-            <Loader>
-              <Loader.Item height="32px" width="108px" />
-            </Loader>
-          </div>
-        </div>
       </div>
-      <div className="my-8 space-y-8">
-        {/* 基本信息：名称 / 项目 ID + 代号 / 可见性 + 所属BU / 描述 / PMS + 时区 */}
-        <SectionSkeleton>
-          <FieldSkeleton span2 />
-          <FieldSkeleton />
-          <FieldSkeleton />
-          <FieldSkeleton />
-          <FieldSkeleton />
-          <FieldSkeleton span2 height="120px" />
-          <FieldSkeleton />
-          <FieldSkeleton />
-        </SectionSkeleton>
-        {/* 分类 */}
-        <SectionSkeleton>
-          <FieldSkeleton />
-          <FieldSkeleton />
-          <FieldSkeleton />
-          <FieldSkeleton />
-        </SectionSkeleton>
-        {/* 团队 */}
-        <SectionSkeleton>
-          <FieldSkeleton />
-          <FieldSkeleton />
-        </SectionSkeleton>
-        {/* 计划 */}
-        <SectionSkeleton>
-          <FieldSkeleton />
-          <FieldSkeleton />
-        </SectionSkeleton>
-        <div className="flex items-center justify-between py-2">
-          <Loader className="mt-2 w-full">
-            <Loader.Item height="34px" width="100px" />
-          </Loader>
-        </div>
-      </div>
-    </>
+    </div>
   );
 }

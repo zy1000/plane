@@ -6,18 +6,12 @@
 
 import { useRouter } from "next/navigation";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { getAssetIdFromUrl, checkURLValidity } from "@plane/utils";
-// plane ui
-// helpers
 // hooks
 import useKeypress from "@/hooks/use-keypress";
 // plane web components
 import { CreateProjectForm } from "@/plane-web/components/projects/create/root";
 // plane web types
 import type { TProject } from "@/plane-web/types/projects";
-// services
-import { FileService } from "@/services/file.service";
-const fileService = new FileService();
 
 type Props = {
   isOpen: boolean;
@@ -31,14 +25,6 @@ type Props = {
 export function CreateProjectModal(props: Props) {
   const { isOpen, onClose, setToFavorite = false, workspaceSlug, data, templateId } = props;
   const router = useRouter();
-
-  const handleCoverImageStatusUpdate = async (projectId: string, coverImage: string) => {
-    if (!checkURLValidity(coverImage)) {
-      await fileService.updateBulkProjectAssetsUploadStatus(workspaceSlug, projectId, projectId, {
-        asset_ids: [getAssetIdFromUrl(coverImage)],
-      });
-    }
-  };
 
   /**
    * 创建完成直接关闭弹窗并跳转到新项目，不再展示特性选择步骤。
@@ -62,7 +48,6 @@ export function CreateProjectModal(props: Props) {
           setToFavorite={setToFavorite}
           workspaceSlug={workspaceSlug}
           onClose={onClose}
-          updateCoverImageStatus={handleCoverImageStatusUpdate}
           handleNextStep={handleProjectCreated}
           data={data}
           templateId={templateId}

@@ -91,6 +91,10 @@ app.conf.beat_schedule = {
         "task": "plane.bgtasks.cycle_overdue_task.scan_cycle_overdues",
         "schedule": crontab(hour=0, minute=10),  # UTC 04:10
     },
+    "sync-external-integrations-daily": {
+        "task": "plane.bgtasks.external_integration_sync_task.sync_external_integrations",
+        "schedule": crontab(hour=21, minute=0),  # UTC 21:00，北京 05:00
+    },
 }
 
 

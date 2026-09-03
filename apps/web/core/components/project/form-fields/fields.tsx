@@ -4,26 +4,28 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { Controller } from "react-hook-form";
 import type { Control } from "react-hook-form";
 import { Link } from "react-router";
-import { NETWORK_CHOICES, PROJECT_GRADE_OPTIONS, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
+import { NETWORK_CHOICES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { TDataDictionaryItemLite, TProjectGrade, TProjectProductType } from "@plane/types";
-import { CustomSelect, Input } from "@plane/ui";
+import { EmojiPicker, EmojiIconPickerTypes, Logo } from "@plane/propel/emoji-icon-picker";
+import type { TDataDictionaryItemLite } from "@plane/types";
+import { CustomSelect } from "@plane/ui";
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
 import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-section";
 import type { TFormVariant } from "@/components/common/form-section";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
 import type { TProject } from "@/plane-web/types/projects";
 import { getProjectFieldLabelKey, normalizeUserId } from "./constants";
 import type {
   TProjectDateFieldKey,
   TProjectDictionaryFieldKey,
+  TProjectFormDictionaryKey,
   TProjectFormFieldKey,
   TProjectMemberFieldKey,
 } from "./constants";
@@ -50,46 +52,83 @@ const useFieldHelpers = (variant: TFormVariant) => {
   return { t, styles, label, requiredMessage };
 };
 
-// ---- 项目代号 ----
-export function ProjectCodeField(props: TProjectFieldProps) {
-  const { control, variant, disabled = false, tabIndex } = props;
+// ---- 字典没有可选值（或该工作区根本没这个系统字典）：在必填错误之外再给一条「去数据字典里加」的引导 ----
+type TDictionaryEmptyHintProps = {
+  dictionaries: TProjectDictionaries;
+  name: TProjectFormDictionaryKey;
+};
+
+function DictionaryEmptyHint({ dictionaries, name }: TDictionaryEmptyHintProps) {
+  const { t } = useTranslation();
+  const dictionaryName = dictionaries.get(name)?.name ?? t(getProjectFieldLabelKey(name));
+  return (
+    <span className="flex flex-wrap items-center gap-x-1">
+      {t("workspace_projects.validation.dictionary_empty", { name: dictionaryName })}
+      <Link
+        to={`/${dictionaries.workspaceSlug}/settings/data-dictionaries`}
+        className="text-accent-primary hover:underline"
+      >
+        {t("workspace_projects.validation.manage_dictionaries")}
+      </Link>
+    </span>
+  );
+}
+
+// ---- 项目代号：字符串列，但取值来自 project_code 字典（存 label，不存 id）----
+type TProjectCodeFieldProps = TProjectFieldProps & {
+  dictionaries: TProjectDictionaries;
+};
+
+export function ProjectCodeField(props: TProjectCodeFieldProps) {
+  const { control, variant, disabled = false, tabIndex, dictionaries } = props;
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
+  const dictionary = dictionaries.get("code");
+  const empty = dictionaries.isEmpty("code");
+  const hint = empty ? (
+    <DictionaryEmptyHint dictionaries={dictionaries} name="code" />
+  ) : variant === "settings" ? (
+    t("workspace_projects.fields.code_hint")
+  ) : undefined;
   return (
     <Controller
       control={control}
       name="code"
-      rules={{
-        validate: (value) => Boolean((value ?? "").trim()) || requiredMessage("code"),
-        maxLength: {
-          value: 255,
-          message: t("workspace_projects.validation.max_length", { field: label("code"), max: 255 }),
-        },
+      rules={{ validate: (value) => Boolean((value ?? "").trim()) || requiredMessage("code") }}
+      render={({ field: { value, onChange }, fieldState: { error } }) => {
+        const code = (value ?? "").trim();
+        const selected = code ? dictionary?.items.find((item) => item.label === code) : undefined;
+        return (
+          <FormFieldShell
+            label={label("code")}
+            required
+            editable={!disabled}
+            error={error?.message}
+            hint={hint}
+            styles={styles}
+          >
+            <div className={styles.control}>
+              <DictionaryItemSelect
+                dictionary={dictionary}
+                // 下拉按 item id 选，表单值是 label，这里来回换算；
+                // 字典未加载或存量代号（0355 之前）不在字典里时，用 fallbackItem 把当前值原样显示出来
+                value={selected?.id ?? (code || null)}
+                onChange={(itemId) => onChange(dictionary?.items.find((item) => item.id === itemId)?.label ?? "")}
+                fallbackItem={
+                  code && !selected
+                    ? { id: code, label: code, dictionary: dictionary?.id ?? "", color: "", is_colored: false }
+                    : undefined
+                }
+                disabled={disabled || empty}
+                placeholder={t("workspace_projects.fields.select_placeholder")}
+                hasError={Boolean(error)}
+                isLoading={dictionaries.isLoading}
+                buttonClassName={styles.dropdownButton}
+                tabIndex={tabIndex}
+              />
+            </div>
+          </FormFieldShell>
+        );
       }}
-      render={({ field: { value, onChange, ref }, fieldState: { error } }) => (
-        <FormFieldShell
-          label={label("code")}
-          required
-          editable={!disabled}
-          error={error?.message}
-          hint={variant === "settings" ? t("workspace_projects.fields.code_hint") : undefined}
-          styles={styles}
-        >
-          <Input
-            id="project-code"
-            name="code"
-            type="text"
-            ref={ref}
-            value={value ?? ""}
-            onChange={onChange}
-            maxLength={255}
-            hasError={Boolean(error)}
-            placeholder={t("workspace_projects.fields.code_placeholder")}
-            className={styles.input}
-            disabled={disabled}
-            tabIndex={tabIndex}
-          />
-        </FormFieldShell>
-      )}
     />
   );
 }
@@ -160,18 +199,8 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
   const dictionary = dictionaries.get(name);
   const empty = dictionaries.isEmpty(name);
-  // 字典没有可选值（或该工作区根本没这个系统字典）：禁用下拉，在必填错误之外再给一条「去数据字典里加」的引导
-  const emptyHint = empty ? (
-    <span className="flex flex-wrap items-center gap-x-1">
-      {t("workspace_projects.validation.dictionary_empty", { name: dictionary?.name ?? label(name) })}
-      <Link
-        to={`/${dictionaries.workspaceSlug}/settings/data-dictionaries`}
-        className="text-accent-primary hover:underline"
-      >
-        {t("workspace_projects.validation.manage_dictionaries")}
-      </Link>
-    </span>
-  ) : undefined;
+  // 字典没有可选值时禁用下拉并给引导
+  const emptyHint = empty ? <DictionaryEmptyHint dictionaries={dictionaries} name={name} /> : undefined;
   return (
     <Controller
       control={control}
@@ -294,96 +323,48 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
   );
 }
 
-// ---- 项目等级 ----
-type TProjectChoiceFieldProps = TProjectFieldProps & {
-  /** 创建时必填；设置页保留「未设置」 */
-  required: boolean;
-};
+// ---- 项目 logo（emoji / icon）----
+type TProjectLogoFieldProps = Pick<TProjectFieldProps, "control" | "disabled">;
 
-export function ProjectGradeField(props: TProjectChoiceFieldProps) {
-  const { control, variant, disabled = false, tabIndex, required } = props;
-  const { t, styles, label } = useFieldHelpers(variant);
+/** 名称输入框左侧的 logo 选择器，创建弹窗与设置页共用；按钮与 h-10 控件同高 */
+export function ProjectLogoField(props: TProjectLogoFieldProps) {
+  const { control, disabled = false } = props;
+  const [isOpen, setIsOpen] = useState(false);
   return (
     <Controller
       control={control}
-      name="grade"
-      rules={required ? { required: t("project_grade_required") } : undefined}
-      render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormFieldShell label={label("grade")} required={required} editable={!disabled} error={error?.message} styles={styles}>
-          <CustomSelect
-            value={value ?? ""}
-            onChange={(val: string) => onChange(val === "" ? null : (val as TProjectGrade))}
-            label={
-              value ? (
-                <ProjectGradeBadge grade={value} />
-              ) : (
-                <span className="text-placeholder">{t("select_project_grade")}</span>
-              )
-            }
-            className="w-full"
-            buttonClassName={cn(styles.select, error && "!border-danger-strong")}
-            input
-            disabled={disabled}
-            tabIndex={tabIndex}
-          >
-            {!required && (
-              <CustomSelect.Option value="">{t("workspace_projects.fields.not_set")}</CustomSelect.Option>
-            )}
-            {PROJECT_GRADE_OPTIONS.map((option) => (
-              <CustomSelect.Option key={option} value={option}>
-                <ProjectGradeBadge grade={option} />
-              </CustomSelect.Option>
-            ))}
-          </CustomSelect>
-        </FormFieldShell>
-      )}
-    />
-  );
-}
+      name="logo_props"
+      render={({ field: { value, onChange } }) => (
+        <EmojiPicker
+          iconType="material"
+          isOpen={isOpen}
+          handleToggle={(val: boolean) => setIsOpen(val)}
+          className="flex shrink-0 items-center justify-center"
+          buttonClassName="flex items-center justify-center"
+          label={
+            <span className="grid h-10 w-10 place-items-center rounded-md border border-subtle bg-layer-2">
+              <Logo logo={value} size={18} />
+            </span>
+          }
+          onChange={(val: any) => {
+            let logoValue = {};
 
-// ---- 产品类型（硬编码枚举，与字典型的「项目类型」是两回事）----
-export function ProjectProductTypeField(props: TProjectChoiceFieldProps) {
-  const { control, variant, disabled = false, tabIndex, required } = props;
-  const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
-  return (
-    <Controller
-      control={control}
-      name="product_type"
-      rules={required ? { required: requiredMessage("product_type") } : undefined}
-      render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormFieldShell
-          label={label("product_type")}
-          required={required}
-          editable={!disabled}
-          error={error?.message}
-          styles={styles}
-        >
-          <CustomSelect
-            value={value ?? ""}
-            onChange={(val: string) => onChange(val === "" ? null : (val as TProjectProductType))}
-            label={
-              value ? (
-                <span>{value}</span>
-              ) : (
-                <span className="text-placeholder">{t("workspace_projects.fields.select_placeholder")}</span>
-              )
-            }
-            className="w-full"
-            buttonClassName={cn(styles.select, error && "!border-danger-strong")}
-            input
-            disabled={disabled}
-            tabIndex={tabIndex}
-          >
-            {!required && (
-              <CustomSelect.Option value="">{t("workspace_projects.fields.not_set")}</CustomSelect.Option>
-            )}
-            {PROJECT_PRODUCT_TYPE_OPTIONS.map((option) => (
-              <CustomSelect.Option key={option} value={option}>
-                {option}
-              </CustomSelect.Option>
-            ))}
-          </CustomSelect>
-        </FormFieldShell>
+            if (val?.type === "emoji")
+              logoValue = {
+                value: val.value,
+              };
+            else if (val?.type === "icon") logoValue = val.value;
+
+            onChange({
+              in_use: val?.type,
+              [val?.type]: logoValue,
+            });
+            setIsOpen(false);
+          }}
+          defaultIconColor={value?.in_use && value.in_use === "icon" ? value.icon?.color : undefined}
+          defaultOpen={value?.in_use && value.in_use === "emoji" ? EmojiIconPickerTypes.EMOJI : EmojiIconPickerTypes.ICON}
+          disabled={disabled}
+        />
       )}
     />
   );

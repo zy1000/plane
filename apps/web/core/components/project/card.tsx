@@ -29,7 +29,6 @@ import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
-import { CoverImage } from "@/components/common/cover-image";
 import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { DeleteProjectModal } from "./delete-project-modal";
 import { JoinProjectModal } from "./join-project-modal";
@@ -218,61 +217,51 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
         )}
       >
         <ContextMenu parentRef={projectCardRef} items={MENU_ITEMS} />
-        <div className="relative h-[118px] w-full rounded-t">
-          <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/60 to-transparent" />
-
-          <CoverImage
-            src={project.cover_image_url}
-            alt={project.name}
-            className="absolute top-0 left-0 h-full w-full rounded-t"
-          />
-
-          <div className="absolute bottom-4 z-[1] flex h-10 w-full items-center justify-between gap-3 px-4">
-            <div className="flex flex-grow items-center gap-2.5 truncate">
-              <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-sm bg-white/10">
-                <Logo logo={project.logo_props} size={18} />
-              </div>
-
-              <div className="flex w-full flex-col justify-between gap-0.5 truncate">
-                <h3 className="truncate font-semibold text-on-color">{project.name}</h3>
-                <span className="flex items-center gap-1.5">
-                  <p className="text-11 font-medium text-on-color">{project.identifier} </p>
-                  {project.network === 0 && <LockIcon className="h-2.5 w-2.5 text-on-color" />}
-                </span>
-              </div>
+        <div className="flex h-[68px] w-full items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 flex-grow items-center gap-2.5">
+            <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-md border border-subtle bg-layer-1">
+              <Logo logo={project.logo_props} size={18} />
             </div>
 
-            {!isArchived && (
-              <div data-prevent-progress className="flex h-full flex-shrink-0 items-center gap-2">
-                <button
-                  className="flex h-6 w-6 items-center justify-center rounded-sm bg-white/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    handleCopyText();
-                  }}
-                >
-                  <LinkIcon className="h-3 w-3 text-on-color" />
-                </button>
-                <FavoriteStar
-                  buttonClassName="h-6 w-6 bg-white/10 rounded-sm"
-                  iconClassName={cn("h-3 w-3", {
-                    "text-on-color": !project.is_favorite,
-                  })}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (project.is_favorite) handleRemoveFromFavorites();
-                    else handleAddToFavorites();
-                  }}
-                  selected={!!project.is_favorite}
-                />
-              </div>
-            )}
+            <div className="flex min-w-0 flex-col justify-between gap-0.5">
+              <h3 className="truncate text-14 font-semibold text-primary">{project.name}</h3>
+              <span className="flex items-center gap-1.5">
+                <p className="text-11 font-medium text-tertiary">{project.identifier} </p>
+                {project.network === 0 && <LockIcon className="h-2.5 w-2.5 text-tertiary" />}
+              </span>
+            </div>
           </div>
+
+          {!isArchived && (
+            <div data-prevent-progress className="flex flex-shrink-0 items-center gap-1">
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-sm text-placeholder hover:bg-layer-1 hover:text-secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleCopyText();
+                }}
+              >
+                <LinkIcon className="h-3 w-3" />
+              </button>
+              <FavoriteStar
+                buttonClassName="h-6 w-6 rounded-sm hover:bg-layer-1"
+                iconClassName={cn("h-3 w-3", {
+                  "text-placeholder": !project.is_favorite,
+                })}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (project.is_favorite) handleRemoveFromFavorites();
+                  else handleAddToFavorites();
+                }}
+                selected={!!project.is_favorite}
+              />
+            </div>
+          )}
         </div>
 
-        <div className="flex h-[104px] w-full flex-col justify-between rounded-b-sm p-4">
+        <div className="flex h-[104px] w-full flex-col justify-between rounded-b-sm p-4 pt-0">
           <p className="line-clamp-2 break-words text-13 text-tertiary">
             {project.description && project.description.trim() !== ""
               ? project.description

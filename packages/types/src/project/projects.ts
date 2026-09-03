@@ -17,8 +17,6 @@ export enum EUserProjectRoles {
   GUEST = 5,
 }
 
-/** 项目等级（与后端 Project.grade 一致） */
-export type TProjectGrade = "P+" | "P" | "A" | "B" | "C";
 /** 项目产品类型（与后端 Project.product_type choices 一致） */
 export type TProjectProductType =
   | "电表"
@@ -88,8 +86,6 @@ export interface IPartialProject {
   updated_by?: string;
   intake_count?: number;
   description_html?: string | null;
-  /** 项目等级（列表/详情接口可能返回） */
-  grade?: TProjectGrade | null;
   /** 项目产品类型（列表/详情接口可能返回） */
   product_type?: TProjectProductType | null;
   /** 项目关联的产品（两个列表接口返回；与 product_type 无关） */

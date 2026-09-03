@@ -22,6 +22,7 @@ export type TWorkspaceSettingsTabs =
   | "issue-type-categories"
   | "requirement-types"
   | "data-dictionaries"
+  | "integrations"
   | "changelog";
 export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;
