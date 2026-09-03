@@ -50,7 +50,11 @@ import {
 } from "@/components/qa/plans/plan-case-display-filters";
 import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
-import { PlanCaseGroupTree } from "@/components/qa/plans/plan-case-group-tree";
+import {
+  PLAN_CASE_PRIORITY_TAG_COLOR,
+  PLAN_CASE_TYPE_TAG_COLOR,
+  PlanCaseGroupTree,
+} from "@/components/qa/plans/plan-case-group-tree";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
 import {
@@ -1130,8 +1134,8 @@ export default function PlanCasesPage() {
                         projectId={projectId ? String(projectId) : undefined}
                         bulkAssigneeUpdating={bulkAssigneeUpdating}
                         renderResultTag={renderResultTag}
-                        renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
-                        renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
+                        renderTypeTag={(value) => renderEnumTag("case_type", value, PLAN_CASE_TYPE_TAG_COLOR)}
+                        renderPriorityTag={(value) => renderEnumTag("case_priority", value, PLAN_CASE_PRIORITY_TAG_COLOR)}
                         renderUpdatedAt={(value) => (value ? formatDateTime(value) : "-")}
                       />
                     </div>

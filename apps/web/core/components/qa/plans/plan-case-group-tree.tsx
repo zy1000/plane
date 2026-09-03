@@ -7,8 +7,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Tree } from "antd";
-import { Flag, LayoutList, Tag } from "lucide-react";
+import { Tag, Tree } from "antd";
+import { CircleAlert, CircleCheck, CircleDashed, CircleX, Flag, LayoutList, Tag as TagIcon } from "lucide-react";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import type { TPlanGroupTree, TPlanGroupTreeNode } from "@/services/qa/plan.service";
 
@@ -18,32 +18,44 @@ type Props = {
   /** "root" | "<kind>:<枚举值>" */
   selectedKey: string;
   onSelect: (key: string) => void;
-  /** 执行结果 → 颜色名（green/red/gold/gray），用于结果节点的圆点 */
+  /** 执行结果 → 颜色名（green/red/gold/gray），用于结果节点的图标与 Tag */
   resultColors?: Record<string, string>;
 };
 
-const RESULT_DOT_CLASS: Record<string, string> = {
-  green: "bg-green-500",
-  red: "bg-red-500",
-  gold: "bg-yellow-500",
-  gray: "bg-gray-400",
+/** 类型 / 优先级 Tag 配色，列表列与分组树共用 */
+export const PLAN_CASE_TYPE_TAG_COLOR = "magenta";
+export const PLAN_CASE_PRIORITY_TAG_COLOR = "warning";
+
+/** 执行结果颜色名 → 节点图标：成功 / 失败 / 阻塞 / 未执行、无效 */
+const RESULT_ICONS: Record<string, ReactNode> = {
+  green: <CircleCheck size={14} />,
+  red: <CircleX size={14} />,
+  gold: <CircleAlert size={14} />,
+  gray: <CircleDashed size={14} />,
 };
 
-const renderRow = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => (
+const renderRow = (label: ReactNode, icon: ReactNode, count?: number) => (
   <div className="flex w-full items-center justify-between gap-2">
     <div className="flex items-center gap-2">
       <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
-      <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+      {label}
     </div>
     {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
   </div>
 );
 
 const renderNodeIcon = (node: TPlanGroupTreeNode, resultColors?: Record<string, string>) => {
-  if (node.kind === "type") return <Tag size={14} />;
+  if (node.kind === "type") return <TagIcon size={14} />;
   if (node.kind === "priority") return <Flag size={14} />;
-  const dotClass = RESULT_DOT_CLASS[resultColors?.[node.id] || ""] || RESULT_DOT_CLASS.gray;
-  return <span className={`inline-block h-2 w-2 rounded-full ${dotClass}`} />;
+  return RESULT_ICONS[resultColors?.[node.id] || ""] || RESULT_ICONS.gray;
+};
+
+/** 与列表里对应列的 Tag 配色一致；执行结果的 gray 不是 antd 预设色，退回 default */
+const getNodeTagColor = (node: TPlanGroupTreeNode, resultColors?: Record<string, string>) => {
+  if (node.kind === "type") return PLAN_CASE_TYPE_TAG_COLOR;
+  if (node.kind === "priority") return PLAN_CASE_PRIORITY_TAG_COLOR;
+  const color = resultColors?.[node.id] || "gray";
+  return color === "gray" ? "default" : color;
 };
 
 /** 计划用例「按类型 / 优先级 / 执行结果分组」的左侧树：全部 / 各枚举值（含数量） */
@@ -54,10 +66,20 @@ export const PlanCaseGroupTree = ({ tree, loading = false, selectedKey, onSelect
   const treeData = [
     {
       key: "root",
-      title: renderRow(tree.name || "全部", <LayoutList size={14} />, tree.count, true),
+      title: renderRow(
+        <span className="text-sm font-medium text-primary">{tree.name || "全部"}</span>,
+        <LayoutList size={14} />,
+        tree.count
+      ),
       children: (tree.children || []).map((node) => ({
         key: `${node.kind}:${node.id}`,
-        title: renderRow(node.name || "-", renderNodeIcon(node, resultColors), node.count),
+        title: renderRow(
+          <Tag color={getNodeTagColor(node, resultColors)} className="m-0">
+            {node.name || "-"}
+          </Tag>,
+          renderNodeIcon(node, resultColors),
+          node.count
+        ),
       })),
     },
   ];
