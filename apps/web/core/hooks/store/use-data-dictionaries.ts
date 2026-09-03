@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  TBulkCreateDataDictionaryItemsResponse,
   TCreateDataDictionaryItemPayload,
   TCreateDataDictionaryPayload,
   TDataDictionary,
@@ -187,6 +188,28 @@ export const useDataDictionaries = (workspaceSlug: string | undefined, options?:
     [patchDictionary, workspaceSlug]
   );
 
+  const bulkCreateItems = useCallback(
+    async (dictionaryId: string, labels: string[]): Promise<TBulkCreateDataDictionaryItemsResponse> => {
+      if (!workspaceSlug) throw new Error("Workspace is required.");
+      setIsMutating(true);
+      try {
+        const response = await dataDictionaryService.bulkCreateItems(workspaceSlug, dictionaryId, labels);
+        // 后端回查出来的 created 可能含并发单条插入的同名项：按 id 去重再合并
+        patchDictionary(dictionaryId, (dictionary) => {
+          const known = new Set(dictionary.items.map((item) => item.id));
+          return {
+            ...dictionary,
+            items: sortItems([...dictionary.items, ...response.created.filter((item) => !known.has(item.id))]),
+          };
+        });
+        return response;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [patchDictionary, workspaceSlug]
+  );
+
   /**
    * 拖拽排序：`orderedItems` 是拖完后的完整顺序，`movedItem` 是被拖的那一项（Sortable.onChange 的两个参数原样传入）。
    * 乐观更新本地顺序；中点算不出来时对整个字典按 (i+1)*STEP 归一化；失败则重新拉取回滚。
@@ -236,6 +259,7 @@ export const useDataDictionaries = (workspaceSlug: string | undefined, options?:
     createItem,
     updateItem,
     deleteItem,
+    bulkCreateItems,
     reorderItem,
   };
 };

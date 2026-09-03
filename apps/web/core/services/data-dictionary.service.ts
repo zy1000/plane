@@ -1,9 +1,11 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
+  TBulkCreateDataDictionaryItemsResponse,
   TCreateDataDictionaryItemPayload,
   TCreateDataDictionaryPayload,
   TDataDictionary,
   TDataDictionaryItem,
+  TDataDictionaryUsageResponse,
   TUpdateDataDictionaryItemPayload,
   TUpdateDataDictionaryPayload,
 } from "@plane/types";
@@ -78,6 +80,28 @@ export class DataDictionaryService extends APIService {
 
   async deleteItem(workspaceSlug: string, dictionaryId: string, itemId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/data-dictionaries/${dictionaryId}/items/${itemId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 设置页「引用」列：每个值被多少活跃产品 / 项目引用 */
+  async getUsage(workspaceSlug: string, dictionaryId: string): Promise<TDataDictionaryUsageResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/data-dictionaries/${dictionaryId}/usage/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 多行粘贴批量新增：重名走 skipped 不报错 */
+  async bulkCreateItems(
+    workspaceSlug: string,
+    dictionaryId: string,
+    labels: string[]
+  ): Promise<TBulkCreateDataDictionaryItemsResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/data-dictionaries/${dictionaryId}/items/bulk/`, { labels })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -1,121 +1,170 @@
-import { useEffect, useState } from "react";
-import { GripVertical, Trash2 } from "lucide-react";
-import { DEFAULT_DATA_DICTIONARY_COLOR } from "@plane/constants";
+import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TDataDictionaryItem, TUpdateDataDictionaryItemPayload } from "@plane/types";
-import { cn } from "@plane/utils";
-import { DictionaryColorDot } from "@/components/data-dictionaries";
+import { Tooltip } from "@plane/propel/tooltip";
+import type { TDataDictionaryItem, TDataDictionaryItemUsage, TDataDictionaryUsageEntity } from "@plane/types";
+import { Loader } from "@plane/ui";
+import { cn, renderFormattedDate } from "@plane/utils";
+import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { DictionaryColorPicker } from "./dictionary-color-picker";
-import { getDataDictionaryFieldErrorI18nKey } from "./helpers";
+import { DictionaryItemForm } from "./dictionary-item-form";
+import type { TDictionaryItemFormValue } from "./dictionary-item-form";
+import { ITEM_ROW_GRID } from "./dictionary-items-grid";
 
 type Props = {
   item: TDataDictionaryItem;
-  index: number;
+  rowNumber: number;
+  isColored: boolean;
   canEdit: boolean;
-  /** 字典开了「彩色显示」才渲染色点 */
-  showColor: boolean;
-  onUpdate: (item: TDataDictionaryItem, payload: TUpdateDataDictionaryItemPayload) => Promise<unknown>;
+  /** 手动顺序且无搜索、无行在编辑时才渲染拖柄 */
+  canDrag: boolean;
+  isEditing: boolean;
+  isHighlighted: boolean;
+  usage: TDataDictionaryItemUsage | undefined;
+  usageEntity: TDataDictionaryUsageEntity;
+  usageLoading: boolean;
+  usageError: boolean;
+  isLabelTaken: (label: string, exceptId: string) => boolean;
+  onStartEdit: (item: TDataDictionaryItem) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (item: TDataDictionaryItem, value: TDictionaryItemFormValue) => Promise<unknown>;
+  onChangeColor: (item: TDataDictionaryItem, color: string) => Promise<unknown>;
   onDelete: (item: TDataDictionaryItem) => void;
 };
 
+const I18N = "workspace_settings.settings.data_dictionaries";
+const ICON_BUTTON =
+  "grid size-7 place-items-center rounded text-tertiary transition-colors hover:bg-layer-2 hover:text-primary";
+
 export function DictionaryItemRow(props: Props) {
-  const { item, index, canEdit, showColor, onUpdate, onDelete } = props;
+  const {
+    item,
+    rowNumber,
+    isColored,
+    canEdit,
+    canDrag,
+    isEditing,
+    isHighlighted,
+    usage,
+    usageEntity,
+    usageLoading,
+    usageError,
+    isLabelTaken,
+    onStartEdit,
+    onCancelEdit,
+    onSaveEdit,
+    onChangeColor,
+    onDelete,
+  } = props;
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(item.label);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setDraft(item.label);
-    setError(null);
-  }, [item.label]);
+  if (isEditing) {
+    return (
+      <DictionaryItemForm
+        mode="edit"
+        rowNumber={rowNumber}
+        initialLabel={item.label}
+        initialColor={item.color}
+        showColor={isColored}
+        isLabelTaken={(label) => isLabelTaken(label, item.id)}
+        onSubmit={(value) => onSaveEdit(item, value)}
+        onCancel={onCancelEdit}
+      />
+    );
+  }
 
-  const commit = async () => {
-    const nextLabel = draft.trim();
-    if (!nextLabel) {
-      setError(t("workspace_settings.settings.data_dictionaries.errors.label_required"));
-      return;
+  const blocking = usage?.blocking ?? false;
+
+  const renderUsage = () => {
+    if (usageLoading) {
+      return (
+        <Loader className="flex">
+          <Loader.Item height="12px" width="56px" />
+        </Loader>
+      );
     }
-    setError(null);
-    if (nextLabel === item.label) {
-      setDraft(item.label);
-      return;
-    }
-    try {
-      await onUpdate(item, { label: nextLabel });
-    } catch (requestError) {
-      const i18nKey = getDataDictionaryFieldErrorI18nKey(requestError);
-      if (i18nKey) setError(t(i18nKey));
-      else setDraft(item.label);
-    }
+    if (usageError) return <span className="text-placeholder">{t(`${I18N}.table.usage_unavailable`)}</span>;
+    const count = usage?.count ?? 0;
+    // 没有引用不占位，留空即可
+    if (!usageEntity || count === 0) return null;
+    return (
+      <span className="text-secondary">
+        {t(`${I18N}.table.${usageEntity === "product" ? "usage_products" : "usage_projects"}`, { count })}
+      </span>
+    );
   };
 
   return (
-    <div>
-      <div
-        className={cn(
-          "group flex items-center gap-1.5 rounded-md border bg-surface-1 p-1.5 focus-within:border-accent-strong",
-          error ? "border-danger-strong" : "border-subtle"
-        )}
-      >
-        {canEdit && (
+    <div
+      className={cn(
+        ITEM_ROW_GRID,
+        "group h-10 border-b border-subtle text-13 transition-colors hover:bg-layer-1-hover",
+        isHighlighted && "bg-accent-primary/10"
+      )}
+      onDoubleClick={() => {
+        if (canEdit) onStartEdit(item);
+      }}
+    >
+      <span className="flex justify-center">
+        {canDrag && (
           <GripVertical
             data-sortable-drag-handle
-            className="size-3.5 shrink-0 cursor-grab text-placeholder active:cursor-grabbing"
-            aria-label={t("workspace_settings.settings.data_dictionaries.detail.drag_hint")}
+            className="size-3.5 cursor-grab text-placeholder active:cursor-grabbing"
+            aria-label={t(`${I18N}.detail.drag_hint`)}
           />
         )}
-        <span className="grid size-5 shrink-0 place-items-center rounded bg-layer-2 text-10 font-medium text-secondary">
-          {index + 1}
-        </span>
-        {showColor &&
-          (canEdit ? (
-            <DictionaryColorPicker
-              value={item.color}
-              previewLabel={item.label}
-              // 改色失败时 root 已 toast，这里没有表单可承接
-              onChange={(color) => onUpdate(item, { color }).catch(() => undefined)}
-            />
-          ) : (
-            <span className="grid size-6 shrink-0 place-items-center">
-              <DictionaryColorDot color={item.color || DEFAULT_DATA_DICTIONARY_COLOR} />
-            </span>
-          ))}
-        <input
-          value={draft}
-          maxLength={255}
-          readOnly={!canEdit}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            if (error) setError(null);
-          }}
-          onBlur={() => {
-            if (canEdit) void commit();
-          }}
-          onKeyDown={(event) => {
-            if (!canEdit) return;
-            if (event.key === "Enter") {
-              event.preventDefault();
-              // 交给 onBlur 统一提交，避免 Enter + 失焦提交两次
-              event.currentTarget.blur();
-            } else if (event.key === "Escape") {
-              setDraft(item.label);
-              setError(null);
-            }
-          }}
-          className="h-7 min-w-0 flex-1 bg-transparent px-1 text-12 text-primary outline-none"
+      </span>
+      <span className="text-12 tabular-nums text-tertiary">{rowNumber}</span>
+      <span className="min-w-0 truncate font-medium text-primary">
+        <DictionaryValueTag
+          label={item.label}
+          color={resolveDictionaryItemColor(item, { is_colored: isColored })}
+          size="md"
         />
+      </span>
+      <span className="text-12 tabular-nums">{renderUsage()}</span>
+      <span className="text-12 tabular-nums text-tertiary">
+        {renderFormattedDate(item.created_at, "yyyy-MM-dd")}
+      </span>
+      <span className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {canEdit && (
-          <button
-            type="button"
-            onClick={() => onDelete(item)}
-            className="grid size-7 shrink-0 place-items-center rounded text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100"
-            aria-label={t("workspace_settings.settings.data_dictionaries.detail.delete_value")}
-          >
-            <Trash2 className="size-3.5" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => onStartEdit(item)}
+              className={ICON_BUTTON}
+              aria-label={t(`${I18N}.table.edit_value`)}
+              title={t(`${I18N}.table.edit_value`)}
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            {isColored && (
+              <DictionaryColorPicker
+                value={item.color}
+                previewLabel={item.label}
+                // 改色失败时 root 已 toast，这里没有表单可承接
+                onChange={(color) => void onChangeColor(item, color).catch(() => undefined)}
+              />
+            )}
+            <Tooltip disabled={!blocking} tooltipContent={t(`${I18N}.table.delete_blocked`)} position="left">
+              <span className="inline-flex">
+                <button
+                  type="button"
+                  disabled={blocking}
+                  onClick={() => onDelete(item)}
+                  className={cn(
+                    ICON_BUTTON,
+                    "hover:bg-danger-subtle hover:text-danger-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-tertiary"
+                  )}
+                  aria-label={t(`${I18N}.detail.delete_value`)}
+                  title={t(`${I18N}.detail.delete_value`)}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </span>
+            </Tooltip>
+          </>
         )}
-      </div>
-      {error && <p className="mt-1 px-1 text-10 leading-4 text-danger-primary">{error}</p>}
+      </span>
     </div>
   );
 }

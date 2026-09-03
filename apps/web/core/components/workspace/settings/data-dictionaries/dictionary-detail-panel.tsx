@@ -1,21 +1,25 @@
-import { useState } from "react";
-import { BookText, Trash2 } from "lucide-react";
-import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
+import { useCallback, useState } from "react";
 import type {
+  TBulkCreateDataDictionaryItemsResponse,
   TCreateDataDictionaryItemPayload,
   TDataDictionary,
   TDataDictionaryItem,
   TUpdateDataDictionaryItemPayload,
   TUpdateDataDictionaryPayload,
 } from "@plane/types";
-import { Input, TextArea } from "@plane/ui";
-import { DictionaryItemsEditor } from "./dictionary-items-editor";
-import { getDataDictionaryFieldErrorI18nKey } from "./helpers";
+import type { useDictionaryUsage } from "@/hooks/store/use-dictionary-usage";
+import { DictionaryBulkAddModal } from "./dictionary-bulk-add-modal";
+import { DictionaryEditModal } from "./dictionary-edit-modal";
+import { DictionaryHeader } from "./dictionary-header";
+import type { TDictionaryItemFormValue } from "./dictionary-item-form";
+import { DictionaryItemsTable } from "./dictionary-items-table";
+import { DictionaryItemsToolbar } from "./dictionary-items-toolbar";
+import { useDictionaryItemsView } from "./use-dictionary-items-view";
 
 type Props = {
-  dictionary: TDataDictionary | null;
+  dictionary: TDataDictionary;
   canEdit: boolean;
+  usage: ReturnType<typeof useDictionaryUsage>;
   onUpdate: (dictionaryId: string, payload: TUpdateDataDictionaryPayload) => Promise<TDataDictionary>;
   onDelete: (dictionary: TDataDictionary) => void;
   onCreateItem: (dictionaryId: string, payload: TCreateDataDictionaryItemPayload) => Promise<TDataDictionaryItem>;
@@ -25,6 +29,7 @@ type Props = {
     payload: TUpdateDataDictionaryItemPayload
   ) => Promise<TDataDictionaryItem>;
   onDeleteItem: (item: TDataDictionaryItem) => void;
+  onBulkCreateItems: (dictionaryId: string, labels: string[]) => Promise<TBulkCreateDataDictionaryItemsResponse>;
   onReorder: (
     dictionaryId: string,
     orderedItems: TDataDictionaryItem[],
@@ -32,119 +37,145 @@ type Props = {
   ) => Promise<void>;
 };
 
-/** 调用方用 key={dictionary.id} 挂载，切换字典时靠重新挂载重置草稿，不用 effect 同步 */
+/**
+ * 右栏：头部 / 工具栏 / 值表格。调用方用 key={dictionary.id} 挂载，切换字典时靠重新挂载把搜索、分页、编辑态归零。
+ * 编辑行与新增行互斥，同一时刻只有一个。
+ */
 export function DictionaryDetailPanel(props: Props) {
-  const { dictionary, canEdit, onUpdate, onDelete, onCreateItem, onUpdateItem, onDeleteItem, onReorder } = props;
-  const { t } = useTranslation();
-  const [draftName, setDraftName] = useState(dictionary?.name ?? "");
-  const [draftDescription, setDraftDescription] = useState(dictionary?.description ?? "");
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const { dictionary, canEdit, usage, onUpdate, onDelete, onCreateItem, onUpdateItem, onDeleteItem, onBulkCreateItems, onReorder } =
+    props;
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [addFocusToken, setAddFocusToken] = useState(0);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
 
-  if (!dictionary) {
-    return (
-      <div className="flex h-full min-h-60 flex-col items-center justify-center rounded-lg border border-dashed border-subtle px-6 py-12 text-center">
-        <span className="grid size-10 place-items-center rounded-lg bg-layer-2 text-secondary">
-          <BookText className="size-5" />
-        </span>
-        <p className="mt-3 text-12 text-secondary">
-          {t("workspace_settings.settings.data_dictionaries.detail.empty_selection")}
-        </p>
-      </div>
-    );
-  }
+  const view = useDictionaryItemsView(dictionary.items, { canEdit, isEditing: editingId !== null || isAdding });
+  // view 每次渲染都是新对象，回调只依赖用到的两个稳定方法，免得表格里的 Sortable 反复重订阅
+  const { revealItem, toFullOrder } = view;
 
-  const isDirty = draftName !== dictionary.name || draftDescription !== (dictionary.description ?? "");
+  const isLabelTaken = useCallback(
+    (label: string, exceptId?: string) => dictionary.items.some((item) => item.id !== exceptId && item.label === label),
+    [dictionary.items]
+  );
 
-  const handleSave = async () => {
-    const name = draftName.trim();
-    if (!name) {
-      setNameError(t("workspace_settings.settings.data_dictionaries.errors.name_required"));
+  const startEdit = useCallback((item: TDataDictionaryItem) => {
+    setIsAdding(false);
+    setEditingId(item.id);
+  }, []);
+
+  const saveEdit = useCallback(
+    async (item: TDataDictionaryItem, value: TDictionaryItemFormValue) => {
+      const payload: TUpdateDataDictionaryItemPayload = { label: value.label };
+      if (dictionary.is_colored) payload.color = value.color;
+      await onUpdateItem(dictionary.id, item.id, payload);
+      setEditingId(null);
+    },
+    [dictionary.id, dictionary.is_colored, onUpdateItem]
+  );
+
+  const changeColor = useCallback(
+    (item: TDataDictionaryItem, color: string) => onUpdateItem(dictionary.id, item.id, { color }),
+    [dictionary.id, onUpdateItem]
+  );
+
+  const openAdd = useCallback(() => {
+    if (isAdding) {
+      setAddFocusToken((token) => token + 1);
       return;
     }
-    setIsSaving(true);
-    setNameError(null);
-    try {
-      const updated = await onUpdate(dictionary.id, { name, description: draftDescription.trim() || null });
-      setDraftName(updated.name);
-      setDraftDescription(updated.description ?? "");
-    } catch (requestError) {
-      const i18nKey = getDataDictionaryFieldErrorI18nKey(requestError);
-      if (i18nKey) setNameError(t(i18nKey));
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    setEditingId(null);
+    setIsAdding(true);
+  }, [isAdding]);
+
+  const createItem = useCallback(
+    async (value: TDictionaryItemFormValue) => {
+      const payload: TCreateDataDictionaryItemPayload = { label: value.label };
+      if (dictionary.is_colored && value.color) payload.color = value.color;
+      const created = await onCreateItem(dictionary.id, payload);
+      revealItem(created);
+    },
+    [dictionary.id, dictionary.is_colored, onCreateItem, revealItem]
+  );
+
+  const bulkCreate = useCallback(
+    async (labels: string[]) => {
+      const response = await onBulkCreateItems(dictionary.id, labels);
+      if (response.created[0]) revealItem(response.created[0]);
+      return response;
+    },
+    [dictionary.id, onBulkCreateItems, revealItem]
+  );
+
+  const pageReorder = useCallback(
+    (pageOrdered: TDataDictionaryItem[], moved: TDataDictionaryItem) => {
+      void onReorder(dictionary.id, toFullOrder(pageOrdered), moved);
+    },
+    [dictionary.id, onReorder, toFullOrder]
+  );
 
   return (
-    <div className="flex flex-col gap-6 rounded-lg border border-subtle bg-surface-1 p-5">
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-12 font-medium text-secondary" htmlFor="data-dictionary-name">
-            {t("workspace_settings.settings.data_dictionaries.detail.name_label")}
-          </label>
-          <Input
-            id="data-dictionary-name"
-            value={draftName}
-            maxLength={255}
-            disabled={!canEdit}
-            hasError={Boolean(nameError)}
-            placeholder={t("workspace_settings.settings.data_dictionaries.detail.name_placeholder")}
-            onChange={(event) => {
-              setDraftName(event.target.value);
-              if (nameError) setNameError(null);
-            }}
-            className="w-full"
-          />
-          {nameError && <p className="text-10 leading-4 text-danger-primary">{nameError}</p>}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-12 font-medium text-secondary" htmlFor="data-dictionary-description">
-            {t("workspace_settings.settings.data_dictionaries.detail.description_label")}
-          </label>
-          <TextArea
-            id="data-dictionary-description"
-            value={draftDescription}
-            maxLength={500}
-            rows={3}
-            disabled={!canEdit}
-            placeholder={t("workspace_settings.settings.data_dictionaries.detail.description_placeholder")}
-            onChange={(event) => setDraftDescription(event.target.value)}
-            className="w-full resize-none"
-          />
-        </div>
-
-        {canEdit && (!dictionary.is_system || isDirty) && (
-          <div className="flex items-center justify-between gap-3">
-            {!dictionary.is_system ? (
-              <Button variant="error-outline" size="lg" onClick={() => onDelete(dictionary)}>
-                <Trash2 className="size-3.5" />
-                {t("workspace_settings.settings.data_dictionaries.detail.delete")}
-              </Button>
-            ) : (
-              <span />
-            )}
-            {isDirty && (
-              <Button variant="primary" size="lg" onClick={() => void handleSave()} loading={isSaving}>
-                {t("workspace_settings.settings.data_dictionaries.detail.save")}
-              </Button>
-            )}
-          </div>
-        )}
-      </section>
-
-      <div className="border-t border-subtle" />
-
-      <DictionaryItemsEditor
+    <section className="flex h-full min-h-0 flex-1 flex-col gap-4">
+      <DictionaryHeader
         dictionary={dictionary}
         canEdit={canEdit}
-        onCreateItem={onCreateItem}
-        onUpdateItem={onUpdateItem}
-        onDeleteItem={onDeleteItem}
         onToggleColored={(isColored) => onUpdate(dictionary.id, { is_colored: isColored })}
-        onReorder={onReorder}
+        onEdit={() => setIsEditModalOpen(true)}
+        onDelete={() => onDelete(dictionary)}
       />
-    </div>
+      <DictionaryItemsToolbar
+        search={view.search}
+        onSearchChange={view.setSearch}
+        sort={view.sort}
+        onSortChange={view.setSort}
+        canEdit={canEdit}
+        dragDisabledReason={view.dragDisabledReason}
+        onAdd={openAdd}
+        onBulkAdd={() => setIsBulkOpen(true)}
+      />
+      <DictionaryItemsTable
+        dictionary={dictionary}
+        canEdit={canEdit}
+        canDrag={view.canDrag}
+        pageItems={view.pageItems}
+        pageOffset={view.pageOffset}
+        total={view.total}
+        page={view.page}
+        pageCount={view.pageCount}
+        pageSize={view.pageSize}
+        onPageChange={view.setPage}
+        onPageSizeChange={view.setPageSize}
+        editingId={editingId}
+        isAdding={isAdding}
+        addFocusToken={addFocusToken}
+        highlightId={view.highlightId}
+        usage={usage.usage}
+        usageEntity={usage.entity}
+        usageLoading={usage.isLoading}
+        usageError={usage.error}
+        isLabelTaken={isLabelTaken}
+        onStartEdit={startEdit}
+        onCancelEdit={() => setEditingId(null)}
+        onSaveEdit={saveEdit}
+        onChangeColor={changeColor}
+        onDelete={onDeleteItem}
+        onCreate={createItem}
+        onCancelAdd={() => setIsAdding(false)}
+        onPageReorder={pageReorder}
+      />
+
+      <DictionaryEditModal
+        isOpen={isEditModalOpen}
+        dictionary={dictionary}
+        onClose={() => setIsEditModalOpen(false)}
+        onSubmit={(payload) => onUpdate(dictionary.id, payload)}
+      />
+      <DictionaryBulkAddModal
+        isOpen={isBulkOpen}
+        dictionary={dictionary}
+        onClose={() => setIsBulkOpen(false)}
+        onSubmit={bulkCreate}
+      />
+    </section>
   );
 }

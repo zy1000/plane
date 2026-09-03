@@ -1,4 +1,6 @@
+from django.db import transaction
 from django.db.models import ProtectedError, RestrictedError
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -10,10 +12,16 @@ from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.type import is_workspace_member
 from plane.db.models import DataDictionary, DataDictionaryItem, Workspace
 from plane.utils.data_dictionary import (
+    bulk_create_items,
+    classify_labels,
+    dictionary_item_usage,
     ensure_system_dictionaries,
     is_dictionary_in_use,
     is_item_in_use,
 )
+
+# 一次批量新增最多接收的行数（前端粘贴多行）
+BULK_LABELS_MAX = 1000
 
 
 def _forbidden():
@@ -131,6 +139,15 @@ class DataDictionaryViewSet(BaseViewSet):
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    def usage(self, request, slug, pk):
+        """设置页「引用」列：每个值被多少活跃产品 / 项目引用，以及是否会挡住删除。"""
+        if not is_workspace_member(request.user, slug):
+            return _forbidden()
+        dictionary = self._get_dictionary(pk)
+        if dictionary is None:
+            return _not_found("Data dictionary not found.")
+        return Response(dictionary_item_usage(dictionary), status=status.HTTP_200_OK)
+
 
 class DataDictionaryItemViewSet(BaseViewSet):
     model = DataDictionaryItem
@@ -162,6 +179,52 @@ class DataDictionaryItemViewSet(BaseViewSet):
         serializer.is_valid(raise_exception=True)
         item = serializer.save(dictionary=dictionary, workspace=dictionary.workspace)
         return Response(self.get_serializer(item).data, status=status.HTTP_201_CREATED)
+
+    def bulk_create(self, request, slug, dictionary_id):
+        """多行粘贴批量新增：归一化后只写不存在的值；重名走 skipped 而不是报错。"""
+        if not is_workspace_member(request.user, slug):
+            return _forbidden()
+        field = drf_serializers.ListField(
+            child=drf_serializers.CharField(allow_blank=True, trim_whitespace=False, max_length=10000),
+            allow_empty=False,
+            max_length=BULK_LABELS_MAX,
+        )
+        raw_labels = request.data.get("labels")
+        if isinstance(raw_labels, list):
+            # DRF 的 CharField 直接拒绝 NUL 字符；粘贴进来的脏字节先剥掉，别让一行废掉整批
+            raw_labels = [value.replace("\x00", "") if isinstance(value, str) else value for value in raw_labels]
+        try:
+            raw_labels = field.run_validation(raw_labels)
+        except drf_serializers.ValidationError as exc:
+            return Response({"labels": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+        labels, skipped = classify_labels(raw_labels)
+        with transaction.atomic():
+            # 行锁把并发的批量 / 单条新增串行化，created 才能按差集精确计数；of=self 只锁字典行不锁 workspace
+            dictionary = (
+                DataDictionary.objects.select_for_update(of=("self",))
+                .filter(workspace__slug=slug, pk=dictionary_id)
+                .first()
+            )
+            if dictionary is None:
+                return _not_found("Data dictionary not found.")
+            created, existing = bulk_create_items(dictionary, labels, actor=request.user)
+        skipped.extend({"label": label, "reason": "existing"} for label in existing)
+        blank = sum(1 for entry in skipped if entry["reason"] == "blank")
+        too_long = sum(1 for entry in skipped if entry["reason"] == "too_long")
+        return Response(
+            {
+                "created": DataDictionaryItemSerializer(created, many=True).data,
+                "skipped": skipped,
+                "summary": {
+                    "requested": len(raw_labels),
+                    "created": len(created),
+                    "skipped_existing": len(existing),
+                    "skipped_blank": blank,
+                    "skipped_too_long": too_long,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     def partial_update(self, request, slug, dictionary_id, pk):
         if not is_workspace_member(request.user, slug):

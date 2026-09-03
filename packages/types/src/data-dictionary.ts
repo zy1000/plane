@@ -75,6 +75,39 @@ export type TUpdateDataDictionaryItemPayload = {
   sort_order?: number;
 };
 
+/** 设置页「引用」列：每个值被多少活跃产品 / 项目引用（count），以及会不会挡住删除（blocking，含软删 / 模板的 FK 引用） */
+export type TDataDictionaryItemUsage = {
+  item_id: string;
+  count: number;
+  blocking: boolean;
+};
+
+/** 引用方实体：产品字典 → product，项目字典（含 project_code）→ project，自定义字典没有引用方 */
+export type TDataDictionaryUsageEntity = "product" | "project" | null;
+
+export type TDataDictionaryUsageResponse = {
+  entity: TDataDictionaryUsageEntity;
+  items: TDataDictionaryItemUsage[];
+};
+
+export type TBulkCreateDataDictionaryItemsSkipReason = "existing" | "blank" | "too_long";
+
+/** 批量新增：重名不报错走 skipped */
+export type TBulkCreateDataDictionaryItemsResponse = {
+  created: TDataDictionaryItem[];
+  skipped: { label: string; reason: TBulkCreateDataDictionaryItemsSkipReason }[];
+  summary: {
+    requested: number;
+    created: number;
+    skipped_existing: number;
+    skipped_blank: number;
+    skipped_too_long: number;
+  };
+};
+
+/** 设置页值列表的排序：手动顺序（sort_order）/ 名称 / 最近添加 */
+export type TDataDictionaryItemsSort = "manual" | "name" | "recent";
+
 export type TDataDictionaryErrorCode =
   | "DATA_DICTIONARY_KEY_INVALID"
   | "DATA_DICTIONARY_KEY_ALREADY_EXISTS"
