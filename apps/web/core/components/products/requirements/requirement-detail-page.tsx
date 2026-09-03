@@ -157,7 +157,10 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   onPatch={detail.submitPatch}
                   onStatusChange={onStatusChange}
                   onOpenRequirement={openRequirement}
-                  onRolledBack={() => void detail.refresh()}
+                  onRolledBack={() => {
+                    void detail.refresh();
+                    void detail.refreshTrail();
+                  }}
                   headerActions={
                     <>
                       {/* 推动评审的入口放在标题右侧 —— 页面级动作不该藏在右栏里 */}

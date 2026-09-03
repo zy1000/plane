@@ -847,6 +847,11 @@ export type TRequirementContentTrailEntry = TRequirementChangeItem & {
   actor_detail: IUserLite | null;
   /** 通过后落在这条需求的第几版；未通过为 null */
   version: number | null;
+  /** 这张变更单的通过规则与名单 —— 历史行里直接回答「等谁批 / 谁批的 / 谁驳回的」 */
+  approval_type: TRequirementApprovalType;
+  required_count: number | null;
+  approvals: TRequirementChangeApproval[];
+  completed_at: string | null;
 };
 
 export type TRequirementSchemaTrailEntry = TRequirementSchemaRevision & {

@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from plane.app.serializers import (
     RequirementApprovalInboxSerializer,
     RequirementChangeActionSerializer,
+    RequirementChangeApprovalSerializer,
     RequirementChangeItemSerializer,
     RequirementChangeRequestDetailSerializer,
     RequirementChangeRequestSerializer,
@@ -462,6 +463,16 @@ class RequirementChangeTrailViewSet(ProductScopedMixin, BaseViewSet):
                 .select_related(
                     "change_request", "change_request__created_by", "requirement_type"
                 )
+                # 审批人与意见随轨迹一起出：详情页要在同一行里回答「谁批的、为什么驳回」，
+                # 不该为每条改动再去拉一次变更单
+                .prefetch_related(
+                    Prefetch(
+                        "change_request__approvals",
+                        queryset=RequirementChangeApproval.objects.select_related(
+                            "approver"
+                        ).order_by("created_at", "id"),
+                    )
+                )
                 .order_by("-created_at", "-id")[:take]
             )
         if kind != TRAIL_CONTENT:
@@ -517,6 +528,12 @@ class RequirementChangeTrailViewSet(ProductScopedMixin, BaseViewSet):
                         "reason": row.change_request.reason,
                         "actor_detail": _user_lite(row.change_request.created_by),
                         "version": version_by_item.get(row.id),
+                        "approval_type": row.change_request.approval_type,
+                        "required_count": row.change_request.required_count,
+                        "completed_at": row.change_request.completed_at,
+                        "approvals": RequirementChangeApprovalSerializer(
+                            row.change_request.approvals.all(), many=True
+                        ).data,
                     }
                 )
             else:

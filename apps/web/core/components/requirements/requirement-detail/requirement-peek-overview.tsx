@@ -174,6 +174,8 @@ export const RequirementPeekOverview = (props: TProps) => {
   const handleRolledBack = useCallback(async () => {
     const row = await detail.refresh();
     if (row) onRequirementUpdated?.(row);
+    // 历史区的时间线读的是轨迹，行变了要一起刷，否则「当前版本」与快照对不上
+    void detail.refreshTrail();
   }, [detail, onRequirementUpdated]);
 
   // 抽屉之外的审批动作改了这一行：重拉并回灌。初值 0 不触发，避免打开抽屉时白拉一次

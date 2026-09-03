@@ -1,20 +1,25 @@
 "use client";
 
 /**
- * 历史区共用的时间线原语，变更轨迹与版本历史都由它渲染。
- *
- * 两块讲的是同一条时间上的事，此前却是两套几何（6rem / 4rem 左栏、两种元信息写法），
- * 上下并排却对不齐。收成一个组件后，改一次两处同时生效。
+ * 历史区共用的时间线原语。
  *
  * 节点用**形状 + 颜色**双重编码，不让颜色单独承载语义：
- * 实心圆=已通过、空心圆=审批中、红环=已驳回、方块=版本、齿轮=需求类型级结构变更。
+ * 带号方块 = 版本（通过审批的改动，当前版实心、历史版描边）；
+ * 圆点 = 没成为版本的改动（琥珀空心审批中、红空心已驳回、灰空心已撤回、实心绿通过但无版本）；
+ * 齿轮 = 需求类型级结构变更。
  */
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { cn, renderFormattedDate, renderFormattedDateTime } from "@plane/utils";
+import type { IUserLite } from "@plane/types";
+import { Avatar } from "@plane/ui";
+import { cn, getFileURL, renderFormattedDate, renderFormattedDateTime } from "@plane/utils";
+import { SECTION_ACTION_BUTTON } from "./requirement-detail-section";
 
-export type THistoryNode = "approved" | "pending" | "rejected" | "version" | "schema";
+export type THistoryNode =
+  | { kind: "dot"; tone: "approved" | "pending" | "rejected" | "cancelled" }
+  | { kind: "version"; label: string; isCurrent: boolean }
+  | { kind: "schema" };
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -26,7 +31,7 @@ const DAY = 24 * HOUR;
  * 不用 @plane/utils 的 calculateTimeAgo —— 它走 date-fns 的 formatDistanceToNow 且没接 locale，
  * 中文界面下会吐英文。超过两天就回落到绝对日期：活动流里「37 天前」不如「7月1日」好用。
  */
-const formatRelative = (iso: string, t: ReturnType<typeof useTranslation>["t"]) => {
+const formatRelative = (iso: string, locale: string, t: ReturnType<typeof useTranslation>["t"]) => {
   const parsed = new Date(iso).getTime();
   if (Number.isNaN(parsed)) return "";
   const diff = Date.now() - parsed;
@@ -34,174 +39,213 @@ const formatRelative = (iso: string, t: ReturnType<typeof useTranslation>["t"]) 
   if (diff < HOUR) return t("relative_time.minutes_ago", { count: Math.floor(diff / MINUTE) });
   if (diff < DAY) return t("relative_time.hours_ago", { count: Math.floor(diff / HOUR) });
   if (diff < 2 * DAY) return t("relative_time.yesterday");
-  return renderFormattedDate(iso);
+  return formatHistoryDate(iso, locale);
+};
+
+/**
+ * 历史里的短日期：中文界面「8月28日」（跨年才带年份），其它语言沿用 renderFormattedDate。
+ * 默认的「Aug 28, 2026」在中文界面里既是英文又太长，窄列里会折成两行。
+ */
+export const formatHistoryDate = (iso: string, locale: string) => {
+  if (!locale.toLowerCase().startsWith("zh")) return renderFormattedDate(iso) ?? "";
+  const sameYear = new Date(iso).getFullYear() === new Date().getFullYear();
+  return renderFormattedDate(iso, sameYear ? "M月d日" : "yyyy年M月d日") ?? "";
 };
 
 /** 右对齐的时间列。hover 出精确到秒的绝对时间 */
-export const HistoryTime = ({ value }: { value: string }) => {
-  const { t } = useTranslation();
+export const HistoryTime = ({ value, className }: { value: string; className?: string }) => {
+  const { t, currentLocale } = useTranslation();
   return (
     <time
       dateTime={value}
       title={renderFormattedDateTime(value)}
-      className="shrink-0 cursor-help pt-0.5 text-caption-sm-regular text-placeholder tabular-nums"
+      className={cn("shrink-0 cursor-help text-caption-md-regular text-placeholder tabular-nums", className)}
     >
-      {formatRelative(value, t)}
+      {formatRelative(value, currentLocale, t)}
     </time>
   );
 };
 
-type TPillTone = "neutral" | "version" | "pending" | "rejected" | "added" | "removed";
+const DOT_TONE: Record<Extract<THistoryNode, { kind: "dot" }>["tone"], string> = {
+  // 通过了但没形成版本（删除审批通过后行已软删）：实心绿
+  approved: "border-success-strong bg-success-primary",
+  pending: "border-warning-strong",
+  rejected: "border-danger-strong",
+  cancelled: "border-strong",
+};
+
+const HistoryNode = ({ node }: { node: THistoryNode }) => {
+  if (node.kind === "version") {
+    return (
+      <span
+        className={cn(
+          "relative z-[1] inline-flex h-[22px] min-w-7 items-center justify-center rounded-md px-1 text-caption-md-medium tabular-nums",
+          node.isCurrent
+            ? "bg-accent-primary text-on-color"
+            : "border border-accent-strong bg-surface-1 text-accent-primary"
+        )}
+      >
+        {node.label}
+      </span>
+    );
+  }
+  if (node.kind === "schema") {
+    return (
+      <span className="relative z-[1] grid size-7 place-items-center rounded-full bg-layer-1 text-placeholder">
+        <SlidersHorizontal className="size-3.5" />
+      </span>
+    );
+  }
+  return <span className={cn("relative z-[1] size-[11px] rounded-full border-2 bg-surface-1", DOT_TONE[node.tone])} />;
+};
+
+export const HistoryTimeline = ({ children }: { children: ReactNode }) => (
+  <div className="flex flex-col pt-1">{children}</div>
+);
+
+/**
+ * 一行：左边 2rem 轨道放节点，右边正文自己排（头行 / 说明 / 面板）。
+ * 节点盒高 28px、行上下各 10px 内边距，所以轨道线在首行从 24px 起、末行到 24px 止。
+ */
+export const HistoryEntry = ({
+  node,
+  isFirst,
+  isLast,
+  children,
+  className,
+}: {
+  node: THistoryNode;
+  isFirst: boolean;
+  isLast: boolean;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <div className={cn("relative grid grid-cols-[2rem_minmax(0,1fr)] gap-x-2.5 py-2.5", className)}>
+    <span
+      className={cn(
+        "absolute left-[15.5px] w-px border-l border-subtle",
+        isFirst && isLast && "hidden",
+        isFirst && !isLast && "top-6 bottom-0",
+        isLast && !isFirst && "top-0 h-6",
+        !isFirst && !isLast && "inset-y-0"
+      )}
+    />
+    <span className="relative flex h-7 items-center justify-center">
+      <HistoryNode node={node} />
+    </span>
+    <div className="flex min-w-0 flex-col gap-2">{children}</div>
+  </div>
+);
+
+/** 头行：头像 + 人名 + 一句动作 + 徽章组，时间靠右 */
+export const HistoryHeader = ({ children, time }: { children: ReactNode; time?: string }) => (
+  <div className="flex min-h-7 flex-wrap items-center gap-2">
+    {children}
+    {time && <HistoryTime value={time} className="ml-auto" />}
+  </div>
+);
+
+/** 头像 + 人名；actor_detail 自带头像，不用再查成员 store */
+export const HistoryActor = ({ user }: { user: IUserLite | null }) => (
+  <span className="inline-flex items-center gap-2">
+    <Avatar size={22} name={user?.display_name ?? "?"} src={getFileURL(user?.avatar_url ?? "")} showTooltip={false} />
+    <span className="text-body-xs-medium text-primary">{user?.display_name ?? "—"}</span>
+  </span>
+);
+
+/** 头行里的一句动作，数字加重 */
+export const HistoryText = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <span className={cn("text-body-xs-regular text-secondary", className)}>{children}</span>
+);
+
+/** 头行下面的说明行（变更原因 / 审批结果）。默认左缩进对齐头像后面的文字 */
+export const HistoryNote = ({
+  children,
+  tone = "default",
+  indent = true,
+  className,
+}: {
+  children: ReactNode;
+  tone?: "default" | "muted" | "danger";
+  indent?: boolean;
+  className?: string;
+}) => (
+  <div
+    className={cn(
+      "flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs-regular",
+      tone === "default" && "text-secondary",
+      tone === "muted" && "text-tertiary",
+      tone === "danger" && "text-danger-secondary",
+      indent && "pl-[30px]",
+      className
+    )}
+  >
+    {children}
+  </div>
+);
+
+type TPillTone = "neutral" | "ghost" | "version" | "added" | "removed";
 
 const PILL_TONE: Record<TPillTone, string> = {
   neutral: "bg-layer-1 text-tertiary",
+  ghost: "border border-subtle-1 text-tertiary",
   version: "bg-accent-subtle text-accent-primary font-semibold",
-  pending: "bg-accent-subtle text-accent-primary",
-  rejected: "bg-danger-subtle text-danger-primary",
   added: "bg-success-subtle text-success-primary",
   removed: "bg-danger-subtle text-danger-primary",
 };
 
+/** 徽章。状态色由调用方传 className（CHANGE_STATUS_PILL），这里只管几何 */
 export const HistoryPill = ({
   tone = "neutral",
-  children,
-  onClick,
+  className,
   title,
+  children,
 }: {
   tone?: TPillTone;
-  children: ReactNode;
-  /** 传了就渲染成按钮 —— 轨迹里的版本号靠它跳到下面的版本节点 */
-  onClick?: () => void;
+  className?: string;
   title?: string;
-}) => {
-  const className = cn(
-    "inline-flex h-[17px] shrink-0 items-center gap-1 rounded px-1.5 text-10 font-medium tabular-nums whitespace-nowrap",
-    PILL_TONE[tone]
-  );
-  if (!onClick) return <span className={className}>{children}</span>;
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={cn(className, "cursor-pointer transition-opacity hover:opacity-80 focus-visible:opacity-80")}
-    >
-      {children}
-    </button>
-  );
-};
-
-const NODE_SHAPE: Record<THistoryNode, string> = {
-  // 实心：这一版已经定下来了
-  approved: "size-[11px] rounded-full bg-accent-primary",
-  // 空心：还在流程里
-  pending: "size-[11px] rounded-full border-2 border-accent-primary bg-surface-1",
-  rejected: "size-[11px] rounded-full border-2 border-danger-primary bg-surface-1",
-  // 方块：里程碑，和圆形的「事件」区分开。尺寸与圆点一致，否则轴心差半像素
-  version: "size-[11px] rounded-[2px] bg-accent-primary",
-  schema: "",
-};
-
-export const HistoryTimeline = ({ children }: { children: ReactNode }) => (
-  <div className="flex flex-col">{children}</div>
-);
-
-export const HistoryEntry = ({
-  node,
-  occurredAt,
-  isFirst,
-  isLast,
-  isHighlighted,
-  id,
-  onClick,
-  leading,
-  children,
-  expanded,
-}: {
-  node: THistoryNode;
-  occurredAt: string;
-  isFirst: boolean;
-  isLast: boolean;
-  isHighlighted?: boolean;
-  id?: string;
-  onClick?: () => void;
-  /** 展开箭头之类的前缀 */
-  leading?: ReactNode;
   children: ReactNode;
-  expanded?: ReactNode;
-}) => {
-  // 展开区里还有回滚按钮，所以可点区域只包住主体，不能把整行做成 button 再嵌一个
-  const body = (
-    <>
-      {leading}
-      <span className="flex min-w-0 flex-col gap-0.5">{children}</span>
-    </>
-  );
-  return (
-    <div
-      id={id}
-      className={cn(
-        "relative grid scroll-mt-24 grid-cols-[1.75rem_minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-md py-1.5 pr-2 transition-colors duration-150 motion-reduce:transition-none",
-        isHighlighted ? "bg-accent-subtle" : "hover:bg-layer-1"
-      )}
-    >
-      {/* 轨道：首尾各截半段，让线正好收在端点节点上 */}
-      <span className="relative h-full">
-        <span
-          className={cn(
-            "absolute left-[9px] w-px border-l border-subtle",
-            isFirst && isLast && "hidden",
-            isFirst && !isLast && "top-[9px] bottom-0",
-            isLast && !isFirst && "top-0 h-[9px]",
-            !isFirst && !isLast && "inset-y-0"
-          )}
-        />
-        {node === "schema" ? (
-          <SlidersHorizontal className="absolute top-[3px] left-[3px] size-3.5 text-placeholder" />
-        ) : (
-          <span className={cn("absolute top-1 left-1 box-border", NODE_SHAPE[node])} />
-        )}
-      </span>
-
-      {onClick ? (
-        <button type="button" onClick={onClick} className="flex min-w-0 cursor-pointer items-start gap-2 text-left">
-          {body}
-        </button>
-      ) : (
-        <div className="flex min-w-0 gap-2">{body}</div>
-      )}
-
-      <HistoryTime value={occurredAt} />
-
-      {expanded && <div className="col-start-2 col-end-4 mt-2">{expanded}</div>}
-    </div>
-  );
-};
-
-/** 主句：谁 + 做了什么。actor 是唯一的 primary，其余降一级 */
-export const HistoryLine = ({
-  actor,
-  children,
-  muted,
-}: {
-  actor: string;
-  children: ReactNode;
-  muted?: boolean;
 }) => (
-  <span className={cn("text-body-xs-regular leading-snug break-words", muted ? "text-tertiary" : "text-secondary")}>
-    <span className={cn(muted ? "text-secondary" : "font-medium text-primary")}>{actor}</span> {children}
+  <span
+    title={title}
+    className={cn(
+      "inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-caption-md-medium whitespace-nowrap tabular-nums",
+      PILL_TONE[tone],
+      className
+    )}
+  >
+    {children}
   </span>
 );
 
-/** 副行：徽章组 + 补充说明，统一降到 placeholder */
-export const HistorySub = ({ children }: { children: ReactNode }) => (
-  <span className="flex flex-wrap items-center gap-1.5 text-caption-sm-regular text-placeholder">{children}</span>
+/** 版本节点行内的动作（查看这一版 / 并排对比 / 回滚）：与区块标题行的文字按钮同一套 */
+export const HistoryActionButton = ({
+  icon: Icon,
+  active,
+  onClick,
+  children,
+  className,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cn(SECTION_ACTION_BUTTON, "h-[26px]", active && "text-accent-primary hover:text-accent-primary", className)}
+  >
+    <Icon className="size-3.5" />
+    {children}
+  </button>
 );
 
 /** 空态：一句陈述 + 一句「什么时候会有东西」 */
 export const HistoryEmpty = ({ title, description }: { title: string; description: string }) => (
-  <div className="flex flex-col gap-0.5 py-3 pl-7">
+  <div className="flex flex-col gap-0.5 py-3 pl-8">
     <span className="text-body-xs-regular text-tertiary">{title}</span>
-    <span className="text-caption-sm-regular text-placeholder">{description}</span>
+    <span className="text-caption-md-regular text-placeholder">{description}</span>
   </div>
 );
