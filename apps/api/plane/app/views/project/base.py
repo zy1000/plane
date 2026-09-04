@@ -1124,9 +1124,27 @@ class ProjectAPI(BaseViewSet):
                         issue_cycle__deleted_at__isnull=True,
                         issue_cycle__issue__deleted_at__isnull=True,
                     ),
-                )
+                ),
+                # 概览「进行中」卡要画迭代进度条：已完成 / 工作项数
+                completed_work_item_count=Count(
+                    "issue_cycle__issue__id",
+                    distinct=True,
+                    filter=Q(
+                        issue_cycle__issue__archived_at__isnull=True,
+                        issue_cycle__issue__is_draft=False,
+                        issue_cycle__deleted_at__isnull=True,
+                        issue_cycle__issue__deleted_at__isnull=True,
+                        issue_cycle__issue__state__group="completed",
+                    ),
+                ),
             )
         )
+        # total_count 不受 include_all_statuses 影响：概览事实条要「迭代 7 个 · 1 进行中」，
+        # 而列表本身只取活跃的那几条
+        cycles_total_count = cycles_queryset.count()
+        cycles_in_progress_count = cycles_queryset.filter(
+            status=Cycle.Status.IN_PROGRESS
+        ).count()
         if not include_all_statuses:
             cycles_queryset = cycles_queryset.filter(
                 status__in=[
@@ -1150,6 +1168,10 @@ class ProjectAPI(BaseViewSet):
                 "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
                 "status": cycle.status,
                 "work_item_count": getattr(cycle, "work_item_count", 0) or 0,
+                "completed_work_item_count": getattr(
+                    cycle, "completed_work_item_count", 0
+                )
+                or 0,
                 "owner": (
                     {
                         "id": str(cycle.owned_by.id),
@@ -1187,8 +1209,32 @@ class ProjectAPI(BaseViewSet):
                         issue_release__deleted_at__isnull=True,
                         issue_release__issue__deleted_at__isnull=True,
                     ),
-                )
+                ),
+                completed_work_item_count=Count(
+                    "issue_release__issue__id",
+                    distinct=True,
+                    filter=Q(
+                        issue_release__issue__archived_at__isnull=True,
+                        issue_release__issue__is_draft=False,
+                        issue_release__deleted_at__isnull=True,
+                        issue_release__issue__deleted_at__isnull=True,
+                        issue_release__issue__state__group="completed",
+                    ),
+                ),
             )
+        )
+        today = timezone.now().date()
+        releases_total_count = releases_queryset.count()
+        releases_in_progress_count = releases_queryset.filter(
+            status__in=["in-progress", "pending-test", "testing"]
+        ).count()
+        # 逾期 = 目标日期已过且还没收口（完成 / 取消之外都算）
+        releases_overdue_count = (
+            releases_queryset.filter(
+                target_date__isnull=False, target_date__lt=today
+            )
+            .exclude(status__in=["completed", "cancelled"])
+            .count()
         )
         if not include_all_statuses:
             releases_queryset = releases_queryset.exclude(
@@ -1205,6 +1251,10 @@ class ProjectAPI(BaseViewSet):
                 ),
                 "status": release.status,
                 "work_item_count": getattr(release, "work_item_count", 0) or 0,
+                "completed_work_item_count": getattr(
+                    release, "completed_work_item_count", 0
+                )
+                or 0,
                 "owner": (
                     {
                         "id": str(release.lead.id),
@@ -1229,6 +1279,10 @@ class ProjectAPI(BaseViewSet):
             project_id=project_id,
             deleted_at__isnull=True,
         )
+        test_plan_total_count = test_plan_queryset.count()
+        test_plan_in_progress_count = test_plan_queryset.filter(
+            state=TestPlan.State.PROGRESS
+        ).count()
         if not include_all_statuses:
             test_plan_queryset = test_plan_queryset.filter(state=TestPlan.State.PROGRESS)
         test_plan_queryset = (
@@ -1245,8 +1299,37 @@ class ProjectAPI(BaseViewSet):
             .order_by("begin_time", "name")
         )
 
+        paginated_test_plans = list(test_plan_queryset[plan_offset:plan_limit])
+        # 用例执行结果按计划分桶：概览「进行中」卡要「通过 91 · 失败 6 · 未执行 31」。
+        # 单独一次分组查询，不往上面的 annotate 里再加一路 plan_cases 联结——那会和
+        # cases 的 M2M 联结做笛卡尔积把 case_count 乘大
+        plan_case_result_rows = (
+            PlanCase.objects.filter(
+                plan_id__in=[plan.id for plan in paginated_test_plans],
+                deleted_at__isnull=True,
+            )
+            .values("plan_id", "result")
+            .annotate(count=Count("id"))
+            .order_by()
+            if paginated_test_plans
+            else []
+        )
+        plan_case_result_map = {}
+        for row in plan_case_result_rows:
+            plan_case_result_map.setdefault(str(row["plan_id"]), {})[
+                row["result"]
+            ] = row["count"]
+        plan_result_keys = {
+            "success": PlanCase.Result.SUCCESS,
+            "fail": PlanCase.Result.FAIL,
+            "block": PlanCase.Result.BLOCK,
+            "not_started": PlanCase.Result.NOT_START,
+            "invalid": PlanCase.Result.INVALID,
+        }
+
         test_plan_data = []
-        for plan in test_plan_queryset[plan_offset:plan_limit]:
+        for plan in paginated_test_plans:
+            plan_result_counts = plan_case_result_map.get(str(plan.id), {})
             first_assignee = None
             for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
                 assignees = list(plan_case.assignees.all())
@@ -1261,6 +1344,10 @@ class ProjectAPI(BaseViewSet):
                     "end_date": plan.end_time.isoformat() if plan.end_time else None,
                     "status": plan.state,
                     "case_count": getattr(plan, "case_count", 0) or 0,
+                    "result_counts": {
+                        key: plan_result_counts.get(value, 0)
+                        for key, value in plan_result_keys.items()
+                    },
                     "owner": (
                         {
                             "id": str(first_assignee.id),
@@ -1284,6 +1371,10 @@ class ProjectAPI(BaseViewSet):
             project_id=project_id,
             deleted_at__isnull=True,
         )
+        case_review_total_count = case_review_queryset.count()
+        case_review_in_progress_count = case_review_queryset.filter(
+            state=CaseReview.State.PROGRESS
+        ).count()
         if not include_all_statuses:
             case_review_queryset = case_review_queryset.filter(
                 state=CaseReview.State.PROGRESS
@@ -1319,20 +1410,31 @@ class ProjectAPI(BaseViewSet):
         return (
             {
                 "work_item_stats": work_item_stats,
+                # count 是本次过滤口径下的条数（分页用）；total_count / in_progress_count
+                # 是全量口径，供概览事实条「N 个 · M 进行中」
                 "cycles": {
                     "count": cycles_queryset.count(),
+                    "total_count": cycles_total_count,
+                    "in_progress_count": cycles_in_progress_count,
                     "data": cycles_data,
                 },
                 "releases": {
                     "count": releases_queryset.count(),
+                    "total_count": releases_total_count,
+                    "in_progress_count": releases_in_progress_count,
+                    "overdue_count": releases_overdue_count,
                     "data": releases_data,
                 },
                 "test_plans": {
                     "count": test_plan_queryset.count(),
+                    "total_count": test_plan_total_count,
+                    "in_progress_count": test_plan_in_progress_count,
                     "data": test_plan_data,
                 },
                 "case_reviews": {
                     "count": case_review_queryset.count(),
+                    "total_count": case_review_total_count,
+                    "in_progress_count": case_review_in_progress_count,
                     "data": case_review_data,
                 },
             },

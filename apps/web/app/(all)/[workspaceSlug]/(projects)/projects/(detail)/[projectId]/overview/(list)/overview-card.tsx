@@ -15,6 +15,10 @@ type Props = {
   children: ReactNode;
 };
 
+/** 卡片标题行右侧的小图标按钮（全屏 / 新增） */
+export const overviewIconButtonClass =
+  "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder";
+
 /**
  * 概览页统一卡片外壳：分层表面，各模块观感一致。
  */

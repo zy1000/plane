@@ -21,7 +21,7 @@ import { LinearProgressIndicator } from "@plane/ui";
  * 吃不到 Tailwind class，所以直接引 packages/tailwind-config/variables.css 里的语义变量，
  * 明暗主题自动跟随。中性两档没有 --bg-* 级别的中性主色，借文字色的两级灰。
  */
-const STATUS_BAR_COLOR: Record<TRequirementItemStatus, string> = {
+export const REQUIREMENT_STATUS_BAR_COLOR: Record<TRequirementItemStatus, string> = {
   not_started: "var(--txt-tertiary)",
   projected: "var(--bg-accent-primary)",
   in_progress: "var(--bg-warning-primary)",
@@ -57,7 +57,7 @@ export const ProductProjectStatusBar: FC<TProps> = ({ statusCounts, total }) => 
     id: status,
     name: t(`requirement_fields.statuses.${status}`),
     value: statusCounts?.[status] ?? 0,
-    color: STATUS_BAR_COLOR[status],
+    color: REQUIREMENT_STATUS_BAR_COLOR[status],
   }));
 
   return <LinearProgressIndicator size="md" data={data} />;

@@ -11,8 +11,11 @@ export type TProjectStatisticCycle = {
   name: string;
   start_date: string | null;
   end_date: string | null;
-  status: "CURRENT";
+  /** 后端 Cycle.Status 的中文值（未开始 / 进行中 / 测试中 / 已退回 / 已完成 / 已取消） */
+  status: string;
   work_item_count: number;
+  /** state.group = completed 的工作项数，概览「进行中」卡画进度用 */
+  completed_work_item_count: number;
   owner: TStatisticOwner | null;
 };
 
@@ -20,10 +23,21 @@ export type TProjectStatisticRelease = {
   id: string;
   name: string;
   start_date: string | null;
+  /** 发布的 target_date */
   end_date: string | null;
   status: string;
   work_item_count: number;
+  completed_work_item_count: number;
   owner: TStatisticOwner | null;
+};
+
+/** 测试计划内用例执行结果分桶（PlanCase.Result：成功 / 失败 / 阻塞 / 未执行 / 无效） */
+export type TProjectStatisticPlanCaseResults = {
+  success: number;
+  fail: number;
+  block: number;
+  not_started: number;
+  invalid: number;
 };
 
 export type TProjectStatisticTestPlan = {
@@ -31,9 +45,22 @@ export type TProjectStatisticTestPlan = {
   name: string;
   start_date: string | null;
   end_date: string | null;
+  /** TestPlan.State 的中文值（未开始 / 进行中 / 已完成） */
   status: string;
   case_count: number;
+  result_counts: TProjectStatisticPlanCaseResults;
   owner: TStatisticOwner | null;
+};
+
+/**
+ * 概览统计里的一段列表：count 是本次过滤口径（include_all_statuses）下的条数，
+ * total_count / in_progress_count 是全量口径，事实条「N 个 · M 进行中」用后者
+ */
+export type TProjectStatisticSection<T> = {
+  count: number;
+  total_count: number;
+  in_progress_count: number;
+  data: T[];
 };
 
 export type TProjectStatisticCaseReview = {
@@ -79,22 +106,13 @@ export type TProjectStatisticResponse = {
     total_cases: number;
     total_timesheet_hours: number;
   };
-  cycles: {
-    count: number;
-    data: TProjectStatisticCycle[];
+  cycles: TProjectStatisticSection<TProjectStatisticCycle>;
+  releases: TProjectStatisticSection<TProjectStatisticRelease> & {
+    /** 目标日期已过且未完成 / 未取消 */
+    overdue_count: number;
   };
-  releases: {
-    count: number;
-    data: TProjectStatisticRelease[];
-  };
-  test_plans: {
-    count: number;
-    data: TProjectStatisticTestPlan[];
-  };
-  case_reviews: {
-    count: number;
-    data: TProjectStatisticCaseReview[];
-  };
+  test_plans: TProjectStatisticSection<TProjectStatisticTestPlan>;
+  case_reviews: TProjectStatisticSection<TProjectStatisticCaseReview>;
   requirement_daily_status: Array<{
     date: string;
     completed: number;

@@ -8,6 +8,10 @@ export interface IOverviewMemberStat {
   avatar_url: string;
   work_item_count: number;
   defect_count: number;
+  /** 未完成（状态组不在 completed / cancelled）的工作项数，含缺陷 */
+  open_count?: number;
+  /** 未完成且目标日期已过的工作项数 */
+  overdue_count?: number;
   timesheet_hours?: number;
 }
 
@@ -18,6 +22,16 @@ export interface IOverviewTrendPoint {
   created: number;
   completed: number;
 }
+
+/** 近 N 个月缺陷「新建 vs 解决」的单点 */
+export interface IOverviewDefectTrendPoint {
+  /** YYYY-MM */
+  month: string;
+  created: number;
+  resolved: number;
+}
+
+export type TOverviewDefectPriority = "urgent" | "high" | "medium" | "low" | "none";
 
 export interface IProjectOverviewAnalytics {
   total_timesheet_hours?: number;
@@ -36,6 +50,10 @@ export interface IProjectOverviewAnalytics {
   total_defects?: number;
   /** 待处理缺陷数 */
   pending_defects?: number;
+  /** 待处理缺陷按优先级分桶 */
+  pending_defects_by_priority?: Record<TOverviewDefectPriority, number>;
+  /** 近 6 个月缺陷新建 vs 解决 */
+  defect_trend?: IOverviewDefectTrendPoint[];
   /** 近 6 个月新建 vs 完成趋势 */
   created_completed_trend?: IOverviewTrendPoint[];
 }

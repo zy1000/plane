@@ -48,7 +48,12 @@ class ProjectProductViewSet(BaseViewSet):
                 workspace__slug=self.kwargs.get("slug"),
                 project_id=self.kwargs.get("project_id"),
             )
-            .select_related("product", "project")
+            .select_related(
+                "product",
+                "product__stage__dictionary",
+                "product__project_lead",
+                "project",
+            )
             .order_by("product__identifier")
         )
 
@@ -157,7 +162,12 @@ class ProductProjectViewSet(BaseViewSet):
                 )
                 | Q(project__network=ProjectNetwork.PUBLIC.value)
             )
-            .select_related("product", "project")
+            .select_related(
+                "product",
+                "product__stage__dictionary",
+                "product__project_lead",
+                "project",
+            )
             .distinct()
             .order_by("project__name")
         )

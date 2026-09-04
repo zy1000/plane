@@ -113,6 +113,32 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             total_defects=Count("id", filter=defect_filter),
             pending_defects=Count("id", filter=defect_filter & open_state),
         )
+        # 概览「缺陷」卡：待处理按优先级分桶 + 近 6 月新建 / 解决节奏。
+        # 与 defect-analytics 端点同口径，但放在这里是为了概览页只依赖
+        # PROJECT_OVERVIEW_VIEW 一个权限、一次请求
+        pending_priority_rows = (
+            scope_queryset.filter(defect_filter & open_state)
+            .values("priority")
+            .annotate(count=Count("id"))
+            .order_by()
+        )
+        pending_priority_map = {
+            row["priority"]: row["count"] for row in pending_priority_rows if row["priority"]
+        }
+        pending_defects_by_priority = {
+            priority: pending_priority_map.get(priority, 0)
+            for priority in ["urgent", "high", "medium", "low", "none"]
+        }
+        defect_trend = [
+            {
+                "month": point["month"],
+                "created": point["created"],
+                "resolved": point["completed"],
+            }
+            for point in self.get_created_completed_trend(
+                scope_queryset.filter(defect_filter)
+            )
+        ]
 
         return {
             "total_work_items": {"count": work_item_counts["total_work_items"] or 0},
@@ -126,6 +152,8 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             "due_soon_work_items": risk_counts["due_soon_work_items"] or 0,
             "total_defects": defect_counts["total_defects"] or 0,
             "pending_defects": defect_counts["pending_defects"] or 0,
+            "pending_defects_by_priority": pending_defects_by_priority,
+            "defect_trend": defect_trend,
             "created_completed_trend": self.get_created_completed_trend(scope_queryset),
         }
 
@@ -190,10 +218,16 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             .annotate(hours=models.Sum("hours"))
         }
 
+        # 概览「团队负荷」按未完成工作项排名，延期单独标红：open / overdue 两个口径
+        # 与健康指标（get_work_items_stats）一致——未完成 = 状态组不在 completed / cancelled
+        today = timezone.now().date()
+        open_state = ~Q(state__group__in=["completed", "cancelled"])
         issue_counts_by_member = {
             row["assignees__id"]: {
                 "total_count": row["total_count"] or 0,
                 "defect_count": row["defect_count"] or 0,
+                "open_count": row["open_count"] or 0,
+                "overdue_count": row["overdue_count"] or 0,
             }
             for row in Issue.issue_objects.filter(
                 project_id=project_id,
@@ -205,6 +239,13 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
                 defect_count=Count(
                     "id",
                     filter=Q(type__category__name="缺陷"),
+                    distinct=True,
+                ),
+                open_count=Count("id", filter=open_state, distinct=True),
+                overdue_count=Count(
+                    "id",
+                    filter=open_state
+                    & Q(target_date__isnull=False, target_date__lt=today),
                     distinct=True,
                 ),
             )
@@ -227,6 +268,8 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
                 "avatar_url": avatar_url,
                 "work_item_count": work_item_count,
                 "defect_count": defect_count,
+                "open_count": member_counts.get("open_count", 0),
+                "overdue_count": member_counts.get("overdue_count", 0),
                 "timesheet_hours": round(hours_by_member.get(user.id, 0), 2),
             })
         return result
@@ -240,7 +283,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
         cache_payload = (
             f"{slug}:{project_id}:{request.user.id}:{query_signature}"
         )
-        cache_key = f"project_analytics_v2:{hashlib.md5(cache_payload.encode()).hexdigest()}"
+        cache_key = f"project_analytics_v3:{hashlib.md5(cache_payload.encode()).hexdigest()}"
         cached_stats = cache.get(cache_key)
         if cached_stats is not None:
             return Response(cached_stats, status=status.HTTP_200_OK)

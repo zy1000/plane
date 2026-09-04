@@ -1,4 +1,5 @@
 import type { TLogoProps } from "./common";
+import type { TDataDictionaryItemLite } from "./data-dictionary";
 import type { TPaginatedResponse } from "./pagination";
 import type { TStateGroups } from "./state";
 import type { IUserLite } from "./users";
@@ -516,6 +517,10 @@ export type TProductProject = {
   /** 产品代号（与开发编号 identifier 是两个字段） */
   product_code: string;
   product_logo_props: TLogoProps | null;
+  /** 产品阶段字典值；老产品迁移后可能为空 */
+  product_stage_detail: TDataDictionaryItemLite | null;
+  /** 产品负责人（工作区成员，不要求是产品成员） */
+  product_project_lead_detail: IUserLite | null;
   project_detail: {
     id: string;
     name: string;

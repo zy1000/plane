@@ -7,7 +7,9 @@ from rest_framework import serializers
 from plane.db.models import ProductProject, RequirementItemStatus
 
 from .base import BaseSerializer
+from .data_dictionary import DataDictionaryItemLiteSerializer
 from .project import ProjectLiteSerializer
+from .user import UserLiteSerializer
 
 
 class ProductProjectSerializer(BaseSerializer):
@@ -25,6 +27,15 @@ class ProductProjectSerializer(BaseSerializer):
     product_logo_props = serializers.JSONField(
         source="product.logo_props", read_only=True
     )
+    # 项目概览「关联产品」卡要一眼看到产品处在哪个阶段、谁在负责；老产品这两项
+    # 可能为空（迁移后未补齐），前端按空处理。视图 select_related 到
+    # product__stage__dictionary / product__project_lead，否则每行两次查询
+    product_stage_detail = DataDictionaryItemLiteSerializer(
+        source="product.stage", read_only=True
+    )
+    product_project_lead_detail = UserLiteSerializer(
+        source="product.project_lead", read_only=True
+    )
     project_detail = ProjectLiteSerializer(source="project", read_only=True)
     status_counts = serializers.SerializerMethodField()
     requirement_count = serializers.SerializerMethodField()
@@ -40,6 +51,8 @@ class ProductProjectSerializer(BaseSerializer):
             "product_identifier",
             "product_code",
             "product_logo_props",
+            "product_stage_detail",
+            "product_project_lead_detail",
             "project_detail",
             "requirement_count",
             "status_counts",
