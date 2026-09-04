@@ -98,7 +98,7 @@ const ProductRow: FC<{ link: TProductProject; href: string }> = ({ link, href })
 const ProductsLegend: FC = () => {
   const { t } = useTranslation();
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-subtle pt-3 text-11 text-tertiary">
+    <div className="mt-auto flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-subtle pt-3 text-11 text-tertiary">
       {REQUIREMENT_STATUSES.map((status) => (
         <span key={status} className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-sm" style={{ backgroundColor: REQUIREMENT_STATUS_BAR_COLOR[status] }} />
@@ -172,17 +172,19 @@ export const OverviewProductsCard: FC<Props> = observer(({ workspaceSlug, projec
     }
     return (
       <>
-        <div className={cn(ROW_GRID, "pb-2 text-11 font-medium text-tertiary")}>
-          <span>{t("project_overview.products.columns.product")}</span>
-          <span>{t("project_overview.products.columns.stage")}</span>
-          <span>{t("project_overview.products.columns.requirements")}</span>
-          <span>{t("project_overview.products.columns.status")}</span>
-          <span className="text-right">{t("project_overview.products.columns.completion")}</span>
-          <span />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={cn(ROW_GRID, "pb-2 text-11 font-medium text-tertiary")}>
+            <span>{t("project_overview.products.columns.product")}</span>
+            <span>{t("project_overview.products.columns.stage")}</span>
+            <span>{t("project_overview.products.columns.requirements")}</span>
+            <span>{t("project_overview.products.columns.status")}</span>
+            <span className="text-right">{t("project_overview.products.columns.completion")}</span>
+            <span />
+          </div>
+          {links.map((link) => (
+            <ProductRow key={link.id} link={link} href={requirementsHref(link.product)} />
+          ))}
         </div>
-        {links.map((link) => (
-          <ProductRow key={link.id} link={link} href={requirementsHref(link.product)} />
-        ))}
         <ProductsLegend />
       </>
     );
@@ -201,8 +203,9 @@ export const OverviewProductsCard: FC<Props> = observer(({ workspaceSlug, projec
         ) : undefined
       }
       className="h-full"
+      bodyClassName="flex min-h-0 flex-col"
     >
-      <div className="px-4 pb-4">{renderBody()}</div>
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">{renderBody()}</div>
     </OverviewCard>
   );
 });
