@@ -9,6 +9,7 @@ import { mergeAttributes, Node } from "@tiptap/core";
 import { CORE_EXTENSIONS } from "@/constants/extension";
 // local imports
 import { DEFAULT_COLUMN_WIDTH } from "./table";
+import { getCellStyleAttributes, parseColwidthAttribute, parseSpanAttribute } from "./table/utilities/cell-attributes";
 
 type TableHeaderOptions = {
   HTMLAttributes: Record<string, unknown>;
@@ -29,21 +30,18 @@ export const TableHeader = Node.create<TableHeaderOptions>({
     return {
       colspan: {
         default: 1,
+        parseHTML: (element) => parseSpanAttribute(element.getAttribute("colspan")),
       },
       rowspan: {
         default: 1,
+        parseHTML: (element) => parseSpanAttribute(element.getAttribute("rowspan")),
       },
       colwidth: {
         default: [DEFAULT_COLUMN_WIDTH],
-        parseHTML: (element) => {
-          const colwidth = element.getAttribute("colwidth");
-          const value = colwidth ? [parseInt(colwidth, 10)] : null;
-
-          return value;
-        },
+        parseHTML: parseColwidthAttribute,
       },
       background: {
-        default: "none",
+        default: null,
       },
     };
   },
@@ -57,12 +55,6 @@ export const TableHeader = Node.create<TableHeaderOptions>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    return [
-      "th",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-        style: `background-color: ${node.attrs.background};`,
-      }),
-      0,
-    ];
+    return ["th", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, getCellStyleAttributes(node.attrs)), 0];
   },
 });

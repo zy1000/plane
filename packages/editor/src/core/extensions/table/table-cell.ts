@@ -13,6 +13,7 @@ import { findParentNodeOfType } from "@/helpers/common";
 // local imports
 import { TableCellSelectionOutlinePlugin } from "./plugins/selection-outline/plugin";
 import { DEFAULT_COLUMN_WIDTH } from "./table";
+import { getCellStyleAttributes, parseColwidthAttribute, parseSpanAttribute } from "./table/utilities/cell-attributes";
 import { isCellSelection } from "./table/utilities/helpers";
 
 type TableCellOptions = {
@@ -34,18 +35,15 @@ export const TableCell = Node.create<TableCellOptions>({
     return {
       colspan: {
         default: 1,
+        parseHTML: (element) => parseSpanAttribute(element.getAttribute("colspan")),
       },
       rowspan: {
         default: 1,
+        parseHTML: (element) => parseSpanAttribute(element.getAttribute("rowspan")),
       },
       colwidth: {
         default: [DEFAULT_COLUMN_WIDTH],
-        parseHTML: (element) => {
-          const colwidth = element.getAttribute("colwidth");
-          const value = colwidth ? [parseInt(colwidth, 10)] : null;
-
-          return value;
-        },
+        parseHTML: parseColwidthAttribute,
       },
       background: {
         default: null,
@@ -110,12 +108,6 @@ export const TableCell = Node.create<TableCellOptions>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    return [
-      "td",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-        style: `background-color: ${node.attrs.background}; color: ${node.attrs.textColor};`,
-      }),
-      0,
-    ];
+    return ["td", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, getCellStyleAttributes(node.attrs)), 0];
   },
 });

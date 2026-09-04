@@ -205,6 +205,41 @@ export const getTableCellWidgetDecorationPos = (table: TableNodeLocation, map: T
   table.start + map.map[index] + 1;
 
 /**
+ * @description Get the map index of the first cell that starts in the given row.
+ * Rows fully covered by cells spanning down from above have no cell of their own and return -1.
+ * @param {TableMap} map - The table map.
+ * @param {number} row - The row index.
+ * @returns {number} The map index of the anchor cell, or -1.
+ */
+export const getRowHandleCellIndex = (map: TableMap, row: number): number => {
+  for (let col = 0; col < map.width; col++) {
+    const index = row * map.width + col;
+    if (row === 0 || map.map[index - map.width] !== map.map[index]) return index;
+  }
+  return -1;
+};
+
+/**
+ * @description Get the map index of the first-row cell that starts in the given column.
+ * Columns covered by a cell spanning from the left return -1.
+ * @param {TableMap} map - The table map.
+ * @param {number} col - The column index.
+ * @returns {number} The map index of the anchor cell, or -1.
+ */
+export const getColumnHandleCellIndex = (map: TableMap, col: number): number =>
+  col === 0 || map.map[col - 1] !== map.map[col] ? col : -1;
+
+/**
+ * @description Check if the table contains merged cells (a cell occupying several map slots).
+ * @param {ProseMirrorNode} table - The table node.
+ * @returns {boolean} True if any cell has a colspan or rowspan greater than 1.
+ */
+export const hasMergedCells = (table: ProseMirrorNode): boolean => {
+  const { map } = TableMap.get(table);
+  return new Set(map).size !== map.length;
+};
+
+/**
  * @description Get the height of the table in pixels.
  * @param {TableNodeLocation} table - The table node location.
  * @param {Editor} editor - The editor instance.

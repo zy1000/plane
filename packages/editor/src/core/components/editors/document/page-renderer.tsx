@@ -10,7 +10,7 @@ import type { Editor } from "@tiptap/react";
 import { cn } from "@plane/utils";
 // components
 import { DocumentContentLoader, EditorContainer, EditorContentWrapper } from "@/components/editors";
-import { BlockMenu, EditorBubbleMenu } from "@/components/menus";
+import { BlockMenu, EditorBubbleMenu, TableCellContextMenu } from "@/components/menus";
 // types
 import type { TCollabValue } from "@/contexts";
 import type {
@@ -112,6 +112,7 @@ export function PageRenderer(props: Props) {
                   flaggedExtensions={flaggedExtensions}
                   disabledExtensions={disabledExtensions}
                 />
+                <TableCellContextMenu editor={editor} />
               </div>
             )}
           </EditorContainer>

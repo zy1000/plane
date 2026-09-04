@@ -12,6 +12,7 @@ import { ReactRenderer } from "@tiptap/react";
 // extensions
 import {
   findTable,
+  getRowHandleCellIndex,
   getTableCellWidgetDecorationPos,
   haveTableRelatedChanges,
 } from "@/extensions/table/table/utilities/helpers";
@@ -52,7 +53,9 @@ export const TableRowDragHandlePlugin = (editor: Editor): Plugin<TableRowDragHan
         if (!isStale) {
           const mapped = prev.decorations?.map(tr.mapping, tr.doc);
           for (let row = 0; row < tableMap.height; row++) {
-            const pos = getTableCellWidgetDecorationPos(table, tableMap, row * tableMap.width);
+            const cellIndex = getRowHandleCellIndex(tableMap, row);
+            if (cellIndex === -1) continue;
+            const pos = getTableCellWidgetDecorationPos(table, tableMap, cellIndex);
             if (mapped?.find(pos, pos + 1)?.length !== 1) {
               isStale = true;
               break;
@@ -84,7 +87,10 @@ export const TableRowDragHandlePlugin = (editor: Editor): Plugin<TableRowDragHan
         const renderers: ReactRenderer[] = [];
 
         for (let row = 0; row < tableMap.height; row++) {
-          const pos = getTableCellWidgetDecorationPos(table, tableMap, row * tableMap.width);
+          // rows fully covered by a rowspan from above get no handle of their own
+          const cellIndex = getRowHandleCellIndex(tableMap, row);
+          if (cellIndex === -1) continue;
+          const pos = getTableCellWidgetDecorationPos(table, tableMap, cellIndex);
 
           const dragHandleComponent = new ReactRenderer(RowDragHandle, {
             props: {

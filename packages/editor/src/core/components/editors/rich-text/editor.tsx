@@ -7,7 +7,7 @@
 import { forwardRef, useCallback } from "react";
 // components
 import { EditorWrapper } from "@/components/editors";
-import { BlockMenu, EditorBubbleMenu } from "@/components/menus";
+import { BlockMenu, EditorBubbleMenu, TableCellContextMenu } from "@/components/menus";
 // extensions
 import { SideMenuExtension } from "@/extensions";
 // plane editor imports
@@ -63,6 +63,7 @@ function RichTextEditor(props: IRichTextEditorProps) {
             disabledExtensions={disabledExtensions}
             workItemIdentifier={workItemIdentifier}
           />
+          <TableCellContextMenu editor={editor} />
         </>
       )}
     </EditorWrapper>

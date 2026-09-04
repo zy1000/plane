@@ -28,6 +28,7 @@ import {
   findTable,
   getTableHeightPx,
   getTableWidthPx,
+  hasMergedCells,
   isCellSelection,
   selectColumn,
 } from "@/extensions/table/table/utilities/helpers";
@@ -134,6 +135,9 @@ export function ColumnDragHandle(props: ColumnDragHandleProps) {
       if (!table) return;
 
       editor.view.dispatch(selectColumn(table, col, editor.state.tr));
+
+      // reordering columns isn't span-aware; keep the selection but skip dragging for merged tables
+      if (hasMergedCells(table.node)) return;
 
       // drag column
       const tableWidthPx = getTableWidthPx(table, editor);

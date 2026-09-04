@@ -6,20 +6,23 @@
 
 import type { ParentConfig } from "@tiptap/core";
 import { callOrReturn, getExtensionField, mergeAttributes, Node } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import {
   addColumnAfter,
   addColumnBefore,
   addRowAfter,
   addRowBefore,
+  cellAround,
   CellSelection,
   columnResizing,
   deleteCellSelection,
   deleteTable,
   fixTables,
   goToNextCell,
+  isInTable,
   mergeCells,
-  setCellAttr,
+  selectedRect,
   splitCell,
   tableEditing,
   toggleHeader,
@@ -37,6 +40,7 @@ import { createTable } from "./utilities/create-table";
 import { deleteColumnOrTable } from "./utilities/delete-column";
 import { handleDeleteKeyOnTable } from "./utilities/delete-key-shortcut";
 import { deleteRowOrTable } from "./utilities/delete-row";
+import { isCellSelection } from "./utilities/helpers";
 import { insertLineAboveTableAction } from "./utilities/insert-line-above-table-action";
 import { insertLineBelowTableAction } from "./utilities/insert-line-below-table-action";
 import { DEFAULT_COLUMN_WIDTH } from ".";
@@ -166,8 +170,31 @@ export const Table = Node.create<TableOptions>({
           deleteTable(state, dispatch),
       mergeCells:
         () =>
-        ({ state, dispatch }) =>
-          mergeCells(state, dispatch),
+        ({ state, tr, dispatch }) => {
+          if (!isCellSelection(state.selection)) return false;
+
+          // prosemirror-tables pads the merged cell's colwidth with zeros, which turns the covered
+          // columns into auto width; capture the widths of the covered columns and restore them after merging
+          const rect = selectedRect(state);
+          const widths: number[] = [];
+          for (let col = rect.left; col < rect.right; col++) {
+            const cellPos = rect.map.map[rect.top * rect.map.width + col];
+            const colwidth = rect.table.nodeAt(cellPos)?.attrs.colwidth as number[] | null | undefined;
+            widths.push(colwidth?.[col - rect.map.colCount(cellPos)] || DEFAULT_COLUMN_WIDTH);
+          }
+
+          if (!mergeCells(state, dispatch)) return false;
+
+          // mergeCells leaves the merged cell selected
+          if (dispatch && isCellSelection(tr.selection)) {
+            const $cell = tr.selection.$anchorCell;
+            if ($cell.nodeAfter) {
+              tr.setNodeMarkup($cell.pos, null, { ...$cell.nodeAfter.attrs, colwidth: widths });
+            }
+          }
+
+          return true;
+        },
       splitCell:
         () =>
         ({ state, dispatch }) =>
@@ -190,17 +217,35 @@ export const Table = Node.create<TableOptions>({
           deleteCellSelection(state, dispatch),
       mergeOrSplit:
         () =>
-        ({ state, dispatch }) => {
-          if (mergeCells(state, dispatch)) {
-            return true;
-          }
-
-          return splitCell(state, dispatch);
-        },
+        ({ commands }) =>
+          commands.mergeCells() || commands.splitCell(),
+      // own implementation instead of prosemirror-tables' setCellAttr, which bails out entirely
+      // when the head cell already has the value, leaving the rest of the selection untouched
       setCellAttribute:
         (name, value) =>
-        ({ state, dispatch }) =>
-          setCellAttr(name, value)(state, dispatch),
+        ({ state, tr, dispatch }) => {
+          if (!isInTable(state)) return false;
+
+          const { selection } = state;
+          const cells: { node: ProseMirrorNode; pos: number }[] = [];
+          if (isCellSelection(selection)) {
+            selection.forEachCell((node, pos) => cells.push({ node, pos }));
+          } else {
+            const $cell = cellAround(selection.$head);
+            if (!$cell?.nodeAfter) return false;
+            cells.push({ node: $cell.nodeAfter, pos: $cell.pos });
+          }
+
+          if (dispatch) {
+            cells.forEach(({ node, pos }) => {
+              if (node.attrs[name] !== value) {
+                tr.setNodeMarkup(pos, null, { ...node.attrs, [name]: value });
+              }
+            });
+          }
+
+          return true;
+        },
       goToNextCell:
         () =>
         ({ state, dispatch }) =>

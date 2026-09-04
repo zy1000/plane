@@ -11,7 +11,7 @@ import type { LucideIcon } from "lucide-react";
 // extensions
 import type { ISvgIcons } from "@plane/propel/icons";
 import { CopyIcon, TrashIcon, CloseIcon } from "@plane/propel/icons";
-import { findTable, getSelectedColumns } from "@/extensions/table/table/utilities/helpers";
+import { findTable, getSelectedColumns, hasMergedCells } from "@/extensions/table/table/utilities/helpers";
 // local imports
 import { duplicateColumns } from "../actions";
 import { TableDragHandleDropdownColorSelector } from "../color-selector";
@@ -70,6 +70,10 @@ type Props = {
 
 export function ColumnOptionsDropdown(props: Props) {
   const { editor, onClose } = props;
+  // duplicating columns isn't span-aware
+  const table = findTable(editor.state.selection);
+  const isMerged = !!table && hasMergedCells(table.node);
+  const dropdownItems = DROPDOWN_ITEMS.filter((item) => item.key !== "duplicate" || !isMerged);
 
   return (
     <>
@@ -88,7 +92,7 @@ export function ColumnOptionsDropdown(props: Props) {
       </button>
       <hr className="my-2 border-subtle" />
       <TableDragHandleDropdownColorSelector editor={editor} onSelect={onClose} />
-      {DROPDOWN_ITEMS.map((item) => (
+      {dropdownItems.map((item) => (
         <button
           key={item.key}
           type="button"

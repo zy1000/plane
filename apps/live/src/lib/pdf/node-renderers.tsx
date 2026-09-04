@@ -14,7 +14,61 @@ import { applyMarks } from "./mark-renderers";
 import { pdfStyles } from "./styles";
 import type { KeyGenerator, NodeRendererRegistry, PDFExportMetadata, PDFRenderContext, TipTapNode } from "./types";
 
-const getCalloutIcon = (node: TipTapNode, color: string): ReactElement => {
+// mirrors DEFAULT_COLUMN_WIDTH of the editor's table extension, which isn't exported from @plane/editor
+const DEFAULT_TABLE_COLUMN_WIDTH = 150;
+
+type TableRowSlot = { kind: "cell" } | { kind: "placeholder"; width: number };
+
+const getCellSpan = (node: TipTapNode, name: "colspan" | "rowspan"): number => {
+  const span = Number(node.attrs?.[name]);
+  return Number.isFinite(span) && span > 0 ? span : 1;
+};
+
+// merged cells span several columns: their width is the sum of the covered column widths
+const getCellWidth = (node: TipTapNode): number => {
+  const colwidth = node.attrs?.colwidth as number[] | undefined;
+  const slotWidths = Array.from(
+    { length: getCellSpan(node, "colspan") },
+    (_, index) => colwidth?.[index] || DEFAULT_TABLE_COLUMN_WIDTH
+  );
+  return slotWidths.reduce((sum, width) => sum + width, 0);
+};
+
+// @react-pdf has no table layout, so a rowspan can't really span rows: the cell is rendered in its first row
+// and the rows below get an empty placeholder of the same width to keep the columns aligned
+const computeTableRowLayouts = (table: TipTapNode): TableRowSlot[][] => {
+  // start column -> cell spanning down from a previous row
+  const covered = new Map<number, { remainingRows: number; colspan: number; width: number }>();
+
+  return (table.content ?? []).map((row) => {
+    const cells = row.content ?? [];
+    const slots: TableRowSlot[] = [];
+    let col = 0;
+    let cellIndex = 0;
+
+    while (cellIndex < cells.length || covered.has(col)) {
+      const spanning = covered.get(col);
+      if (spanning) {
+        slots.push({ kind: "placeholder", width: spanning.width });
+        spanning.remainingRows -= 1;
+        if (spanning.remainingRows === 0) covered.delete(col);
+        col += spanning.colspan;
+        continue;
+      }
+
+      const cell = cells[cellIndex++];
+      const colspan = getCellSpan(cell, "colspan");
+      const rowspan = getCellSpan(cell, "rowspan");
+      slots.push({ kind: "cell" });
+      if (rowspan > 1) covered.set(col, { remainingRows: rowspan - 1, colspan, width: getCellWidth(cell) });
+      col += colspan;
+    }
+
+    return slots;
+  });
+};
+
+const getCalloutIcon =(node: TipTapNode, color: string): ReactElement => {
   const logoInUse = node.attrs?.["data-logo-in-use"] as string | undefined;
   const iconName = node.attrs?.["data-icon-name"] as string | undefined;
   const iconColor = (node.attrs?.["data-icon-color"] as string) || color;
@@ -207,9 +261,21 @@ export const nodeRenderers: NodeRendererRegistry = {
 
   tableRow: (node: TipTapNode, children: ReactElement[], ctx: PDFRenderContext): ReactElement => {
     const isHeader = node.attrs?._isHeader === true;
+    const rowLayout = node.attrs?._rowLayout as TableRowSlot[] | undefined;
+    let cellIndex = 0;
+    const cells = rowLayout
+      ? rowLayout.map((slot) =>
+          slot.kind === "cell" ? (
+            children[cellIndex++]
+          ) : (
+            <View key={ctx.getKey()} style={[pdfStyles.tableCell, { width: slot.width, flex: undefined }]} />
+          )
+        )
+      : children;
+
     return (
       <View key={ctx.getKey()} style={isHeader ? pdfStyles.tableHeaderRow : pdfStyles.tableRow} wrap={false}>
-        {children}
+        {cells}
       </View>
     );
   },
@@ -217,7 +283,7 @@ export const nodeRenderers: NodeRendererRegistry = {
   tableHeader: (node: TipTapNode, children: ReactElement[], ctx: PDFRenderContext): ReactElement => {
     const colwidth = node.attrs?.colwidth as number[] | undefined;
     const background = node.attrs?.background as string | undefined;
-    const width = colwidth?.[0];
+    const width = colwidth?.length ? getCellWidth(node) : undefined;
     const widthStyle = width ? { width, flex: undefined } : {};
     const resolvedBgColor = background ? resolveColorForPdf(background, "background") : null;
     const bgStyle = resolvedBgColor ? { backgroundColor: resolvedBgColor } : {};
@@ -232,7 +298,7 @@ export const nodeRenderers: NodeRendererRegistry = {
   tableCell: (node: TipTapNode, children: ReactElement[], ctx: PDFRenderContext): ReactElement => {
     const colwidth = node.attrs?.colwidth as number[] | undefined;
     const background = node.attrs?.background as string | undefined;
-    const width = colwidth?.[0];
+    const width = colwidth?.length ? getCellWidth(node) : undefined;
     const widthStyle = width ? { width, flex: undefined } : {};
     const resolvedBgColor = background ? resolveColorForPdf(background, "background") : null;
     const bgStyle = resolvedBgColor ? { backgroundColor: resolvedBgColor } : {};
@@ -365,13 +431,16 @@ type InternalRenderContext = {
   nestingLevel: number;
   listItemIndex: number;
   textAlign?: string | null;
+  // cell/placeholder sequence of a table row, computed by the parent table
+  rowLayout?: TableRowSlot[];
   pdfContext: PDFRenderContext;
 };
 
 const renderNodeWithContext = (node: TipTapNode, context: InternalRenderContext): ReactElement => {
-  const { parentType, nestingLevel, listItemIndex, textAlign, pdfContext } = context;
+  const { parentType, nestingLevel, listItemIndex, textAlign, rowLayout, pdfContext } = context;
 
   const isListContainer = node.type === CORE_EXTENSIONS.BULLET_LIST || node.type === CORE_EXTENSIONS.ORDERED_LIST;
+  const tableRowLayouts = node.type === CORE_EXTENSIONS.TABLE ? computeTableRowLayouts(node) : undefined;
 
   let childTextAlign = textAlign;
   if (node.type === CORE_EXTENSIONS.PARAGRAPH && node.attrs?.textAlign) {
@@ -387,6 +456,7 @@ const renderNodeWithContext = (node: TipTapNode, context: InternalRenderContext)
       _listItemIndex: listItemIndex,
       _textAlign: childTextAlign,
       _isHeader: node.content?.some((child) => child.type === CORE_EXTENSIONS.TABLE_HEADER),
+      _rowLayout: rowLayout,
     },
   };
 
@@ -397,12 +467,13 @@ const renderNodeWithContext = (node: TipTapNode, context: InternalRenderContext)
 
   let currentListItemIndex = 0;
   const children: ReactElement[] =
-    node.content?.map((child) => {
+    node.content?.map((child, index) => {
       const childContext: InternalRenderContext = {
         parentType: node.type,
         nestingLevel: childNestingLevel,
         listItemIndex: 0,
         textAlign: childTextAlign,
+        rowLayout: tableRowLayouts?.[index],
         pdfContext,
       };
 

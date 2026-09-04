@@ -12,6 +12,7 @@ import { ReactRenderer } from "@tiptap/react";
 // extensions
 import {
   findTable,
+  getColumnHandleCellIndex,
   getTableCellWidgetDecorationPos,
   haveTableRelatedChanges,
 } from "@/extensions/table/table/utilities/helpers";
@@ -52,7 +53,9 @@ export const TableColumnDragHandlePlugin = (editor: Editor): Plugin<TableColumnD
         if (!isStale) {
           const mapped = prev.decorations?.map(tr.mapping, tr.doc);
           for (let col = 0; col < tableMap.width; col++) {
-            const pos = getTableCellWidgetDecorationPos(table, tableMap, col);
+            const cellIndex = getColumnHandleCellIndex(tableMap, col);
+            if (cellIndex === -1) continue;
+            const pos = getTableCellWidgetDecorationPos(table, tableMap, cellIndex);
             if (mapped?.find(pos, pos + 1)?.length !== 1) {
               isStale = true;
               break;
@@ -84,7 +87,10 @@ export const TableColumnDragHandlePlugin = (editor: Editor): Plugin<TableColumnD
         const renderers: ReactRenderer[] = [];
 
         for (let col = 0; col < tableMap.width; col++) {
-          const pos = getTableCellWidgetDecorationPos(table, tableMap, col);
+          // columns covered by a colspan in the first row get no handle of their own
+          const cellIndex = getColumnHandleCellIndex(tableMap, col);
+          if (cellIndex === -1) continue;
+          const pos = getTableCellWidgetDecorationPos(table, tableMap, cellIndex);
 
           const dragHandleComponent = new ReactRenderer(ColumnDragHandle, {
             props: {

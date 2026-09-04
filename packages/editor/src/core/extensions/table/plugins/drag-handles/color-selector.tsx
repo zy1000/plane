@@ -12,7 +12,6 @@ import { ChevronRightIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // constants
 import { COLORS_LIST } from "@/constants/common";
-import { CORE_EXTENSIONS } from "@/constants/extension";
 
 // TODO: implement text color selector
 
@@ -21,14 +20,9 @@ type Props = {
   onSelect: (color: string | null) => void;
 };
 
+// applies to every selected cell (td and th alike), or the cell holding the cursor
 const handleBackgroundColorChange = (editor: Editor, color: string | null) => {
-  editor
-    .chain()
-    .focus()
-    .updateAttributes(CORE_EXTENSIONS.TABLE_CELL, {
-      background: color,
-    })
-    .run();
+  editor.chain().focus().setCellAttribute("background", color).run();
 };
 
 // const handleTextColorChange = (editor: Editor, color: string | null) => {
