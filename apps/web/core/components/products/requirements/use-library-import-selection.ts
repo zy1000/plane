@@ -4,11 +4,15 @@ import type { TRequirementImportPayload } from "@plane/types";
 /**
  * 导入弹窗的勾选状态。
  *
- * 按 `库 -> 条目 ID 集合` 存，而不是把整行存下来：勾整个库时手上只有一串 id
- * （来自「可导入条目」接口），没有行数据。这个形状顺带让「每库已选多少」「按库分组
+ * 按 `库 -> 条目 ID 集合` 存，而不是把整行存下来：勾一个模块或整个库时手上只有一串
+ * id（来自「可导入条目」接口），没有行数据。这个形状顺带让「每库已选多少」「按库分组
  * 提交」都变成直接读取。
  *
- * 选中态跨库、跨分页累积，切库不清空 —— 可以攒一批再一次性导入。
+ * 左侧树上的节点（需求类型 / 标准库 / 模块）都只是「一批 id」的不同切法，所以这里不
+ * 认识树，只提供按 id 批操作的原语：单库一批走 toggleItems，跨库一批（需求类型节点）
+ * 走 toggleGroups。
+ *
+ * 选中态跨库、跨模块、跨分页累积，切节点不清空 —— 可以攒一批再一次性导入。
  */
 
 export type TSelectionState = "checked" | "indeterminate" | "unchecked";
@@ -21,19 +25,36 @@ export const getSelectionState = (picked: number, total: number): TSelectionStat
 export const useLibraryImportSelection = (itemIdsByLibrary: Map<string, string[]>) => {
   const [selected, setSelected] = useState<Map<string, Set<string>>>(new Map());
 
-  /** 一组条目要么全加、要么全删 —— 本页全选与整库全选共用这一条 */
-  const toggleItems = useCallback((libraryId: string, itemIds: string[]) => {
-    if (!itemIds.length) return;
+  /**
+   * 一批 id 要么全加、要么全删。
+   *
+   * `groups` 里一个库一项，允许跨库 —— 需求类型节点下挂着多个库，勾它必须整体判定
+   * 「是不是已经全选了」，否则会出现「已经全选的库被清掉、没选的库被选上」的对调。
+   */
+  const toggleGroups = useCallback((groups: { libraryId: string; itemIds: string[] }[]) => {
+    const effective = groups.filter((group) => group.itemIds.length);
+    if (!effective.length) return;
     setSelected((current) => {
+      const isAllPicked = effective.every((group) =>
+        group.itemIds.every((itemId) => current.get(group.libraryId)?.has(itemId))
+      );
       const next = new Map(current);
-      const picked = new Set(next.get(libraryId) ?? []);
-      if (itemIds.every((itemId) => picked.has(itemId))) itemIds.forEach((itemId) => picked.delete(itemId));
-      else itemIds.forEach((itemId) => picked.add(itemId));
-      if (picked.size) next.set(libraryId, picked);
-      else next.delete(libraryId);
+      for (const { libraryId, itemIds } of effective) {
+        const picked = new Set(next.get(libraryId) ?? []);
+        if (isAllPicked) itemIds.forEach((itemId) => picked.delete(itemId));
+        else itemIds.forEach((itemId) => picked.add(itemId));
+        if (picked.size) next.set(libraryId, picked);
+        else next.delete(libraryId);
+      }
       return next;
     });
   }, []);
+
+  /** 单库的一批 —— 本页全选、模块节点、整库全选都走这条 */
+  const toggleItems = useCallback(
+    (libraryId: string, itemIds: string[]) => toggleGroups([{ libraryId, itemIds }]),
+    [toggleGroups]
+  );
 
   const toggleItem = useCallback(
     (libraryId: string, itemId: string) => toggleItems(libraryId, [itemId]),
@@ -83,9 +104,16 @@ export const useLibraryImportSelection = (itemIdsByLibrary: Map<string, string[]
     totalCount,
     libraryCount,
     pickedCountOf: (libraryId: string) => selected.get(libraryId)?.size ?? 0,
+    /** 某一批 id 里已经选了几条 —— 模块 / 需求类型节点的三态与徽标数字都靠它 */
+    pickedCountIn: (libraryId: string, itemIds: string[]) => {
+      const picked = selected.get(libraryId);
+      if (!picked?.size) return 0;
+      return itemIds.reduce((count, itemId) => (picked.has(itemId) ? count + 1 : count), 0);
+    },
     isPicked: (libraryId: string, itemId: string) => Boolean(selected.get(libraryId)?.has(itemId)),
     toggleItem,
     toggleItems,
+    toggleGroups,
     toggleLibrary,
     clear,
     toPayloads,

@@ -56,7 +56,7 @@ export const useLibraryItems = ({
   const [requirementsError, setRequirementsError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<TRequirementFilter[]>([]);
-  /** 左侧模块树的过滤（含子模块）；null = 「全部」（含未挂靠的条目） */
+  /** 左侧模块树的过滤（含子模块）；`"none"` = 未归类；null = 「全部」 */
   const [moduleId, setModuleId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);

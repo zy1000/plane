@@ -290,7 +290,11 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         # queryset 已锁定本作用域，跨作用域的 module_id 展开后与本批行无交集，
         # 自然得到空集，不需要额外校验归属。
         raw_module_id = request.query_params.get("module_id")
-        if raw_module_id:
+        if raw_module_id == "none":
+            # 「未归类」：没挂任何模块的行。导入弹窗的模块树要能单独选中这一堆，
+            # 否则勾满所有模块也还差它们，且没有任何入口看到它们。
+            queryset = queryset.filter(module_id__isnull=True)
+        elif raw_module_id:
             try:
                 module_id = drf_serializers.UUIDField().run_validation(raw_module_id)
             except drf_serializers.ValidationError as exc:

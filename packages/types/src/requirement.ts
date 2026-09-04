@@ -656,15 +656,25 @@ export type TRequirementImportPayload = {
   after_id?: string;
 };
 
+/** 一条还没导进目标产品的库条目。module_id 为 null = 未归类 */
+export type TRequirementImportableItem = {
+  id: string;
+  module_id: string | null;
+};
+
 /**
  * 某个产品「还没导过」的库条目，按库分组。
  *
- * 导入弹窗靠它算出每个库的可导条数与三态勾选，以及「勾整库」要提交的那批 id ——
- * 条目列表是分页的，凑不出全量。库里条目全导完时 item_ids 是空数组（库本身仍在）。
+ * 导入弹窗靠它算出每个节点（需求类型 / 标准库 / 模块）的可导条数与三态勾选，以及
+ * 勾这些节点要提交的那批 id —— 条目列表是分页的，凑不出全量。库里条目全导完时
+ * items 是空数组（库本身仍在）。
+ *
+ * 带 module_id 是因为模块树接口的 count 是库内全量、不排除已导入的，光有树算不出
+ * 「这个模块还剩几条可导」。数组顺序即库内顺序，提交时按它排。
  */
 export type TRequirementImportableLibrary = {
   library_id: string;
-  item_ids: string[];
+  items: TRequirementImportableItem[];
 };
 
 export type TRequirementImportResponse = {

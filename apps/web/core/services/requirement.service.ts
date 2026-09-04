@@ -375,7 +375,7 @@ export class RequirementService extends APIService {
       ids?: string[];
       /** 藏掉已经导进该产品的条目 —— 导入弹窗的候选池用，必须在服务端剔除才能保住分页 */
       excludeImportedIntoProduct?: string;
-      /** 按模块过滤（含子模块）；不传 = 全部（含未挂靠的条目） */
+      /** 按模块过滤（含子模块）；`"none"` = 只看未挂靠的条目；不传 = 全部 */
       moduleId?: string;
     } = {}
   ): Promise<TRequirementsResponse> {

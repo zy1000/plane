@@ -14,20 +14,28 @@ import { getCurrentPageOffset, LeafValue } from "@/components/requirements/requi
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { useImportableLibraryItems } from "@/hooks/store/use-importable-library-items";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
+import { useLibraryModuleTrees } from "@/hooks/store/use-library-module-trees";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
+import {
+  findModuleNamePath,
+  RequirementImportLibraryTree,
+  UNASSIGNED_MODULE_ID,
+  type TImportTreeNode,
+} from "./import-library-tree";
 import { getSelectionState, useLibraryImportSelection } from "./use-library-import-selection";
 
 /**
  * 从标准库导入条目到产品需求。
  *
- * 左侧常驻标准库列表，右侧是所选库的条目；勾选按 `库 -> 条目 ID` 存在
- * useLibraryImportSelection 里，切库不清空，所以可以跨库攒一批再一次性导入。接口一次
- * 只收一个 library_id，跨库的部分由调用方按库分组后顺序调用（见
- * useProductRequirements.importFromLibraries）。
+ * 左侧是一棵「需求类型 → 标准库 → 模块」的可勾选树，右侧是当前节点（及其子模块）下的
+ * 条目；勾选按 `库 -> 条目 ID` 存在 useLibraryImportSelection 里，切节点不清空，所以
+ * 可以跨模块、跨库攒一批再一次性导入。接口一次只收一个 library_id，跨库的部分由调用方
+ * 按库分组后顺序调用（见 useProductRequirements.importFromLibraries）。
  *
  * 已经导进本产品的条目不进候选池：右侧列表由服务端剔除（条目是分页的，前端就地过滤
- * 会让某一页只剩几行、总数也偏大），左侧的可导条数与「勾整库」则来自
- * useImportableLibraryItems。
+ * 会让某一页只剩几行、总数也偏大），树上每个节点的可导条数与「勾节点」的那批 id 则来自
+ * useImportableLibraryItems（它带回每条的 module_id，模块级的数字只能这么算 ——
+ * 模块树接口自带的 count 是库内全量、不排除已导入的）。
  *
  * 刻意不复用 RequirementGrid：它的勾选是接删除的，还自带编辑工具栏与 bulk-save
  * 契约。这里只复用它的展示部件（内置列 BuiltinCellValue + 自定义列 LeafValue），
@@ -60,19 +68,27 @@ export const RequirementImportFromLibraryModal = ({
   onImport,
 }: TProps) => {
   const { t } = useTranslation();
-  const [libraryId, setLibraryId] = useState<string | null>(null);
-  const [librarySearch, setLibrarySearch] = useState("");
+  const [activeNode, setActiveNode] = useState<TImportTreeNode | null>(null);
+  const [treeSearch, setTreeSearch] = useState("");
+  /** 每次打开自增，用来让左树丢掉上一次的模块树缓存与展开状态 */
+  const [treeRevision, setTreeRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const libraryId = activeNode?.libraryId ?? null;
 
   const { libraries, isLoading: isLibrariesLoading } = useRequirementLibraries(workspaceSlug);
-  // 可导条数与「勾整库」的 id 都来自这里；跟条目列表一样只在有意打开时才拉
-  const { itemIdsByLibrary, isLoading: isImportableLoading, refetch: refetchImportable } =
-    useImportableLibraryItems({
-      workspaceSlug,
-      productId,
-      enabled: isOpen || shouldPrefetch,
-    });
+  // 树上每个节点的可导条数与「勾节点」的 id 都来自这里；跟条目列表一样只在有意打开时才拉
+  const {
+    itemsByLibrary,
+    itemIdsByLibrary,
+    isLoading: isImportableLoading,
+    refetch: refetchImportable,
+  } = useImportableLibraryItems({
+    workspaceSlug,
+    productId,
+    enabled: isOpen || shouldPrefetch,
+  });
+  const moduleTrees = useLibraryModuleTrees(workspaceSlug);
   const itemsStore = useLibraryItems({
     workspaceSlug,
     libraryId: libraryId ?? undefined,
@@ -82,8 +98,8 @@ export const RequirementImportFromLibraryModal = ({
 
   useEffect(() => {
     if (isOpen) return;
-    // 刻意不重置 libraryId：留着它，下次打开就不用重新拉一遍条目，也保留了上次看到哪个库
-    setLibrarySearch("");
+    // 刻意不重置 activeNode：留着它，下次打开就不用重新拉一遍条目，也保留了上次看到哪个节点
+    setTreeSearch("");
     selection.clear();
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,27 +117,22 @@ export const RequirementImportFromLibraryModal = ({
     if (!isOpen) return;
     void refetchImportable().catch(() => undefined);
     void itemsStore.fetchRequirements().catch(() => undefined);
+    // 模块树同理：上次打开之后库里的模块可能已经增删改过
+    moduleTrees.reset();
+    setTreeRevision((current) => current + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
-
-  const filteredLibraries = useMemo(() => {
-    const keyword = librarySearch.trim().toLowerCase();
-    if (!keyword) return libraries;
-    return libraries.filter(
-      (library) =>
-        library.name.toLowerCase().includes(keyword) ||
-        (library.requirement_type_detail?.name ?? "").toLowerCase().includes(keyword)
-    );
-  }, [libraries, librarySearch]);
 
   const importableCountOf = (id: string) => itemIdsByLibrary.get(id)?.length ?? 0;
 
   // 自动选中第一个还有东西可导的库，省掉一次点击；预热时就选，这样条目也能提前拉好
   useEffect(() => {
     if (!(isOpen || shouldPrefetch) || libraryId || !libraries.length) return;
-    setLibraryId(
-      (libraries.find((library) => (itemIdsByLibrary.get(library.id)?.length ?? 0) > 0) ?? libraries[0]).id
-    );
+    setActiveNode({
+      libraryId: (libraries.find((library) => (itemIdsByLibrary.get(library.id)?.length ?? 0) > 0) ?? libraries[0])
+        .id,
+      moduleId: null,
+    });
   }, [isOpen, shouldPrefetch, libraries, libraryId, itemIdsByLibrary]);
 
   /**
@@ -166,11 +177,19 @@ export const RequirementImportFromLibraryModal = ({
     listRef.current?.scrollTo({ top: 0 });
   }, [itemsStore.cursor]);
 
-  const switchLibrary = (nextId: string) => {
-    if (nextId === libraryId) return;
-    setLibraryId(nextId);
-    // 搜索是按当前库的条目搜的，换库后留着会让人以为「这个库只有这几条」
-    itemsStore.setSearch("");
+  /** 右侧面包屑：库名 + 从根到当前模块的名称路径 */
+  const activeModulePath = useMemo(() => {
+    if (!libraryId || !activeNode?.moduleId) return [];
+    if (activeNode.moduleId === UNASSIGNED_MODULE_ID) return [t("requirement_modules.unassigned")];
+    return findModuleNamePath(moduleTrees.treesByLibrary.get(libraryId) ?? [], activeNode.moduleId);
+  }, [activeNode?.moduleId, libraryId, moduleTrees.treesByLibrary, t]);
+
+  const selectNode = (node: TImportTreeNode) => {
+    if (node.libraryId === libraryId && node.moduleId === activeNode?.moduleId) return;
+    setActiveNode(node);
+    itemsStore.setModuleId(node.moduleId);
+    // 搜索是按当前节点下的条目搜的，换了节点还留着会让人以为「这里只有这几条」
+    if (itemsStore.search) itemsStore.setSearch("");
     itemsStore.setCursor(undefined);
   };
 
@@ -218,106 +237,45 @@ export const RequirementImportFromLibraryModal = ({
         </button>
       </div>
 
-      <div className="flex h-[58vh] min-h-[360px]">
-        {/* 左：标准库列表，常驻 */}
-        <aside className="flex w-60 shrink-0 flex-col border-r border-subtle">
+      {/* 左树多了模块层级，比原先的平铺库列表更需要纵向空间 */}
+      <div className="flex h-[58vh] min-h-[420px]">
+        {/* 左：需求类型 → 标准库 → 模块 的可勾选树，常驻 */}
+        <aside className="flex w-[296px] shrink-0 flex-col border-r border-subtle">
           <div className="relative shrink-0 px-3 py-2.5">
             <Search className="pointer-events-none absolute top-1/2 left-5 size-3.5 -translate-y-1/2 text-placeholder" />
             <input
-              value={librarySearch}
-              onChange={(event) => setLibrarySearch(event.target.value)}
+              value={treeSearch}
+              onChange={(event) => setTreeSearch(event.target.value)}
               className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-7 text-12 text-primary outline-none placeholder:text-placeholder"
-              placeholder={t("workspace_products.requirements.import_modal.search_libraries")}
+              placeholder={t("workspace_products.requirements.import_modal.search_tree")}
             />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
             {isLibrariesLoading ? (
-              /* 每条按真实条目的两行结构排（名称 + 类型/条数），避免加载完之后列表跳一下 */
+              /* 每条按真实节点的高度排，避免加载完之后列表跳一下 */
               <ul className="space-y-0.5">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <li key={index} className="rounded-md px-2.5 py-2" style={{ animationDelay: `${index * 60}ms` }}>
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <li key={index} className="flex h-8 items-center px-2" style={{ animationDelay: `${index * 60}ms` }}>
                     <span className="block h-3 w-3/4 animate-pulse rounded bg-layer-2" />
-                    <span className="mt-1.5 block h-2.5 w-1/2 animate-pulse rounded bg-layer-1" />
                   </li>
                 ))}
               </ul>
-            ) : !filteredLibraries.length ? (
-              <p className="px-2 py-8 text-center text-12 text-secondary">
-                {t("workspace_products.requirements.import_modal.empty_libraries")}
-              </p>
             ) : (
-              <ul className="space-y-0.5">
-                {filteredLibraries.map((library) => {
-                  const isActive = library.id === libraryId;
-                  const importableCount = importableCountOf(library.id);
-                  const pickedCount = selection.pickedCountOf(library.id);
-                  const libraryState = getSelectionState(pickedCount, importableCount);
-                  // 「空库」和「都导完了」都是 0 条可导，但对用户是两回事
-                  const metaKey =
-                    library.item_count === 0
-                      ? "library_meta_empty"
-                      : importableCount === 0
-                        ? "library_meta_drained"
-                        : "library_meta_importable";
-                  return (
-                    /* 勾选框与切库按钮必须是兄弟节点：套进 <button> 里是 interactive
-                       content 嵌套，点勾选会连带触发切库，各浏览器行为还不一致 */
-                    <li
-                      key={library.id}
-                      className={cn(
-                        "relative flex items-start gap-2 rounded-md px-2.5 py-2 transition-colors",
-                        isActive ? "bg-layer-2" : "hover:bg-layer-1"
-                      )}
-                    >
-                      {isActive && (
-                        <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent-primary" />
-                      )}
-                      <Checkbox
-                        containerClassName="mt-0.5"
-                        checked={libraryState === "checked"}
-                        indeterminate={libraryState === "indeterminate"}
-                        disabled={importableCount === 0}
-                        onChange={() => selection.toggleLibrary(library.id)}
-                        aria-label={t("workspace_products.requirements.import_modal.select_all_library", {
-                          library: library.name,
-                        })}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => switchLibrary(library.id)}
-                        className="min-w-0 flex-1 text-left"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "min-w-0 flex-1 truncate text-12",
-                              isActive ? "font-medium text-primary" : "text-secondary"
-                            )}
-                          >
-                            {library.name}
-                          </span>
-                          {pickedCount > 0 && (
-                            <span className="shrink-0 rounded-full bg-accent-primary px-1.5 text-10 font-medium text-on-color">
-                              {pickedCount}
-                            </span>
-                          )}
-                        </div>
-                        <span className="mt-0.5 block truncate text-10 text-tertiary">
-                          {t(`workspace_products.requirements.import_modal.${metaKey}`, {
-                            requirement_type: library.requirement_type_detail?.name ?? "",
-                            count: importableCount,
-                          })}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <RequirementImportLibraryTree
+                libraries={libraries}
+                itemsByLibrary={itemsByLibrary}
+                treesByLibrary={moduleTrees.treesByLibrary}
+                ensureModules={(id) => void moduleTrees.ensureModules(id)}
+                search={treeSearch}
+                selection={selection}
+                activeNode={activeNode}
+                onSelectNode={selectNode}
+                revision={treeRevision}
+              />
             )}
           </div>
         </aside>
-
-        {/* 右：所选库的条目 */}
+        {/* 右：所选节点（含其子模块）下的条目 */}
         <section className="flex min-w-0 flex-1 flex-col">
           {isBootstrapping ? (
             /* 打开瞬间会自动选中第一个库，这段空档给骨架而不是提示文案 ——
@@ -347,7 +305,29 @@ export const RequirementImportFromLibraryModal = ({
           ) : (
             <>
               <div className="flex shrink-0 items-center gap-2 border-b border-subtle px-4 py-2.5">
-                <span className="min-w-0 truncate text-12 font-medium text-primary">{activeLibrary?.name}</span>
+                {/* 面包屑：库 / 模块路径。只到模块为止 —— 条目本身在下面的表里 */}
+                <div className="flex min-w-0 items-center gap-1.5 text-12 text-secondary">
+                  <span className="min-w-0 truncate font-medium text-primary">{activeLibrary?.name}</span>
+                  {activeModulePath.map((name, index) => (
+                    <span key={`${name}-${index}`} className="flex min-w-0 items-center gap-1.5">
+                      <span className="text-placeholder">/</span>
+                      <span
+                        className={cn(
+                          "min-w-0 truncate",
+                          index === activeModulePath.length - 1 && "font-medium text-primary"
+                        )}
+                      >
+                        {name}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                {activeNode?.moduleId && activeNode.moduleId !== UNASSIGNED_MODULE_ID && (
+                  /* 点父模块看到的是整棵子树，不说清楚会以为列表串了别的模块的条目 */
+                  <span className="shrink-0 rounded bg-layer-2 px-1.5 py-0.5 text-10 text-tertiary">
+                    {t("workspace_products.requirements.import_modal.includes_submodules")}
+                  </span>
+                )}
                 <div className="relative ml-auto w-52">
                   <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-placeholder" />
                   <input

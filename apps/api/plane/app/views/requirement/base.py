@@ -209,13 +209,17 @@ class RequirementViewSet(BaseRequirementRowViewSet):
         )
 
     def importable_library_items(self, request, *args, **kwargs):
-        """本产品「还没导过」的标准库条目 id，按库分组。
+        """本产品「还没导过」的标准库条目，按库分组，每条只带 id 与所属模块。
 
-        导入弹窗要三样东西：每个库还剩多少可导、勾整库时那一批 id、以及据此算出的
-        三态。它们都要在弹窗打开的一瞬间就位（条目列表是分页的，凑不出全量），所以
-        一次把全工作区的库都算出来，而不是每个库发一次请求。
+        导入弹窗要三样东西：每个节点还剩多少可导、勾某个节点时那一批 id、以及据此
+        算出的三态。它们都要在弹窗打开的一瞬间就位（条目列表是分页的，凑不出全量），
+        所以一次把全工作区的库都算出来，而不是每个库发一次请求。
 
-        只吐 id，不序列化整行 —— 行的内容由条目列表接口分页给出。
+        带上 module_id 是为了让左侧那棵「需求类型 → 标准库 → 模块」树能在前端把可导
+        条目按模块归堆：模块树本身另有接口（且它的 count 是库内全量，不排除已导入的），
+        光有树算不出「这个模块还剩几条可导」。module_id 为 null 即「未归类」。
+
+        只吐 id + module_id，不序列化整行 —— 行的内容由条目列表接口分页给出。
         """
         owner, error = self._owner_or_error(require_write=False)
         if error is not None:
@@ -229,23 +233,28 @@ class RequirementViewSet(BaseRequirementRowViewSet):
             ).values_list("source_library_id", "source_sequence_id")
         )
         grouped = {}
-        for library_id, item_id, sequence_id in (
+        for library_id, item_id, sequence_id, module_id in (
             Requirement.objects.filter(
                 library__isnull=False,
                 library__workspace__slug=self.workspace_slug,
             )
             .order_by("library_id", "sort_order", "created_at", "id")
-            .values_list("library_id", "id", "sequence_id")
+            .values_list("library_id", "id", "sequence_id", "module_id")
         ):
-            item_ids = grouped.setdefault(str(library_id), [])
+            items = grouped.setdefault(str(library_id), [])
             if (library_id, sequence_id) in imported:
                 continue
-            item_ids.append(str(item_id))
+            items.append(
+                {
+                    "id": str(item_id),
+                    "module_id": str(module_id) if module_id else None,
+                }
+            )
 
         return Response(
             [
-                {"library_id": library_id, "item_ids": item_ids}
-                for library_id, item_ids in grouped.items()
+                {"library_id": library_id, "items": items}
+                for library_id, items in grouped.items()
             ],
             status=status.HTTP_200_OK,
         )
