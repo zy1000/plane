@@ -36,7 +36,9 @@ const Checkbox = React.forwardRef(function Checkbox(props: CheckboxProps, ref: R
         name={name}
         checked={checked}
         className={cn(
-          "size-4 shrink-0 cursor-pointer appearance-none rounded-[3px] border focus:outline-1 focus:outline-offset-4 focus:outline-accent-strong",
+          // focus-visible 而不是 focus：鼠标点一下不该留一圈焦点环（尤其 offset-4 是
+          // 飘在框外的一圈），键盘 Tab 过来仍然要有。与 propel 里其它控件的写法一致
+          "size-4 shrink-0 cursor-pointer appearance-none rounded-[3px] border focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-accent-strong",
           {
             "cursor-not-allowed border-subtle bg-layer-1": disabled,
             "border-strong bg-transparent hover:border-strong-1": !disabled,

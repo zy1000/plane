@@ -143,7 +143,7 @@ export const useProductRequirements = ({
    * 从一个或多个标准库导入。
    *
    * 导入弹窗允许跨库勾选，而接口一次只收一个 library_id，所以这里按库分组顺序调用，
-   * 最后只刷新一次。返回各批次的响应，调用方用第一批的类型 ID 决定切到哪个视图。
+   * 最后只刷新一次。返回各批次的响应供调用方统计条数与判断是否真的导进了东西。
    */
   const importFromLibraries = useCallback(
     async (payloads: TRequirementImportPayload[]) => {
@@ -155,7 +155,7 @@ export const useProductRequirements = ({
         for (const payload of payloads) {
           responses.push(await requirementService.importLibraryItems(workspaceSlug, productId, payload));
         }
-        // 先刷配置：引用的需求类型集合可能变大了，页面要据此更新视图列表并切过去
+        // 先刷配置：引用的需求类型集合可能变大了，视图切换器与默认视图的字段都要跟上
         await fetchConfiguration();
         await fetchRequirements();
         return responses;

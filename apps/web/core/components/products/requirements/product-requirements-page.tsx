@@ -612,8 +612,11 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           // 导入会按名称路径映射/新建产品模块，左栏要跟上
           void refreshModules().catch(() => undefined);
           if (!responses.length) return responses;
-          // 跨库导入时切到第一批的类型视图，用户马上能看到刚导进来的数据
-          changeView({ kind: "requirementType", requirementTypeId: responses[0].requirement_type_id });
+          /*
+           * 回默认视图。一次可以从多个标准库导入，而每个库绑一个需求类型 —— 切到其中
+           * 任意一个类型视图都会把这一批里的其它类型藏起来，看着像是只导进去一部分。
+           */
+          changeView({ kind: "default" });
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title: t("success"),
