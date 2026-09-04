@@ -19,6 +19,7 @@ import {
   ProjectDateField,
   ProjectDictionaryField,
   ProjectMemberField,
+  ProjectProductTypeField,
   validateEndDate,
 } from "@/components/project/form-fields";
 import type { TProjectDictionaries } from "@/components/project/form-fields";
@@ -36,7 +37,7 @@ const VARIANT = "grouped-modal" as const;
 
 /**
  * 创建弹窗的中段：四组字段，组名靠左、字段靠右两列。
- * 基本信息（代号 | 类型 / 所属BU | 状态）· 团队（负责人 | 研发产品经理）· 排期（开始 → 完成 + 工期）· 描述。
+ * 基本信息（代号 | 项目类型 / 产品类型 | 所属BU / 状态）· 团队（负责人 | 研发产品经理）· 排期（开始 → 完成 + 工期）· 描述。
  * 名称 / 项目 ID / logo / 可见性在顶部身份区（header.tsx）。
  */
 function ProjectCommonAttributes(props: Props) {
@@ -69,6 +70,7 @@ function ProjectCommonAttributes(props: Props) {
             dictionaries={dictionaries}
             tabIndex={getIndex("project_type")}
           />
+          <ProjectProductTypeField {...base} required tabIndex={getIndex("product_type")} />
           <ProjectDictionaryField
             {...base}
             name="business_unit"

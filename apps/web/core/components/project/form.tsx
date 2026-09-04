@@ -140,6 +140,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       product_manager: normalizeUserId(formData.product_manager),
       status: formData.status ?? null,
       project_type: formData.project_type ?? null,
+      product_type: formData.product_type ?? null,
       start_date: formData.start_date ?? null,
       end_date: formData.end_date ?? null,
       project_lead: normalizeUserId(formData.project_lead),

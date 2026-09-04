@@ -56,6 +56,7 @@ export const PROJECT_CREATE_TAB_INDICES = [
   "network",
   "code",
   "project_type",
+  "product_type",
   "business_unit",
   "status",
   "lead",

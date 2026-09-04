@@ -25,6 +25,7 @@ export const getProjectFormValues = (projectLead?: string | null): Partial<IProj
   product_manager: null,
   status: null,
   project_type: null,
+  product_type: null,
   start_date: null,
   end_date: null,
   /** 创建时默认开启全部项目特性，跳过创建后选择特性的环节 */

@@ -36,6 +36,7 @@ export type TProjectFormFieldKey =
   | "description_html"
   | "pms_project_name"
   | "timezone"
+  | "product_type"
   | TProjectDictionaryFieldKey
   | TProjectMemberFieldKey
   | TProjectDateFieldKey;
@@ -50,6 +51,7 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
   "description_html",
   "pms_project_name",
   "timezone",
+  "product_type",
   "project_type",
   "status",
   "project_lead",

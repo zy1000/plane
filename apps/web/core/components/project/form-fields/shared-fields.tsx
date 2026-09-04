@@ -11,7 +11,13 @@ import type { TTranslationStore } from "@plane/i18n";
 import { getDate } from "@plane/utils";
 import type { TFormVariant } from "@/components/common/form-section";
 import type { TProject } from "@/plane-web/types/projects";
-import { ProjectCodeField, ProjectDateField, ProjectDictionaryField, ProjectMemberField } from "./fields";
+import {
+  ProjectCodeField,
+  ProjectDateField,
+  ProjectDictionaryField,
+  ProjectMemberField,
+  ProjectProductTypeField,
+} from "./fields";
 import type { TProjectDictionaries } from "./use-project-dictionaries";
 
 export type TProjectSharedFieldsProps = {
@@ -43,7 +49,7 @@ export const validateEndDate =
 
 /**
  * 创建弹窗与设置页共用的中段字段，按两列网格的顺序平铺：
- * 项目代号 | 项目类型 / 负责人 | 研发产品经理 / 所属BU | 项目状态 / 开始日期 | 完成日期。
+ * 项目代号 | 项目类型 / 产品类型 | 负责人 / 研发产品经理 | 所属BU / 项目状态 | 开始日期 / 完成日期。
  * 本身不带网格容器，作为父级 grid 的直接子元素使用；
  * 名称 / 项目 ID / 描述 / 可见性两处差异较大（identifier 自动同步 vs 唯一性检查、TextArea vs 富文本），由各自表单拼装。
  */
@@ -64,6 +70,7 @@ export function ProjectSharedFields(props: TProjectSharedFieldsProps) {
         fallbackItem={project?.project_type_detail}
         tabIndex={getIndex?.("project_type")}
       />
+      <ProjectProductTypeField {...base} required={false} tabIndex={getIndex?.("product_type")} />
       <ProjectMemberField {...base} name="project_lead" required projectId={projectId} tabIndex={getIndex?.("lead")} />
       <ProjectMemberField {...base} name="product_manager" required tabIndex={getIndex?.("product_manager")} />
       <ProjectDictionaryField
