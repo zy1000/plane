@@ -559,7 +559,7 @@ export const RequirementGridColumnResizer = ({
  * 表格走 border-separate，行组（thead / tbody）上的 border 在这个模型下根本不渲染。
  * FLUSH 版不带内边距，留给自己要铺满整格底色的单元格（左固定的标题列就是）。
  *
- * 单列表头钉 44px，和正文行高对齐。表单子字段叶子行另盖成 40px。分组表头另走
+ * 单列表头钉 44px，和正文行高对齐。表单子字段叶子行另盖成 28px（与分组条同高）。分组表头另走
  * REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS，不能套 h-11，否则两行叠成 88px，
  * 单列 rowSpan=2 会被一起拉高，列名漂在一格空白中间。
  */
@@ -571,10 +571,10 @@ export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x
 export const REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS =
   "group/header relative h-7 border-r border-b border-strong bg-layer-1 text-center align-middle text-13 font-medium";
 /**
- * 二级表头的叶子行：比正文行略矮，把 4px 让给上面的分组条。
- * 有二级表头时盖掉叶子格的 h-11。rowSpan 格高度改由两行相加，列名落在这条带里。
+ * 二级表头的叶子行：与分组条同高（h-7），有二级表头时盖掉叶子格的 h-11。
+ * rowSpan 格高度改由两行相加，列名落在这条带里。
  */
-const HEADER_FORM_LEAF_ROW_CLASS = "h-10";
+const HEADER_FORM_LEAF_ROW_CLASS = "h-7";
 const HEADER_CELL_SPANNED_CLASS = "!h-auto align-bottom";
 
 /**
