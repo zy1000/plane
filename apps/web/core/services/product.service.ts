@@ -11,7 +11,6 @@ const PRODUCT_PATCH_FIELDS = [
   "owner",
   "reviewers",
   "logo_props",
-  "cover_image",
   "code",
   "stage",
   "category",
@@ -59,7 +58,6 @@ export class ProductService extends APIService {
 
   async update(workspaceSlug: string, productId: string, payload: TUpdateProductPayload): Promise<TProduct> {
     // 白名单透传：只发 undefined 以外的字段（null 表示清空，要透传）。
-    // 不透传 cover_image_asset：编辑换封面统一走资产上传确认由后端回写绑定。
     const body = Object.fromEntries(
       PRODUCT_PATCH_FIELDS.filter((key) => payload[key] !== undefined).map((key) => [key, payload[key]])
     );

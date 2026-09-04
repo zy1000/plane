@@ -10,6 +10,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import {
   FORM_VARIANT_STYLES,
+  FormFieldGroup,
   FormFieldShell,
   FormSection,
   FormWarningBanner,
@@ -19,8 +20,8 @@ import type { TFormVariant } from "@/components/common/form-section";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
-import { PRODUCT_DICTIONARY_FIELDS, PRODUCT_REQUIRED_EXTENDED_FIELDS } from "./constants";
-import type { TProductDictionaryFieldKey } from "./constants";
+import { PRODUCT_DICTIONARY_FIELDS, PRODUCT_FORM_DICTIONARY_KEYS, PRODUCT_REQUIRED_EXTENDED_FIELDS } from "./constants";
+import type { TProductDictionaryFieldKey, TProductFormDictionaryKey } from "./constants";
 import type { TProductExtendedFieldErrors, TProductExtendedFieldsState } from "./use-product-extended-fields";
 
 type Props = {
@@ -37,13 +38,27 @@ type Props = {
   className?: string;
   /** 把产品负责人放进「团队」区，与项目/测试负责人同一套控件 */
   ownerField?: ReactNode;
+  /** 把描述编辑器放进「描述」区；不传则不渲染该组（设置页描述在区块外自持） */
+  descriptionField?: ReactNode;
 };
 
-const TEXT_FIELDS = ["code", "model_number", "external_model"] as const;
-const CLASSIFICATION_FIELDS = ["stage", "category", "status"] as const;
+const TEXT_FIELDS = ["model_number", "external_model"] as const;
+const CLASSIFICATION_FIELDS = ["stage", "status", "category"] as const;
 const LEVEL_FIELDS = ["hardware_level", "structure_level", "software_level"] as const;
 const DATE_FIELDS = ["start_date", "o_phase_close_date", "v_phase_close_date"] as const;
 const LEAD_FIELDS = ["project_lead", "test_lead"] as const;
+
+/**
+ * 分组弹窗里三连排一行的字段用短标签，语境由组名（研发等级 / 计划）给出。
+ * 设置页仍用完整字段名。
+ */
+const SHORT_LABEL_FIELDS: Partial<Record<TProductExtendedFieldKey, true>> = {
+  hardware_level: true,
+  structure_level: true,
+  software_level: true,
+  o_phase_close_date: true,
+  v_phase_close_date: true,
+};
 
 const UserCell = ({ user }: { user: IUserLite | null | undefined }) =>
   user ? (
@@ -67,19 +82,28 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
     missingRequiredFields,
     className,
     ownerField,
+    descriptionField,
   } = props;
   const { t } = useTranslation();
-  // 一次拉全量字典给 6 个下拉共用；查看态不请求
+  // 一次拉全量字典给 7 个下拉（6 个 FK + 项目代号）共用；查看态不请求
   const { isLoading, getDictionaryByKey } = useDataDictionaries(workspaceSlug, { autoFetch: editable });
   const styles = FORM_VARIANT_STYLES[variant];
   const reviewers = product?.reviewer_details ?? [];
   const showOptional = false;
   const divided = variant === "settings";
+  const grouped = variant === "grouped-modal";
   const gridClass = getFormGridClassName(variant);
+  /** 分组弹窗按组指定列数；设置页一律两列 */
+  const groupGrid = (columns: 2 | 3) =>
+    grouped ? cn("grid grid-cols-1 gap-x-5 gap-y-4", columns === 3 ? "md:grid-cols-3" : "md:grid-cols-2") : gridClass;
+  /** 整行字段：跟随所在组的列数 */
+  const fullSpan = (columns: 2 | 3) => (grouped && columns === 3 ? "md:col-span-3" : "md:col-span-2");
 
   const fieldLabel = (key: TProductExtendedFieldKey) => t(`workspace_products.fields.${key}`);
+  const displayLabel = (key: TProductExtendedFieldKey) =>
+    grouped && SHORT_LABEL_FIELDS[key] ? t(`workspace_products.fields.${key}_short`) : fieldLabel(key);
   const wrapperProps = (key: TProductExtendedFieldKey) => ({
-    label: fieldLabel(key),
+    label: displayLabel(key),
     required: PRODUCT_REQUIRED_EXTENDED_FIELDS.includes(key),
     editable,
     optionalText: t("workspace_products.fields.optional"),
@@ -90,13 +114,13 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
   const dropdownButtonClassName = (key: TProductExtendedFieldKey) =>
     cn(styles.dropdownButton, errors[key] && "border-danger-strong");
 
-  const isDictionaryEmpty = (key: TProductDictionaryFieldKey) => {
-    const dictionary = getDictionaryByKey(PRODUCT_DICTIONARY_FIELDS[key]);
+  const isDictionaryEmpty = (key: TProductFormDictionaryKey) => {
+    const dictionary = getDictionaryByKey(PRODUCT_FORM_DICTIONARY_KEYS[key]);
     return editable && dictionary !== undefined && dictionary.items.length === 0;
   };
 
-  const renderDictionaryEmptyHint = (key: TProductDictionaryFieldKey) => {
-    const dictionary = getDictionaryByKey(PRODUCT_DICTIONARY_FIELDS[key]);
+  const renderDictionaryEmptyHint = (key: TProductFormDictionaryKey) => {
+    const dictionary = getDictionaryByKey(PRODUCT_FORM_DICTIONARY_KEYS[key]);
     return (
       <span className="flex flex-wrap items-center gap-x-1">
         {t("workspace_products.validation.dictionary_empty", { name: dictionary?.name ?? fieldLabel(key) })}
@@ -107,7 +131,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
     );
   };
 
-  const renderDictionaryEmptyBanners = (keys: readonly TProductDictionaryFieldKey[]) => {
+  const renderDictionaryEmptyBanners = (keys: readonly TProductFormDictionaryKey[]) => {
     const emptyKeys = keys.filter(isDictionaryEmpty);
     if (emptyKeys.length === 0) return null;
     return (
@@ -136,7 +160,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
           onChange={(event) => onChange(key, event.target.value)}
           maxLength={255}
           hasError={Boolean(errors[key])}
-          placeholder={key === "code" ? t("workspace_products.fields.code_placeholder") : fieldLabel(key)}
+          placeholder={fieldLabel(key)}
           className={styles.input}
         />
       ) : (
@@ -145,13 +169,59 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
     </FormFieldShell>
   ));
 
-  const dictionaryFields = (keys: readonly TProductDictionaryFieldKey[]) =>
+  // 项目代号：与 Project.code 同一本 project_code 字典，但产品这边 code 是字符串列，存的是 label 而不是 id
+  const codeDictionary = getDictionaryByKey(PRODUCT_FORM_DICTIONARY_KEYS.code);
+  const code = values.code.trim();
+  const codeItem = code ? codeDictionary?.items.find((item) => item.label === code) : undefined;
+  const codeEmpty = isDictionaryEmpty("code");
+  const codeField = (
+    <FormFieldShell
+      {...wrapperProps("code")}
+      error={codeEmpty ? undefined : errors.code}
+      // 分组弹窗没有分区标题的 extra 位，「工作区内唯一」挂到控件下方
+      hint={grouped && editable && !codeEmpty ? t("workspace_products.fields.code_hint") : undefined}
+      className={fullSpan(2)}
+    >
+      {editable ? (
+        <div className={styles.control}>
+          <DictionaryItemSelect
+            dictionary={codeDictionary}
+            // 下拉按 item id 选，表单值是 label，这里来回换算；
+            // 字典未加载或存量代号不在字典里时，用 fallbackItem 把当前值原样显示出来
+            value={codeItem?.id ?? (code || null)}
+            onChange={(itemId) =>
+              onChange("code", codeDictionary?.items.find((item) => item.id === itemId)?.label ?? "")
+            }
+            fallbackItem={
+              code && !codeItem
+                ? { id: code, label: code, dictionary: codeDictionary?.id ?? "", color: "", is_colored: false }
+                : undefined
+            }
+            disabled={codeEmpty}
+            placeholder={t("workspace_products.fields.select_placeholder")}
+            hasError={Boolean(errors.code)}
+            isLoading={isLoading}
+            buttonClassName={styles.dropdownButton}
+          />
+        </div>
+      ) : (
+        <p className={cn(styles.text, "truncate")}>{values.code || "—"}</p>
+      )}
+    </FormFieldShell>
+  );
+
+  const dictionaryFields = (keys: readonly TProductDictionaryFieldKey[], columns: 2 | 3 = 2) =>
     keys.map((key) => {
       const dictionary = getDictionaryByKey(PRODUCT_DICTIONARY_FIELDS[key]);
       const detail = product?.[`${key}_detail` as const] ?? null;
       const empty = isDictionaryEmpty(key);
       return (
-        <FormFieldShell key={key} {...wrapperProps(key)} error={empty ? undefined : errors[key]}>
+        <FormFieldShell
+          key={key}
+          {...wrapperProps(key)}
+          error={empty ? undefined : errors[key]}
+          className={key === "category" ? fullSpan(columns) : undefined}
+        >
           {editable ? (
             <div className={styles.control}>
               <DictionaryItemSelect
@@ -221,7 +291,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
   ));
 
   const reviewersField = (
-    <FormFieldShell {...wrapperProps("reviewers")}>
+    <FormFieldShell {...wrapperProps("reviewers")} className={fullSpan(3)}>
       {editable ? (
         <div className={styles.control}>
           <MemberDropdown
@@ -264,34 +334,58 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
       </FormWarningBanner>
     ) : null;
 
+  /** 分组弹窗用左侧组名列，设置页保持带分隔线的分区标题 */
+  const group = (title: string, children: ReactNode, options?: { extra?: string; optional?: boolean }) =>
+    grouped ? (
+      <FormFieldGroup title={title} optional={options?.optional}>
+        {children}
+      </FormFieldGroup>
+    ) : (
+      <FormSection title={title} extra={options?.extra} divided={divided}>
+        {children}
+      </FormSection>
+    );
+
   return (
-    <div className={cn(variant === "settings" ? "space-y-8" : "space-y-7", className)}>
+    <div className={cn(grouped ? undefined : variant === "settings" ? "space-y-8" : "space-y-7", className)}>
       {missingBanner}
-      <FormSection
-        title={t("workspace_products.extended.identity")}
-        extra={editable ? t("workspace_products.fields.code_hint") : undefined}
-        divided={divided}
-      >
-        <div className={gridClass}>{textFields}</div>
-      </FormSection>
-      <FormSection title={t("workspace_products.extended.classification")} divided={divided}>
-        {renderDictionaryEmptyBanners(CLASSIFICATION_FIELDS)}
-        <div className={gridClass}>{dictionaryFields(CLASSIFICATION_FIELDS)}</div>
-      </FormSection>
-      <FormSection title={t("workspace_products.extended.levels")} divided={divided}>
-        {renderDictionaryEmptyBanners(LEVEL_FIELDS)}
-        <div className={gridClass}>{dictionaryFields(LEVEL_FIELDS)}</div>
-      </FormSection>
-      <FormSection title={t("workspace_products.extended.plan")} divided={divided}>
-        <div className={gridClass}>{dateFields}</div>
-      </FormSection>
-      <FormSection title={t("workspace_products.extended.team")} divided={divided}>
-        <div className={gridClass}>
+      {group(
+        t("workspace_products.extended.basic"),
+        <>
+          {renderDictionaryEmptyBanners(["code"])}
+          <div className={groupGrid(2)}>
+            {codeField}
+            {textFields}
+          </div>
+        </>,
+        { extra: editable ? t("workspace_products.fields.code_hint") : undefined }
+      )}
+      {group(
+        t("workspace_products.extended.classification"),
+        <>
+          {renderDictionaryEmptyBanners(CLASSIFICATION_FIELDS)}
+          <div className={groupGrid(2)}>{dictionaryFields(CLASSIFICATION_FIELDS)}</div>
+        </>
+      )}
+      {group(
+        t("workspace_products.extended.levels"),
+        <>
+          {renderDictionaryEmptyBanners(LEVEL_FIELDS)}
+          <div className={groupGrid(3)}>{dictionaryFields(LEVEL_FIELDS, 3)}</div>
+        </>
+      )}
+      {group(t("workspace_products.extended.plan"), <div className={groupGrid(3)}>{dateFields}</div>)}
+      {group(
+        t("workspace_products.extended.team"),
+        <div className={groupGrid(3)}>
           {ownerField}
           {leadFields}
           {reviewersField}
         </div>
-      </FormSection>
+      )}
+      {descriptionField
+        ? group(t("workspace_products.fields.description"), descriptionField, { optional: editable })
+        : null}
     </div>
   );
 });

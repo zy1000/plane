@@ -37,7 +37,6 @@ class ProductViewSet(BaseViewSet):
                 "owner",
                 "created_by",
                 "updated_by",
-                "cover_image_asset",
                 # *_detail 要出所属字典的 is_colored，把字典头一并 JOIN 上
                 "stage",
                 "stage__dictionary",
@@ -129,12 +128,6 @@ class ProductViewSet(BaseViewSet):
         # 负责人同时是首个产品成员：之后改负责人只能从成员里选（见 validate_owner），
         # 这里是成员表的起点，缺了它产品建完就没有任何成员。
         ProductMember.objects.get_or_create(product=product, member_id=product.owner_id)
-        # 创建流的封面资产上传时 product 还不存在，这里反向把 asset 挂到产品上
-        # （正向 product.cover_image_asset 已由 serializer.save 落库）
-        cover_asset = serializer.validated_data.get("cover_image_asset")
-        if cover_asset:
-            cover_asset.product_id = product.id
-            cover_asset.save(update_fields=["product"])
         return Response(
             self.get_serializer(product).data,
             status=status.HTTP_201_CREATED,
@@ -155,8 +148,6 @@ class ProductViewSet(BaseViewSet):
 
         data = request.data.copy()
         data.pop("workspace", None)
-        # 编辑换封面统一走资产上传确认（entity_asset_save）回写，不允许从这里改绑
-        data.pop("cover_image_asset", None)
         serializer = self.get_serializer(
             product,
             data=data,

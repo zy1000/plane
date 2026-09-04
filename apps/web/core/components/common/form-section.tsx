@@ -119,6 +119,32 @@ export function FormSection(props: TFormSectionProps) {
   );
 }
 
+/**
+ * 分组弹窗的字段分组：组名靠左一列（与首行控件顶对齐），字段靠右；组与组之间一条分隔线。
+ * 项目创建弹窗与产品创建/编辑弹窗共用。
+ */
+export type TFormFieldGroupProps = {
+  title: string;
+  /** 整组都是非必填时在组名后挂「可选」标签（如描述） */
+  optional?: boolean;
+  children: ReactNode;
+};
+
+export function FormFieldGroup(props: TFormFieldGroupProps) {
+  const { title, optional = false, children } = props;
+  const { t } = useTranslation();
+  const styles = FORM_VARIANT_STYLES["grouped-modal"];
+  return (
+    <section className="grid grid-cols-1 gap-y-2 border-t border-subtle py-5 md:grid-cols-[104px_minmax(0,1fr)] md:gap-x-6">
+      <h3 className={cn(styles.title, "flex items-center gap-1.5 md:h-[38px]")}>
+        {title}
+        {optional ? <span className={styles.optionalBadge}>{t("optional")}</span> : null}
+      </h3>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
+
 /** 字段外壳（label / 必填星号 / 错误 / 提示）。名字带 Shell 是为了避开 @plane/ui 里已有的 FormField */
 export type TFormFieldShellProps = {
   label: string;

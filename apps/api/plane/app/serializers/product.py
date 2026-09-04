@@ -6,7 +6,6 @@ from rest_framework import serializers
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
     DataDictionaryItem,
-    FileAsset,
     Product,
     ProductMember,
     ProductMemberRole,
@@ -73,32 +72,6 @@ class ProductSerializer(BaseSerializer):
     )
     owner_detail = UserLiteSerializer(source="owner", read_only=True)
     reviewer_details = UserLiteSerializer(source="reviewers", many=True, read_only=True)
-    cover_image_url = serializers.CharField(read_only=True)
-    # 仅创建时可写：product 尚不存在、上传确认无法回写，由 ViewSet.create 反向绑定。
-    # 编辑换封面走资产上传确认（entity_asset_save）回写，_update 里会 pop 掉这个字段。
-    cover_image_asset = serializers.PrimaryKeyRelatedField(
-        queryset=FileAsset.objects.all(),
-        required=False,
-        allow_null=True,
-        write_only=True,
-    )
-
-    def validate_cover_image_asset(self, asset):
-        if asset is None:
-            return None
-        workspace = self.context.get("workspace")
-        request = self.context.get("request")
-        if (
-            workspace is None
-            or asset.workspace_id != workspace.id
-            or asset.entity_type != FileAsset.EntityTypeContext.PRODUCT_COVER
-            or asset.product_id is not None
-            or (request is not None and asset.created_by_id != request.user.id)
-            or not asset.is_uploaded
-        ):
-            raise serializers.ValidationError("PRODUCT_COVER_ASSET_INVALID")
-        return asset
-
     def validate_name(self, value):
         name = value.strip()
         if not name:
@@ -279,9 +252,6 @@ class ProductSerializer(BaseSerializer):
             "o_phase_close_date",
             "v_phase_close_date",
             "logo_props",
-            "cover_image",
-            "cover_image_asset",
-            "cover_image_url",
             "created_at",
             "updated_at",
             "created_by",
@@ -300,7 +270,6 @@ class ProductSerializer(BaseSerializer):
             "software_level_detail",
             "project_lead_detail",
             "test_lead_detail",
-            "cover_image_url",
             "created_at",
             "updated_at",
             "created_by",
