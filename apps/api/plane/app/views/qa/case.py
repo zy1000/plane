@@ -24,6 +24,10 @@ from plane.app.permissions import (
     allow_workspace_member,
     PermissionKey,
 )
+from plane.app.views.qa.template_permissions import (
+    CASE_TEMPLATE_READ_KEYS,
+    allow_workspace_member_or_template,
+)
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, TestCaseActivitySerializer, PlanCaseRecordSerializer, CaseListSerializer, \
     CaseLabelListSerializer, IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
@@ -199,7 +203,7 @@ class CaseAssetAPIView(BaseAPIView):
     queryset = FileAsset.objects.all()
     serializer_class = CaseAttachmentSerializer
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug, case_id: str):
         # 锁 workspace + entity_type，排除软删；模板用例（无 project）同样适用
         case = self.queryset.filter(
@@ -405,7 +409,10 @@ class CaseAPI(BaseViewSet):
         return list_response(data=result, count=len(result))
 
     @action(detail=False, methods=['post'], url_path='export')
-    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(
+        PermissionKey.QA_CASE_IMPORT_EXPORT,
+        template_permission_keys=(PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,),
+    )
     def export(self, request, slug):
         fields = request.data.get('fields') or []
         if not isinstance(fields, list) or not fields:
@@ -1403,7 +1410,14 @@ class CaseAPI(BaseViewSet):
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='import-case')
-    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(
+        PermissionKey.QA_CASE_IMPORT_EXPORT,
+        # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
+        template_permission_keys=(
+            PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
+            PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
+        ),
+    )
     def import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1511,7 +1525,14 @@ class CaseAPI(BaseViewSet):
                         status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='validate-import-case')
-    @allow_fine_permission_or_template(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission_or_template(
+        PermissionKey.QA_CASE_IMPORT_EXPORT,
+        # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
+        template_permission_keys=(
+            PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
+            PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
+        ),
+    )
     def validate_import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1613,15 +1634,19 @@ class CaseAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=['post'], url_path='update-module')
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def update_module(self, request, slug):
         cases_id = request.data.get('cases_id')
         module_id = request.data.get('module_id')
 
-        TestCase.objects.filter(pk__in=cases_id).update(module_id=module_id)
+        # 按 URL slug 收窄：原来是裸 pk__in，跨工作区也能改
+        TestCase.objects.filter(
+            pk__in=cases_id, repository__workspace__slug=slug
+        ).update(module_id=module_id)
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='copy-case')
-    @allow_workspace_member
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def copy_case(self, request, slug):
         cases_id = request.data.get('cases_id') or []
         module_id = request.data.get('module_id')
@@ -1738,7 +1763,7 @@ class CaseMindmapAPIView(BaseAPIView):
 
 class CaseModuleView(BaseViewSet):
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def copy(self, request, slug):
         case_module_id = request.data.get('module_id')
         target_module_id = request.data.get('target_module_id')

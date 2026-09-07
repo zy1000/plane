@@ -18,6 +18,7 @@ import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
+import { useTemplatePermissions } from "../permissions";
 import { useRequirementLibrariesContext } from "./context";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
@@ -40,6 +41,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
     setIsCreateModalOpen,
     setLibraryToEdit,
   } = useRequirementLibrariesContext();
+  const { canManageLibraries } = useTemplatePermissions(workspaceSlug);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -180,13 +182,15 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                 : "requirement_libraries.empty.description"
             )}
           </p>
-          <Button
-            className="mt-4"
-            variant={hasFilters ? "secondary" : "primary"}
-            onClick={hasFilters ? resetView : () => setIsCreateModalOpen(true)}
-          >
-            {t(hasFilters ? "requirement_libraries.list.reset_view" : "requirement_libraries.create")}
-          </Button>
+          {(hasFilters || canManageLibraries) && (
+            <Button
+              className="mt-4"
+              variant={hasFilters ? "secondary" : "primary"}
+              onClick={hasFilters ? resetView : () => setIsCreateModalOpen(true)}
+            >
+              {t(hasFilters ? "requirement_libraries.list.reset_view" : "requirement_libraries.create")}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -248,9 +252,11 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                   )}
                 </div>
               </div>
-              <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
-                {t("requirement_libraries.create")}
-              </Button>
+              {canManageLibraries && (
+                <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
+                  {t("requirement_libraries.create")}
+                </Button>
+              )}
             </Header.RightItem>
           </Header>
         }
@@ -377,26 +383,30 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                         </td>
                         <td className="px-3 py-2.5 align-middle" onClick={(event) => event.stopPropagation()}>
                           <div className="-ml-1.5 flex items-center justify-start gap-0.5">
-                            <Tooltip tooltipContent={t("edit")}>
-                              <button
-                                type="button"
-                                onClick={() => setLibraryToEdit(library)}
-                                className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
-                                aria-label={t("requirement_libraries.list.edit_library", { name: library.name })}
-                              >
-                                <Pencil className="size-3.5" />
-                              </button>
-                            </Tooltip>
-                            <Tooltip tooltipContent={t("delete")}>
-                              <button
-                                type="button"
-                                onClick={() => setLibrariesToDelete([library])}
-                                className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary"
-                                aria-label={t("requirement_libraries.list.delete_library", { name: library.name })}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </Tooltip>
+                            {canManageLibraries && (
+                              <>
+                              <Tooltip tooltipContent={t("edit")}>
+                                <button
+                                  type="button"
+                                  onClick={() => setLibraryToEdit(library)}
+                                  className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+                                  aria-label={t("requirement_libraries.list.edit_library", { name: library.name })}
+                                >
+                                  <Pencil className="size-3.5" />
+                                </button>
+                              </Tooltip>
+                              <Tooltip tooltipContent={t("delete")}>
+                                <button
+                                  type="button"
+                                  onClick={() => setLibrariesToDelete([library])}
+                                  className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-danger-subtle hover:text-danger-primary"
+                                  aria-label={t("requirement_libraries.list.delete_library", { name: library.name })}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </Tooltip>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -414,7 +424,7 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
                 <Button
                   variant="error-outline"
                   size="lg"
-                  disabled={isMutating}
+                  disabled={isMutating || !canManageLibraries}
                   onClick={() =>
                     setLibrariesToDelete(libraries.filter((library) => selectedLibraryIds.includes(library.id)))
                   }

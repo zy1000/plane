@@ -12,12 +12,17 @@ from django.db import IntegrityError
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions import (
+    PermissionKey,
+    allow_fine_permission,
+    has_workspace_permission,
+)
 from plane.app.serializers.requirement_module import (
     RequirementModuleSerializer,
     RequirementModuleWriteSerializer,
 )
 from plane.app.views.base import BaseAPIView
+from plane.app.views.requirement.library import LIBRARY_READ_KEYS
 from plane.app.views.requirement.library_item import get_scoped_library
 from plane.app.permissions.keys import PermissionKey
 from plane.app.views.requirement.mixins import (
@@ -35,7 +40,7 @@ DUPLICATE_NAME_MESSAGE = "同级模块名称已存在"
 class _RequirementModuleScopeMixin:
     """按 URL kwargs 解析模块归属。
 
-    库是工作区级资源，工作区成员即可维护（口径同
+    库走工作区级的 workspace.requirement_library.*（口径同
     RequirementLibraryItemViewSet.can_write）；产品走产品成员权限
     （can_write_requirements，与产品需求的写权限一致）。
     """
@@ -59,6 +64,18 @@ class _RequirementModuleScopeMixin:
                 return None, None, Response(
                     {"error": self.NOT_FOUND_LIBRARY},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+            library_keys = (
+                (PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE,)
+                if require_write
+                else LIBRARY_READ_KEYS
+            )
+            if not has_workspace_permission(
+                self.request.user, self.workspace_slug, *library_keys
+            ):
+                return None, None, Response(
+                    {"error": self.FORBIDDEN},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
             return library, {"library_id": library.id}, None
 

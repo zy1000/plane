@@ -87,6 +87,11 @@ from plane.app.permissions import (
     allow_workspace_member,
     PermissionKey,
 )
+from plane.app.views.qa.template_permissions import (
+    CASE_TEMPLATE_READ_KEYS,
+    allow_workspace_member_or_template,
+    template_permission_error,
+)
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
@@ -198,6 +203,13 @@ class RepositoryAPIView(BaseAPIView):
         workspace = get_object_or_404(Workspace, slug=slug)
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # 模板库（is_template=True）走工作区级模板权限；项目库维持「工作区成员即可」
+        if serializer.validated_data.get("is_template"):
+            error = template_permission_error(
+                request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+            )
+            if error is not None:
+                return error
         project = serializer.validated_data.get("project")
         if project is not None and project.workspace_id != workspace.id:
             return Response(
@@ -217,6 +229,12 @@ class RepositoryAPIView(BaseAPIView):
         request.data.pop("is_template", None)
         request.data.pop("workspace", None)
         repository = get_object_or_404(self.get_queryset(), id=repository_id)
+        if repository.is_template:
+            error = template_permission_error(
+                request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+            )
+            if error is not None:
+                return error
         update_serializer = self.serializer_class(
             instance=repository, data=request.data, partial=True
         )
@@ -232,6 +250,10 @@ class RepositoryAPIView(BaseAPIView):
         # 让项目侧列表、库下拉、复制弹窗等存量消费方都看不到模板库
         if "is_template" not in request.query_params:
             queryset = queryset.filter(is_template=False)
+        elif request.query_params.get("is_template") in ("true", "True", "1"):
+            error = template_permission_error(request, slug, *CASE_TEMPLATE_READ_KEYS)
+            if error is not None:
+                return error
         repositories = self.filter_queryset(queryset)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(repositories, request)
@@ -243,7 +265,14 @@ class RepositoryAPIView(BaseAPIView):
     @allow_workspace_member
     def delete(self, request, slug):
         plan_ids = request.data.pop("ids")
-        self.get_queryset().filter(id__in=plan_ids).delete(soft=False)
+        targets = self.get_queryset().filter(id__in=plan_ids)
+        if targets.filter(is_template=True).exists():
+            error = template_permission_error(
+                request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+            )
+            if error is not None:
+                return error
+        targets.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1672,7 +1701,7 @@ class CaseDetailAPIView(BaseAPIView):
     pagination_class = CustomPaginator
     serializer_class = CaseListSerializer
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug, case_id):
         case = get_object_or_404(
             self.queryset, id=case_id, repository__workspace__slug=slug
@@ -1843,7 +1872,7 @@ class CaseModuleAPIView(BaseAPIView):
         # 锁定在 URL slug 对应的工作区内，杜绝跨工作区读删
         return CaseModule.objects.filter(repository__workspace__slug=self.workspace_slug)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
         repository_ids_raw = request.query_params.get("repository_id__in")
         if repository_ids_raw:
@@ -1854,7 +1883,9 @@ class CaseModuleAPIView(BaseAPIView):
         serializer = CaseModuleListSerializer(instance=modules, many=True)
         return Response(data=serializer.data)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+    )
     def post(self, request, slug):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1871,7 +1902,9 @@ class CaseModuleAPIView(BaseAPIView):
         serializer = CaseModuleListSerializer(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+    )
     def delete(self, request, slug):
         self.filter_queryset(self.get_queryset()).all().delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -1890,13 +1923,15 @@ class LabelAPIView(BaseAPIView):
         # 锁定在 URL slug 对应的工作区内，杜绝跨工作区读改删
         return CaseLabel.objects.filter(repository__workspace__slug=self.workspace_slug)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
         labels = self.filter_queryset(self.get_queryset()).all()
         serializer = self.serializer_class(instance=labels, many=True)
         return Response(data=serializer.data)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+    )
     def post(self, request, slug):
         name = request.data["name"]
         case_id = request.data.get("case_id")
@@ -1916,7 +1951,9 @@ class LabelAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=label)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
+    )
     def delete(self, request, slug):
         case_id = request.data.get("case_id")
         label_id = request.data["id"]

@@ -12,6 +12,11 @@ from rest_framework import status
 from rest_framework import serializers as drf_serializers
 from rest_framework.response import Response
 
+from plane.app.permissions import (
+    PermissionKey,
+    allow_fine_permission,
+    has_workspace_permission,
+)
 from plane.app.serializers.requirement_library import RequirementLibrarySerializer
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.mixins import (
@@ -19,6 +24,7 @@ from plane.app.views.requirement.mixins import (
     RowLayer,
     get_scoped_product,
 )
+from plane.app.views.requirement.library import LIBRARY_READ_KEYS
 from plane.app.views.requirement.row_base import BaseRequirementRowViewSet
 from plane.db.models import Requirement, RequirementLibrary
 from plane.utils.requirement import (
@@ -46,6 +52,7 @@ class RequirementLibraryConfigurationAPIView(BaseAPIView):
     没有 PUT —— 字段属于库所选的需求类型，改字段要去需求类型的配置接口。
     """
 
+    @allow_fine_permission(*LIBRARY_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, library_id):
         library = get_scoped_library(slug=slug, library_id=library_id)
         if library is None:
@@ -93,8 +100,41 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
         )
 
     def can_write(self, owner, permission_key=None):
-        # 库是工作区级资源，口径与需求类型一致：工作区成员即可维护
-        return True
+        # 库是工作区级资源：写一律要「维护需求标准库」。Excel 导入走的也是这条
+        # （import_excel 内部会 _owner_or_error），所以导入 = 维护 + 导入导出两把钥匙。
+        return has_workspace_permission(
+            self.request.user,
+            self.workspace_slug,
+            PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE,
+        )
+
+    # 读路径不过 can_write（require_write=False），单独挂装饰器；
+    # Excel 三个端点另挂「导入/导出标准库条目」。
+    @allow_fine_permission(*LIBRARY_READ_KEYS, level="WORKSPACE")
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @allow_fine_permission(*LIBRARY_READ_KEYS, level="WORKSPACE")
+    def batch_download_attachments(self, request, *args, **kwargs):
+        return super().batch_download_attachments(request, *args, **kwargs)
+
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT, level="WORKSPACE"
+    )
+    def export_excel(self, request, *args, **kwargs):
+        return super().export_excel(request, *args, **kwargs)
+
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT, level="WORKSPACE"
+    )
+    def validate_excel_import(self, request, *args, **kwargs):
+        return super().validate_excel_import(request, *args, **kwargs)
+
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT, level="WORKSPACE"
+    )
+    def import_excel(self, request, *args, **kwargs):
+        return super().import_excel(request, *args, **kwargs)
 
     def resolve_layer(self, owner):
         fields = get_library_field_specs(owner)
@@ -145,7 +185,8 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
             return queryset
         # 脏参数不要打到数据库：非法 UUID 直接 400，与 list() 里 ?ids= 的口径一致
         product_id = drf_serializers.UUIDField().run_validation(product_id)
-        # 库是工作区级资源（can_write 恒 True），产品不是。不校验可见性的话，
+        # 库是工作区级资源（读要 workspace.requirement_library.view/manage），产品不是。
+        # 不校验产品可见性的话，
         # 同工作区但看不到该产品的人能借这个参数探出产品导过哪些标准
         if get_scoped_product(
             self.request.user, slug=self.workspace_slug, product_id=product_id

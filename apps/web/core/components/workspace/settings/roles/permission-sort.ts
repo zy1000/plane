@@ -10,14 +10,18 @@ export type TPermissionSortScope = "workspace" | "project" | "product";
 type TSortablePermission = Pick<IPermission, "key" | "name" | "action" | "sort_order" | "module">;
 
 const CATEGORY_ORDER: Record<TPermissionSortScope, string[]> = {
+  // 分类名以后端 permissions 表的 category 列为准（迁移 0205 / 0288 / 0359 的口径），
+  // 不是 permission_bootstrap 里那套「工作区 XX」的兜底标签
   workspace: [
-    "工作区设置",
-    "工作区成员",
-    "工作区角色模板",
-    "工作区用户组",
-    "工作区项目",
-    "成员画像",
-    "工作区分析",
+    "设置",
+    "成员",
+    "角色模板",
+    "用户组",
+    "项目管理",
+    "需求标准库",
+    "用例模板库",
+    "用户资料与画像",
+    "分析",
     "工作区",
     "其他",
   ],
@@ -110,6 +114,12 @@ const PERMISSION_KEY_ORDER = [
   "workspace.analytics.view",
   "workspace.analytics.manage_saved_view",
   "workspace.analytics.export",
+  "workspace.requirement_library.view",
+  "workspace.requirement_library.manage",
+  "workspace.requirement_library.import_export",
+  "workspace.case_template.view",
+  "workspace.case_template.manage",
+  "workspace.case_template.import_export",
   "project.settings.view",
   "project.settings.edit",
   "project.member.view",

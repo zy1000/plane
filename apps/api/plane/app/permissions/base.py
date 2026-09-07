@@ -149,6 +149,16 @@ def is_workspace_member(user, workspace_slug: str) -> bool:
     ).exists()
 
 
+def has_workspace_permission(user, slug, *permission_keys) -> bool:
+    """持有任一指定 workspace.* key 即 True。直通（owner / 实例管理员）在 key 解析里。"""
+    wanted = {
+        key.value if isinstance(key, Enum) else str(key) for key in permission_keys
+    }
+    if not wanted:
+        return False
+    return bool(_get_user_workspace_permission_keys(user, slug) & wanted)
+
+
 def allow_workspace_member(view_func):
     """Require active workspace membership without applying a business permission."""
 
@@ -460,17 +470,24 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
     return decorator
 
 
-def allow_fine_permission_or_template(*permission_keys: str):
-    """QA 用例端点专用：模板库操作放行工作区成员，否则走项目细粒度鉴权。
+def allow_fine_permission_or_template(
+    *permission_keys: str, template_permission_keys=()
+):
+    """QA 用例端点专用：模板库操作走工作区级模板权限，否则走项目细粒度鉴权。
 
     模板库（is_template=True，必然 project 为空）没有项目语境，项目分支必 403，
-    故对本工作区的模板库退化为工作区成员校验。
+    故对本工作区的模板库改判 workspace.case_template.*（template_permission_keys，
+    **全部**持有才放行，与项目分支的 OR 语义不同）。
     分支条件必须是 is_template 而非 project 为空——存量「跨项目共享库」
     （project 为空且非模板）维持原有行为，不放宽安全面。
     """
 
     def decorator(view_func):
         fine_wrapped = allow_fine_permission(*permission_keys)(view_func)
+        required_template_keys = {
+            key.value if isinstance(key, Enum) else str(key)
+            for key in template_permission_keys
+        }
 
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
@@ -487,8 +504,19 @@ def allow_fine_permission_or_template(*permission_keys: str):
                     workspace__slug=slug,
                     is_template=True,
                 ).exists()
-                if is_template_repo and is_workspace_member(request.user, slug):
-                    return view_func(instance, request, *args, **kwargs)
+                if is_template_repo:
+                    if not is_workspace_member(request.user, slug):
+                        return Response(
+                            {"error": "You must be an active workspace member."},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                    user_keys = _get_user_workspace_permission_keys(request.user, slug)
+                    if required_template_keys.issubset(user_keys):
+                        return view_func(instance, request, *args, **kwargs)
+                    return Response(
+                        {"error": "您没有所需的用例模板库权限。"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             return fine_wrapped(instance, request, *args, **kwargs)
 
         return _wrapped_view

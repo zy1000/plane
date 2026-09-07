@@ -18,6 +18,7 @@ import {
 import { RequirementCreateModal } from "@/components/requirements/requirement-create-modal";
 import { RequirementGrid, type TRequirementGridHandle } from "@/components/requirements/requirement-grid";
 import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
+import { useTemplatePermissions } from "@/components/template-management/permissions";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
@@ -57,6 +58,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { members } = useProductMembers(workspaceSlug, productId);
+  // 「从标准库导入」读的是工作区级标准库，要单独的模板权限
+  const { canViewLibraries } = useTemplatePermissions(workspaceSlug);
   const { data: currentUser } = useUser();
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -374,6 +377,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
               {canCreate && (
                 <RequirementCreateActions
+                  canImportFromLibrary={canViewLibraries}
                   onImportPrefetch={() => setShouldPrefetchImport(true)}
                   onImport={() => setIsImportOpen(true)}
                   onManualEntry={() =>
@@ -445,6 +449,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   customButton={
                     canCreate ? (
                       <RequirementCreateActions
+                        canImportFromLibrary={canViewLibraries}
                         onImportPrefetch={() => setShouldPrefetchImport(true)}
                         onImport={() => setIsImportOpen(true)}
                         onManualEntry={() => setIsCreateOpen(true)}

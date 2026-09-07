@@ -32,6 +32,7 @@ import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { useUserPermissions } from "@/hooks/store/user";
+import { useTemplatePermissions } from "@/components/template-management/permissions";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { CasesDisplayFilters, DEFAULT_CASE_DISPLAY_PROPERTIES } from "./cases-display-filters";
@@ -155,19 +156,22 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const { allowProjectPermissionKeys } = useUserPermissions();
   const workspaceSlugString = String(workspaceSlug || "");
   const projectIdString = String(projectId || "");
-  // 模板模式下工作区成员即可维护（与后端 allow_workspace_member 口径一致）
-  const canCreateCase =
-    isTemplateMode ||
-    allowProjectPermissionKeys([QA_CASE_CREATE_PERMISSION_KEY], workspaceSlugString, projectIdString);
-  const canEditCase =
-    isTemplateMode ||
-    allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlugString, projectIdString);
-  const canDeleteCase =
-    isTemplateMode ||
-    allowProjectPermissionKeys([QA_CASE_DELETE_PERMISSION_KEY], workspaceSlugString, projectIdString);
-  const canImportExportCase =
-    isTemplateMode ||
-    allowProjectPermissionKeys([QA_CASE_IMPORT_EXPORT_PERMISSION_KEY], workspaceSlugString, projectIdString);
+  // 模板模式走工作区级模板权限（与后端 workspace.case_template.* 口径一致），
+  // 项目模式仍走项目侧 QA key
+  const { canViewCaseTemplates, canManageCaseTemplates, canImportExportCaseTemplates } =
+    useTemplatePermissions(workspaceSlugString);
+  const canCreateCase = isTemplateMode
+    ? canManageCaseTemplates
+    : allowProjectPermissionKeys([QA_CASE_CREATE_PERMISSION_KEY], workspaceSlugString, projectIdString);
+  const canEditCase = isTemplateMode
+    ? canManageCaseTemplates
+    : allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlugString, projectIdString);
+  const canDeleteCase = isTemplateMode
+    ? canManageCaseTemplates
+    : allowProjectPermissionKeys([QA_CASE_DELETE_PERMISSION_KEY], workspaceSlugString, projectIdString);
+  const canImportExportCase = isTemplateMode
+    ? canImportExportCaseTemplates
+    : allowProjectPermissionKeys([QA_CASE_IMPORT_EXPORT_PERMISSION_KEY], workspaceSlugString, projectIdString);
   const moduleIdFromUrl = searchParams.get("moduleId");
 
   const [cases, setCases] = useState<TestCase[]>([]);
@@ -1022,10 +1026,11 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           <button
             type="button"
             onClick={() => {
-              if (!repositoryId || !canCreateCase) return;
+              // 从模板导入还要能读模板库（后端 workspace.case_template.view）
+              if (!repositoryId || !canCreateCase || !canViewCaseTemplates) return;
               setIsTemplateImportOpen(true);
             }}
-            disabled={!repositoryId || !canCreateCase}
+            disabled={!repositoryId || !canCreateCase || !canViewCaseTemplates}
             className="flex items-center justify-center gap-1.5 rounded-l border border-r-0 border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             导入

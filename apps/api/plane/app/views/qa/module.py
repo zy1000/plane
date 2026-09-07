@@ -6,9 +6,13 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
 
-from plane.app.permissions import allow_workspace_member
+from plane.app.permissions import PermissionKey
 from plane.app.serializers.qa import CaseModuleCreateUpdateSerializer, CaseModuleListSerializer
 from plane.app.views import BaseAPIView
+from plane.app.views.qa.template_permissions import (
+    CASE_TEMPLATE_READ_KEYS,
+    allow_workspace_member_or_template,
+)
 from plane.db.models import CaseModule, TestCase
 
 
@@ -24,7 +28,7 @@ class CaseModuleCountAPIView(BaseAPIView):
         # 锁定在 URL slug 对应的工作区内
         return CaseModule.objects.filter(repository__workspace__slug=self.workspace_slug)
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
         modules = self.filter_queryset(self.get_queryset()).annotate(
             case_count=Count('cases', filter=Q(cases__deleted_at__isnull=True))).values('id', 'parent_id', 'case_count')
@@ -68,7 +72,7 @@ class CaseModuleDetailAPIView(BaseAPIView):
     queryset = CaseModule.objects.all()
     serializer_class = CaseModuleCreateUpdateSerializer
 
-    @allow_workspace_member
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def patch(self, request, slug, module_id):
         module = get_object_or_404(
             self.queryset,

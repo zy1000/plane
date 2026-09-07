@@ -25,6 +25,7 @@ from .base import (
     allow_workspace_member,
     allow_workspace_self_or_permission,
     is_workspace_member,
+    has_workspace_permission,
     get_issue_permission_key,
     has_project_issue_permission,
     resolve_project_issue_type_name,

@@ -26,6 +26,7 @@ import { canEditRequirementContent } from "@/components/requirements/requirement
 import { useRequirementTitles } from "@/components/requirements/use-requirement-titles";
 import { useLibraryConfiguration } from "@/hooks/store/use-library-configuration";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useTemplatePermissions } from "../permissions";
 import { useRequirementLibrariesContext } from "./context";
 
 /**
@@ -40,6 +41,7 @@ export const RequirementLibraryItemPage = observer(function RequirementLibraryIt
   const router = useAppRouter();
   const { libraryId, requirementId } = useParams();
   const { workspaceSlug, libraries } = useRequirementLibrariesContext();
+  const { canManageLibraries } = useTemplatePermissions(workspaceSlug);
   const currentLibraryId = libraryId ?? "";
 
   const configuration = useLibraryConfiguration({ workspaceSlug, libraryId });
@@ -68,8 +70,8 @@ export const RequirementLibraryItemPage = observer(function RequirementLibraryIt
     [configuration?.fields, library]
   );
 
-  /** 与条目列表页一致：标准库暂无页面级写权限区分；内容还要看这一行有没有锁定 / 关闭 */
-  const canEdit = true;
+  /** 与条目列表页一致：写要「维护需求标准库」；内容还要看这一行有没有锁定 / 关闭 */
+  const canEdit = canManageLibraries;
   const isEditable = canEditRequirementContent(requirement, canEdit);
   /** 模块是旁路轴（set-module），只看页面级写权限 */
   const onModuleChange = (moduleId: string | null, moduleName: string | null) =>

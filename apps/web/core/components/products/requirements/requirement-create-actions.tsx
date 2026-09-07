@@ -7,6 +7,8 @@ import { RequirementExcelImportModal, useRequirementExcelActions } from "@/compo
 type TRequirementCreateActionsProps = {
   onManualEntry: () => void;
   onImport: () => void;
+  /** 没有「查看需求标准库」时不给「从标准库导入」入口（后端同样 403） */
+  canImportFromLibrary?: boolean;
   onImportPrefetch?: () => void;
   /** Excel 出入口。给了才渲染导入菜单里的 Excel 项，以及导出按钮 */
   excel?: {
@@ -27,6 +29,7 @@ type TRequirementCreateActionsProps = {
 export function RequirementCreateActions({
   onManualEntry,
   onImport,
+  canImportFromLibrary = true,
   onImportPrefetch,
   excel,
 }: TRequirementCreateActionsProps) {
@@ -55,17 +58,21 @@ export function RequirementCreateActions({
           customButton={<span>{t("common.import")}</span>}
           ariaLabel={t("common.import")}
         >
-          <CustomMenu.MenuItem onClick={onImport}>
-            {t("workspace_products.requirements.data.import_from_library_full")}
-          </CustomMenu.MenuItem>
+          {canImportFromLibrary && (
+            <CustomMenu.MenuItem onClick={onImport}>
+              {t("workspace_products.requirements.data.import_from_library_full")}
+            </CustomMenu.MenuItem>
+          )}
           <CustomMenu.MenuItem onClick={excelActions.openImport}>
             {t("requirement_excel.menu.import")}
           </CustomMenu.MenuItem>
         </CustomMenu>
       ) : (
-        <Button variant="secondary" size="lg" onClick={onImport}>
-          {t("common.import")}
-        </Button>
+        canImportFromLibrary && (
+          <Button variant="secondary" size="lg" onClick={onImport}>
+            {t("common.import")}
+          </Button>
+        )
       )}
       {excel && (
         <>

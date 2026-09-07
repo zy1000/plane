@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_workspace_member
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.qa import CaseCreateUpdateSerializer, CaseListSerializer
 from plane.app.views import BaseAPIView
 from plane.app.views.qa.case import (
@@ -19,6 +19,7 @@ from plane.app.views.qa.case import (
     sync_case_labels_by_name,
 )
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
+from plane.app.views.qa.template_permissions import CASE_TEMPLATE_READ_KEYS
 from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.db.models import PlanCase, TestCase, TestCaseRepository
@@ -31,7 +32,7 @@ class TemplateCaseAPIView(BaseAPIView):
 
     项目侧用例主 CRUD（CaseAPIView）挂项目级 URL 与 QA 细粒度权限，
     模板库不挂项目走不通，故独立一个 workspace 级入口；
-    序列化、过滤、排序配置复用项目侧，权限对齐标准库先例（工作区成员即可维护）。
+    序列化、过滤、排序配置复用项目侧，权限走 workspace.case_template.*。
     """
 
     model = TestCase
@@ -74,7 +75,7 @@ class TemplateCaseAPIView(BaseAPIView):
             is_template=True,
         )
 
-    @allow_workspace_member
+    @allow_fine_permission(*CASE_TEMPLATE_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         if not repository_id:
@@ -102,7 +103,9 @@ class TemplateCaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=cases.count())
 
-    @allow_workspace_member
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE"
+    )
     def post(self, request, slug):
         self._get_template_repository(slug, request.data.get("repository"))
         serializer = CaseCreateUpdateSerializer(data=request.data)
@@ -119,7 +122,9 @@ class TemplateCaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=test_case)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_workspace_member
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE"
+    )
     def put(self, request, slug):
         case_id = request.data.pop("id")
         case = get_object_or_404(self.get_queryset(), id=case_id)
@@ -141,7 +146,9 @@ class TemplateCaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=case)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_workspace_member
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE"
+    )
     def delete(self, request, slug):
         # 防呆：必须显式指定要删的用例，避免无参请求清空全工作区模板用例
         if not request.query_params.get("id__in"):
@@ -165,7 +172,7 @@ class TemplateCaseIdsAPIView(BaseAPIView):
 
     model = TestCase
 
-    @allow_workspace_member
+    @allow_fine_permission(*CASE_TEMPLATE_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         if not repository_id:
@@ -206,7 +213,7 @@ class TemplateCaseImportAPIView(BaseAPIView):
 
     model = TestCase
 
-    @allow_workspace_member
+    @allow_fine_permission(*CASE_TEMPLATE_READ_KEYS, level="WORKSPACE")
     def post(self, request, slug):
         cases_id = request.data.get("cases_id") or []
         target_repository_id = request.data.get("repository_id")

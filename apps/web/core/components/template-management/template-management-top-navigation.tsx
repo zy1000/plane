@@ -7,6 +7,7 @@ import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { getTemplateManagementTabPath, TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS } from "./navigation";
 
@@ -21,6 +22,10 @@ export const TemplateManagementTopNavigation = observer(function TemplateManagem
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const { sidebarCollapsed } = useAppTheme();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
+  const visibleItems = TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.filter((item) =>
+    allowWorkspacePermissionKeys(item.permissionKeys, workspaceSlug)
+  );
 
   return (
     <div className="z-20">
@@ -39,7 +44,7 @@ export const TemplateManagementTopNavigation = observer(function TemplateManagem
 
               <div className="flex h-full min-w-0 flex-1 items-center overflow-hidden">
                 <TabNavigationList className="h-full">
-                  {TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.map((item) => {
+                  {visibleItems.map((item) => {
                     const href = getTemplateManagementTabPath(workspaceSlug, item.key);
                     const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
                     const normalizedHref = href.endsWith("/") ? href : `${href}/`;

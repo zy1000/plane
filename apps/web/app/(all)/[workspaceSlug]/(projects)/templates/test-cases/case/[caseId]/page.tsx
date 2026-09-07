@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { observer } from "mobx-react";
 import { useNavigate, useParams } from "react-router";
 import { FlaskConical } from "lucide-react";
 // plane imports
@@ -9,14 +10,17 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { PageHead } from "@/components/core/page-title";
 import UpdateModal from "@/components/qa/cases/update-modal";
+import { useTemplatePermissions } from "@/components/template-management";
 
 /** 模板用例全屏（独立页面）详情：与抽屉共用同一套展示结构（UpdateModal 的 page 形态，templateMode） */
-export default function TemplateCaseDetailPage() {
+const TemplateCaseDetailPage = observer(function TemplateCaseDetailPage() {
   const params = useParams();
   const workspaceSlug = params.workspaceSlug?.toString() ?? "";
   const caseId = params.caseId?.toString() ?? "";
   const { t } = useTranslation();
   const navigate = useNavigate();
+  // 不传 canEdit 时 UpdateModal 会退回项目级判定，模板路由没有 project_id → 恒只读
+  const { canManageCaseTemplates } = useTemplatePermissions(workspaceSlug);
 
   // 面包屑数据：来自 UpdateModal 内部加载的用例详情（含所属模板库与用例名）
   const [caseName, setCaseName] = useState<string>("");
@@ -72,6 +76,7 @@ export default function TemplateCaseDetailPage() {
           open
           variant="page"
           templateMode
+          canEdit={canManageCaseTemplates}
           caseId={caseId}
           workspaceSlug={workspaceSlug}
           onClose={() => navigate(repositoryUrl)}
@@ -80,4 +85,6 @@ export default function TemplateCaseDetailPage() {
       </div>
     </>
   );
-}
+});
+
+export default TemplateCaseDetailPage;

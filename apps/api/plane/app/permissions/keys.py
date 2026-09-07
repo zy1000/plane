@@ -30,6 +30,15 @@ class PermissionKey(str, Enum):
     WORKSPACE_ANALYTICS_VIEW = "workspace.analytics.view"
     WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW = "workspace.analytics.manage_saved_view"
     WORKSPACE_ANALYTICS_EXPORT = "workspace.analytics.export"
+    # 模板中心（工作区级）：需求标准库 + 用例模板库
+    WORKSPACE_REQUIREMENT_LIBRARY_VIEW = "workspace.requirement_library.view"
+    WORKSPACE_REQUIREMENT_LIBRARY_MANAGE = "workspace.requirement_library.manage"
+    WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT = (
+        "workspace.requirement_library.import_export"
+    )
+    WORKSPACE_CASE_TEMPLATE_VIEW = "workspace.case_template.view"
+    WORKSPACE_CASE_TEMPLATE_MANAGE = "workspace.case_template.manage"
+    WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT = "workspace.case_template.import_export"
 
     # Project permissions
     PROJECT_SETTINGS_VIEW = "project.settings.view"

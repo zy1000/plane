@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { observer } from "mobx-react";
 import { Link, useNavigate } from "react-router";
 import { Button as AntButton, Input, Modal, Space, Table, Tooltip, message } from "antd";
 import type { TableProps } from "antd";
@@ -21,13 +22,16 @@ import {
   useTemplateCaseRepositories,
   type TTemplateCaseRepository,
 } from "@/hooks/store/use-template-case-repositories";
+// local imports
+import { useTemplatePermissions } from "../permissions";
 
 type Props = {
   workspaceSlug: string;
 };
 
-export const TemplateCaseRepositoryList = ({ workspaceSlug }: Props) => {
+export const TemplateCaseRepositoryList = observer(function TemplateCaseRepositoryList({ workspaceSlug }: Props) {
   const { t } = useTranslation();
+  const { canManageCaseTemplates } = useTemplatePermissions(workspaceSlug);
   const navigate = useNavigate();
   const {
     repositories,
@@ -123,6 +127,7 @@ export const TemplateCaseRepositoryList = ({ workspaceSlug }: Props) => {
       title: "操作",
       key: "actions",
       width: 120,
+      hidden: !canManageCaseTemplates,
       render: (_: unknown, record) => (
         <Space>
           <AntButton
@@ -171,16 +176,18 @@ export const TemplateCaseRepositoryList = ({ workspaceSlug }: Props) => {
                 onChange={(e) => setSearchInput(e.target.value)}
                 onSearch={(value) => void fetchPage({ page: 1, search: value.trim() }).catch(() => undefined)}
               />
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setEditing(null);
-                  setModalOpen(true);
-                }}
-              >
-                <Plus className="size-3.5" />
-                {t("workspace_templates.test_cases.create")}
-              </Button>
+              {canManageCaseTemplates && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setEditing(null);
+                    setModalOpen(true);
+                  }}
+                >
+                  <Plus className="size-3.5" />
+                  {t("workspace_templates.test_cases.create")}
+                </Button>
+              )}
             </Header.RightItem>
           </Header>
         }
@@ -212,17 +219,19 @@ export const TemplateCaseRepositoryList = ({ workspaceSlug }: Props) => {
               <p className="mt-2 text-13 leading-5 text-secondary">
                 {t("workspace_templates.test_cases.empty.description")}
               </p>
-              <Button
-                className="mt-4"
-                variant="primary"
-                onClick={() => {
-                  setEditing(null);
-                  setModalOpen(true);
-                }}
-              >
-                <Plus className="size-3.5" />
-                {t("workspace_templates.test_cases.create")}
-              </Button>
+              {canManageCaseTemplates && (
+                <Button
+                  className="mt-4"
+                  variant="primary"
+                  onClick={() => {
+                    setEditing(null);
+                    setModalOpen(true);
+                  }}
+                >
+                  <Plus className="size-3.5" />
+                  {t("workspace_templates.test_cases.create")}
+                </Button>
+              )}
             </div>
           </div>
         ) : (
@@ -274,4 +283,4 @@ export const TemplateCaseRepositoryList = ({ workspaceSlug }: Props) => {
       />
     </>
   );
-};
+});

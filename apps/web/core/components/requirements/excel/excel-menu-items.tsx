@@ -28,6 +28,8 @@ export type TRequirementExcelActionsArgs = {
   filters?: TRequirementFilter[];
   requirementTypeIds?: string[];
   disabled?: boolean;
+  /** 只禁导入（导出仍可用）：标准库的导入要「维护」权限，导出只要「导入导出」 */
+  importDisabled?: boolean;
   onImported?: (response: TRequirementExcelImportResponse) => void | Promise<void>;
 };
 
@@ -61,7 +63,12 @@ export function RequirementExcelMenu(args: TRequirementExcelActionsArgs) {
   return (
     <>
       <div className="flex items-center gap-2">
-        <Button variant="secondary" size="lg" disabled={args.disabled} onClick={actions.openImport}>
+        <Button
+          variant="secondary"
+          size="lg"
+          disabled={args.disabled || args.importDisabled}
+          onClick={actions.openImport}
+        >
           {t("common.import")}
         </Button>
         <Button

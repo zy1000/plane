@@ -23,6 +23,7 @@ import { RequirementGrid } from "@/components/requirements/requirement-grid";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
+import { useTemplatePermissions } from "../permissions";
 import { useRequirementLibrariesContext } from "./context";
 
 /**
@@ -35,6 +36,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
   const { t } = useTranslation();
   const { libraryId } = useParams();
   const { workspaceSlug, libraries, setLibraryToEdit } = useRequirementLibrariesContext();
+  const { canManageLibraries, canImportExportLibraries } = useTemplatePermissions(workspaceSlug);
   const [searchParams, setSearchParams] = useSearchParams();
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const store = useLibraryItems({ workspaceSlug, libraryId });
@@ -164,7 +166,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               <div className="flex min-w-0 items-center gap-2">
                 {/* 网格自己的工具栏（搜索 / 筛选 / 显示 / 新增）portal 进这里 */}
                 <div ref={setDataToolbarHost} className="flex min-w-0 items-center gap-2" />
-                {library && (
+                {library && canManageLibraries && (
                   <Tooltip tooltipContent={t("requirement_libraries.edit_action")} position="bottom">
                     <IconButton
                       variant="ghost"
@@ -179,6 +181,8 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                   workspaceSlug={workspaceSlug}
                   scope="library"
                   entityId={libraryId ?? ""}
+                  disabled={!canImportExportLibraries}
+                  importDisabled={!canManageLibraries}
                   search={store.search}
                   filters={store.filters}
                   onImported={() => {
@@ -216,6 +220,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               store={moduleStore}
               selectedModuleId={selectedModuleId}
               onSelect={setSelectedModuleId}
+              readonly={!canManageLibraries}
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {library && (
@@ -237,6 +242,9 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 workspaceSlug={workspaceSlug}
                 entityId={libraryId ?? ""}
                 entityKind="library"
+                readOnly={!canManageLibraries}
+                canCreate={canManageLibraries}
+                canDelete={canManageLibraries}
                 createRequirementTypeId={store.requirementTypeId ?? undefined}
                 createModalContext={{ entityName: library?.name, typeName: library?.requirement_type_detail?.name }}
                 builtinLayout={store.configuration?.builtin_fields ?? null}
@@ -285,7 +293,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
         requirementId={peekRequirementId}
         requirementTypes={requirementTypes}
         rows={store.requirementsPage.results}
-        canEdit
+        canEdit={canManageLibraries}
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
         onRequirementUpdated={(requirement) => {
