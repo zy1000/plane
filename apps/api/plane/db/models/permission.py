@@ -8,6 +8,7 @@ class Permission(BaseModel):
     class Scope(models.TextChoices):
         WORKSPACE = "workspace", "工作区"
         PROJECT = "project", "项目"
+        PRODUCT = "product", "产品"
 
     key = models.CharField(
         max_length=255,

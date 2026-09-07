@@ -396,7 +396,7 @@ export interface IPermission {
   key: string;
   name: string;
   description: string | null;
-  scope: "workspace" | "project";
+  scope: "workspace" | "project" | "product";
   module: string | null;
   action: string | null;
   category: string | null;

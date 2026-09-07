@@ -5,7 +5,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ShieldCheck, Building2, FolderKanban, Search, CheckSquare, Square, MinusSquare, Check } from "lucide-react";
+import {
+  ShieldCheck,
+  Building2,
+  FolderKanban,
+  PackageOpen,
+  Search,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Check,
+} from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IPermission, IWorkspaceRole } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
@@ -25,7 +35,7 @@ type Props = {
   onActiveScopeChange?: (scope: PermissionScope) => void;
 };
 
-export type PermissionScope = "workspace" | "project";
+export type PermissionScope = "workspace" | "project" | "product";
 
 type TScope = PermissionScope;
 
@@ -56,7 +66,10 @@ type TSearchResultScope = {
 const SCOPE_CONFIG: Record<TScope, { label: string; icon: typeof Building2 }> = {
   workspace: { label: "工作区", icon: Building2 },
   project: { label: "项目", icon: FolderKanban },
+  product: { label: "产品", icon: PackageOpen },
 };
+
+const SCOPE_ORDER: TScope[] = ["workspace", "project", "product"];
 
 export const getPermissionScopeSummary = (
   permissions: IPermission[],
@@ -112,7 +125,7 @@ export function PermissionsPanel({
       if (!catMap.has(cat)) catMap.set(cat, []);
       catMap.get(cat)!.push(perm);
     }
-    return (["workspace", "project"] as TScope[]).map((scope) => {
+    return SCOPE_ORDER.map((scope) => {
       const catMap = scopeMap.get(scope) ?? new Map<string, IPermission[]>();
       const categories: TCategoryGroup[] = Array.from(catMap.entries())
         .map(([category, perms]) => {

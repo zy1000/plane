@@ -6,6 +6,7 @@ from rest_framework import serializers
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
     DataDictionaryItem,
+    Permission,
     Product,
     ProductMember,
     ProductMemberRole,
@@ -13,8 +14,10 @@ from plane.db.models import (
     User,
     WorkspaceMember,
 )
+from plane.app.permissions.base import _get_user_product_permission_keys
 from plane.utils.content_validator import validate_html_content
 from plane.utils.data_dictionary import PRODUCT_DICTIONARY_FIELD_KEYS
+from plane.utils.product_roles import ensure_product_default_roles
 
 from .base import BaseSerializer
 from .data_dictionary import DataDictionaryItemLiteSerializer
@@ -64,6 +67,9 @@ class ProductSerializer(BaseSerializer):
     )
     project_lead_detail = UserLiteSerializer(source="project_lead", read_only=True)
     test_lead_detail = UserLiteSerializer(source="test_lead", read_only=True)
+    # 当前用户在这个产品里的有效 product.* key。前端所有产品内的按钮显隐都读它，
+    # 列表 / 详情 / 弹窗 / 设置区手里本来就有产品对象，不用再单独拉一次。
+    my_permission_keys = serializers.SerializerMethodField()
     reviewers = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), many=True, required=False
     )
@@ -183,6 +189,13 @@ class ProductSerializer(BaseSerializer):
             raise serializers.ValidationError(errors)
         return attrs
 
+    def get_my_permission_keys(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None:
+            return []
+        return sorted(_get_user_product_permission_keys(user, obj))
+
     def validate_owner(self, owner):
         workspace = self.context.get("workspace")
         if workspace is None:
@@ -256,6 +269,7 @@ class ProductSerializer(BaseSerializer):
             "updated_at",
             "created_by",
             "updated_by",
+            "my_permission_keys",
         ]
         read_only_fields = [
             "id",
@@ -274,6 +288,7 @@ class ProductSerializer(BaseSerializer):
             "updated_at",
             "created_by",
             "updated_by",
+            "my_permission_keys",
         ]
 
 
@@ -390,11 +405,46 @@ class ProductMemberInviteSerializer(BaseSerializer):
     def create(self, validated_data):
         roles = validated_data.pop("custom_roles", [])
         product_member = ProductMember.objects.create(**validated_data)
+        # 没指定角色就绑默认的「产品成员」，别让人裸奔——项目侧 873 个无角色成员就是这么来的。
+        if not roles:
+            _, member_role = ensure_product_default_roles(product_member.product)
+            roles = [member_role]
         ProductMemberRole.objects.bulk_create(
             [ProductMemberRole(member=product_member, role=role) for role in roles],
             ignore_conflicts=True,
         )
         return product_member
+
+
+class ProductRolePermissionBindingSerializer(serializers.Serializer):
+    """照 ProjectRolePermissionBindingSerializer：白名单过滤，非法 key 静默丢弃。"""
+
+    permission_keys = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        allow_empty=True,
+        required=True,
+    )
+
+    def validate_permission_keys(self, value):
+        normalized_keys = list(dict.fromkeys(value))
+        existing_keys = set(
+            Permission.objects.filter(
+                key__in=normalized_keys,
+                is_active=True,
+                scope="product",
+            ).values_list("key", flat=True)
+        )
+        return [key for key in normalized_keys if key in existing_keys]
+
+    def save(self, **kwargs):
+        role = self.context["role"]
+        permissions_payload = (
+            role.permissions if isinstance(role.permissions, dict) else {}
+        )
+        permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
+        role.permissions = permissions_payload
+        role.save()
+        return role
 
 
 class ProductMemberCustomRolesSerializer(serializers.Serializer):

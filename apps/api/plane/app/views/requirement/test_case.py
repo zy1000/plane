@@ -27,7 +27,8 @@ from rest_framework.response import Response
 
 from plane.app.views.base import BaseViewSet
 from plane.db.models import Requirement, RequirementTestCase, TestCase
-from plane.utils.product import can_edit_product_requirements, can_view_product
+from plane.app.permissions.keys import PermissionKey
+from plane.utils.product import can_view_product, has_product_permission
 from plane.utils.requirement_project import RequirementLinkError
 from plane.utils.requirement_test_case import (
     has_project_side_link_permission,
@@ -123,8 +124,8 @@ class RequirementTestCaseViewSet(BaseViewSet):
             )
 
         if for_write:
-            can_write = can_edit_product_requirements(
-                request.user, product
+            can_write = has_product_permission(
+                request.user, product, PermissionKey.PRODUCT_TEST_CASE_LINK_MANAGE
             ) or has_project_side_link_permission(
                 request.user, slug=slug, requirement=requirement, manage=True
             )

@@ -19,6 +19,7 @@ from plane.app.serializers.requirement_module import (
 )
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.library_item import get_scoped_library
+from plane.app.permissions.keys import PermissionKey
 from plane.app.views.requirement.mixins import (
     can_write_requirements,
     get_scoped_product,
@@ -71,7 +72,9 @@ class _RequirementModuleScopeMixin:
                 {"error": self.NOT_FOUND_PRODUCT},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if require_write and not can_write_requirements(self.request.user, product):
+        if require_write and not can_write_requirements(
+            self.request.user, product, PermissionKey.PRODUCT_REQUIREMENT_MODULE_MANAGE
+        ):
             return None, None, Response(
                 {"error": self.FORBIDDEN},
                 status=status.HTTP_403_FORBIDDEN,

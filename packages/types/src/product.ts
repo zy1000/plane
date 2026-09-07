@@ -1,6 +1,7 @@
 import type { TLogoProps } from "./common";
 import type { TDataDictionaryItemLite } from "./data-dictionary";
 import type { IUserLite } from "./users";
+import type { IPermission } from "./workspace";
 
 export type TProductNetwork = 0 | 2;
 
@@ -45,6 +46,8 @@ export type TProduct = {
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
+  /** 当前用户在这个产品里的有效 product.* 权限；产品内所有按钮显隐都读它 */
+  my_permission_keys: string[];
 };
 
 export type TCreateProductPayload = {
@@ -99,9 +102,16 @@ export type TProductRole = {
   product: string;
   name: string;
   description: string | null;
-  permissions: Record<string, never>;
+  permissions: { permission_keys?: string[] };
   created_at: string;
   updated_at: string;
+};
+
+/** GET/PATCH .../products/{pid}/roles/{id}/permissions/ 的响应，与项目侧同构 */
+export type TProductRolePermissionData = {
+  role: TProductRole;
+  permission_keys: string[];
+  permissions: IPermission[];
 };
 
 export type TCreateProductRolePayload = {

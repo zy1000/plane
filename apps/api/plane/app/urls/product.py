@@ -6,6 +6,8 @@ from django.urls import path
 
 from plane.app.views.product import (
     ProductMemberViewSet,
+    ProductMyPermissionKeysAPIView,
+    ProductRolePermissionAPIView,
     ProductRoleViewSet,
     ProductViewSet,
 )
@@ -85,5 +87,15 @@ urlpatterns = [
             }
         ),
         name="product-role-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/roles/<int:pk>/permissions/",
+        ProductRolePermissionAPIView.as_view(),
+        name="product-role-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/my-permission-keys/",
+        ProductMyPermissionKeysAPIView.as_view(),
+        name="product-my-permission-keys",
     ),
 ]

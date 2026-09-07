@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { Link } from "react-router";
 import { Pagination } from "antd";
 import { AlertCircle, Eye, Globe2, LockKeyhole, PackageOpen, Pencil, Settings, Trash2 } from "lucide-react";
+import { PRODUCT_SETTINGS_DELETE_PERMISSION_KEY, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -14,10 +15,11 @@ import { Avatar, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
 import { PageHead } from "@/components/core/page-title";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useUserPermissions } from "@/hooks/store/user";
 import { DeleteProductModal } from "./delete-modal";
 import { ProductModal } from "./modal";
 import { useProductsContext } from "./context";
+import { hasProductPermission } from "./permissions";
 
 const ProductUserCell = ({ user }: { user: IUserLite | null | undefined }) => (
   <div className="flex min-w-0 items-center gap-2">
@@ -29,7 +31,6 @@ const ProductUserCell = ({ user }: { user: IUserLite | null | undefined }) => (
 export const ProductsRoot = observer(function ProductsRoot() {
   const { workspaceSlug } = useParams();
   const { t } = useTranslation();
-  const { data: currentUser } = useUser();
   const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
   const { products, searchQuery, isLoading, error, fetchProducts, openProductModal, setProductToDelete } =
     useProductsContext();
@@ -37,7 +38,9 @@ export const ProductsRoot = observer(function ProductsRoot() {
   const workspaceInfo = workspaceInfoBySlug(slug);
   const isWorkspaceAdmin = workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(slug);
   const canCreate = workspaceInfo?.role === EUserWorkspaceRoles.MEMBER || isWorkspaceAdmin;
-  const canManage = (product: TProduct) => isWorkspaceAdmin || product.owner === currentUser?.id;
+  const canEditProduct = (product: TProduct) => hasProductPermission(product, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY);
+  const canDeleteProduct = (product: TProduct) =>
+    hasProductPermission(product, PRODUCT_SETTINGS_DELETE_PERMISSION_KEY);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const filteredProducts = useMemo(
     () =>
@@ -157,7 +160,8 @@ export const ProductsRoot = observer(function ProductsRoot() {
                 </thead>
                 <tbody>
                   {currentPageProducts.map((product) => {
-                    const manageable = canManage(product);
+                    const editable = canEditProduct(product);
+                    const deletable = canDeleteProduct(product);
                     const settingsPath = `/${slug}/settings/products/${product.id}`;
 
                     return (
@@ -235,7 +239,7 @@ export const ProductsRoot = observer(function ProductsRoot() {
                             <Tooltip
                               tooltipContent={
                                 <div className="text-xs text-primary">
-                                  {manageable
+                                  {editable
                                     ? t("workspace_products.actions.edit")
                                     : t("workspace_products.actions.no_permission_edit")}
                                 </div>
@@ -244,15 +248,15 @@ export const ProductsRoot = observer(function ProductsRoot() {
                             >
                               <button
                                 type="button"
-                                disabled={!manageable}
+                                disabled={!editable}
                                 className={cn(
                                   "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                                  manageable
+                                  editable
                                     ? "hover:bg-layer-1-hover hover:text-primary"
                                     : "cursor-not-allowed opacity-50"
                                 )}
                                 aria-label={t("workspace_products.actions.edit")}
-                                onClick={() => manageable && openProductModal("edit", product)}
+                                onClick={() => editable && openProductModal("edit", product)}
                               >
                                 <Pencil className="h-3 w-3" />
                               </button>
@@ -260,7 +264,7 @@ export const ProductsRoot = observer(function ProductsRoot() {
                             <Tooltip
                               tooltipContent={
                                 <div className="text-xs text-primary">
-                                  {manageable
+                                  {deletable
                                     ? t("workspace_products.actions.delete")
                                     : t("workspace_products.actions.no_permission_delete")}
                                 </div>
@@ -269,15 +273,15 @@ export const ProductsRoot = observer(function ProductsRoot() {
                             >
                               <button
                                 type="button"
-                                disabled={!manageable}
+                                disabled={!deletable}
                                 className={cn(
                                   "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                                  manageable
+                                  deletable
                                     ? "hover:bg-layer-1-hover hover:text-primary"
                                     : "cursor-not-allowed opacity-50"
                                 )}
                                 aria-label={t("workspace_products.actions.delete")}
-                                onClick={() => manageable && setProductToDelete(product)}
+                                onClick={() => deletable && setProductToDelete(product)}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </button>

@@ -545,14 +545,16 @@ class RequirementProjectsViewSet(BaseViewSet):
     model = RequirementProject
 
     def create(self, request, slug, product_id, requirement_id):
-        from plane.utils.product import can_edit_product_requirements
+        from plane.utils.product import has_product_permission
 
         product = get_scoped_product(request.user, slug=slug, product_id=product_id)
         if product is None:
             return Response(
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
-        if not can_edit_product_requirements(request.user, product):
+        if not has_product_permission(
+            request.user, product, PermissionKey.PRODUCT_PROJECT_LINK_MANAGE
+        ):
             return Response(
                 {"error": "You do not have permission to maintain product requirements."},
                 status=status.HTTP_403_FORBIDDEN,

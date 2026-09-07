@@ -3,7 +3,12 @@ import { orderBy as sortByOrder } from "lodash-es";
 import Link from "next/link";
 import { observer } from "mobx-react";
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, CircleMinus, SearchX } from "lucide-react";
-import type { TMemberOrderByOptions } from "@plane/constants";
+import {
+  PRODUCT_MEMBER_BIND_ROLE_PERMISSION_KEY,
+  PRODUCT_MEMBER_INVITE_PERMISSION_KEY,
+  PRODUCT_MEMBER_REMOVE_PERMISSION_KEY,
+  type TMemberOrderByOptions,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { SearchIcon } from "@plane/propel/icons";
@@ -16,6 +21,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRoles } from "@/hooks/store/use-product-roles";
 import { useProductsContext } from "../../context";
+import { hasProductPermission } from "../../permissions";
 import { AddProductMembersModal, type TProductMemberOption } from "./add-members-modal";
 import { ConfirmProductMemberRemove } from "./confirm-member-remove";
 import { ProductRoleMultiSelect } from "./product-role-multi-select";
@@ -92,9 +98,10 @@ function ProductMemberNameCell(props: {
   workspaceSlug: string;
   removeLabel: string;
   isOwner: boolean;
+  canRemove: boolean;
   onRemove: (row: TProductMemberRow) => void;
 }) {
-  const { row, workspaceSlug, removeLabel, isOwner, onRemove } = props;
+  const { row, workspaceSlug, removeLabel, isOwner, canRemove, onRemove } = props;
   const displayName = getMemberFullName(row.member);
 
   return (
@@ -106,7 +113,7 @@ function ProductMemberNameCell(props: {
         {displayName}
       </Link>
       {/* 负责人必须始终是成员，移不掉：换人得先在产品设置里改负责人 */}
-      {!isOwner && (
+      {!isOwner && canRemove && (
         <CustomMenu
           ellipsis
           closeOnSelect
@@ -170,7 +177,11 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
   );
   const { roles, isLoading: isRolesLoading, error: rolesError, fetchRoles } = useProductRoles(workspaceSlug, productId);
   const { products } = useProductsContext();
-  const ownerId = products.find(({ id }) => id === productId)?.owner;
+  const product = products.find(({ id }) => id === productId);
+  const ownerId = product?.owner;
+  const canInvite = hasProductPermission(product, PRODUCT_MEMBER_INVITE_PERMISSION_KEY);
+  const canRemove = hasProductPermission(product, PRODUCT_MEMBER_REMOVE_PERMISSION_KEY);
+  const canBindRole = hasProductPermission(product, PRODUCT_MEMBER_BIND_ROLE_PERMISSION_KEY);
 
   const rows = useMemo<TProductMemberRow[]>(
     () =>
@@ -294,6 +305,7 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
           workspaceSlug={workspaceSlug}
           removeLabel={t("workspace_products.settings.members.remove")}
           isOwner={row.member.id === ownerId}
+          canRemove={canRemove}
           onRemove={setMemberToRemove}
         />
       ),
@@ -341,7 +353,9 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
         <ProductMemberRoleCell
           membership={row.membership}
           roles={roles}
-          disabled={isRolesLoading || Boolean(rolesError) || updatingMembershipId === row.membership.id}
+          disabled={
+            !canBindRole || isRolesLoading || Boolean(rolesError) || updatingMembershipId === row.membership.id
+          }
           onChange={(roleIds) => void handleRoleChange(row.membership, roleIds)}
         />
       ),
@@ -369,6 +383,7 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
         isOpen={isAddModalOpen}
         memberOptions={memberOptions}
         roles={roles}
+        canBindRole={canBindRole}
         isRolesLoading={isRolesLoading || Boolean(rolesError)}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={addMembers}
@@ -403,9 +418,11 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
             disabled={isRolesLoading || Boolean(rolesError)}
             onChange={setRoleFilters}
           />
-          <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
-            {t("workspace_products.settings.members.add")}
-          </Button>
+          {canInvite && (
+            <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
+              {t("workspace_products.settings.members.add")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -432,9 +449,11 @@ export const ProductMemberList = observer(function ProductMemberList(props: {
         <div className="flex min-h-56 flex-col items-center justify-center gap-2 text-center">
           <p className="text-13 font-medium text-primary">{t("workspace_products.settings.members.empty")}</p>
           <p className="max-w-sm text-12 text-tertiary">{t("workspace_products.settings.members.empty_description")}</p>
-          <Button className="mt-2" variant="secondary" onClick={() => setIsAddModalOpen(true)}>
-            {t("workspace_products.settings.members.add")}
-          </Button>
+          {canInvite && (
+            <Button className="mt-2" variant="secondary" onClick={() => setIsAddModalOpen(true)}>
+              {t("workspace_products.settings.members.add")}
+            </Button>
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto">

@@ -143,6 +143,9 @@ type TProps = {
   onSubmitReview?: (requirementIds: string[], changeType?: TRequirementChangeType) => void;
   onWithdrawReview?: (changeRequestId: string) => void;
   readOnly?: boolean;
+  /** 建 / 删按产品角色单独放行；缺省都开，只在 readOnly=false 时有意义 */
+  canCreate?: boolean;
+  canDelete?: boolean;
   /**
    * 新增行绑定到的需求类型。产品需求传当前视图的类型，标准库传 library.requirement_type_id。
    * 表格下方的「新增数据」因此永远挂在类型上，不会挂到标准库上。
@@ -212,6 +215,8 @@ export const RequirementGrid = observer(
       onSubmitReview,
       onWithdrawReview,
       readOnly = false,
+      canCreate = true,
+      canDelete = true,
       createRequirementTypeId,
       columnStorageId,
       builtinLayout = null,
@@ -748,8 +753,9 @@ export const RequirementGrid = observer(
               <MenuRowLabel icon={History} label={t("requirement_approval.view_change_request")} />
             </CustomMenu.MenuItem>
           )}
-          {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」 */}
-          {!requirement.is_locked && (
+          {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」。
+              草稿直删看 canDelete，申请删除看有没有提评审入口 */}
+          {!requirement.is_locked && (requirement.approved_version !== null ? Boolean(onSubmitReview) : canDelete) && (
             <CustomMenu.MenuItem
               onClick={() => {
                 if (requirement.approved_version !== null && onSubmitReview) {
@@ -1336,7 +1342,7 @@ export const RequirementGrid = observer(
           />
         </FiltersDropdown>
         {/* 单元格已经常驻可编辑，不再有「进入编辑态」这一步；这里改成新增入口 */}
-        {!readOnly && !hideToolbarAdd && (
+        {!readOnly && canCreate && !hideToolbarAdd && (
           <Button variant="primary" size="lg" onClick={() => openCreateModal()} disabled={isLoading}>
             {t("requirement_grid.data.add")}
           </Button>
@@ -1608,7 +1614,7 @@ export const RequirementGrid = observer(
                 onFieldResize={(fieldId, event) => startResize(fieldId, columnSnapshot, event)}
               />
               {rowGroups}
-              {!readOnly && requirements.length > 0 && (
+              {!readOnly && canCreate && requirements.length > 0 && (
                 <tbody>
                   <tr>
                     {/*
@@ -1644,7 +1650,7 @@ export const RequirementGrid = observer(
               submitReviewCount={submittableSelectedIds.length}
               onSubmitReview={onSubmitReview ? () => onSubmitReview(submittableSelectedIds) : undefined}
               deleteCount={deletableSelectedIds.length}
-              onDelete={() => setIdsToDelete(deletableSelectedIds)}
+              onDelete={canDelete ? () => setIdsToDelete(deletableSelectedIds) : undefined}
               onMoveToModule={onMoveToModule ? () => onMoveToModule(selectedIds) : undefined}
             />
           )}

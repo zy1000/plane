@@ -21,7 +21,8 @@ from plane.db.models import (
     Requirement,
     RequirementType,
 )
-from plane.utils.product import can_edit_product_requirements, can_view_product
+from plane.app.permissions.keys import PermissionKey
+from plane.utils.product import can_view_product, has_product_permission
 from plane.utils.requirement import (
     RequirementScopeHandle,
     field_specs_for_requirement_types,
@@ -173,6 +174,13 @@ def get_requirement_scope(user, *, slug, product_id, for_update=False):
     return product, RequirementScopeHandle.for_product(product)
 
 
-def can_write_requirements(user, product):
-    """能不能录入/修改需求条目。产品成员即可。"""
-    return can_edit_product_requirements(user, product)
+def can_write_requirements(user, product, permission_key=None):
+    """能不能对产品需求做某个动作。缺省是「编辑」；建 / 删 / 模块 / 评审 / 基线各传自己的 key。
+    传一组 key 表示任一命中即可。"""
+    if permission_key is None:
+        keys = (PermissionKey.PRODUCT_REQUIREMENT_EDIT,)
+    elif isinstance(permission_key, (tuple, list, set, frozenset)):
+        keys = tuple(permission_key)
+    else:
+        keys = (permission_key,)
+    return has_product_permission(user, product, *keys)

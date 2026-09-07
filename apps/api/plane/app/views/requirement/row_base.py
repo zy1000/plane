@@ -27,6 +27,7 @@ from plane.app.serializers.requirement import (
     RequirementSetModuleSerializer,
     RequirementUpdateSerializer,
 )
+from plane.app.permissions.keys import PermissionKey
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.excel import RequirementExcelMixin
 from plane.db.models import (
@@ -119,7 +120,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         """返回这批需求行的归属对象（产品作用域句柄或标准库）；不存在或不可见时返回 None。"""
         raise NotImplementedError
 
-    def can_write(self, owner):
+    def can_write(self, owner, permission_key=None):
         raise NotImplementedError
 
     def resolve_layer(self, owner):
@@ -131,20 +132,38 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
     NOT_FOUND = "Requirement not found."
     FORBIDDEN = "You do not have permission to maintain these requirements."
 
-    def _owner_or_error(self, *, for_update=False, require_write=True):
-        """返回 (owner, error_response)。"""
+    def _owner_or_error(
+        self, *, for_update=False, require_write=True, permission_key=None
+    ):
+        """返回 (owner, error_response)。permission_key 缺省是「编辑需求」。"""
         owner = self.resolve_owner(for_update=for_update)
         if owner is None:
             return None, Response(
                 {"error": self.NOT_FOUND},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if require_write and not self.can_write(owner):
+        if require_write and not self.can_write(owner, permission_key):
             return None, Response(
                 {"error": self.FORBIDDEN},
                 status=status.HTTP_403_FORBIDDEN,
             )
         return owner, None
+
+    def _batch_permission_error(self, owner, *, creates=(), updates=(), deletes=()):
+        """批量保存 / Excel 导入是建、改、删混在一起的，按实际出现的操作分别查 key。"""
+        required = []
+        if creates:
+            required.append(PermissionKey.PRODUCT_REQUIREMENT_CREATE)
+        if updates:
+            required.append(PermissionKey.PRODUCT_REQUIREMENT_EDIT)
+        if deletes:
+            required.append(PermissionKey.PRODUCT_REQUIREMENT_DELETE)
+        for key in required:
+            if not self.can_write(owner, key):
+                return Response(
+                    {"error": self.FORBIDDEN}, status=status.HTTP_403_FORBIDDEN
+                )
+        return None
 
     def _serializer_context(self, layer, owner):
         return {
@@ -375,7 +394,10 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         """
         try:
             with transaction.atomic():
-                owner, error = self._owner_or_error(for_update=True)
+                owner, error = self._owner_or_error(
+                    for_update=True,
+                    permission_key=PermissionKey.PRODUCT_REQUIREMENT_CREATE,
+                )
                 if error is not None:
                     return error
                 layer = self.resolve_layer(owner)
@@ -592,7 +614,9 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         return None
 
     def destroy(self, request, *args, pk=None, **kwargs):
-        owner, error = self._owner_or_error()
+        owner, error = self._owner_or_error(
+            permission_key=PermissionKey.PRODUCT_REQUIREMENT_DELETE
+        )
         if error is not None:
             return error
         layer = self.resolve_layer(owner)
@@ -609,7 +633,9 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_destroy(self, request, *args, **kwargs):
-        owner, error = self._owner_or_error()
+        owner, error = self._owner_or_error(
+            permission_key=PermissionKey.PRODUCT_REQUIREMENT_DELETE
+        )
         if error is not None:
             return error
         layer = self.resolve_layer(owner)
@@ -658,6 +684,13 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 },
             )
             serializer.is_valid(raise_exception=True)
+            error = self._batch_permission_error(
+                owner,
+                creates=serializer.validated_data["creates"],
+                deletes=serializer.validated_data["deletes"],
+            )
+            if error is not None:
+                return error
 
             # 锁定 / 已关闭 / 「已确认不能直接删」折进现成的 conflicts 形状，
             # 前端不必学新的错误结构。已关闭只拦内容更新，不拦删除
@@ -824,7 +857,10 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         前一个的结果，不会双双落库。弹窗侧的候选池过滤只是读时快照，挡不住并发。
         """
         with transaction.atomic():
-            owner, error = self._owner_or_error(for_update=True)
+            owner, error = self._owner_or_error(
+                    for_update=True,
+                    permission_key=PermissionKey.PRODUCT_REQUIREMENT_CREATE,
+                )
             if error is not None:
                 return error
             layer = self.resolve_layer(owner)

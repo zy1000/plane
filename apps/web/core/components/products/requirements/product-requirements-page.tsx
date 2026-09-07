@@ -90,6 +90,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
   const canEdit = store.canEdit;
+  const { canCreate, canDelete, canManageModules, canSubmitReview, canManageBaselines } = store;
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
   const baselinesStore = useRequirementBaselines({ workspaceSlug, productId });
   /**
@@ -353,7 +354,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 )}
               </Button>
             )}
-            {activeTab === "baselines" && !openedBaselineId && canEdit && (
+            {activeTab === "baselines" && !openedBaselineId && canManageBaselines && (
               <Button variant="primary" size="lg" onClick={() => setIsCreateBaselineOpen(true)}>
                 {t("workspace_products.requirements.baseline.create")}
               </Button>
@@ -371,7 +372,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             />
             <div className="ml-auto flex min-w-0 items-center gap-1.5">
               <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
-              {canEdit && (
+              {canCreate && (
                 <RequirementCreateActions
                   onImportPrefetch={() => setShouldPrefetchImport(true)}
                   onImport={() => setIsImportOpen(true)}
@@ -405,7 +406,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
             productId={productId ?? ""}
             fields={store.configuration?.fields ?? []}
             requirementTypes={requirementTypes}
-            canManage={canEdit}
+            canManage={canManageBaselines}
             store={baselinesStore}
             isCreateOpen={isCreateBaselineOpen}
             onCreateOpenChange={setIsCreateBaselineOpen}
@@ -433,7 +434,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               store={moduleStore}
               selectedModuleId={selectedModuleId}
               onSelect={setSelectedModuleId}
-              readonly={!canEdit}
+              readonly={!canManageModules}
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {requirementTypes.length === 0 ? (
@@ -442,7 +443,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   title={t("workspace_products.requirements.data.empty.title")}
                   description={t("workspace_products.requirements.data.empty.description")}
                   customButton={
-                    canEdit ? (
+                    canCreate ? (
                       <RequirementCreateActions
                         onImportPrefetch={() => setShouldPrefetchImport(true)}
                         onImport={() => setIsImportOpen(true)}
@@ -468,6 +469,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   isMutating={store.isMutating}
                   error={store.requirementsError}
                   readOnly={!canEdit}
+                  canCreate={canCreate}
+                  canDelete={canDelete}
                   search={store.search}
                   filters={store.filters}
                   onSearchChange={store.setSearch}
@@ -501,6 +504,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   entityKind="product"
                   showApprovalColumn
                   readOnly={!canEdit}
+                  canCreate={canCreate}
+                  canDelete={canDelete}
                   createRequirementTypeId={activeView.requirementTypeId}
                   columnStorageId={activeView.requirementTypeId}
                   builtinLayout={activeType?.builtin_fields ?? null}
@@ -566,9 +571,11 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         onClose={() => setPeekRequirement(null)}
         onOpenRequirement={setPeekRequirement}
         // 横幅上的审批入口复用列表的提交弹窗与撤回逻辑；查看变更单要先关抽屉，变更记录页在它底下
-        onSubmitReview={canEdit ? (requirementId) => approvalActions.openSubmitModal([requirementId]) : undefined}
+        onSubmitReview={
+          canSubmitReview ? (requirementId) => approvalActions.openSubmitModal([requirementId]) : undefined
+        }
         onWithdrawReview={
-          canEdit
+          canSubmitReview
             ? (changeRequestId) =>
                 void approvalActions.withdraw(changeRequestId).then(() => setPeekRefreshToken((token) => token + 1))
             : undefined

@@ -19,6 +19,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
+from plane.app.permissions.keys import PermissionKey
 from plane.app.serializers.requirement import (
     RequirementBatchCreateSerializer,
     RequirementBatchSaveSerializer,
@@ -348,7 +349,12 @@ class RequirementExcelMixin:
                 )
 
     def validate_excel_import(self, request, *args, **kwargs):
-        owner, error = self._owner_or_error()
+        owner, error = self._owner_or_error(
+            permission_key=(
+                PermissionKey.PRODUCT_REQUIREMENT_CREATE,
+                PermissionKey.PRODUCT_REQUIREMENT_EDIT,
+            )
+        )
         if error is not None:
             return error
         layer = self.resolve_layer(owner)
@@ -373,7 +379,13 @@ class RequirementExcelMixin:
             return error
 
         with transaction.atomic():
-            owner, error = self._owner_or_error(for_update=True)
+            owner, error = self._owner_or_error(
+                for_update=True,
+                permission_key=(
+                    PermissionKey.PRODUCT_REQUIREMENT_CREATE,
+                    PermissionKey.PRODUCT_REQUIREMENT_EDIT,
+                ),
+            )
             if error is not None:
                 return error
             layer = self.resolve_layer(owner)
@@ -388,6 +400,10 @@ class RequirementExcelMixin:
             chosen, creates, updates, parent_by_client_id = xl.build_batch_payload(
                 results, selected_keys=row_keys
             )
+            error = self._batch_permission_error(owner, creates=creates, updates=updates)
+            if error is not None:
+                transaction.set_rollback(True)
+                return error
             if not chosen:
                 transaction.set_rollback(True)
                 return Response(

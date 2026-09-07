@@ -752,9 +752,15 @@ class TestProductApp:
                 == status.HTTP_201_CREATED
             )
 
-        for unauthorized_user in (member, guest, outsider):
+        # 读角色列表放开给能看见产品的人（公开产品 = 任何活跃工作区成员）；
+        # 建角色要 product.role.manage，工作区成员身份本身不给。
+        for unauthorized_user, expected_list_status in (
+            (member, status.HTTP_200_OK),
+            (guest, status.HTTP_200_OK),
+            (outsider, status.HTTP_403_FORBIDDEN),
+        ):
             self.authenticate(api_client, unauthorized_user)
-            assert api_client.get(role_list_url).status_code == status.HTTP_403_FORBIDDEN
+            assert api_client.get(role_list_url).status_code == expected_list_status
             assert (
                 api_client.post(
                     role_list_url,

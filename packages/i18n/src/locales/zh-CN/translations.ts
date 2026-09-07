@@ -2618,6 +2618,8 @@ export default {
         add: "添加成员",
         add_modal_title: "添加产品成员",
         add_modal_description: "从当前工作区的活跃成员中选择，并可为每位成员分配多个产品角色。",
+        add_modal_description_no_role:
+          "从当前工作区的活跃成员中选择。你没有分配角色的权限，加入的成员将使用默认产品角色。",
         select_member: "选择成员",
         loading_roles: "角色加载中…",
         role_search: "搜索角色...",
@@ -2662,6 +2664,7 @@ export default {
         description: "管理此产品内生效的自定义角色，可手动创建",
         roles: "角色",
         search: "搜索角色...",
+        search_permissions: "搜索权限...",
         create: "新建角色",
         empty: "暂无角色",
         no_results: "没有匹配的角色",

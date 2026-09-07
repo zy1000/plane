@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Archive, Trash2 } from "lucide-react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams } from "react-router";
+import { PRODUCT_SETTINGS_DELETE_PERMISSION_KEY, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles } from "@plane/types";
 import type { TLogoProps, TProductNetwork } from "@plane/types";
-import { Loader } from "@plane/ui";
-import { renderFormattedDate } from "@plane/utils";
+import { Avatar, Loader } from "@plane/ui";
+import { getFileURL, renderFormattedDate } from "@plane/utils";
 import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -22,6 +23,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "../context";
 import { DeleteProductModal } from "../delete-modal";
+import { hasProductPermission } from "../permissions";
 import { ProductExtendedFields, useProductExtendedFields } from "../extended-fields";
 import { ProductLogoHeader } from "../logo-header";
 import { ProductSettingsHeader } from "./header";
@@ -109,6 +111,10 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
 
   if (!workspaceSlug || !productId || !product) return null;
 
+  // 设置区对能看见产品的人开放，这一页的字段按「编辑产品设置」决定可写，删除另看自己的 key
+  const canEdit = hasProductPermission(product, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY);
+  const canDelete = hasProductPermission(product, PRODUCT_SETTINGS_DELETE_PERMISSION_KEY);
+
   const handleSave = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -148,12 +154,11 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         message: t("workspace_products.toast.updated"),
       });
 
-      const canStillManage = hasWorkspaceAdminAccess || savedProduct.owner === currentUser?.id;
-      if (!canStillManage) {
-        const canStillView = savedProduct.network === 2 || isProductMember;
-        navigate(canStillView ? `/${workspaceSlug}/products/${productId}/requirements` : `/${workspaceSlug}/products`, {
-          replace: true,
-        });
+      // 保存响应里带最新的 my_permission_keys：换掉负责人后自己可能就没资格再编辑。
+      // 还看得见产品就留在这页（自动转只读），彻底看不见了才踢走。
+      const canStillView = savedProduct.network === 2 || isProductMember;
+      if (!hasProductPermission(savedProduct, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY) && !canStillView) {
+        navigate(`/${workspaceSlug}/products`, { replace: true });
       }
     } catch (error) {
       const errorPayload =
@@ -189,7 +194,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
 
       <div className="w-full">
         <div className="mb-8">
-          <ProductLogoHeader logoProps={logoProps} editable onLogoChange={setLogoProps} />
+          <ProductLogoHeader logoProps={logoProps} editable={canEdit} onLogoChange={setLogoProps} />
         </div>
         <div className="space-y-8">
           <div className="space-y-4">
@@ -198,23 +203,28 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
                 {t("workspace_products.settings.fields.name")}
                 <span className="ml-0.5 text-danger-primary">*</span>
               </label>
-              <input
-                id="product-settings-name"
-                value={name}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setFormError(null);
-                }}
-                maxLength={255}
-                className="focus:border-accent-primary h-10 w-full rounded-md border border-subtle bg-surface-1 px-3 text-body-sm-regular text-primary outline-none placeholder:text-placeholder"
-                placeholder={t("workspace_products.fields.name")}
-              />
+              {canEdit ? (
+                <input
+                  id="product-settings-name"
+                  value={name}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setFormError(null);
+                  }}
+                  maxLength={255}
+                  className="focus:border-accent-primary h-10 w-full rounded-md border border-subtle bg-surface-1 px-3 text-body-sm-regular text-primary outline-none placeholder:text-placeholder"
+                  placeholder={t("workspace_products.fields.name")}
+                />
+              ) : (
+                <p className="text-body-sm-regular text-primary">{name || "—"}</p>
+              )}
               {formError && <p className="mt-1.5 text-caption-md-regular text-danger-primary">{formError}</p>}
             </div>
 
             {/* 改标识符只影响展示：编号是读时拼的，所有已有需求的编号会立刻跟着变 */}
             <IdentifierInput
               id="product-settings-identifier"
+              editable={canEdit}
               value={identifier}
               onChange={(value) => {
                 setIdentifier(value);
@@ -237,24 +247,38 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
                 </Loader>
               ) : (
                 <div className="min-h-[120px] overflow-hidden rounded-md border border-subtle bg-surface-1">
-                  <RichTextEditor
-                    key={`product-settings-editor-${product.id}-${editorVersion}`}
-                    id={product.id}
-                    editable
-                    initialValue={descriptionHTML}
-                    value={null}
-                    workspaceSlug={workspaceSlug}
-                    workspaceId={workspaceId}
-                    dragDropEnabled
-                    deferAssetDeletion
-                    onDeferredAssetDelete={handleDeferredAssetDelete}
-                    onChange={(_json, html) => setDescriptionHTML(html)}
-                    placeholder={t("workspace_products.fields.description")}
-                    searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
-                    uploadFile={handleUpload}
-                    duplicateFile={handleDuplicate}
-                    containerClassName="min-h-[120px] pr-3 pt-3 text-13"
-                  />
+                  {canEdit ? (
+                    <RichTextEditor
+                      key={`product-settings-editor-${product.id}-${editorVersion}`}
+                      id={product.id}
+                      editable
+                      initialValue={descriptionHTML}
+                      value={null}
+                      workspaceSlug={workspaceSlug}
+                      workspaceId={workspaceId}
+                      dragDropEnabled
+                      deferAssetDeletion
+                      onDeferredAssetDelete={handleDeferredAssetDelete}
+                      onChange={(_json, html) => setDescriptionHTML(html)}
+                      placeholder={t("workspace_products.fields.description")}
+                      searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
+                      uploadFile={handleUpload}
+                      duplicateFile={handleDuplicate}
+                      containerClassName="min-h-[120px] pr-3 pt-3 text-13"
+                    />
+                  ) : (
+                    <RichTextEditor
+                      key={`product-settings-view-${product.id}-${editorVersion}`}
+                      id={product.id}
+                      editable={false}
+                      initialValue={descriptionHTML}
+                      value={null}
+                      workspaceSlug={workspaceSlug}
+                      workspaceId={workspaceId}
+                      dragDropEnabled={false}
+                      containerClassName="min-h-[120px] pr-3 pt-3 text-13"
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -262,7 +286,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
 
           <ProductExtendedFields
             workspaceSlug={workspaceSlug}
-            editable
+            editable={canEdit}
             variant="settings"
             product={product}
             values={extended.values}
@@ -275,23 +299,35 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
                   {t("workspace_products.fields.product_owner")}
                   <span className="ml-0.5 text-danger-primary">*</span>
                 </span>
-                <div className="h-10 w-full">
-                  <MemberDropdown
-                    multiple={false}
-                    value={ownerId}
-                    memberIds={ownerCandidateIds}
-                    onChange={(value) => {
-                      setOwnerId(value);
-                      setOwnerError(null);
-                    }}
-                    buttonVariant="border-with-text"
-                    className="h-full w-full"
-                    buttonClassName="h-full w-full border !border-subtle bg-surface-1 text-body-sm-regular"
-                    buttonContainerClassName="h-full w-full"
-                    placeholder={t("workspace_products.validation.owner_required")}
-                    showUserDetails
-                  />
-                </div>
+                {canEdit ? (
+                  <div className="h-10 w-full">
+                    <MemberDropdown
+                      multiple={false}
+                      value={ownerId}
+                      memberIds={ownerCandidateIds}
+                      onChange={(value) => {
+                        setOwnerId(value);
+                        setOwnerError(null);
+                      }}
+                      buttonVariant="border-with-text"
+                      className="h-full w-full"
+                      buttonClassName="h-full w-full border !border-subtle bg-surface-1 text-body-sm-regular"
+                      buttonContainerClassName="h-full w-full"
+                      placeholder={t("workspace_products.validation.owner_required")}
+                      showUserDetails
+                    />
+                  </div>
+                ) : (
+                  <div className="flex min-h-10 items-center gap-1.5 text-body-sm-regular text-primary">
+                    <Avatar
+                      size="sm"
+                      name={product.owner_detail?.display_name ?? ""}
+                      src={getFileURL(product.owner_detail?.avatar_url ?? "")}
+                      showTooltip={false}
+                    />
+                    <span className="truncate">{product.owner_detail?.display_name ?? "—"}</span>
+                  </div>
+                )}
                 {ownerError ? <p className="mt-1.5 text-caption-md-regular text-danger-primary">{ownerError}</p> : null}
                 {willLosePrivateAccess ? (
                   <div className="mt-1.5 flex items-start gap-2 text-caption-md-regular text-warning-primary">
@@ -304,9 +340,13 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
           />
 
           <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="primary" loading={isSaving} onClick={() => void handleSave()}>
-              {t("workspace_products.settings.update_product")}
-            </Button>
+            {canEdit ? (
+              <Button variant="primary" loading={isSaving} onClick={() => void handleSave()}>
+                {t("workspace_products.settings.update_product")}
+              </Button>
+            ) : (
+              <span />
+            )}
             {createdAt && (
               <p className="text-caption-md-regular text-tertiary">
                 {t("workspace_products.settings.created_on", { date: createdAt })}
@@ -315,38 +355,41 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
           </div>
         </div>
 
-        <div className="mt-10 rounded-lg border border-subtle bg-layer-2">
-          <SettingsBoxedControlItem
-            className="rounded-b-none border-0 border-b"
-            title={
-              <span className="flex items-center gap-2">
-                <Archive className="size-4 text-tertiary" />
-                {t("workspace_products.settings.archive.title")}
-              </span>
-            }
-            description={t("workspace_products.settings.archive.description")}
-            control={
-              <Button variant="secondary" disabled>
-                {t("workspace_products.settings.archive.button")}
-              </Button>
-            }
-          />
-          <SettingsBoxedControlItem
-            className="rounded-t-none border-0"
-            title={
-              <span className="flex items-center gap-2">
-                <Trash2 className="size-4 text-danger-primary" />
-                {t("workspace_products.settings.delete.title")}
-              </span>
-            }
-            description={t("workspace_products.settings.delete.description")}
-            control={
-              <Button variant="error-outline" onClick={() => setProductToDelete(product)}>
-                {t("workspace_products.settings.delete.button")}
-              </Button>
-            }
-          />
-        </div>
+        {/* 归档还没上线，只剩删除有实义：没有删除权限就整块不出现 */}
+        {canDelete && (
+          <div className="mt-10 rounded-lg border border-subtle bg-layer-2">
+            <SettingsBoxedControlItem
+              className="rounded-b-none border-0 border-b"
+              title={
+                <span className="flex items-center gap-2">
+                  <Archive className="size-4 text-tertiary" />
+                  {t("workspace_products.settings.archive.title")}
+                </span>
+              }
+              description={t("workspace_products.settings.archive.description")}
+              control={
+                <Button variant="secondary" disabled>
+                  {t("workspace_products.settings.archive.button")}
+                </Button>
+              }
+            />
+            <SettingsBoxedControlItem
+              className="rounded-t-none border-0"
+              title={
+                <span className="flex items-center gap-2">
+                  <Trash2 className="size-4 text-danger-primary" />
+                  {t("workspace_products.settings.delete.title")}
+                </span>
+              }
+              description={t("workspace_products.settings.delete.description")}
+              control={
+                <Button variant="error-outline" onClick={() => setProductToDelete(product)}>
+                  {t("workspace_products.settings.delete.button")}
+                </Button>
+              }
+            />
+          </div>
+        )}
       </div>
 
       <DeleteProductModal

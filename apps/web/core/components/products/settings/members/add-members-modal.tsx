@@ -5,7 +5,7 @@ import { ChevronDownIcon, CloseIcon, PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TCreateProductMemberPayload, TProductRole } from "@plane/types";
 import { Avatar, CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 import type { TProductMemberBulkMutationResult } from "@/hooks/store/use-product-members";
 import { ProductRoleMultiSelect } from "./product-role-multi-select";
 
@@ -26,6 +26,8 @@ type Props = {
   isOpen: boolean;
   memberOptions: TProductMemberOption[];
   roles: TProductRole[];
+  /** 没有「分配成员角色」权限时不给选角色：后端也会拒，加进来的人走默认产品角色 */
+  canBindRole: boolean;
   isRolesLoading: boolean;
   onClose: () => void;
   onAdd: (payloads: TCreateProductMemberPayload[]) => Promise<TProductMemberBulkMutationResult>;
@@ -34,7 +36,7 @@ type Props = {
 const initialRow = (): TMemberRow => ({ key: 0, memberId: "", roleIds: [] });
 
 export function AddProductMembersModal(props: Props) {
-  const { isOpen, memberOptions, roles, isRolesLoading, onClose, onAdd } = props;
+  const { isOpen, memberOptions, roles, canBindRole, isRolesLoading, onClose, onAdd } = props;
   const { t } = useTranslation();
   const nextKey = useRef(1);
   const [rows, setRows] = useState<TMemberRow[]>([initialRow()]);
@@ -70,7 +72,9 @@ export function AddProductMembersModal(props: Props) {
     if (!isComplete || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const result = await onAdd(rows.map((row) => ({ member: row.memberId, custom_role_ids: row.roleIds })));
+      const result = await onAdd(
+        rows.map((row) => ({ member: row.memberId, ...(canBindRole ? { custom_role_ids: row.roleIds } : {}) }))
+      );
       if (result.failures.length === 0) {
         setToast({
           type: TOAST_TYPE.SUCCESS,
@@ -115,7 +119,13 @@ export function AddProductMembersModal(props: Props) {
           <h3 className="text-16 font-medium text-primary">
             {t("workspace_products.settings.members.add_modal_title")}
           </h3>
-          <p className="mt-1 text-12 text-tertiary">{t("workspace_products.settings.members.add_modal_description")}</p>
+          <p className="mt-1 text-12 text-tertiary">
+            {t(
+              canBindRole
+                ? "workspace_products.settings.members.add_modal_description"
+                : "workspace_products.settings.members.add_modal_description_no_role"
+            )}
+          </p>
         </div>
 
         <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -144,7 +154,13 @@ export function AddProductMembersModal(props: Props) {
                   ),
                 }));
                 return (
-                  <div key={row.key} className="grid grid-cols-[minmax(0,1fr)_18rem_1.5rem] items-start gap-3">
+                  <div
+                    key={row.key}
+                    className={cn(
+                      "grid items-start gap-3",
+                      canBindRole ? "grid-cols-[minmax(0,1fr)_18rem_1.5rem]" : "grid-cols-[minmax(0,1fr)_1.5rem]"
+                    )}
+                  >
                     <CustomSearchSelect
                       value={row.memberId}
                       onChange={(value: string) => updateRow(row.key, { memberId: value })}
@@ -172,15 +188,17 @@ export function AddProductMembersModal(props: Props) {
                       }
                     />
 
-                    <div className="flex min-h-9 items-center rounded-md border border-subtle bg-surface-1 px-3 shadow-sm">
-                      <ProductRoleMultiSelect
-                        value={row.roleIds}
-                        roles={roles}
-                        onChange={(roleIds) => updateRow(row.key, { roleIds })}
-                        isLoading={isRolesLoading}
-                        disabled={isRolesLoading}
-                      />
-                    </div>
+                    {canBindRole && (
+                      <div className="flex min-h-9 items-center rounded-md border border-subtle bg-surface-1 px-3 shadow-sm">
+                        <ProductRoleMultiSelect
+                          value={row.roleIds}
+                          roles={roles}
+                          onChange={(roleIds) => updateRow(row.key, { roleIds })}
+                          isLoading={isRolesLoading}
+                          disabled={isRolesLoading}
+                        />
+                      </div>
+                    )}
 
                     <button
                       type="button"

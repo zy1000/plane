@@ -17,7 +17,7 @@ from plane.app.serializers.product_project import ProductProjectSerializer
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.mixins import get_scoped_product
 from plane.db.models import ProductProject, Project, ProjectNetwork
-from plane.utils.product import can_manage_product
+from plane.utils.product import has_product_permission
 from plane.utils.requirement_project import (
     RequirementLinkError,
     resolve_linkable_products,
@@ -191,7 +191,9 @@ class ProductProjectViewSet(BaseViewSet):
             return Response(
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
-        if not can_manage_product(request.user, product):
+        if not has_product_permission(
+            request.user, product, PermissionKey.PRODUCT_PROJECT_LINK_MANAGE
+        ):
             return Response(
                 {"error": "You do not have permission to update this product."},
                 status=status.HTTP_403_FORBIDDEN,

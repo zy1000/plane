@@ -4,13 +4,11 @@ import { AlertCircle, PackageOpen } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { EUserWorkspaceRoles } from "@plane/types";
 import { Breadcrumbs, Header, Loader } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useProductsContext } from "./context";
 import { ProductTopNavigation } from "./product-top-navigation";
 
@@ -90,14 +88,8 @@ const ProductDetailError = ({ workspaceSlug }: { workspaceSlug: string }) => {
 
 export const ProductDetailsLayout = observer(function ProductDetailsLayout(props: TProductDetailsLayoutProps) {
   const { children, workspaceSlug, productId } = props;
-  const { data: currentUser } = useUser();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
   const { products, fetchProduct, detailError, detailErrorProductId } = useProductsContext();
   const currentProduct = products.find((product) => product.id === productId);
-  const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
-  const isWorkspaceAdmin =
-    workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug);
-  const canManage = Boolean(currentProduct && (isWorkspaceAdmin || currentProduct.owner === currentUser?.id));
   const hasDetailError = detailErrorProductId === productId && Boolean(detailError);
   const isInitialLoading = !currentProduct && !hasDetailError;
 
@@ -107,7 +99,8 @@ export const ProductDetailsLayout = observer(function ProductDetailsLayout(props
 
   return (
     <>
-      <ProductTopNavigation workspaceSlug={workspaceSlug} productId={productId} canManage={canManage} />
+      {/* 设置区对能看见产品的人只读开放，入口不再按 key 隐藏；各页内部按 key 决定能不能改 */}
+      <ProductTopNavigation workspaceSlug={workspaceSlug} productId={productId} canManage />
       {hasDetailError ? (
         <ProductDetailError workspaceSlug={workspaceSlug} />
       ) : isInitialLoading ? (

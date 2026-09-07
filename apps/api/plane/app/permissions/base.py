@@ -12,8 +12,11 @@ from plane.db.models import (
     ProjectRole,
     IssueType,
     Project,
+    Product,
+    ProductMember,
     TestCaseRepository,
 )
+from django.core.exceptions import ValidationError
 from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
     build_issue_type_permission_key,
@@ -253,6 +256,71 @@ def _get_user_project_permission_keys(
     return keys
 
 
+def _can_manage_workspace_products_cached(user, workspace) -> bool:
+    """产品列表序列化会对每个产品各问一次「是不是工作区管理员」，同一请求内按工作区缓存在 user 上。"""
+    # utils/product.py 反向依赖本模块，只能延迟导入
+    from plane.utils.product import can_manage_workspace_products
+
+    cache = getattr(user, "_plane_ws_products_admin_cache", None)
+    if cache is None:
+        cache = {}
+        try:
+            user._plane_ws_products_admin_cache = cache
+        except AttributeError:
+            pass
+    key = str(workspace.id)
+    if key not in cache:
+        cache[key] = can_manage_workspace_products(user, workspace)
+    return cache[key]
+
+
+def _get_user_product_permission_keys(user, product) -> set:
+    """用户在某产品内的有效 product.* key 集合。
+
+    直通：实例管理员 / 工作区 owner / 工作区管理员（沿用 utils/product.py 的整数角色判定）/
+    产品负责人 → 全部 product.* 静态 key。
+    否则取该用户 ProductMember 上所有角色的 permission_keys 并集。
+    ProductMember / ProductRole 没有 is_active / deleted_at，别照抄项目分支的过滤条件。
+    """
+    if not user or getattr(user, "is_anonymous", True):
+        return set()
+
+    if product.owner_id == user.id or _can_manage_workspace_products_cached(
+        user, product.workspace
+    ):
+        return {key for key in PermissionKey.values() if key.startswith("product.")}
+
+    member = ProductMember.objects.filter(product=product, member=user).first()
+    if member is None:
+        return set()
+
+    keys: set = set()
+    for role in member.custom_roles.all():
+        perms = role.permissions if isinstance(role.permissions, dict) else {}
+        keys.update(k for k in perms.get("permission_keys", []) if isinstance(k, str))
+    return keys
+
+
+def _resolve_product_for_request(request, slug: str, kwargs: dict):
+    """PRODUCT 级装饰器的产品解析：URL 的 product_id → URL 的 pk（ProductViewSet 自身路由）
+    → 请求体的 product（products/member/invite/ 路由）。产品必须属于 slug 工作区。"""
+    product_id = (
+        str(kwargs.get("product_id", ""))
+        or str(kwargs.get("pk", ""))
+        or str(request.data.get("product", "") or "")
+    )
+    if not product_id:
+        return None
+    try:
+        return (
+            Product.objects.filter(pk=product_id, workspace__slug=slug)
+            .select_related("workspace")
+            .first()
+        )
+    except (ValueError, ValidationError):
+        return None
+
+
 _ISSUE_TYPE_ALLOWED_ACTIONS = frozenset(
     action for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
 )
@@ -331,14 +399,24 @@ def has_project_issue_permission(
     return required_permission in user_keys
 
 
+_FINE_PERMISSION_LEVELS = ("WORKSPACE", "PROJECT", "PRODUCT")
+
+
 def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
     """
     基于细粒度 permission key 的鉴权装饰器。
     用法：
       @allow_fine_permission("project.role.view")                        # 项目级（默认）
       @allow_fine_permission("workspace.role.view", level="WORKSPACE")   # 工作区级
+      @allow_fine_permission("product.role.manage", level="PRODUCT")     # 产品级
     当用户拥有任意一个指定 key 时放行。
     """
+    if level not in _FINE_PERMISSION_LEVELS:
+        # 以前拼错会静默降级成项目级鉴权，改成启动即报错
+        raise ValueError(
+            f"allow_fine_permission: unknown level {level!r}, "
+            f"expected one of {_FINE_PERMISSION_LEVELS}"
+        )
 
     def decorator(view_func):
         @wraps(view_func)
@@ -348,6 +426,15 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
                 user_keys = _get_user_workspace_permission_keys(request.user, slug)
                 request._plane_workspace_permission_keys = user_keys
                 error_msg = "You don't have the required workspace permissions."
+            elif level == "PRODUCT":
+                product = _resolve_product_for_request(request, slug, kwargs)
+                if product is None:
+                    return Response(
+                        {"error": "Product not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                user_keys = _get_user_product_permission_keys(request.user, product)
+                error_msg = "您没有所需的产品权限。"
             else:
                 project_id = (
                     str(kwargs.get("project_id", ""))

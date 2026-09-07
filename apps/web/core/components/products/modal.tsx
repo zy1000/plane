@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { AlertTriangle, Pencil } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { InfoIcon } from "@plane/propel/icons";
@@ -22,6 +23,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
 import { ProductExtendedFields, useProductExtendedFields } from "./extended-fields";
+import { hasProductPermission } from "./permissions";
 import { getProductLogoDefaults } from "./logo-header";
 import { ProductModalHeader } from "./modal-header";
 
@@ -86,7 +88,7 @@ export const ProductModal = observer(function ProductModal() {
   }, [ownerScopeProductId, product?.owner, productMembers]);
   const hasWorkspaceAdminAccess =
     workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug);
-  const canManageProduct = Boolean(product && (product.owner === currentUser?.id || hasWorkspaceAdminAccess));
+  const canManageProduct = hasProductPermission(product, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY);
   const isProductMember = Boolean(
     currentUser?.id && productMembers.some((membership) => membership.member === currentUser.id)
   );

@@ -7,7 +7,8 @@ import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import { EUserWorkspaceRoles, type TProductProject } from "@plane/types";
+import { PRODUCT_PROJECT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
+import type { TProductProject } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -17,29 +18,21 @@ import { PageHead } from "@/components/core/page-title";
 import { useProductProjects } from "@/hooks/store/use-product-projects";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { getCompletionRate, ProductProjectStatusBar } from "./product-project-status-bar";
 import { ProductProjectsModal, type TProductProjectCandidate } from "./product-projects-modal";
 import { useProductsContext } from "../context";
+import { hasProductPermission } from "../permissions";
 
 export const ProductProjectsPage = observer(function ProductProjectsPage() {
   const { t } = useTranslation();
   const { workspaceSlug, productId } = useParams();
-  const { data: currentUser } = useUser();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
   const { products } = useProductsContext();
   const { joinedProjectIds, getProjectById, loader } = useProject();
   const { currentWorkspaceDisplayFilters } = useProjectFilter();
   const slug = workspaceSlug?.toString() ?? "";
   const product = products.find((item) => item.id === productId);
   const featureTitle = t("workspace_products.navigation.projects");
-  const workspaceInfo = workspaceInfoBySlug(slug);
-  const canManage = Boolean(
-    product &&
-      (workspaceInfo?.role === EUserWorkspaceRoles.ADMIN ||
-        hasAllWorkspacePermissions(slug) ||
-        product.owner === currentUser?.id)
-  );
+  const canManage = hasProductPermission(product, PRODUCT_PROJECT_LINK_MANAGE_PERMISSION_KEY);
   const { links, isLoading, isMutating, error, fetchProjects, updateProjects } = useProductProjects({
     workspaceSlug: slug || undefined,
     productId: productId?.toString(),

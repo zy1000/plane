@@ -5,9 +5,7 @@ import { observer } from "mobx-react";
 import { Outlet, useNavigate, useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { EUserWorkspaceRoles } from "@plane/types";
 import { Loader } from "@plane/ui";
-import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { ProductsProvider, useProductsContext } from "@/components/products";
 import { getProductSettingsActivePath } from "@/components/products/settings/navigation";
@@ -68,16 +66,9 @@ const ProductSettingsLayoutContent = observer(function ProductSettingsLayoutCont
   workspaceSlug: string;
 }) {
   const pathname = usePathname();
-  const navigate = useNavigate();
-  const { t } = useTranslation();
   const { data: currentUser } = useUser();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
   const { products, fetchProduct, detailError, detailErrorProductId } = useProductsContext();
   const product = products.find(({ id }) => id === productId);
-  const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
-  const isWorkspaceAdmin =
-    workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug);
-  const canManage = Boolean(product && (isWorkspaceAdmin || product.owner === currentUser?.id));
   const hasDetailError = detailErrorProductId === productId && Boolean(detailError);
 
   useEffect(() => {
@@ -86,21 +77,6 @@ const ProductSettingsLayoutContent = observer(function ProductSettingsLayoutCont
 
   if ((!product && !hasDetailError) || !currentUser) return <ProductSettingsLoading />;
   if (hasDetailError || !product) return <ProductSettingsUnavailable workspaceSlug={workspaceSlug} />;
-
-  if (!canManage) {
-    return (
-      <NotAuthorizedView
-        section="settings"
-        isProjectView
-        className="h-full"
-        actionButton={
-          <Button variant="secondary" onClick={() => navigate(`/${workspaceSlug}/products/${productId}/requirements`)}>
-            {t("workspace_products.settings.back_to_product")}
-          </Button>
-        }
-      />
-    );
-  }
 
   return (
     <>

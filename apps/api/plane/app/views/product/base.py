@@ -2,14 +2,21 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import (
+    PermissionKey,
+    allow_fine_permission,
+    allow_workspace_member,
+)
 from plane.app.serializers.product import ProductSerializer
 from plane.app.views.base import BaseViewSet
 from plane.db.models import Product, ProductMember, Workspace
 from plane.utils.product import (
     can_create_product,
-    can_manage_product,
     can_manage_workspace_products,
+)
+from plane.utils.product_roles import (
+    bind_product_member_role,
+    ensure_product_default_roles,
 )
 
 
@@ -81,16 +88,12 @@ class ProductViewSet(BaseViewSet):
     def _get_product(self, pk):
         return self.get_queryset().filter(pk=pk).first()
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_workspace_member
     def list(self, request, slug):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_workspace_member
     def retrieve(self, request, slug, pk):
         product = self._get_product(pk)
         if product is None:
@@ -103,7 +106,7 @@ class ProductViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_workspace_member
     def create(self, request, slug):
         workspace = Workspace.objects.filter(slug=slug).first()
         if workspace is None:
@@ -127,7 +130,11 @@ class ProductViewSet(BaseViewSet):
         )
         # 负责人同时是首个产品成员：之后改负责人只能从成员里选（见 validate_owner），
         # 这里是成员表的起点，缺了它产品建完就没有任何成员。
-        ProductMember.objects.get_or_create(product=product, member_id=product.owner_id)
+        owner_member, _ = ProductMember.objects.get_or_create(
+            product=product, member_id=product.owner_id
+        )
+        admin_role, _ = ensure_product_default_roles(product)
+        bind_product_member_role(owner_member, admin_role)
         return Response(
             self.get_serializer(product).data,
             status=status.HTTP_201_CREATED,
@@ -140,12 +147,6 @@ class ProductViewSet(BaseViewSet):
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not can_manage_product(request.user, product):
-            return Response(
-                {"error": "You do not have permission to update this product."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         data = request.data.copy()
         data.pop("workspace", None)
         serializer = self.get_serializer(
@@ -154,40 +155,38 @@ class ProductViewSet(BaseViewSet):
             partial=partial,
         )
         serializer.is_valid(raise_exception=True)
+        previous_owner_id = product.owner_id
         serializer.save(
             workspace=product.workspace,
             created_by=product.created_by,
             deleted_at=product.deleted_at,
             updated_by=request.user,
         )
+        # 换负责人：新负责人补绑产品管理员（validate_owner 已保证他是产品成员）。
+        # 旧负责人的角色不动，转让不等于降权。
+        if product.owner_id != previous_owner_id:
+            owner_member = ProductMember.objects.get(
+                product=product, member_id=product.owner_id
+            )
+            admin_role, _ = ensure_product_default_roles(product)
+            bind_product_member_role(owner_member, admin_role)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.PRODUCT_SETTINGS_EDIT, level="PRODUCT")
     def update(self, request, slug, pk):
         return self._update(request, pk, partial=False)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.PRODUCT_SETTINGS_EDIT, level="PRODUCT")
     def partial_update(self, request, slug, pk):
         return self._update(request, pk, partial=True)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.PRODUCT_SETTINGS_DELETE, level="PRODUCT")
     def destroy(self, request, slug, pk):
         product = self._get_product(pk)
         if product is None:
             return Response(
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
-            )
-        if not can_manage_product(request.user, product):
-            return Response(
-                {"error": "You do not have permission to delete this product."},
-                status=status.HTTP_403_FORBIDDEN,
             )
 
         product.delete()

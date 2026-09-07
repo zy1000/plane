@@ -6,7 +6,7 @@
 
 import type { IPermission } from "@plane/types";
 
-export type TPermissionSortScope = "workspace" | "project";
+export type TPermissionSortScope = "workspace" | "project" | "product";
 type TSortablePermission = Pick<IPermission, "key" | "name" | "action" | "sort_order" | "module">;
 
 const CATEGORY_ORDER: Record<TPermissionSortScope, string[]> = {
@@ -53,6 +53,7 @@ const CATEGORY_ORDER: Record<TPermissionSortScope, string[]> = {
     "项目",
     "其他",
   ],
+  product: ["产品设置", "产品成员与角色", "产品需求", "产品关联", "产品", "其他"],
 };
 
 const ACTION_ORDER = [
@@ -243,12 +244,28 @@ const PERMISSION_KEY_ORDER = [
   "project.archive",
   "project.unarchive",
   "project.delete",
+  "product.settings.edit",
+  "product.settings.delete",
+  "product.member.invite",
+  "product.member.bind_role",
+  "product.member.remove",
+  "product.role.manage",
+  "product.requirement.create",
+  "product.requirement.edit",
+  "product.requirement.delete",
+  "product.requirement_module.manage",
+  "product.change_request.submit",
+  "product.baseline.manage",
+  "product.test_case_link.manage",
+  "product.project_link.manage",
 ];
 
-const CATEGORY_ORDER_INDEX: Record<TPermissionSortScope, Map<string, number>> = {
-  workspace: new Map(CATEGORY_ORDER.workspace.map((category, index) => [category, index])),
-  project: new Map(CATEGORY_ORDER.project.map((category, index) => [category, index])),
-};
+const CATEGORY_ORDER_INDEX = Object.fromEntries(
+  Object.entries(CATEGORY_ORDER).map(([scope, categories]) => [
+    scope,
+    new Map(categories.map((category, index) => [category, index])),
+  ])
+) as Record<TPermissionSortScope, Map<string, number>>;
 const ACTION_ORDER_INDEX = new Map(ACTION_ORDER.map((action, index) => [action, index]));
 const PERMISSION_KEY_ORDER_INDEX = new Map(PERMISSION_KEY_ORDER.map((key, index) => [key, index]));
 
@@ -256,7 +273,7 @@ const collator = new Intl.Collator("zh-Hans-CN", { numeric: true, sensitivity: "
 
 const getCategoryOrder = (scope: TPermissionSortScope, category: string) => {
   const normalizedCategory = category.startsWith("工作项类型 - ") ? "工作项类型" : category;
-  return CATEGORY_ORDER_INDEX[scope].get(normalizedCategory) ?? Number.MAX_SAFE_INTEGER;
+  return CATEGORY_ORDER_INDEX[scope]?.get(normalizedCategory) ?? Number.MAX_SAFE_INTEGER;
 };
 
 const getPermissionAction = (permission: TSortablePermission) => {

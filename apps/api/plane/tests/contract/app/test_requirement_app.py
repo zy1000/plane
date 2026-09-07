@@ -22,6 +22,10 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.tests.factories import UserFactory, WorkspaceFactory
+from plane.utils.product_roles import (
+    bind_product_member_role,
+    ensure_product_default_roles,
+)
 from plane.utils.requirement import ORDERABLE_BUILTIN_COLUMNS
 
 
@@ -397,7 +401,10 @@ class TestRequirementApp:
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN, response.data
 
-        ProductMember.objects.create(product=self.product, member=viewer)
+        # ORM 直建成员不会走 API 入口的默认角色绑定，手动绑「产品成员」
+        membership = ProductMember.objects.create(product=self.product, member=viewer)
+        _, member_role = ensure_product_default_roles(self.product)
+        bind_product_member_role(membership, member_role)
         allowed = api_client.post(
             self.requirements_url(),
             self.make_payload(type_id, "有权限"),

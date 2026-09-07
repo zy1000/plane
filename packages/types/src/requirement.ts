@@ -263,6 +263,12 @@ export type TRequirementTypeSchema = {
 export type TRequirementConfiguration = {
   /** 能不能录入/修改需求条目；项目侧恒为 false（写入权在产品上） */
   can_edit: boolean;
+  /** 以下按动作拆开，来自产品角色的权限；项目侧恒为 false */
+  can_create: boolean;
+  can_delete: boolean;
+  can_manage_modules: boolean;
+  can_submit_review: boolean;
+  can_manage_baselines: boolean;
   /** 一个产品下可以同时有多张待审单，所以给计数而不是单个 id；项目侧恒为 0 */
   pending_change_request_count: number;
   /** 所有引用到的需求类型字段的扁平并集 */

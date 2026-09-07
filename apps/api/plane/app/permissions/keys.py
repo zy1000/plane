@@ -179,6 +179,24 @@ class PermissionKey(str, Enum):
     QA_MINDMAP_VIEW = "qa.mindmap.view"
     QA_MINDMAP_EDIT = "qa.mindmap.edit"
 
+    # Product permissions（scope=product，迁移 0357 播种）
+    # 刻意没有 view 类 key：能不能看产品由「产品成员 / 公开 / 评审人」决定
+    # （utils/product.py::can_view_product），key 只表达读之上的动作。
+    PRODUCT_SETTINGS_EDIT = "product.settings.edit"
+    PRODUCT_SETTINGS_DELETE = "product.settings.delete"
+    PRODUCT_MEMBER_INVITE = "product.member.invite"
+    PRODUCT_MEMBER_REMOVE = "product.member.remove"
+    PRODUCT_MEMBER_BIND_ROLE = "product.member.bind_role"
+    PRODUCT_ROLE_MANAGE = "product.role.manage"
+    PRODUCT_REQUIREMENT_CREATE = "product.requirement.create"
+    PRODUCT_REQUIREMENT_EDIT = "product.requirement.edit"
+    PRODUCT_REQUIREMENT_DELETE = "product.requirement.delete"
+    PRODUCT_REQUIREMENT_MODULE_MANAGE = "product.requirement_module.manage"
+    PRODUCT_CHANGE_REQUEST_SUBMIT = "product.change_request.submit"
+    PRODUCT_BASELINE_MANAGE = "product.baseline.manage"
+    PRODUCT_PROJECT_LINK_MANAGE = "product.project_link.manage"
+    PRODUCT_TEST_CASE_LINK_MANAGE = "product.test_case_link.manage"
+
     def __str__(self) -> str:
         return self.value
 

@@ -92,7 +92,7 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
             for_update=for_update,
         )
 
-    def can_write(self, owner):
+    def can_write(self, owner, permission_key=None):
         # 库是工作区级资源，口径与需求类型一致：工作区成员即可维护
         return True
 

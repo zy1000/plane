@@ -13,6 +13,7 @@ from plane.app.serializers.requirement import (
     RequirementSerializer,
     RequirementStatusWriteSerializer,
 )
+from plane.app.permissions.keys import PermissionKey
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.library_item import get_scoped_library
 from plane.app.views.requirement.mixins import (
@@ -76,6 +77,22 @@ class RequirementConfigurationAPIView(BaseAPIView):
         return Response(
             {
                 "can_edit": can_write_requirements(request.user, product),
+                # 下面几个按动作拆开，前端按钮显隐直接读；项目侧的 configuration 恒 false
+                "can_create": can_write_requirements(
+                    request.user, product, PermissionKey.PRODUCT_REQUIREMENT_CREATE
+                ),
+                "can_delete": can_write_requirements(
+                    request.user, product, PermissionKey.PRODUCT_REQUIREMENT_DELETE
+                ),
+                "can_manage_modules": can_write_requirements(
+                    request.user, product, PermissionKey.PRODUCT_REQUIREMENT_MODULE_MANAGE
+                ),
+                "can_submit_review": can_write_requirements(
+                    request.user, product, PermissionKey.PRODUCT_CHANGE_REQUEST_SUBMIT
+                ),
+                "can_manage_baselines": can_write_requirements(
+                    request.user, product, PermissionKey.PRODUCT_BASELINE_MANAGE
+                ),
                 # 现在一个产品下可以同时有多张待审单，所以给计数而不是单个 id
                 "pending_change_request_count": RequirementChangeRequest.objects.filter(
                     product=product, status=RequirementChangeStatus.PENDING
@@ -105,8 +122,8 @@ class RequirementViewSet(BaseRequirementRowViewSet):
         )
         return scope
 
-    def can_write(self, owner):
-        return can_write_requirements(self.request.user, owner.product)
+    def can_write(self, owner, permission_key=None):
+        return can_write_requirements(self.request.user, owner.product, permission_key)
 
     def resolve_layer(self, owner):
         return resolve_row_layer(owner)

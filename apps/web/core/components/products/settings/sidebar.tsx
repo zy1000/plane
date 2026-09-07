@@ -8,6 +8,7 @@ import { cn } from "@plane/utils";
 import { SettingsSidebarItem } from "@/components/settings/sidebar/item";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useProductsContext } from "../context";
+import { hasProductPermission } from "../permissions";
 import {
   getProductSettingsPath,
   getProductSettingsReturnPath,
@@ -67,17 +68,24 @@ const ProductSettingsSidebarHeader = observer(function ProductSettingsSidebarHea
   );
 });
 
-const ProductSettingsSidebarItems = (props: Pick<TProductSettingsSidebarProps, "productId" | "workspaceSlug">) => {
+const ProductSettingsSidebarItems = observer(function ProductSettingsSidebarItems(
+  props: Pick<TProductSettingsSidebarProps, "productId" | "workspaceSlug">
+) {
   const { productId, workspaceSlug } = props;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
+  const { products } = useProductsContext();
+  const product = products.find(({ id }) => id === productId);
   const settingsSearch = searchParams.toString();
   const normalizedPathname = pathname.replace(/\/+$/, "");
+  const visibleItems = PRODUCT_SETTINGS_ITEMS.filter(
+    (item) => !item.permissionKeys || hasProductPermission(product, ...item.permissionKeys)
+  );
 
   return (
     <div className="mt-4 flex flex-col px-3">
-      {PRODUCT_SETTINGS_ITEMS.map((item) => {
+      {visibleItems.map((item) => {
         const itemHref = getProductSettingsPath(workspaceSlug, productId, item.key);
         const itemHrefWithSearch = settingsSearch ? `${itemHref}?${settingsSearch}` : itemHref;
         const isActive = normalizedPathname === itemHref.replace(/\/+$/, "");
@@ -96,7 +104,7 @@ const ProductSettingsSidebarItems = (props: Pick<TProductSettingsSidebarProps, "
       })}
     </div>
   );
-};
+});
 
 export const ProductSettingsSidebar = observer(function ProductSettingsSidebar(props: TProductSettingsSidebarProps) {
   const { className, productId, workspaceSlug } = props;

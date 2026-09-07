@@ -30,6 +30,7 @@ ACTION_LABELS = {
     "manage_saved_view": "管理保存视图",
     "mark_default": "设为默认",
     "remove": "移除",
+    "submit": "提交",
     "unarchive": "恢复",
     "upload": "上传",
     "view": "查看",
@@ -53,6 +54,15 @@ MODULE_LABELS = {
     "page": "页面",
     "page.access": "页面访问",
     "page.version": "页面版本",
+    "product.baseline": "需求基线",
+    "product.change_request": "需求评审",
+    "product.member": "产品成员",
+    "product.project_link": "产品关联项目",
+    "product.requirement": "产品需求",
+    "product.requirement_module": "需求模块",
+    "product.role": "产品角色",
+    "product.settings": "产品设置",
+    "product.test_case_link": "需求用例关联",
     "project": "项目",
     "project.analytics": "项目概览",
     "project.announcement": "项目公告",
@@ -100,6 +110,7 @@ CATEGORY_LABELS = {
     "milestone": "项目里程碑",
     "modules": "模块",
     "page": "页面",
+    "product": "产品",
     "project": "项目",
     "qa": "测试管理",
     "releases": "发布",
@@ -153,7 +164,33 @@ PERMISSION_OVERRIDES = {
         "category": "需求",
         "sort_order": 130,
     },
+    # 自动拼出来是「删除产品设置」「绑定角色产品成员」，不像人话。
+    "product.settings.delete": {"name": "删除产品"},
+    "product.member.bind_role": {"name": "分配产品成员角色"},
 }
+
+
+# 产品权限按 module 归到 4 个分类，角色编辑器左栏才不会是 14 项挤在一个「产品」下。
+# 迁移 0357 有一份副本，改这里要同步。
+PRODUCT_CATEGORY_BY_MODULE = {
+    "product.settings": "产品设置",
+    "product.member": "产品成员与角色",
+    "product.role": "产品成员与角色",
+    "product.requirement": "产品需求",
+    "product.requirement_module": "产品需求",
+    "product.change_request": "产品需求",
+    "product.baseline": "产品需求",
+    "product.test_case_link": "产品需求",
+    "product.project_link": "产品关联",
+}
+
+
+def _scope_for_key(key: str) -> str:
+    if key.startswith("workspace."):
+        return "workspace"
+    if key.startswith("product."):
+        return "product"
+    return "project"
 
 
 def _split_permission_key(key: str) -> tuple[str, str]:
@@ -171,10 +208,11 @@ def _build_permission_defaults(key: str) -> dict:
     defaults = {
         "name": f"{action_label}{module_label}",
         "description": f"{action_label}{module_label}",
-        "scope": "workspace" if key.startswith("workspace.") else "project",
+        "scope": _scope_for_key(key),
         "module": module,
         "action": action,
-        "category": CATEGORY_LABELS.get(module_root, module_label),
+        "category": PRODUCT_CATEGORY_BY_MODULE.get(module)
+        or CATEGORY_LABELS.get(module_root, module_label),
         "sort_order": 100,
         "is_active": True,
     }

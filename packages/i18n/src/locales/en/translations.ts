@@ -2431,6 +2431,8 @@ export default {
         add: "Add member",
         add_modal_title: "Add product members",
         add_modal_description: "Select active workspace members and optionally assign each member product roles.",
+        add_modal_description_no_role:
+          "Select active workspace members. You cannot assign roles, so they will join with the default product role.",
         select_member: "Select member",
         loading_roles: "Loading roles…",
         role_search: "Search roles...",
@@ -2475,6 +2477,7 @@ export default {
         description: "Manage custom roles that apply within this product and create them manually.",
         roles: "Roles",
         search: "Search roles...",
+        search_permissions: "Search permissions...",
         create: "New role",
         empty: "No roles yet",
         no_results: "No matching roles",

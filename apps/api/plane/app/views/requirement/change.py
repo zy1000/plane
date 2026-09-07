@@ -30,6 +30,7 @@ from plane.app.serializers import (
     RequirementVersionSerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
+from plane.app.permissions.keys import PermissionKey
 from plane.app.views.requirement.mixins import (
     can_write_requirements,
     get_requirement_scope,
@@ -148,12 +149,12 @@ class ProductScopedMixin:
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    def scope_for_write(self, *, for_update=False):
-        """返回 (scope, error_response)。"""
+    def scope_for_write(self, *, for_update=False, permission_key=None):
+        """返回 (scope, error_response)。permission_key 缺省是「编辑需求」。"""
         product, scope = self.resolve_scope(for_update=for_update)
         if product is None:
             return None, self.not_found()
-        if not can_write_requirements(self.request.user, product):
+        if not can_write_requirements(self.request.user, product, permission_key):
             return None, self.forbidden()
         return scope, None
 
@@ -258,7 +259,10 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         validated = serializer.validated_data
         try:
             with transaction.atomic():
-                scope, error = self.scope_for_write(for_update=True)
+                scope, error = self.scope_for_write(
+                    for_update=True,
+                    permission_key=PermissionKey.PRODUCT_CHANGE_REQUEST_SUBMIT,
+                )
                 if error is not None:
                     return error
                 change_request = submit_change_request(
@@ -595,7 +599,10 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         )
 
         with transaction.atomic():
-            scope, error = self.scope_for_write(for_update=not is_preview)
+            scope, error = self.scope_for_write(
+                for_update=not is_preview,
+                permission_key=PermissionKey.PRODUCT_BASELINE_MANAGE,
+            )
             if error is not None:
                 return error
 
@@ -658,7 +665,9 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def partial_update(self, request, slug, product_id, pk):
-        _, error = self.scope_for_write()
+        _, error = self.scope_for_write(
+            permission_key=PermissionKey.PRODUCT_BASELINE_MANAGE
+        )
         if error is not None:
             return error
         baseline = self.get_queryset().filter(id=pk).first()
@@ -675,7 +684,9 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, slug, product_id, pk):
-        _, error = self.scope_for_write()
+        _, error = self.scope_for_write(
+            permission_key=PermissionKey.PRODUCT_BASELINE_MANAGE
+        )
         if error is not None:
             return error
         baseline = self.get_queryset().filter(id=pk).first()

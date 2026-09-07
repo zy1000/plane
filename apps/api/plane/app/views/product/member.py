@@ -2,7 +2,11 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import (
+    PermissionKey,
+    allow_fine_permission,
+    allow_workspace_member,
+)
 from plane.app.serializers.product import (
     ProductMemberCustomRolesSerializer,
     ProductMemberInviteSerializer,
@@ -11,9 +15,10 @@ from plane.app.serializers.product import (
 from plane.app.views.base import BaseViewSet
 from plane.db.models import Product, ProductMember, Workspace
 from plane.utils.product import (
-    can_manage_product,
     can_manage_workspace_products,
     can_view_product,
+    has_product_permission,
+    roles_exceed_product_permissions,
 )
 
 
@@ -77,9 +82,29 @@ class ProductMemberViewSet(BaseViewSet):
     def _get_member(self, pk):
         return self.get_queryset().filter(pk=pk).first()
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    def _role_grant_error(self, request, product, roles):
+        """挂角色的两道门：要有 bind_role，且不能授予自己没有的产品权限。
+
+        邀请端点只挂了 member.invite，但它接受 custom_role_ids —— 不在这里补，
+        只有「添加成员」权限的人就能在邀请那一刻把产品管理员角色挂给任何人。
+        """
+        if not roles:
+            return None
+        if not has_product_permission(
+            request.user, product, PermissionKey.PRODUCT_MEMBER_BIND_ROLE
+        ):
+            return Response(
+                {"error": "您没有分配产品成员角色的权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if roles_exceed_product_permissions(request.user, product, roles):
+            return Response(
+                {"error": "不能授予超出自己所持有的产品权限的角色。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    @allow_fine_permission(PermissionKey.PRODUCT_MEMBER_INVITE, level="PRODUCT")
     def invite(self, request, slug, product_id=None):
         product_id = product_id or request.data.get("product")
         product = self._get_product(product_id)
@@ -87,11 +112,6 @@ class ProductMemberViewSet(BaseViewSet):
             return Response(
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
-            )
-        if not can_manage_product(request.user, product):
-            return Response(
-                {"error": "You do not have permission to invite product members."},
-                status=status.HTTP_403_FORBIDDEN,
             )
 
         data = request.data.copy()
@@ -101,15 +121,18 @@ class ProductMemberViewSet(BaseViewSet):
             context={"workspace_slug": slug},
         )
         serializer.is_valid(raise_exception=True)
+        role_error = self._role_grant_error(
+            request, product, serializer.validated_data.get("custom_roles", [])
+        )
+        if role_error is not None:
+            return role_error
         product_member = serializer.save()
         return Response(
             self.get_serializer(product_member).data,
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_workspace_member
     def list(self, request, slug, product_id):
         if self._get_visible_product(product_id) is None:
             return Response(
@@ -121,9 +144,7 @@ class ProductMemberViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_workspace_member
     def retrieve(self, request, slug, product_id, pk):
         product_member = self._get_member(pk)
         if product_member is None:
@@ -136,9 +157,7 @@ class ProductMemberViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.PRODUCT_MEMBER_BIND_ROLE, level="PRODUCT")
     def assign_roles(self, request, slug, product_id, pk):
         product_member = self._get_member(pk)
         if product_member is None:
@@ -146,37 +165,35 @@ class ProductMemberViewSet(BaseViewSet):
                 {"error": "Product member not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not can_manage_product(request.user, product_member.product):
-            return Response(
-                {"error": "You do not have permission to assign product roles."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         serializer = ProductMemberCustomRolesSerializer(
             product_member,
             data=request.data,
         )
         serializer.is_valid(raise_exception=True)
+        # 只校验新增的角色：保留成员原有的高权角色不算越权，去掉更不算
+        existing_role_ids = set(product_member.custom_roles.values_list("id", flat=True))
+        added_roles = [
+            role
+            for role in serializer.validated_data.get("custom_roles", [])
+            if role.id not in existing_role_ids
+        ]
+        role_error = self._role_grant_error(request, product_member.product, added_roles)
+        if role_error is not None:
+            return role_error
         product_member = serializer.save()
         return Response(
             self.get_serializer(product_member).data,
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.PRODUCT_MEMBER_REMOVE, level="PRODUCT")
     def destroy(self, request, slug, product_id, pk):
         product_member = self._get_member(pk)
         if product_member is None:
             return Response(
                 {"error": "Product member not found."},
                 status=status.HTTP_404_NOT_FOUND,
-            )
-        if not can_manage_product(request.user, product_member.product):
-            return Response(
-                {"error": "You do not have permission to remove product members."},
-                status=status.HTTP_403_FORBIDDEN,
             )
         # 负责人必须始终在成员里（见 ProductSerializer.validate_owner），
         # 放行的话产品就再也改不了负责人了 —— 要换人先改负责人再移除。

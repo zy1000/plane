@@ -29,6 +29,7 @@ export * from "./module";
 export * from "./notification";
 export * from "./page";
 export * from "./payment";
+export * from "./product";
 export * from "./profile";
 export * from "./project";
 export * from "./rich-filters";

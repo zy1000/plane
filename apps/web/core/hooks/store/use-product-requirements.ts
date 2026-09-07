@@ -323,6 +323,12 @@ export const useProductRequirements = ({
     configuration,
     /** 能不能录入/修改需求条目；配置没到之前按不能改处理 */
     canEdit: configuration?.can_edit ?? false,
+    /** 以下按动作拆开，来自产品角色 */
+    canCreate: configuration?.can_create ?? false,
+    canDelete: configuration?.can_delete ?? false,
+    canManageModules: configuration?.can_manage_modules ?? false,
+    canSubmitReview: configuration?.can_submit_review ?? false,
+    canManageBaselines: configuration?.can_manage_baselines ?? false,
     pendingChangeRequestCount: configuration?.pending_change_request_count ?? 0,
     requirementTypes: configuration?.requirement_types ?? EMPTY_REQUIREMENT_TYPES,
     requirementsPage,
