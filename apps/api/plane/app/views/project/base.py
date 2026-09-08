@@ -96,6 +96,18 @@ from plane.utils.project.defaults import (
 from plane.utils.response import list_response
 
 
+# 项目列表接口只回列表 UI 用得到的 key，不把整份 ACL 塞进每一行
+# （工作区 owner 在 185 个项目的工作区里是 1MB，占接口体积 92%）。
+# 完整权限走 GET .../projects/{id}/my-permission-keys/，进入项目时才拉。
+# 列表页要新增权限判断时往这里加 key，前端不用改。
+PROJECT_LIST_PERMISSION_KEYS = frozenset(
+    {
+        PermissionKey.PROJECT_PUBLISH_VIEW.value,
+        PermissionKey.PROJECT_PUBLISH_CREATE.value,
+    }
+)
+
+
 class ProjectViewSet(BaseViewSet):
     serializer_class = ProjectListSerializer
     model = Project
@@ -344,8 +356,9 @@ class ProjectViewSet(BaseViewSet):
         )
         for index, row in enumerate(serialized_projects):
             project_id = self._get_project_row_value(project_rows[index], "id")
-            row["permission_keys"] = list(
+            row["permission_keys"] = sorted(
                 permission_keys_by_project.get(project_id, set())
+                & PROJECT_LIST_PERMISSION_KEYS
             )
             row["products"] = products_by_project.get(project_id, [])
         return serialized_projects
@@ -527,8 +540,9 @@ class ProjectViewSet(BaseViewSet):
         )
         for row in project_rows:
             row.update(stats_by_project[row["id"]])
-            row["permission_keys"] = list(
+            row["permission_keys"] = sorted(
                 permission_keys_by_project.get(str(row["id"]), set())
+                & PROJECT_LIST_PERMISSION_KEYS
             )
             row["products"] = products_by_project.get(str(row["id"]), [])
         return Response(project_rows, status=status.HTTP_200_OK)

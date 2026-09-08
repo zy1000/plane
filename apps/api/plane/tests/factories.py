@@ -18,6 +18,9 @@ class UserFactory(factory.django.DjangoModelFactory):
 
     id = factory.LazyFunction(uuid4)
     email = factory.Sequence(lambda n: f"user{n}@plane.so")
+    # User.username 是 unique 且模型不自动填，不给就都是 ""，
+    # 一个测试里造第二个用户就会撞 users_username_key
+    username = factory.Sequence(lambda n: f"user{n}")
     password = factory.PostGenerationMethodCall("set_password", "password")
     first_name = factory.Sequence(lambda n: f"First{n}")
     last_name = factory.Sequence(lambda n: f"Last{n}")
