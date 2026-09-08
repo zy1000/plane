@@ -110,6 +110,7 @@ import {
   type TRequirementCreateContext,
   type TRequirementCreateSeed,
 } from "./requirement-create-modal";
+import { useProgressiveRows } from "./use-progressive-rows";
 import { useRequirementAssetUpload } from "./use-requirement-asset-upload";
 import { useRequirementRowAutosave } from "./use-requirement-row-autosave";
 import { useRequirementTitles } from "./use-requirement-titles";
@@ -118,6 +119,8 @@ import { getSubformDropEdgeClass, moveFormRow, useSubformRowDnd } from "./use-su
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { RequirementBulkOperationsBar } from "@/components/requirements/requirement-bulk-operations-bar";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
+/** 首屏先画多少行（按估算的 tr 数）再补齐其余：行高 44px，24 行 ≈ 1056px，约一屏 */
+const FIRST_PAINT_ROW_BUDGET = 24;
 
 /**
  * 编号列默认宽：普通列宽再加上行按钮组（详情入口 + 行菜单，两枚 size-6 图标与
@@ -1266,8 +1269,14 @@ export const RequirementGrid = observer(
       );
     };
 
-    // 行永远来自服务端列表 —— 表格里不再有只存在于前端的草稿行
-    const rowGroups = requirements.map((requirement) => renderRequirementRows(requirement));
+    // 行永远来自服务端列表 —— 表格里不再有只存在于前端的草稿行。
+    // 首屏只画约一屏，其余在 transition 里补齐（见 useProgressiveRows）；权重按子表单展开后的
+    // 行数估，用服务端的 data 就够（与上面渲染用的本地值最多差一两行）
+    const visibleRequirements = useProgressiveRows(requirements, {
+      budget: FIRST_PAINT_ROW_BUDGET,
+      weigh: (requirement) => Math.max(1, getMaxFormRows(requirement.data ?? {}, formFields)),
+    });
+    const rowGroups = visibleRequirements.map((requirement) => renderRequirementRows(requirement));
     const selectableRequirementIds = requirements.map((requirement) => requirement.id);
     const displayedTotalCount = totalCount;
     const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
