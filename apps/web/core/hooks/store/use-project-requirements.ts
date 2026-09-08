@@ -50,10 +50,15 @@ export const useProjectRequirements = ({
   workspaceSlug,
   projectId,
   initialListQuery,
+  initialModuleId,
+  initialProductId,
 }: {
   workspaceSlug: string | undefined;
   projectId: string | undefined;
   initialListQuery?: TProjectRequirementListQuery;
+  /** 首屏就带着 ?moduleId= / ?product= 时传进来，免得挂载后再追平初值、多打一次列表 */
+  initialModuleId?: string | null;
+  initialProductId?: string | null;
 }) => {
   const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TProjectRequirementsResponse>(EMPTY_PAGE);
@@ -71,8 +76,8 @@ export const useProjectRequirements = ({
    * 左侧栏的浏览范围；null = 「全部」。独立于 listFilters ——
    * rich-filters 的表达式重建不感知它们，与筛选在服务端 AND 叠加。
    */
-  const [moduleId, setModuleIdState] = useState<string | null>(null);
-  const [productId, setProductIdState] = useState<string | null>(null);
+  const [moduleId, setModuleIdState] = useState<string | null>(initialModuleId ?? null);
+  const [productId, setProductIdState] = useState<string | null>(initialProductId ?? null);
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !projectId) return null;

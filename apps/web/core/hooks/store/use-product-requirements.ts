@@ -45,9 +45,12 @@ const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
 export const useProductRequirements = ({
   workspaceSlug,
   productId,
+  initialModuleId,
 }: {
   workspaceSlug: string | undefined;
   productId: string | undefined;
+  /** 首屏就带着模块过滤（URL ?moduleId=）时传进来，免得挂载后再追平初值、多打一次列表 */
+  initialModuleId?: string | null;
 }) => {
   const { t } = useTranslation();
   const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
@@ -64,7 +67,7 @@ export const useProductRequirements = ({
   /** 当前需求类型视图；undefined = 不按类型过滤（默认视图 / 单类型） */
   const [requirementTypeFilter, setRequirementTypeFilter] = useState<string | undefined>();
   /** 左侧模块树的过滤（含子模块）；null = 「全部」（含未挂靠的需求） */
-  const [moduleId, setModuleId] = useState<string | null>(null);
+  const [moduleId, setModuleId] = useState<string | null>(initialModuleId ?? null);
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !productId) return null;

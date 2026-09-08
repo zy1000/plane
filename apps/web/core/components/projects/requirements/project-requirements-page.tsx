@@ -81,10 +81,16 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     setDataToolbarHost(document.getElementById(PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID) as HTMLDivElement | null);
   }, []);
 
+  // ?product= / ?moduleId= 的初值要同时喂给 store：页面与 store 各自从 null 起步再追平，
+  // 首屏列表会多打一次。按已关联产品校验 URL 值的那一步在下面，初值只认 URL 原值（同 selectedProductId）
+  const urlModuleId = searchParams.get("moduleId");
+  const [initialProductId] = useState(() => getProductFromParam(searchParams.get(PRODUCT_PARAM), null) ?? null);
   const store = useProjectRequirements({
     workspaceSlug: slug,
     projectId: project,
     initialListQuery,
+    initialModuleId: urlModuleId,
+    initialProductId,
   });
   const { links: productLinks, isLoading: isProductLinksLoading } = useProjectProducts({
     workspaceSlug: slug,
@@ -100,10 +106,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   // 与筛选在服务端 AND 叠加
   const allowedProductIds = isProductLinksLoading ? null : productLinks.map((link) => link.product);
   const urlProductId = getProductFromParam(searchParams.get(PRODUCT_PARAM), allowedProductIds) ?? null;
-  const urlModuleId = searchParams.get("moduleId");
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(
-    () => getProductFromParam(searchParams.get(PRODUCT_PARAM), null) ?? null
-  );
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(initialProductId);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
   const syncedProductRef = useRef(selectedProductId);
   const syncedModuleRef = useRef(urlModuleId);

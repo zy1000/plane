@@ -63,7 +63,16 @@ export class TranslationStore {
     this.setLanguage(FALLBACK_LANGUAGE);
   }
 
-  /** Loads the translations for the current language */
+  /**
+   * Loads the translations for the current language.
+   *
+   * Only the current + fallback languages are loaded here. The remaining ~18 languages
+   * used to be preloaded in the background, which deep-merged every locale into the
+   * observable `translations` map on cold start (~0.5s of main-thread CPU, plus 6MB of
+   * extra chunks in dev) right while the first page was trying to render. `setLanguage`
+   * already loads a language on demand when it is not loaded yet, so preloading only
+   * bought a slightly faster first language switch.
+   */
   private async loadTranslations(): Promise<void> {
     try {
       // Set initialized to true (Core translations are already loaded)
@@ -72,8 +81,6 @@ export class TranslationStore {
       });
       // Load current and fallback languages in parallel
       await this.loadPrimaryLanguages();
-      // Load all remaining languages in parallel
-      this.loadRemainingLanguages();
     } catch (error) {
       console.error("Failed in translation initialization:", error);
       runInAction(() => {
@@ -103,16 +110,6 @@ export class TranslationStore {
         this.isLoading = false;
       });
     }
-  }
-
-  private loadRemainingLanguages(): void {
-    const remainingLanguages = SUPPORTED_LANGUAGES.map((lang) => lang.value).filter(
-      (lang) => !this.loadedLanguages.has(lang) && lang !== this.currentLocale && lang !== FALLBACK_LANGUAGE
-    );
-    // Load all remaining languages in parallel
-    Promise.all(remainingLanguages.map((lang) => this.loadLanguageTranslations(lang))).catch((error) => {
-      console.error("Failed to load some remaining languages:", error);
-    });
   }
 
   private async loadLanguageTranslations(language: TLanguage): Promise<void> {

@@ -39,7 +39,9 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
   const { canManageLibraries, canImportExportLibraries } = useTemplatePermissions(workspaceSlug);
   const [searchParams, setSearchParams] = useSearchParams();
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
-  const store = useLibraryItems({ workspaceSlug, libraryId });
+  // 模块过滤的初值要同时喂给 store：页面与 store 各自从 null 起步再追平，首屏列表会多打一次
+  const urlModuleId = searchParams.get("moduleId");
+  const store = useLibraryItems({ workspaceSlug, libraryId, initialModuleId: urlModuleId });
 
   // 编辑弹窗改完写回的是 context 里的列表缓存，所以以它为准；直接刷新详情页时
   // 列表可能还没回来，先拿 configuration 里的兜底，两边是同一个序列化器的输出
@@ -51,7 +53,6 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
   const [moveIds, setMoveIds] = useState<string[]>([]);
 
   // ?moduleId= 与选中模块双向同步（与下面 peek 的同款写法）
-  const urlModuleId = searchParams.get("moduleId");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
   const selectedModuleName = useMemo(
     () => findRequirementModuleName(moduleStore.modules, selectedModuleId),

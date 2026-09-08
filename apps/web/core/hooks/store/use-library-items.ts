@@ -38,6 +38,7 @@ export const useLibraryItems = ({
   workspaceSlug,
   libraryId,
   excludeImportedIntoProduct,
+  initialModuleId,
 }: {
   workspaceSlug: string | undefined;
   libraryId: string | undefined;
@@ -46,6 +47,8 @@ export const useLibraryItems = ({
    * 标准库管理页不传，行为不变。
    */
   excludeImportedIntoProduct?: string;
+  /** 首屏就带着模块过滤（URL ?moduleId=）时传进来，免得挂载后再追平初值、多打一次列表 */
+  initialModuleId?: string | null;
 }) => {
   const [configuration, setConfiguration] = useState<TRequirementLibraryConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TRequirementsResponse>(EMPTY_PAGE);
@@ -57,7 +60,7 @@ export const useLibraryItems = ({
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<TRequirementFilter[]>([]);
   /** 左侧模块树的过滤（含子模块）；`"none"` = 未归类；null = 「全部」 */
-  const [moduleId, setModuleId] = useState<string | null>(null);
+  const [moduleId, setModuleId] = useState<string | null>(initialModuleId ?? null);
   const [cursor, setCursor] = useState<string | undefined>();
   const [perPage, setPerPage] = useState(20);
 

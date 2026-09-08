@@ -71,7 +71,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [isCreateBaselineOpen, setIsCreateBaselineOpen] = useState(false);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
 
-  const store = useProductRequirements({ workspaceSlug, productId });
+  // 模块过滤的初值要同时喂给 store：页面与 store 各自从 null 起步再追平，首屏列表会多打一次
+  const urlModuleId = searchParams.get("moduleId");
+  const store = useProductRequirements({ workspaceSlug, productId, initialModuleId: urlModuleId });
   const moduleStore = useRequirementModules(workspaceSlug, productId ? { kind: "product", productId } : undefined);
   /** 批量移动弹窗的目标行；空数组 = 关着 */
   const [moveIds, setMoveIds] = useState<string[]>([]);
@@ -136,7 +138,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
 
   // ?moduleId= 与左侧模块树选中双向同步（写法同下面的 peek）。独立 URL 参数，
   // 与需求类型视图 / rich-filters 正交，切视图时过滤保持
-  const urlModuleId = searchParams.get("moduleId");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(urlModuleId);
   const selectedModuleName = useMemo(
     () => findRequirementModuleName(moduleStore.modules, selectedModuleId),
