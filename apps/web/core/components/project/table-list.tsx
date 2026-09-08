@@ -68,7 +68,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     totalProjectIds: storeTotalProjectIds,
     filteredProjectIds: storeFilteredProjectIds,
     getProjectById,
-    fetchPartialProjects,
     addProjectToFavorites,
     removeProjectFromFavorites,
   } = useProject();
@@ -96,11 +95,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   const [restoreProjectId, setRestoreProjectId] = useState<string | null>(null);
   // 展开了关联产品子行的项目；按 id 记，翻页 / 排序不清空
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
-
-  useEffect(() => {
-    if (!workspaceSlugString) return;
-    void fetchPartialProjects(workspaceSlugString);
-  }, [fetchPartialProjects, workspaceSlugString]);
 
   useEffect(() => {
     const orderBy = currentWorkspaceDisplayFilters?.order_by?.toString();
@@ -265,7 +259,13 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     [sortDirection, sortKey]
   );
 
-  if (!filteredProjectIds || !totalProjectIds || loader === "init-loader" || fetchStatus !== "complete")
+  // 轻量的 projects 接口就够渲染表格，不必死等更重的 projects/details。
+  // 例外：按成员筛选依赖 project.members，只有 details 才返回，否则会先闪一下「无结果」。
+  const isMembersFilterApplied = (currentWorkspaceFilters?.members?.length ?? 0) > 0;
+  const isProjectDataReady =
+    fetchStatus === "complete" || (fetchStatus === "partial" && !isMembersFilterApplied);
+
+  if (!filteredProjectIds || !totalProjectIds || loader === "init-loader" || !isProjectDataReady)
     return <ProjectsLoader />;
 
   if (totalProjectIds?.length === 0 && !currentWorkspaceDisplayFilters?.archived_projects)

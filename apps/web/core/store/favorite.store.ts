@@ -433,6 +433,10 @@ export class FavoriteStore implements IFavoriteStore {
           this.favoriteIds.push(favorite.id);
           if (favorite.entity_identifier) {
             set(this.entityMap, [favorite.entity_identifier], favorite);
+            // 收藏接口比项目接口后到时，回填已在 store 里的项目，保持 is_favorite 是唯一事实来源
+            if (favorite.entity_type === "project" && this.projectStore.projectMap[favorite.entity_identifier]) {
+              this.projectStore.projectMap[favorite.entity_identifier].is_favorite = true;
+            }
           }
         });
       });

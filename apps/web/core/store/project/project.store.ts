@@ -317,7 +317,13 @@ export class ProjectStore implements IProjectStore {
       const projectsResponse = await this.projectService.getProjectsLite(workspaceSlug);
       runInAction(() => {
         projectsResponse.forEach((project) => {
-          update(this.projectMap, [project.id], (p) => ({ ...p, ...project }));
+          // 轻量接口不返回 is_favorite，先用收藏 store 播种，避免表格先出图时星标是空的。
+          // 顺序：已有的真实值 > 播种值，projectsResponse 里没有这个字段所以不会覆盖。
+          update(this.projectMap, [project.id], (p) => ({
+            is_favorite: !!this.rootStore.favorite.entityMap[project.id],
+            ...p,
+            ...project,
+          }));
         });
         this.loader = "loaded";
         if (!this.fetchStatus) this.fetchStatus = "partial";
