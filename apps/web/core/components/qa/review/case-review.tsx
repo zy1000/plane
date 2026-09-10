@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import useSWR from "swr";
 import { Transition } from "@headlessui/react";
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
@@ -29,6 +30,7 @@ import { CaseVersionCompareModal } from "../cases/update-modal/case-version-comp
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import { WORKSPACE_MEMBERS } from "@/constants/fetch-keys";
 
 type ReviewCaseRow = ReviewCaseListItem;
 
@@ -371,14 +373,14 @@ export default function CaseReview() {
   React.useEffect(() => {
     fetchEnums();
     fetchReviewTree();
-    if (workspaceSlug) {
-      try {
-        fetchWorkspaceMembers(String(workspaceSlug));
-      } catch (e: unknown) {
-        qaCaseSetToastError(e, t, "获取成员信息失败");
-      }
-    }
   }, [workspaceSlug, reviewId]);
+
+  // 与外层 workspace-wrapper 共用同一个 SWR key,避免整份工作区成员被重复拉一次
+  useSWR(
+    workspaceSlug ? WORKSPACE_MEMBERS(String(workspaceSlug)) : null,
+    workspaceSlug ? () => fetchWorkspaceMembers(String(workspaceSlug)) : null,
+    { revalidateIfStale: false, revalidateOnFocus: false }
+  );
 
   React.useEffect(() => {
     if (!workspaceSlug || !reviewId) return;
