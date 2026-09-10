@@ -800,12 +800,22 @@ class ReviewCaseListSerializer(ModelSerializer):
             return False
         return str(result) != str(CaseReviewRecord.Result.RE_REVIEW)
 
+    def _review_state(self, obj: CaseReviewThrough):
+        """评审人列表 + 每人最后一条记录。一行有 5 个字段要用,DRF 是逐行序列化的,
+        这里只缓存当前这一行,避免同一行重复算 5 遍。"""
+        cached = getattr(self, "_review_state_cache", None)
+        if cached is not None and cached[0] == obj.pk:
+            return cached[1]
+        assignee_ids = self._get_assignee_ids(obj)
+        state = (assignee_ids, self._get_last_record_result_by_assignee(obj, assignee_ids))
+        self._review_state_cache = (obj.pk, state)
+        return state
+
     def get_assignees(self, obj: CaseReviewThrough):
-        return self._get_assignee_ids(obj)
+        return self._review_state(obj)[0]
 
     def get_reviewer_statuses(self, obj: CaseReviewThrough):
-        assignee_ids = self._get_assignee_ids(obj)
-        last_by_assignee = self._get_last_record_result_by_assignee(obj, assignee_ids)
+        assignee_ids, last_by_assignee = self._review_state(obj)
         return [
             {
                 "assignee": assignee_id,
@@ -816,8 +826,7 @@ class ReviewCaseListSerializer(ModelSerializer):
         ]
 
     def get_unreviewed_assignees(self, obj: CaseReviewThrough):
-        assignee_ids = self._get_assignee_ids(obj)
-        last_by_assignee = self._get_last_record_result_by_assignee(obj, assignee_ids)
+        assignee_ids, last_by_assignee = self._review_state(obj)
         return [
             assignee_id
             for assignee_id in assignee_ids
@@ -825,8 +834,7 @@ class ReviewCaseListSerializer(ModelSerializer):
         ]
 
     def get_reviewed_count(self, obj: CaseReviewThrough):
-        assignee_ids = self._get_assignee_ids(obj)
-        last_by_assignee = self._get_last_record_result_by_assignee(obj, assignee_ids)
+        assignee_ids, last_by_assignee = self._review_state(obj)
         return len(
             [
                 assignee_id
@@ -836,7 +844,7 @@ class ReviewCaseListSerializer(ModelSerializer):
         )
 
     def get_reviewer_count(self, obj: CaseReviewThrough):
-        return len(self._get_assignee_ids(obj))
+        return len(self._review_state(obj)[0])
 
     class Meta:
         model = CaseReviewThrough
