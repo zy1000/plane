@@ -319,32 +319,6 @@ class CaseReviewView(BaseViewSet):
         serializer = ReviewCaseListSerializer(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
-    @action(detail=False, methods=['get'], url_path='module-count')
-    def module_count(self, request, slug):
-        review_id = request.query_params['review_id']
-        review = CaseReview.objects.get(id=review_id)
-        case_ids = CaseReviewThrough.objects.filter(review_id=review_id).values_list('case_id', flat=True)
-        modules = list(
-            CaseModule.objects.filter(repository_id=review.module.repository_id, deleted_at__isnull=True).values('id',
-                                                                                                                 'parent_id'))
-        base_counts = {m['id']: 0 for m in modules}
-        aggregates = TestCase.objects.filter(id__in=case_ids).values('module_id').annotate(count=Count('id'))
-        for item in aggregates:
-            if item['module_id']:
-                base_counts[item['module_id']] = item['count']
-        children_map = {}
-        for m in modules:
-            pid = m['parent_id']
-            if pid:
-                children_map.setdefault(pid, []).append(m['id'])
-        result = {str(m['id']): base_counts.get(m['id'], 0) for m in modules}
-        for m in modules:
-            mid = m['id']
-            for child in children_map.get(mid, []):
-                result[str(mid)] += base_counts.get(child, 0)
-        result['total'] = len(case_ids)
-        return Response(data=result, status=status.HTTP_200_OK)
-
     @action(detail=False, methods=['post'], url_path='case-review')
     def case_review(self, request, slug):
         # 输入参数

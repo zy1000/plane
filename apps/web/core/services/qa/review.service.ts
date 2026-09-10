@@ -4,7 +4,6 @@ import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
 
-export type ModuleCountResponse = { total: number } & Record<string, number>;
 export type ReviewCaseReviewerStatus = {
   assignee: string;
   result: string | null;
@@ -117,14 +116,6 @@ export class CaseService extends APIService {
       });
   }
 
-  async getReviewCases(workspaceSlug: string, id: string): Promise<string[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/review/${id}/cases/`)
-      .then((response) => (Array.isArray(response?.data?.ids) ? response.data.ids.map(String) : []))
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
   async getReviewCaseList(
     workspaceSlug: string,
     review_id: string,
@@ -162,15 +153,6 @@ export class CaseService extends APIService {
   async addReviewCases(workspaceSlug: string, projectId: string, data: { review_id: string; case_ids: string[] }): Promise<void> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/review/add-cases/`, data, { params: { project_id: projectId } })
       .then(() => {})
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async getModuleCount(workspaceSlug: string, review_id: string): Promise<ModuleCountResponse> {
-    const query = {review_id}
-    return this.get(`/api/workspaces/${workspaceSlug}/test/review/module-count/`, {params: query})
-      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
