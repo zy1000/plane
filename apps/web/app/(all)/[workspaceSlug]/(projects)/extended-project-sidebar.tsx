@@ -6,7 +6,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 // plane imports
 import { PROJECT_TRACKER_ELEMENTS, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -32,7 +32,11 @@ export const ExtendedProjectSidebar = observer(function ExtendedProjectSidebar()
   // states
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   // routers
-  const { workspaceSlug } = useParams();
+  const { workspaceSlug, projectId: activeProjectId } = useParams();
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const navigateTo = useCallback((to: string) => routerRef.current.push(to), []);
   // store hooks
   const { t } = useTranslation();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar } = useAppTheme();
@@ -155,7 +159,10 @@ export const ExtendedProjectSidebar = observer(function ExtendedProjectSidebar()
               <SidebarProjectsListItem
                 key={projectId}
                 projectId={projectId}
-                handleCopyText={() => handleCopyText(projectId)}
+                workspaceSlug={String(workspaceSlug ?? "")}
+                activeProjectId={activeProjectId ? String(activeProjectId) : undefined}
+                navigateTo={navigateTo}
+                handleCopyText={handleCopyText}
                 projectListType={"JOINED"}
                 disableDrag={false}
                 disableDrop={false}

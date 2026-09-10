@@ -610,6 +610,12 @@ class CaseReviewThrough(BaseModel):
 
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="review_cases")
     review = models.ForeignKey(CaseReview, on_delete=models.CASCADE, related_name="review_cases")
+    # 评审人（多选）：每条评审用例独立指定，聚合规则见 utils/qa.update_case_review_status
+    assignees = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="assigned_review_cases",
+    )
     result = models.CharField(choices=Result.choices, default=Result.NOT_START,
                               verbose_name="CaseReview Result")
 

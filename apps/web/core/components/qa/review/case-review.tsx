@@ -15,7 +15,7 @@ import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/serv
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { Button as PlaneButton } from "@plane/propel/button";
-import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums, globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import * as LucideIcons from "lucide-react";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
@@ -33,6 +33,9 @@ import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseS
 import { WORKSPACE_MEMBERS } from "@/constants/fetch-keys";
 
 type ReviewCaseRow = ReviewCaseListItem;
+
+// 评审枚举是静态字典，按工作区缓存一份，进页那一波不再和用例列表抢接口
+const reviewEnumsCache = new Map<string, Record<string, Record<string, { label: string; color: string }>>>();
 
 type StepItem = { result: string; description: string };
 
@@ -202,8 +205,14 @@ export default function CaseReview() {
 
   const fetchReviewEnums = async () => {
     if (!workspaceSlug) return;
+    const cached = reviewEnumsCache.get(String(workspaceSlug));
+    if (cached) {
+      setReviewEnums(cached);
+      return;
+    }
     try {
       const data = await reviewService.getReviewEnums(String(workspaceSlug));
+      reviewEnumsCache.set(String(workspaceSlug), data || {});
       setReviewEnums(data || {});
     } catch {}
   };
@@ -275,7 +284,9 @@ export default function CaseReview() {
   const fetchEnums = async () => {
     if (!workspaceSlug) return;
     try {
-      const enums = await getEnums(String(workspaceSlug));
+      // testhub 布局进模块时已拉过一份枚举放在 globalEnums，有就直接用，别在进页那一波再抢一次接口
+      const cached: any = globalEnums.Enums;
+      const enums = Object.keys(cached?.case_type || {}).length > 0 ? cached : await getEnums(String(workspaceSlug));
       setEnumsData({
         case_test_type: enums.case_test_type || {},
         case_type: enums.case_type || {},

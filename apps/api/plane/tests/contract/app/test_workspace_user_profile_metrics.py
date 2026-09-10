@@ -53,7 +53,6 @@ class TestWorkspaceUserProfileMetrics:
             project=self.project,
         )
         self.review = CaseReview.objects.create(name="Metric Review", project=self.project)
-        self.review.assignees.add(self.target)
 
     def _create_review_case(self, suffix):
         case = QATestCase.objects.create(
@@ -62,6 +61,8 @@ class TestWorkspaceUserProfileMetrics:
             repository=self.repository,
         )
         through = CaseReviewThrough.objects.create(case=case, review=self.review)
+        # 评审人是用例级的
+        through.assignees.add(self.target)
         return case, through
 
     def _create_state(self, name, group):

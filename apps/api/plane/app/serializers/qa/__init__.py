@@ -712,6 +712,9 @@ class ReviewCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseReview
         fields = "__all__"
+        # 评审人是用例级的，评审单上的 assignees / mode 只是派生汇总，
+        # 由 utils.qa.sync_review_reviewer_summary 维护，不接受直接写入
+        read_only_fields = ["assignees", "mode"]
 
 
 class ReviewListSerializer(ModelSerializer):
@@ -768,12 +771,10 @@ class ReviewCaseListSerializer(ModelSerializer):
         return obj.case.priority
 
     def _get_assignee_ids(self, obj: CaseReviewThrough):
-        prefetched_assignees = getattr(obj.review, "_prefetched_objects_cache", {}).get(
-            "assignees"
-        )
+        prefetched_assignees = getattr(obj, "_prefetched_objects_cache", {}).get("assignees")
         if prefetched_assignees is not None:
             return [str(assignee.id) for assignee in prefetched_assignees]
-        return [str(assignee_id) for assignee_id in obj.review.assignees.values_list("id", flat=True)]
+        return [str(assignee_id) for assignee_id in obj.assignees.values_list("id", flat=True)]
 
     def _get_last_record_result_by_assignee(self, obj: CaseReviewThrough, assignee_ids):
         records = getattr(obj, "prefetched_review_records", None)

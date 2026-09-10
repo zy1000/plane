@@ -3,8 +3,6 @@ import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { Modal, Form, Input, Select, DatePicker, Button, Space } from "antd";
-// 说明：替换评审人选择器为统一的 MemberDropdown 组件，保持参数结构不变
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import type { RangePickerProps } from "antd/es/date-picker";
 import { useTranslation } from "@plane/i18n";
 import { CaseService as ReviewService } from "@/services/qa/review.service";
@@ -21,7 +19,6 @@ type ReviewFormValues = {
   name: string;
   description?: string;
   module_id: string | null;
-  assignees: string[];
   started_at?: any;
   ended_at?: any;
 };
@@ -32,7 +29,6 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
   const [submitting, setSubmitting] = useState(false);
   const reviewService = useMemo(() => new ReviewService(), []);
   const [moduleOptions, setModuleOptions] = useState<{ value: string; label: string }[]>([]);
-  // 成员选择改为使用 MemberDropdown 的内部数据源
 
   const [form] = Form.useForm<ReviewFormValues>();
 
@@ -63,7 +59,6 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         setModuleOptions(opts);
       })
       .catch(() => setModuleOptions([]));
-    // MemberDropdown 在首次打开时会自行触发成员数据获取
   }, [open, workspaceSlug, projectId, reviewService]);
 
   useEffect(() => {
@@ -73,7 +68,6 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
       name: vals.name ?? "",
       description: vals.description ?? "",
       module_id: (vals as any)?.module ?? vals.module_id ?? null,
-      assignees: Array.isArray(vals.assignees) ? vals.assignees : [],
       started_at: vals.started_at ? dayjs(vals.started_at) : undefined,
       ended_at: vals.ended_at ? dayjs(vals.ended_at) : undefined,
     });
@@ -84,13 +78,11 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
     try {
       setSubmitting(true);
       const v = await form.validateFields();
-      const selectedAssignees = Array.isArray(v.assignees) ? v.assignees : [];
+      // 评审人是用例级的，在评审详情页逐条或批量设置，这里不再收集
       const payload: any = {
         name: v.name,
         description: v.description || "",
         module: v.module_id,
-        assignees: selectedAssignees,
-        mode: selectedAssignees.length <= 1 ? "单人评审" : "多人评审",
         project: projectId,
       };
       if (mode === "create") {
@@ -153,19 +145,6 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         </Form.Item>
         <Form.Item name="module_id" label="所属模块">
           <Select placeholder="请选择所属模块" options={moduleOptions} showSearch allowClear />
-        </Form.Item>
-        <Form.Item name="assignees" label="评审人" rules={[{ required: true, message: "请选择评审人" }]}>
-          <MemberDropdown
-            multiple
-            projectId={projectId ? String(projectId) : undefined}
-            value={form.getFieldValue("assignees") ?? []}
-            onChange={(val) => form.setFieldsValue({ assignees: Array.isArray(val) ? val : [] })}
-            placeholder="请选择评审人"
-            className="w-full"
-            buttonVariant="transparent-with-text"
-            showUserDetails={true}
-            optionsClassName="z-[1100]"
-          />
         </Form.Item>
         <Form.Item label="评审周期">
           <Space>

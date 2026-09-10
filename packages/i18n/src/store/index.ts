@@ -265,6 +265,9 @@ export class TranslationStore {
         document.documentElement.lang = lng;
       }
 
+      // 语言没变就不要清缓存：messageCache 是 observable，清一次会让所有调用过 t() 的组件整体重渲
+      if (this.currentLocale === lng) return;
+
       runInAction(() => {
         this.currentLocale = lng;
         this.messageCache.clear(); // Clear cache when language changes

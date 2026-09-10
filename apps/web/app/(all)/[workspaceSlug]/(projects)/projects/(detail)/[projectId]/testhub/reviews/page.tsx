@@ -692,7 +692,6 @@ export default function ReviewsPage() {
       name: record.name,
       description: (record as any)?.description ?? "",
       module_id: (record as any)?.module ?? record.module_id ?? null,
-      assignees: Array.isArray(record.assignees) ? record.assignees : [],
       started_at: record.started_at ?? null,
       ended_at: record.ended_at ?? null,
       cases: (record as any)?.cases ?? [],

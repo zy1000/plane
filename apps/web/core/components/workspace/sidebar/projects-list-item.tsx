@@ -11,7 +11,6 @@ import { pointerOutsideOfPreview } from "@atlaskit/pragmatic-drag-and-drop/eleme
 import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
 import { attachInstruction, extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import { observer } from "mobx-react";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createRoot } from "react-dom/client";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
 import { Settings, Share2, LogOut, MoreHorizontal } from "lucide-react";
@@ -53,7 +52,12 @@ import { HIGHLIGHT_CLASS, highlightIssueOnDrop } from "../../issues/issue-layout
 
 type Props = {
   projectId: string;
-  handleCopyText: () => void;
+  // 由列表层统一从路由取一次再下发，避免每个项目项各自订阅路由变化而整列重渲
+  workspaceSlug: string;
+  activeProjectId?: string;
+  // useRouter/useNavigate 会订阅 RouteContext，同样由列表层持有一份稳定的跳转函数下发
+  navigateTo: (to: string) => void;
+  handleCopyText: (projectId: string) => void;
   handleOnProjectDrop?: (
     sourceId: string | undefined,
     destinationId: string | undefined,
@@ -70,6 +74,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const {
     projectId,
     handleCopyText,
+    workspaceSlug,
+    activeProjectId,
+    navigateTo,
     disableDrag,
     disableDrop,
     isLastChild,
@@ -89,6 +96,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   // states
   const [leaveProjectModalOpen, setLeaveProjectModal] = useState(false);
   const [publishModalOpen, setPublishModal] = useState(false);
+  // 两个弹窗内部各自 useParams 订阅路由，135 个项目项常驻挂载会跟着每次跳转重渲；首次打开后再挂载，之后保持挂载以保留关闭动画
+  const [leaveProjectModalMounted, setLeaveProjectModalMounted] = useState(false);
+  const [publishModalMounted, setPublishModalMounted] = useState(false);
   const [isMenuActive, setIsMenuActive] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const isProjectListOpen = getIsProjectListOpen(projectId);
@@ -98,11 +108,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const projectRef = useRef<HTMLDivElement | null>(null);
   const dragHandleRef = useRef<HTMLButtonElement | null>(null);
   // router
-  const { workspaceSlug, projectId: URLProjectId } = useParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const currentPath = getPathWithSearch(pathname, searchParams);
+  const URLProjectId = activeProjectId;
   // derived values
   const project = getPartialProjectById(projectId);
 
@@ -153,6 +159,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const isAccordionMode = projectPreferences.navigationMode === "ACCORDION";
 
   const handleLeaveProject = () => {
+    setLeaveProjectModalMounted(true);
     setLeaveProjectModal(true);
   };
 
@@ -289,7 +296,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     if (projectPreferences.navigationMode === "ACCORDION") {
       setIsProjectListOpen(!isProjectListOpen);
     } else {
-      router.push(defaultTabUrl);
+      navigateTo(defaultTabUrl);
     }
     // close the extended sidebar if it is open
     if (isExtendedProjectSidebarOpened && !isAccordionMode) {
@@ -301,8 +308,12 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
 
   return (
     <>
-      <PublishProjectModal isOpen={publishModalOpen} projectId={projectId} onClose={() => setPublishModal(false)} />
-      <LeaveProjectModal project={project} isOpen={leaveProjectModalOpen} onClose={() => setLeaveProjectModal(false)} />
+      {publishModalMounted && (
+        <PublishProjectModal isOpen={publishModalOpen} projectId={projectId} onClose={() => setPublishModal(false)} />
+      )}
+      {leaveProjectModalMounted && (
+        <LeaveProjectModal project={project} isOpen={leaveProjectModalOpen} onClose={() => setLeaveProjectModal(false)} />
+      )}
       <Disclosure key={`${project.id}_${URLProjectId}`} defaultOpen={isProjectListOpen} as="div">
         <div
           id={`sidebar-${projectId}-${projectListType}`}
@@ -411,7 +422,12 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
 
                   {/* publish project settings */}
                   {canPublishProject && (
-                    <CustomMenu.MenuItem onClick={() => setPublishModal(true)}>
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        setPublishModalMounted(true);
+                        setPublishModal(true);
+                      }}
+                    >
                       <div className="relative flex flex-shrink-0 items-center justify-start gap-2">
                         <div className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm text-secondary transition-all duration-300 hover:bg-layer-1">
                           <Share2 className="h-3.5 w-3.5 stroke-[1.5]" />
@@ -420,7 +436,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                       </div>
                     </CustomMenu.MenuItem>
                   )}
-                  <CustomMenu.MenuItem onClick={handleCopyText}>
+                  <CustomMenu.MenuItem onClick={() => handleCopyText(projectId)}>
                     <span className="flex items-center justify-start gap-2">
                       <LinkIcon className="h-3.5 w-3.5 stroke-[1.5]" />
                       <span>{t("copy_link")}</span>
@@ -429,7 +445,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                   {isAuthorized && (
                     <CustomMenu.MenuItem
                       onClick={() => {
-                        router.push(`/${workspaceSlug}/projects/${project?.id}/archives/issues`);
+                        navigateTo(`/${workspaceSlug}/projects/${project?.id}/archives/issues`);
                       }}
                     >
                       <div className="flex cursor-pointer items-center justify-start gap-2">
@@ -440,11 +456,15 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                   )}
                   <CustomMenu.MenuItem
                     onClick={() => {
-                      router.push(
+                      navigateTo(
                         buildProjectSettingsPath({
                           workspaceSlug: workspaceSlug.toString(),
                           projectId: project.id,
-                          currentPath,
+                          // 点击时再读当前地址，不在渲染期订阅路由
+                          currentPath: getPathWithSearch(
+                            window.location.pathname,
+                            new URLSearchParams(window.location.search)
+                          ),
                         })
                       );
                     }}

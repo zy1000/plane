@@ -15,6 +15,7 @@ export type ReviewCaseListItem = {
   code?: string;
   name: string;
   priority: number;
+  /** 本条用例的评审人（用例级，不是评审单级） */
   assignees: string[];
   result: string;
   created_by: string | null;
@@ -150,8 +151,27 @@ export class CaseService extends APIService {
       });
   }
 
-  async addReviewCases(workspaceSlug: string, projectId: string, data: { review_id: string; case_ids: string[] }): Promise<void> {
+  async addReviewCases(
+    workspaceSlug: string,
+    projectId: string,
+    data: { review_id: string; case_ids: string[]; assignees?: string[] }
+  ): Promise<void> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/review/add-cases/`, data, { params: { project_id: projectId } })
+      .then(() => {})
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 整体覆盖一批评审用例的评审人；ids 传一条即行内编辑，传多条即批量设置 */
+  async updateReviewCaseAssignees(
+    workspaceSlug: string,
+    projectId: string,
+    data: { review_id: string; ids: string[]; assignees: string[] }
+  ): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/review/case-assignees/`, data, {
+      params: { project_id: projectId },
+    })
       .then(() => {})
       .catch((error) => {
         throw error?.response?.data;
