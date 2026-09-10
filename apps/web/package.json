@@ -41,6 +41,7 @@
     "@react-pdf/renderer": "^3.4.5",
     "@react-router/node": "catalog:",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "catalog:",
     "antd": "^5.27.6",
     "axios": "catalog:",
     "clsx": "^2.0.0",
