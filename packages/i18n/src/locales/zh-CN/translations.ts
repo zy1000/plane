@@ -2119,6 +2119,7 @@ export default {
       requirement_types: "需求类型",
       libraries: "标准需求库",
       test_cases: "测试用例库",
+      reviews: "评审模板库",
     },
     test_cases: {
       title: "测试用例库",
@@ -2128,6 +2129,70 @@ export default {
       empty: {
         title: "还没有模板库",
         description: "沉淀一批可复用的测试用例，项目里的测试用例可以直接从模板导入。",
+      },
+    },
+    reviews: {
+      title: "评审模板库",
+      create: "新建评审",
+      add_child: "在此评审下加评审活动",
+      search_placeholder: "搜索标题或角色",
+      error_title: "评审模板加载失败",
+      stage_summary: "{reviews} 个评审 · {activities} 个评审活动",
+      // 有些阶段没有汇总评审，活动本身就是顶层项 —— 不说一句会看着像漏配了
+      rootless_hint: "本阶段没有汇总评审，评审活动直接归属阶段",
+      no_auditor: "无需审核",
+      enable: "启用",
+      disable: "停用",
+      rail: {
+        title: "研发阶段",
+        count_hint: "评审数 · 评审活动数",
+      },
+      kind: {
+        review: "评审",
+        activity: "评审活动",
+        o_stage_review: "O阶段评审",
+        o_stage_activity: "O阶段评审活动",
+      },
+      table: {
+        title: "名称",
+        kind: "类型",
+        initiator: "发起者",
+        leader: "主导者",
+        auditor: "审核者",
+        active: "启用",
+        empty: "本阶段还没有评审模板，点右上角新建一条。",
+      },
+      form: {
+        create_title: "新建评审",
+        edit_title: "编辑评审",
+        parent_label: "归属",
+        parent_stage_option: "直接归属阶段（不挂在任何评审下）",
+        parent_empty: "本阶段还没有同类型的评审可挂，先建一个评审再来。",
+        title_placeholder: "例如：F1评审-BOM评审",
+        title_required: "请填写标题",
+        role_placeholder: "填角色名称，例如：硬件研发负责人",
+        auditor_placeholder: "留空表示无需审核",
+        // 模板是工作区级标准流程，落到具体项目 + 产品时才把角色解析成人
+        role_hint: "三个角色填的是名称不是具体的人，发起评审时按角色在项目与产品成员里解析。",
+        kind_locked: "类型决定了它能挂在哪、带不带 O 阶段的成品字段，创建后不可改。",
+        save_failed: "保存失败，请稍后重试",
+      },
+      delete_modal: {
+        title: "删除评审模板",
+        content_review: "确定删除「{title}」吗？它下面的 {count} 个评审活动会一并删除。",
+        content_activity: "确定删除「{title}」吗？",
+      },
+      toast: {
+        created: "已创建",
+        updated: "已保存",
+        deleted: "已删除",
+        update_failed: "保存失败，请稍后重试",
+        delete_failed: "删除失败，请稍后重试",
+        reorder_failed: "排序失败，已还原",
+      },
+      empty: {
+        title: "还没有评审模板",
+        description: "评审模板库是工作区级的标准研发流程，按阶段维护评审与评审活动。",
       },
     },
     requirement_types: {

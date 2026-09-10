@@ -1940,6 +1940,7 @@ export default {
       requirement_types: "Requirement types",
       libraries: "Standard requirement library",
       test_cases: "Test case library",
+      reviews: "Review templates",
     },
     test_cases: {
       title: "Test case library",
@@ -1949,6 +1950,70 @@ export default {
       empty: {
         title: "No template repositories yet",
         description: "Build a set of reusable test cases that projects can import directly.",
+      },
+    },
+    reviews: {
+      title: "Review templates",
+      create: "New review",
+      add_child: "Add activity under this review",
+      search_placeholder: "Search title or role",
+      error_title: "Failed to load review templates",
+      stage_summary: "{reviews} reviews \u00b7 {activities} activities",
+      rootless_hint: "This stage has no summary review; activities belong directly to the stage",
+      no_auditor: "No approval needed",
+      enable: "Enable",
+      disable: "Disable",
+      rail: {
+        title: "Stages",
+        count_hint: "Reviews \u00b7 Activities",
+      },
+      kind: {
+        review: "Review",
+        activity: "Review activity",
+        o_stage_review: "O-stage review",
+        o_stage_activity: "O-stage activity",
+      },
+      table: {
+        title: "Name",
+        kind: "Type",
+        initiator: "Initiator",
+        leader: "Owner",
+        auditor: "Approver",
+        active: "Enabled",
+        empty: "No review templates in this stage yet. Create one from the top right.",
+      },
+      form: {
+        create_title: "New review",
+        edit_title: "Edit review",
+        parent_label: "Belongs to",
+        parent_stage_option: "Directly under the stage (no parent review)",
+        parent_empty: "No matching review in this stage yet. Create a review first.",
+        title_placeholder: "e.g. F1 review - BOM review",
+        title_required: "Title is required",
+        role_placeholder: "Role name, e.g. Hardware lead",
+        auditor_placeholder: "Leave empty if no approval is needed",
+        role_hint:
+          "These three fields hold role names, not people. Roles are resolved against project and product members when a review starts.",
+        kind_locked:
+          "Type decides where it can sit and whether it carries the O-stage fields. It cannot be changed after creation.",
+        save_failed: "Could not save. Please try again.",
+      },
+      delete_modal: {
+        title: "Delete review template",
+        content_review: "Delete \u201c{title}\u201d? Its {count} review activities will be deleted too.",
+        content_activity: "Delete \u201c{title}\u201d?",
+      },
+      toast: {
+        created: "Created",
+        updated: "Saved",
+        deleted: "Deleted",
+        update_failed: "Could not save. Please try again.",
+        delete_failed: "Could not delete. Please try again.",
+        reorder_failed: "Could not reorder. Reverted.",
+      },
+      empty: {
+        title: "No review templates yet",
+        description: "The review template library holds the workspace-level standard R&D process, organised by stage.",
       },
     },
     requirement_types: {

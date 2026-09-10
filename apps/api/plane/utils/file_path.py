@@ -346,6 +346,34 @@ class _Resolver:
                 display_name=getattr(cycle, "name", "") or "",
             )
 
+        if et == "STAGE_REVIEW_FILE":
+            stage_review = self._get_related(asset, "stage_review")
+            if stage_review is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            return self._get_or_create_node(
+                parent=cat_node,
+                entity_type="STAGE_REVIEW",
+                entity_id=stage_review.pk,
+                display_name=getattr(stage_review, "title", "") or "",
+            )
+
+        # 评审评论中的内联图片：复用与 STAGE_REVIEW_FILE 相同的目录节点（Workspace -> Project ->
+        # 阶段评审 -> StageReview），上传期靠 stage_review_id 定位父级，与具体
+        # stage_review_comment 解耦，避免评论尚未创建时无法定路径。
+        if et == "STAGE_REVIEW_COMMENT_DESCRIPTION":
+            stage_review = self._get_related(asset, "stage_review")
+            if stage_review is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            stage_review_category = self._category_node(
+                parent=proj_node, entity_type="STAGE_REVIEW_FILE"
+            )
+            return self._get_or_create_node(
+                parent=stage_review_category,
+                entity_type="STAGE_REVIEW",
+                entity_id=stage_review.pk,
+                display_name=getattr(stage_review, "title", "") or "",
+            )
+
         if et == "RELEASE_FILE":
             release = self._get_related(asset, "release")
             if release is None:

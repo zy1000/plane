@@ -5,6 +5,7 @@
 # Python imports
 import csv
 import io
+import logging
 import os
 from datetime import date
 import uuid
@@ -45,6 +46,9 @@ from plane.bgtasks.event_tracking_task import track_event
 from plane.utils.url import contains_url
 from plane.utils.analytics_events import WORKSPACE_CREATED, WORKSPACE_DELETED
 from plane.utils.csv_utils import sanitize_csv_row
+from plane.utils.stage_review_template import ensure_stage_review_templates
+
+logger = logging.getLogger("plane")
 
 
 class WorkSpaceViewSet(BaseViewSet):
@@ -115,7 +119,7 @@ class WorkSpaceViewSet(BaseViewSet):
                 )
 
             if serializer.is_valid(raise_exception=True):
-                serializer.save(owner=request.user)
+                workspace = serializer.save(owner=request.user)
                 # Create Workspace member
                 _ = WorkspaceMember.objects.create(
                     workspace_id=serializer.data["id"],
@@ -123,6 +127,16 @@ class WorkSpaceViewSet(BaseViewSet):
                     role=20,
                     company_role=request.data.get("company_role", ""),
                 )
+
+                # 阶段评审：新工作区自带标准研发流程（顺带补齐 product_stage 的阶段值）。
+                # 预置失败不能让建工作区 500 —— 工作区和成员已经落库了，报错会让用户重试时撞 slug。
+                try:
+                    ensure_stage_review_templates(workspace, actor=request.user)
+                except Exception:
+                    logger.exception(
+                        "Failed to seed stage review templates for workspace %s",
+                        workspace.id,
+                    )
 
                 # Get total members and role
                 total_members = WorkspaceMember.objects.filter(workspace_id=serializer.data["id"]).count()

@@ -162,6 +162,8 @@ class FileAsset(BaseModel):
         PLAN_CASE_RECORD_FILE = "PLAN_CASE_RECORD_FILE"
         TEST_CASE_COMMENT_DESCRIPTION = "TEST_CASE_COMMENT_DESCRIPTION"
         REQUIREMENT_ATTACHMENT = "REQUIREMENT_ATTACHMENT"
+        STAGE_REVIEW_FILE = "STAGE_REVIEW_FILE"
+        STAGE_REVIEW_COMMENT_DESCRIPTION = "STAGE_REVIEW_COMMENT_DESCRIPTION"
 
     attributes = models.JSONField(default=dict)
     # 末段文件名（含可能的 (1)/(2) 去重后缀）。完整 MinIO key 由 ``path`` 节点链派生 +
@@ -211,6 +213,15 @@ class FileAsset(BaseModel):
     )
     plan_case_record = models.ForeignKey(
         "db.PlanCaseRecord", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    stage_review = models.ForeignKey(
+        "db.StageReview", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    stage_review_comment = models.ForeignKey(
+        "db.StageReviewComment",
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="assets",
     )
     entity_type = models.CharField(max_length=255, null=True, blank=True)
     entity_identifier = models.CharField(max_length=255, null=True, blank=True)

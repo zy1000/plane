@@ -40,6 +40,7 @@ export * from "./module";
 export * from "./release";
 export * from "./requirement";
 export * from "./requirement-type";
+export * from "./stage-review-template";
 export * from "./page";
 export * from "./payment";
 export * from "./pragmatic";

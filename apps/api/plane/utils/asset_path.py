@@ -47,6 +47,7 @@ CATEGORY_SLUG_MAP: dict[str, Tuple[str, str]] = {
     "CASES_CATEGORY":             ("测试用例", "cases"),
     "PLAN_CASE_RECORDS_CATEGORY": ("用例执行", "plan-case-records"),
     "REQUIREMENTS_CATEGORY":      ("需求",     "requirements"),
+    "STAGE_REVIEWS_CATEGORY":     ("阶段评审", "stage-reviews"),
     # 临时分类：业务实体未就绪时 FileAsset 先落入 ``_temp`` 子目录。
     # 用下划线前缀以与正式业务 slug 区分开。
     "TEMP_CATEGORY":              ("_temp",   "_temp"),
@@ -69,6 +70,8 @@ ENTITY_TO_CATEGORY: dict[str, str] = {
     "CASE_ATTACHMENT":          "CASES_CATEGORY",
     "PLAN_CASE_RECORD_FILE":    "PLAN_CASE_RECORDS_CATEGORY",
     "REQUIREMENT_ATTACHMENT":   "REQUIREMENTS_CATEGORY",
+    "STAGE_REVIEW_FILE":              "STAGE_REVIEWS_CATEGORY",
+    "STAGE_REVIEW_COMMENT_DESCRIPTION": "STAGE_REVIEWS_CATEGORY",
 }
 
 

@@ -1,11 +1,12 @@
 import type { LucideIcon } from "lucide-react";
-import { FlaskConical, Library } from "lucide-react";
+import { ClipboardCheck, FlaskConical, Library } from "lucide-react";
 import {
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
+  WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
 } from "@plane/constants";
 
-export type TTemplateManagementTabKey = "libraries" | "test-cases";
+export type TTemplateManagementTabKey = "libraries" | "test-cases" | "reviews";
 
 export type TTemplateManagementNavigationItem = {
   key: TTemplateManagementTabKey;
@@ -27,6 +28,12 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     icon: FlaskConical,
     i18nKey: "workspace_templates.navigation.test_cases",
     permissionKeys: WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
+  },
+  {
+    key: "reviews",
+    icon: ClipboardCheck,
+    i18nKey: "workspace_templates.navigation.reviews",
+    permissionKeys: WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
   },
 ];
 

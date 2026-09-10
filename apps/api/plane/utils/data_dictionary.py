@@ -1,20 +1,30 @@
 """数据字典：系统字典规格、幂等预置、值的归一化 / 批量写入、产品 / 项目引用检查与计数。
 
 迁移里有 SYSTEM_DICTIONARIES 的副本（迁移不能 import 运行时代码）：产品六项在 0346，项目三项在 0348，
-项目代号在 0355，改这里要同步改那边。
+项目代号在 0355，改这里要同步改那边。product_stage 的**值**是个例外 —— 它们同时是阶段评审的阶段
+词表，规格收在零 import 的 plane/db/seed_data/stage_review_templates.py，运行时与迁移 0362 共用
+同一份，不用两处同步。
 """
 
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q
 
 from plane.db.models import DataDictionary, DataDictionaryItem, Product, Project
+from plane.db.seed_data.stage_review_templates import PRODUCT_STAGE_LABELS
 
 SORT_ORDER_STEP = 10000
 
 LEVEL_ITEMS = ("P+", "P", "A", "B", "C", "裁剪")
 
 SYSTEM_DICTIONARIES = (
-    {"key": "product_stage", "name": "产品阶段", "description": "", "items": ()},
+    # 产品阶段的值同时是阶段评审的阶段词表，规格在 plane/db/seed_data/stage_review_templates.py
+    # （那边是零 import 的纯常量模块，运行时与 seed 迁移共用一份）。
+    {
+        "key": "product_stage",
+        "name": "产品阶段",
+        "description": "",
+        "items": PRODUCT_STAGE_LABELS,
+    },
     {
         "key": "product_category",
         "name": "产品类别",

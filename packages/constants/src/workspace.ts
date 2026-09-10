@@ -101,7 +101,7 @@ export const WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY = "workspace.user_prof
 export const WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY = "workspace.analytics.view" as const;
 export const WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY = "workspace.analytics.manage_saved_view" as const;
 export const WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY = "workspace.analytics.export" as const;
-// 模板中心：需求标准库 + 用例模板库（与后端 plane/app/permissions/keys.py 的同名段一致）
+// 模板中心：需求标准库 + 用例模板库 + 评审模板库（与后端 plane/app/permissions/keys.py 的同名段一致）
 export const WORKSPACE_REQUIREMENT_LIBRARY_VIEW_PERMISSION_KEY = "workspace.requirement_library.view" as const;
 export const WORKSPACE_REQUIREMENT_LIBRARY_MANAGE_PERMISSION_KEY = "workspace.requirement_library.manage" as const;
 export const WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT_PERMISSION_KEY =
@@ -110,6 +110,8 @@ export const WORKSPACE_CASE_TEMPLATE_VIEW_PERMISSION_KEY = "workspace.case_templ
 export const WORKSPACE_CASE_TEMPLATE_MANAGE_PERMISSION_KEY = "workspace.case_template.manage" as const;
 export const WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT_PERMISSION_KEY =
   "workspace.case_template.import_export" as const;
+export const WORKSPACE_REVIEW_TEMPLATE_VIEW_PERMISSION_KEY = "workspace.review_template.view" as const;
+export const WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY = "workspace.review_template.manage" as const;
 
 /** 读标准库：查看或维护任一即可（后端 LIBRARY_READ_KEYS 的对应物） */
 export const WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS = [
@@ -123,10 +125,17 @@ export const WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS = [
   WORKSPACE_CASE_TEMPLATE_MANAGE_PERMISSION_KEY,
 ];
 
-/** 模板中心入口：两个库任一能看就显示 */
+/** 读评审模板库：查看或维护任一即可（评审模板库没有导入导出，只有两个 key） */
+export const WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS = [
+  WORKSPACE_REVIEW_TEMPLATE_VIEW_PERMISSION_KEY,
+  WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY,
+];
+
+/** 模板中心入口：三个库任一能看就显示 */
 export const WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS = [
   ...WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
   ...WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
+  ...WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
 ];
 
 export const WORKSPACE_SETTINGS = {

@@ -10,11 +10,10 @@ const TemplateManagementIndexPage = observer(function TemplateManagementIndexPag
 }: {
   workspaceSlug: string;
 }) {
-  // 只有用例模板库权限的人别往标准库落地
-  const { canViewLibraries } = useTemplatePermissions(workspaceSlug);
-  return (
-    <Navigate to={getTemplateManagementTabPath(workspaceSlug, canViewLibraries ? "libraries" : "test-cases")} replace />
-  );
+  // 按 tab 顺序落到第一个有权看的库：只有评审模板库权限的人别往标准库落地
+  const { canViewLibraries, canViewCaseTemplates } = useTemplatePermissions(workspaceSlug);
+  const tabKey = canViewLibraries ? "libraries" : canViewCaseTemplates ? "test-cases" : "reviews";
+  return <Navigate to={getTemplateManagementTabPath(workspaceSlug, tabKey)} replace />;
 });
 
 export default function TemplateManagementIndexRoutePage({ params }: Route.ComponentProps) {

@@ -207,6 +207,20 @@ PERMISSION_OVERRIDES = {
         "category": "用例模板库",
         "sort_order": 3,
     },
+    "workspace.review_template.view": {
+        "name": "查看评审模板库",
+        "description": "查看各研发阶段的评审与评审活动模板",
+        "module": "review_template",
+        "category": "评审模板库",
+        "sort_order": 1,
+    },
+    "workspace.review_template.manage": {
+        "name": "维护评审模板库",
+        "description": "新建/编辑/删除评审与评审活动模板，调整排序与启用状态",
+        "module": "review_template",
+        "category": "评审模板库",
+        "sort_order": 2,
+    },
     # 自动拼出来是「删除产品设置」「绑定角色产品成员」，不像人话。
     "product.settings.delete": {"name": "删除产品"},
     "product.member.bind_role": {"name": "分配产品成员角色"},

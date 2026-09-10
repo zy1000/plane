@@ -39,6 +39,8 @@ class PermissionKey(str, Enum):
     WORKSPACE_CASE_TEMPLATE_VIEW = "workspace.case_template.view"
     WORKSPACE_CASE_TEMPLATE_MANAGE = "workspace.case_template.manage"
     WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT = "workspace.case_template.import_export"
+    WORKSPACE_REVIEW_TEMPLATE_VIEW = "workspace.review_template.view"
+    WORKSPACE_REVIEW_TEMPLATE_MANAGE = "workspace.review_template.manage"
 
     # Project permissions
     PROJECT_SETTINGS_VIEW = "project.settings.view"
