@@ -6,14 +6,14 @@ from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count, Q, Prefetch
+from django.db.models import Q
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
-    ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
+    ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, \
     ReviewCaseRecordsSerializer, ReviewSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
@@ -21,6 +21,7 @@ from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, Cas
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import (
+    build_review_case_rows,
     invalid_workspace_member_ids,
     set_review_case_assignees,
     sync_review_reviewer_summary,
@@ -312,8 +313,6 @@ class CaseReviewView(BaseViewSet):
                 review__project__workspace__slug=slug,
                 case__deleted_at__isnull=True,
             )
-            .select_related('case', 'case__repository', 'case__module', 'review')
-            .prefetch_related('assignees')
         )
         if project_id := request.query_params.get('project_id'):
             query = query.filter(review__project_id=project_id, case__repository__project_id=project_id)
@@ -352,35 +351,25 @@ class CaseReviewView(BaseViewSet):
         if not request.query_params.get('review_id'):
             return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        query = self._filtered_case_through_qs(request, slug)
-        query = query.annotate(
-            suggestion_count=Count(
-                "review_records",
-                filter=Q(
-                    review_records__result=CaseReviewRecord.Result.SUGGEST,
-                    review_records__confirmed=False,
-                    review_records__deleted_at__isnull=True,
-                ),
-                distinct=True,
-            )
-        )
-        query = query.prefetch_related(
-            Prefetch(
-                "review_records",
-                queryset=CaseReviewRecord.objects.filter(deleted_at__isnull=True)
-                .exclude(result=CaseReviewRecord.Result.SUGGEST)
-                .order_by("assignee_id", "-created_at"),
-                to_attr="prefetched_review_records",
-            )
+        # 列表只用得上这几列，扁平取；评审人、结论、建议数由 build_review_case_rows 整页一次性补齐
+        query = self._filtered_case_through_qs(request, slug).values(
+            "id",
+            "case_id",
+            "result",
+            "created_by_id",
+            "case__name",
+            "case__code",
+            "case__priority",
+            "case__repository__name",
+            "case__module__name",
         )
         all_param = str(request.query_params.get("all", "")).strip().lower()
         if all_param in {"1", "true", "yes"}:
-            serializer = ReviewCaseListSerializer(instance=query, many=True)
-            return list_response(data=serializer.data, count=query.count())
+            rows = list(query)
+            return list_response(data=build_review_case_rows(rows), count=len(rows))
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
-        serializer = ReviewCaseListSerializer(instance=paginated_queryset, many=True)
-        return list_response(data=serializer.data, count=query.count())
+        return list_response(data=build_review_case_rows(paginated_queryset), count=query.count())
 
     @transaction.atomic
     @action(detail=False, methods=['post'], url_path='case-review')

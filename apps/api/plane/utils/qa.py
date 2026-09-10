@@ -1,4 +1,7 @@
 import uuid
+from collections import defaultdict
+
+from django.db.models import Count
 
 from plane.db.models import CaseReview, CaseReviewRecord, CaseReviewThrough, TestCase, WorkspaceMember
 
@@ -145,3 +148,84 @@ def re_approval_case(case: TestCase):
                                             crt=crt, reason='用例内容变更')
         update_case_review_status(crt.review, crt)
 
+
+def build_review_case_rows(rows):
+    """把 values() 取出的评审用例扁平行拼成列表接口的返回结构。
+
+    一次评审能挂上千条用例，让 ORM 逐行实例化 case/repository/module/review 会占掉接口大半耗时，
+    这里改成整页一次性取评审人、评审结论和建议数，再在内存里拼。
+    """
+    rows = list(rows)
+    if not rows:
+        return []
+
+    crt_ids = [row["id"] for row in rows]
+
+    # 评审人按 User 的默认排序取，和之前 prefetch_related("assignees") 出来的顺序保持一致
+    assignees_by_crt = defaultdict(list)
+    for crt_id, user_id in (
+        CaseReviewThrough.assignees.through.objects.filter(casereviewthrough_id__in=crt_ids)
+        .order_by("-user__created_at")
+        .values_list("casereviewthrough_id", "user_id")
+    ):
+        assignees_by_crt[crt_id].append(str(user_id))
+
+    # 每个评审人在该条用例上的最后一条结论，「建议」不算结论
+    last_result_by_crt = defaultdict(dict)
+    for crt_id, assignee_id, result in (
+        CaseReviewRecord.objects.filter(crt_id__in=crt_ids, deleted_at__isnull=True)
+        .exclude(result=CaseReviewRecord.Result.SUGGEST)
+        .order_by("assignee_id", "-created_at")
+        .values_list("crt_id", "assignee_id", "result")
+    ):
+        if assignee_id:
+            last_result_by_crt[crt_id].setdefault(str(assignee_id), result)
+
+    suggestion_counts = {
+        item["crt_id"]: item["count"]
+        for item in CaseReviewRecord.objects.filter(
+            crt_id__in=crt_ids,
+            result=CaseReviewRecord.Result.SUGGEST,
+            confirmed=False,
+            deleted_at__isnull=True,
+        )
+        .values("crt_id")
+        .annotate(count=Count("id"))
+    }
+
+    data = []
+    for row in rows:
+        crt_id = row["id"]
+        assignee_ids = assignees_by_crt.get(crt_id, [])
+        last_result = last_result_by_crt.get(crt_id, {})
+        reviewer_statuses = []
+        unreviewed_assignees = []
+        for assignee_id in assignee_ids:
+            result = last_result.get(assignee_id)
+            reviewed = bool(result) and str(result) != str(CaseReviewRecord.Result.RE_REVIEW)
+            reviewer_statuses.append(
+                {"assignee": assignee_id, "result": result, "reviewed": reviewed}
+            )
+            if not reviewed:
+                unreviewed_assignees.append(assignee_id)
+        created_by_id = row["created_by_id"]
+        data.append(
+            {
+                "id": str(crt_id),
+                "name": row["case__name"],
+                "priority": row["case__priority"],
+                "assignees": assignee_ids,
+                "result": row["result"],
+                "created_by": str(created_by_id) if created_by_id else None,
+                "case_id": str(row["case_id"]),
+                "code": row["case__code"],
+                "repository": row["case__repository__name"],
+                "module": row["case__module__name"],
+                "suggestion_count": suggestion_counts.get(crt_id, 0),
+                "reviewer_statuses": reviewer_statuses,
+                "unreviewed_assignees": unreviewed_assignees,
+                "reviewed_count": len(assignee_ids) - len(unreviewed_assignees),
+                "reviewer_count": len(assignee_ids),
+            }
+        )
+    return data
