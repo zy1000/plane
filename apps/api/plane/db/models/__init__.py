@@ -183,6 +183,11 @@ from .requirement import (
 from .stage_review import (
     ProductionMode,
     ReviewTailoring,
+    ReviewTailoringActivity,
+    ReviewTailoringApproval,
+    ReviewTailoringApprovalAction,
+    ReviewTailoringApprovalType,
+    ReviewTailoringComment,
     ReviewTailoringItem,
     ReviewTailoringStatus,
     ShipmentAssessment,

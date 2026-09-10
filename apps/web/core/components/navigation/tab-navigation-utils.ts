@@ -77,6 +77,7 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
     cycles: `${baseUrl}/cycles`,
     modules: `${baseUrl}/modules`,
     milestones: `${baseUrl}/milestones`,
+    review_tailorings: `${baseUrl}/review-tailorings`,
     views: `${baseUrl}/views`,
     pages: `${baseUrl}/pages`,
     intake: `${baseUrl}/intake`,

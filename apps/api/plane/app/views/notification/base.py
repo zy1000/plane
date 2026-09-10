@@ -31,7 +31,7 @@ from ..base import BaseAPIView, BaseViewSet
 
 # 会出现在通知中心的实体。加新实体时同时要确认前端卡片能渲染它 ——
 # notification-card/item.tsx 以 data.issue_activity.field 作为渲染开关。
-NOTIFIABLE_ENTITY_NAMES = ["issue", "requirement_change_request"]
+NOTIFIABLE_ENTITY_NAMES = ["issue", "requirement_change_request", "review_tailoring"]
 
 
 class NotificationViewSet(BaseViewSet, BasePaginator):

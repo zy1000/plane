@@ -7,7 +7,8 @@
    汇总评审）。没有单独的「模板头」表，*阶段 + 这棵树* 就是模板。
 2. **裁剪**（``ReviewTailoring`` + ``ReviewTailoringItem``）—— 项目级的二维勾选表：
    横轴产品、纵轴该阶段模板树的**全部节点**（评审与评审活动树形展开、逐个勾）。
-   签批通过后生效，勾上的格子生成评审实例。
+   签批通过后生效，勾上的格子生成评审实例；改动走**原地修订**，同一张表在
+   已生效与修订中之间往返，不复制新表。
 3. **评审**（``StageReview``）—— 真正执行的那条记录，绑定项目 + 产品，有负责人、
    起止日期、状态与评审结论。评审活动同样落在这张表里（``kind`` 取 activity /
    o_stage_activity，配 ``parent``）。
@@ -173,13 +174,39 @@ class ShipmentAssessment(models.TextChoices):
 
 
 class ReviewTailoringStatus(models.TextChoices):
-    """裁剪单的签批状态。approved 即生效。"""
+    """裁剪表的状态。四个值构成一个环，没有终态。
+
+    草稿 ──提交签批──▶ 签批中 ──通过──▶ 已生效 ──开始修订──▶ 修订中 ──提交签批──▶ …
+
+    驳回与撤回都回到**可编辑态**：从未生效过的回 ``draft``，生效过的回 ``revising``
+    （判定走 ``approved_at`` 是否为空，见 ``utils/review_tailoring.py``）。没有
+    ``rejected`` / ``cancelled`` 这种终态 —— 驳回不是结局，是让人改完再提。
+    """
 
     DRAFT = "draft", "草稿"
     PENDING = "pending", "签批中"
     APPROVED = "approved", "已生效"
-    REJECTED = "rejected", "已驳回"
-    CANCELLED = "cancelled", "已取消"
+    REVISING = "revising", "修订中"
+
+
+class ReviewTailoringApprovalType(models.TextChoices):
+    """裁剪表的签批通过规则。
+
+    刻意不复用 ``RequirementApprovalType`` —— 那个枚举带 ``none``（无需评审），
+    裁剪表**必须**有人签批。借过来的话 DB 的 choices 会放行 none，只靠序列化器挡
+    等于把规则写了一半。
+    """
+
+    ANY = "any", "任一通过"
+    ALL = "all", "全部通过"
+    N_OF_M = "n_of_m", "指定人数通过"
+
+
+class ReviewTailoringApprovalAction(models.TextChoices):
+    """签批动作。``action`` 为空表示这一轮里这个人还没表态。"""
+
+    APPROVED = "approved", "通过"
+    REJECTED = "rejected", "驳回"
 
 
 class StageReviewTemplate(BaseModel):
@@ -294,8 +321,12 @@ class StageReviewTemplate(BaseModel):
 class StageReview(ProjectBaseModel):
     """评审实例：一条真正要执行的评审（或评审活动），绑定项目 + 产品。
 
-    由裁剪单勾选生成，也允许手工新建（``template`` 为空）。评审活动随它所属的评审一起
-    生成，不单独出现在裁剪矩阵里。
+    由裁剪表勾选生成，也允许手工新建（``template`` 为空）。评审与评审活动在裁剪矩阵里
+    各占一行、各自可勾，所以两者都可能被单独生成。
+
+    **同一 (项目, 产品, 模板项) 允许存在多条**：同一阶段下可以有多张裁剪表，两张表
+    各自勾中同一个格子就各生成一条评审（产品决策，2026-09-10）。所以生成时的去重只
+    看「本格子的 ``stage_review`` 指针是否为空」，不靠唯一约束兜底。
 
     产品与项目必须已经通过 ``ProductProject`` 建立关联 —— 这条跨表规则 DB 表达不了
     （workspace 在各自父表上），由写入口校验，同 ``ProductProject`` 的注释。
@@ -454,13 +485,6 @@ class StageReview(ProjectBaseModel):
                 | Q(kind__in=ACTIVITY_KINDS),
                 name="sr_kind_parent_consistent",
             ),
-            # 同一 (项目, 产品, 模板项) 只应存在一条评审 —— 裁剪重复勾选不能生成第二条。
-            # 手工新建的评审 template 为空，不受这条约束。
-            models.UniqueConstraint(
-                fields=["project", "product", "template"],
-                condition=Q(template__isnull=False, deleted_at__isnull=True),
-                name="sr_unique_project_product_template_active",
-            ),
         ]
 
     def clean(self):
@@ -573,16 +597,19 @@ class StageReviewComment(ProjectBaseModel):
 
 
 class ReviewTailoring(ProjectBaseModel):
-    """一次裁剪，也是一个修订版本。
+    """一张裁剪表：某项目某阶段下，「哪些产品要做哪些评审」的二维勾选表。
 
-    ``(project, stage, revision)`` 唯一；修订不是原地改，而是复制上一版明细开一张
-    ``revision + 1`` 的新单，走完签批置 ``approved`` 生效。**生效版本 = 该 (项目, 阶段)
-    下 status=approved 里 revision 最大的那张**，不另存 is_current 标志位，避免两个
-    事实来源对不上。
+    **原地修订**：已生效的表点「开始修订」进入 ``revising``，在同一张表上改勾选与
+    裁剪原因，再走一轮签批；通过时按差异新增 / 删除评审实例。不复制新表 —— 复制会
+    让「当前生效的是哪一张」变成需要推算的事实，而矩阵本身就是可以就地改的。
+    ``revision`` 只是**生效次数**（0 = 从未生效），不再是版本号。
 
-    签批人名单与通过规则暂时没落表 —— 要做成 any / all / n_of_m，照
-    ``RequirementChangeRequest`` + ``RequirementChangeApproval`` 那套加一张
-    ``ReviewTailoringApproval`` 即可，本表只留状态位。
+    **同一 (项目, 阶段) 允许多张表**（产品决策 2026-09-10）：按标题区分，各自签批、
+    各自生效，同一格子被两张表勾中就生成两条评审。所以这里没有任何跨表唯一约束。
+
+    签批人名单与通过规则落在 ``approval_type`` / ``required_count`` 与
+    ``ReviewTailoringApproval`` 行上，**按轮次（``round``）记账**：每提交一次
+    ``round += 1`` 并新建一批签批行，历史轮次原样留着当审计线索。
     """
 
     # project / workspace 由 ProjectBaseModel 提供
@@ -592,47 +619,84 @@ class ReviewTailoring(ProjectBaseModel):
         related_name="review_tailorings",
         verbose_name="裁剪阶段",
     )
-    revision = models.PositiveIntegerField(default=1, verbose_name="修订号")
+    title = models.CharField(max_length=255, verbose_name="标题")
+    # 富文本。口径同 StageReviewTemplate.description_html：只存一列 HTML。
+    description_html = models.TextField(blank=True, null=True, verbose_name="描述 HTML")
+    # 生效次数：0 = 从未生效。与 approved_at 互为冗余，由 CheckConstraint 钉住。
+    revision = models.PositiveIntegerField(default=0, verbose_name="生效次数")
     status = models.CharField(
         max_length=20,
         choices=ReviewTailoringStatus.choices,
         default=ReviewTailoringStatus.DRAFT,
         db_index=True,
-        verbose_name="签批状态",
+        verbose_name="状态",
     )
-    remark = models.TextField(blank=True, default="", verbose_name="裁剪 / 修订说明")
+    # ↓ 签批：规则挂在表头，只保留**最近一轮**；历史轮次的规则在提交活动的 extra 里。
+    # 草稿态还没配规则，所以允许空串（CheckConstraint 的第二支）。
+    approval_type = models.CharField(
+        max_length=10,
+        choices=ReviewTailoringApprovalType.choices,
+        blank=True,
+        default="",
+        verbose_name="签批通过规则",
+    )
+    required_count = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name="最少通过人数"
+    )
+    round = models.PositiveIntegerField(default=0, verbose_name="签批轮次")
+    # 撤回要判「是不是你提交的」，而修订的提交人未必是建表的人，所以不能用 created_by。
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submitted_review_tailorings",
+        verbose_name="本轮提交人",
+    )
     submitted_at = models.DateTimeField(
         null=True, blank=True, verbose_name="提交签批时间"
     )
-    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="生效时间")
+    approved_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="最近一次生效时间"
+    )
+    # 生效那一刻每个格子的 {selected, reason, stage_review_id}，供「取消修订」原样回滚。
+    # 修订期间不碰评审实例，所以这份快照足够还原，不需要另存历史明细表。
+    effective_snapshot = models.JSONField(
+        null=True, blank=True, verbose_name="生效快照"
+    )
 
     class Meta:
         db_table = "review_tailorings"
-        ordering = ("-revision", "-created_at")
+        ordering = ("-created_at",)
         verbose_name = "Review Tailoring"
         verbose_name_plural = "Review Tailorings"
+        indexes = [
+            models.Index(fields=["project", "stage"], name="rt_project_stage"),
+            models.Index(fields=["project", "status"], name="rt_project_status"),
+        ]
         constraints = [
-            models.UniqueConstraint(
-                fields=["project", "stage", "revision"],
-                condition=Q(deleted_at__isnull=True),
-                name="rt_unique_project_stage_revision_active",
-            ),
-            # 同一 (项目, 阶段) 同时只允许一张没走完的单，否则两个人各开一张会互相覆盖
-            models.UniqueConstraint(
-                fields=["project", "stage"],
-                condition=Q(
-                    status__in=[
-                        ReviewTailoringStatus.DRAFT,
-                        ReviewTailoringStatus.PENDING,
-                    ],
-                    deleted_at__isnull=True,
+            # 人数只对 n_of_m 有意义，口径同 req_change_required_count_consistent
+            models.CheckConstraint(
+                check=(
+                    Q(approval_type=ReviewTailoringApprovalType.N_OF_M)
+                    & Q(required_count__gte=1)
+                )
+                | (
+                    ~Q(approval_type=ReviewTailoringApprovalType.N_OF_M)
+                    & Q(required_count__isnull=True)
                 ),
-                name="rt_unique_open_per_project_stage",
+                name="rt_required_count_consistent",
+            ),
+            # revision 是 approved_at 的冗余计数，两者不允许对不上
+            models.CheckConstraint(
+                check=Q(approved_at__isnull=True, revision=0)
+                | Q(approved_at__isnull=False, revision__gte=1),
+                name="rt_revision_effective_consistent",
             ),
         ]
 
     def __str__(self):
-        return f"裁剪 r{self.revision} [{self.status}]"
+        return f"{self.title} [{self.status}]"
 
 
 class ReviewTailoringItem(BaseModel):
@@ -641,9 +705,9 @@ class ReviewTailoringItem(BaseModel):
     纵轴是树：评审与它下面的评审活动各占一行，都能单独勾。「勾了父不勾子」/「勾了子
     不勾父」分别生成什么，是生效编排要定的产品语义，本模型不做限制。
 
-    ``stage_review`` 记的是这个格子当前对应的评审实例。它是普通外键而不是一对一：
-    修订时未改动的勾选项会把上一版的实例原样带过来，同一条评审会被相邻两个修订版本
-    的格子同时引用。
+    ``stage_review`` 记的是这个格子当前对应的评审实例：生效时勾上且指针为空就新建一条
+    并回填，取消勾选就软删那条评审并把指针置空。**修订是原地改**，所以一个格子在任一
+    时刻最多指向一条评审，不存在两个版本共用一条的情况。
     """
 
     tailoring = models.ForeignKey(
@@ -670,6 +734,8 @@ class ReviewTailoringItem(BaseModel):
     # 标题快照，模板改名后历史单仍显示当时的口径
     title = models.CharField(max_length=255, verbose_name="评审标题（快照）")
     selected = models.BooleanField(default=False, verbose_name="是否需要")
+    # 「裁剪原因」：**未勾选**时必填（提交签批时校验，草稿态允许空）。勾上的格子这里恒为空。
+    reason = models.TextField(blank=True, default="", verbose_name="裁剪原因")
     stage_review = models.ForeignKey(
         StageReview,
         on_delete=models.SET_NULL,
@@ -708,3 +774,168 @@ class ReviewTailoringItem(BaseModel):
 
     def __str__(self):
         return f"{self.product_id} x {self.title} = {self.selected}"
+
+
+class ReviewTailoringApproval(BaseModel):
+    """一轮签批里某个人的表态。结构对齐 ``RequirementChangeApproval``。
+
+    **按轮次记账**：每次提交签批 ``ReviewTailoring.round`` 加一并新建一批行，判定
+    「谁还没表态」一律 ``filter(round=tailoring.round)``。历史轮次的行留着当审计线索，
+    不删也不复用 —— 驳回后改一改再提是常态，复用行会把两次表态搅成一次。
+    """
+
+    tailoring = models.ForeignKey(
+        ReviewTailoring,
+        on_delete=models.CASCADE,
+        related_name="approvals",
+        verbose_name="所属裁剪表",
+    )
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="review_tailoring_approvals",
+        verbose_name="签批人",
+    )
+    round = models.PositiveIntegerField(default=1, verbose_name="第几轮签批")
+    action = models.CharField(
+        max_length=20,
+        choices=ReviewTailoringApprovalAction.choices,
+        null=True,
+        blank=True,
+        verbose_name="签批动作（null 表示尚未表态）",
+    )
+    comment = models.TextField(blank=True, default="", verbose_name="签批意见")
+    acted_at = models.DateTimeField(null=True, blank=True, verbose_name="表态时间")
+
+    class Meta:
+        db_table = "review_tailoring_approvals"
+        ordering = ("tailoring", "round", "created_at")
+        verbose_name = "Review Tailoring Approval"
+        verbose_name_plural = "Review Tailoring Approvals"
+        indexes = [
+            models.Index(fields=["tailoring", "round"], name="rta_tailoring_round"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tailoring", "round", "approver"],
+                condition=Q(deleted_at__isnull=True),
+                name="rta_unique_tailoring_round_approver_active",
+            ),
+        ]
+
+    def __str__(self):
+        return f"r{self.round} {self.approver_id} [{self.action or '待签批'}]"
+
+
+class ReviewTailoringActivity(ProjectBaseModel):
+    """裁剪表的变更历史。字段形状对齐 ``ReleaseActivity`` / ``IssueActivity``。
+
+    **同步写入**，与产生它的动作在同一个事务里 —— 与 release / cycle / issue 的活动
+    不同，那几套挂在通用写路径上、量大且与主流程无关，所以走 Celery；这里的事件全部
+    由裁剪表自己的几个动作产生，异步化换不来什么，却会带来「生效了但历史丢了」。
+    """
+
+    tailoring = models.ForeignKey(
+        ReviewTailoring,
+        on_delete=models.CASCADE,
+        related_name="activities",
+        verbose_name="所属裁剪表",
+    )
+    verb = models.CharField(max_length=255, default="created", verbose_name="动作")
+    field = models.CharField(
+        max_length=255, blank=True, null=True, verbose_name="字段名"
+    )
+    old_value = models.TextField(blank=True, null=True, verbose_name="旧值")
+    new_value = models.TextField(blank=True, null=True, verbose_name="新值")
+    comment = models.TextField(blank=True, default="", verbose_name="说明")
+    tailoring_comment = models.ForeignKey(
+        "db.ReviewTailoringComment",
+        on_delete=models.SET_NULL,
+        related_name="comment_activities",
+        null=True,
+        blank=True,
+        verbose_name="关联评论",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="review_tailoring_activities",
+        verbose_name="操作人",
+    )
+    old_identifier = models.UUIDField(null=True)
+    new_identifier = models.UUIDField(null=True)
+    epoch = models.FloatField(null=True)
+    # 格子级变更把 product_id / template_id 放这里，前端才能把「XX 产品的 XX 评审」拼出来
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "review_tailoring_activities"
+        ordering = ("created_at",)
+        verbose_name = "Review Tailoring Activity"
+        verbose_name_plural = "Review Tailoring Activities"
+        indexes = [
+            models.Index(
+                fields=["tailoring", "created_at"], name="rtact_tailoring_created"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.tailoring_id} {self.field} {self.verb}"
+
+
+class ReviewTailoringComment(ProjectBaseModel):
+    """裁剪表下的评论。结构对齐 ``StageReviewComment`` / ``ReleaseComment``。
+
+    评论里的内联图片走 ``PROJECT_DESCRIPTION`` 资产（同发布单详情的富文本），不另开
+    entity_type —— 再开一个要连带改 ``FileAsset`` 的外键、``file_path`` 的解析分支和
+    资产目录树三处，评论图片撑不起这个成本。
+    """
+
+    tailoring = models.ForeignKey(
+        ReviewTailoring,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        verbose_name="所属裁剪表",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="review_tailoring_comments",
+        null=True,
+        verbose_name="评论人",
+    )
+    comment_html = models.TextField(blank=True, default="<p></p>")
+    comment_json = models.JSONField(blank=True, default=dict)
+    comment_stripped = models.TextField(blank=True, default="")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        verbose_name="父评论",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True, verbose_name="编辑时间")
+
+    class Meta:
+        db_table = "review_tailoring_comments"
+        ordering = ("-created_at",)
+        verbose_name = "Review Tailoring Comment"
+        verbose_name_plural = "Review Tailoring Comments"
+        indexes = [
+            models.Index(
+                fields=["tailoring", "-created_at"], name="rtc_tailoring_created"
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.comment_stripped = (
+            strip_tags(self.comment_html) if self.comment_html else ""
+        )
+        if not self.project_id and self.tailoring_id:
+            self.project_id = self.tailoring.project_id
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.tailoring_id} {self.actor_id}"

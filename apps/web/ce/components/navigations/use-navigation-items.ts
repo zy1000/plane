@@ -21,6 +21,7 @@ import {
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
+  PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
   PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
   PROJECT_VIEWS_VIEW_PERMISSION_KEY,
   PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY,
@@ -37,7 +38,7 @@ import {
 } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, Bug, Folder, Milestone, Package, Rocket, Rss } from "lucide-react";
+import { ArchiveIcon, Bug, Folder, Milestone, Package, Rocket, Rss, Scissors } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -151,6 +152,19 @@ export const useNavigationItems = ({
         permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
         shouldRender: !!project?.module_view,
         sortOrder: 3.5,
+      },
+      {
+        // 评审裁剪：排在发布之后、里程碑之前 —— 它决定的是「这个阶段要做哪些评审」，
+        // 与发布、里程碑同属项目节奏这一组
+        i18n_key: "sidebar.review_tailorings",
+        key: "review_tailorings",
+        name: "评审裁剪",
+        href: `/${workspaceSlug}/projects/${projectId}/review-tailorings`,
+        icon: Scissors,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
+        shouldRender: true,
+        sortOrder: 3.7,
       },
       {
         i18n_key: "sidebar.milestones",

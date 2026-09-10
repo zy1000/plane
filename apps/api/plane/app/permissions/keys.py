@@ -74,6 +74,10 @@ class PermissionKey(str, Enum):
     PROJECT_REQUIREMENT_LINK_VIEW = "project.requirement_link.view"
     PROJECT_REQUIREMENT_LINK_MANAGE = "project.requirement_link.manage"
     PROJECT_PRODUCT_LINK_MANAGE = "project.product_link.manage"
+    # 评审裁剪（ReviewTailoring）。签批动作不单独给 key —— 能不能签批由「是不是本轮
+    # 签批人」判定，多一个 key 只会让配错权限的人以为自己能签批。
+    PROJECT_REVIEW_TAILORING_VIEW = "project.review_tailoring.view"
+    PROJECT_REVIEW_TAILORING_MANAGE = "project.review_tailoring.manage"
     # 工作项 CRUD/归档权限按 IssueType 动态衍生为 project.issue_type.<id_hex>.<action>，
     # 见 plane.db.models.issue_type.build_issue_type_permission_key。
     ISSUE_COMMENT_CREATE = "issue.comment.create"

@@ -9,7 +9,10 @@ import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 
 /** none 排最前：它是「走不走评审」的开关，与后面三条「怎么评」不是一个层级 */
-const approvalTypes: TRequirementApprovalType[] = ["none", "any", "all", "n_of_m"];
+const DEFAULT_APPROVAL_TYPES: TRequirementApprovalType[] = ["none", "any", "all", "n_of_m"];
+
+/** 规则文案的默认命名空间。评审裁剪复用这套控件但有自己的一份文案，见 approvalTypes 注释 */
+const DEFAULT_LABEL_I18N_PREFIX = "workspace_products.requirements.approval";
 
 type TRequirementApprovalRuleFieldsProps = {
   memberOptions: IUserLite[];
@@ -23,6 +26,16 @@ type TRequirementApprovalRuleFieldsProps = {
   radioGroupName?: string;
   /** 评审人字段下方的提示，例如评审人为空时的「请至少选择一名评审人」 */
   approversHelp?: string;
+  /**
+   * 可选的规则子集。评审裁剪必须有人签批，所以它传三值把 none 去掉 ——
+   * 与其在这里写 if，不如让调用方声明自己允许哪几条。
+   */
+  approvalTypes?: TRequirementApprovalType[];
+  /** 规则名与字段名的文案命名空间。裁剪表有自己的一份文案，不蹭需求的 */
+  labelI18nPrefix?: string;
+  approversLabel?: string;
+  approversPlaceholder?: string;
+  ruleLabel?: string;
 };
 
 /** 标签在上、控件在下，与产品通用设置其它字段同一套排布，字段间不加分割线 */
@@ -72,13 +85,21 @@ export function RequirementApprovalRuleFields({
   className,
   radioGroupName = "requirement-change-approval-type",
   approversHelp,
+  approvalTypes = DEFAULT_APPROVAL_TYPES,
+  labelI18nPrefix = DEFAULT_LABEL_I18N_PREFIX,
+  approversLabel,
+  approversPlaceholder,
+  ruleLabel,
 }: TRequirementApprovalRuleFieldsProps) {
   const { t } = useTranslation();
   const isApproverDisabled = approvalType === "none";
 
   return (
     <div className={cn("space-y-6", className)}>
-      <SettingsField label={t("workspace_products.requirements.fields.approvers")} help={approversHelp}>
+      <SettingsField
+        label={approversLabel ?? t("workspace_products.requirements.fields.approvers")}
+        help={approversHelp}
+      >
         <div className="h-10 w-full">
           <MemberDropdown
             multiple
@@ -90,13 +111,13 @@ export function RequirementApprovalRuleFields({
             className="h-full w-full"
             buttonClassName="h-full w-full border !border-subtle bg-surface-1"
             buttonContainerClassName="h-full w-full"
-            placeholder={t("workspace_products.requirements.fields.select_approvers")}
+            placeholder={approversPlaceholder ?? t("workspace_products.requirements.fields.select_approvers")}
             showUserDetails
           />
         </div>
       </SettingsField>
 
-      <SettingsField label={t("workspace_products.requirements.fields.approval_rule")}>
+      <SettingsField label={ruleLabel ?? t("workspace_products.requirements.fields.approval_rule")}>
         <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
           {approvalTypes.map((value) => {
             const isSelected = approvalType === value;
@@ -116,7 +137,7 @@ export function RequirementApprovalRuleFields({
                   onChange={() => onApprovalTypeChange(value)}
                   className="accent-accent-primary size-3.5 shrink-0"
                 />
-                <span className="font-medium">{t(`workspace_products.requirements.approval.${value}`)}</span>
+                <span className="font-medium">{t(`${labelI18nPrefix}.${value}`)}</span>
                 {value === "n_of_m" && (
                   /* 计数常驻这一行，不随选中长出来 —— 长出来就会把整块撑高 */
                   <span className="ml-auto flex items-center gap-1.5 text-11 text-secondary">

@@ -50,6 +50,15 @@ export type TNotificationData = {
     requirement_count: number;
     requirement_titles: string[];
   };
+  /** 评审裁剪签批通知专用。裁剪表是项目级的，所以 project 不为空 */
+  review_tailoring?: {
+    id: string;
+    project_id: string;
+    title: string;
+    stage_label: string;
+    status: string;
+    revision: number;
+  };
 };
 
 export type TNotification = {

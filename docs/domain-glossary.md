@@ -15,6 +15,7 @@
 | qa 测试 | TestHub：用例/计划/执行/评审/报表（体量最大） | 混合，见下 | `qa/` | `components/qa/` |
 | timesheet 工时 | 工时填报与报表 | project + workspace | `timesheet/` | `components/timesheets/` |
 | milestone 里程碑 | 最轻量，1 个 model | project | `milestone/` | **无组件目录**，内联在路由页 |
+| stage_review 阶段评审 | 模板（工作区）→ 裁剪（项目）→ 评审实例；裁剪表是「产品 × 评审」的勾选矩阵 | 混合，见下 | `stage_review/` | `components/template-management/reviews/` + `components/review-tailorings/` |
 | workflow 工作流审批 | 状态流转审批，**与 requirement 审批完全是两套机制** | project | `workflow/` | `components/project-workflows/` |
 | changelog 更新公告 | 后端叫 changelog，**前端叫 releasenote** | instance 全局 | `changelog.py`（单文件） | `core/modules/releasenote/` |
 | custom | 不是业务模块，是四个定制端点的杂物抽屉 | — | `custom/` | — |
@@ -209,6 +210,55 @@
 - `update_state()` 按 start_date / end_date 自动推算状态，「已完成」**不可逆**。
 - 前端**没有 components 目录**（`components/milestone/` 是空的），页面和弹窗全部内联在 `app/.../[projectId]/milestones/` 下。
 
+## stage_review（阶段评审 / 评审裁剪）
+
+`db/models/stage_review.py` 一个文件装三层，**改动前先读文件顶部的模块 docstring**。命名一律带 `StageReview` 前缀 —— 本仓库「评审」已经有需求变更评审和 QA 用例评审两个既有含义。
+
+### 三层关系
+
+1. **模板 `StageReviewTemplate`** —— 工作区级标准流程，树最多两层：评审恒在顶层，评审活动挂在同族评审下**或直接挂在阶段下**（O-SV1 / O-C / O-T1 三个阶段没有汇总评审）。没有「模板头」表，*阶段 + 这棵树* 就是模板。
+2. **裁剪 `ReviewTailoring` + `ReviewTailoringItem`** —— 项目级二维矩阵：横轴产品（来自 `ProductProject`）、纵轴该阶段模板树全部节点。勾上 = 要做，不勾 = 裁剪掉且**必须填 `reason`**（提交签批时校验）。
+3. **评审实例 `StageReview`** —— 裁剪签批生效时按勾选生成，绑定项目 + 产品。评审活动同样落这张表（`kind ∈ ACTIVITY_KINDS` + `parent`），不是独立表。
+
+**阶段不新建表**，直接引用 `product_stage` 数据字典的值（`Product.stage` 引用的就是它）。要让评审阶段与产品阶段分家，新建一个 `review_stage` 字典 key 即可，外键指向不变。
+
+`kind` 四值编码了**两件事**（层级 × 是否 O 阶段），所以判定层级走 `ROOT_KINDS` / `ACTIVITY_KINDS`、判定 O 阶段走 `O_STAGE_KINDS`，别在业务代码里写 `kind == "review"`。
+
+### 裁剪的状态机（2026-09-10）
+
+`draft → pending → approved → revising → pending → …`，**没有终态**：驳回与撤回都回到可编辑态，从未生效过回 `draft`、生效过回 `revising`（判据是 `approved_at` 是否为空，`_editable_status()`）。`revision` 是**生效次数**（0 = 从未生效），不是版本号；`round` 是签批轮次，每提交一次 +1 并新建一批 `ReviewTailoringApproval` 行，历史轮次留着当审计线索。
+
+**修订是原地改**，不复制新表 —— 生效那一刻把每个格子的 `{selected, reason, stage_review_id}` 写进 `effective_snapshot`，「取消修订」按它回滚，快照之外的格子（修订期 `sync_items` 补进来的）硬删。
+
+**同一 (项目, 阶段) 允许多张表**，同一格子被两张表勾中就生成两条评审（产品决策）。所以 `sr_unique_project_product_template_active` 与两条 `rt_unique_*` 已在迁移 `0364` 删除，生成时的去重只看「本格子 `stage_review` 指针是否为空」。
+
+### 必须记住的三个陷阱
+
+- **软删级联是异步 Celery 任务**（`db/mixins.py:72` 的 `soft_delete_related_objects.delay`），投递发生在事务提交之前、没有 worker 就永远不跑。所以 `_apply_effective` 删评审**不调 `instance.delete()`**，而是 queryset 级删除 + 手动置空 `ReviewTailoringItem.stage_review` + 手动删评论与附件（见 `_delete_stage_reviews`）。**新写「删一批带反向引用的行」时照此办理。**
+- 同一个任务把 **PROTECT 当 CASCADE** 处理，所以模板的 `destroy` 不能靠 `ReviewTailoringItem.template` 的 PROTECT 兜底 —— `views/stage_review/template.py` 自己查引用后返 409 `STAGE_REVIEW_TEMPLATE_IN_USE`，引导改停用。
+- `bulk_create` 绕过 `save()`：建格子要显式给 `title` 快照与 `created_by`，建评审要显式给 `workspace/project/product/stage/sort_order`（`save()` 里那段从 parent 抄的传播不会跑）。父子分两批、先根后子。
+
+### 权限
+
+模板库是工作区级 `workspace.review_template.view/manage`（迁移 `0363`）；裁剪是项目级 `project.review_tailoring.view/manage`（迁移 `0365`，授予来源 key 分别是 `project.requirement_link.view` 与 `project.product_link.manage`）。**签批没有单独的 key** —— 能不能签批由「是不是本轮签批人」判定，`act` 端点只要 view。
+
+### 文件落点
+
+| 层 | 路径 |
+|---|---|
+| Model | `db/models/stage_review.py`（模板 / 裁剪 / 评审 / 签批 / 活动 / 评论 共 7 个 model） |
+| 领域编排 | `utils/review_tailoring.py`（状态机 + 生效编排）、`utils/review_tailoring_notification.py`、`utils/stage_review_template.py`（模板 bootstrap） |
+| Views | `app/views/stage_review/template.py`（工作区级）/ `tailoring.py`（项目级，含评论与活动端点） |
+| Serializers | `app/serializers/stage_review_template.py` / `review_tailoring.py` |
+| URLs | `app/urls/stage_review.py`（两套路由都在这个文件里） |
+| 预置数据 | `db/seed_data/stage_review_templates.py`（10 阶段 / 7 根评审 / 59 活动，零 import 的纯常量模块，迁移与运行时共用） |
+| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限） |
+| 前端类型 | `packages/types/src/stage-review-template.ts`、`review-tailoring.ts` |
+| 前端 service | `core/services/stage-review-template.service.ts`、`review-tailoring.service.ts` |
+| 前端 hook | `core/hooks/store/use-stage-review-templates.ts`、`use-review-tailorings.ts`、`use-review-tailoring-detail.ts`、`use-review-tailoring-feed.ts`（**都走局部 state，不进 MobX root store**） |
+| 前端组件 | `core/components/template-management/reviews/`（模板库）、`core/components/review-tailorings/`（裁剪） |
+| 前端页面 | `templates/reviews/`（工作区）、`projects/(detail)/[projectId]/review-tailorings/`（项目，列表 + 详情两组路由） |
+
 ## workflow（工作流审批）
 
 `db/models/workflow.py`（510 行）。**与 requirement 的审批是两套完全独立的机制，不要互相参照实现。**
@@ -246,6 +296,8 @@ Product (workspace 级，与 Project 无 FK)
 
 Project (原生)
   ├─FK×3(RESTRICT)── DataDictionaryItem                （所属BU/项目状态/项目类型，0348）
+  ├── ReviewTailoring ──Item──▶ (Product × StageReviewTemplate)
+  │        └─生效时生成─▶ StageReview ──FK── Product / DataDictionaryItem(阶段)
   ├─FK(SET_NULL)── User (product_manager，不进 ProjectMember)
   ├── Release ──ReleaseIssue── Issue
   ├── Milestone ──M2M── Issue                     （完全孤立，不连 Release/Cycle/baseline）

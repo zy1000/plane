@@ -343,6 +343,28 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/pages/(list)/page.tsx"
             ),
           ]),
+          // Review Tailorings List
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(list)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/review-tailorings",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(list)/page.tsx"
+              ),
+            ]
+          ),
+
+          // Review Tailoring Detail
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(detail)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/review-tailorings/:tailoringId",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(detail)/[tailoringId]/page.tsx"
+              ),
+            ]
+          ),
+
           // Milestones List
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(list)/layout.tsx", [
             route(

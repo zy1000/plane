@@ -53,6 +53,12 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
    */
   const requirementChangeRequest = notification?.data?.requirement_change_request;
   const isRequirementNotification = Boolean(requirementChangeRequest);
+  /**
+   * 裁剪表签批通知。它有 project，闸门那关本来就过得去，但下面的跳转要求 issueId ——
+   * 不单独分派的话点开既不标已读也不跳转。
+   */
+  const reviewTailoring = notification?.data?.review_tailoring;
+  const isTailoringNotification = Boolean(reviewTailoring);
 
   const markRead = async () => {
     if (notification.read_at !== null) return;
@@ -72,6 +78,17 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
     if (!productId || !requirementChangeRequest) return;
     router.push(
       `/${workspaceSlug}/products/${productId}/requirements?tab=changes&cr=${requirementChangeRequest.id}`
+    );
+  };
+
+  /** 裁剪表签批通知点开就去那张表 */
+  const handleTailoringNotification = async () => {
+    if (isSnoozeStateModalOpen || customSnoozeModal) return;
+    setCurrentSelectedNotificationId(notificationId);
+    await markRead();
+    if (!reviewTailoring) return;
+    router.push(
+      `/${workspaceSlug}/projects/${reviewTailoring.project_id}/review-tailorings/${reviewTailoring.id}`
     );
   };
 
@@ -113,7 +130,13 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
           "bg-accent-primary/5": notification.read_at === null,
         }
       )}
-      onClick={isRequirementNotification ? handleRequirementNotification : handleNotificationIssuePeekOverview}
+      onClick={
+        isRequirementNotification
+          ? handleRequirementNotification
+          : isTailoringNotification
+            ? handleTailoringNotification
+            : handleNotificationIssuePeekOverview
+      }
     >
       {notification.read_at === null && (
         <div className="absolute top-[50%] left-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-primary" />
@@ -155,8 +178,19 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
           <div className="relative flex items-center gap-3 text-caption-sm-regular text-secondary">
             <div className="line-clamp-1 w-full truncate overflow-hidden break-words whitespace-normal">
-              {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
-              {notification?.data?.issue?.name}
+              {isTailoringNotification ? (
+                /* 裁剪表通知没有 issue，照原样渲染会剩一个孤零零的「-」 */
+                <>
+                  {reviewTailoring?.stage_label}
+                  {reviewTailoring?.stage_label && reviewTailoring?.title ? " · " : ""}
+                  {reviewTailoring?.title}
+                </>
+              ) : (
+                <>
+                  {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
+                  {notification?.data?.issue?.name}
+                </>
+              )}
             </div>
             <div className="flex-shrink-0">
               {notification?.snoozed_till ? (

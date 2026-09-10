@@ -125,8 +125,27 @@ class StageReviewTemplateViewSet(BaseViewSet):
                 {"error": "Stage review template not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        # 删评审会连带软删它下面的评审活动（parent CASCADE + soft_delete_related_objects）。
-        # 已经被裁剪单引用过的模板由 ReviewTailoringItem 的 PROTECT 兜住。
+        # PROTECT 在这里**兜不住**：软删走的是 soft_delete_related_objects 任务，
+        # 它把 PROTECT 当 CASCADE 处理（bgtasks/deletion_task.py），会把引用这个模板的
+        # 裁剪格子一起软删掉，历史裁剪表就少了一行且没人知道为什么。所以自己挡在前面。
+        if (
+            template.tailoring_items.exists()
+            or template.stage_reviews.exists()
+            or StageReviewTemplate.objects.filter(parent=template)
+            .filter(
+                Q(tailoring_items__isnull=False) | Q(stage_reviews__isnull=False)
+            )
+            .exists()
+        ):
+            return Response(
+                {
+                    "error": "This template is used by a tailoring or a review. "
+                    "Disable it instead of deleting.",
+                    "code": "STAGE_REVIEW_TEMPLATE_IN_USE",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        # 删评审会连带软删它下面的评审活动（parent CASCADE + soft_delete_related_objects）
         template.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

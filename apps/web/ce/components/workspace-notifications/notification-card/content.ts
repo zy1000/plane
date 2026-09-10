@@ -35,6 +35,27 @@ export const ADDITIONAL_NOTIFICATION_CONTENT_MAP: TNotificationContentMap = {
     value: newValue || null,
     showConnector: true,
   }),
+  // 评审裁剪签批。newValue 是「阶段 · 标题」，由后端拼好
+  review_tailoring_approval_request: ({ newValue }) => ({
+    action: "提交了裁剪表签批",
+    value: newValue || null,
+    showConnector: true,
+  }),
+  review_tailoring_approval_approved: ({ newValue }) => ({
+    action: "通过了裁剪表签批",
+    value: newValue || null,
+    showConnector: true,
+  }),
+  review_tailoring_approval_rejected: ({ newValue }) => ({
+    action: "驳回了裁剪表签批",
+    value: newValue || null,
+    showConnector: true,
+  }),
+  review_tailoring_approval_withdrawn: ({ newValue }) => ({
+    action: "撤回了裁剪表签批",
+    value: newValue || null,
+    showConnector: true,
+  }),
 };
 
 // Fallback action renderer for fields not in the map
