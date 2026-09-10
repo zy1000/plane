@@ -357,7 +357,8 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId, variant = 
       ) : null}
 
       <Transition.Root show={isOpen} as={React.Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={() => setIsOpen(false)}>
+        {/* data-prevent-outside-click：弹窗 portal 在抽屉外，否则点击会被详情抽屉判定为外部点击而连带关闭 */}
+        <Dialog as="div" className="relative z-50" onClose={() => setIsOpen(false)} data-prevent-outside-click>
           <Transition.Child
             as={React.Fragment}
             enter="ease-out duration-200"
