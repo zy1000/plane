@@ -4,26 +4,25 @@ import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
 
-export type ReviewCaseReviewerStatus = {
-  assignee: string;
-  result: string | null;
-  reviewed: boolean;
-};
+/** 当前用户在这条用例上的身份：不是本条评审人时为 null */
+export type ReviewCaseMineState = "todo" | "done" | null;
+
 export type ReviewCaseListItem = {
   id: string;
   case_id: string;
   code?: string;
   name: string;
   priority: number;
-  /** 本条用例的评审人（用例级，不是评审单级） */
-  assignees: string[];
   result: string;
   created_by: string | null;
   repository?: string | null;
   module?: string | null;
   suggestion_count: number;
-  reviewer_statuses: ReviewCaseReviewerStatus[];
-  unreviewed_assignees: string[];
+  /** 本条用例的评审人（用例级）。卡片列表用 slim=true 拉取时不下发 */
+  assignees?: string[];
+  mine: ReviewCaseMineState;
+  /** 待评审人头像用，服务端最多下发 5 个；真实待评审人数看 reviewer_count - reviewed_count */
+  pending_assignees: string[];
   reviewed_count: number;
   reviewer_count: number;
 };
@@ -122,6 +121,8 @@ export class CaseService extends APIService {
     review_id: string,
     queries?: {
       all?: boolean;
+      /** 只要卡片用得到的字段，不下发每行的评审人 id */
+      slim?: boolean;
       page?: number;
       page_size?: number;
       project_id?: string | null;

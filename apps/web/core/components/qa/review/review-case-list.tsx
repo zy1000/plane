@@ -9,7 +9,7 @@ type Props = {
   selectedCaseId?: string;
   suggestionCounts: Record<string, number>;
   reviewEnums: Record<string, Record<string, { label: string; color: string }>>;
-  onSelect: (caseId: string, assignees?: Array<string>) => void;
+  onSelect: (caseId: string, mine: ReviewCaseListItem["mine"]) => void;
   emptyText: string;
 };
 

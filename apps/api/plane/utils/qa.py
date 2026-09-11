@@ -149,11 +149,19 @@ def re_approval_case(case: TestCase):
         update_case_review_status(crt.review, crt)
 
 
-def build_review_case_rows(rows):
+# 卡片上待评审头像最多显示 5 个，剩下的只用数字表示，评审人多的评审不必把全量 id 发给前端
+PENDING_ASSIGNEE_PREVIEW = 5
+
+
+def build_review_case_rows(rows, current_user_id=None, include_assignees=True):
     """把 values() 取出的评审用例扁平行拼成列表接口的返回结构。
 
     一次评审能挂上千条用例，让 ORM 逐行实例化 case/repository/module/review 会占掉接口大半耗时，
     这里改成整页一次性取评审人、评审结论和建议数，再在内存里拼。
+
+    include_assignees=False 时不下发整行的评审人 id（评审页的卡片列表一次要上千行，
+    这些 uuid 能占掉响应体的一多半，它只需要「我在这条上是什么身份」和几个待评审头像）；
+    评审详情页的表格要编辑评审人，仍然取全量。
     """
     rows = list(rows)
     if not rows:
@@ -193,37 +201,38 @@ def build_review_case_rows(rows):
         .annotate(count=Count("id"))
     }
 
+    current_user_id = str(current_user_id) if current_user_id else None
     data = []
     for row in rows:
         crt_id = row["id"]
         assignee_ids = assignees_by_crt.get(crt_id, [])
         last_result = last_result_by_crt.get(crt_id, {})
-        reviewer_statuses = []
         unreviewed_assignees = []
         for assignee_id in assignee_ids:
             result = last_result.get(assignee_id)
             reviewed = bool(result) and str(result) != str(CaseReviewRecord.Result.RE_REVIEW)
-            reviewer_statuses.append(
-                {"assignee": assignee_id, "result": result, "reviewed": reviewed}
-            )
             if not reviewed:
                 unreviewed_assignees.append(assignee_id)
+        if current_user_id and current_user_id in assignee_ids:
+            mine = "todo" if current_user_id in unreviewed_assignees else "done"
+        else:
+            mine = None
         created_by_id = row["created_by_id"]
         data.append(
             {
                 "id": str(crt_id),
                 "name": row["case__name"],
                 "priority": row["case__priority"],
-                "assignees": assignee_ids,
                 "result": row["result"],
+                **({"assignees": assignee_ids} if include_assignees else {}),
                 "created_by": str(created_by_id) if created_by_id else None,
                 "case_id": str(row["case_id"]),
                 "code": row["case__code"],
                 "repository": row["case__repository__name"],
                 "module": row["case__module__name"],
                 "suggestion_count": suggestion_counts.get(crt_id, 0),
-                "reviewer_statuses": reviewer_statuses,
-                "unreviewed_assignees": unreviewed_assignees,
+                "mine": mine,
+                "pending_assignees": unreviewed_assignees[:PENDING_ASSIGNEE_PREVIEW],
                 "reviewed_count": len(assignee_ids) - len(unreviewed_assignees),
                 "reviewer_count": len(assignee_ids),
             }

@@ -363,13 +363,21 @@ class CaseReviewView(BaseViewSet):
             "case__repository__name",
             "case__module__name",
         )
+        # slim=true 的调用方（评审页卡片列表）不需要每行的评审人 id，只看 mine 和待评审头像
+        slim = str(request.query_params.get("slim", "")).strip().lower() in {"1", "true", "yes"}
         all_param = str(request.query_params.get("all", "")).strip().lower()
         if all_param in {"1", "true", "yes"}:
             rows = list(query)
-            return list_response(data=build_review_case_rows(rows), count=len(rows))
+            return list_response(
+                data=build_review_case_rows(rows, request.user.id, include_assignees=not slim),
+                count=len(rows),
+            )
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
-        return list_response(data=build_review_case_rows(paginated_queryset), count=query.count())
+        return list_response(
+            data=build_review_case_rows(paginated_queryset, request.user.id, include_assignees=not slim),
+            count=query.count(),
+        )
 
     @transaction.atomic
     @action(detail=False, methods=['post'], url_path='case-review')

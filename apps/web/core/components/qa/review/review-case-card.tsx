@@ -11,7 +11,7 @@ type Props = {
   isActive: boolean;
   suggestionCount: number;
   resultColor: string;
-  onSelect: (caseId: string, assignees?: Array<string>) => void;
+  onSelect: (caseId: string, mine: ReviewCaseListItem["mine"]) => void;
 };
 
 // 单条评审用例卡片。列表量级可达千条,这里用 observer + memo 隔离重渲:
@@ -22,35 +22,29 @@ export const ReviewCaseCard: React.FC<Props> = observer((props) => {
 
   const caseId = String(item.case_id ?? item.id);
   const showBadge = suggestionCount > 0;
-  const reviewerStatuses = Array.isArray(item.reviewer_statuses) ? item.reviewer_statuses : [];
-  const reviewerCount = Number(
-    item.reviewer_count ?? (Array.isArray(item.assignees) ? item.assignees.length : reviewerStatuses.length)
-  );
-  const fallbackUnreviewed = reviewerStatuses
-    .filter((status) => !Boolean(status?.reviewed))
-    .map((status) => String(status?.assignee || ""))
-    .filter((id) => Boolean(id));
-  const unreviewedAssignees = (Array.isArray(item.unreviewed_assignees) ? item.unreviewed_assignees : fallbackUnreviewed)
+  const reviewerCount = Math.max(Number(item.reviewer_count || 0), 0);
+  const safeReviewedCount = Math.min(Math.max(Number(item.reviewed_count || 0), 0), reviewerCount);
+  const pendingCount = reviewerCount - safeReviewedCount;
+  const progressPercent = reviewerCount > 0 ? Math.round((safeReviewedCount / reviewerCount) * 100) : 0;
+  // 服务端只下发前几个待评审人用来出头像,超出的部分用数字补
+  const pendingAvatarIds = (Array.isArray(item.pending_assignees) ? item.pending_assignees : [])
     .map((assigneeId) => String(assigneeId || ""))
     .filter((id) => Boolean(id));
-  const reviewedCount = Number(item.reviewed_count ?? Math.max(reviewerCount - unreviewedAssignees.length, 0));
-  const safeReviewedCount = Math.min(Math.max(reviewedCount, 0), Math.max(reviewerCount, 0));
-  const pendingCount =
-    reviewerCount > 0 ? Math.max(unreviewedAssignees.length, reviewerCount - safeReviewedCount) : 0;
-  const progressPercent = reviewerCount > 0 ? Math.round((safeReviewedCount / reviewerCount) * 100) : 0;
-  const pendingNames = unreviewedAssignees
+  const extraPendingCount = Math.max(pendingCount - pendingAvatarIds.length, 0);
+  const pendingNames = pendingAvatarIds
     .map((assigneeId) => getUserDetails(assigneeId)?.display_name || "未知用户")
     .join("、");
-  const pendingTooltip = pendingCount > 0 ? `待评审：${pendingNames || "成员信息加载中"}` : "";
-  const pendingAvatarIds = unreviewedAssignees.slice(0, 5);
-  const extraPendingCount = Math.max(pendingCount - pendingAvatarIds.length, 0);
+  const pendingTooltip =
+    pendingCount > 0
+      ? `待评审：${pendingNames || "成员信息加载中"}${extraPendingCount > 0 ? ` 等 ${pendingCount} 人` : ""}`
+      : "";
 
   return (
     <Card
       data-case-id={caseId}
       bordered
       hoverable
-      onClick={() => onSelect(caseId, item.assignees)}
+      onClick={() => onSelect(caseId, item.mine)}
       className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow relative !overflow-visible`}
     >
       {showBadge && (

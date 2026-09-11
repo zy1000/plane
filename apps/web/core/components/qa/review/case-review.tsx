@@ -151,7 +151,7 @@ export default function CaseReview() {
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
   const [isCaseModalOpen, setIsCaseModalOpen] = React.useState<boolean>(false);
   const { activeKey: activeFilterKey, setActiveKey: setActiveFilterKey, filters, filteredCases, isFiltering } =
-    useReviewCaseFilter(cases, currentUser?.id ? String(currentUser.id) : undefined);
+    useReviewCaseFilter(cases);
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
@@ -251,6 +251,8 @@ export default function CaseReview() {
       const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
         all: true,
+        // 卡片只用得到 mine 和待评审头像，别把每行的评审人 id 全拉回来
+        slim: true,
         ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
         ...(repositoryId ? { repository_id: repositoryId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
@@ -646,10 +648,8 @@ export default function CaseReview() {
 
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case_id ?? item.id) === String(selectedCaseId || ""));
-    const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
-    setIsCurrentUserReviewer(isReviewer);
-  }, [cases, selectedCaseId, currentUser?.id]);
+    setIsCurrentUserReviewer(Boolean(row?.mine));
+  }, [cases, selectedCaseId]);
 
   React.useEffect(() => {
     setActiveTab("basic");
@@ -658,18 +658,15 @@ export default function CaseReview() {
   React.useEffect(() => {
     if (!selectedCaseId) return;
     const row = cases.find((item) => String(item.case_id ?? item.id) === String(selectedCaseId || ""));
-    const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
-    setReviewValue(isReviewer ? "通过" : "建议");
+    setReviewValue(row?.mine ? "通过" : "建议");
     setReason("");
-  }, [selectedCaseId, cases, currentUser?.id]);
+  }, [selectedCaseId, cases]);
 
   // 选中某条用例:更新选中态、按评审人重置默认评审值、加载详情与建议数
-  const selectCase = (caseId: string, assignees?: Array<string>) => {
-    const reviewers = Array.isArray(assignees) ? assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
+  // mine 由服务端按当前用户算好:非空即当前用户是这条用例的评审人
+  const selectCase = (caseId: string, mine: ReviewCaseRow["mine"]) => {
     setSelectedCaseId(caseId);
-    setReviewValue(isReviewer ? "通过" : "建议");
+    setReviewValue(mine ? "通过" : "建议");
     setReason("");
     fetchCaseDetail(caseId);
   };
@@ -691,7 +688,7 @@ export default function CaseReview() {
     const idx = list.findIndex((item) => String(item.case_id ?? item.id) === curId);
     if (idx >= 0 && idx < list.length - 1) {
       const next = list[idx + 1];
-      selectCase(String(next.case_id ?? next.id), next.assignees);
+      selectCase(String(next.case_id ?? next.id), next.mine);
       return;
     }
     qaCaseSetToastWarning("已是最后一条用例");
