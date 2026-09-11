@@ -1,21 +1,21 @@
 "use client";
 import React from "react";
+import useSWR from "swr";
 import { Transition } from "@headlessui/react";
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree, Checkbox } from "antd";
+import { Row, Col, Input, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Tree, Checkbox } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { Button as PlaneButton } from "@plane/propel/button";
-import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums, globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import * as LucideIcons from "lucide-react";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
@@ -25,13 +25,69 @@ import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { workItemTypeName } from "../cases/work-item-category";
 import { ReviewRecordsPanel } from "./review-records";
 import { ReviewCaseFilterBar, useReviewCaseFilter } from "./review-case-filter";
+import { ReviewCaseList } from "./review-case-list";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import { WORKSPACE_MEMBERS } from "@/constants/fetch-keys";
 
 type ReviewCaseRow = ReviewCaseListItem;
 
+// 评审枚举是静态字典，按工作区缓存一份，进页那一波不再和用例列表抢接口
+const reviewEnumsCache = new Map<string, Record<string, Record<string, { label: string; color: string }>>>();
+
+type StepItem = { result: string; description: string };
+
+const StepsTable: React.FC<{ steps?: StepItem[] }> = ({ steps }) => {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return <span className="text-secondary">暂无内容</span>;
+  }
+  const headerStyle = { backgroundColor: "var(--bg-layer-1)", padding: 12, border: "1px solid var(--border-subtle)" } as const;
+  const cellStyle = { padding: 12, border: "1px solid var(--border-subtle)" } as const;
+  const columns = [
+    {
+      title: "序号",
+      key: "index",
+      width: 80,
+      render: (_: any, __: StepItem, idx: number) => idx + 1,
+      onHeaderCell: () => ({ style: headerStyle }),
+      onCell: () => ({ style: cellStyle }),
+    },
+    {
+      title: "步骤描述",
+      dataIndex: "description",
+      key: "description",
+      render: (text: any) => <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>,
+      onHeaderCell: () => ({ style: headerStyle }),
+      onCell: () => ({ style: cellStyle }),
+    },
+    {
+      title: "预期结果",
+      dataIndex: "result",
+      key: "result",
+      render: (text: any) => (
+        <span className="whitespace-pre-wrap break-words text-secondary">{String(text || "")}</span>
+      ),
+      onHeaderCell: () => ({ style: headerStyle }),
+      onCell: () => ({ style: cellStyle }),
+    },
+  ];
+  return (
+    <div className="rounded border border-subtle">
+      <div className="overflow-x-auto">
+        <Table
+          size="small"
+          pagination={false}
+          bordered={false}
+          rowKey={(_: any, idx?: number) => String(idx ?? 0)}
+          dataSource={steps}
+          columns={columns as any}
+        />
+      </div>
+    </div>
+  );
+};
 
 export default function CaseReview() {
   const { t } = useTranslation();
@@ -70,7 +126,6 @@ export default function CaseReview() {
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
   const [reviewTree, setReviewTree] = React.useState<any | null>(null);
   const skipNextUrlSyncedFetchRef = React.useRef(false);
-  const listScrollRef = React.useRef<HTMLDivElement>(null);
 
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
   const [caseDetail, setCaseDetail] = React.useState<any>(null);
@@ -96,7 +151,7 @@ export default function CaseReview() {
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
   const [isCaseModalOpen, setIsCaseModalOpen] = React.useState<boolean>(false);
   const { activeKey: activeFilterKey, setActiveKey: setActiveFilterKey, filters, filteredCases, isFiltering } =
-    useReviewCaseFilter(cases, currentUser?.id ? String(currentUser.id) : undefined);
+    useReviewCaseFilter(cases);
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
@@ -150,8 +205,14 @@ export default function CaseReview() {
 
   const fetchReviewEnums = async () => {
     if (!workspaceSlug) return;
+    const cached = reviewEnumsCache.get(String(workspaceSlug));
+    if (cached) {
+      setReviewEnums(cached);
+      return;
+    }
     try {
       const data = await reviewService.getReviewEnums(String(workspaceSlug));
+      reviewEnumsCache.set(String(workspaceSlug), data || {});
       setReviewEnums(data || {});
     } catch {}
   };
@@ -190,6 +251,8 @@ export default function CaseReview() {
       const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
         all: true,
+        // 卡片只用得到 mine 和待评审头像，别把每行的评审人 id 全拉回来
+        slim: true,
         ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
         ...(repositoryId ? { repository_id: repositoryId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
@@ -209,7 +272,6 @@ export default function CaseReview() {
         setCaseDetail(null);
         if (firstCaseId) {
           fetchCaseDetail(firstCaseId);
-          fetchSuggestionCountForCase(firstCaseId);
         }
       }
     } catch (e: unknown) {
@@ -224,7 +286,9 @@ export default function CaseReview() {
   const fetchEnums = async () => {
     if (!workspaceSlug) return;
     try {
-      const enums = await getEnums(String(workspaceSlug));
+      // testhub 布局进模块时已拉过一份枚举放在 globalEnums，有就直接用，别在进页那一波再抢一次接口
+      const cached: any = globalEnums.Enums;
+      const enums = Object.keys(cached?.case_type || {}).length > 0 ? cached : await getEnums(String(workspaceSlug));
       setEnumsData({
         case_test_type: enums.case_test_type || {},
         case_type: enums.case_type || {},
@@ -262,12 +326,10 @@ export default function CaseReview() {
         .then((list) => setCaseVersions(Array.isArray(list) ? list : []))
         .catch(() => setCaseVersions([]))
         .finally(() => setLoadingCaseVersions(false));
-      try {
-        const list = await caseService.getCaseAssetList(String(workspaceSlug), String(targetId));
-        setAttachments(Array.isArray(list) ? list : []);
-      } catch {
-        setAttachments([]);
-      }
+      caseService
+        .getCaseAssetList(String(workspaceSlug), String(targetId))
+        .then((list) => setAttachments(Array.isArray(list) ? list : []))
+        .catch(() => setAttachments([]));
     } catch (e: unknown) {
       qaCaseSetToastError(e, t, "获取用例详情失败");
     } finally {
@@ -324,14 +386,14 @@ export default function CaseReview() {
   React.useEffect(() => {
     fetchEnums();
     fetchReviewTree();
-    if (workspaceSlug) {
-      try {
-        fetchWorkspaceMembers(String(workspaceSlug));
-      } catch (e: unknown) {
-        qaCaseSetToastError(e, t, "获取成员信息失败");
-      }
-    }
   }, [workspaceSlug, reviewId]);
+
+  // 与外层 workspace-wrapper 共用同一个 SWR key,避免整份工作区成员被重复拉一次
+  useSWR(
+    workspaceSlug ? WORKSPACE_MEMBERS(String(workspaceSlug)) : null,
+    workspaceSlug ? () => fetchWorkspaceMembers(String(workspaceSlug)) : null,
+    { revalidateIfStale: false, revalidateOnFocus: false }
+  );
 
   React.useEffect(() => {
     if (!workspaceSlug || !reviewId) return;
@@ -398,16 +460,6 @@ export default function CaseReview() {
     setCompareOpen(false);
   }, [selectedCaseId]);
 
-  // 选中用例变化时,将对应卡片滚动到列表可见区(自动切换模式下停在切换后的位置;
-  // 已可见时 block:nearest 不会滚动,也不会影响外层页面)
-  React.useEffect(() => {
-    if (!selectedCaseId) return;
-    const container = listScrollRef.current;
-    if (!container) return;
-    const el = container.querySelector(`[data-case-id="${selectedCaseId}"]`);
-    if (el) (el as HTMLElement).scrollIntoView({ block: "nearest" });
-  }, [selectedCaseId, filteredCases]);
-
   React.useEffect(() => {
     const map: Record<string, string> = {
       work: workItemTypeName("Task"),
@@ -445,58 +497,6 @@ export default function CaseReview() {
       debouncedSearch.cancel();
     };
   }, [debouncedSearch]);
-
-  type StepItem = { result: string; description: string };
-
-  const StepsTable: React.FC<{ steps?: StepItem[] }> = ({ steps }) => {
-    if (!Array.isArray(steps) || steps.length === 0) {
-      return <span className="text-secondary">暂无内容</span>;
-    }
-    const headerStyle = { backgroundColor: "var(--bg-layer-1)", padding: 12, border: "1px solid var(--border-subtle)" } as const;
-    const cellStyle = { padding: 12, border: "1px solid var(--border-subtle)" } as const;
-    const columns = [
-      {
-        title: "序号",
-        key: "index",
-        width: 80,
-        render: (_: any, __: StepItem, idx: number) => idx + 1,
-        onHeaderCell: () => ({ style: headerStyle }),
-        onCell: () => ({ style: cellStyle }),
-      },
-      {
-        title: "步骤描述",
-        dataIndex: "description",
-        key: "description",
-        render: (text: any) => <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>,
-        onHeaderCell: () => ({ style: headerStyle }),
-        onCell: () => ({ style: cellStyle }),
-      },
-      {
-        title: "预期结果",
-        dataIndex: "result",
-        key: "result",
-        render: (text: any) => (
-          <span className="whitespace-pre-wrap break-words text-secondary">{String(text || "")}</span>
-        ),
-        onHeaderCell: () => ({ style: headerStyle }),
-        onCell: () => ({ style: cellStyle }),
-      },
-    ];
-    return (
-      <div className="rounded border border-subtle">
-        <div className="overflow-x-auto">
-          <Table
-            size="small"
-            pagination={false}
-            bordered={false}
-            rowKey={(_: any, idx?: number) => String(idx ?? 0)}
-            dataSource={steps}
-            columns={columns as any}
-          />
-        </div>
-      </div>
-    );
-  };
 
   const handleRadioChange = (e: any) => {
     const val = String(e?.target?.value || "") as "通过" | "不通过" | "建议";
@@ -648,10 +648,8 @@ export default function CaseReview() {
 
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case_id ?? item.id) === String(selectedCaseId || ""));
-    const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
-    setIsCurrentUserReviewer(isReviewer);
-  }, [cases, selectedCaseId, currentUser?.id]);
+    setIsCurrentUserReviewer(Boolean(row?.mine));
+  }, [cases, selectedCaseId]);
 
   React.useEffect(() => {
     setActiveTab("basic");
@@ -660,21 +658,17 @@ export default function CaseReview() {
   React.useEffect(() => {
     if (!selectedCaseId) return;
     const row = cases.find((item) => String(item.case_id ?? item.id) === String(selectedCaseId || ""));
-    const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
-    setReviewValue(isReviewer ? "通过" : "建议");
+    setReviewValue(row?.mine ? "通过" : "建议");
     setReason("");
-  }, [selectedCaseId, cases, currentUser?.id]);
+  }, [selectedCaseId, cases]);
 
   // 选中某条用例:更新选中态、按评审人重置默认评审值、加载详情与建议数
-  const selectCase = (caseId: string, assignees?: Array<string>) => {
-    const reviewers = Array.isArray(assignees) ? assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
+  // mine 由服务端按当前用户算好:非空即当前用户是这条用例的评审人
+  const selectCase = (caseId: string, mine: ReviewCaseRow["mine"]) => {
     setSelectedCaseId(caseId);
-    setReviewValue(isReviewer ? "通过" : "建议");
+    setReviewValue(mine ? "通过" : "建议");
     setReason("");
     fetchCaseDetail(caseId);
-    fetchSuggestionCountForCase(caseId);
   };
 
   // 用 ref 持有最新值,供 debouncedSubmit 闭包内的自动切换逻辑读取,避免拿到旧 state
@@ -694,7 +688,7 @@ export default function CaseReview() {
     const idx = list.findIndex((item) => String(item.case_id ?? item.id) === curId);
     if (idx >= 0 && idx < list.length - 1) {
       const next = list[idx + 1];
-      selectCase(String(next.case_id ?? next.id), next.assignees);
+      selectCase(String(next.case_id ?? next.id), next.mine);
       return;
     }
     qaCaseSetToastWarning("已是最后一条用例");
@@ -874,114 +868,14 @@ export default function CaseReview() {
                 <div className="text-danger-primary text-sm">{error}</div>
               </div>
             ) : (
-              <div className="flex flex-col gap-3 flex-1 min-h-0">
-                <div
-                  ref={listScrollRef}
-                  className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-5 pl-1 pt-4 pb-2"
-                  style={{ scrollbarGutter: "stable" }}
-                >
-                  {filteredCases.length === 0 ? (
-                    <div className="text-secondary py-12 text-center">
-                      {isFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
-                    </div>
-                  ) : (
-                    filteredCases.map((item) => {
-                      const caseId = String(item.case_id ?? item.id);
-                      const isActive = String(selectedCaseId || "") === caseId;
-                      const color = reviewEnums?.CaseReviewThrough_Result?.[item.result]?.color || "default";
-                      const suggestionCount = suggestionCounts[caseId] || 0;
-                      const showBadge = suggestionCount > 0;
-                      const reviewerStatuses = Array.isArray(item.reviewer_statuses) ? item.reviewer_statuses : [];
-                      const reviewerCount = Number(
-                        item.reviewer_count ?? (Array.isArray(item.assignees) ? item.assignees.length : reviewerStatuses.length)
-                      );
-                      const fallbackUnreviewed = reviewerStatuses
-                        .filter((status) => !Boolean(status?.reviewed))
-                        .map((status) => String(status?.assignee || ""))
-                        .filter((id) => Boolean(id));
-                      const unreviewedAssignees = (
-                        Array.isArray(item.unreviewed_assignees) ? item.unreviewed_assignees : fallbackUnreviewed
-                      )
-                        .map((assigneeId) => String(assigneeId || ""))
-                        .filter((id) => Boolean(id));
-                      const reviewedCount = Number(
-                        item.reviewed_count ?? Math.max(reviewerCount - unreviewedAssignees.length, 0)
-                      );
-                      const safeReviewedCount = Math.min(Math.max(reviewedCount, 0), Math.max(reviewerCount, 0));
-                      const pendingCount =
-                        reviewerCount > 0 ? Math.max(unreviewedAssignees.length, reviewerCount - safeReviewedCount) : 0;
-                      const progressPercent = reviewerCount > 0 ? Math.round((safeReviewedCount / reviewerCount) * 100) : 0;
-                      const pendingNames = unreviewedAssignees
-                        .map((assigneeId) => getUserDetails(assigneeId)?.display_name || "未知用户")
-                        .join("、");
-                      const pendingTooltip = pendingCount > 0 ? `待评审：${pendingNames || "成员信息加载中"}` : "";
-                      const pendingAvatarIds = unreviewedAssignees.slice(0, 5);
-                      const extraPendingCount = Math.max(pendingCount - pendingAvatarIds.length, 0);
-                      return (
-                        <Card
-                          key={item.id}
-                          data-case-id={caseId}
-                          bordered
-                          hoverable
-                          onClick={() => {
-                            selectCase(caseId, item.assignees);
-                          }}
-                          className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow relative !overflow-visible`}
-                        >
-                          {showBadge && (
-                            <div className="absolute -top-2 -right-2 z-10">
-                              <Badge count={suggestionCount} style={{ backgroundColor: "#ee313b" }} />
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium truncate">{item.name}</div>
-                            <Tag color={color}>{item.result || "-"}</Tag>
-                          </div>
-                          <div className="mt-2 flex items-center justify-between text-xs text-secondary">
-                            {reviewerCount > 0 ? (
-                              <span>{`已评 ${safeReviewedCount}/${reviewerCount}`}</span>
-                            ) : (
-                              <span>未配置评审人</span>
-                            )}
-                            {reviewerCount > 0 ? <span>{progressPercent}%</span> : null}
-                          </div>
-                          {reviewerCount > 0 ? (
-                            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#f5f5f5]">
-                              <div
-                                className="h-full bg-accent-primary transition-all duration-300 ease-out"
-                                style={{ width: `${progressPercent}%` }}
-                              />
-                            </div>
-                          ) : null}
-                          {reviewerCount > 0 ? (
-                            pendingCount > 0 ? (
-                              <div className="mt-2 flex items-center justify-between gap-2">
-                                <Tooltip title={pendingTooltip}>
-                                  <div className="truncate text-xs text-[#d48806]">{`待评审 ${pendingCount} 人`}</div>
-                                </Tooltip>
-                                <div className="flex items-center gap-1">
-                                  {pendingAvatarIds.length > 0 ? (
-                                    <Tooltip title={pendingTooltip}>
-                                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                                        <ButtonAvatars showTooltip={false} userIds={pendingAvatarIds} size="sm" />
-                                      </div>
-                                    </Tooltip>
-                                  ) : null}
-                                  {extraPendingCount > 0 ? (
-                                    <span className="text-xs text-[#d48806]">{`+${extraPendingCount}`}</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-2 text-xs text-[#52c41a]">评审完成</div>
-                            )
-                          ) : null}
-                        </Card>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+              <ReviewCaseList
+                cases={filteredCases}
+                selectedCaseId={selectedCaseId}
+                suggestionCounts={suggestionCounts}
+                reviewEnums={reviewEnums}
+                onSelect={selectCase}
+                emptyText={isFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
+              />
             )}
           </div>
         </Col>

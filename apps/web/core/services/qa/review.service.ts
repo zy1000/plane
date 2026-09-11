@@ -4,26 +4,25 @@ import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
 
-export type ModuleCountResponse = { total: number } & Record<string, number>;
-export type ReviewCaseReviewerStatus = {
-  assignee: string;
-  result: string | null;
-  reviewed: boolean;
-};
+/** 当前用户在这条用例上的身份：不是本条评审人时为 null */
+export type ReviewCaseMineState = "todo" | "done" | null;
+
 export type ReviewCaseListItem = {
   id: string;
   case_id: string;
   code?: string;
   name: string;
   priority: number;
-  assignees: string[];
   result: string;
   created_by: string | null;
   repository?: string | null;
   module?: string | null;
   suggestion_count: number;
-  reviewer_statuses: ReviewCaseReviewerStatus[];
-  unreviewed_assignees: string[];
+  /** 本条用例的评审人（用例级）。卡片列表用 slim=true 拉取时不下发 */
+  assignees?: string[];
+  mine: ReviewCaseMineState;
+  /** 待评审人头像用，服务端最多下发 5 个；真实待评审人数看 reviewer_count - reviewed_count */
+  pending_assignees: string[];
   reviewed_count: number;
   reviewer_count: number;
 };
@@ -117,19 +116,13 @@ export class CaseService extends APIService {
       });
   }
 
-  async getReviewCases(workspaceSlug: string, id: string): Promise<string[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/review/${id}/cases/`)
-      .then((response) => (Array.isArray(response?.data?.ids) ? response.data.ids.map(String) : []))
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
   async getReviewCaseList(
     workspaceSlug: string,
     review_id: string,
     queries?: {
       all?: boolean;
+      /** 只要卡片用得到的字段，不下发每行的评审人 id */
+      slim?: boolean;
       page?: number;
       page_size?: number;
       project_id?: string | null;
@@ -159,7 +152,11 @@ export class CaseService extends APIService {
       });
   }
 
-  async addReviewCases(workspaceSlug: string, projectId: string, data: { review_id: string; case_ids: string[] }): Promise<void> {
+  async addReviewCases(
+    workspaceSlug: string,
+    projectId: string,
+    data: { review_id: string; case_ids: string[]; assignees?: string[] }
+  ): Promise<void> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/review/add-cases/`, data, { params: { project_id: projectId } })
       .then(() => {})
       .catch((error) => {
@@ -167,10 +164,16 @@ export class CaseService extends APIService {
       });
   }
 
-  async getModuleCount(workspaceSlug: string, review_id: string): Promise<ModuleCountResponse> {
-    const query = {review_id}
-    return this.get(`/api/workspaces/${workspaceSlug}/test/review/module-count/`, {params: query})
-      .then((response) => response?.data)
+  /** 整体覆盖一批评审用例的评审人；ids 传一条即行内编辑，传多条即批量设置 */
+  async updateReviewCaseAssignees(
+    workspaceSlug: string,
+    projectId: string,
+    data: { review_id: string; ids: string[]; assignees: string[] }
+  ): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/review/case-assignees/`, data, {
+      params: { project_id: projectId },
+    })
+      .then(() => {})
       .catch((error) => {
         throw error?.response?.data;
       });

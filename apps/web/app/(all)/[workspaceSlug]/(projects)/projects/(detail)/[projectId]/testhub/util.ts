@@ -23,12 +23,20 @@ export const formatDate = (isoString:string) => {
   };
 
 
+// layout 与页面会在同一次挂载里各调一次,这里合并同一工作区正在飞行中的请求;
+// 请求结束即清掉,枚举来自可编辑的数据字典,不做跨请求缓存
+const enumsInFlight = new Map<string, Promise<any>>();
+
 export const getEnums = async (workspaceSlug: string) => {
+  const existing = enumsInFlight.get(workspaceSlug);
+  if (existing) return existing;
   const repositoryService = new RepositoryService();
-  const response: any = await repositoryService.enumsList(
-    workspaceSlug as string,
-  );
-  return response || {};
+  const request = repositoryService
+    .enumsList(workspaceSlug as string)
+    .then((response: any) => response || {})
+    .finally(() => enumsInFlight.delete(workspaceSlug));
+  enumsInFlight.set(workspaceSlug, request);
+  return request;
 }
 
 export type TGlobalEnums = {

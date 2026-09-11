@@ -712,6 +712,9 @@ class ReviewCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseReview
         fields = "__all__"
+        # 评审人是用例级的，评审单上的 assignees / mode 只是派生汇总，
+        # 由 utils.qa.sync_review_reviewer_summary 维护，不接受直接写入
+        read_only_fields = ["assignees", "mode"]
 
 
 class ReviewListSerializer(ModelSerializer):
@@ -746,117 +749,6 @@ class ReviewSerializer(ModelSerializer):
     class Meta:
         model = CaseReview
         fields = ["id", "name"]
-
-
-class ReviewCaseListSerializer(ModelSerializer):
-    name = serializers.SerializerMethodField()
-    priority = serializers.SerializerMethodField()
-    assignees = serializers.SerializerMethodField()
-    code = serializers.CharField(source="case.code", read_only=True)
-    repository = serializers.CharField(source="case.repository.name", read_only=True)
-    module = serializers.CharField(source="case.module.name", read_only=True)
-    suggestion_count = serializers.IntegerField(read_only=True, default=0)
-    reviewer_statuses = serializers.SerializerMethodField()
-    unreviewed_assignees = serializers.SerializerMethodField()
-    reviewed_count = serializers.SerializerMethodField()
-    reviewer_count = serializers.SerializerMethodField()
-
-    def get_name(self, obj: CaseReviewThrough):
-        return obj.case.name
-
-    def get_priority(self, obj: CaseReviewThrough):
-        return obj.case.priority
-
-    def _get_assignee_ids(self, obj: CaseReviewThrough):
-        prefetched_assignees = getattr(obj.review, "_prefetched_objects_cache", {}).get(
-            "assignees"
-        )
-        if prefetched_assignees is not None:
-            return [str(assignee.id) for assignee in prefetched_assignees]
-        return [str(assignee_id) for assignee_id in obj.review.assignees.values_list("id", flat=True)]
-
-    def _get_last_record_result_by_assignee(self, obj: CaseReviewThrough, assignee_ids):
-        records = getattr(obj, "prefetched_review_records", None)
-        if records is None:
-            records = list(
-                CaseReviewRecord.objects.filter(crt=obj, deleted_at__isnull=True)
-                .exclude(result=CaseReviewRecord.Result.SUGGEST)
-                .order_by("assignee_id", "-created_at")
-            )
-
-        assignee_id_set = {str(assignee_id) for assignee_id in assignee_ids}
-        last_by_assignee = {}
-        for record in records:
-            if not getattr(record, "assignee_id", None):
-                continue
-            assignee_id = str(record.assignee_id)
-            if assignee_id not in assignee_id_set or assignee_id in last_by_assignee:
-                continue
-            last_by_assignee[assignee_id] = record.result
-        return last_by_assignee
-
-    def _is_reviewed_result(self, result):
-        if not result:
-            return False
-        return str(result) != str(CaseReviewRecord.Result.RE_REVIEW)
-
-    def get_assignees(self, obj: CaseReviewThrough):
-        return self._get_assignee_ids(obj)
-
-    def get_reviewer_statuses(self, obj: CaseReviewThrough):
-        assignee_ids = self._get_assignee_ids(obj)
-        last_by_assignee = self._get_last_record_result_by_assignee(obj, assignee_ids)
-        return [
-            {
-                "assignee": assignee_id,
-                "result": last_by_assignee.get(assignee_id),
-                "reviewed": self._is_reviewed_result(last_by_assignee.get(assignee_id)),
-            }
-            for assignee_id in assignee_ids
-        ]
-
-    def get_unreviewed_assignees(self, obj: CaseReviewThrough):
-        assignee_ids = self._get_assignee_ids(obj)
-        last_by_assignee = self._get_last_record_result_by_assignee(obj, assignee_ids)
-        return [
-            assignee_id
-            for assignee_id in assignee_ids
-            if not self._is_reviewed_result(last_by_assignee.get(assignee_id))
-        ]
-
-    def get_reviewed_count(self, obj: CaseReviewThrough):
-        assignee_ids = self._get_assignee_ids(obj)
-        last_by_assignee = self._get_last_record_result_by_assignee(obj, assignee_ids)
-        return len(
-            [
-                assignee_id
-                for assignee_id in assignee_ids
-                if self._is_reviewed_result(last_by_assignee.get(assignee_id))
-            ]
-        )
-
-    def get_reviewer_count(self, obj: CaseReviewThrough):
-        return len(self._get_assignee_ids(obj))
-
-    class Meta:
-        model = CaseReviewThrough
-        fields = [
-            "id",
-            "name",
-            "priority",
-            "assignees",
-            "result",
-            "created_by",
-            "case_id",
-            "code",
-            "repository",
-            "module",
-            "suggestion_count",
-            "reviewer_statuses",
-            "unreviewed_assignees",
-            "reviewed_count",
-            "reviewer_count",
-        ]
 
 
 class ReviewCaseRecordsSerializer(ModelSerializer):

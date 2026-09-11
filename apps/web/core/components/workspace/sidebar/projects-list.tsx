@@ -4,11 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Ellipsis } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
@@ -35,6 +35,9 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   // store hooks
   const { t } = useTranslation();
+  // t 每次渲染都是新函数，回调里经 ref 取用，保证传给项目项的 props 稳定、memo 生效
+  const tRef = useRef(t);
+  tRef.current = t;
   const { toggleCreateProjectModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
@@ -42,7 +45,11 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
 
   const { loader, getPartialProjectById, joinedProjectIds: joinedProjects, updateProjectView } = useProject();
   // router params
-  const { workspaceSlug } = useParams();
+  const { workspaceSlug, projectId: activeProjectId } = useParams();
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const navigateTo = useCallback((to: string) => routerRef.current.push(to), []);
 
   // auth
   const isAuthorizedUser = allowPermissions(
@@ -59,17 +66,20 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
   const hasMoreProjects =
     projectPreferences.showLimitedProjects && joinedProjects.length > projectPreferences.limitedProjectsCount;
 
-  const handleCopyText = (projectId: string) => {
-    copyUrlToClipboard(`${workspaceSlug}/projects/${projectId}/issues`).then(() => {
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("link_copied"),
-        message: t("project_link_copied_to_clipboard"),
+  const handleCopyText = useCallback(
+    (projectId: string) => {
+      copyUrlToClipboard(`${workspaceSlug}/projects/${projectId}/issues`).then(() => {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: tRef.current("link_copied"),
+          message: tRef.current("project_link_copied_to_clipboard"),
+        });
       });
-    });
-  };
+    },
+    [workspaceSlug]
+  );
 
-  const handleOnProjectDrop = (
+  const handleOnProjectDrop = useCallback((
     sourceId: string | undefined,
     destinationId: string | undefined,
     shouldDropAtEnd: boolean
@@ -93,11 +103,11 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
       updateProjectView(workspaceSlug.toString(), sourceId, { sort_order: updatedSortOrder }).catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: t("error"),
-          message: t("something_went_wrong"),
+          title: tRef.current("error"),
+          message: tRef.current("something_went_wrong"),
         });
       });
-  };
+  }, [joinedProjects, workspaceSlug, getPartialProjectById, updateProjectView]);
 
   /**
    * Implementing scroll animation styles based on the scroll length of the container
@@ -154,7 +164,10 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
             <SidebarProjectsListItem
               key={projectId}
               projectId={projectId}
-              handleCopyText={() => handleCopyText(projectId)}
+              workspaceSlug={String(workspaceSlug ?? "")}
+              activeProjectId={activeProjectId ? String(activeProjectId) : undefined}
+              navigateTo={navigateTo}
+              handleCopyText={handleCopyText}
               projectListType={"JOINED"}
               disableDrag={false}
               disableDrop={false}

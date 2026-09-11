@@ -6,21 +6,28 @@ from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count, Q, Prefetch
+from django.db.models import Q
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
-    ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
+    ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, \
     ReviewCaseRecordsSerializer, ReviewSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
     TestCaseRepository, TestCaseVersion
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.paginator import CustomPaginator
-from plane.utils.qa import update_case_review_status, update_review_status
+from plane.utils.qa import (
+    build_review_case_rows,
+    invalid_workspace_member_ids,
+    set_review_case_assignees,
+    sync_review_reviewer_summary,
+    update_case_review_status,
+    update_review_status,
+)
 from plane.utils.response import list_response
 from plane.app.views.qa.filters import CaseReviewFilter
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
@@ -160,6 +167,10 @@ class CaseReviewView(BaseViewSet):
     def add_cases(self, request, slug):
         review_id = request.data.get('review_id')
         raw_case_ids = request.data.get('case_ids')
+        assignee_ids = request.data.get('assignees') or []
+
+        if not isinstance(assignee_ids, list):
+            return Response({"error": "assignees must be a list"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not review_id:
             return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -180,6 +191,9 @@ class CaseReviewView(BaseViewSet):
         if project_id:
             review_lookup["project_id"] = project_id
         review = get_object_or_404(CaseReview, **review_lookup)
+
+        if assignee_ids and invalid_workspace_member_ids(slug, assignee_ids):
+            return Response({"error": "assignee is invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
         repo_ids = list(
             TestCaseRepository.objects.filter(
@@ -204,13 +218,63 @@ class CaseReviewView(BaseViewSet):
 
         to_create_case_ids = found_case_ids - existing_case_ids
         if to_create_case_ids:
-            CaseReviewThrough.objects.bulk_create(
+            created = CaseReviewThrough.objects.bulk_create(
                 [CaseReviewThrough(review=review, case_id=case_id, created_by=request.user) for case_id in
                  to_create_case_ids],
                 batch_size=1000,
             )
+            if assignee_ids:
+                set_review_case_assignees([crt.id for crt in created], assignee_ids)
+                for crt in created:
+                    update_case_review_status(review, crt)
+                sync_review_reviewer_summary(review)
             update_review_status(review)
 
+
+        return Response(status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    @action(detail=False, methods=['post'], url_path='case-assignees')
+    @allow_fine_permission(PermissionKey.QA_REVIEW_EDIT)
+    def case_assignees(self, request, slug):
+        """整体覆盖一批评审用例的评审人。ids 传一条即行内编辑，传多条即批量设置。"""
+        review_id = request.data.get('review_id')
+        raw_ids = request.data.get('ids')
+        assignee_ids = request.data.get('assignees')
+
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(raw_ids, list) or len(raw_ids) == 0:
+            return Response({"error": "ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if assignee_ids is None:
+            assignee_ids = []
+        if not isinstance(assignee_ids, list):
+            return Response({"error": "assignees must be a list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        project_id = request.query_params.get('project_id')
+        review_lookup = {"id": review_id, "deleted_at__isnull": True, "project__workspace__slug": slug}
+        if project_id:
+            review_lookup["project_id"] = project_id
+        review = get_object_or_404(CaseReview, **review_lookup)
+
+        if assignee_ids and invalid_workspace_member_ids(slug, assignee_ids):
+            return Response({"error": "assignee is invalid"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 只认属于该评审单的行，越界 id 直接丢弃
+        crts = list(
+            CaseReviewThrough.objects.filter(
+                id__in=raw_ids, review=review, deleted_at__isnull=True
+            )
+        )
+        if not crts:
+            return Response({"error": "no review case matched"}, status=status.HTTP_404_NOT_FOUND)
+
+        set_review_case_assignees([crt.id for crt in crts], assignee_ids)
+        for crt in crts:
+            update_case_review_status(review, crt)
+        sync_review_reviewer_summary(review)
 
         return Response(status=status.HTTP_200_OK)
 
@@ -249,8 +313,6 @@ class CaseReviewView(BaseViewSet):
                 review__project__workspace__slug=slug,
                 case__deleted_at__isnull=True,
             )
-            .select_related('case', 'case__repository', 'case__module', 'review')
-            .prefetch_related('review__assignees')
         )
         if project_id := request.query_params.get('project_id'):
             query = query.filter(review__project_id=project_id, case__repository__project_id=project_id)
@@ -272,7 +334,7 @@ class CaseReviewView(BaseViewSet):
 
         assignee_values = self._query_param_values(request, 'assignee__in')
         if assignee_values:
-            query = query.filter(review__assignees__id__in=assignee_values).distinct()
+            query = query.filter(assignees__id__in=assignee_values).distinct()
 
         module_ids = self._query_param_values(request, 'module_id')
         if module_ids:
@@ -289,62 +351,35 @@ class CaseReviewView(BaseViewSet):
         if not request.query_params.get('review_id'):
             return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        query = self._filtered_case_through_qs(request, slug)
-        query = query.annotate(
-            suggestion_count=Count(
-                "review_records",
-                filter=Q(
-                    review_records__result=CaseReviewRecord.Result.SUGGEST,
-                    review_records__confirmed=False,
-                    review_records__deleted_at__isnull=True,
-                ),
-                distinct=True,
-            )
+        # 列表只用得上这几列，扁平取；评审人、结论、建议数由 build_review_case_rows 整页一次性补齐
+        query = self._filtered_case_through_qs(request, slug).values(
+            "id",
+            "case_id",
+            "result",
+            "created_by_id",
+            "case__name",
+            "case__code",
+            "case__priority",
+            "case__repository__name",
+            "case__module__name",
         )
-        query = query.prefetch_related(
-            Prefetch(
-                "review_records",
-                queryset=CaseReviewRecord.objects.filter(deleted_at__isnull=True)
-                .exclude(result=CaseReviewRecord.Result.SUGGEST)
-                .order_by("assignee_id", "-created_at"),
-                to_attr="prefetched_review_records",
-            )
-        )
+        # slim=true 的调用方（评审页卡片列表）不需要每行的评审人 id，只看 mine 和待评审头像
+        slim = str(request.query_params.get("slim", "")).strip().lower() in {"1", "true", "yes"}
         all_param = str(request.query_params.get("all", "")).strip().lower()
         if all_param in {"1", "true", "yes"}:
-            serializer = ReviewCaseListSerializer(instance=query, many=True)
-            return list_response(data=serializer.data, count=query.count())
+            rows = list(query)
+            return list_response(
+                data=build_review_case_rows(rows, request.user.id, include_assignees=not slim),
+                count=len(rows),
+            )
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
-        serializer = ReviewCaseListSerializer(instance=paginated_queryset, many=True)
-        return list_response(data=serializer.data, count=query.count())
+        return list_response(
+            data=build_review_case_rows(paginated_queryset, request.user.id, include_assignees=not slim),
+            count=query.count(),
+        )
 
-    @action(detail=False, methods=['get'], url_path='module-count')
-    def module_count(self, request, slug):
-        review_id = request.query_params['review_id']
-        review = CaseReview.objects.get(id=review_id)
-        case_ids = CaseReviewThrough.objects.filter(review_id=review_id).values_list('case_id', flat=True)
-        modules = list(
-            CaseModule.objects.filter(repository_id=review.module.repository_id, deleted_at__isnull=True).values('id',
-                                                                                                                 'parent_id'))
-        base_counts = {m['id']: 0 for m in modules}
-        aggregates = TestCase.objects.filter(id__in=case_ids).values('module_id').annotate(count=Count('id'))
-        for item in aggregates:
-            if item['module_id']:
-                base_counts[item['module_id']] = item['count']
-        children_map = {}
-        for m in modules:
-            pid = m['parent_id']
-            if pid:
-                children_map.setdefault(pid, []).append(m['id'])
-        result = {str(m['id']): base_counts.get(m['id'], 0) for m in modules}
-        for m in modules:
-            mid = m['id']
-            for child in children_map.get(mid, []):
-                result[str(mid)] += base_counts.get(child, 0)
-        result['total'] = len(case_ids)
-        return Response(data=result, status=status.HTTP_200_OK)
-
+    @transaction.atomic
     @action(detail=False, methods=['post'], url_path='case-review')
     def case_review(self, request, slug):
         # 输入参数
@@ -357,10 +392,19 @@ class CaseReviewView(BaseViewSet):
         if isinstance(case_ids, str):
             case_ids = [case_ids]
 
+        cr = CaseReview.objects.get(id=review_id)
+        skipped_case_ids = []
+
         for case_id in case_ids:
-            # 获取评审单与评审用例
-            cr = CaseReview.objects.get(id=review_id)
             crt = CaseReviewThrough.objects.get(review=cr, case_id=case_id)
+
+            # 评审人是用例级的：只有本条用例的评审人才能给出结论，其他人只能提「建议」
+            if record_result != CaseReviewRecord.Result.SUGGEST and not crt.assignees.filter(
+                id=assignee_id
+            ).exists():
+                skipped_case_ids.append(str(case_id))
+                continue
+
             # 评审前记录当前结果，用于活动对比
             old_review_result = crt.result
 
@@ -391,7 +435,7 @@ class CaseReviewView(BaseViewSet):
                     crt=crt,
                 )
 
-            update_case_review_status(cr, crt, assignee_id)
+            update_case_review_status(cr, crt)
 
             # 触发评审状态活动
             crt.refresh_from_db()
@@ -413,8 +457,7 @@ class CaseReviewView(BaseViewSet):
             if crt.result == CaseReviewThrough.Result.PASS:
                 TestCaseVersion.create_from_case(case=TestCase.objects.get(id=case_id))
 
-        # serializer = ReviewCaseListSerializer(instance=crt)
-        return Response(status=status.HTTP_200_OK)
+        return Response({"skipped_case_ids": skipped_case_ids}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='records')
     def get_records(self, request, slug):

@@ -72,6 +72,7 @@ from plane.db.models import (
     CaseReviewThrough,
 )
 from plane.utils.paginator import CustomPaginator
+from plane.utils.qa import invalid_workspace_member_ids as _invalid_workspace_member_ids
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.serializers import (
@@ -546,29 +547,6 @@ class PlanModuleCountAPIView(BaseAPIView):
             result[mid] = subtree_count(mid)
 
         return Response(data=result)
-
-
-def _invalid_workspace_member_ids(slug, member_ids):
-    """返回不是该工作区活跃成员的 id 集合（字符串），空集合即全部合法；非法 UUID 也视为不合法。"""
-    wanted = set()
-    invalid = set()
-    for member_id in member_ids:
-        try:
-            wanted.add(str(uuid.UUID(str(member_id))))
-        except (ValueError, TypeError, AttributeError):
-            invalid.add(str(member_id))
-    if wanted:
-        valid = {
-            str(member_id)
-            for member_id in WorkspaceMember.objects.filter(
-                workspace__slug=slug,
-                member_id__in=wanted,
-                deleted_at__isnull=True,
-                is_active=True,
-            ).values_list("member_id", flat=True)
-        }
-        invalid |= wanted - valid
-    return invalid
 
 
 def _set_plan_case_assignees(plan_case_ids, assignee_ids):

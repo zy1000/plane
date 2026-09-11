@@ -37,6 +37,8 @@ import type {
 } from "@/components/qa/review/review-case-list-filters/types";
 import type { TReviewCaseFilterSelectOption } from "@/components/qa/review/review-case-list-filters/use-review-case-filters-config";
 import { useUser } from "@/hooks/store/user";
+import { useMember } from "@/hooks/store/use-member";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useTranslation } from "@plane/i18n";
 import {
   qaCaseErrorContent,
@@ -95,15 +97,20 @@ export default function CaseManagementReviewDetailPage() {
   const [filterExpression, setFilterExpression] = useState<TReviewCaseFilterExpression>(
     EMPTY_REVIEW_CASE_FILTER_EXPRESSION
   );
-  const [reviewAssigneeIds, setReviewAssigneeIds] = useState<string[]>([]);
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
   const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
   const [isCaseSelectionOpen, setIsCaseSelectionOpen] = useState(false);
   const { data: currentUser } = useUser();
+  const {
+    project: { getProjectMemberIds },
+  } = useMember();
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedCaseMap, setSelectedCaseMap] = useState<Record<string, string>>({});
+  // 批量工具条里暂存的评审人，点「应用」才提交
+  const [bulkAssignees, setBulkAssignees] = useState<string[]>([]);
+  const [bulkAssigneeUpdating, setBulkAssigneeUpdating] = useState(false);
 
   const [reviewList, setReviewList] = useState<Array<{ id: string; name: string }>>([]);
   const [reviewListLoading, setReviewListLoading] = useState<boolean>(false);
@@ -170,6 +177,11 @@ export default function CaseManagementReviewDetailPage() {
     });
   }, [filters, reviewId, selectedModuleId, ordering]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
+  const hasPendingAssigneeRefreshRef = useRef(false);
+
+  useEffect(() => {
+    if (selectedCaseIds.length === 0) setBulkAssignees([]);
+  }, [selectedCaseIds.length]);
 
   useEffect(() => {
     if (lastSelectionContextKeyRef.current !== null && lastSelectionContextKeyRef.current !== selectionContextKey) {
@@ -282,10 +294,6 @@ export default function CaseManagementReviewDetailPage() {
       }
 
       setReviewCases(data);
-      const assigneesFromRows = data.find((row) => Array.isArray(row.assignees) && row.assignees.length > 0)?.assignees;
-      if (assigneesFromRows && assigneesFromRows.length > 0) {
-        setReviewAssigneeIds(Array.from(new Set(assigneesFromRows.map((assigneeId) => String(assigneeId)))));
-      }
       setTotal(count);
       setCurrentPage(pageToUse);
       setPageSize(size);
@@ -323,8 +331,13 @@ export default function CaseManagementReviewDetailPage() {
     fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
   };
 
+  const projectMemberIds = useMemo(
+    () => getProjectMemberIds(projectIdString, false) ?? [],
+    [getProjectMemberIds, projectIdString]
+  );
+
   const { areAllConfigsInitialized, configs: reviewCaseFilterConfigs } = useReviewCaseFiltersConfig({
-    assigneeIds: reviewAssigneeIds,
+    assigneeIds: projectMemberIds,
     casePriorityEnums,
     moduleOptions: moduleFilterOptions,
     repositoryOptions: repositoryFilterOptions,
@@ -361,6 +374,50 @@ export default function CaseManagementReviewDetailPage() {
       });
       return next;
     });
+  };
+
+  /** 整体覆盖一批评审用例的评审人；行内编辑与批量设置共用 */
+  const applyReviewCaseAssignees = async (throughIds: string[], assigneeIds: string[]) => {
+    if (!workspaceSlug || !projectId || !reviewId || throughIds.length === 0) return false;
+    try {
+      await reviewService.updateReviewCaseAssignees(workspaceSlug as string, projectId as string, {
+        review_id: reviewId as string,
+        ids: throughIds,
+        assignees: assigneeIds,
+      });
+      const idSet = new Set(throughIds.map((id) => String(id)));
+      setReviewCases((prev) =>
+        prev.map((row) => (idSet.has(String(row.id)) ? { ...row, assignees: assigneeIds } : row))
+      );
+      return true;
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "设置评审人失败");
+      return false;
+    }
+  };
+
+  const handleCaseAssigneesChange = async (record: ReviewCaseRow, assigneeIds: string[]) => {
+    const ok = await applyReviewCaseAssignees([String(record.id)], assigneeIds);
+    if (ok) hasPendingAssigneeRefreshRef.current = true;
+  };
+
+  // 评审人变了会连带影响评审结论，下拉关掉后统一拉一次当前页；没改过就不拉
+  const handleCaseAssigneesEditClose = () => {
+    if (!hasPendingAssigneeRefreshRef.current) return;
+    hasPendingAssigneeRefreshRef.current = false;
+    fetchReviewCaseList(currentPage, pageSize);
+  };
+
+  const handleBulkAssigneesApply = async () => {
+    setBulkAssigneeUpdating(true);
+    const ok = await applyReviewCaseAssignees(selectedCaseIds, bulkAssignees);
+    setBulkAssigneeUpdating(false);
+    if (!ok) return;
+    qaCaseSetToastSuccess(`已为 ${selectedCaseIds.length} 条用例设置评审人`);
+    setSelectedCaseIds([]);
+    setSelectedCaseMap({});
+    setBulkAssignees([]);
+    fetchReviewCaseList(currentPage, pageSize);
   };
 
   const handleOpenCase = (record: ReviewCaseRow) => {
@@ -400,7 +457,6 @@ export default function CaseManagementReviewDetailPage() {
     setFilters({});
     setFilterExpression(EMPTY_REVIEW_CASE_FILTER_EXPRESSION);
     setOrdering(DEFAULT_REVIEW_CASE_ORDERING);
-    setReviewAssigneeIds([]);
     setSelectedCaseIds([]);
     setSelectedCaseMap({});
     fetchReviewTree();
@@ -679,7 +735,10 @@ export default function CaseManagementReviewDetailPage() {
                         onCancel={handleCancelCase}
                         onOpenCase={handleOpenCase}
                         onReview={handleReviewCase}
+                        onAssigneesChange={handleCaseAssigneesChange}
+                        onAssigneesEditClose={handleCaseAssigneesEditClose}
                         onRowSelectChange={handleRowSelectChange}
+                        projectId={projectIdString}
                         reviewCases={reviewCases}
                         reviewEnums={reviewEnums}
                         selectedCaseIds={selectedCaseIds}
@@ -700,23 +759,72 @@ export default function CaseManagementReviewDetailPage() {
                             >
                               清除选择
                             </span>
+                            <MemberDropdown
+                              multiple
+                              value={bulkAssignees}
+                              onChange={(value) => setBulkAssignees(Array.isArray(value) ? value : [])}
+                              disabled={bulkAssigneeUpdating || !canEditReview}
+                              projectId={projectId ? String(projectId) : undefined}
+                              buttonVariant="transparent-with-text"
+                              placement="top-start"
+                              optionsClassName="z-[80]"
+                              button={
+                                <span
+                                  className={`text-sm transition-colors ${
+                                    canEditReview && !bulkAssigneeUpdating
+                                      ? "cursor-pointer"
+                                      : "cursor-not-allowed opacity-50"
+                                  }`}
+                                  style={{ color: "#2a83ff" }}
+                                >
+                                  {bulkAssigneeUpdating
+                                    ? "设置中..."
+                                    : bulkAssignees.length > 0
+                                      ? `设置评审人（${bulkAssignees.length}）`
+                                      : "设置评审人"}
+                                </span>
+                              }
+                            />
+                            {bulkAssignees.length > 0 && !bulkAssigneeUpdating && canEditReview && (
+                              <span
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#2a83ff" }}
+                                onClick={handleBulkAssigneesApply}
+                              >
+                                应用
+                              </span>
+                            )}
                             <Popconfirm
                               title="确定通过选中用例？"
                               onConfirm={async () => {
                                 if (!workspaceSlug || !reviewId) return;
                                 try {
-                                  const caseIds = selectedCaseIds.map((id) => selectedCaseMap[id]).filter((id) => !!id);
+                                  // 评审人是用例级的，只能通过自己是评审人的那些用例
+                                  const userId = currentUser?.id ? String(currentUser.id) : "";
+                                  const reviewableIds = selectedCaseIds.filter((id) => {
+                                    const row = reviewCases.find((item) => String(item.id) === String(id));
+                                    return (row?.assignees || []).some((assignee) => String(assignee) === userId);
+                                  });
+                                  const skippedCount = selectedCaseIds.length - reviewableIds.length;
+                                  const caseIds = reviewableIds.map((id) => selectedCaseMap[id]).filter((id) => !!id);
 
-                                  if (caseIds.length === 0) return;
+                                  if (caseIds.length === 0) {
+                                    qaCaseSetToastWarning("选中的用例里没有你要评审的用例");
+                                    return;
+                                  }
 
                                   await caseService.submitCaseReview(workspaceSlug as string, {
                                     review_id: reviewId as string,
                                     case_id: caseIds,
                                     result: "通过",
-                                    assignee: currentUser?.id ? String(currentUser.id) : undefined,
+                                    assignee: userId || undefined,
                                   });
 
-                                  qaCaseSetToastSuccess("已批量通过用例");
+                                  qaCaseSetToastSuccess(
+                                    skippedCount > 0
+                                      ? `已通过 ${caseIds.length} 条用例，跳过 ${skippedCount} 条（你不是评审人）`
+                                      : "已批量通过用例"
+                                  );
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
                                   fetchReviewCaseList(currentPage, pageSize);
@@ -805,13 +913,14 @@ export default function CaseManagementReviewDetailPage() {
           initialSelectedIds={[]}
           projectId={projectId ? String(projectId) : undefined}
           reviewId={reviewId ? String(reviewId) : undefined}
-          onConfirm={async (ids) => {
+          onConfirm={async (ids, assignees) => {
             if (!canEditReview) return;
             if (!workspaceSlug || !reviewId) return;
             try {
               await reviewService.addReviewCases(String(workspaceSlug), String(projectId), {
                 review_id: String(reviewId),
                 case_ids: ids || [],
+                ...(assignees && assignees.length > 0 ? { assignees } : {}),
               });
               qaCaseSetToastSuccess("已关联所选用例");
               setIsCaseSelectionOpen(false);

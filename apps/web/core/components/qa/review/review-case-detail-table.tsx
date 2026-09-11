@@ -23,9 +23,13 @@ type TReviewCaseDetailTableProps = {
   displayProperties: TReviewCaseDisplayProperties;
   loading?: boolean;
   onCancel: (record: ReviewCaseListItem) => void;
+  onAssigneesChange: (record: ReviewCaseListItem, assigneeIds: string[]) => void;
+  /** 评审人下拉关掉时才刷新列表，避免每勾一个人就整页重拉 */
+  onAssigneesEditClose: () => void;
   onOpenCase: (record: ReviewCaseListItem) => void;
   onReview: (record: ReviewCaseListItem) => void;
   onRowSelectChange: (selectedKeysOnCurrentPage: string[]) => void;
+  projectId?: string;
   reviewCases: ReviewCaseListItem[];
   reviewEnums: TReviewEnums;
   selectedCaseIds: string[];
@@ -78,10 +82,13 @@ export const ReviewCaseDetailTable = ({
   canEditReview = true,
   displayProperties,
   loading = false,
+  onAssigneesChange,
+  onAssigneesEditClose,
   onCancel,
   onOpenCase,
   onReview,
   onRowSelectChange,
+  projectId,
   reviewCases,
   reviewEnums,
   selectedCaseIds,
@@ -248,23 +255,21 @@ export const ReviewCaseDetailTable = ({
                     className="h-12 border-r border-b border-subtle px-page-x py-0"
                     style={getWidthStyle("assignees")}
                   >
-                    {Array.isArray(record.assignees) && record.assignees.length > 0 ? (
-                      <MemberDropdown
-                        multiple
-                        value={record.assignees}
-                        onChange={() => {}}
-                        disabled
-                        placeholder="未知用户"
-                        className="w-full text-sm"
-                        buttonContainerClassName="w-full text-left p-0 cursor-default"
-                        buttonVariant="transparent-with-text"
-                        buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-                        showUserDetails
-                        optionsClassName="z-[60]"
-                      />
-                    ) : (
-                      <span className="text-placeholder">-</span>
-                    )}
+                    <MemberDropdown
+                      multiple
+                      projectId={projectId}
+                      value={Array.isArray(record.assignees) ? record.assignees : []}
+                      onChange={(val) => onAssigneesChange(record, Array.isArray(val) ? val : [])}
+                      onClose={onAssigneesEditClose}
+                      disabled={!canEditReview}
+                      placeholder={canEditReview ? "设置评审人" : "-"}
+                      className="w-full text-sm"
+                      buttonContainerClassName={cn("w-full text-left p-0", !canEditReview && "cursor-default")}
+                      buttonVariant="transparent-with-text"
+                      buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+                      showUserDetails
+                      optionsClassName="z-[60]"
+                    />
                   </TableCell>
                 )}
 

@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useContext } from "react";
+import { useCallback, useContext } from "react";
 // context
 import { TranslationContext } from "../context";
 // types
@@ -32,10 +32,15 @@ export function useTranslation(): TTranslationStore {
     throw new Error("useTranslation must be used within a TranslationProvider");
   }
 
+  // changeLanguage 保持引用稳定：store-wrapper 把它放进 useEffect 依赖，
+  // 每次渲染换新函数会让每次路由切换都重跑 changeLanguage、清空整份翻译缓存
+  // t 仍按上游做法每次渲染新建，避免依赖 [t] 的 useMemo 在切换语言后拿到旧文案
+  const changeLanguage = useCallback((lng: TLanguage) => store.setLanguage(lng), [store]);
+
   return {
     t: store.t.bind(store),
     currentLocale: store.currentLocale,
-    changeLanguage: (lng: TLanguage) => store.setLanguage(lng),
+    changeLanguage,
     languages: store.availableLanguages,
   };
 }

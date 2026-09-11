@@ -10,6 +10,7 @@ import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import {
   CASE_PICKER_MODAL_CLASS,
   CasePickerModalStyles,
@@ -34,7 +35,7 @@ type Props = {
   initialSelectedIds: string[];
   projectId?: string;
   reviewId?: string;
-  onConfirm: (ids: string[]) => void;
+  onConfirm: (ids: string[], assignees: string[]) => void;
   onChangeSelected?: (ids: string[]) => void;
 };
 
@@ -59,6 +60,8 @@ export default function TestCaseSelectionModal({
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [checkedTreeKeys, setCheckedTreeKeys] = useState<string[]>([]);
+  // 这批用例关联进评审时一并指定的评审人
+  const [assignees, setAssignees] = useState<string[]>([]);
   const nodeCaseIdsCacheRef = useRef<Record<string, string[]>>({});
 
   const [cases, setCases] = useState<TTestCase[]>([]);
@@ -77,6 +80,7 @@ export default function TestCaseSelectionModal({
     if (!open) return;
     const init = initialSelectedIds?.map(String) || [];
     setSelectedIds(init);
+    setAssignees([]);
     setCheckedTreeKeys([]);
     nodeCaseIdsCacheRef.current = {};
     setSelectedTreeKey("root");
@@ -206,7 +210,7 @@ export default function TestCaseSelectionModal({
   ];
 
   const handleConfirm = () => {
-    onConfirm(selectedIds);
+    onConfirm(selectedIds, assignees);
   };
 
   const onMouseDownResize = (e: any) => {
@@ -556,8 +560,24 @@ export default function TestCaseSelectionModal({
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-subtle bg-surface-1 px-6 py-3">
-          <div className="text-sm text-secondary">
-            已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-secondary">
+              已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
+            </div>
+            <div className="flex items-center gap-2 text-sm text-secondary">
+              <span>评审人</span>
+              <MemberDropdown
+                multiple
+                projectId={projectId ? String(projectId) : undefined}
+                value={assignees}
+                onChange={(value) => setAssignees(Array.isArray(value) ? value : [])}
+                placeholder="可不选"
+                buttonVariant="border-with-text"
+                placement="top-start"
+                optionsClassName="z-[1100]"
+                showUserDetails
+              />
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="secondary" onClick={onClose} size="lg">

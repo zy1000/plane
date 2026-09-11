@@ -637,6 +637,9 @@ importers:
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tanstack/react-virtual':
+        specifier: 'catalog:'
+        version: 3.13.12(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       antd:
         specifier: ^5.27.6
         version: 5.29.3(date-fns@4.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

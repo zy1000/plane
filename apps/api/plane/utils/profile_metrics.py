@@ -417,7 +417,7 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
     )
     return (
         CaseReviewThrough.objects.filter(
-            review__assignees__id=user_id,
+            assignees__id=user_id,
             case__deleted_at__isnull=True,
             case__repository__deleted_at__isnull=True,
             review__deleted_at__isnull=True,
