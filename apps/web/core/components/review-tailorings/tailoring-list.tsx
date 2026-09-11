@@ -10,7 +10,6 @@ import type { TCreateReviewTailoringPayload, TReviewTailoring } from "@plane/typ
 import { EReviewTailoringStatus } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
 import { cn, renderFormattedDate } from "@plane/utils";
-import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { getTailoringError, useReviewTailorings } from "@/hooks/store/use-review-tailorings";
 import { CreateTailoringModal } from "./create-tailoring-modal";
@@ -43,11 +42,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   const visible = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return tailorings;
-    return tailorings.filter(
-      (item) =>
-        item.title.toLowerCase().includes(keyword) ||
-        (item.stage_detail?.label ?? "").toLowerCase().includes(keyword)
-    );
+    return tailorings.filter((item) => item.title.toLowerCase().includes(keyword));
   }, [tailorings, search]);
 
   const translateError = (requestError: unknown) => {
@@ -123,7 +118,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
           <Table className="min-w-full border-separate border-spacing-0 border-t border-l border-subtle">
             <TableHeader className="sticky top-0 z-[2] bg-layer-1">
               <TableRow>
-                {["title", "stage", "status", "revision", "products", "selected", "created_by", "created_at", "approved_at"].map(
+                {["title", "status", "revision", "reviews", "products", "selected", "created_by", "created_at", "approved_at"].map(
                   (key) => (
                     <TableHead
                       key={key}
@@ -152,16 +147,6 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
                     <TableCell className="max-w-[280px] border-r border-b border-subtle px-3 py-2">
                       <span className="block truncate text-13 font-medium text-primary">{item.title}</span>
                     </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                      {item.stage_detail ? (
-                        <DictionaryValueTag
-                          label={item.stage_detail.label}
-                          color={resolveDictionaryItemColor(item.stage_detail)}
-                        />
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
                     <TableCell className="border-r border-b border-subtle px-3 py-2">
                       <ReviewTailoringStatusBadge status={item.status} />
                     </TableCell>
@@ -169,6 +154,9 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
                       {item.revision === 0
                         ? t(`${I18N}.list.never_effective`)
                         : t(`${I18N}.list.revision_value`, { count: item.revision })}
+                    </TableCell>
+                    <TableCell className="border-r border-b border-subtle px-3 py-2 tabular-nums">
+                      {item.review_count}
                     </TableCell>
                     <TableCell className="border-r border-b border-subtle px-3 py-2 tabular-nums">
                       {item.product_count}
@@ -217,8 +205,6 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
       <CreateTailoringModal
         isOpen={isCreateOpen}
         isSubmitting={isMutating}
-        workspaceSlug={workspaceSlug}
-        projectId={projectId}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={handleCreate}
       />

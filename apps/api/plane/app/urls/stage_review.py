@@ -4,7 +4,11 @@ from plane.app.views.stage_review import (
     ReviewTailoringActivityEndpoint,
     ReviewTailoringCommentViewSet,
     ReviewTailoringViewSet,
+    StageReviewActivityEndpoint,
+    StageReviewCommentViewSet,
+    StageReviewFileAPI,
     StageReviewTemplateViewSet,
+    StageReviewViewSet,
 )
 
 urlpatterns = [
@@ -56,6 +60,23 @@ urlpatterns = [
         name="review-tailoring-products",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/"
+        "products/<uuid:product_id>/",
+        ReviewTailoringViewSet.as_view({"delete": "remove_product"}),
+        name="review-tailoring-product-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/reviews/",
+        ReviewTailoringViewSet.as_view({"post": "reviews"}),
+        name="review-tailoring-reviews",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/"
+        "reviews/<uuid:template_id>/",
+        ReviewTailoringViewSet.as_view({"delete": "remove_review"}),
+        name="review-tailoring-review-detail",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/submit/",
         ReviewTailoringViewSet.as_view({"post": "submit"}),
         name="review-tailoring-submit",
@@ -95,5 +116,82 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:tailoring_id>/activities/",
         ReviewTailoringActivityEndpoint.as_view(),
         name="review-tailoring-activities",
+    ),
+    # --- 阶段评审实例（项目级）---------------------------------------------
+    # 状态动作同样走显式 URL：advance 往前一步、rollback 退回一步，具体从哪到哪由
+    # utils/stage_review.py 的状态机决定，接口不接受「直接改成某个状态」。
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/",
+        StageReviewViewSet.as_view({"get": "list", "post": "create"}),
+        name="stage-reviews",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/stages/",
+        StageReviewViewSet.as_view({"get": "stages"}),
+        name="stage-review-stages",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/",
+        StageReviewViewSet.as_view(
+            {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+        ),
+        name="stage-review-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/advance/",
+        StageReviewViewSet.as_view({"post": "advance"}),
+        name="stage-review-advance",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/rollback/",
+        StageReviewViewSet.as_view({"post": "rollback"}),
+        name="stage-review-rollback",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/candidates/",
+        StageReviewViewSet.as_view({"get": "candidates"}),
+        name="stage-review-candidates",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/comments/",
+        StageReviewCommentViewSet.as_view({"get": "list", "post": "create"}),
+        name="stage-review-comments",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/comments/<uuid:pk>/",
+        StageReviewCommentViewSet.as_view({"delete": "destroy"}),
+        name="stage-review-comment-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/activities/",
+        StageReviewActivityEndpoint.as_view(),
+        name="stage-review-activities",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/files/",
+        StageReviewFileAPI.as_view({"get": "list", "post": "upload"}),
+        name="stage-review-files",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/files/<uuid:asset_id>/uploaded/",
+        StageReviewFileAPI.as_view({"patch": "mark_uploaded"}),
+        name="stage-review-file-uploaded",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/files/<uuid:asset_id>/",
+        StageReviewFileAPI.as_view({"delete": "destroy"}),
+        name="stage-review-file-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
+        "<uuid:stage_review_id>/files/<uuid:asset_id>/download/",
+        StageReviewFileAPI.as_view({"get": "download"}),
+        name="stage-review-file-download",
     ),
 ]

@@ -59,6 +59,7 @@ MODULE_LABELS = {
     "product.member": "产品成员",
     "product.project_link": "产品关联项目",
     "project.review_tailoring": "评审裁剪",
+    "project.stage_review": "阶段评审",
     "product.requirement": "产品需求",
     "product.requirement_module": "需求模块",
     "product.role": "产品角色",
@@ -234,6 +235,20 @@ PERMISSION_OVERRIDES = {
         "description": "新建/编辑/删除裁剪表，勾选裁剪项、提交签批与发起修订",
         "module": "project.review_tailoring",
         "category": "评审裁剪",
+        "sort_order": 2,
+    },
+    "project.stage_review.view": {
+        "name": "查看阶段评审",
+        "description": "查看本项目各阶段的评审、评审活动与执行进度",
+        "module": "project.stage_review",
+        "category": "阶段评审",
+        "sort_order": 1,
+    },
+    "project.stage_review.manage": {
+        "name": "维护阶段评审",
+        "description": "推进评审状态、填写评审结论、维护负责人与附件，手工新建评审",
+        "module": "project.stage_review",
+        "category": "阶段评审",
         "sort_order": 2,
     },
     # 自动拼出来是「删除产品设置」「绑定角色产品成员」，不像人话。

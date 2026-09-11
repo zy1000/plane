@@ -7,10 +7,8 @@
 
 from rest_framework import serializers
 
-from plane.app.serializers.data_dictionary import DataDictionaryItemLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
-    DataDictionaryItem,
     ReviewTailoring,
     ReviewTailoringActivity,
     ReviewTailoringApproval,
@@ -45,13 +43,19 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     """矩阵里的一个格子。
 
     ``parent_template_id`` 是给前端建树用的（纵轴要把评审活动缩进到它所属的评审下），
-    直接从模板节点上取，省得前端再去模板库查一遍。
+    ``stage_*`` 三件套是给前端分组用的（纵轴按阶段折成一段一段），都直接从模板节点上
+    取，省得前端再去模板库查一遍。
     """
 
     product_id = serializers.UUIDField(read_only=True)
     template_id = serializers.UUIDField(read_only=True)
     parent_template_id = serializers.UUIDField(
         source="template.parent_id", read_only=True
+    )
+    stage_id = serializers.UUIDField(source="template.stage_id", read_only=True)
+    stage_label = serializers.CharField(source="template.stage.label", read_only=True)
+    stage_sort_order = serializers.FloatField(
+        source="template.stage.sort_order", read_only=True
     )
     kind = serializers.CharField(source="template.kind", read_only=True)
     template_is_active = serializers.BooleanField(
@@ -74,6 +78,9 @@ class ReviewTailoringItemSerializer(BaseSerializer):
             "product_id",
             "template_id",
             "parent_template_id",
+            "stage_id",
+            "stage_label",
+            "stage_sort_order",
             "kind",
             "template_is_active",
             "template_sort_order",
@@ -97,14 +104,30 @@ class ReviewTailoringProductSerializer(serializers.Serializer):
     identifier = serializers.CharField(read_only=True)
 
 
+class ReviewTailoringRowSerializer(serializers.Serializer):
+    """矩阵纵轴的一行 = 纵轴展开后的一个模板节点。
+
+    **不从格子反推**：一张刚加完评审、还没加产品的表没有任何格子，但它的行必须画得出来。
+    前端按这份行清单建阶段分组与父子缩进，格子只负责填每一格的勾选与原因。
+    """
+
+    template_id = serializers.UUIDField(source="id", read_only=True)
+    parent_template_id = serializers.UUIDField(source="parent_id", read_only=True)
+    stage_id = serializers.UUIDField(read_only=True)
+    stage_label = serializers.CharField(source="stage.label", read_only=True)
+    stage_sort_order = serializers.FloatField(source="stage.sort_order", read_only=True)
+    kind = serializers.CharField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    sort_order = serializers.FloatField(read_only=True)
+
+
 class ReviewTailoringListSerializer(BaseSerializer):
     """列表行。计数字段全部由 view 的 queryset annotate 出来，不在这里反查。"""
 
-    stage_id = serializers.UUIDField(read_only=True)
-    stage_detail = DataDictionaryItemLiteSerializer(source="stage", read_only=True)
     created_by_detail = UserLiteSerializer(source="created_by", read_only=True)
     submitted_by_detail = UserLiteSerializer(source="submitted_by", read_only=True)
     product_count = serializers.IntegerField(read_only=True, default=0)
+    review_count = serializers.IntegerField(read_only=True, default=0)
     item_count = serializers.IntegerField(read_only=True, default=0)
     selected_count = serializers.IntegerField(read_only=True, default=0)
 
@@ -115,14 +138,13 @@ class ReviewTailoringListSerializer(BaseSerializer):
             "project_id",
             "workspace_id",
             "title",
-            "stage_id",
-            "stage_detail",
             "status",
             "revision",
             "round",
             "approval_type",
             "required_count",
             "product_count",
+            "review_count",
             "item_count",
             "selected_count",
             "created_by_detail",
@@ -144,6 +166,7 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
     description_html = serializers.CharField(read_only=True)
     items = serializers.SerializerMethodField()
     products = serializers.SerializerMethodField()
+    rows = serializers.SerializerMethodField()
     approvals = serializers.SerializerMethodField()
 
     class Meta(ReviewTailoringListSerializer.Meta):
@@ -151,6 +174,7 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
             "description_html",
             "items",
             "products",
+            "rows",
             "approvals",
         ]
         read_only_fields = fields
@@ -158,6 +182,11 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
     def get_items(self, obj):
         return ReviewTailoringItemSerializer(
             self.context.get("items", []), many=True
+        ).data
+
+    def get_rows(self, obj):
+        return ReviewTailoringRowSerializer(
+            self.context.get("rows", []), many=True
         ).data
 
     def get_products(self, obj):
@@ -236,19 +265,16 @@ class ReviewTailoringCommentSerializer(BaseSerializer):
 
 
 class ReviewTailoringCreateSerializer(serializers.Serializer):
+    """建表只问标题。
+
+    阶段不再是表的属性（纵轴一次铺全部阶段），产品由详情页逐列添加 —— 建表这一步问得
+    越少越好。
+    """
+
     title = serializers.CharField(max_length=255)
     description_html = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=""
     )
-    stage_id = serializers.PrimaryKeyRelatedField(
-        queryset=DataDictionaryItem.objects.all()
-    )
-    product_ids = serializers.ListField(
-        child=serializers.UUIDField(), allow_empty=False
-    )
-
-    def validate_product_ids(self, value):
-        return list(dict.fromkeys(value))
 
 
 class ReviewTailoringHeaderSerializer(serializers.Serializer):
@@ -292,6 +318,17 @@ class ReviewTailoringProductsSerializer(serializers.Serializer):
     )
 
     def validate_product_ids(self, value):
+        return list(dict.fromkeys(value))
+
+
+class ReviewTailoringReviewsSerializer(serializers.Serializer):
+    """加纵轴。只收顶层评审 id —— 是不是顶层、属不属于本工作区在 utils 里查。"""
+
+    template_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False
+    )
+
+    def validate_template_ids(self, value):
         return list(dict.fromkeys(value))
 
 

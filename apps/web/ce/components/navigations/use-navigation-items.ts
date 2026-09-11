@@ -22,6 +22,7 @@ import {
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
   PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
+  PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS,
   PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
   PROJECT_VIEWS_VIEW_PERMISSION_KEY,
   PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY,
@@ -38,7 +39,7 @@ import {
 } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, Bug, Folder, Milestone, Package, Rocket, Rss, Scissors } from "lucide-react";
+import { ArchiveIcon, Bug, ClipboardCheck, Folder, Milestone, Package, Rocket, Rss, Scissors } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -165,6 +166,18 @@ export const useNavigationItems = ({
         permissionKeys: PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
         shouldRender: true,
         sortOrder: 3.7,
+      },
+      {
+        // 阶段评审：紧跟裁剪 —— 裁剪决定「要做哪些评审」，这里是那些评审的执行台
+        i18n_key: "sidebar.stage_reviews",
+        key: "stage_reviews",
+        name: "阶段评审",
+        href: `/${workspaceSlug}/projects/${projectId}/stage-reviews`,
+        icon: ClipboardCheck,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS,
+        shouldRender: true,
+        sortOrder: 3.8,
       },
       {
         i18n_key: "sidebar.milestones",

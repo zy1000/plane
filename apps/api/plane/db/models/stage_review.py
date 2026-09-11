@@ -596,16 +596,76 @@ class StageReviewComment(ProjectBaseModel):
         return f"{self.stage_review_id} {self.actor_id}"
 
 
+class StageReviewActivity(ProjectBaseModel):
+    """评审的变更历史。字段形状对齐 ``ReviewTailoringActivity``。
+
+    **同步写入**，与产生它的动作在同一个事务里。状态只能一步步推进（见
+    ``utils/stage_review.py``），这张表就是「谁在什么时候把它推到哪一步」的唯一线索，
+    异步化换不来什么，却会带来「推进了但历史丢了」。
+    """
+
+    stage_review = models.ForeignKey(
+        StageReview,
+        on_delete=models.CASCADE,
+        related_name="activities",
+        verbose_name="所属评审",
+    )
+    verb = models.CharField(max_length=255, default="created", verbose_name="动作")
+    field = models.CharField(
+        max_length=255, blank=True, null=True, verbose_name="字段名"
+    )
+    old_value = models.TextField(blank=True, null=True, verbose_name="旧值")
+    new_value = models.TextField(blank=True, null=True, verbose_name="新值")
+    comment = models.TextField(blank=True, default="", verbose_name="说明")
+    stage_review_comment = models.ForeignKey(
+        StageReviewComment,
+        on_delete=models.SET_NULL,
+        related_name="comment_activities",
+        null=True,
+        blank=True,
+        verbose_name="关联评论",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="stage_review_activities",
+        verbose_name="操作人",
+    )
+    old_identifier = models.UUIDField(null=True)
+    new_identifier = models.UUIDField(null=True)
+    epoch = models.FloatField(null=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "stage_review_activities"
+        ordering = ("created_at",)
+        verbose_name = "Stage Review Activity"
+        verbose_name_plural = "Stage Review Activities"
+        indexes = [
+            models.Index(
+                fields=["stage_review", "created_at"], name="sract_review_created"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.stage_review_id} {self.field} {self.verb}"
+
+
 class ReviewTailoring(ProjectBaseModel):
-    """一张裁剪表：某项目某阶段下，「哪些产品要做哪些评审」的二维勾选表。
+    """一张裁剪表：某项目下，「哪些产品要做哪些评审」的二维勾选表。
+
+    **表不绑定阶段**（产品决策 2026-09-11）：纵轴一次铺开工作区里**全部阶段**的模板
+    树，按阶段分组；横轴的产品由人在详情页逐个添加。建表那一步只要一个标题 —— 一个
+    项目一张表就能走完 I → D → O → V，不必每个阶段各建一张再重选一遍产品。
 
     **原地修订**：已生效的表点「开始修订」进入 ``revising``，在同一张表上改勾选与
     裁剪原因，再走一轮签批；通过时按差异新增 / 删除评审实例。不复制新表 —— 复制会
     让「当前生效的是哪一张」变成需要推算的事实，而矩阵本身就是可以就地改的。
     ``revision`` 只是**生效次数**（0 = 从未生效），不再是版本号。
 
-    **同一 (项目, 阶段) 允许多张表**（产品决策 2026-09-10）：按标题区分，各自签批、
-    各自生效，同一格子被两张表勾中就生成两条评审。所以这里没有任何跨表唯一约束。
+    **同一项目允许多张表**（产品决策 2026-09-10）：按标题区分，各自签批、各自生效，
+    同一格子被两张表勾中就生成两条评审。所以这里没有任何跨表唯一约束。
 
     签批人名单与通过规则落在 ``approval_type`` / ``required_count`` 与
     ``ReviewTailoringApproval`` 行上，**按轮次（``round``）记账**：每提交一次
@@ -613,12 +673,6 @@ class ReviewTailoring(ProjectBaseModel):
     """
 
     # project / workspace 由 ProjectBaseModel 提供
-    stage = models.ForeignKey(
-        "db.DataDictionaryItem",
-        on_delete=models.RESTRICT,
-        related_name="review_tailorings",
-        verbose_name="裁剪阶段",
-    )
     title = models.CharField(max_length=255, verbose_name="标题")
     # 富文本。口径同 StageReviewTemplate.description_html：只存一列 HTML。
     description_html = models.TextField(blank=True, null=True, verbose_name="描述 HTML")
@@ -671,7 +725,6 @@ class ReviewTailoring(ProjectBaseModel):
         verbose_name = "Review Tailoring"
         verbose_name_plural = "Review Tailorings"
         indexes = [
-            models.Index(fields=["project", "stage"], name="rt_project_stage"),
             models.Index(fields=["project", "status"], name="rt_project_status"),
         ]
         constraints = [
@@ -699,10 +752,90 @@ class ReviewTailoring(ProjectBaseModel):
         return f"{self.title} [{self.status}]"
 
 
+class ReviewTailoringProduct(BaseModel):
+    """裁剪矩阵的**横轴**：这张表要为哪些产品做裁剪。
+
+    为什么单独一张表而不是从格子里反推：两个轴都是人一列一行加出来的，加产品和加评审
+    谁先谁后都得成立。从格子反推的话，先加的那个轴会因为交叉积是空的而当场消失。
+    """
+
+    tailoring = models.ForeignKey(
+        ReviewTailoring,
+        on_delete=models.CASCADE,
+        related_name="axis_products",
+        verbose_name="所属裁剪单",
+    )
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="review_tailoring_columns",
+        verbose_name="产品",
+    )
+
+    class Meta:
+        db_table = "review_tailoring_products"
+        ordering = ("product__identifier", "product__name", "id")
+        verbose_name = "Review Tailoring Product"
+        verbose_name_plural = "Review Tailoring Products"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tailoring", "product"],
+                condition=Q(deleted_at__isnull=True),
+                name="rtp_unique_tailoring_product_active",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.tailoring_id} x {self.product_id}"
+
+
+class ReviewTailoringTemplate(BaseModel):
+    """裁剪矩阵的**纵轴**：这张表要裁哪些评审。
+
+    只存**顶层节点**（评审，或直接挂在阶段下的评审活动）。它下面的评审活动跟着整块进
+    矩阵，不单独记 —— 记了的话模板库后来给这个评审加的新活动就进不来，而那正是修订时
+    ``sync_items`` 该补上的东西。「这个评审要做但其中某个活动不做」由矩阵里取消勾选 +
+    写裁剪原因表达，不是靠纵轴删行。
+    """
+
+    tailoring = models.ForeignKey(
+        ReviewTailoring,
+        on_delete=models.CASCADE,
+        related_name="axis_templates",
+        verbose_name="所属裁剪单",
+    )
+    # PROTECT 与格子一致：被引用过的模板不许删，否则历史裁剪单会变成一张读不懂的表
+    template = models.ForeignKey(
+        StageReviewTemplate,
+        on_delete=models.PROTECT,
+        related_name="tailoring_axis_entries",
+        verbose_name="顶层评审",
+    )
+
+    class Meta:
+        db_table = "review_tailoring_templates"
+        ordering = ("template__stage__sort_order", "template__sort_order", "id")
+        verbose_name = "Review Tailoring Template"
+        verbose_name_plural = "Review Tailoring Templates"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tailoring", "template"],
+                condition=Q(deleted_at__isnull=True),
+                name="rtt_unique_tailoring_template_active",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.tailoring_id} x {self.template_id}"
+
+
 class ReviewTailoringItem(BaseModel):
     """裁剪矩阵里的一个格子：(产品 × 模板节点) 是否需要做。
 
-    纵轴是树：评审与它下面的评审活动各占一行，都能单独勾。「勾了父不勾子」/「勾了子
+    格子是两个轴（``ReviewTailoringProduct`` × ``ReviewTailoringTemplate`` 展开后的
+    节点）的交叉积，**没进轴就没有格子，也就不必为它写裁剪原因** —— 与本项目无关的评审
+    压根不该出现在表里。模板节点自带 ``stage``，格子不另存一份，阶段分组由前端按
+    ``template.stage`` 折出来。评审与它下面的评审活动各占一行，都能单独勾。「勾了父不勾子」/「勾了子
     不勾父」分别生成什么，是生效编排要定的产品语义，本模型不做限制。
 
     ``stage_review`` 记的是这个格子当前对应的评审实例：生效时勾上且指针为空就新建一条
@@ -760,12 +893,6 @@ class ReviewTailoringItem(BaseModel):
                 name="rti_unique_tailoring_product_template_active",
             ),
         ]
-
-    def clean(self):
-        # 裁剪矩阵树形展开、评审与评审活动逐个勾，所以纵轴不再限制 kind，
-        # 只留「格子的模板节点必须属于本裁剪单的阶段」这一条。
-        if self.tailoring.stage_id != self.template.stage_id:
-            raise ValidationError({"template": "模板评审的阶段与裁剪单的阶段不一致"})
 
     def save(self, *args, **kwargs):
         if not self.title and self.template_id:

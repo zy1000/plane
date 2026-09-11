@@ -1,6 +1,9 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
+import { Boxes, ListChecks } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TSubmitReviewTailoringPayload } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
@@ -13,6 +16,7 @@ import { useUser } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useReviewTailoringPermissions } from "../permissions";
 import { AddProductsModal } from "./add-products-modal";
+import { AddReviewsModal } from "./add-reviews-modal";
 import { TailoringApprovalBar } from "./approval-bar";
 import { SubmitApprovalModal } from "./submit-approval-modal";
 import { TailoringActivityFeed } from "./tailoring-activity-feed";
@@ -23,6 +27,32 @@ import { TailoringMatrix } from "./tailoring-matrix";
 import { getCellLockReason } from "./tailoring-matrix-model";
 
 const I18N = "review_tailoring";
+
+/** 轴为空时的引导卡片。横轴纵轴共用一套版式，只是图标与文案不同 */
+const AxisEmptyState = ({
+  icon,
+  title,
+  description,
+  action,
+  onAction,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  action?: string;
+  onAction: () => void;
+}) => (
+  <div className="flex flex-col items-center justify-center gap-2 rounded border border-dashed border-subtle py-14">
+    {icon}
+    <p className="text-14 font-medium text-primary">{title}</p>
+    <p className="max-w-sm text-center text-12 text-tertiary">{description}</p>
+    {action && (
+      <Button variant="primary" size="sm" className="mt-2" onClick={onAction}>
+        {action}
+      </Button>
+    )}
+  </div>
+);
 
 type TTab = "matrix" | "items" | "activity" | "comments";
 
@@ -51,6 +81,9 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [tab, setTab] = useState<TTab>("matrix");
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isAddProductsOpen, setIsAddProductsOpen] = useState(false);
+  const [isAddReviewsOpen, setIsAddReviewsOpen] = useState(false);
+  /** 待确认移除的行或列。两者共用一个确认弹窗 —— 文案与后果是一样的 */
+  const [toRemove, setToRemove] = useState<{ kind: "review" | "product"; id: string; name: string } | null>(null);
   const [isCancelRevisionOpen, setIsCancelRevisionOpen] = useState(false);
 
   const { detail, items, isLoading, isMutating, isDirty, isEditable } = store;
@@ -119,6 +152,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         onSaveCells={() => void run(() => store.saveCells(), "cells_saved")}
         onSubmit={() => setIsSubmitOpen(true)}
         onAddProducts={() => setIsAddProductsOpen(true)}
+        onAddReviews={() => setIsAddReviewsOpen(true)}
         onRevise={() => void run(() => store.revise(), "revising")}
         onCancelRevision={() => setIsCancelRevisionOpen(true)}
       />
@@ -148,13 +182,37 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
             {!editable && canManage && detail.status === EReviewTailoringStatus.APPROVED && (
               <p className="mb-3 text-11 text-tertiary">{t(`${I18N}.matrix.readonly_hint`)}</p>
             )}
-            <TailoringMatrix
-              items={items}
-              products={detail.products}
-              editable={editable}
-              onToggle={handleToggle}
-              onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
-            />
+            {/* 两个轴各自的空态：谁空先引导谁，纵轴优先 —— 没有评审的表连一行都画不出来 */}
+            {detail.rows.length === 0 ? (
+              <AxisEmptyState
+                icon={<ListChecks className="size-8 text-placeholder" />}
+                title={t(`${I18N}.matrix.empty_reviews_title`)}
+                description={t(`${I18N}.matrix.empty_reviews_description`)}
+                action={editable ? t(`${I18N}.actions.add_reviews`) : undefined}
+                onAction={() => setIsAddReviewsOpen(true)}
+              />
+            ) : detail.products.length === 0 ? (
+              <AxisEmptyState
+                icon={<Boxes className="size-8 text-placeholder" />}
+                title={t(`${I18N}.matrix.empty_products_title`)}
+                description={t(`${I18N}.matrix.empty_products_description`)}
+                action={editable ? t(`${I18N}.actions.add_products`) : undefined}
+                onAction={() => setIsAddProductsOpen(true)}
+              />
+            ) : (
+              <TailoringMatrix
+                rows={detail.rows}
+                items={items}
+                products={detail.products}
+                editable={editable}
+                onToggle={handleToggle}
+                onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
+                onRemoveReview={(templateId, title) =>
+                  setToRemove({ kind: "review", id: templateId, name: title })
+                }
+                onRemoveProduct={(productId, name) => setToRemove({ kind: "product", id: productId, name })}
+              />
+            )}
           </>
         )}
 
@@ -162,7 +220,6 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           <TailoringItemsTable
             items={items}
             products={detail.products}
-            stageLabel={detail.stage_detail?.label ?? ""}
             editable={editable}
             onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
             onBulkReason={store.setReasonForMany}
@@ -202,6 +259,37 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           const ok = await run(() => store.submit(payload), "submitted");
           if (ok) setIsSubmitOpen(false);
         }}
+      />
+
+      <AddReviewsModal
+        isOpen={isAddReviewsOpen}
+        isSubmitting={isMutating}
+        workspaceSlug={workspaceSlug}
+        existingRows={detail.rows}
+        onClose={() => setIsAddReviewsOpen(false)}
+        onSubmit={async (templateIds) => {
+          const ok = await run(() => store.addReviews(templateIds), "reviews_added");
+          if (ok) setIsAddReviewsOpen(false);
+        }}
+      />
+
+      <AlertModalCore
+        isOpen={Boolean(toRemove)}
+        handleClose={() => setToRemove(null)}
+        handleSubmit={async () => {
+          if (!toRemove) return;
+          const ok = await run(
+            () =>
+              toRemove.kind === "review"
+                ? store.removeReview(toRemove.id)
+                : store.removeProduct(toRemove.id),
+            "axis_removed"
+          );
+          if (ok) setToRemove(null);
+        }}
+        isSubmitting={isMutating}
+        title={t(`${I18N}.actions.remove_${toRemove?.kind ?? "review"}_title`)}
+        content={t(`${I18N}.actions.remove_axis_content`, { name: toRemove?.name ?? "" })}
       />
 
       <AddProductsModal

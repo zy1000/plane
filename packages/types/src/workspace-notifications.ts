@@ -55,7 +55,6 @@ export type TNotificationData = {
     id: string;
     project_id: string;
     title: string;
-    stage_label: string;
     status: string;
     revision: number;
   };

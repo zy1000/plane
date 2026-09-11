@@ -167,6 +167,30 @@ export const useReviewTailoringDetail = (
     [workspaceSlug, projectId, tailoringId, run]
   );
 
+  const removeProduct = useCallback(
+    async (productId: string) => {
+      if (!workspaceSlug || !projectId || !tailoringId) return undefined;
+      return run(() => service.removeProduct(workspaceSlug, projectId, tailoringId, productId));
+    },
+    [workspaceSlug, projectId, tailoringId, run]
+  );
+
+  const addReviews = useCallback(
+    async (templateIds: string[]) => {
+      if (!workspaceSlug || !projectId || !tailoringId) return undefined;
+      return run(() => service.addReviews(workspaceSlug, projectId, tailoringId, templateIds));
+    },
+    [workspaceSlug, projectId, tailoringId, run]
+  );
+
+  const removeReview = useCallback(
+    async (templateId: string) => {
+      if (!workspaceSlug || !projectId || !tailoringId) return undefined;
+      return run(() => service.removeReview(workspaceSlug, projectId, tailoringId, templateId));
+    },
+    [workspaceSlug, projectId, tailoringId, run]
+  );
+
   /** 提交签批前先把未保存的勾选落库，否则服务端校验的是旧矩阵 */
   const submit = useCallback(
     async (payload: TSubmitReviewTailoringPayload) => {
@@ -225,6 +249,9 @@ export const useReviewTailoringDetail = (
     saveCells,
     updateHeader,
     addProducts,
+    removeProduct,
+    addReviews,
+    removeReview,
     submit,
     withdraw,
     act,

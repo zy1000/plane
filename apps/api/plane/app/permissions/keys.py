@@ -78,6 +78,10 @@ class PermissionKey(str, Enum):
     # 签批人」判定，多一个 key 只会让配错权限的人以为自己能签批。
     PROJECT_REVIEW_TAILORING_VIEW = "project.review_tailoring.view"
     PROJECT_REVIEW_TAILORING_MANAGE = "project.review_tailoring.manage"
+    # 阶段评审实例（StageReview）。与裁剪分开给 key —— 裁剪决定「要做哪些评审」，
+    # 执行评审的是另一拨人，能勾裁剪表不代表该替人推进评审状态。
+    PROJECT_STAGE_REVIEW_VIEW = "project.stage_review.view"
+    PROJECT_STAGE_REVIEW_MANAGE = "project.stage_review.manage"
     # 工作项 CRUD/归档权限按 IssueType 动态衍生为 project.issue_type.<id_hex>.<action>，
     # 见 plane.db.models.issue_type.build_issue_type_permission_key。
     ISSUE_COMMENT_CREATE = "issue.comment.create"

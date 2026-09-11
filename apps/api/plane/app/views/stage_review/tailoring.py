@@ -25,11 +25,11 @@ from plane.app.serializers.review_tailoring import (
     ReviewTailoringHeaderSerializer,
     ReviewTailoringListSerializer,
     ReviewTailoringProductsSerializer,
+    ReviewTailoringReviewsSerializer,
     ReviewTailoringSubmitSerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import (
-    DataDictionaryItem,
     Product,
     Project,
     ReviewTailoring,
@@ -37,14 +37,19 @@ from plane.db.models import (
     ReviewTailoringApproval,
     ReviewTailoringComment,
     ReviewTailoringItem,
+    ReviewTailoringProduct,
 )
 from plane.utils.review_tailoring import (
     ReviewTailoringError,
     act_on_tailoring,
     add_products,
+    add_reviews,
+    axis_templates,
     cancel_revision,
     create_tailoring,
     delete_tailoring,
+    remove_product,
+    remove_review,
     save_cells,
     start_revision,
     submit_for_approval,
@@ -72,6 +77,7 @@ CONFLICT_CODES = {
     "REVIEW_TAILORING_APPROVER_INVALID",
     "REVIEW_TAILORING_REVIEW_COMPLETED",
     "REVIEW_TAILORING_TEMPLATE_DISABLED",
+    "REVIEW_TAILORING_AXIS_IN_USE",
     "REVIEW_TAILORING_EFFECTIVE_UNDELETABLE",
     "REVIEW_TAILORING_PENDING_UNDELETABLE",
 }
@@ -97,7 +103,7 @@ class ReviewTailoringViewSet(BaseViewSet):
     model = ReviewTailoring
     serializer_class = ReviewTailoringListSerializer
     search_fields = ["title"]
-    filterset_fields = {"stage_id": ["exact"], "status": ["exact"]}
+    filterset_fields = {"status": ["exact"]}
 
     def get_queryset(self):
         return self.filter_queryset(
@@ -110,9 +116,7 @@ class ReviewTailoringViewSet(BaseViewSet):
                 project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
             )
-            .select_related(
-                "stage", "stage__dictionary", "created_by", "submitted_by", "project"
-            )
+            .select_related("created_by", "submitted_by", "project")
             .annotate(
                 item_count=Count(
                     "items", filter=Q(items__deleted_at__isnull=True), distinct=True
@@ -122,9 +126,15 @@ class ReviewTailoringViewSet(BaseViewSet):
                     filter=Q(items__deleted_at__isnull=True, items__selected=True),
                     distinct=True,
                 ),
+                # 两个轴各自数自己的行数：从格子反推的话，只加了一个轴的表会显示成 0
                 product_count=Count(
-                    "items__product",
-                    filter=Q(items__deleted_at__isnull=True),
+                    "axis_products",
+                    filter=Q(axis_products__deleted_at__isnull=True),
+                    distinct=True,
+                ),
+                review_count=Count(
+                    "axis_templates",
+                    filter=Q(axis_templates__deleted_at__isnull=True),
                     distinct=True,
                 ),
             )
@@ -137,12 +147,22 @@ class ReviewTailoringViewSet(BaseViewSet):
         """一次查完格子 / 产品 / 本轮签批，再喂给序列化器，避免逐条反查。"""
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
-            .select_related("template", "stage_review", "created_by")
-            .order_by("template__sort_order", "template__created_at", "id")
+            .select_related("template", "template__stage", "stage_review", "created_by")
+            .order_by(
+                "template__stage__sort_order",
+                "template__sort_order",
+                "template__created_at",
+                "id",
+            )
         )
-        product_ids = list(dict.fromkeys(item.product_id for item in items))
+        # 两个轴都单独查：只加了一个轴的表没有任何格子，从格子反推会画出一张空表
+        rows = axis_templates(tailoring)
         products = list(
-            Product.objects.filter(id__in=product_ids).order_by("identifier", "name")
+            Product.objects.filter(
+                id__in=ReviewTailoringProduct.objects.filter(
+                    tailoring=tailoring
+                ).values_list("product_id", flat=True)
+            ).order_by("identifier", "name")
         )
         approvals = list(
             ReviewTailoringApproval.objects.filter(
@@ -154,10 +174,16 @@ class ReviewTailoringViewSet(BaseViewSet):
         # 计数字段在列表 queryset 上 annotate，单条读取时补上，前端两处形状一致
         tailoring.item_count = len(items)
         tailoring.selected_count = sum(1 for item in items if item.selected)
-        tailoring.product_count = len(product_ids)
+        tailoring.product_count = len(products)
+        tailoring.review_count = sum(1 for row in rows if row.parent_id is None)
         serializer = ReviewTailoringDetailSerializer(
             tailoring,
-            context={"items": items, "products": products, "approvals": approvals},
+            context={
+                "items": items,
+                "rows": rows,
+                "products": products,
+                "approvals": approvals,
+            },
         )
         return Response(serializer.data, status=http_status)
 
@@ -206,20 +232,12 @@ class ReviewTailoringViewSet(BaseViewSet):
             return Response(
                 {"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND
             )
-        stage = serializer.validated_data["stage_id"]
-        if stage.workspace_id != project.workspace_id:
-            return Response(
-                {"error": "Stage does not belong to this workspace."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         try:
             with transaction.atomic():
                 tailoring = create_tailoring(
                     project=project,
-                    stage=stage,
                     title=serializer.validated_data["title"],
                     description_html=serializer.validated_data.get("description_html"),
-                    product_ids=serializer.validated_data["product_ids"],
                     actor=request.user,
                 )
         except ReviewTailoringError as exc:
@@ -289,6 +307,53 @@ class ReviewTailoringViewSet(BaseViewSet):
                     tailoring=tailoring,
                     product_ids=serializer.validated_data["product_ids"],
                     actor=request.user,
+                )
+        except ReviewTailoringError as exc:
+            return tailoring_error_response(exc)
+        return self._detail_response(self.get_queryset().filter(pk=pk).first())
+
+    @allow_fine_permission(TAILORING_MANAGE_KEY)
+    def remove_product(self, request, slug, project_id, pk, product_id):
+        try:
+            with transaction.atomic():
+                tailoring = self._locked(pk)
+                if tailoring is None:
+                    return self._not_found()
+                remove_product(
+                    tailoring=tailoring, product_id=product_id, actor=request.user
+                )
+        except ReviewTailoringError as exc:
+            return tailoring_error_response(exc)
+        return self._detail_response(self.get_queryset().filter(pk=pk).first())
+
+    @allow_fine_permission(TAILORING_MANAGE_KEY)
+    def reviews(self, request, slug, project_id, pk):
+        """加纵轴。只收顶层评审 —— 它下面的评审活动跟着整块进矩阵。"""
+        serializer = ReviewTailoringReviewsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                tailoring = self._locked(pk)
+                if tailoring is None:
+                    return self._not_found()
+                add_reviews(
+                    tailoring=tailoring,
+                    template_ids=serializer.validated_data["template_ids"],
+                    actor=request.user,
+                )
+        except ReviewTailoringError as exc:
+            return tailoring_error_response(exc)
+        return self._detail_response(self.get_queryset().filter(pk=pk).first())
+
+    @allow_fine_permission(TAILORING_MANAGE_KEY)
+    def remove_review(self, request, slug, project_id, pk, template_id):
+        try:
+            with transaction.atomic():
+                tailoring = self._locked(pk)
+                if tailoring is None:
+                    return self._not_found()
+                remove_review(
+                    tailoring=tailoring, template_id=template_id, actor=request.user
                 )
         except ReviewTailoringError as exc:
             return tailoring_error_response(exc)

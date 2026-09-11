@@ -16,14 +16,12 @@ import { collectMissingReasons } from "./tailoring-matrix-model";
 export const TailoringItemsTable = ({
   items,
   products,
-  stageLabel,
   editable,
   onReasonChange,
   onBulkReason,
 }: {
   items: TReviewTailoringItem[];
   products: TReviewTailoringProduct[];
-  stageLabel: string;
   editable: boolean;
   onReasonChange: (itemId: string, reason: string) => void;
   onBulkReason: (itemIds: string[], reason: string) => void;
@@ -38,11 +36,12 @@ export const TailoringItemsTable = ({
 
   const visible = useMemo(() => {
     const rows = productFilter === "all" ? items : items.filter((item) => item.product_id === productFilter);
-    // 先按产品再按模板顺序，读起来是「这个产品这一阶段要做什么」
+    // 先按产品、再按阶段、最后按模板顺序，读起来是「这个产品每个阶段要做什么」
     return [...rows].sort((a, b) => {
       const left = productById.get(a.product_id)?.name ?? "";
       const right = productById.get(b.product_id)?.name ?? "";
       if (left !== right) return left.localeCompare(right);
+      if (a.stage_sort_order !== b.stage_sort_order) return a.stage_sort_order - b.stage_sort_order;
       return a.template_sort_order - b.template_sort_order;
     });
   }, [items, productFilter, productById]);
@@ -134,7 +133,7 @@ export const TailoringItemsTable = ({
                     {productById.get(item.product_id)?.name ?? "—"}
                   </TableCell>
                   <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                    {stageLabel}
+                    {item.stage_label}
                   </TableCell>
                   <TableCell className="border-r border-b border-subtle px-3 py-2">
                     <StageReviewKindBadge kind={item.kind as never} />

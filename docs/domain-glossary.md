@@ -217,7 +217,7 @@
 ### 三层关系
 
 1. **模板 `StageReviewTemplate`** —— 工作区级标准流程，树最多两层：评审恒在顶层，评审活动挂在同族评审下**或直接挂在阶段下**（O-SV1 / O-C / O-T1 三个阶段没有汇总评审）。没有「模板头」表，*阶段 + 这棵树* 就是模板。
-2. **裁剪 `ReviewTailoring` + `ReviewTailoringItem`** —— 项目级二维矩阵：横轴产品（来自 `ProductProject`）、纵轴该阶段模板树全部节点。勾上 = 要做，不勾 = 裁剪掉且**必须填 `reason`**（提交签批时校验）。
+2. **裁剪 `ReviewTailoring` + 两个轴 + `ReviewTailoringItem`** —— 项目级二维矩阵。**两个轴都是人挑出来的**：横轴 `ReviewTailoringProduct`（候选来自 `ProductProject`）、纵轴 `ReviewTailoringTemplate`（只存顶层评审，它的评审活动跟着整块进来）。`ReviewTailoringItem` 是两者的交叉积。勾上 = 要做，不勾 = 裁剪掉且**必须填 `reason`**（提交签批时校验）。
 3. **评审实例 `StageReview`** —— 裁剪签批生效时按勾选生成，绑定项目 + 产品。评审活动同样落这张表（`kind ∈ ACTIVITY_KINDS` + `parent`），不是独立表。
 
 **阶段不新建表**，直接引用 `product_stage` 数据字典的值（`Product.stage` 引用的就是它）。要让评审阶段与产品阶段分家，新建一个 `review_stage` 字典 key 即可，外键指向不变。
@@ -230,7 +230,28 @@
 
 **修订是原地改**，不复制新表 —— 生效那一刻把每个格子的 `{selected, reason, stage_review_id}` 写进 `effective_snapshot`，「取消修订」按它回滚，快照之外的格子（修订期 `sync_items` 补进来的）硬删。
 
-**同一 (项目, 阶段) 允许多张表**，同一格子被两张表勾中就生成两条评审（产品决策）。所以 `sr_unique_project_product_template_active` 与两条 `rt_unique_*` 已在迁移 `0364` 删除，生成时的去重只看「本格子 `stage_review` 指针是否为空」。
+**同一项目允许多张表**，同一格子被两张表勾中就生成两条评审（产品决策）。所以 `sr_unique_project_product_template_active` 与两条 `rt_unique_*` 已在迁移 `0364` 删除，生成时的去重只看「本格子 `stage_review` 指针是否为空」。
+
+**表不绑定阶段、两个轴都自己挑（2026-09-11，迁移 `0369` + `0370`）**：`ReviewTailoring.stage` 已删列，一张表跨全部阶段；建表只填标题，建出来是一张**零行零列的空表**（`create_tailoring` 不铺任何格子）。
+
+为什么纵轴不自动铺满全部模板：那样一来**凡是没勾的格子都得写裁剪原因**，而很多评审跟这个项目本来就没关系，逼着为它们编理由只是噪音。所以纵轴改成挑 —— 没加进来的评审不占行，也就不必解释。「这个评审要做但其中某个活动不做」仍然由矩阵里取消勾选 + 写原因表达。
+
+- 加减轴：`add_products` / `remove_product` / `add_reviews` / `remove_review`（`utils/review_tailoring.py`），对应 `POST|DELETE .../products/` 与 `.../reviews/`。纵轴**只收顶层节点**（`parent_id is None`），展开成「它自己 + 当前启用的子活动」放在读的时候做（`axis_templates()`），这样模板库后来加的新活动才进得来。
+- 移除的分寸：行 / 列下只要有格子生成过评审实例就拦（`REVIEW_TAILORING_AXIS_IN_USE`）—— 那条评审是既成事实，要下线请走修订取消勾选。没生成过的一律硬删，留着软删行会让唯一约束挡住下次重新加回来。
+- 详情接口另给一段 `rows`（纵轴展开后的节点），**不从格子反推** —— 只加了一个轴的表一个格子都没有，反推会画出一张空表。
+- 生成评审实例时阶段取自 `item.template.stage_id`，表头上没有阶段可抄。
+- 连带看：`ReviewTailoringItem` 已经没有 `clean()`，裁剪通知的摘要只剩标题，列表的 `product_count` / `review_count` 从轴表 annotate 而不是数格子。
+
+### 评审实例的执行台（2026-09-11）
+
+评审实例自己的那一屏在 `projects/(detail)/[projectId]/stage-reviews/`：左栏阶段（只列有评审的阶段）+ 四张状态卡 + 按产品分组的表（评审活动缩进挂在所属评审下）+ 右侧详情抽屉。
+
+- **状态只能一步步推进**：`未评审 → 评审中 → 审核中 → 已评审`，接口只有 `advance/`（往前一步）与 `rollback/`（退回一步），**没有「改成某个状态」的写入口**，前端也就没有状态下拉。状态机在 `utils/stage_review.py`。
+- **结论在「提交审核」那一刻定稿**：`result` 只由 `advance`（评审中 → 审核中）写入，条件通过必须带原因，O 阶段两种 kind 必须同时给生产方式与出货评估。`PATCH` 的序列化器**刻意不含 status / result**。
+- 负责人 / 审核者生成时是空的，由 `candidates/` 端点按「该产品下担任 `leader_role` / `auditor_role` 的成员」筛；筛不出人退回全部项目成员并回 `fallback: true`。
+- 手工新建的评审 `template` 为空、不回写任何裁剪格子；也只有它能删（裁剪生成的要回裁剪表取消勾选）。
+- 轨迹是新表 `StageReviewActivity`，**同步写**，口径同 `ReviewTailoringActivity`；`_delete_stage_reviews` 也要跟着删它。
+- 权限 `project.stage_review.view/manage`（迁移 `0368`），推进状态不另给 key。
 
 ### 必须记住的三个陷阱
 
@@ -246,18 +267,18 @@
 
 | 层 | 路径 |
 |---|---|
-| Model | `db/models/stage_review.py`（模板 / 裁剪 / 评审 / 签批 / 活动 / 评论 共 7 个 model） |
-| 领域编排 | `utils/review_tailoring.py`（状态机 + 生效编排）、`utils/review_tailoring_notification.py`、`utils/stage_review_template.py`（模板 bootstrap） |
-| Views | `app/views/stage_review/template.py`（工作区级）/ `tailoring.py`（项目级，含评论与活动端点） |
-| Serializers | `app/serializers/stage_review_template.py` / `review_tailoring.py` |
-| URLs | `app/urls/stage_review.py`（两套路由都在这个文件里） |
+| Model | `db/models/stage_review.py`（模板 / 裁剪 / 评审 / 签批 / 活动 / 评论 共 8 个 model） |
+| 领域编排 | `utils/stage_review.py`（评审实例状态机 + 负责人解析）、`utils/review_tailoring.py`（裁剪状态机 + 生效编排）、`utils/review_tailoring_notification.py`、`utils/stage_review_template.py`（模板 bootstrap） |
+| Views | `app/views/stage_review/template.py`（工作区级）/ `tailoring.py`（项目级，含评论与活动端点）/ `review.py`（评审实例：CRUD + advance/rollback + candidates + 评论 / 活动 / 附件） |
+| Serializers | `app/serializers/stage_review_template.py` / `review_tailoring.py` / `stage_review.py` |
+| URLs | `app/urls/stage_review.py`（模板 / 裁剪 / 评审实例三套路由都在这个文件里） |
 | 预置数据 | `db/seed_data/stage_review_templates.py`（10 阶段 / 7 根评审 / 59 活动，零 import 的纯常量模块，迁移与运行时共用） |
-| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限） |
-| 前端类型 | `packages/types/src/stage-review-template.ts`、`review-tailoring.ts` |
-| 前端 service | `core/services/stage-review-template.service.ts`、`review-tailoring.service.ts` |
-| 前端 hook | `core/hooks/store/use-stage-review-templates.ts`、`use-review-tailorings.ts`、`use-review-tailoring-detail.ts`、`use-review-tailoring-feed.ts`（**都走局部 state，不进 MobX root store**） |
-| 前端组件 | `core/components/template-management/reviews/`（模板库）、`core/components/review-tailorings/`（裁剪） |
-| 前端页面 | `templates/reviews/`（工作区）、`projects/(detail)/[projectId]/review-tailorings/`（项目，列表 + 详情两组路由） |
+| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限）`0367`（评审活动表）`0368`（评审实例权限） |
+| 前端类型 | `packages/types/src/stage-review-template.ts`、`review-tailoring.ts`、`stage-review.ts` |
+| 前端 service | `core/services/stage-review-template.service.ts`、`review-tailoring.service.ts`、`stage-review.service.ts` |
+| 前端 hook | `core/hooks/store/use-stage-review-templates.ts`、`use-review-tailorings.ts`、`use-review-tailoring-detail.ts`、`use-review-tailoring-feed.ts`、`use-stage-reviews.ts`、`use-stage-review-detail.ts`（**都走局部 state，不进 MobX root store**） |
+| 前端组件 | `core/components/template-management/reviews/`（模板库）、`core/components/review-tailorings/`（裁剪）、`core/components/stage-reviews/`（评审执行台，含 `detail/` 抽屉） |
+| 前端页面 | `templates/reviews/`（工作区）、`projects/(detail)/[projectId]/review-tailorings/`（项目，列表 + 详情两组路由）、`projects/(detail)/[projectId]/stage-reviews/`（评审执行台，单路由 + 抽屉） |
 
 ## workflow（工作流审批）
 

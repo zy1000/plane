@@ -104,6 +104,46 @@ export class ReviewTailoringService extends APIService {
       });
   }
 
+  async removeProduct(
+    workspaceSlug: string,
+    projectId: string,
+    tailoringId: string,
+    productId: string
+  ): Promise<TReviewTailoringDetail> {
+    return this.delete(`${this.base(workspaceSlug, projectId)}/${tailoringId}/products/${productId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 加纵轴。只收顶层评审 id，它下面的评审活动由后端整块带进矩阵 */
+  async addReviews(
+    workspaceSlug: string,
+    projectId: string,
+    tailoringId: string,
+    templateIds: string[]
+  ): Promise<TReviewTailoringDetail> {
+    return this.post(`${this.base(workspaceSlug, projectId)}/${tailoringId}/reviews/`, { template_ids: templateIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeReview(
+    workspaceSlug: string,
+    projectId: string,
+    tailoringId: string,
+    templateId: string
+  ): Promise<TReviewTailoringDetail> {
+    return this.delete(`${this.base(workspaceSlug, projectId)}/${tailoringId}/reviews/${templateId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async submit(
     workspaceSlug: string,
     projectId: string,

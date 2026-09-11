@@ -42,6 +42,7 @@ export * from "./requirement";
 export * from "./requirement-type";
 export * from "./review-tailoring";
 export * from "./stage-review-template";
+export * from "./stage-review";
 export * from "./page";
 export * from "./payment";
 export * from "./pragmatic";

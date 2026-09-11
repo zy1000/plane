@@ -28,13 +28,11 @@ FIELD_WITHDRAWN = "review_tailoring_approval_withdrawn"
 
 
 def _payload(tailoring, *, field, actor_id, summary):
-    stage_label = getattr(tailoring.stage, "label", "") or ""
     return {
         "review_tailoring": {
             "id": str(tailoring.id),
             "project_id": str(tailoring.project_id),
             "title": tailoring.title,
-            "stage_label": stage_label,
             "status": tailoring.status,
             "revision": tailoring.revision,
         },
@@ -53,8 +51,8 @@ def _payload(tailoring, *, field, actor_id, summary):
 
 
 def _summary(tailoring):
-    stage_label = getattr(tailoring.stage, "label", "") or ""
-    return f"{stage_label} · {tailoring.title}".strip(" ·")
+    # 表不再绑定阶段，标题就是这张表在通知里的全部身份
+    return tailoring.title
 
 
 def _round_approver_ids(tailoring, *, only_pending=False):

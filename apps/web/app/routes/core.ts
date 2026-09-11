@@ -354,6 +354,14 @@ export const coreRoutes: RouteConfigEntry[] = [
             ]
           ),
 
+          // Stage Reviews
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/stage-reviews",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/page.tsx"
+            ),
+          ]),
+
           // Review Tailoring Detail
           layout(
             "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(detail)/layout.tsx",

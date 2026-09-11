@@ -1,4 +1,3 @@
-import type { TDataDictionaryItemLite } from "./data-dictionary";
 import type { IUserLite } from "./users";
 
 /**
@@ -47,6 +46,23 @@ export type TReviewTailoringProduct = {
   identifier: string;
 };
 
+/**
+ * 矩阵纵轴的一行 = 纵轴展开后的一个模板节点。
+ *
+ * 行**不从格子反推**：刚加完评审还没加产品的表一个格子都没有，但行必须画得出来。
+ */
+export type TReviewTailoringRow = {
+  template_id: string;
+  /** 评审活动指向它所属的评审；顶层节点为 null */
+  parent_template_id: string | null;
+  stage_id: string;
+  stage_label: string;
+  stage_sort_order: number;
+  kind: string;
+  title: string;
+  sort_order: number;
+};
+
 /** 矩阵里的一个格子 = (产品, 模板节点) */
 export type TReviewTailoringItem = {
   id: string;
@@ -54,6 +70,10 @@ export type TReviewTailoringItem = {
   template_id: string;
   /** 评审活动指向它所属的评审；顶层节点为 null。前端靠它把纵轴折成树 */
   parent_template_id: string | null;
+  /** 模板节点所属阶段。纵轴跨全部阶段，前端靠这三个字段折成分组 */
+  stage_id: string;
+  stage_label: string;
+  stage_sort_order: number;
   kind: string;
   template_is_active: boolean;
   template_sort_order: number;
@@ -74,8 +94,6 @@ export type TReviewTailoring = {
   project_id: string;
   workspace_id: string;
   title: string;
-  stage_id: string;
-  stage_detail: TDataDictionaryItemLite | null;
   status: EReviewTailoringStatus;
   /** 生效次数，0 = 从未生效 */
   revision: number;
@@ -84,6 +102,8 @@ export type TReviewTailoring = {
   approval_type: TReviewTailoringApprovalType | "";
   required_count: number | null;
   product_count: number;
+  /** 纵轴上的顶层评审数（不含它们下面的评审活动） */
+  review_count: number;
   item_count: number;
   selected_count: number;
   created_by_detail: IUserLite | null;
@@ -98,6 +118,7 @@ export type TReviewTailoringDetail = TReviewTailoring & {
   description_html: string | null;
   items: TReviewTailoringItem[];
   products: TReviewTailoringProduct[];
+  rows: TReviewTailoringRow[];
   /** 只有本轮的签批行；历史轮次留在变更历史里 */
   approvals: TReviewTailoringApproval[];
 };
@@ -142,8 +163,6 @@ export type TReviewTailoringComment = {
 export type TCreateReviewTailoringPayload = {
   title: string;
   description_html?: string | null;
-  stage_id: string;
-  product_ids: string[];
 };
 
 export type TUpdateReviewTailoringHeaderPayload = {

@@ -3,6 +3,11 @@
 一句话讲清这套东西在做什么：**裁剪表是「产品 × 评审模板节点」的勾选矩阵，签批通过
 的那一刻，把勾选状态同步成一批真实的评审实例（``StageReview``）。**
 
+**两个轴都是人挑出来的**：横轴 ``ReviewTailoringProduct``、纵轴 ``ReviewTailoringTemplate``
+（只存顶层评审，它的评审活动跟着整块进来），格子是两者的交叉积。没进轴的评审压根不出现
+在表里，也就不必为它写裁剪原因 —— 全量铺开时「凡是没勾的都要写理由」才是真正劝退人的
+地方。所以建表只要一个标题，建出来是一张零行零列的空表。
+
 三条贯穿全文的约定：
 
 1. **调用方负责事务与行锁。** 本模块的写函数一律假定外层已经
@@ -30,8 +35,11 @@ from plane.db.models import (
     ReviewTailoringApprovalAction,
     ReviewTailoringApprovalType,
     ReviewTailoringItem,
+    ReviewTailoringProduct,
     ReviewTailoringStatus,
+    ReviewTailoringTemplate,
     StageReview,
+    StageReviewActivity,
     StageReviewComment,
     StageReviewStatus,
     StageReviewTemplate,
@@ -114,17 +122,49 @@ def _linked_product_ids(project_id):
     )
 
 
-def _active_templates(workspace_id, stage_id):
-    """某阶段下启用中的模板节点，先根后子。
+def _axis_product_ids(tailoring):
+    """横轴上的产品，按加入顺序无关的固定口径排（列头的排序由视图统一做）。"""
+    return list(
+        ReviewTailoringProduct.objects.filter(tailoring=tailoring)
+        .order_by("product__identifier", "product__name", "id")
+        .values_list("product_id", flat=True)
+    )
 
-    排序口径与模板库列表一致（``views/stage_review/template.py:49``）：节点之间按
-    ``sort_order``，父子关系由调用方按 ``parent_id`` 重建。
+
+def _axis_root_ids(tailoring):
+    """纵轴上的顶层评审 id。"""
+    return list(
+        ReviewTailoringTemplate.objects.filter(tailoring=tailoring).values_list(
+            "template_id", flat=True
+        )
+    )
+
+
+def _expand_templates(root_ids):
+    """把选中的顶层评审展开成真正要铺的节点：它自己 + 它下面**当前启用**的评审活动。
+
+    纵轴只存顶层，展开放在读的时候做 —— 模板库后来给这个评审加的新活动才进得来，那正是
+    修订时 ``sync_items`` 该补上的东西。
+
+    排序口径与模板库列表一致（``views/stage_review/template.py:48``）：阶段之间按字典值
+    的 ``sort_order``，阶段内按节点的 ``sort_order``。``select_related("stage")`` 是给
+    序列化器用的 —— 行要透出阶段标签。
     """
+    root_ids = list(root_ids)
+    if not root_ids:
+        return []
     return list(
         StageReviewTemplate.objects.filter(
-            workspace_id=workspace_id, stage_id=stage_id, is_active=True
-        ).order_by("sort_order", "created_at", "id")
+            Q(id__in=root_ids) | Q(parent_id__in=root_ids), is_active=True
+        )
+        .select_related("stage")
+        .order_by("stage__sort_order", "sort_order", "created_at", "id")
     )
+
+
+def axis_templates(tailoring):
+    """纵轴展开后的全部节点。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
+    return _expand_templates(_axis_root_ids(tailoring))
 
 
 def _sort_templates_root_first(templates):
@@ -159,49 +199,21 @@ def _build_items(tailoring, templates, product_ids, actor):
 # --- 建表与格子维护 --------------------------------------------------------
 
 
-def create_tailoring(
-    *, project, stage, title, description_html, product_ids, actor
-):
-    """新建一张裁剪表，并把 (选中的产品 × 该阶段启用模板) 的格子全部铺好。
+def create_tailoring(*, project, title, description_html, actor):
+    """新建一张裁剪表。**只建表头，一个格子都不铺。**
 
-    产品必须已经关联进本项目 —— 裁剪的是「本项目要为这个产品做哪些评审」，没关联的
-    产品在这里没有意义。
+    矩阵是「产品 × 全阶段模板节点」，而产品这一维在建表这一刻还不知道 —— 由人在详情页
+    逐列添加（``add_products``）。所以新表是一张零列的空表，纵轴要等第一列产品进来才
+    显形。
     """
-    product_ids = list(dict.fromkeys(product_ids))
-    if not product_ids:
-        raise ReviewTailoringError(
-            "At least one product is required.",
-            code="REVIEW_TAILORING_PRODUCT_REQUIRED",
-        )
-
-    linked = _linked_product_ids(project.id)
-    invalid = [str(pid) for pid in product_ids if pid not in linked]
-    if invalid:
-        raise ReviewTailoringError(
-            "Some products are not linked to this project.",
-            code="REVIEW_TAILORING_PRODUCT_NOT_LINKED",
-            detail={"product_ids": invalid},
-        )
-
-    templates = _active_templates(project.workspace_id, stage.id)
-    if not templates:
-        raise ReviewTailoringError(
-            "This stage has no active review templates.",
-            code="REVIEW_TAILORING_STAGE_NO_TEMPLATE",
-        )
-
     tailoring = ReviewTailoring.objects.create(
         workspace_id=project.workspace_id,
         project=project,
-        stage=stage,
         title=title,
         description_html=description_html or None,
         status=ReviewTailoringStatus.DRAFT,
         created_by=actor,
         updated_by=actor,
-    )
-    ReviewTailoringItem.objects.bulk_create(
-        _build_items(tailoring, templates, product_ids, actor), batch_size=500
     )
     _write_activity(
         tailoring,
@@ -209,13 +221,17 @@ def create_tailoring(
         verb="created",
         field="tailoring",
         new_value=title,
-        extra={"product_count": len(product_ids), "template_count": len(templates)},
     )
     return tailoring
 
 
 def add_products(*, tailoring, product_ids, actor):
-    """给已有的表补几列产品。只增不删 —— 删列走 ``sync_items``。"""
+    """给横轴加几列产品，并按当前纵轴把这几列的格子铺满。
+
+    产品必须已经关联进本项目 —— 裁剪的是「本项目要为这个产品做哪些评审」，没关联的
+    产品在这里没有意义。纵轴此刻可以是空的：列先立住，等加了评审再由 ``add_reviews``
+    把交叉的格子补出来。
+    """
     _require_status(
         tailoring,
         EDITABLE_STATUSES,
@@ -232,19 +248,27 @@ def add_products(*, tailoring, product_ids, actor):
             detail={"product_ids": invalid},
         )
 
-    existing = set(
-        ReviewTailoringItem.objects.filter(tailoring=tailoring).values_list(
-            "product_id", flat=True
-        )
-    )
+    existing = set(_axis_product_ids(tailoring))
     fresh = [pid for pid in product_ids if pid not in existing]
     if not fresh:
         return 0
 
-    templates = _active_templates(tailoring.workspace_id, tailoring.stage_id)
-    ReviewTailoringItem.objects.bulk_create(
-        _build_items(tailoring, templates, fresh, actor), batch_size=500
+    ReviewTailoringProduct.objects.bulk_create(
+        [
+            ReviewTailoringProduct(
+                tailoring=tailoring,
+                product_id=product_id,
+                created_by=actor,
+                updated_by=actor,
+            )
+            for product_id in fresh
+        ]
     )
+    templates = axis_templates(tailoring)
+    if templates:
+        ReviewTailoringItem.objects.bulk_create(
+            _build_items(tailoring, templates, fresh, actor), batch_size=500
+        )
     _write_activity(
         tailoring,
         actor=actor,
@@ -256,13 +280,183 @@ def add_products(*, tailoring, product_ids, actor):
     return len(fresh)
 
 
+def add_reviews(*, tailoring, template_ids, actor):
+    """给纵轴加几个评审，并按当前横轴把这几行的格子铺满。
+
+    只收**顶层节点**（评审，或直接挂在阶段下的评审活动）—— 它下面的评审活动跟着整块进
+    矩阵。「这个评审要做，但其中某个活动不做」由矩阵里取消勾选 + 写裁剪原因表达，而不是
+    靠纵轴少加一行；反过来，跟本项目无关的评审根本不进表，也就不用为它编理由。
+    """
+    _require_status(
+        tailoring,
+        EDITABLE_STATUSES,
+        code="REVIEW_TAILORING_NOT_EDITABLE",
+        message="Only a draft or revising tailoring can be edited.",
+    )
+    template_ids = list(dict.fromkeys(template_ids))
+    candidates = {
+        template.id: template
+        for template in StageReviewTemplate.objects.filter(
+            id__in=template_ids, workspace_id=tailoring.workspace_id, is_active=True
+        )
+    }
+    invalid = [str(tid) for tid in template_ids if tid not in candidates]
+    if invalid:
+        raise ReviewTailoringError(
+            "Some reviews do not exist in this workspace or are disabled.",
+            code="REVIEW_TAILORING_TEMPLATE_INVALID",
+            detail={"template_ids": invalid},
+        )
+    not_root = [
+        str(tid) for tid in template_ids if candidates[tid].parent_id is not None
+    ]
+    if not_root:
+        raise ReviewTailoringError(
+            "Only a top-level review can be added to the matrix.",
+            code="REVIEW_TAILORING_TEMPLATE_NOT_ROOT",
+            detail={"template_ids": not_root},
+        )
+
+    existing = set(_axis_root_ids(tailoring))
+    fresh = [tid for tid in template_ids if tid not in existing]
+    if not fresh:
+        return 0
+
+    ReviewTailoringTemplate.objects.bulk_create(
+        [
+            ReviewTailoringTemplate(
+                tailoring=tailoring,
+                template_id=template_id,
+                created_by=actor,
+                updated_by=actor,
+            )
+            for template_id in fresh
+        ]
+    )
+    product_ids = _axis_product_ids(tailoring)
+    if product_ids:
+        ReviewTailoringItem.objects.bulk_create(
+            _build_items(tailoring, _expand_templates(fresh), product_ids, actor),
+            batch_size=500,
+        )
+    _write_activity(
+        tailoring,
+        actor=actor,
+        verb="updated",
+        field="reviews",
+        new_value=len(fresh),
+        extra={
+            "template_ids": [str(tid) for tid in fresh],
+            "titles": [candidates[tid].title for tid in fresh],
+        },
+    )
+    return len(fresh)
+
+
+def _assert_axis_removable(items):
+    """这一行 / 这一列能不能移除。
+
+    只要其中任何一个格子已经生成过评审实例，就不许悄悄抽掉 —— 那条评审是既成事实，抽掉
+    整行会让它失去唯一的来源解释。要下线请走修订，把格子取消勾选，让 ``_apply_effective``
+    正经把评审删掉。
+    """
+    blocking = [item for item in items if item.stage_review_id]
+    if blocking:
+        raise ReviewTailoringError(
+            "Some cells already generated reviews; uncheck them in a revision instead.",
+            code="REVIEW_TAILORING_AXIS_IN_USE",
+            detail={"item_ids": [str(item.id) for item in blocking]},
+        )
+
+
+def remove_product(*, tailoring, product_id, actor):
+    """移除横轴的一列。加错了能改回来，不必删表重建。"""
+    _require_status(
+        tailoring,
+        EDITABLE_STATUSES,
+        code="REVIEW_TAILORING_NOT_EDITABLE",
+        message="Only a draft or revising tailoring can be edited.",
+    )
+    column = ReviewTailoringProduct.objects.filter(
+        tailoring=tailoring, product_id=product_id
+    ).first()
+    if column is None:
+        raise ReviewTailoringError(
+            "This product is not on the matrix.",
+            code="REVIEW_TAILORING_AXIS_NOT_FOUND",
+        )
+
+    items = list(
+        ReviewTailoringItem.objects.filter(tailoring=tailoring, product_id=product_id)
+    )
+    _assert_axis_removable(items)
+
+    # 硬删：这一列从未生效过，留着软删行只会让唯一约束挡住下次重新加回来
+    ReviewTailoringItem.objects.filter(
+        id__in=[item.id for item in items]
+    ).delete(soft=False)
+    ReviewTailoringProduct.objects.filter(id=column.id).delete(soft=False)
+    _write_activity(
+        tailoring,
+        actor=actor,
+        verb="updated",
+        field="products",
+        old_value=1,
+        extra={"removed_product_id": str(product_id)},
+    )
+    return len(items)
+
+
+def remove_review(*, tailoring, template_id, actor):
+    """移除纵轴的一行（顶层评审连同它的评审活动）。"""
+    _require_status(
+        tailoring,
+        EDITABLE_STATUSES,
+        code="REVIEW_TAILORING_NOT_EDITABLE",
+        message="Only a draft or revising tailoring can be edited.",
+    )
+    row = ReviewTailoringTemplate.objects.filter(
+        tailoring=tailoring, template_id=template_id
+    ).select_related("template").first()
+    if row is None:
+        raise ReviewTailoringError(
+            "This review is not on the matrix.",
+            code="REVIEW_TAILORING_AXIS_NOT_FOUND",
+        )
+
+    # 停用后的活动不在 _expand_templates 里，但它的格子还在，所以按 template 的父子关系查
+    items = list(
+        ReviewTailoringItem.objects.filter(tailoring=tailoring).filter(
+            Q(template_id=template_id) | Q(template__parent_id=template_id)
+        )
+    )
+    _assert_axis_removable(items)
+
+    ReviewTailoringItem.objects.filter(
+        id__in=[item.id for item in items]
+    ).delete(soft=False)
+    ReviewTailoringTemplate.objects.filter(id=row.id).delete(soft=False)
+    _write_activity(
+        tailoring,
+        actor=actor,
+        verb="updated",
+        field="reviews",
+        old_value=1,
+        extra={"removed_template_id": str(template_id), "title": row.template.title},
+    )
+    return len(items)
+
+
 def sync_items(*, tailoring, actor):
-    """把格子对齐「当前关联的产品 × 当前启用的模板」。
+    """把格子对齐「当前横轴 × 当前纵轴展开后的节点」。
 
-    开始修订时跑一次：这期间模板库可能加了新评审、项目可能新关联了产品。
+    开始修订时跑一次：这期间模板库可能给某个已选评审加了新活动、也可能停用了旧活动。
 
-    删列的分寸：草稿表随便删；修订中的表只删还没生成过评审的格子 —— 已经生成的评审
-    是既成事实，产品被解除关联不该让它凭空消失，那属于评审自己的生命周期。
+    顺带收一下轴自己的烂摊子：产品被解除了与本项目的关联、顶层评审被停用或删除，那一
+    行 / 那一列就不该继续留在表上。
+
+    删的分寸：只删还没生成过评审的格子 —— 已经生成的评审是既成事实，产品被解除关联不该
+    让它凭空消失，那属于评审自己的生命周期。
     """
     _require_status(
         tailoring,
@@ -272,11 +466,45 @@ def sync_items(*, tailoring, actor):
     )
 
     items = list(ReviewTailoringItem.objects.filter(tailoring=tailoring))
-    templates = _active_templates(tailoring.workspace_id, tailoring.stage_id)
-    template_ids = {template.id for template in templates}
     linked = _linked_product_ids(tailoring.project_id)
 
-    product_ids = {item.product_id for item in items if item.product_id in linked}
+    # 1. 轴上已经站不住的行列先摘掉（有格子生成过评审的留着，理由同上）
+    stale_columns = [
+        column
+        for column in ReviewTailoringProduct.objects.filter(tailoring=tailoring)
+        if column.product_id not in linked
+    ]
+    generated_products = {item.product_id for item in items if item.stage_review_id}
+    stale_columns = [
+        column for column in stale_columns if column.product_id not in generated_products
+    ]
+    if stale_columns:
+        ReviewTailoringProduct.objects.filter(
+            id__in=[column.id for column in stale_columns]
+        ).delete(soft=False)
+
+    live_root_ids = set(
+        StageReviewTemplate.objects.filter(
+            id__in=_axis_root_ids(tailoring), is_active=True
+        ).values_list("id", flat=True)
+    )
+    generated_templates = {item.template_id for item in items if item.stage_review_id}
+    stale_rows = [
+        row
+        for row in ReviewTailoringTemplate.objects.filter(tailoring=tailoring)
+        if row.template_id not in live_root_ids
+        and row.template_id not in generated_templates
+    ]
+    if stale_rows:
+        ReviewTailoringTemplate.objects.filter(
+            id__in=[row.id for row in stale_rows]
+        ).delete(soft=False)
+
+    # 2. 再按收拾干净的两个轴对齐格子
+    product_ids = _axis_product_ids(tailoring)
+    templates = axis_templates(tailoring)
+    template_ids = {template.id for template in templates}
+    product_id_set = set(product_ids)
     present = {(item.product_id, item.template_id) for item in items}
 
     missing = [
@@ -297,13 +525,15 @@ def sync_items(*, tailoring, actor):
     if missing:
         ReviewTailoringItem.objects.bulk_create(missing, batch_size=500)
 
-    # 产品被解除关联，或模板被停用/删除，且这个格子从没生成过评审 → 硬删干净。
-    # 硬删是因为它从未生效过，留着只会让矩阵多出一列/一行读不懂的东西。
+    # 掉出两个轴、且从没生成过评审的格子 → 硬删干净。硬删是因为它从未生效过，留着只会
+    # 让矩阵多出一行 / 一列读不懂的东西。
     stale = [
         item
         for item in items
         if item.stage_review_id is None
-        and (item.product_id not in linked or item.template_id not in template_ids)
+        and (
+            item.product_id not in product_id_set or item.template_id not in template_ids
+        )
     ]
     if stale:
         ReviewTailoringItem.objects.filter(
@@ -832,6 +1062,7 @@ def _delete_stage_reviews(review_ids):
     ReviewTailoringItem.objects.filter(stage_review_id__in=all_ids).update(
         stage_review=None
     )
+    StageReviewActivity.objects.filter(stage_review_id__in=all_ids).delete()
     StageReviewComment.objects.filter(stage_review_id__in=all_ids).delete()
     FileAsset.objects.filter(
         Q(stage_review_id__in=all_ids)
@@ -880,7 +1111,8 @@ def _create_stage_reviews(tailoring, items, actor):
                 workspace_id=tailoring.workspace_id,
                 project_id=tailoring.project_id,
                 product_id=item.product_id,
-                stage_id=tailoring.stage_id,
+                # 阶段跟着模板节点走 —— 一张表跨全部阶段，表头上没有阶段可抄
+                stage_id=template.stage_id,
                 kind=template.kind,
                 parent_id=parent_id,
                 template=template,

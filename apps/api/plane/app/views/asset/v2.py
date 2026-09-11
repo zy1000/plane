@@ -843,6 +843,12 @@ class ProjectAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
 
+        # 上传阶段 StageReviewComment 尚未创建，entity_identifier 是 stage_review_id，
+        # 先以评审作为 path 父级；bulk 阶段再回填 stage_review_comment_id
+        # （与 STAGE_REVIEW_FILE 共享同一存储目录，不需要 rebind）。
+        if entity_type == FileAsset.EntityTypeContext.STAGE_REVIEW_COMMENT_DESCRIPTION:
+            return {"stage_review_id": entity_id}
+
         return {}
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
@@ -1045,6 +1051,14 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
             except IntegrityError:
                 pass
 
+        # StageReviewComment 创建完成后回填 stage_review_comment_id；path 在上传时已挂到
+        # 评审节点下，这里不需要再 rebind。
+        if asset.entity_type == FileAsset.EntityTypeContext.STAGE_REVIEW_COMMENT_DESCRIPTION:
+            try:
+                assets.update(stage_review_comment_id=entity_id)
+            except IntegrityError:
+                pass
+
         if needs_rebind:
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -1110,6 +1124,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
 
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
+
+        if entity_type == FileAsset.EntityTypeContext.STAGE_REVIEW_COMMENT_DESCRIPTION:
+            return {"stage_review_id": entity_id}
 
         # 测试用例附件/模板用例富文本贴图（entity_id 为空表示不绑 case）
         if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:

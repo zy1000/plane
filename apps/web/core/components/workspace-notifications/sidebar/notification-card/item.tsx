@@ -180,11 +180,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
             <div className="line-clamp-1 w-full truncate overflow-hidden break-words whitespace-normal">
               {isTailoringNotification ? (
                 /* 裁剪表通知没有 issue，照原样渲染会剩一个孤零零的「-」 */
-                <>
-                  {reviewTailoring?.stage_label}
-                  {reviewTailoring?.stage_label && reviewTailoring?.title ? " · " : ""}
-                  {reviewTailoring?.title}
-                </>
+                <>{reviewTailoring?.title}</>
               ) : (
                 <>
                   {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;

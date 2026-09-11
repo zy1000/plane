@@ -315,6 +315,18 @@ export const PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS = [
   PROJECT_REVIEW_TAILORING_MANAGE_PERMISSION_KEY,
 ];
 
+/**
+ * 阶段评审页权限常量，与后端 PermissionKey.PROJECT_STAGE_REVIEW_* 一致。
+ * 与裁剪分开给 key —— 裁剪决定「要做哪些评审」，执行评审的是另一拨人。
+ */
+export const PROJECT_STAGE_REVIEW_VIEW_PERMISSION_KEY = "project.stage_review.view" as const;
+export const PROJECT_STAGE_REVIEW_MANAGE_PERMISSION_KEY = "project.stage_review.manage" as const;
+/** 读接受任一：只配了维护的角色不该被读挡住，口径同后端 STAGE_REVIEW_READ_KEYS */
+export const PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS = [
+  PROJECT_STAGE_REVIEW_VIEW_PERMISSION_KEY,
+  PROJECT_STAGE_REVIEW_MANAGE_PERMISSION_KEY,
+];
+
 /** 项目里程碑页权限常量，与后端 PermissionKey.MILESTONE_VIEW 一致 */
 export const PROJECT_MILESTONE_VIEW_PERMISSION_KEY = "milestone.view" as const;
 export const PROJECT_MILESTONE_CREATE_PERMISSION_KEY = "milestone.create" as const;

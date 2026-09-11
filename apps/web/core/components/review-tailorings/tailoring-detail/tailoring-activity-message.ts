@@ -22,8 +22,15 @@ export const buildActivityMessage = (activity: TReviewTailoringActivity, t: TFn)
       });
     case "description":
       return t("review_tailoring.activity.description_changed");
+    // 加列与移除列共用 field="products"：加列记 new_value，移除列记 old_value
     case "products":
-      return t("review_tailoring.activity.products_added", { count: activity.new_value ?? 0 });
+      return activity.new_value
+        ? t("review_tailoring.activity.products_added", { count: activity.new_value })
+        : t("review_tailoring.activity.products_removed");
+    case "reviews":
+      return activity.new_value
+        ? t("review_tailoring.activity.reviews_added", { count: activity.new_value })
+        : t("review_tailoring.activity.reviews_removed");
     case "items":
       return t("review_tailoring.activity.items_synced", {
         added: extra.added ?? 0,

@@ -5,7 +5,6 @@ import { Button } from "@plane/propel/button";
 import type { TReviewTailoringDetail } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
 import { cn, renderFormattedDate } from "@plane/utils";
-import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { ReviewTailoringStatusBadge } from "../status-badge";
 
 const I18N = "review_tailoring";
@@ -26,6 +25,7 @@ export const TailoringHeader = ({
   onSaveCells,
   onSubmit,
   onAddProducts,
+  onAddReviews,
   onRevise,
   onCancelRevision,
 }: {
@@ -37,6 +37,7 @@ export const TailoringHeader = ({
   onSaveCells: () => void;
   onSubmit: () => void;
   onAddProducts: () => void;
+  onAddReviews: () => void;
   onRevise: () => void;
   onCancelRevision: () => void;
 }) => {
@@ -109,12 +110,6 @@ export const TailoringHeader = ({
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-11 text-tertiary">
-            {detail.stage_detail && (
-              <DictionaryValueTag
-                label={detail.stage_detail.label}
-                color={resolveDictionaryItemColor(detail.stage_detail)}
-              />
-            )}
             <ReviewTailoringStatusBadge status={detail.status} />
             <span>
               {detail.revision === 0
@@ -126,6 +121,12 @@ export const TailoringHeader = ({
                 {t(`${I18N}.list.approved_at`)} {renderFormattedDate(detail.approved_at)}
               </span>
             )}
+            <span>
+              {t(`${I18N}.list.axis_value`, {
+                reviews: detail.review_count,
+                products: detail.product_count,
+              })}
+            </span>
             <span>
               {t(`${I18N}.list.selected_value`, {
                 selected: detail.selected_count,
@@ -139,6 +140,9 @@ export const TailoringHeader = ({
           <div className="flex flex-wrap items-center gap-2">
             {isEditable && (
               <>
+                <Button variant="secondary" size="sm" disabled={isMutating} onClick={onAddReviews}>
+                  {t(`${I18N}.actions.add_reviews`)}
+                </Button>
                 <Button variant="secondary" size="sm" disabled={isMutating} onClick={onAddProducts}>
                   {t(`${I18N}.actions.add_products`)}
                 </Button>
