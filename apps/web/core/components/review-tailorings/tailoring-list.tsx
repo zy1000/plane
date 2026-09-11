@@ -1,24 +1,46 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
-import { Plus, Scissors, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { SearchIcon } from "@plane/propel/icons";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TCreateReviewTailoringPayload, TReviewTailoring } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn, copyUrlToClipboard } from "@plane/utils";
+import { CountChip } from "@/components/common/count-chip";
+import { PageSearchInput } from "@/components/pages/list/search-input";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { getTailoringError, useReviewTailorings } from "@/hooks/store/use-review-tailorings";
 import { CreateTailoringModal } from "./create-tailoring-modal";
+import { TailoringAppliedFilters } from "./list/applied-filters";
+import { TailoringEmptyState } from "./list/empty-state";
+import {
+  EMPTY_TAILORING_FILTERS,
+  REVIEW_TAILORINGS_HEADER_ACTIONS_ID,
+  REVIEW_TAILORINGS_HEADER_COUNT_ID,
+  filterTailorings,
+  hasTailoringFilters,
+} from "./list/filters";
+import { TailoringFiltersDropdown } from "./list/filters-dropdown";
+import { TailoringRow } from "./list/tailoring-row";
 import { useReviewTailoringPermissions } from "./permissions";
-import { ReviewTailoringStatusBadge } from "./status-badge";
 
 const I18N = "review_tailoring";
 
-/** 裁剪表列表。行点击进详情，删除只对从未生效过的草稿开放 */
+const COLUMNS = [
+  { key: "tailoring", className: "w-[36%] pl-6" },
+  { key: "status", className: "w-[18%]" },
+  { key: "selected", className: "w-[18%]" },
+  { key: "created_by", className: "w-[14%]" },
+  { key: "updated_at", className: "w-[10%]" },
+] as const;
+
+/**
+ * 裁剪表列表。搜索 / 过滤 / 新建 portal 进页头右侧的挂点，状态全留在这里；
+ * 行点击进详情，删除只对从未生效过的草稿开放。
+ */
 export const ReviewTailoringList = observer(function ReviewTailoringList({
   workspaceSlug,
   projectId,
@@ -35,15 +57,22 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   );
 
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState(EMPTY_TAILORING_FILTERS);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [toDelete, setToDelete] = useState<TReviewTailoring | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
+  const [countHost, setCountHost] = useState<HTMLElement | null>(null);
 
-  const visible = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return tailorings;
-    return tailorings.filter((item) => item.title.toLowerCase().includes(keyword));
-  }, [tailorings, search]);
+  // 挂点在同一次提交里由页头渲染出来，layout effect 时 DOM 已就绪
+  useLayoutEffect(() => {
+    setActionsHost(document.getElementById(REVIEW_TAILORINGS_HEADER_ACTIONS_ID));
+    setCountHost(document.getElementById(REVIEW_TAILORINGS_HEADER_COUNT_ID));
+  }, []);
+
+  const visible = useMemo(() => filterTailorings(tailorings, search, filters), [tailorings, search, filters]);
+
+  const detailPath = (id: string) => `/${workspaceSlug}/projects/${projectId}/review-tailorings/${id}`;
 
   const translateError = (requestError: unknown) => {
     const { message, code } = getTailoringError(requestError);
@@ -56,7 +85,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
       const created = await createTailoring(payload);
       setIsCreateOpen(false);
       setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.created`) });
-      if (created) router.push(`/${workspaceSlug}/projects/${projectId}/review-tailorings/${created.id}`);
+      if (created) router.push(detailPath(created.id));
     } catch (requestError) {
       setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.toast.failed`), message: translateError(requestError) });
     }
@@ -76,131 +105,90 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
     }
   };
 
-  if (isLoading) {
-    return (
-      <Loader className="space-y-3 p-6">
-        <Loader.Item height="32px" />
-        <Loader.Item height="180px" />
-      </Loader>
+  const handleCopyLink = (item: TReviewTailoring) => {
+    void copyUrlToClipboard(detailPath(item.id).slice(1)).then(() =>
+      setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.list.link_copied`) })
     );
-  }
+  };
+
+  const headerActions = (
+    <>
+      <PageSearchInput
+        searchQuery={search}
+        updateSearchQuery={setSearch}
+        placeholder={t(`${I18N}.search_placeholder`)}
+      />
+      <TailoringFiltersDropdown tailorings={tailorings} filters={filters} onChange={setFilters} />
+      {canManage && (
+        <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="size-3.5" />
+          {t(`${I18N}.create`)}
+        </Button>
+      )}
+    </>
+  );
+
+  const renderBody = () => {
+    if (isLoading) {
+      return (
+        <Loader className="space-y-3 p-6">
+          <Loader.Item height="32px" />
+          <Loader.Item height="180px" />
+        </Loader>
+      );
+    }
+    if (tailorings.length === 0) {
+      return <TailoringEmptyState canCreate={canManage} onCreate={() => setIsCreateOpen(true)} />;
+    }
+    if (visible.length === 0) {
+      return <p className="py-16 text-center text-13 text-tertiary">{t(`${I18N}.empty.filtered`)}</p>;
+    }
+    return (
+      <table className="w-full min-w-[880px] border-collapse">
+        <thead className="sticky top-0 z-[2] bg-surface-1">
+          <tr>
+            {COLUMNS.map((column) => (
+              <th
+                key={column.key}
+                className={cn(
+                  "border-b border-subtle px-3 py-2 text-left text-12 font-medium whitespace-nowrap text-tertiary",
+                  column.className
+                )}
+              >
+                {t(`${I18N}.list.${column.key}`)}
+              </th>
+            ))}
+            <th className="w-12 border-b border-subtle" />
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((item) => (
+            <TailoringRow
+              key={item.id}
+              item={item}
+              canDelete={canManage && item.status === EReviewTailoringStatus.DRAFT && item.revision === 0}
+              onOpen={() => router.push(detailPath(item.id))}
+              onCopyLink={() => handleCopyLink(item)}
+              onDelete={() => setToDelete(item)}
+            />
+          ))}
+        </tbody>
+      </table>
+    );
+  };
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-subtle px-6 py-3">
-        <div className="relative">
-          <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-tertiary" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t(`${I18N}.search_placeholder`)}
-            className="focus:border-accent-primary h-8 w-56 rounded border border-subtle bg-surface-1 pr-2 pl-7 text-12 text-primary outline-none"
-          />
-        </div>
-        {canManage && (
-          <Button variant="primary" size="sm" className="ml-auto" onClick={() => setIsCreateOpen(true)}>
-            <Plus className="size-3.5" />
-            {t(`${I18N}.create`)}
-          </Button>
-        )}
-      </div>
+      {actionsHost && createPortal(headerActions, actionsHost)}
+      {countHost && tailorings.length > 0 && createPortal(<CountChip count={tailorings.length} />, countHost)}
+
+      {hasTailoringFilters(filters) && (
+        <TailoringAppliedFilters tailorings={tailorings} filters={filters} onChange={setFilters} />
+      )}
 
       {error && <p className="px-6 py-3 text-12 text-danger-primary">{error}</p>}
 
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
-        {visible.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-            <Scissors className="size-8 text-placeholder" />
-            <p className="text-14 font-medium text-primary">{t(`${I18N}.empty.title`)}</p>
-            <p className="max-w-sm text-12 text-tertiary">{t(`${I18N}.empty.description`)}</p>
-          </div>
-        ) : (
-          <Table className="min-w-full border-separate border-spacing-0 border-t border-l border-subtle">
-            <TableHeader className="sticky top-0 z-[2] bg-layer-1">
-              <TableRow>
-                {["title", "status", "revision", "reviews", "products", "selected", "created_by", "created_at", "approved_at"].map(
-                  (key) => (
-                    <TableHead
-                      key={key}
-                      className="border-r border-b border-subtle px-3 py-2 text-left whitespace-nowrap"
-                    >
-                      {t(`${I18N}.list.${key}`)}
-                    </TableHead>
-                  )
-                )}
-                <TableHead className="w-16 border-r border-b border-subtle px-3 py-2 text-left">
-                  {t(`${I18N}.list.actions`)}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map((item) => {
-                const canDelete = canManage && item.status === EReviewTailoringStatus.DRAFT && item.revision === 0;
-                return (
-                  <TableRow
-                    key={item.id}
-                    className="group cursor-pointer bg-surface-1 hover:bg-surface-2"
-                    onClick={() =>
-                      router.push(`/${workspaceSlug}/projects/${projectId}/review-tailorings/${item.id}`)
-                    }
-                  >
-                    <TableCell className="max-w-[280px] border-r border-b border-subtle px-3 py-2">
-                      <span className="block truncate text-13 font-medium text-primary">{item.title}</span>
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2">
-                      <ReviewTailoringStatusBadge status={item.status} />
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                      {item.revision === 0
-                        ? t(`${I18N}.list.never_effective`)
-                        : t(`${I18N}.list.revision_value`, { count: item.revision })}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 tabular-nums">
-                      {item.review_count}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 tabular-nums">
-                      {item.product_count}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 tabular-nums whitespace-nowrap">
-                      {t(`${I18N}.list.selected_value`, {
-                        selected: item.selected_count,
-                        total: item.item_count,
-                      })}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                      {item.created_by_detail?.display_name ?? "—"}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                      {renderFormattedDate(item.created_at) ?? "—"}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                      {item.approved_at ? renderFormattedDate(item.approved_at) : "—"}
-                    </TableCell>
-                    <TableCell className="border-r border-b border-subtle px-3 py-2">
-                      {canDelete && (
-                        <button
-                          type="button"
-                          title={t(`${I18N}.actions.delete`)}
-                          className={cn(
-                            "rounded p-1 text-tertiary opacity-0 transition",
-                            "hover:bg-danger-subtle hover:text-danger-primary group-hover:opacity-100"
-                          )}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setToDelete(item);
-                          }}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+      <div className="min-h-0 flex-1 overflow-auto">{renderBody()}</div>
 
       <CreateTailoringModal
         isOpen={isCreateOpen}

@@ -23,7 +23,9 @@
    而不是 ``status``，因为 ``status`` 正是要被改写的那一列。
 """
 
-from django.db.models import Q
+from collections import defaultdict
+
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from plane.db.models import (
@@ -794,21 +796,29 @@ def _validate_before_submit(tailoring):
     return items
 
 
+def _changed_cell_count(snapshot, items):
+    """与生效快照相比改动了几个格子：勾选或原因变了、快照里没有（新补进来）、
+    快照里有但现在没了（被移除的行列）都各算一格。"""
+    changed = 0
+    current_ids = set()
+    for item in items:
+        current_ids.add(str(item.id))
+        recorded = snapshot.get(str(item.id))
+        if (
+            recorded is None
+            or bool(recorded.get("selected")) != item.selected
+            or (recorded.get("reason") or "") != item.reason
+        ):
+            changed += 1
+    return changed + sum(1 for key in snapshot if key not in current_ids)
+
+
 def _has_changes(tailoring, items):
     """修订提交时，与生效快照比一比有没有实际改动。"""
     snapshot = tailoring.effective_snapshot or {}
     if not snapshot:
         return True
-    for item in items:
-        recorded = snapshot.get(str(item.id))
-        if recorded is None:
-            return True
-        if bool(recorded.get("selected")) != item.selected:
-            return True
-        if (recorded.get("reason") or "") != item.reason:
-            return True
-    # 快照里有、现在没有的格子（被 sync_items 删掉的列）也算改动
-    return len(snapshot) != len(items)
+    return _changed_cell_count(snapshot, items) > 0
 
 
 def _validate_approvers(project_id, workspace_id, approver_ids):
@@ -1306,3 +1316,64 @@ def delete_tailoring(*, tailoring):
             code="REVIEW_TAILORING_EFFECTIVE_UNDELETABLE",
         )
     tailoring.delete()
+
+
+def attach_list_progress(tailorings):
+    """给列表行补上「状态下面那行小字」要用的数，就地写到对象上。
+
+    - ``approval_total`` / ``approval_approved``：本轮签批人数与已通过人数（签批中用）
+    - ``generated_count``：已生成评审实例的格子数（已生效用）
+    - ``pending_change_count``：修订期间相对生效快照改了几格（修订中用）
+
+    列表是几十张表的量级，三条查询按表分组算完再分发，不在 queryset 上再挂 join ——
+    列表 queryset 已经连了格子与两个轴，再连签批行会把行数乘上去。
+    """
+    tailorings = list(tailorings)
+    if not tailorings:
+        return tailorings
+    ids = [tailoring.id for tailoring in tailorings]
+    current_round = {tailoring.id: tailoring.round for tailoring in tailorings}
+
+    approvals = defaultdict(lambda: [0, 0])
+    for tailoring_id, round_no, action in ReviewTailoringApproval.objects.filter(
+        tailoring_id__in=ids
+    ).values_list("tailoring_id", "round", "action"):
+        if round_no != current_round[tailoring_id]:
+            continue
+        approvals[tailoring_id][0] += 1
+        if action == ReviewTailoringApprovalAction.APPROVED:
+            approvals[tailoring_id][1] += 1
+
+    generated = dict(
+        ReviewTailoringItem.objects.filter(
+            tailoring_id__in=ids, stage_review__isnull=False
+        )
+        .values("tailoring_id")
+        .annotate(count=Count("id"))
+        .values_list("tailoring_id", "count")
+    )
+
+    revising_ids = [
+        tailoring.id
+        for tailoring in tailorings
+        if tailoring.status == ReviewTailoringStatus.REVISING
+        and tailoring.effective_snapshot
+    ]
+    revising_items = defaultdict(list)
+    if revising_ids:
+        for item in ReviewTailoringItem.objects.filter(
+            tailoring_id__in=revising_ids
+        ).only("id", "tailoring_id", "selected", "reason"):
+            revising_items[item.tailoring_id].append(item)
+
+    for tailoring in tailorings:
+        tailoring.approval_total, tailoring.approval_approved = approvals[tailoring.id]
+        tailoring.generated_count = generated.get(tailoring.id, 0)
+        tailoring.pending_change_count = (
+            _changed_cell_count(
+                tailoring.effective_snapshot, revising_items[tailoring.id]
+            )
+            if tailoring.id in revising_ids
+            else 0
+        )
+    return tailorings

@@ -130,6 +130,11 @@ class ReviewTailoringListSerializer(BaseSerializer):
     review_count = serializers.IntegerField(read_only=True, default=0)
     item_count = serializers.IntegerField(read_only=True, default=0)
     selected_count = serializers.IntegerField(read_only=True, default=0)
+    # 以下四个只有列表接口会算（``attach_list_progress``），详情里恒为 0
+    approval_total = serializers.IntegerField(read_only=True, default=0)
+    approval_approved = serializers.IntegerField(read_only=True, default=0)
+    generated_count = serializers.IntegerField(read_only=True, default=0)
+    pending_change_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = ReviewTailoring
@@ -147,6 +152,10 @@ class ReviewTailoringListSerializer(BaseSerializer):
             "review_count",
             "item_count",
             "selected_count",
+            "approval_total",
+            "approval_approved",
+            "generated_count",
+            "pending_change_count",
             "created_by_detail",
             "submitted_by_detail",
             "created_at",

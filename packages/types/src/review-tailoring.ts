@@ -106,6 +106,14 @@ export type TReviewTailoring = {
   review_count: number;
   item_count: number;
   selected_count: number;
+  /** 以下四个只有列表接口会算，详情里恒为 0 */
+  /** 本轮签批人数 / 已通过人数（签批中） */
+  approval_total: number;
+  approval_approved: number;
+  /** 已生成评审实例的格子数（已生效） */
+  generated_count: number;
+  /** 修订期间相对生效快照改了几格（修订中） */
+  pending_change_count: number;
   created_by_detail: IUserLite | null;
   submitted_by_detail: IUserLite | null;
   created_at: string;

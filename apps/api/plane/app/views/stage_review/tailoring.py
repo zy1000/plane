@@ -44,6 +44,7 @@ from plane.utils.review_tailoring import (
     act_on_tailoring,
     add_products,
     add_reviews,
+    attach_list_progress,
     axis_templates,
     cancel_revision,
     create_tailoring,
@@ -209,7 +210,8 @@ class ReviewTailoringViewSet(BaseViewSet):
 
     @allow_fine_permission(*TAILORING_READ_KEYS)
     def list(self, request, slug, project_id):
-        serializer = self.get_serializer(self.get_queryset(), many=True)
+        rows = attach_list_progress(self.get_queryset())
+        serializer = self.get_serializer(rows, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(*TAILORING_READ_KEYS)
