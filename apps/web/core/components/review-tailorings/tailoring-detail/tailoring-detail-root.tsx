@@ -6,7 +6,7 @@ import { Boxes, ChevronsDownUp, ChevronsUpDown, ListChecks, Plus } from "lucide-
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TReviewTailoringProduct, TSubmitReviewTailoringPayload } from "@plane/types";
+import type { TReviewTailoringItem, TReviewTailoringProduct, TSubmitReviewTailoringPayload } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Loader, ToggleSwitch } from "@plane/ui";
 import { copyUrlToClipboard } from "@plane/utils";
 import { useReviewTailoringDetail } from "@/hooks/store/use-review-tailoring-detail";
@@ -34,7 +34,6 @@ import { TailoringActivityFeed } from "./tailoring-activity-feed";
 import { TailoringComments } from "./tailoring-comments";
 import { TailoringItemsTable } from "./tailoring-items-table";
 import { TailoringMatrix } from "./tailoring-matrix";
-import type { TMatrixRow } from "./tailoring-matrix-model";
 import { buildMatrixGroups, filterMatrixGroups, getCellLockReason, getTailoringStats } from "./tailoring-matrix-model";
 
 const I18N = "review_tailoring";
@@ -160,9 +159,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     store.setCell(itemId, { selected });
   };
 
-  /** 行首勾选框：全勾了就整行取消，否则整行勾上；锁住的格子跳过 */
-  const handleToggleRow = (row: TMatrixRow) => {
-    const cells = [...row.cells.values()];
+  /** 批量勾选（整行 / 整列 / 整段 / 整表）：全勾了就整批取消，否则整批勾上；锁住的格子跳过 */
+  const handleToggleCells = (cells: TReviewTailoringItem[]) => {
     const next = !cells.every((cell) => cell.selected);
     store.setCells(
       cells.filter((cell) => cell.selected !== next && !getCellLockReason(cell, next)).map((cell) => cell.id),
@@ -171,7 +169,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   };
 
   /** 移除前先数清楚会带走什么；生成过评审的行列服务端会拦，这里提前说 */
-  const requestRemove = (target: Omit<TRemoveTarget, "cells" | "reasons">, predicate: (item: (typeof items)[number]) => boolean) => {
+  const requestRemove = (target: Omit<TRemoveTarget, "cells" | "reasons">, predicate: (item: TReviewTailoringItem) => boolean) => {
     const cells = items.filter(predicate);
     if (cells.some((cell) => cell.stage_review_id)) {
       setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.actions.remove_axis_in_use`, { name: target.name }) });
@@ -324,7 +322,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
               collapsed={collapsed}
               onToggleGroup={toggleGroup}
               onToggle={handleToggle}
-              onToggleRow={handleToggleRow}
+              onToggleCells={handleToggleCells}
               onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
               onRemoveReview={(row) =>
                 requestRemove(

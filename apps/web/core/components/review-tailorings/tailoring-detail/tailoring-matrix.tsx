@@ -7,9 +7,41 @@ import { cn } from "@plane/utils";
 import { CellReasonPopover } from "./cell-reason-popover";
 import { MatrixCell, ReadonlyCheck } from "./matrix-cell";
 import type { TMatrixGroup, TMatrixRow } from "./tailoring-matrix-model";
-import { countChildren, getGroupSelectionCount, getRowSelectionState } from "./tailoring-matrix-model";
+import {
+  collectGroupCells,
+  countChildren,
+  getGroupSelectionCount,
+  getSelectionState,
+} from "./tailoring-matrix-model";
 
 const ROW_HEAD = "sticky left-0 w-[340px] min-w-[340px] max-w-[340px]";
+
+/** 整行 / 整列 / 整段 / 整表共用的批量勾选框：全勾了就整批取消，否则整批勾上 */
+const BulkCheckbox = ({
+  cells,
+  editable,
+  label,
+  onToggle,
+}: {
+  cells: TReviewTailoringItem[];
+  editable: boolean;
+  label: string;
+  onToggle: (cells: TReviewTailoringItem[]) => void;
+}) => {
+  const state = getSelectionState(cells);
+  if (!editable) return <ReadonlyCheck checked={state === "all"} indeterminate={state === "some"} />;
+  return (
+    <span className="flex shrink-0 items-center" title={label}>
+      <Checkbox
+        checked={state === "all"}
+        indeterminate={state === "some"}
+        disabled={cells.length === 0}
+        onChange={() => onToggle(cells)}
+        aria-label={label}
+      />
+    </span>
+  );
+};
 
 /** 图例：四种格子与四种评审状态各是什么样子 */
 const MatrixLegend = () => {
@@ -58,7 +90,7 @@ export const TailoringMatrix = ({
   collapsed,
   onToggleGroup,
   onToggle,
-  onToggleRow,
+  onToggleCells,
   onReasonChange,
   onRemoveReview,
   onRemoveProduct,
@@ -76,7 +108,8 @@ export const TailoringMatrix = ({
   collapsed: Set<string>;
   onToggleGroup: (stageId: string) => void;
   onToggle: (itemId: string, selected: boolean) => void;
-  onToggleRow: (row: TMatrixRow) => void;
+  /** 批量勾选：传一批格子进来，由调用方决定是整批勾上还是整批取消 */
+  onToggleCells: (cells: TReviewTailoringItem[]) => void;
   onReasonChange: (itemId: string, reason: string) => void;
   onRemoveReview: (row: TMatrixRow) => void;
   onRemoveProduct: (product: TReviewTailoringProduct) => void;
@@ -124,17 +157,31 @@ export const TailoringMatrix = ({
                 "top-0 z-[4] h-11 border-b border-subtle bg-surface-1 px-4 text-left text-12 font-normal text-tertiary"
               )}
             >
-              {t("review_tailoring.matrix.review_column")}
-              <span className="ml-2 text-placeholder tabular-nums">
-                {t("review_tailoring.matrix.rows_count", { count: rowCount })}
-              </span>
+              <div className="flex items-center gap-2.5">
+                <BulkCheckbox
+                  cells={collectGroupCells(groups)}
+                  editable={editable}
+                  label={t("review_tailoring.matrix.select_all")}
+                  onToggle={onToggleCells}
+                />
+                {t("review_tailoring.matrix.review_column")}
+                <span className="text-placeholder tabular-nums">
+                  {t("review_tailoring.matrix.rows_count", { count: rowCount })}
+                </span>
+              </div>
             </th>
             {products.map((product) => (
               <th
                 key={product.id}
                 className="group/col sticky top-0 z-[2] h-11 w-[156px] min-w-[156px] border-b border-l border-subtle bg-surface-1 px-3.5 text-left font-normal"
               >
-                <div className="flex min-w-0 items-center gap-1.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <BulkCheckbox
+                    cells={collectGroupCells(groups, product.id)}
+                    editable={editable}
+                    label={t("review_tailoring.matrix.select_column")}
+                    onToggle={onToggleCells}
+                  />
                   <span className="truncate text-13 font-medium text-primary" title={product.name}>
                     {product.name}
                   </span>
@@ -189,33 +236,40 @@ export const TailoringMatrix = ({
                     colSpan={products.length + (editable ? 3 : 2)}
                     className="h-8.5 border-b border-subtle bg-layer-1 p-0"
                   >
-                    <button
-                      type="button"
-                      className={cn(ROW_HEAD, "flex h-8.5 items-center gap-2 bg-layer-1 px-4 text-left")}
-                      onClick={() => onToggleGroup(group.stageId)}
-                    >
-                      {isCollapsed ? (
-                        <ChevronRight className="size-3.5 shrink-0 text-tertiary" />
-                      ) : (
-                        <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
-                      )}
-                      <span className="truncate text-13 font-semibold text-secondary">{group.stageLabel}</span>
-                      <span className="ml-1.5 block h-1 w-16 shrink-0 overflow-hidden rounded-full bg-layer-3">
-                        <span
-                          className="block h-full rounded-full bg-accent-primary"
-                          style={{ width: `${total ? Math.round((selected / total) * 100) : 0}%` }}
-                        />
-                      </span>
-                      <span className="shrink-0 text-12 text-tertiary tabular-nums">
-                        {selected} / {total}
-                      </span>
-                    </button>
+                    <div className={cn(ROW_HEAD, "flex h-8.5 items-center gap-2.5 bg-layer-1 px-4")}>
+                      <BulkCheckbox
+                        cells={collectGroupCells([group])}
+                        editable={editable}
+                        label={t("review_tailoring.matrix.select_stage")}
+                        onToggle={onToggleCells}
+                      />
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        onClick={() => onToggleGroup(group.stageId)}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight className="size-3.5 shrink-0 text-tertiary" />
+                        ) : (
+                          <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
+                        )}
+                        <span className="truncate text-13 font-semibold text-secondary">{group.stageLabel}</span>
+                        <span className="ml-1.5 block h-1 w-16 shrink-0 overflow-hidden rounded-full bg-layer-3">
+                          <span
+                            className="block h-full rounded-full bg-accent-primary"
+                            style={{ width: `${total ? Math.round((selected / total) * 100) : 0}%` }}
+                          />
+                        </span>
+                        <span className="shrink-0 text-12 text-tertiary tabular-nums">
+                          {selected} / {total}
+                        </span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
 
                 {!isCollapsed &&
                   group.rows.map((row, index) => {
-                    const state = getRowSelectionState(row);
                     const cells = [...row.cells.values()];
                     const isLastChild = row.isChild && !group.rows[index + 1]?.isChild;
                     const children = childCount.get(row.templateId) ?? 0;
@@ -237,18 +291,12 @@ export const TailoringMatrix = ({
                               row.isChild && (isLastChild ? "before:bottom-1/2" : "before:bottom-0")
                             )}
                           >
-                            {editable ? (
-                              <span className="flex shrink-0 items-center" title={t("review_tailoring.matrix.select_row")}>
-                                <Checkbox
-                                  checked={state === "all"}
-                                  indeterminate={state === "some"}
-                                  disabled={cells.length === 0}
-                                  onChange={() => onToggleRow(row)}
-                                />
-                              </span>
-                            ) : (
-                              <ReadonlyCheck checked={state === "all"} indeterminate={state === "some"} />
-                            )}
+                            <BulkCheckbox
+                              cells={cells}
+                              editable={editable}
+                              label={t("review_tailoring.matrix.select_row")}
+                              onToggle={onToggleCells}
+                            />
                             <span
                               className={cn(
                                 "min-w-0 flex-1 truncate text-primary",

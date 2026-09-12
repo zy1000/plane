@@ -135,13 +135,32 @@ export const getCellLockReason = (
 export const collectMissingReasons = (items: TReviewTailoringItem[]): TReviewTailoringItem[] =>
   items.filter((item) => !item.selected && !item.reason.trim());
 
-/** 一行里有多少个产品勾上了，用于渲染行级的半选态 */
-export const getRowSelectionState = (row: TMatrixRow): "none" | "some" | "all" => {
-  const cells = [...row.cells.values()];
+/** 一批格子的勾选态，用于整行 / 整列 / 整段 / 整表勾选框的半选显示 */
+export const getSelectionState = (cells: TReviewTailoringItem[]): "none" | "some" | "all" => {
   if (cells.length === 0) return "none";
   const selected = cells.filter((cell) => cell.selected).length;
   if (selected === 0) return "none";
   return selected === cells.length ? "all" : "some";
+};
+
+/** 一行里有多少个产品勾上了，用于渲染行级的半选态 */
+export const getRowSelectionState = (row: TMatrixRow): "none" | "some" | "all" =>
+  getSelectionState([...row.cells.values()]);
+
+/** 段内全部格子（整段勾选）。传多段进来就是整表 */
+export const collectGroupCells = (groups: TMatrixGroup[], productId?: string): TReviewTailoringItem[] => {
+  const cells: TReviewTailoringItem[] = [];
+  for (const group of groups) {
+    for (const row of group.rows) {
+      if (productId) {
+        const cell = row.cells.get(productId);
+        if (cell) cells.push(cell);
+      } else {
+        cells.push(...row.cells.values());
+      }
+    }
+  }
+  return cells;
 };
 
 /**
