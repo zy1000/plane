@@ -109,6 +109,16 @@ export const useReviewTailoringDetail = (
     []
   );
 
+  /** 一次改一批格子的勾选（矩阵行首的整行勾选）。联动只算一遍 */
+  const setCells = useCallback((itemIds: string[], selected: boolean) => {
+    if (itemIds.length === 0) return;
+    const targets = new Set(itemIds);
+    setItems((current) =>
+      cascadeSelection(current.map((item) => (targets.has(item.id) ? { ...item, selected } : item)))
+    );
+    setIsDirty(true);
+  }, []);
+
   /** 给一批格子统一填裁剪原因（明细表的「批量填写原因」） */
   const setReasonForMany = useCallback((itemIds: string[], reason: string) => {
     const targets = new Set(itemIds);
@@ -130,16 +140,28 @@ export const useReviewTailoringDetail = (
     [apply]
   );
 
-  /** 只发真正变过的格子，别把几百个没动过的一起推上去 */
-  const buildDirtyCells = useCallback((): TReviewTailoringCellPayload[] => {
+  /**
+   * 和服务端那份相比真正变过的格子。矩阵格子上的角标、底部「N 处改动」都数它 ——
+   * 勾了又勾回去的格子不算改动，`isDirty` 只说明「动过」，不说明「还有差异」。
+   */
+  const dirtyIds = useMemo(() => {
     const original = new Map((detail?.items ?? []).map((item) => [item.id, item]));
-    return items
-      .filter((item) => {
-        const before = original.get(item.id);
-        return !before || before.selected !== item.selected || before.reason !== item.reason;
-      })
-      .map((item) => ({ id: item.id, selected: item.selected, reason: item.reason }));
+    const ids = new Set<string>();
+    for (const item of items) {
+      const before = original.get(item.id);
+      if (!before || before.selected !== item.selected || before.reason !== item.reason) ids.add(item.id);
+    }
+    return ids;
   }, [detail, items]);
+
+  /** 只发真正变过的格子，别把几百个没动过的一起推上去 */
+  const buildDirtyCells = useCallback(
+    (): TReviewTailoringCellPayload[] =>
+      items
+        .filter((item) => dirtyIds.has(item.id))
+        .map((item) => ({ id: item.id, selected: item.selected, reason: item.reason })),
+    [items, dirtyIds]
+  );
 
   const saveCells = useCallback(async () => {
     if (!workspaceSlug || !projectId || !tailoringId) return undefined;
@@ -227,6 +249,17 @@ export const useReviewTailoringDetail = (
     return run(() => service.cancelRevision(workspaceSlug, projectId, tailoringId));
   }, [workspaceSlug, projectId, tailoringId, run]);
 
+  /** 删除整张表。只有从未生效的草稿能删，服务端会再拦一次 */
+  const deleteTailoring = useCallback(async () => {
+    if (!workspaceSlug || !projectId || !tailoringId) return;
+    setIsMutating(true);
+    try {
+      await service.destroy(workspaceSlug, projectId, tailoringId);
+    } finally {
+      setIsMutating(false);
+    }
+  }, [workspaceSlug, projectId, tailoringId]);
+
   /** 丢弃未保存的改动，回到服务端那份 */
   const resetCells = useCallback(() => {
     setItems(detail?.items ?? []);
@@ -239,11 +272,13 @@ export const useReviewTailoringDetail = (
     isLoading,
     isMutating,
     isDirty,
+    dirtyIds,
     isEditable,
     isPending: detail?.status === EReviewTailoringStatus.PENDING,
     error,
     fetchDetail,
     setCell,
+    setCells,
     setReasonForMany,
     resetCells,
     saveCells,
@@ -257,6 +292,7 @@ export const useReviewTailoringDetail = (
     act,
     revise,
     cancelRevision,
+    deleteTailoring,
   };
 };
 

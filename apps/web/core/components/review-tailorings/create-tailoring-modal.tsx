@@ -6,19 +6,10 @@ import { Button } from "@plane/propel/button";
 import type { TCreateReviewTailoringPayload } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { toDescriptionHtml } from "./description-text";
 import { TailoringNextSteps } from "./list/next-steps";
 
 const I18N = "review_tailoring.form";
-
-const escapeHtml = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-/** 描述在这里是纯文本框，后端存的是 HTML：按行包成段落 */
-const toDescriptionHtml = (text: string) =>
-  text
-    .split("\n")
-    .map((line) => `<p>${escapeHtml(line)}</p>`)
-    .join("");
 
 /**
  * 新建裁剪表：标题必填、描述选填，下面亮出建好之后的三步。

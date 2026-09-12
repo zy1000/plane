@@ -44,6 +44,7 @@ from plane.utils.review_tailoring import (
     act_on_tailoring,
     add_products,
     add_reviews,
+    attach_detail_progress,
     attach_list_progress,
     axis_templates,
     cancel_revision,
@@ -177,6 +178,7 @@ class ReviewTailoringViewSet(BaseViewSet):
         tailoring.selected_count = sum(1 for item in items if item.selected)
         tailoring.product_count = len(products)
         tailoring.review_count = sum(1 for row in rows if row.parent_id is None)
+        attach_detail_progress(tailoring, items, approvals)
         serializer = ReviewTailoringDetailSerializer(
             tailoring,
             context={

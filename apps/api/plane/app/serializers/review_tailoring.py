@@ -130,7 +130,7 @@ class ReviewTailoringListSerializer(BaseSerializer):
     review_count = serializers.IntegerField(read_only=True, default=0)
     item_count = serializers.IntegerField(read_only=True, default=0)
     selected_count = serializers.IntegerField(read_only=True, default=0)
-    # 以下四个只有列表接口会算（``attach_list_progress``），详情里恒为 0
+    # 以下四个由 view 就地挂到对象上：列表走 ``attach_list_progress``，详情走 ``attach_detail_progress``
     approval_total = serializers.IntegerField(read_only=True, default=0)
     approval_approved = serializers.IntegerField(read_only=True, default=0)
     generated_count = serializers.IntegerField(read_only=True, default=0)

@@ -1377,3 +1377,25 @@ def attach_list_progress(tailorings):
             else 0
         )
     return tailorings
+
+
+def attach_detail_progress(tailoring, items, approvals):
+    """详情页的四个进度数，口径与 ``attach_list_progress`` 一致，就地写到对象上。
+
+    详情接口已经把全部格子与本轮签批查出来了（``approvals`` 只含本轮），这里直接数，
+    不再发查询。修订中头部的「本次改了几格」、提交签批弹窗的摘要都读这几个数。
+    """
+    tailoring.approval_total = len(approvals)
+    tailoring.approval_approved = sum(
+        1
+        for approval in approvals
+        if approval.action == ReviewTailoringApprovalAction.APPROVED
+    )
+    tailoring.generated_count = sum(1 for item in items if item.stage_review_id)
+    tailoring.pending_change_count = (
+        _changed_cell_count(tailoring.effective_snapshot, items)
+        if tailoring.status == ReviewTailoringStatus.REVISING
+        and tailoring.effective_snapshot
+        else 0
+    )
+    return tailoring

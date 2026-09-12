@@ -106,7 +106,7 @@ export type TReviewTailoring = {
   review_count: number;
   item_count: number;
   selected_count: number;
-  /** 以下四个只有列表接口会算，详情里恒为 0 */
+  /** 以下四个列表与详情接口都会算（后端 attach_list_progress / attach_detail_progress） */
   /** 本轮签批人数 / 已通过人数（签批中） */
   approval_total: number;
   approval_approved: number;

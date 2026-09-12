@@ -21,14 +21,14 @@ const ICON_TONE: Record<EReviewTailoringStatus, string> = {
 };
 
 /** 短日期：中文界面「9月8日」（跨年才带年份），其它语言沿用 renderFormattedDate */
-const formatShortDate = (iso: string, locale: string) => {
+export const formatShortDate = (iso: string, locale: string) => {
   if (!locale.toLowerCase().startsWith("zh")) return renderFormattedDate(iso) ?? "";
   const sameYear = new Date(iso).getFullYear() === new Date().getFullYear();
   return renderFormattedDate(iso, sameYear ? "M月d日" : "yyyy年M月d日") ?? "";
 };
 
 /** 更新时间：刚刚 / 今天 10:20 / 昨天 / 9月8日。calculateTimeAgo 不接 locale，中文界面会吐英文 */
-const formatUpdatedAt = (iso: string, locale: string, t: TTranslate) => {
+export const formatUpdatedAt = (iso: string, locale: string, t: TTranslate) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const now = new Date();

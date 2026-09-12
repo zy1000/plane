@@ -143,3 +143,74 @@ export const getRowSelectionState = (row: TMatrixRow): "none" | "some" | "all" =
   if (selected === 0) return "none";
   return selected === cells.length ? "all" : "some";
 };
+
+/**
+ * 头部三格数字、签批面板与提交弹窗的摘要都从这里取，读的是**本地格子**（含未保存的改动），
+ * 所以勾一下头部就跟着变。
+ *
+ * 「生效后」的两个数与后端 `_apply_effective` 同一口径：勾上但还没生成评审的格子会新建，
+ * 取消勾选但已生成评审的格子会删掉。
+ */
+export type TTailoringStats = {
+  total: number;
+  selected: number;
+  cut: number;
+  missing: number;
+  toCreate: number;
+  toDelete: number;
+  generated: number;
+};
+
+export const getTailoringStats = (items: TReviewTailoringItem[]): TTailoringStats => {
+  const stats: TTailoringStats = { total: 0, selected: 0, cut: 0, missing: 0, toCreate: 0, toDelete: 0, generated: 0 };
+  for (const item of items) {
+    stats.total += 1;
+    if (item.stage_review_id) stats.generated += 1;
+    if (item.selected) {
+      stats.selected += 1;
+      if (!item.stage_review_id) stats.toCreate += 1;
+      continue;
+    }
+    stats.cut += 1;
+    if (!item.reason.trim()) stats.missing += 1;
+    if (item.stage_review_id) stats.toDelete += 1;
+  }
+  return stats;
+};
+
+/** 矩阵的快速筛选：只看缺原因（可编辑时）/ 只看裁掉的（只读时） */
+export type TMatrixFilter = "all" | "missing" | "cut";
+
+const cellMatches = (cell: TReviewTailoringItem, filter: TMatrixFilter) => {
+  if (filter === "missing") return !cell.selected && !cell.reason.trim();
+  if (filter === "cut") return !cell.selected;
+  return true;
+};
+
+/**
+ * 按筛选收窄每一段的行。子行命中时把它的父行也留下 —— 否则活动会脱离所属评审孤零零地挂着。
+ * 没有行留下的段整段不画。
+ */
+export const filterMatrixGroups = (groups: TMatrixGroup[], filter: TMatrixFilter): TMatrixGroup[] => {
+  if (filter === "all") return groups;
+  return groups
+    .map((group) => {
+      const keep = new Set<number>();
+      let lastRootIndex = -1;
+      group.rows.forEach((row, index) => {
+        if (!row.isChild) lastRootIndex = index;
+        if (![...row.cells.values()].some((cell) => cellMatches(cell, filter))) return;
+        keep.add(index);
+        if (row.isChild && lastRootIndex >= 0) keep.add(lastRootIndex);
+      });
+      return { ...group, rows: group.rows.filter((_, index) => keep.has(index)) };
+    })
+    .filter((group) => group.rows.length > 0);
+};
+
+/** 一个顶层评审下挂了几个活动（行首的「N 个活动」） */
+export const countChildren = (rows: TMatrixRow[], index: number): number => {
+  let count = 0;
+  for (let cursor = index + 1; cursor < rows.length && rows[cursor].isChild; cursor += 1) count += 1;
+  return count;
+};

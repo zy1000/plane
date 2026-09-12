@@ -1,14 +1,19 @@
 import { Outlet } from "react-router";
+import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
+import { ReviewTailoringDetailHeader } from "./header";
 
 /**
- * 详情页自己渲染头部（标题可就地改、操作按钮随状态变），所以这里不套 AppHeader，
- * 只留内容容器 —— 口径同项目「产品」页。
+ * 顶栏只有面包屑与两个挂点；表名、主按钮、「⋯」菜单由详情组件 portal 进来 ——
+ * 它们随状态变，数据只在详情组件里有。
  */
 export default function ProjectReviewTailoringDetailLayout() {
   return (
-    <ContentWrapper>
-      <Outlet />
-    </ContentWrapper>
+    <>
+      <AppHeader header={<ReviewTailoringDetailHeader />} />
+      <ContentWrapper>
+        <Outlet />
+      </ContentWrapper>
+    </>
   );
 }

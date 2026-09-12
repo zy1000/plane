@@ -241,7 +241,7 @@
 - 详情接口另给一段 `rows`（纵轴展开后的节点），**不从格子反推** —— 只加了一个轴的表一个格子都没有，反推会画出一张空表。
 - 生成评审实例时阶段取自 `item.template.stage_id`，表头上没有阶段可抄。
 - 连带看：`ReviewTailoringItem` 已经没有 `clean()`，裁剪通知的摘要只剩标题，列表的 `product_count` / `review_count` 从轴表 annotate 而不是数格子。
-- 列表行状态下那行小字要的四个数（本轮签批人数 / 已通过、已生成评审格数、修订中改动格数）由 `attach_list_progress()` 在 `list()` 里分组查完挂到对象上，**只有列表接口有**，详情里恒为 0。
+- 四个进度数（本轮签批人数 / 已通过、已生成评审格数、修订中改动格数）：列表由 `attach_list_progress()` 在 `list()` 里分组查完挂到对象上；详情由 `attach_detail_progress()` 拿 `_detail_response` 已经查好的格子与本轮签批直接数，不再发查询（2026-09-11）。详情页头部「本次改了 N 格未提交」读 `pending_change_count`；「生效后 +N −M」与提交弹窗的摘要则由前端按本地格子算（含未保存的改动），口径同 `_apply_effective`。
 
 ### 评审实例的执行台（2026-09-11）
 
