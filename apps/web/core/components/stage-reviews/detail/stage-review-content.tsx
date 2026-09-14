@@ -209,18 +209,8 @@ const DescriptionEditor = ({
   );
 };
 
-/** 把多行纯文本拆成条目；用户自己敲的「1.」「1、」「(1)」「-」前缀去掉，免得编号出现两遍 */
-const splitInstruction = (text: string) =>
-  text
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:\d+\s*[.、)）]|[(（]\d+[)）]|[-•·])\s*/, "").trim())
-    .filter(Boolean);
-
 /**
- * 工作指引是纯文本（模型上就是 TextField），不套编辑器。
- *
- * 读的时候按行渲成编号清单 —— 它写的是「评审前准备什么、会上逐条过什么」这种步骤，
- * 编号比一段平铺的文字好跟；只有一行时就是一段话，不硬加编号。
+ * 工作指引是纯文本（模型上就是 TextField），不套编辑器。按用户写下的样子展示，不加编号。
  */
 const WorkInstruction = ({
   detail,
@@ -241,9 +231,9 @@ const WorkInstruction = ({
   }, [detail.id, detail.work_instruction]);
 
   const title = t(`${I18N}.fields.work_instruction`);
-  const lines = splitInstruction(detail.work_instruction);
+  const isBlank = !detail.work_instruction.trim();
 
-  if (editable && (isOpen || lines.length === 0)) {
+  if (editable && (isOpen || isBlank)) {
     return (
       <Block title={title}>
         <div className={cn(FIELD_BOX_CLASS, FIELD_EDITOR_CLASS)}>
@@ -268,7 +258,7 @@ const WorkInstruction = ({
     );
   }
 
-  if (lines.length === 0) {
+  if (isBlank) {
     return (
       <Block title={title}>
         <p className="text-14 text-placeholder">{t(`${I18N}.detail.empty_value`)}</p>
@@ -288,20 +278,7 @@ const WorkInstruction = ({
         )
       }
     >
-      <div className={FIELD_BOX_CLASS}>
-        {lines.length === 1 ? (
-          <p className="text-14 leading-relaxed text-secondary">{lines[0]}</p>
-        ) : (
-          <ol className="flex flex-col gap-1.5">
-            {lines.map((line, index) => (
-              <li key={index} className="grid grid-cols-[20px_1fr] gap-2 text-14 leading-relaxed text-secondary">
-                <span className="pt-px text-12 font-semibold tabular-nums text-accent-primary">{index + 1}</span>
-                <span>{line}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
+      <p className="whitespace-pre-wrap text-14 leading-relaxed text-secondary">{detail.work_instruction}</p>
     </Block>
   );
 };

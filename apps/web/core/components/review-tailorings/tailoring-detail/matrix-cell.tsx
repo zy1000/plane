@@ -1,10 +1,10 @@
-import { AlertTriangle, Check, Lock, MessageSquare, Minus } from "lucide-react";
+import { AlertTriangle, Check, MessageSquare, Minus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TReviewTailoringItem } from "@plane/types";
 import { Checkbox } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { getCellLockReason } from "./tailoring-matrix-model";
+import { getCellLockReason, isCompletedCut } from "./tailoring-matrix-model";
 
 /** 已生成评审的格子挂一枚状态药丸，四种状态与阶段评审页同一套颜色 */
 const REVIEW_STATUS_PILL: Record<string, string> = {
@@ -59,6 +59,7 @@ export const MatrixCell = ({
   const lock = getCellLockReason(cell, !cell.selected);
   const reason = cell.reason.trim();
   const missing = !cell.selected && !reason;
+  const willDeleteCompleted = isCompletedCut(cell);
 
   return (
     <td
@@ -69,13 +70,7 @@ export const MatrixCell = ({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        {lock === "locked_completed" ? (
-          <Tooltip tooltipContent={t(`review_tailoring.matrix.${lock}`)}>
-            <span className="grid size-4 shrink-0 place-items-center rounded-sm border border-subtle bg-layer-3 text-placeholder">
-              <Lock className="size-2.5" strokeWidth={2.6} />
-            </span>
-          </Tooltip>
-        ) : !editable ? (
+        {!editable ? (
           <ReadonlyCheck checked={cell.selected} />
         ) : (
           <Tooltip tooltipContent={lock ? t(`review_tailoring.matrix.${lock}`) : ""} disabled={!lock}>
@@ -99,6 +94,14 @@ export const MatrixCell = ({
             <span className="size-1.5 rounded-full bg-current" />
             {t(`stage_review.status.${cell.stage_review_status}`)}
           </span>
+        )}
+
+        {willDeleteCompleted && (
+          <Tooltip tooltipContent={t("review_tailoring.matrix.completed_will_delete")}>
+            <span className="flex shrink-0 items-center text-danger-primary">
+              <AlertTriangle className="size-3.5" strokeWidth={2.4} />
+            </span>
+          </Tooltip>
         )}
 
         {!cell.selected && (reason || editable || missing) && (

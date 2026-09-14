@@ -116,6 +116,13 @@ export const SubmitApprovalModal = observer(function SubmitApprovalModal({
           </div>
         </div>
 
+        {stats.toDeleteCompleted > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-danger-subtle bg-danger-subtle/30 px-3 py-2 text-13 text-danger-primary">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.4} />
+            <span>{t(`${I18N}.completed_delete_warning`, { count: stats.toDeleteCompleted })}</span>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1.5">
           <span className="text-13 font-medium text-secondary">
             {t(`${I18N}.approvers`)}

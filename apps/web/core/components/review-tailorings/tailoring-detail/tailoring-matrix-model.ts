@@ -119,14 +119,10 @@ export const buildMatrixColumns = (products: TReviewTailoringProduct[]): TReview
 /**
  * 这个格子能不能改。
  *
- * 两种锁：已评审完成的不许被裁掉，停用模板不许新增勾选。
- * 返回 null 表示可改，否则是该显示的原因 key。
+ * 只剩一种锁：停用模板不许新增勾选。已评审的评审可以裁掉（定稿后唯一的纠错出口），
+ * 由格子与提交弹窗提示会删除记录。返回 null 表示可改，否则是该显示的原因 key。
  */
-export const getCellLockReason = (
-  item: TReviewTailoringItem,
-  nextSelected: boolean
-): "locked_completed" | "locked_disabled" | null => {
-  if (!nextSelected && item.stage_review_status === "completed") return "locked_completed";
+export const getCellLockReason = (item: TReviewTailoringItem, nextSelected: boolean): "locked_disabled" | null => {
   if (nextSelected && !item.template_is_active && !item.stage_review_id) return "locked_disabled";
   return null;
 };
@@ -177,11 +173,26 @@ export type TTailoringStats = {
   missing: number;
   toCreate: number;
   toDelete: number;
+  /** 要删的里面已评审的条数：签批生效后连同轨迹、评论、附件一起删，提交时要提醒 */
+  toDeleteCompleted: number;
   generated: number;
 };
 
+/** 取消勾选了一个已评审的格子：签批生效时这条评审会被删掉 */
+export const isCompletedCut = (item: TReviewTailoringItem) =>
+  !item.selected && Boolean(item.stage_review_id) && item.stage_review_status === "completed";
+
 export const getTailoringStats = (items: TReviewTailoringItem[]): TTailoringStats => {
-  const stats: TTailoringStats = { total: 0, selected: 0, cut: 0, missing: 0, toCreate: 0, toDelete: 0, generated: 0 };
+  const stats: TTailoringStats = {
+    total: 0,
+    selected: 0,
+    cut: 0,
+    missing: 0,
+    toCreate: 0,
+    toDelete: 0,
+    toDeleteCompleted: 0,
+    generated: 0,
+  };
   for (const item of items) {
     stats.total += 1;
     if (item.stage_review_id) stats.generated += 1;
@@ -193,6 +204,7 @@ export const getTailoringStats = (items: TReviewTailoringItem[]): TTailoringStat
     stats.cut += 1;
     if (!item.reason.trim()) stats.missing += 1;
     if (item.stage_review_id) stats.toDelete += 1;
+    if (isCompletedCut(item)) stats.toDeleteCompleted += 1;
   }
   return stats;
 };

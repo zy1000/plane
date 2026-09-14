@@ -119,7 +119,8 @@ urlpatterns = [
     ),
     # --- 阶段评审实例（项目级）---------------------------------------------
     # 状态动作同样走显式 URL：advance 往前一步、rollback 退回一步，具体从哪到哪由
-    # utils/stage_review.py 的状态机决定，接口不接受「直接改成某个状态」。
+    # utils/stage_review.py 的状态机决定，接口不接受「直接改成某个状态」。已评审是终态，
+    # 两个动作都会拒绝。
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/",
         StageReviewViewSet.as_view({"get": "list", "post": "create"}),

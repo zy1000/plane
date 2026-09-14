@@ -279,12 +279,11 @@ const DrawerBody = ({
 
   const isCompleted = detail.status === EStageReviewStatus.COMPLETED;
   const isRejected = detail.status === EStageReviewStatus.IN_REVIEW && detail.result === EStageReviewResult.REJECTED;
-  // 退回到真实发生过的上一步：免审完成的评审没进过审核中，退回评审中（与后端 rollback 一致）
-  const previousStatus =
-    isCompleted && detail.result === EStageReviewResult.WAIVED
-      ? EStageReviewStatus.IN_REVIEW
-      : STAGE_REVIEW_STATUS_ORDER[STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) - 1];
-  // 已评审之后字段不再可改：要改先退回上一步，这样轨迹里不会出现「评完了还在改」
+  // 已评审是终态，没有上一步可退（与后端 rollback 一致）
+  const previousStatus = isCompleted
+    ? undefined
+    : STAGE_REVIEW_STATUS_ORDER[STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) - 1];
+  // 已评审即定稿：字段与附件都改不了也退不回，要重做去裁剪表取消勾选后重新生成
   const editable = canManage && !isCompleted;
   const source = detail.parent_title
     ? t(`${I18N}.detail.belongs_to`, { title: detail.parent_title })
@@ -420,9 +419,7 @@ const DrawerBody = ({
             {previousStatus && (
               <button type="button" className={FOOT_GHOST} disabled={isMutating} onClick={onRollback}>
                 <Undo2 className="size-3.5" />
-                {isCompleted
-                  ? t(`${I18N}.actions.rollback`, { status: t(`${I18N}.status.${previousStatus}`) })
-                  : t(`${I18N}.actions.rollback_plain`)}
+                {t(`${I18N}.actions.rollback_plain`)}
               </button>
             )}
             {detail.status === EStageReviewStatus.NOT_STARTED && (

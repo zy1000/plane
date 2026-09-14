@@ -49,6 +49,7 @@ from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.stage_review import (
     StageReviewError,
     advance as advance_review,
+    assert_not_locked,
     create_manual_review,
     delete_review,
     resolve_role_candidates,
@@ -68,6 +69,7 @@ STAGE_REVIEW_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.STAGE_REVIEW_FILE
 
 #: 这些是「当前状态不允许」而不是「请求写错了」，回 409 让前端能区分对待
 CONFLICT_CODES = {
+    "STAGE_REVIEW_LOCKED",
     "STAGE_REVIEW_ALREADY_COMPLETED",
     "STAGE_REVIEW_NO_PREVIOUS_STATUS",
     "STAGE_REVIEW_FROM_TAILORING_UNDELETABLE",
@@ -533,6 +535,10 @@ class StageReviewFileAPI(BaseViewSet):
             return Response(
                 {"error": "Stage review not found."}, status=status.HTTP_404_NOT_FOUND
             )
+        try:
+            assert_not_locked(review)
+        except StageReviewError as exc:
+            return stage_review_error_response(exc)
         name = request.data.get("name")
         if not name:
             return Response(
@@ -566,6 +572,15 @@ class StageReviewFileAPI(BaseViewSet):
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
     def mark_uploaded(self, request, slug, project_id, stage_review_id, asset_id):
+        review = self._review(slug, project_id, stage_review_id)
+        if review is None:
+            return Response(
+                {"error": "Stage review not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        try:
+            assert_not_locked(review)
+        except StageReviewError as exc:
+            return stage_review_error_response(exc)
         asset = FileAsset.objects.filter(
             pk=asset_id,
             workspace__slug=slug,
@@ -583,20 +598,27 @@ class StageReviewFileAPI(BaseViewSet):
             get_asset_object_metadata.delay(asset_id=str(asset.id))
         asset.save(update_fields=["is_uploaded"])
 
-        review = self._review(slug, project_id, stage_review_id)
-        if review is not None:
-            write_activity(
-                review,
-                actor=request.user,
-                verb="created",
-                field="attachment",
-                new_value=(asset.attributes or {}).get("name") or "",
-                extra={"asset_id": str(asset.id)},
-            )
+        write_activity(
+            review,
+            actor=request.user,
+            verb="created",
+            field="attachment",
+            new_value=(asset.attributes or {}).get("name") or "",
+            extra={"asset_id": str(asset.id)},
+        )
         return Response(self._serialize(asset), status=status.HTTP_200_OK)
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
     def destroy(self, request, slug, project_id, stage_review_id, asset_id):
+        review = self._review(slug, project_id, stage_review_id)
+        if review is None:
+            return Response(
+                {"error": "Stage review not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        try:
+            assert_not_locked(review)
+        except StageReviewError as exc:
+            return stage_review_error_response(exc)
         asset = FileAsset.objects.filter(
             pk=asset_id,
             workspace__slug=slug,
@@ -613,16 +635,14 @@ class StageReviewFileAPI(BaseViewSet):
         asset.deleted_at = timezone.now()
         asset.save(update_fields=["is_deleted", "deleted_at"])
 
-        review = self._review(slug, project_id, stage_review_id)
-        if review is not None:
-            write_activity(
-                review,
-                actor=request.user,
-                verb="deleted",
-                field="attachment",
-                old_value=(asset.attributes or {}).get("name") or "",
-                extra={"asset_id": str(asset.id)},
-            )
+        write_activity(
+            review,
+            actor=request.user,
+            verb="deleted",
+            field="attachment",
+            old_value=(asset.attributes or {}).get("name") or "",
+            extra={"asset_id": str(asset.id)},
+        )
         # 物理删除对象，避免 MinIO 累积孤儿（口径同迭代附件）
         try:
             S3Storage(request=request).delete_files(object_names=[asset.storage_key])

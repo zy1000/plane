@@ -769,30 +769,8 @@ def _validate_before_submit(tailoring):
             detail={"items": disabled},
         )
 
-    # 4. 要删的评审里不能有已评审完的 —— 已完成的评审是既成记录，不能被一次裁剪抹掉
-    to_delete_ids = [
-        item.stage_review_id
-        for item in items
-        if not item.selected and item.stage_review_id
-    ]
-    if to_delete_ids:
-        completed = list(
-            StageReview.objects.filter(
-                Q(id__in=to_delete_ids) | Q(parent_id__in=to_delete_ids),
-                status=StageReviewStatus.COMPLETED,
-            ).values("id", "title")
-        )
-        if completed:
-            raise ReviewTailoringError(
-                "Completed reviews cannot be tailored out.",
-                code="REVIEW_TAILORING_REVIEW_COMPLETED",
-                detail={
-                    "reviews": [
-                        {"id": str(row["id"]), "title": row["title"]}
-                        for row in completed
-                    ]
-                },
-            )
+    # 已评审的评审也允许裁掉：已评审即定稿、不能退回，这是定稿后唯一的纠错出口。
+    # 前端在取消勾选与提交签批时提示「会连同轨迹、评论、附件一起删除」
     return items
 
 

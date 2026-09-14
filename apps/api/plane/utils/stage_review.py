@@ -6,9 +6,10 @@
 1. **状态只能顺着走。** ``未评审 → 评审中 → 审核中 → 已评审`` 每一步都是一个显式
    动作，没有「直接改状态」的写入口 —— 前端也就没有状态下拉框。唯一由结论决定落点
    的是「提交审核」：**不通过留在评审中**（整改后再提），**免审直接已评审**（不经
-   审核），通过 / 条件通过才进审核中。退回只回到**上一步真实发生过的状态**，不允许
-   从已评审一键打回未评审。这样「谁在什么时候把它推到哪一步」在
-   ``StageReviewActivity`` 里是一条连续的线。
+   审核），通过 / 条件通过才进审核中。退回只回一步。**已评审是终态**：不能退回，
+   内容字段与附件也不能再改（评论仍开放）；点错了只能去裁剪表取消勾选、签批生效删掉
+   后重新生成。这样「谁在什么时候把它推到哪一步」在 ``StageReviewActivity`` 里是一条
+   连续的线。
 2. **结论在提交审核那一刻定稿。** ``result`` 不是随便改的字段：它只在 ``advance()``
    里写入，条件通过与不通过必须带结论说明，O 阶段的两种类型必须同时给生产方式与出货
    评估。校验集中在 ``_validate_result``，模型的 ``clean()`` 只做兜底。
@@ -247,22 +248,27 @@ def advance(review, *, actor, payload=None):
     return review
 
 
+def assert_not_locked(review):
+    """已评审即定稿：内容、附件、状态都不能再动。评论不走这里。"""
+    if review.status == StageReviewStatus.COMPLETED:
+        raise StageReviewError(
+            "已评审的评审已定稿，不能再修改或退回", code="STAGE_REVIEW_LOCKED"
+        )
+
+
 def rollback(review, *, actor):
     """退回上一步。只回一步，且不清结论 —— 退回多半是为了改结论再提一次。
 
-    「上一步」指**真实发生过**的那一步：免审完成的评审从没进过审核中，退回到评审中；
-    若退到审核中，会凭空冒出「审核通过」按钮和「等待审核者」提示。
+    已评审不能退回（``assert_not_locked``），所以只剩审核中 → 评审中、评审中 → 未评审。
     """
+    assert_not_locked(review)
     if review.status not in PREVIOUS_STATUS:
         raise StageReviewError(
             "未评审的评审没有上一步可退", code="STAGE_REVIEW_NO_PREVIOUS_STATUS"
         )
 
     old_status = review.status
-    if old_status == StageReviewStatus.COMPLETED and review.result == StageReviewResult.WAIVED:
-        new_status = StageReviewStatus.IN_REVIEW
-    else:
-        new_status = PREVIOUS_STATUS[old_status]
+    new_status = PREVIOUS_STATUS[old_status]
     update_fields = ["status", "updated_by"]
 
     # 退回到未评审 = 这一轮从没提交过结论，把结论一起抹掉，避免列表里出现
@@ -440,6 +446,7 @@ def update_review(review, *, actor, validated_data):
 
     每个改动的字段写一条轨迹，**旧值与新值都记**：时间线要写成「把负责人从 A 改为 B」。
     """
+    assert_not_locked(review)
     changed = []
     for field, value in validated_data.items():
         old = getattr(review, field)

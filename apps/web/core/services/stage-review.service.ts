@@ -19,7 +19,7 @@ import { APIService } from "@/services/api.service";
  * 阶段评审实例：项目级资源，后端 project.stage_review.* 鉴权。
  *
  * 状态没有「改成某个状态」的接口，只有 advance（往前一步）与 rollback（退回一步），
- * 从哪到哪由后端状态机决定。两者与 update 一样返回**完整详情**，调用方整块替换本地
+ * 从哪到哪由后端状态机决定；已评审是终态，两者连同 update / 附件写入都回 409。两者与 update 一样返回**完整详情**，调用方整块替换本地
  * 状态，不用再补一次请求。
  */
 export class StageReviewService extends APIService {
