@@ -3,13 +3,15 @@
 裁剪表签批生效时生成的那批 ``StageReview``（见 ``utils/review_tailoring.py``），
 以及手工补建的评审，都在这里走同一套规则。三条贯穿全文的约定：
 
-1. **状态只能顺着走，一次一步。** ``未评审 → 评审中 → 审核中 → 已评审`` 每一步都是
-   一个显式动作，没有「直接改状态」的写入口 —— 前端也就没有状态下拉框。退回同样
-   只允许回到**上一步**，不允许从已评审一键打回未评审。这样「谁在什么时候把它推到
-   哪一步」在 ``StageReviewActivity`` 里是一条连续的线。
-2. **结论在提交审核那一刻定稿。** ``result`` 不是随便改的字段：它只在 ``submit()``
-   里写入，条件通过必须带原因，O 阶段的两种类型必须同时给生产方式与出货评估。校验
-   集中在 ``_validate_result``，模型的 ``clean()`` 只兜底「字段与 kind 不匹配」。
+1. **状态只能顺着走。** ``未评审 → 评审中 → 审核中 → 已评审`` 每一步都是一个显式
+   动作，没有「直接改状态」的写入口 —— 前端也就没有状态下拉框。唯一由结论决定落点
+   的是「提交审核」：**不通过留在评审中**（整改后再提），**免审直接已评审**（不经
+   审核），通过 / 条件通过才进审核中。退回只回到**上一步真实发生过的状态**，不允许
+   从已评审一键打回未评审。这样「谁在什么时候把它推到哪一步」在
+   ``StageReviewActivity`` 里是一条连续的线。
+2. **结论在提交审核那一刻定稿。** ``result`` 不是随便改的字段：它只在 ``advance()``
+   里写入，条件通过与不通过必须带结论说明，O 阶段的两种类型必须同时给生产方式与出货
+   评估。校验集中在 ``_validate_result``，模型的 ``clean()`` 只做兜底。
 3. **评审与评审活动一视同仁。** 两者是同一张表的两行，父评审**不汇总**子活动的结论
    （产品决策）—— 所以这里没有任何「子活动没评完就不许提交父评审」的联动，各推各的。
 
@@ -64,6 +66,17 @@ ADVANCE_VERB = {
     StageReviewStatus.IN_APPROVAL: "审核通过",
 }
 
+#: 「提交审核」这一跳由结论决定落点：不通过留在原地整改，免审直达完成，其余进审核中
+SUBMIT_TARGET = {
+    StageReviewResult.REJECTED: StageReviewStatus.IN_REVIEW,
+    StageReviewResult.WAIVED: StageReviewStatus.COMPLETED,
+}
+REJECT_VERB = "评审不通过"
+WAIVE_VERB = "免审完成"
+
+#: 必须带结论说明的结论：条件通过要写放行条件，不通过要写整改什么
+REASON_REQUIRED_RESULTS = (StageReviewResult.CONDITIONAL, StageReviewResult.REJECTED)
+
 
 def write_activity(
     review,
@@ -76,6 +89,8 @@ def write_activity(
     comment="",
     extra=None,
     review_comment=None,
+    old_identifier=None,
+    new_identifier=None,
 ):
     """同步写一条变更历史，与产生它的动作在同一个事务里。
 
@@ -96,6 +111,8 @@ def write_activity(
         new_value=None if new_value is None else str(new_value),
         comment=comment,
         extra=extra or {},
+        old_identifier=old_identifier,
+        new_identifier=new_identifier,
         stage_review_comment=review_comment,
     )
 
@@ -130,17 +147,18 @@ def _validate_result(review, payload):
             "评审结果必填", code="STAGE_REVIEW_RESULT_REQUIRED", detail={"field": "result"}
         )
 
+    # 字段名沿用 conditional_reason，语义已是「结论说明」：条件通过与不通过共用
     reason = (payload.get("conditional_reason") or "").strip()
-    if result == StageReviewResult.CONDITIONAL and not reason:
+    if result in REASON_REQUIRED_RESULTS and not reason:
         raise StageReviewError(
-            "条件通过必须填写原因",
+            "条件通过 / 不通过必须填写结论说明",
             code="STAGE_REVIEW_CONDITIONAL_REASON_REQUIRED",
             detail={"field": "conditional_reason"},
         )
-    # 换成别的结论时把上一次的原因清掉，免得详情页挂着一段对不上的说明
+    # 换成不需要说明的结论时把上一次的说明清掉，免得详情页挂着一段对不上的话
     fields = {
         "result": result,
-        "conditional_reason": reason if result == StageReviewResult.CONDITIONAL else "",
+        "conditional_reason": reason if result in REASON_REQUIRED_RESULTS else "",
     }
 
     production_mode = payload.get("production_mode") or ""
@@ -172,10 +190,11 @@ def _validate_result(review, payload):
 
 
 def advance(review, *, actor, payload=None):
-    """把评审推进一步。调用方负责事务与行锁。
+    """把评审往前推。调用方负责事务与行锁。
 
-    ``评审中 → 审核中`` 这一跳顺带把结论写进去 —— 结论与「提交」是同一个动作的两
-    面，分成两个接口会出现「提交了但没结论」的中间态。
+    「提交审核」（评审中那一跳）顺带把结论写进去 —— 结论与「提交」是同一个动作的两
+    面，分成两个接口会出现「提交了但没结论」的中间态。落点由结论决定（``SUBMIT_TARGET``）：
+    不通过**不推进**，只记下结论与说明；免审直接已评审；其余进审核中。
     """
     if review.status not in NEXT_STATUS:
         raise StageReviewError(
@@ -184,18 +203,37 @@ def advance(review, *, actor, payload=None):
 
     old_status = review.status
     new_status = NEXT_STATUS[old_status]
-    update_fields = ["status"]
+    previous_result = review.result
+    update_fields = ["updated_by"]
 
     if old_status == StageReviewStatus.IN_REVIEW:
         for field, value in _validate_result(review, payload or {}).items():
             setattr(review, field, value)
             update_fields.append(field)
+        new_status = SUBMIT_TARGET.get(review.result, StageReviewStatus.IN_APPROVAL)
+
+    review.updated_by = actor
+
+    if new_status == old_status:
+        # 不通过：状态原地不动。轨迹记成一条「结论」事件而不是 status → status，
+        # 前端进度条只按 status 记录算日期，不会被它干扰
+        review.save(update_fields=update_fields)
+        write_activity(
+            review,
+            actor=actor,
+            verb="updated",
+            field="result",
+            old_value=previous_result or None,
+            new_value=review.result,
+            comment=REJECT_VERB,
+            extra={"status": old_status, "conditional_reason": review.conditional_reason},
+        )
+        return review
 
     review.status = new_status
-    review.updated_by = actor
-    update_fields.append("updated_by")
-    review.save(update_fields=update_fields)
+    review.save(update_fields=[*update_fields, "status"])
 
+    is_waived = old_status == StageReviewStatus.IN_REVIEW and review.result == StageReviewResult.WAIVED
     write_activity(
         review,
         actor=actor,
@@ -203,21 +241,28 @@ def advance(review, *, actor, payload=None):
         field="status",
         old_value=old_status,
         new_value=new_status,
-        comment=ADVANCE_VERB[old_status],
+        comment=WAIVE_VERB if is_waived else ADVANCE_VERB[old_status],
         extra={"result": review.result} if review.result else None,
     )
     return review
 
 
 def rollback(review, *, actor):
-    """退回上一步。只回一步，且不清结论 —— 退回多半是为了改结论再提一次。"""
+    """退回上一步。只回一步，且不清结论 —— 退回多半是为了改结论再提一次。
+
+    「上一步」指**真实发生过**的那一步：免审完成的评审从没进过审核中，退回到评审中；
+    若退到审核中，会凭空冒出「审核通过」按钮和「等待审核者」提示。
+    """
     if review.status not in PREVIOUS_STATUS:
         raise StageReviewError(
             "未评审的评审没有上一步可退", code="STAGE_REVIEW_NO_PREVIOUS_STATUS"
         )
 
     old_status = review.status
-    new_status = PREVIOUS_STATUS[old_status]
+    if old_status == StageReviewStatus.COMPLETED and review.result == StageReviewResult.WAIVED:
+        new_status = StageReviewStatus.IN_REVIEW
+    else:
+        new_status = PREVIOUS_STATUS[old_status]
     update_fields = ["status", "updated_by"]
 
     # 退回到未评审 = 这一轮从没提交过结论，把结论一起抹掉，避免列表里出现
@@ -367,22 +412,56 @@ def create_manual_review(*, project, product, stage, actor, data):
     return review
 
 
+#: 成员字段：轨迹里值存显示名、identifier 存用户 id，前端据此出「从 A 改为 B」
+_MEMBER_FIELDS = ("leader", "auditor")
+#: 长文本字段只记「改了」，不把整段 HTML / 原文塞进轨迹 —— 时间线也只写「更新了描述」
+_TEXT_ONLY_FIELDS = ("description_html", "work_instruction")
+
+
+def _activity_value(field, value):
+    """把字段值翻成轨迹里给人读的那一份。"""
+    if value is None or field in _TEXT_ONLY_FIELDS:
+        return None
+    if field in _MEMBER_FIELDS:
+        return value.display_name
+    if field in ("start_date", "end_date"):
+        return value.isoformat()
+    if isinstance(value, (list, tuple)):
+        return "、".join(str(item) for item in value)
+    return str(value)
+
+
+def _activity_identifier(field, value):
+    return value.id if field in _MEMBER_FIELDS and value is not None else None
+
+
 def update_review(review, *, actor, validated_data):
-    """详情页里改字段。状态与结论不在这里改 —— 那两列只能由动作推进。"""
+    """详情页里改字段。状态与结论不在这里改 —— 那两列只能由动作推进。
+
+    每个改动的字段写一条轨迹，**旧值与新值都记**：时间线要写成「把负责人从 A 改为 B」。
+    """
     changed = []
     for field, value in validated_data.items():
-        if getattr(review, field) != value:
+        old = getattr(review, field)
+        if old != value:
             setattr(review, field, value)
-            changed.append(field)
+            changed.append((field, old, value))
     if not changed:
         return review
 
     review.updated_by = actor
     _validated(review)
-    review.save(update_fields=[*changed, "updated_by"])
-    for field in changed:
+    review.save(update_fields=[*(field for field, _, _ in changed), "updated_by"])
+    for field, old, new in changed:
         write_activity(
-            review, actor=actor, verb="updated", field=field, new_value=getattr(review, field)
+            review,
+            actor=actor,
+            verb="updated",
+            field=field,
+            old_value=_activity_value(field, old),
+            new_value=_activity_value(field, new),
+            old_identifier=_activity_identifier(field, old),
+            new_identifier=_activity_identifier(field, new),
         )
     return review
 

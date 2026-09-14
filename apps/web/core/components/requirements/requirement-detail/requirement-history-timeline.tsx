@@ -59,7 +59,7 @@ export const HistoryTime = ({ value, className }: { value: string; className?: s
     <time
       dateTime={value}
       title={renderFormattedDateTime(value)}
-      className={cn("shrink-0 cursor-help text-caption-md-regular text-placeholder tabular-nums", className)}
+      className={cn("shrink-0 text-caption-md-regular text-placeholder tabular-nums", className)}
     >
       {formatRelative(value, currentLocale, t)}
     </time>

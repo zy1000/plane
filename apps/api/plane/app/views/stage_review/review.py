@@ -134,7 +134,15 @@ class StageReviewViewSet(BaseViewSet):
     def get_queryset(self):
         return (
             self._scoped_queryset()
-            .annotate(attachment_count=_attachment_count_annotation())
+            .annotate(
+                attachment_count=_attachment_count_annotation(),
+                # 列表的「评论数量」列与详情共用这一份计数
+                comment_count=Count(
+                    "comments",
+                    filter=Q(comments__deleted_at__isnull=True),
+                    distinct=True,
+                ),
+            )
             .distinct()
         )
 
@@ -151,18 +159,7 @@ class StageReviewViewSet(BaseViewSet):
         )
 
     def _detail_response(self, pk, http_status=status.HTTP_200_OK):
-        review = (
-            self.get_queryset()
-            .filter(pk=pk)
-            .annotate(
-                comment_count=Count(
-                    "comments",
-                    filter=Q(comments__deleted_at__isnull=True),
-                    distinct=True,
-                )
-            )
-            .first()
-        )
+        review = self.get_queryset().filter(pk=pk).first()
         if review is None:
             return self._not_found()
         return Response(StageReviewDetailSerializer(review).data, status=http_status)
@@ -198,16 +195,31 @@ class StageReviewViewSet(BaseViewSet):
 
     @allow_fine_permission(*STAGE_REVIEW_READ_KEYS)
     def stages(self, request, slug, project_id):
-        """左栏的阶段列表：只列出真的有评审的阶段，带完成进度。
+        """左栏的阶段列表：只列出真的有评审的阶段，带四个状态各自的条数。
 
         阶段本身来自 ``product_stage`` 数据字典，但这里不查字典全表 —— 没有评审的
-        阶段出现在左栏只会让人点进去看空列表。
+        阶段出现在左栏只会让人点进去看空列表。四个状态计数给左栏的分段进度条用。
         """
         rows = (
             self._scoped_queryset()
             .values("stage_id", "stage__label", "stage__sort_order")
             .annotate(
                 total=Count("id", distinct=True),
+                not_started=Count(
+                    "id",
+                    filter=Q(status=StageReviewStatus.NOT_STARTED),
+                    distinct=True,
+                ),
+                in_review=Count(
+                    "id",
+                    filter=Q(status=StageReviewStatus.IN_REVIEW),
+                    distinct=True,
+                ),
+                in_approval=Count(
+                    "id",
+                    filter=Q(status=StageReviewStatus.IN_APPROVAL),
+                    distinct=True,
+                ),
                 completed=Count(
                     "id",
                     filter=Q(status=StageReviewStatus.COMPLETED),
@@ -222,6 +234,9 @@ class StageReviewViewSet(BaseViewSet):
                     "stage_id": str(row["stage_id"]),
                     "label": row["stage__label"],
                     "total": row["total"],
+                    "not_started": row["not_started"],
+                    "in_review": row["in_review"],
+                    "in_approval": row["in_approval"],
                     "completed": row["completed"],
                 }
                 for row in rows

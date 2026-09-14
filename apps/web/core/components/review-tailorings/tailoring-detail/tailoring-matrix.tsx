@@ -4,7 +4,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
 import { Checkbox, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { CellReasonPopover } from "./cell-reason-popover";
+import { CellReasonModal } from "./cell-reason-modal";
 import { MatrixCell, ReadonlyCheck } from "./matrix-cell";
 import type { TMatrixGroup, TMatrixRow } from "./tailoring-matrix-model";
 import {
@@ -117,7 +117,7 @@ export const TailoringMatrix = ({
   onAddProducts: () => void;
 }) => {
   const { t } = useTranslation();
-  const [openReason, setOpenReason] = useState<{ itemId: string; anchor: HTMLElement } | null>(null);
+  const [openReasonId, setOpenReasonId] = useState<string | null>(null);
 
   const { childCount, rowCount } = useMemo(() => {
     const counts = new Map<string, number>();
@@ -131,20 +131,8 @@ export const TailoringMatrix = ({
     return { childCount: counts, rowCount: total };
   }, [allGroups]);
 
-  /** 本表已经写过的裁剪原因，按出现次数排，给原因气泡当快捷选项 */
-  const reasonSuggestions = useMemo(() => {
-    const frequency = new Map<string, number>();
-    for (const item of items) {
-      const reason = item.reason.trim();
-      if (!item.selected && reason) frequency.set(reason, (frequency.get(reason) ?? 0) + 1);
-    }
-    return [...frequency.entries()].sort((a, b) => b[1] - a[1]).map(([reason]) => reason);
-  }, [items]);
-
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
-  const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
-  const openItem = openReason ? itemById.get(openReason.itemId) : undefined;
-  const openRowTitle = openItem?.title ?? "";
+  const openItem = openReasonId ? itemById.get(openReasonId) : undefined;
 
   return (
     <>
@@ -343,13 +331,9 @@ export const TailoringMatrix = ({
                               cell={cell}
                               editable={editable}
                               isDirty={dirtyIds.has(cell.id)}
-                              isReasonOpen={openReason?.itemId === cell.id}
+                              isReasonOpen={openReasonId === cell.id}
                               onToggle={(next) => onToggle(cell.id, next)}
-                              onOpenReason={(anchor) =>
-                                setOpenReason((current) =>
-                                  current?.itemId === cell.id ? null : { itemId: cell.id, anchor }
-                                )
-                              }
+                              onOpenReason={() => setOpenReasonId(cell.id)}
                             />
                           );
                         })}
@@ -384,21 +368,15 @@ export const TailoringMatrix = ({
 
       <MatrixLegend />
 
-      {openReason && openItem && (
-        <CellReasonPopover
-          key={openReason.itemId}
-          anchor={openReason.anchor}
-          value={openItem.reason}
-          subject={t("review_tailoring.matrix.reason_for", {
-            product: productById.get(openItem.product_id)?.name ?? "",
-            review: openRowTitle,
-          })}
-          suggestions={reasonSuggestions}
-          editable={editable}
-          onSave={(reason) => onReasonChange(openItem.id, reason)}
-          onClose={() => setOpenReason(null)}
-        />
-      )}
+      <CellReasonModal
+        isOpen={Boolean(openItem)}
+        value={openItem?.reason ?? ""}
+        editable={editable}
+        onSave={(reason) => {
+          if (openItem) onReasonChange(openItem.id, reason);
+        }}
+        onClose={() => setOpenReasonId(null)}
+      />
     </>
   );
 };

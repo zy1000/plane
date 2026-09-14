@@ -53,7 +53,7 @@ export const MatrixCell = ({
   isDirty: boolean;
   isReasonOpen: boolean;
   onToggle: (selected: boolean) => void;
-  onOpenReason: (anchor: HTMLElement) => void;
+  onOpenReason: () => void;
 }) => {
   const { t } = useTranslation();
   const lock = getCellLockReason(cell, !cell.selected);
@@ -110,9 +110,9 @@ export const MatrixCell = ({
               !editable && !reason && "cursor-default"
             )}
             title={reason || undefined}
-            onClick={(event) => {
+            onClick={() => {
               if (!editable && !reason) return;
-              onOpenReason(event.currentTarget.closest("td") ?? event.currentTarget);
+              onOpenReason();
             }}
           >
             {missing ? (

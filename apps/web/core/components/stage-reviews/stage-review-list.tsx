@@ -1,44 +1,43 @@
-import { useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { format } from "date-fns";
 import { observer } from "mobx-react";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, SearchX } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TCreateStageReviewPayload, TStageReview } from "@plane/types";
-import { EStageReviewStatus } from "@plane/types";
-import { AlertModalCore, Loader } from "@plane/ui";
-import { cn } from "@plane/utils";
-import { getStageReviewError, useStageReviews } from "@/hooks/store/use-stage-reviews";
+import { Button } from "@plane/propel/button";
+import type { IUserLite, TStageReview } from "@plane/types";
+import { COLLECTION_OPERATOR, EStageReviewStatus, LOGICAL_OPERATOR } from "@plane/types";
+import { Loader } from "@plane/ui";
+import { toFilterArray } from "@plane/utils";
+import { CountChip } from "@/components/common/count-chip";
+import { PageSearchInput } from "@/components/pages/list/search-input";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import { useStageReviews } from "@/hooks/store/use-stage-reviews";
 import { useUser } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { CreateStageReviewModal } from "./create-stage-review-modal";
 import { StageReviewDrawer } from "./detail/stage-review-drawer";
+import { StageReviewDisplayDropdown } from "./display/display-dropdown";
+import { useStageReviewDisplay } from "./display/display-settings";
+import { stageReviewMatchesConditions } from "./filters/match-stage-review";
+import { useStageReviewFilter } from "./filters/use-stage-review-filter";
+import { useStageReviewFiltersConfig } from "./filters/use-stage-review-filters-config";
+import { StageReviewGroupSidebar } from "./group-sidebar/group-sidebar";
+import { useStageReviewGrouping } from "./group-sidebar/use-stage-review-grouping";
+import { STAGE_REVIEWS_HEADER_ACTIONS_ID, STAGE_REVIEWS_HEADER_COUNT_ID } from "./header-slots";
 import { useStageReviewPermissions } from "./permissions";
-import { StageReviewRail } from "./stage-rail";
-import { StageReviewFilters } from "./stage-review-filters";
-import {
-  EMPTY_STAGE_REVIEW_FILTERS,
-  buildStageReviewGroups,
-  countByStatus,
-  type TStageReviewFilters,
-} from "./stage-review-rows";
 import { StageReviewTable } from "./stage-review-table";
+import { StageReviewSummary } from "./stage-summary";
 
 const I18N = "stage_review";
 
-/** 四张统计卡的左边框颜色，顺序与状态一致 */
-const STAT_ACCENT: Record<EStageReviewStatus, string> = {
-  [EStageReviewStatus.NOT_STARTED]: "border-l-tertiary",
-  [EStageReviewStatus.IN_REVIEW]: "border-l-warning-primary",
-  [EStageReviewStatus.IN_APPROVAL]: "border-l-accent-primary",
-  [EStageReviewStatus.COMPLETED]: "border-l-success-primary",
-};
-
 /**
- * 阶段评审执行台：左栏选阶段，主区按产品分组，评审活动缩进挂在所属评审下。
+ * 阶段评审列表，布局照工作项：左侧分组栏（「显示 → 分组方式」决定按什么分，默认研发阶段；
+ * 选「无」不出分组栏），右侧是选中那一组的摘要 + 按属性列出的评审表；点一行开右侧抽屉。
  *
- * 这一屏回答两个问题 —— 这个阶段还剩什么没评完（左栏进度 + 四张卡），以及轮到我的
- * 那条现在该做什么（点开右侧抽屉）。**被裁剪掉的评审不会出现在这里**，它们在裁剪表
- * 里带着原因存档。
+ * 页头的搜索 / 筛选 / 显示照工作项：筛选是页头下方的筛选行，显示是「显示属性 / 分组方式 /
+ * 排序方式 / 显示评审活动 / 显示空组」。**评审只由裁剪表生成**，这里没有新建与删除；被裁剪
+ * 掉的评审也不会出现，它们在裁剪表里带着原因存档。
  */
 export const StageReviewList = observer(function StageReviewList({
   workspaceSlug,
@@ -51,81 +50,87 @@ export const StageReviewList = observer(function StageReviewList({
   const { data: currentUser } = useUser();
   const { getWorkspaceBySlug } = useWorkspace();
   const { canManage } = useStageReviewPermissions(workspaceSlug, projectId);
-  const {
-    stages,
-    activeStage,
-    activeStageId,
-    setActiveStageId,
-    reviews,
-    isStagesLoading,
-    isReviewsLoading,
-    error,
-    applyReview,
-    createReview,
-    deleteReview,
-  } = useStageReviews(workspaceSlug, projectId);
+  const { stages, reviews, isLoading, error, applyReview } = useStageReviews(workspaceSlug, projectId);
 
-  const [filters, setFilters] = useState<TStageReviewFilters>(EMPTY_STAGE_REVIEW_FILTERS);
+  const [search, setSearch] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [openReviewId, setOpenReviewId] = useState<string | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isMutating, setIsMutating] = useState(false);
-  const [toDelete, setToDelete] = useState<TStageReview | null>(null);
+  const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
+  const [countHost, setCountHost] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    setActionsHost(document.getElementById(STAGE_REVIEWS_HEADER_ACTIONS_ID));
+    setCountHost(document.getElementById(STAGE_REVIEWS_HEADER_COUNT_ID));
+  }, []);
+
+  const { settings, updateSettings } = useStageReviewDisplay(projectId, currentUser?.id);
+  const { areAllConfigsInitialized, configs } = useStageReviewFiltersConfig({
+    reviews,
+    workspaceSlug,
+    currentUser: currentUser as IUserLite | undefined,
+  });
+  const filter = useStageReviewFilter({ areAllConfigsInitialized, configs, projectId });
+  const conditions = filter.allConditionsForDisplay;
 
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
-  const counts = useMemo(() => countByStatus(reviews), [reviews]);
-  const groups = useMemo(
-    () => buildStageReviewGroups(reviews, filters, currentUser?.id),
-    [reviews, filters, currentUser?.id]
+  const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+
+  const isHit = useCallback(
+    (review: TStageReview) => {
+      const keyword = search.trim().toLowerCase();
+      return (
+        (!keyword || review.title.toLowerCase().includes(keyword)) &&
+        stageReviewMatchesConditions(review, conditions, currentUser?.id)
+      );
+    },
+    [search, conditions, currentUser?.id]
   );
 
-  const translateError = (requestError: unknown) => {
-    const { message, code } = getStageReviewError(requestError);
-    return code ? t(`${I18N}.errors.${code}`, { defaultValue: message }) : message;
-  };
+  const { sidebarGroups, rowsOf, reviewsOf } = useStageReviewGrouping({ reviews, stages, isHit, settings });
 
-  const handleCreate = async (payload: TCreateStageReviewPayload) => {
-    setIsMutating(true);
-    try {
-      const created = await createReview(payload);
-      setIsCreateOpen(false);
-      setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.created`) });
-      // 建完直接开抽屉：负责人、日期、描述都还要在里面补
-      if (created) setOpenReviewId(created.id);
-    } catch (requestError) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t(`${I18N}.toast.failed`),
-        message: translateError(requestError),
-      });
-    } finally {
-      setIsMutating(false);
+  // 选中的组不在当前分组栏里（切了分组方式、被筛没了）就落到第一组，同工作项
+  const isGrouped = settings.groupBy !== "none";
+  const activeGroup = isGrouped
+    ? (sidebarGroups.find((group) => group.id === selectedGroupId) ?? sidebarGroups[0] ?? null)
+    : null;
+  const rows = isGrouped ? rowsOf(activeGroup?.id ?? null) : rowsOf(null);
+  const summaryReviews = isGrouped ? (activeGroup ? reviewsOf(activeGroup.id) : []) : reviews;
+  const summaryLabel = isGrouped ? (activeGroup?.name ?? "") : t(`${I18N}.list.all_reviews`);
+
+  // 摘要图例与筛选行里的「状态」是同一个条件
+  const statusCondition = conditions.find((condition) => condition.property === "status");
+  const activeStatuses = (toFilterArray(statusCondition?.value as never) ?? []).map(String) as EStageReviewStatus[];
+
+  const handleToggleStatus = (status: EStageReviewStatus) => {
+    if (!statusCondition) {
+      filter.addCondition(
+        LOGICAL_OPERATOR.AND,
+        { property: "status", operator: COLLECTION_OPERATOR.IN, value: [status] },
+        false
+      );
+      filter.toggleVisibility(true);
+      return;
     }
+    const next = activeStatuses.includes(status)
+      ? activeStatuses.filter((value) => value !== status)
+      : [...activeStatuses, status];
+    if (next.length === 0) filter.removeCondition(statusCondition.id);
+    else filter.updateConditionValue(statusCondition.id, next);
   };
 
-  const handleDelete = async () => {
-    if (!toDelete) return;
-    setIsMutating(true);
-    try {
-      await deleteReview(toDelete.id);
-      if (openReviewId === toDelete.id) setOpenReviewId(null);
-      setToDelete(null);
-      setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.deleted`) });
-    } catch (requestError) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t(`${I18N}.toast.failed`),
-        message: translateError(requestError),
-      });
-    } finally {
-      setIsMutating(false);
-    }
+  const handleClearAll = () => {
+    setSearch("");
+    void filter.clearFilters();
   };
 
-  if (isStagesLoading) {
+  if (isLoading) {
     return (
-      <Loader className="space-y-3 p-5">
-        <Loader.Item height="64px" />
-        <Loader.Item height="320px" />
+      <Loader className="flex h-full gap-4 p-4">
+        <Loader.Item height="100%" width="240px" />
+        <div className="flex flex-1 flex-col gap-3">
+          <Loader.Item height="96px" />
+          <Loader.Item height="320px" />
+        </div>
       </Loader>
     );
   }
@@ -141,63 +146,69 @@ export const StageReviewList = observer(function StageReviewList({
     );
   }
 
-  return (
-    <div className="flex h-full min-h-0">
-      <StageReviewRail stages={stages} activeStageId={activeStageId} onSelect={setActiveStageId} />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex gap-2.5 px-5 pt-4">
-          {[
-            EStageReviewStatus.NOT_STARTED,
-            EStageReviewStatus.IN_REVIEW,
-            EStageReviewStatus.IN_APPROVAL,
-            EStageReviewStatus.COMPLETED,
-          ].map((status) => (
-            <div
-              key={status}
-              className={cn(
-                "flex flex-1 flex-col gap-0.5 rounded-lg border border-subtle border-l-[3px] px-3.5 py-2.5",
-                STAT_ACCENT[status]
-              )}
-            >
-              <span className="text-12 text-tertiary">{t(`${I18N}.status.${status}`)}</span>
-              <span className="text-22 font-semibold tabular-nums text-primary">{counts[status]}</span>
-            </div>
-          ))}
+  const renderBody = () => {
+    if (reviews.length === 0) {
+      return (
+        <div className="grid h-full place-items-center px-6 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <ClipboardCheck className="size-8 text-tertiary" />
+            <p className="text-14 font-medium text-primary">{t(`${I18N}.empty.title`)}</p>
+            <p className="max-w-80 text-12 leading-relaxed text-tertiary">{t(`${I18N}.empty.description`)}</p>
+          </div>
         </div>
+      );
+    }
+    if (rows.length === 0) {
+      return (
+        <div className="grid h-full place-items-center px-6 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <SearchX className="size-8 text-tertiary" />
+            <p className="text-14 font-medium text-primary">{t(`${I18N}.list.empty_filtered_title`)}</p>
+            <p className="max-w-80 text-12 leading-relaxed text-tertiary">
+              {t(`${I18N}.list.empty_filtered_description`)}
+            </p>
+            <Button variant="secondary" size="sm" className="mt-1" onClick={handleClearAll}>
+              {t(`${I18N}.list.clear_filters`)}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <StageReviewTable
+        rows={rows}
+        settings={settings}
+        today={today}
+        activeReviewId={openReviewId}
+        onOpen={setOpenReviewId}
+      />
+    );
+  };
 
-        <StageReviewFilters
-          reviews={reviews}
-          filters={filters}
-          canManage={canManage}
-          onChange={setFilters}
-          onCreate={() => setIsCreateOpen(true)}
-        />
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <FiltersRow filter={filter} />
 
-        <div className="min-h-0 flex-1 overflow-auto px-5 pb-5">
-          {isReviewsLoading ? (
-            <Loader className="space-y-2">
-              <Loader.Item height="36px" />
-              <Loader.Item height="36px" />
-              <Loader.Item height="36px" />
-            </Loader>
-          ) : groups.length === 0 ? (
-            <div className="grid h-full place-items-center px-6 text-center">
-              <div className="flex flex-col items-center gap-2">
-                <ClipboardCheck className="size-8 text-tertiary" />
-                <p className="text-14 font-medium text-primary">{t(`${I18N}.empty.title`)}</p>
-                <p className="max-w-80 text-12 leading-relaxed text-tertiary">{t(`${I18N}.empty.description`)}</p>
-              </div>
-            </div>
-          ) : (
-            <StageReviewTable
-              groups={groups}
-              activeReviewId={openReviewId}
-              canManage={canManage}
-              onOpen={setOpenReviewId}
-              onDelete={setToDelete}
+      <div className="flex min-h-0 flex-1">
+        {isGrouped && (
+          <StageReviewGroupSidebar
+            groupBy={settings.groupBy}
+            groups={sidebarGroups}
+            selectedGroupId={activeGroup?.id ?? null}
+            onSelectGroup={setSelectedGroupId}
+          />
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {(!isGrouped || activeGroup) && reviews.length > 0 && (
+            <StageReviewSummary
+              label={summaryLabel}
+              reviews={summaryReviews}
+              activeStatuses={activeStatuses}
+              onToggleStatus={handleToggleStatus}
             />
           )}
+          <div className="min-h-0 flex-1 overflow-auto">{renderBody()}</div>
         </div>
       </div>
 
@@ -211,24 +222,20 @@ export const StageReviewList = observer(function StageReviewList({
         onUpdated={applyReview}
       />
 
-      <CreateStageReviewModal
-        isOpen={isCreateOpen}
-        stageId={activeStageId}
-        stageLabel={activeStage?.label ?? ""}
-        reviews={reviews}
-        isSubmitting={isMutating}
-        onClose={() => setIsCreateOpen(false)}
-        onSubmit={handleCreate}
-      />
-
-      <AlertModalCore
-        isOpen={Boolean(toDelete)}
-        handleClose={() => setToDelete(null)}
-        handleSubmit={handleDelete}
-        isSubmitting={isMutating}
-        title={t(`${I18N}.delete.title`)}
-        content={t(`${I18N}.delete.content`, { title: toDelete?.title ?? "" })}
-      />
+      {actionsHost &&
+        createPortal(
+          <>
+            <PageSearchInput
+              searchQuery={search}
+              updateSearchQuery={setSearch}
+              placeholder={t(`${I18N}.list.search_placeholder`)}
+            />
+            <FiltersToggle filter={filter} enableQuickAddFilter={false} />
+            <StageReviewDisplayDropdown settings={settings} onChange={updateSettings} />
+          </>,
+          actionsHost
+        )}
+      {countHost && reviews.length > 0 && createPortal(<CountChip count={reviews.length} />, countHost)}
     </div>
   );
 });

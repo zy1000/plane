@@ -245,12 +245,12 @@
 
 ### 评审实例的执行台（2026-09-11）
 
-评审实例自己的那一屏在 `projects/(detail)/[projectId]/stage-reviews/`：左栏阶段（只列有评审的阶段）+ 四张状态卡 + 按产品分组的表（评审活动缩进挂在所属评审下）+ 右侧详情抽屉。
+评审实例自己的那一屏在 `projects/(detail)/[projectId]/stage-reviews/`，布局照工作项（2026-09-14 改版）：**左侧分组栏**（`stage-reviews/group-sidebar/`，照 `issue-layouts/list/group-sidebar.tsx`：「分组方式 : 维度」+ 可收起 + 点组右侧只看这一组；维度由「显示 → 分组方式」决定：研发阶段（默认，每行带阶段四色完成度）/ 产品 / 状态 / 负责人 / 审核者 / 结论 / 类型 / 无，「无」不出分组栏）+ 右侧选中组的摘要（状态图例 = 筛选行里的「状态」条件，数字按这一组未筛选的评审算）+ 属性列表格（按研发阶段 / 产品分组或不分组时评审活动缩进挂在所属评审下，按其它维度分组时铺平带「所属评审 ›」；子活动标题去掉「所属评审-」前缀）+ 右侧详情抽屉。项目的评审一次取全，分组与筛选都在前端做；阶段汇总接口只给「研发阶段」分组提供阶段名、顺序与完成度。筛选行复用 `components/rich-filters/`，本地匹配（`stage-reviews/filters/`，负责人 / 审核者的「我」「未指定」是占位值）；显示是显示属性 / 分组方式 / 排序方式 / 显示评审活动 / 显示空组，按「项目 + 人」存 localStorage（`stage-reviews/display/`）。
 
 - **状态只能一步步推进**：`未评审 → 评审中 → 审核中 → 已评审`，接口只有 `advance/`（往前一步）与 `rollback/`（退回一步），**没有「改成某个状态」的写入口**，前端也就没有状态下拉。状态机在 `utils/stage_review.py`。
 - **结论在「提交审核」那一刻定稿**：`result` 只由 `advance`（评审中 → 审核中）写入，条件通过必须带原因，O 阶段两种 kind 必须同时给生产方式与出货评估。`PATCH` 的序列化器**刻意不含 status / result**。
 - 负责人 / 审核者生成时是空的，由 `candidates/` 端点按「该产品下担任 `leader_role` / `auditor_role` 的成员」筛；筛不出人退回全部项目成员并回 `fallback: true`。
-- 手工新建的评审 `template` 为空、不回写任何裁剪格子；也只有它能删（裁剪生成的要回裁剪表取消勾选）。
+- **前端不再提供手工新建 / 删除**（2026-09-14 用户拍板：评审只由裁剪表生成）。后端 `create` / `destroy` 端点与 `is_manual`（`template` 为空）暂时保留未动，库里若有旧的手工评审仍会正常列出。
 - 轨迹是新表 `StageReviewActivity`，**同步写**，口径同 `ReviewTailoringActivity`；`_delete_stage_reviews` 也要跟着删它。
 - 权限 `project.stage_review.view/manage`（迁移 `0368`），推进状态不另给 key。
 

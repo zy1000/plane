@@ -1,107 +1,156 @@
-import type { TStageReview, TStageReviewProduct } from "@plane/types";
+import type { TStageReview } from "@plane/types";
 import { EStageReviewStatus } from "@plane/types";
+import type { TStageReviewGroupBy, TStageReviewOrderBy } from "./display/display-settings";
 
-/** 表格里的一行：评审或评审活动，`depth=1` 的缩进挂在所属评审下 */
+/** 表格里的一行：评审或评审活动 */
 export type TStageReviewRow = {
   review: TStageReview;
+  /** 1 = 缩进挂在所属评审下（按研发阶段 / 产品分组或不分组时出现） */
   depth: 0 | 1;
+  /** 自己没命中，只是因为子活动命中被带出来的所属评审：半透明，不计入命中数 */
+  carried: boolean;
+  /** 列表里显示的标题：子活动去掉「所属评审-」前缀 */
+  title: string;
+  /** 铺平时，子活动前面带的「所属评审 ›」 */
+  parentTitle: string | null;
 };
 
-export type TStageReviewGroup = {
-  product: TStageReviewProduct;
-  rows: TStageReviewRow[];
-  total: number;
-  completed: number;
-};
+/** 负责人 / 审核者 / 结论为空的那一组 */
+export const STAGE_REVIEW_GROUP_NONE = "__none__";
+/** 分组方式为「无」时唯一的那一组 */
+export const STAGE_REVIEW_GROUP_ALL = "__all__";
 
-export type TStageReviewFilters = {
-  productId: string | null;
-  status: EStageReviewStatus | null;
-  leaderId: string | null;
-  /** 只看与我有关：我是负责人或审核者 */
-  mineOnly: boolean;
-};
-
-export const EMPTY_STAGE_REVIEW_FILTERS: TStageReviewFilters = {
-  productId: null,
-  status: null,
-  leaderId: null,
-  mineOnly: false,
-};
-
-const matches = (review: TStageReview, filters: TStageReviewFilters, currentUserId: string | undefined) => {
-  if (filters.productId && review.product_id !== filters.productId) return false;
-  if (filters.status && review.status !== filters.status) return false;
-  if (filters.leaderId && review.leader_id !== filters.leaderId) return false;
-  if (filters.mineOnly && currentUserId) {
-    if (review.leader_id !== currentUserId && review.auditor_id !== currentUserId) return false;
+/** 一条评审落在哪个分组里。按研发阶段 / 产品分时父子一定同组，其它方式可能拆开 */
+export const stageReviewGroupKey = (groupBy: TStageReviewGroupBy, review: TStageReview): string => {
+  switch (groupBy) {
+    case "stage":
+      return review.stage_id;
+    case "product":
+      return review.product_id;
+    case "status":
+      return review.status;
+    case "leader":
+      return review.leader_id ?? STAGE_REVIEW_GROUP_NONE;
+    case "auditor":
+      return review.auditor_id ?? STAGE_REVIEW_GROUP_NONE;
+    case "result":
+      return review.result || STAGE_REVIEW_GROUP_NONE;
+    case "kind":
+      return review.kind;
+    default:
+      return STAGE_REVIEW_GROUP_ALL;
   }
-  return true;
+};
+
+/** 「D阶段评审-需求Review（软件&整机）」挂在「D阶段评审」下时只显示后半段；前缀后面必须跟分隔符才去 */
+const stripParentPrefix = (title: string, parentTitle: string) => {
+  if (!parentTitle || !title.startsWith(parentTitle)) return title;
+  const rest = title.slice(parentTitle.length).match(/^\s*[-－—–:：]\s*(.+)$/);
+  return rest ? rest[1] : title;
+};
+
+const compareBy = (orderBy: TStageReviewOrderBy, indexOf: (review: TStageReview) => number) => {
+  const byIndex = (a: TStageReview, b: TStageReview) => indexOf(a) - indexOf(b);
+  return (a: TStageReview, b: TStageReview) => {
+    switch (orderBy) {
+      case "-created_at":
+        return b.created_at.localeCompare(a.created_at) || byIndex(a, b);
+      case "-updated_at":
+        return (b.updated_at ?? "").localeCompare(a.updated_at ?? "") || byIndex(a, b);
+      case "start_date":
+      case "end_date": {
+        const left = a[orderBy];
+        const right = b[orderBy];
+        if (left === right) return byIndex(a, b);
+        // 没排期的沉底
+        if (!left) return 1;
+        if (!right) return -1;
+        return left.localeCompare(right);
+      }
+      default:
+        return byIndex(a, b);
+    }
+  };
 };
 
 /**
- * 扁平的评审列表折成「产品分组 + 两层树」。
+ * 扁平评审列表 → 「分组 key → 表格行」。分组的顺序、名称、空组由左侧分组栏决定，这里不管。
  *
- * 两条规则值得记住：
- * 1. **筛选命中子活动时，它所属的评审要跟着留下来** —— 否则一条活动会孤零零地顶在
- *    分组下，读不出它属于哪个评审。父只是被带出来的话不参与计数。
- * 2. 评审活动允许没有父（有些阶段没有汇总评审），那种就按顶层行渲染。
- *
- * 分组头的「x / y 已评审」按**筛选后**的行算 —— 屏幕上看到几条，这个数就说几条。
+ * - **按研发阶段 / 产品分组或不分组**：父子一定同组，保留「评审 → 评审活动」两层。命中子
+ *   活动时它所属的评审跟着出来（`carried`），否则一条活动孤零零地顶着。
+ * - **按其它属性分组**：父子可能落在不同组，一律铺平，子活动前面带「所属评审 ›」。
+ * - 评审活动允许没有父，或父不在列表里 —— 那种按顶层行处理。
+ * - 排序作用在评审这一层；活动在所属评审下按同一口径排。关掉「显示评审活动」只剩顶层行。
  */
-export const buildStageReviewGroups = (
-  reviews: TStageReview[],
-  filters: TStageReviewFilters,
-  currentUserId: string | undefined
-): TStageReviewGroup[] => {
-  const hits = new Set(reviews.filter((review) => matches(review, filters, currentUserId)).map((review) => review.id));
+export const buildStageReviewRowsByGroup = ({
+  reviews,
+  isHit,
+  orderBy,
+  groupBy,
+  showActivities,
+}: {
+  reviews: TStageReview[];
+  isHit: (review: TStageReview) => boolean;
+  orderBy: TStageReviewOrderBy;
+  groupBy: TStageReviewGroupBy;
+  showActivities: boolean;
+}): Map<string, TStageReviewRow[]> => {
   const byId = new Map(reviews.map((review) => [review.id, review]));
-  // 命中的活动把它所属的评审一起带出来
-  const visible = new Set(hits);
-  for (const id of hits) {
-    const parentId = byId.get(id)?.parent_id;
-    if (parentId) visible.add(parentId);
-  }
+  const index = new Map(reviews.map((review, position) => [review.id, position]));
+  const compare = compareBy(orderBy, (review) => index.get(review.id) ?? 0);
+  const parentOf = (review: TStageReview) => (review.parent_id ? (byId.get(review.parent_id) ?? null) : null);
+  const push = (rowsByKey: Map<string, TStageReviewRow[]>, key: string, rows: TStageReviewRow[]) =>
+    rowsByKey.set(key, [...(rowsByKey.get(key) ?? []), ...rows]);
 
-  const groups = new Map<string, TStageReviewGroup>();
-  const childrenOf = new Map<string, TStageReview[]>();
+  const hits = new Set(
+    reviews.filter((review) => (showActivities || !parentOf(review)) && isHit(review)).map((review) => review.id)
+  );
+  const rowsByKey = new Map<string, TStageReviewRow[]>();
 
-  for (const review of reviews) {
-    if (!visible.has(review.id)) continue;
-    if (review.parent_id) {
-      const siblings = childrenOf.get(review.parent_id) ?? [];
-      siblings.push(review);
-      childrenOf.set(review.parent_id, siblings);
+  if (groupBy === "none" || groupBy === "stage" || groupBy === "product") {
+    const carried = new Set<string>();
+    const childrenOf = new Map<string, TStageReview[]>();
+    for (const review of reviews) {
+      const parent = parentOf(review);
+      if (!parent || !hits.has(review.id)) continue;
+      if (!hits.has(parent.id)) carried.add(parent.id);
+      childrenOf.set(parent.id, [...(childrenOf.get(parent.id) ?? []), review]);
     }
-  }
 
-  for (const review of reviews) {
-    if (!visible.has(review.id) || review.parent_id) continue;
-    const product = review.product_detail ?? {
-      id: review.product_id,
-      name: "—",
-      code: "",
-      identifier: "",
-    };
-    const group = groups.get(product.id) ?? { product, rows: [], total: 0, completed: 0 };
-    group.rows.push({ review, depth: 0 });
-    for (const child of childrenOf.get(review.id) ?? []) {
-      group.rows.push({ review: child, depth: 1 });
+    const roots = reviews
+      .filter((review) => !parentOf(review) && (hits.has(review.id) || carried.has(review.id)))
+      .sort(compare);
+    for (const root of roots) {
+      push(rowsByKey, stageReviewGroupKey(groupBy, root), [
+        { review: root, depth: 0, carried: carried.has(root.id), title: root.title, parentTitle: null },
+        ...(childrenOf.get(root.id) ?? []).sort(compare).map((child) => ({
+          review: child,
+          depth: 1 as const,
+          carried: false,
+          title: stripParentPrefix(child.title, root.title),
+          parentTitle: null,
+        })),
+      ]);
     }
-    groups.set(product.id, group);
+    return rowsByKey;
   }
 
-  for (const group of groups.values()) {
-    // 只被「带出来」的父不算进进度，否则筛完的分组头会多出没命中的那条
-    const counted = group.rows.filter((row) => hits.has(row.review.id));
-    group.total = counted.length;
-    group.completed = counted.filter((row) => row.review.status === EStageReviewStatus.COMPLETED).length;
+  for (const review of reviews.filter((item) => hits.has(item.id)).sort(compare)) {
+    const parent = parentOf(review);
+    push(rowsByKey, stageReviewGroupKey(groupBy, review), [
+      {
+        review,
+        depth: 0,
+        carried: false,
+        title: parent ? stripParentPrefix(review.title, parent.title) : review.title,
+        parentTitle: parent?.title ?? null,
+      },
+    ]);
   }
-
-  return [...groups.values()].sort((a, b) => a.product.name.localeCompare(b.product.name));
+  return rowsByKey;
 };
 
-/** 顶部四张卡：按当前阶段的全部评审算，不受筛选影响 */
+/** 摘要里的四个数：按当前分组的全部评审算，不受筛选影响 */
 export const countByStatus = (reviews: TStageReview[]): Record<EStageReviewStatus, number> => {
   const counts = {
     [EStageReviewStatus.NOT_STARTED]: 0,

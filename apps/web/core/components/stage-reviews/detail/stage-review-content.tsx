@@ -18,6 +18,21 @@ const isBlankRichText = (html: string | null | undefined) => {
   return text.length === 0 && !/<(img|image-component|video|table)\b/i.test(html ?? "");
 };
 
+/** 区块标题右侧的小动作：描边小按钮（上传附件）或安静的文字（编辑） */
+export const BLOCK_ACTION_CLASS = cn(
+  "inline-flex h-6.5 items-center gap-1 rounded-md px-2 text-12 font-medium transition disabled:opacity-50",
+  "border border-strong bg-surface-1 text-secondary hover:bg-layer-2"
+);
+export const BLOCK_ACTION_QUIET_CLASS =
+  "inline-flex h-6.5 items-center gap-1 rounded-md px-2 text-12 font-medium text-placeholder transition hover:bg-layer-2 hover:text-secondary";
+
+const FIELD_BOX_CLASS =
+  "-mx-2.5 rounded-lg border border-subtle px-2.5 py-1.5 transition focus-within:bg-surface-1";
+/** 跟描述 RichTextEditor 同一套字：large-font = 1rem / 1.5rem，Inter */
+const FIELD_EDITOR_CLASS = "editor-container large-font sans-serif line-spacing-regular";
+const FIELD_LINE_CLASS =
+  "min-h-7 [font-family:var(--font-style)] text-[length:var(--font-size-regular)] leading-[var(--line-height-regular)]";
+
 export const Block = ({
   title,
   count,
@@ -30,38 +45,22 @@ export const Block = ({
   children: React.ReactNode;
 }) => (
   <section className="flex flex-col gap-2.5">
-    <h4 className="flex items-center gap-2 text-12 font-semibold tracking-wide text-tertiary">
+    <h4 className="flex min-h-6.5 items-center gap-2 text-14 font-semibold text-primary">
       {title}
-      {count !== undefined && <span className="font-medium text-placeholder tabular-nums">{count}</span>}
-      {action && <span className="ml-auto">{action}</span>}
+      {count !== undefined && count > 0 && (
+        <span className="text-12 font-medium text-placeholder tabular-nums">{count}</span>
+      )}
+      {action && <span className="ml-auto flex items-center">{action}</span>}
     </h4>
     {children}
   </section>
 );
 
-/** 空字段的一行占位：点一下才展开编辑器，不占一个大空框 */
-const GhostRow = ({ label, onClick }: { label: string; onClick: () => void }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      "flex items-center gap-2 rounded-lg border border-dashed border-subtle bg-layer-1 px-3 py-2",
-      "text-13 text-tertiary transition hover:border-strong hover:text-secondary"
-    )}
-  >
-    <Pencil className="size-3.5" />
-    {label}
-  </button>
-);
-
 /**
  * 抽屉正文里「要读的那两块」：描述与工作指引。
  *
- * 空着的时候各占一行虚线占位，点一下才展开编辑器 —— 裁剪生成的评审这两块多半是空的
- * （模板没写描述，工作指引本来就只在实例上），摆两个大空框会让人以为系统没有这些字段。
- *
- * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传）；
- * 工作指引是纯文本，模型上就是 TextField，没有 HTML 列可存。
+ * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传），空着也画框；
+ * 工作指引是纯文本，模型上就是 TextField，没有 HTML 列可存，读的时候按行渲成编号清单。
  */
 export const StageReviewContent = ({
   workspaceSlug,
@@ -77,28 +76,19 @@ export const StageReviewContent = ({
   detail: TStageReviewDetail;
   editable: boolean;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
-}) => {
-  const { t } = useTranslation();
-
-  return (
-    <>
-      <Block title={t(`${I18N}.fields.description`)}>
-        <DescriptionEditor
-          workspaceSlug={workspaceSlug}
-          workspaceId={workspaceId}
-          projectId={projectId}
-          detail={detail}
-          editable={editable}
-          onUpdate={onUpdate}
-        />
-      </Block>
-
-      <Block title={t(`${I18N}.fields.work_instruction`)}>
-        <WorkInstruction detail={detail} editable={editable} onUpdate={onUpdate} />
-      </Block>
-    </>
-  );
-};
+}) => (
+  <>
+    <DescriptionEditor
+      workspaceSlug={workspaceSlug}
+      workspaceId={workspaceId}
+      projectId={projectId}
+      detail={detail}
+      editable={editable}
+      onUpdate={onUpdate}
+    />
+    <WorkInstruction detail={detail} editable={editable} onUpdate={onUpdate} />
+  </>
+);
 
 /**
  * 描述。内联图片走 PROJECT_DESCRIPTION 资产，与迭代描述（CycleRichTextEditor）同一个
@@ -127,12 +117,10 @@ const DescriptionEditor = ({
   const isBlank = isBlankRichText(detail.description_html);
   const saved = isBlank ? EMPTY_RICH_TEXT : (detail.description_html as string);
   const [draft, setDraft] = useState(saved);
-  const [isOpen, setIsOpen] = useState(false);
 
   // 换一条评审、或存完之后回灌
   useEffect(() => {
     setDraft(saved);
-    setIsOpen(false);
   }, [detail.id, saved]);
 
   const handleUploadFile = useCallback(
@@ -163,62 +151,77 @@ const DescriptionEditor = ({
     [duplicateEditorAsset, projectId, workspaceSlug]
   );
 
+  const title = t(`${I18N}.fields.description`);
+
   if (!editable) {
-    return isBlank ? (
-      <p className="text-13 text-tertiary">{t(`${I18N}.detail.empty_value`)}</p>
-    ) : (
-      <RichTextEditor
-        id={`stage_review_description_${detail.id}`}
-        editable={false}
-        initialValue={saved}
-        value={saved}
-        onChange={() => {}}
-        workspaceSlug={workspaceSlug}
-        workspaceId={workspaceId}
-        projectId={projectId}
-        containerClassName="!p-0 text-13 leading-relaxed text-secondary"
-      />
+    return (
+      <Block title={title}>
+        {isBlank ? (
+          <p className="text-14 text-placeholder">{t(`${I18N}.detail.empty_value`)}</p>
+        ) : (
+          <RichTextEditor
+            id={`stage_review_description_${detail.id}`}
+            editable={false}
+            initialValue={saved}
+            value={saved}
+            onChange={() => {}}
+            workspaceSlug={workspaceSlug}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            containerClassName={`!p-0 ${FIELD_LINE_CLASS} text-secondary`}
+          />
+        )}
+      </Block>
     );
   }
 
-  if (isBlank && !isOpen) {
-    return <GhostRow label={t(`${I18N}.detail.add_description`)} onClick={() => setIsOpen(true)} />;
-  }
-
   return (
-    <div
-      className="rounded-lg border border-subtle bg-surface-1 px-3 py-2"
-      onBlur={(event) => {
-        // 焦点还在块内（比如点了工具栏按钮）就不算改完
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        if (draft !== saved) onUpdate({ description_html: draft });
-      }}
-    >
-      <RichTextEditor
-        // 换评审要重挂：editable 时 value 传 null，内容只在挂载时由 initialValue 灌一次
-        key={detail.id}
-        id={`stage_review_description_${detail.id}`}
-        editable
-        autofocus={isOpen}
-        initialValue={saved}
-        value={null}
-        onChange={(_json, html) => setDraft(html)}
-        workspaceSlug={workspaceSlug}
-        workspaceId={workspaceId}
-        projectId={projectId}
-        placeholder={t(`${I18N}.detail.description_placeholder`)}
-        searchMentionCallback={async (payload) =>
-          await workspaceService.searchEntity(workspaceSlug, { ...payload, project_id: projectId })
-        }
-        uploadFile={handleUploadFile}
-        duplicateFile={handleDuplicateFile}
-        containerClassName="!p-0 text-13 leading-relaxed"
-      />
-    </div>
+    <Block title={title}>
+      <div
+        className={FIELD_BOX_CLASS}
+        onBlur={(event) => {
+          // 焦点还在块内（比如点了工具栏按钮）就不算改完
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          if (draft !== saved) onUpdate({ description_html: draft });
+        }}
+      >
+        <RichTextEditor
+          // 换评审要重挂：editable 时 value 传 null，内容只在挂载时由 initialValue 灌一次
+          key={detail.id}
+          id={`stage_review_description_${detail.id}`}
+          editable
+          initialValue={saved}
+          value={null}
+          onChange={(_json, html) => setDraft(html)}
+          workspaceSlug={workspaceSlug}
+          workspaceId={workspaceId}
+          projectId={projectId}
+          placeholder={t("common.click_to_add_description")}
+          searchMentionCallback={async (payload) =>
+            await workspaceService.searchEntity(workspaceSlug, { ...payload, project_id: projectId })
+          }
+          uploadFile={handleUploadFile}
+          duplicateFile={handleDuplicateFile}
+          containerClassName={`!p-0 ${FIELD_LINE_CLASS}`}
+        />
+      </div>
+    </Block>
   );
 };
 
-/** 工作指引是纯文本（模型上就是 TextField），不套编辑器 */
+/** 把多行纯文本拆成条目；用户自己敲的「1.」「1、」「(1)」「-」前缀去掉，免得编号出现两遍 */
+const splitInstruction = (text: string) =>
+  text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:\d+\s*[.、)）]|[(（]\d+[)）]|[-•·])\s*/, "").trim())
+    .filter(Boolean);
+
+/**
+ * 工作指引是纯文本（模型上就是 TextField），不套编辑器。
+ *
+ * 读的时候按行渲成编号清单 —— 它写的是「评审前准备什么、会上逐条过什么」这种步骤，
+ * 编号比一段平铺的文字好跟；只有一行时就是一段话，不硬加编号。
+ */
 const WorkInstruction = ({
   detail,
   editable,
@@ -237,36 +240,68 @@ const WorkInstruction = ({
     setIsOpen(false);
   }, [detail.id, detail.work_instruction]);
 
-  if (!editable) {
+  const title = t(`${I18N}.fields.work_instruction`);
+  const lines = splitInstruction(detail.work_instruction);
+
+  if (editable && (isOpen || lines.length === 0)) {
     return (
-      <p
-        className={cn(
-          "text-13 leading-relaxed whitespace-pre-line",
-          detail.work_instruction ? "text-secondary" : "text-tertiary"
-        )}
-      >
-        {detail.work_instruction || t(`${I18N}.detail.empty_value`)}
-      </p>
+      <Block title={title}>
+        <div className={cn(FIELD_BOX_CLASS, FIELD_EDITOR_CLASS)}>
+          <textarea
+            value={draft}
+            autoFocus={isOpen}
+            rows={Math.max(1, draft.split(/\r?\n/).length)}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
+              if (draft !== detail.work_instruction) onUpdate({ work_instruction: draft });
+              else setIsOpen(false);
+            }}
+            placeholder={t(`${I18N}.detail.add_work_instruction`)}
+            className={cn(
+              "block w-full resize-none bg-transparent p-0 pb-1 text-primary outline-none",
+              "placeholder:text-placeholder placeholder:opacity-100",
+              FIELD_LINE_CLASS
+            )}
+          />
+        </div>
+      </Block>
     );
   }
 
-  if (!detail.work_instruction && !isOpen) {
-    return <GhostRow label={t(`${I18N}.detail.add_work_instruction`)} onClick={() => setIsOpen(true)} />;
+  if (lines.length === 0) {
+    return (
+      <Block title={title}>
+        <p className="text-14 text-placeholder">{t(`${I18N}.detail.empty_value`)}</p>
+      </Block>
+    );
   }
 
   return (
-    <textarea
-      value={draft}
-      autoFocus={isOpen}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== detail.work_instruction) onUpdate({ work_instruction: draft });
-      }}
-      placeholder={t(`${I18N}.detail.work_instruction_placeholder`)}
-      className={cn(
-        "min-h-20 w-full rounded-lg border border-subtle bg-surface-1 px-3 py-2.5 text-13 leading-relaxed",
-        "text-primary placeholder:text-tertiary focus:border-accent-strong focus:outline-none"
-      )}
-    />
+    <Block
+      title={title}
+      action={
+        editable && (
+          <button type="button" className={BLOCK_ACTION_QUIET_CLASS} onClick={() => setIsOpen(true)}>
+            <Pencil className="size-3" />
+            {t(`${I18N}.detail.edit`)}
+          </button>
+        )
+      }
+    >
+      <div className={FIELD_BOX_CLASS}>
+        {lines.length === 1 ? (
+          <p className="text-14 leading-relaxed text-secondary">{lines[0]}</p>
+        ) : (
+          <ol className="flex flex-col gap-1.5">
+            {lines.map((line, index) => (
+              <li key={index} className="grid grid-cols-[20px_1fr] gap-2 text-14 leading-relaxed text-secondary">
+                <span className="pt-px text-12 font-semibold tabular-nums text-accent-primary">{index + 1}</span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </Block>
   );
 };

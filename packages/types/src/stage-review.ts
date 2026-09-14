@@ -8,8 +8,9 @@ import type { IUserLite } from "./users";
  * **评审与评审活动是同一张表的两行**，只有层级不同（`kind` + `parent_id`），列表与
  * 详情抽屉共用同一套结构；父评审不汇总子活动的结论，各自独立评审。
  *
- * 状态只能顺着走、一次一步：未评审 → 评审中 → 审核中 → 已评审，没有「直接改成某个
- * 状态」的写入口，所以前端也不该出现状态下拉框。
+ * 状态只能顺着走：未评审 → 评审中 → 审核中 → 已评审，没有「直接改成某个状态」的写
+ * 入口，所以前端也不该出现状态下拉框。「提交审核」的落点由结论决定：不通过留在评审中，
+ * 免审直接已评审，通过 / 条件通过进审核中。
  */
 
 export enum EStageReviewStatus {
@@ -72,13 +73,17 @@ export type TStageReview = {
   start_date: string | null;
   end_date: string | null;
   attachment_count: number;
+  comment_count: number;
   is_manual: boolean;
   sort_order: number;
   created_at: string;
+  updated_at: string;
 };
 
 export type TStageReviewDetail = TStageReview & {
   stage_detail: TDataDictionaryItemLite | null;
+  /** 评审活动才有：所属评审的标题，只用来画面包屑 */
+  parent_title: string | null;
   description_html: string | null;
   work_instruction: string;
   conditional_reason: string;
@@ -98,16 +103,17 @@ export type TStageReviewDetail = TStageReview & {
   };
   /** 组件版本：同样只有「O阶段评审」有值，这一组只有「版本」一个子属性 */
   component_versions: { version: string };
-  comment_count: number;
   created_by: string | null;
-  updated_at: string;
 };
 
-/** 左栏的一个阶段：只列出真的有评审的阶段 */
+/** 左栏的一个阶段：只列出真的有评审的阶段，四个状态各自的条数给分段进度条用 */
 export type TStageReviewStageSummary = {
   stage_id: string;
   label: string;
   total: number;
+  not_started: number;
+  in_review: number;
+  in_approval: number;
   completed: number;
 };
 
@@ -138,6 +144,9 @@ export type TStageReviewActivity = {
   field: string | null;
   old_value: string | null;
   new_value: string | null;
+  /** 负责人 / 审核者这类成员字段：值是显示名，identifier 是用户 id；老记录为空 */
+  old_identifier: string | null;
+  new_identifier: string | null;
   comment: string;
   stage_review_comment: string | null;
   extra: Record<string, unknown>;
@@ -199,7 +208,10 @@ export type TUpdateStageReviewPayload = Partial<{
   component_version: string;
 }>;
 
-/** 提交审核时的结论。条件通过必须带原因，O 阶段必须带生产方式与出货评估 */
+/**
+ * 提交审核时的结论。条件通过与不通过必须带结论说明（conditional_reason），O 阶段必须带
+ * 生产方式与出货评估。落点由结论决定：不通过留在评审中，免审直接已评审，其余进审核中。
+ */
 export type TSubmitStageReviewPayload = {
   result: EStageReviewResult;
   conditional_reason?: string;

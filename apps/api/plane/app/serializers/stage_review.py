@@ -53,6 +53,7 @@ class StageReviewListSerializer(BaseSerializer):
     leader_detail = UserLiteSerializer(source="leader", read_only=True)
     auditor_detail = UserLiteSerializer(source="auditor", read_only=True)
     attachment_count = serializers.IntegerField(read_only=True, default=0)
+    comment_count = serializers.IntegerField(read_only=True, default=0)
     is_manual = serializers.SerializerMethodField()
 
     class Meta:
@@ -77,9 +78,11 @@ class StageReviewListSerializer(BaseSerializer):
             "start_date",
             "end_date",
             "attachment_count",
+            "comment_count",
             "is_manual",
             "sort_order",
             "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 
@@ -95,13 +98,17 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
     """
 
     stage_detail = DataDictionaryItemLiteSerializer(source="stage", read_only=True)
+    # 评审活动的面包屑要带一级「所属评审」，只要标题，不展开整个父对象
+    parent_title = serializers.CharField(
+        source="parent.title", read_only=True, allow_null=True, default=None
+    )
     finished_goods = serializers.DictField(read_only=True)
     component_versions = serializers.DictField(read_only=True)
-    comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta(StageReviewListSerializer.Meta):
         fields = StageReviewListSerializer.Meta.fields + [
             "stage_detail",
+            "parent_title",
             "description_html",
             "work_instruction",
             "conditional_reason",
@@ -112,9 +119,7 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
             "shipment_assessment",
             "finished_goods",
             "component_versions",
-            "comment_count",
             "created_by",
-            "updated_at",
         ]
         read_only_fields = fields
 

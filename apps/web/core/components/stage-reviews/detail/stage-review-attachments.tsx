@@ -1,9 +1,9 @@
-import { useRef } from "react";
-import { Download, FileText, Trash2, Upload } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, FileText, Paperclip, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TStageReviewAttachment } from "@plane/types";
 import { cn, renderFormattedDate } from "@plane/utils";
-import { Block } from "./stage-review-content";
+import { BLOCK_ACTION_CLASS, Block } from "./stage-review-content";
 
 const I18N = "stage_review";
 
@@ -14,9 +14,34 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+/** 文件类型小方块：按扩展名配色，认不出的用通用文件图标 */
+const FILE_KIND: { test: RegExp; label: string; className: string }[] = [
+  { test: /\.pdf$/i, label: "PDF", className: "bg-danger-primary" },
+  { test: /\.(xlsx?|csv)$/i, label: "XLS", className: "bg-success-primary" },
+  { test: /\.docx?$/i, label: "DOC", className: "bg-accent-primary" },
+  { test: /\.pptx?$/i, label: "PPT", className: "bg-warning-primary" },
+  { test: /\.(png|jpe?g|gif|webp|svg)$/i, label: "IMG", className: "bg-layer-3 text-secondary" },
+];
+
+const FileKindIcon = ({ name }: { name: string }) => {
+  const kind = FILE_KIND.find((item) => item.test.test(name));
+  return (
+    <span
+      className={cn(
+        "grid size-7.5 shrink-0 place-items-center rounded-md text-10 font-bold text-on-color",
+        kind ? kind.className : "bg-layer-2 text-tertiary"
+      )}
+    >
+      {kind ? kind.label : <FileText className="size-3.5" />}
+    </span>
+  );
+};
+
 /**
  * 评审附件。走 FileAsset 的预签名两步上传，下载也是换一个预签名地址再交给浏览器 ——
  * 文件不经过 Django，口径同迭代与发布的附件。
+ *
+ * 上传入口在区块标题右侧；空态是一条 42px 的虚线投放区（支持拖入），有文件后两列平铺。
  */
 export const StageReviewAttachments = ({
   attachments,
@@ -35,6 +60,7 @@ export const StageReviewAttachments = ({
 }) => {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   return (
     <Block
@@ -46,8 +72,9 @@ export const StageReviewAttachments = ({
             type="button"
             disabled={isMutating}
             onClick={() => inputRef.current?.click()}
-            className="text-12 font-medium text-accent-primary transition hover:text-accent-secondary"
+            className={BLOCK_ACTION_CLASS}
           >
+            <Upload className="size-3" />
             {t(`${I18N}.detail.upload`)}
           </button>
         )
@@ -67,35 +94,44 @@ export const StageReviewAttachments = ({
 
       {attachments.length === 0 ? (
         editable ? (
-          // 空态是一行虚线投放区，不是一块「还没有附件」的空提示
           <button
             type="button"
             disabled={isMutating}
             onClick={() => inputRef.current?.click()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              const file = event.dataTransfer.files?.[0];
+              if (file) onUpload(file);
+            }}
             className={cn(
-              "flex items-center justify-center gap-2 rounded-lg border border-dashed border-subtle bg-layer-1 px-3 py-3",
-              "text-13 text-tertiary transition hover:border-strong hover:text-secondary"
+              "flex h-10.5 items-center justify-center gap-2 rounded-lg border border-dashed border-strong",
+              "text-13 text-placeholder transition hover:border-accent-strong hover:text-tertiary",
+              isDragging && "border-accent-strong bg-accent-subtle text-accent-primary"
             )}
           >
-            <Upload className="size-3.5" />
-            {t(`${I18N}.detail.drop_file`)}
+            <Paperclip className="size-3.5" />
+            {t(`${I18N}.detail.drop_hint`)}
           </button>
         ) : (
-          <p className="text-13 text-tertiary">{t(`${I18N}.detail.no_attachments`)}</p>
+          <p className="text-14 text-placeholder">{t(`${I18N}.detail.no_attachments`)}</p>
         )
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="grid gap-2 sm:grid-cols-2">
           {attachments.map((asset) => (
             <li
               key={asset.id}
-              className="group flex items-center gap-2.5 rounded-lg border border-subtle px-3 py-2"
+              className="group flex min-w-0 items-center gap-2.5 rounded-lg border border-subtle px-2.5 py-2"
             >
-              <span className="grid size-7.5 shrink-0 place-items-center rounded-md bg-accent-subtle text-accent-primary">
-                <FileText className="size-3.5" />
-              </span>
+              <FileKindIcon name={asset.name} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-13 text-primary">{asset.name}</span>
-                <span className="block text-11 tabular-nums text-tertiary">
+                <span className="block truncate text-12 tabular-nums text-placeholder">
                   {formatSize(asset.size)} · {asset.created_by_detail?.display_name ?? "—"} ·{" "}
                   {renderFormattedDate(asset.created_at)}
                 </span>
