@@ -1,6 +1,7 @@
 import { observer } from "mobx-react";
-import { Grid3x3, Link2, MoreHorizontal, Trash2 } from "lucide-react";
+import { Grid3x3, Link2, MoreHorizontal, PenLine, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { getIconButtonStyling } from "@plane/propel/icon-button";
 import type { TReviewTailoring } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
@@ -97,20 +98,31 @@ export const TailoringRow = observer(function TailoringRow({
   onOpen,
   onCopyLink,
   onDelete,
+  onSign,
 }: {
   item: TReviewTailoring;
   canDelete: boolean;
   onOpen: () => void;
   onCopyLink: () => void;
   onDelete: () => void;
+  /** 本轮在等我签时才给：行尾出「签批」，打开签批收件箱并定位到这一张 */
+  onSign?: () => void;
 }) {
   const { t, currentLocale } = useTranslation();
   const hasAxis = item.review_count > 0 || item.product_count > 0;
   const creator = item.created_by_detail;
 
   return (
-    <tr className="group cursor-pointer hover:bg-layer-transparent-hover" onClick={onOpen}>
-      <td className="border-b border-subtle py-3.5 pr-3 pl-6">
+    <tr
+      className={cn("group cursor-pointer hover:bg-layer-transparent-hover", item.my_approval_pending && "bg-warning-subtle/60")}
+      onClick={onOpen}
+    >
+      <td
+        className={cn(
+          "border-b border-subtle py-3.5 pr-3 pl-6",
+          item.my_approval_pending && "shadow-[inset_3px_0_0_var(--background-color-warning-primary)]"
+        )}
+      >
         <div className="flex min-w-0 items-center gap-3">
           <span className={cn("grid size-8.5 shrink-0 place-items-center rounded-lg", ICON_TONE[item.status])}>
             <Grid3x3 className="size-4" />
@@ -126,7 +138,14 @@ export const TailoringRow = observer(function TailoringRow({
         </div>
       </td>
       <td className="border-b border-subtle px-3 py-3.5">
-        <ReviewTailoringStatusBadge status={item.status} showDot />
+        <div className="flex items-center gap-1.5">
+          <ReviewTailoringStatusBadge status={item.status} showDot />
+          {item.my_approval_pending && (
+            <span className="rounded-full border border-warning-subtle bg-surface-1 px-2 py-0.5 text-11 font-medium whitespace-nowrap text-warning-primary">
+              {t("review_tailoring.approval.pending_for_you")}
+            </span>
+          )}
+        </div>
         <div className="mt-1 text-12 whitespace-nowrap text-tertiary tabular-nums">
           {statusDetail(item, currentLocale, t)}
         </div>
@@ -147,7 +166,13 @@ export const TailoringRow = observer(function TailoringRow({
       </td>
       {/* 菜单弹层是 portal，但 React 事件仍沿组件树冒泡到行上，得在这里截住 */}
       <td className="border-b border-subtle py-3.5 pr-4 pl-1" onClick={(event) => event.stopPropagation()}>
-        <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div className="flex items-center justify-end gap-1">
+          {onSign && (
+            <Button variant="secondary" size="lg" prependIcon={<PenLine />} onClick={onSign}>
+              {t("review_tailoring.approval.sign")}
+            </Button>
+          )}
+          <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <CustomMenu
             // CustomMenu 自己包了一层 <button>，这里只画样子
             customButton={
@@ -169,6 +194,7 @@ export const TailoringRow = observer(function TailoringRow({
               </CustomMenu.MenuItem>
             )}
           </CustomMenu>
+          </div>
         </div>
       </td>
     </tr>

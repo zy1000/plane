@@ -1229,10 +1229,12 @@ def delete_tailoring(*, tailoring):
     tailoring.delete()
 
 
-def attach_list_progress(tailorings):
+def attach_list_progress(tailorings, user=None):
     """给列表行补上「状态下面那行小字」要用的数，就地写到对象上。
 
     - ``approval_total`` / ``approval_approved``：本轮签批人数与已通过人数（签批中用）
+    - ``my_approval_pending`` / ``my_approval_action``：按请求人算，他是不是本轮还没表态的签批人、
+      表过态的话结论是什么（列表页「待你签批」与签批收件箱用）
     - ``generated_count``：已生成评审实例的格子数（已生效用）
     - ``pending_change_count``：修订期间相对生效快照改了几格（修订中用）
 
@@ -1246,14 +1248,18 @@ def attach_list_progress(tailorings):
     current_round = {tailoring.id: tailoring.round for tailoring in tailorings}
 
     approvals = defaultdict(lambda: [0, 0])
-    for tailoring_id, round_no, action in ReviewTailoringApproval.objects.filter(
+    # 请求人在本轮的签批行：有这一行才是签批人，action 为空就是还没表态
+    mine = {}
+    for tailoring_id, round_no, action, approver_id in ReviewTailoringApproval.objects.filter(
         tailoring_id__in=ids
-    ).values_list("tailoring_id", "round", "action"):
+    ).values_list("tailoring_id", "round", "action", "approver_id"):
         if round_no != current_round[tailoring_id]:
             continue
         approvals[tailoring_id][0] += 1
         if action == ReviewTailoringApprovalAction.APPROVED:
             approvals[tailoring_id][1] += 1
+        if user is not None and approver_id == user.id:
+            mine[tailoring_id] = action
 
     generated = dict(
         ReviewTailoringItem.objects.filter(
@@ -1279,6 +1285,12 @@ def attach_list_progress(tailorings):
 
     for tailoring in tailorings:
         tailoring.approval_total, tailoring.approval_approved = approvals[tailoring.id]
+        tailoring.my_approval_action = mine.get(tailoring.id)
+        tailoring.my_approval_pending = (
+            tailoring.status == ReviewTailoringStatus.PENDING
+            and tailoring.id in mine
+            and mine[tailoring.id] is None
+        )
         tailoring.generated_count = generated.get(tailoring.id, 0)
         tailoring.pending_change_count = (
             _changed_cell_count(
@@ -1288,6 +1300,7 @@ def attach_list_progress(tailorings):
             else 0
         )
     return tailorings
+
 
 
 def attach_detail_progress(tailoring, items, approvals):

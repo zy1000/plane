@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
-import { Plus } from "lucide-react";
+import { Inbox, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -13,6 +13,7 @@ import { CountChip } from "@/components/common/count-chip";
 import { PageSearchInput } from "@/components/pages/list/search-input";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { getTailoringError, useReviewTailorings } from "@/hooks/store/use-review-tailorings";
+import { ReviewTailoringApprovalInbox } from "./approval-inbox-modal";
 import { CreateTailoringModal } from "./create-tailoring-modal";
 import { TailoringAppliedFilters } from "./list/applied-filters";
 import { TailoringEmptyState } from "./list/empty-state";
@@ -25,6 +26,7 @@ import {
 } from "./list/filters";
 import { TailoringFiltersDropdown } from "./list/filters-dropdown";
 import { TailoringRow } from "./list/tailoring-row";
+import { TailoringCountBadge } from "./pending-approval-badge";
 import { useReviewTailoringPermissions } from "./permissions";
 
 const I18N = "review_tailoring";
@@ -51,7 +53,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   const { t } = useTranslation();
   const router = useAppRouter();
   const { canManage } = useReviewTailoringPermissions(workspaceSlug, projectId);
-  const { tailorings, isLoading, isMutating, error, createTailoring, deleteTailoring } = useReviewTailorings(
+  const { tailorings, isLoading, isMutating, error, fetchTailorings, createTailoring, deleteTailoring } = useReviewTailorings(
     workspaceSlug,
     projectId
   );
@@ -61,6 +63,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [toDelete, setToDelete] = useState<TReviewTailoring | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [inbox, setInbox] = useState<{ isOpen: boolean; initialId?: string }>({ isOpen: false });
   const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
   const [countHost, setCountHost] = useState<HTMLElement | null>(null);
 
@@ -71,6 +74,9 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   }, []);
 
   const visible = useMemo(() => filterTailorings(tailorings, search, filters), [tailorings, search, filters]);
+  const pendingMineCount = tailorings.filter((item) => item.my_approval_pending).length;
+  /** 本项目里等我签或我签过的表，有才出页头的「待我签批」 */
+  const hasMySigning = tailorings.some((item) => item.my_approval_pending || item.my_approval_action);
 
   const detailPath = (id: string) => `/${workspaceSlug}/projects/${projectId}/review-tailorings/${id}`;
 
@@ -113,6 +119,13 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
 
   const headerActions = (
     <>
+      {hasMySigning && (
+        <Button variant="secondary" size="lg" onClick={() => setInbox({ isOpen: true })}>
+          <Inbox className="size-3.5" />
+          {t(`${I18N}.approval.inbox_button`)}
+          <TailoringCountBadge count={pendingMineCount} />
+        </Button>
+      )}
       <PageSearchInput
         searchQuery={search}
         updateSearchQuery={setSearch}
@@ -158,7 +171,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
                 {t(`${I18N}.list.${column.key}`)}
               </th>
             ))}
-            <th className="w-12 border-b border-subtle" />
+            <th className="w-28 border-b border-subtle" />
           </tr>
         </thead>
         <tbody>
@@ -170,6 +183,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
               onOpen={() => router.push(detailPath(item.id))}
               onCopyLink={() => handleCopyLink(item)}
               onDelete={() => setToDelete(item)}
+              onSign={item.my_approval_pending ? () => setInbox({ isOpen: true, initialId: item.id }) : undefined}
             />
           ))}
         </tbody>
@@ -195,6 +209,20 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
         isSubmitting={isMutating}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={handleCreate}
+      />
+
+      <ReviewTailoringApprovalInbox
+        isOpen={inbox.isOpen}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        tailorings={tailorings}
+        initialId={inbox.initialId}
+        onClose={() => setInbox({ isOpen: false })}
+        onChanged={() => void fetchTailorings().catch(() => undefined)}
+        onOpenTailoring={(tailoringId) => {
+          setInbox({ isOpen: false });
+          router.push(detailPath(tailoringId));
+        }}
       />
 
       <AlertModalCore

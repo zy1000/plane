@@ -114,6 +114,10 @@ export type TReviewTailoring = {
   generated_count: number;
   /** 修订期间相对生效快照改了几格（修订中） */
   pending_change_count: number;
+  /** 当前用户是本轮签批人且还没表态（列表接口按请求人算，详情里恒为 false，看 approvals） */
+  my_approval_pending: boolean;
+  /** 当前用户在本轮的结论；不是签批人或还没表态为 null */
+  my_approval_action: TReviewTailoringApprovalAction | null;
   created_by_detail: IUserLite | null;
   submitted_by_detail: IUserLite | null;
   created_at: string;

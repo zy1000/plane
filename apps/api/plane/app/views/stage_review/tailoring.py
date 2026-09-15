@@ -215,7 +215,7 @@ class ReviewTailoringViewSet(BaseViewSet):
 
     @allow_fine_permission(*TAILORING_READ_KEYS)
     def list(self, request, slug, project_id):
-        rows = attach_list_progress(self.get_queryset())
+        rows = attach_list_progress(self.get_queryset(), user=request.user)
         serializer = self.get_serializer(rows, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

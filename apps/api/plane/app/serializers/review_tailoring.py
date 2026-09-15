@@ -135,6 +135,9 @@ class ReviewTailoringListSerializer(BaseSerializer):
     approval_approved = serializers.IntegerField(read_only=True, default=0)
     generated_count = serializers.IntegerField(read_only=True, default=0)
     pending_change_count = serializers.IntegerField(read_only=True, default=0)
+    # 按请求人算，只有列表会挂（attach_list_progress(user=...)）；详情里前端直接看 approvals
+    my_approval_pending = serializers.BooleanField(read_only=True, default=False)
+    my_approval_action = serializers.CharField(read_only=True, default=None, allow_null=True)
 
     class Meta:
         model = ReviewTailoring
@@ -156,6 +159,8 @@ class ReviewTailoringListSerializer(BaseSerializer):
             "approval_approved",
             "generated_count",
             "pending_change_count",
+            "my_approval_pending",
+            "my_approval_action",
             "created_by_detail",
             "submitted_by_detail",
             "created_at",

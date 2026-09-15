@@ -22,7 +22,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useReviewTailoringPermissions } from "../permissions";
 import { AddAxesModal } from "./add-axes-modal";
-import { ApprovalPanel } from "./approval-panel";
+import { ReviewTailoringApprovalModal } from "./approval-modal";
 import { DetailHeaderActions } from "./detail-header-actions";
 import { DetailHero } from "./detail-hero";
 import type { TDetailTab } from "./detail-tab-bar";
@@ -101,6 +101,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
 
   const [tab, setTab] = useState<TDetailTab>("matrix");
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
+  const [isApprovalOpen, setIsApprovalOpen] = useState(false);
   const [isAddAxesOpen, setIsAddAxesOpen] = useState(false);
   const [toRemove, setToRemove] = useState<TRemoveTarget | null>(null);
   const [isCancelRevisionOpen, setIsCancelRevisionOpen] = useState(false);
@@ -263,6 +264,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
             detail={detail}
             canManage={canManage}
             isMutating={isMutating}
+            currentUserId={currentUser?.id}
+            onOpenApproval={() => setIsApprovalOpen(true)}
             onSubmit={() => setIsSubmitOpen(true)}
             onRevise={() => void run(() => store.revise(), "revising")}
             onCancelRevision={() => setIsCancelRevisionOpen(true)}
@@ -283,15 +286,6 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           canManage={canManage}
           onTitleSave={(title) => void run(() => store.updateHeader({ title }), "updated")}
           onDescriptionSave={(description_html) => void run(() => store.updateHeader({ description_html }), "updated")}
-        />
-        <ApprovalPanel
-          detail={detail}
-          stats={stats}
-          currentUserId={currentUser?.id}
-          isMutating={isMutating}
-          onApprove={(comment) => void run(() => store.act({ action: "approved", comment }), "approved")}
-          onReject={(comment) => void run(() => store.act({ action: "rejected", comment }), "rejected")}
-          onWithdraw={() => void run(() => store.withdraw(), "withdrawn")}
         />
       </div>
 
@@ -415,6 +409,19 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         onSubmit={async (payload: TSubmitReviewTailoringPayload) => {
           const ok = await run(() => store.submit(payload), "submitted");
           if (ok) setIsSubmitOpen(false);
+        }}
+      />
+
+      <ReviewTailoringApprovalModal
+        isOpen={isApprovalOpen}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        store={store}
+        onClose={() => setIsApprovalOpen(false)}
+        onDone={() => {
+          setIsApprovalOpen(false);
+          // 每个签批动作都会写一条活动，历史那一栏要跟着刷
+          void feed.fetchFeed().catch(() => undefined);
         }}
       />
 
