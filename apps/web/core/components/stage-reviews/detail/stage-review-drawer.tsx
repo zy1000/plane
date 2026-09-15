@@ -105,6 +105,7 @@ export const StageReviewDrawer = ({
     uploadAttachment,
     deleteAttachment,
     downloadAttachment,
+    getAttachmentUrl,
     createComment,
     deleteComment,
   } = useStageReviewDetail(workspaceSlug, projectId, reviewId);
@@ -198,9 +199,10 @@ export const StageReviewDrawer = ({
                 onOpenSubmit={() => setIsSubmitOpen(true)}
                 onApprove={() => void run(advance, "completed")}
                 onRollback={() => void run(rollback, "rolled_back")}
-                onUpload={(file) => void run(() => uploadAttachment(file), "attachment_uploaded")}
+                onUpload={(file, onProgress) => run(() => uploadAttachment(file, onProgress), "attachment_uploaded")}
                 onDownload={(assetId) => void downloadAttachment(assetId)}
-                onDeleteAttachment={(assetId) => void run(() => deleteAttachment(assetId), "attachment_deleted")}
+                onDeleteAttachment={(assetId) => run(() => deleteAttachment(assetId), "attachment_deleted")}
+                getAttachmentUrl={getAttachmentUrl}
                 onCreateComment={createComment}
                 onDeleteComment={deleteComment}
               />
@@ -241,9 +243,10 @@ type DrawerBodyProps = {
   onOpenSubmit: () => void;
   onApprove: () => void;
   onRollback: () => void;
-  onUpload: (file: File) => void;
+  onUpload: (file: File, onProgress: (percentage: number) => void) => Promise<unknown>;
   onDownload: (assetId: string) => void;
-  onDeleteAttachment: (assetId: string) => void;
+  onDeleteAttachment: (assetId: string) => Promise<unknown>;
+  getAttachmentUrl: (assetId: string) => Promise<string | undefined>;
   onCreateComment: (commentHtml: string) => Promise<unknown>;
   onDeleteComment: (commentId: string) => Promise<unknown>;
 };
@@ -270,6 +273,7 @@ const DrawerBody = ({
   onUpload,
   onDownload,
   onDeleteAttachment,
+  getAttachmentUrl,
   onCreateComment,
   onDeleteComment,
 }: DrawerBodyProps) => {
@@ -372,12 +376,15 @@ const DrawerBody = ({
           />
 
           <StageReviewAttachments
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
             attachments={attachments}
             editable={editable}
             isMutating={isMutating}
             onUpload={onUpload}
             onDownload={onDownload}
             onDelete={onDeleteAttachment}
+            getFileURL={getAttachmentUrl}
           />
 
           <StageReviewTimeline

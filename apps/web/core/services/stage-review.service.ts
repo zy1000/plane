@@ -184,7 +184,8 @@ export class StageReviewService extends APIService {
     workspaceSlug: string,
     projectId: string,
     reviewId: string,
-    file: File
+    file: File,
+    onProgress?: (percentage: number) => void
   ): Promise<TStageReviewAttachment> {
     const metadata = await getFileMetaDataForUpload(file);
     const credentials = await this.post(`${this.base(workspaceSlug, projectId)}/${reviewId}/files/`, metadata)
@@ -197,7 +198,9 @@ export class StageReviewService extends APIService {
       { upload_data: credentials.upload_data, asset_id: credentials.asset_id, asset_url: "" } as TFileSignedURLResponse,
       file
     );
-    await new FileUploadService().uploadFile(credentials.upload_data.url, payload);
+    await new FileUploadService().uploadFile(credentials.upload_data.url, payload, (event) => {
+      if (onProgress && event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+    });
 
     return this.patch(`${this.base(workspaceSlug, projectId)}/${reviewId}/files/${credentials.asset_id}/uploaded/`, {})
       .then((response) => response?.data)

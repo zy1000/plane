@@ -1,66 +1,167 @@
-import { useRef, useState } from "react";
-import { Download, FileText, Paperclip, Trash2, Upload } from "lucide-react";
+import { useCallback, useState } from "react";
+import type { FileRejection } from "react-dropzone";
+import { useDropzone } from "react-dropzone";
+import { Download, Paperclip, UploadCloud } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { PlusIcon, TrashIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TStageReviewAttachment } from "@plane/types";
-import { cn, renderFormattedDate } from "@plane/utils";
-import { BLOCK_ACTION_CLASS, Block } from "./stage-review-content";
+import { AlertModalCore, CircularProgressIndicator, CustomMenu } from "@plane/ui";
+import { cn, convertBytesToSize, getFileExtension, renderFormattedDate } from "@plane/utils";
+import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { getFileIcon } from "@/components/icons";
+import { usePlatformOS } from "@/hooks/use-platform-os";
+import { useFileSize } from "@/plane-web/hooks/use-file-size";
+import { Block } from "./stage-review-content";
+import { useStageReviewAttachmentPreview } from "./use-stage-review-attachment-preview";
 
 const I18N = "stage_review";
 
-/** 248 KB / 1.1 MB 这种人读的大小 */
-const formatSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
+/** 一行附件，照工作项附件行（issues/attachment/attachment-list-item.tsx）：点整行预览，右侧上传人头像 + 悬停出「⋯」 */
+const AttachmentRow = ({
+  asset,
+  editable,
+  onPreview,
+  onDownload,
+  onDelete,
+}: {
+  asset: TStageReviewAttachment;
+  editable: boolean;
+  onPreview: (asset: TStageReviewAttachment) => void;
+  onDownload: (assetId: string) => void;
+  onDelete: (asset: TStageReviewAttachment) => void;
+}) => {
+  const { t } = useTranslation();
+  const { isMobile } = usePlatformOS();
 
-/** 文件类型小方块：按扩展名配色，认不出的用通用文件图标 */
-const FILE_KIND: { test: RegExp; label: string; className: string }[] = [
-  { test: /\.pdf$/i, label: "PDF", className: "bg-danger-primary" },
-  { test: /\.(xlsx?|csv)$/i, label: "XLS", className: "bg-success-primary" },
-  { test: /\.docx?$/i, label: "DOC", className: "bg-accent-primary" },
-  { test: /\.pptx?$/i, label: "PPT", className: "bg-warning-primary" },
-  { test: /\.(png|jpe?g|gif|webp|svg)$/i, label: "IMG", className: "bg-layer-3 text-secondary" },
-];
-
-const FileKindIcon = ({ name }: { name: string }) => {
-  const kind = FILE_KIND.find((item) => item.test.test(name));
   return (
-    <span
-      className={cn(
-        "grid size-7.5 shrink-0 place-items-center rounded-md text-10 font-bold text-on-color",
-        kind ? kind.className : "bg-layer-2 text-tertiary"
-      )}
+    <div
+      role="button"
+      tabIndex={0}
+      className="group -mx-2 flex h-11 cursor-pointer items-center justify-between gap-3 rounded-md px-2 hover:bg-surface-2"
+      onClick={() => onPreview(asset)}
     >
-      {kind ? kind.label : <FileText className="size-3.5" />}
-    </span>
+      <div className="flex min-w-0 flex-1 items-center gap-3 text-13">
+        <span className="flex shrink-0">{getFileIcon(getFileExtension(asset.name), 18)}</span>
+        <Tooltip tooltipContent={asset.name} isMobile={isMobile}>
+          <p className="truncate font-medium text-secondary">{asset.name}</p>
+        </Tooltip>
+        <span className="flex size-1.5 shrink-0 rounded-full bg-layer-1" />
+        <span className="shrink-0 text-placeholder">{convertBytesToSize(asset.size)}</span>
+      </div>
+
+      {/* 右侧操作区不冒泡到整行，点头像 / 菜单不触发预览 */}
+      <div className="flex items-center gap-3" onClick={(event) => event.stopPropagation()}>
+        {asset.created_by_id && (
+          <Tooltip
+            isMobile={isMobile}
+            tooltipContent={t(`${I18N}.detail.uploaded_by`, {
+              name: asset.created_by_detail?.display_name ?? "",
+              date: renderFormattedDate(asset.created_at),
+            })}
+          >
+            <div className="flex items-center justify-center">
+              <ButtonAvatars showTooltip userIds={asset.created_by_id} />
+            </div>
+          </Tooltip>
+        )}
+        <div className="opacity-0 transition-opacity group-hover:opacity-100">
+          <CustomMenu ellipsis closeOnSelect placement="bottom-end">
+            <CustomMenu.MenuItem onClick={() => onDownload(asset.id)}>
+              <div className="flex items-center gap-2">
+                <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <span>{t(`${I18N}.detail.download`)}</span>
+              </div>
+            </CustomMenu.MenuItem>
+            {editable && (
+              <CustomMenu.MenuItem onClick={() => onDelete(asset)}>
+                <div className="flex items-center gap-2">
+                  <TrashIcon className="h-3.5 w-3.5" strokeWidth={2} />
+                  <span>{t("common.actions.delete")}</span>
+                </div>
+              </CustomMenu.MenuItem>
+            )}
+          </CustomMenu>
+        </div>
+      </div>
+    </div>
   );
 };
 
 /**
- * 评审附件。走 FileAsset 的预签名两步上传，下载也是换一个预签名地址再交给浏览器 ——
- * 文件不经过 Django，口径同迭代与发布的附件。
+ * 评审附件，列表与交互照工作项附件：整行点开预览（Office / PDF / xmind / 图片），「⋯」里下载与删除，
+ * 删除要确认，整块可拖入上传并显示进度。走 FileAsset 的预签名两步上传，文件不经过 Django。
  *
- * 上传入口在区块标题右侧；空态是一条 42px 的虚线投放区（支持拖入），有文件后两列平铺。
+ * 标题行保持抽屉其他区块的样式，上传入口是标题右侧的「+」；空态是一条虚线投放区。
+ * 已评审（editable=false）时只能预览与下载。
  */
 export const StageReviewAttachments = ({
+  workspaceSlug,
+  projectId,
   attachments,
   editable,
   isMutating,
   onUpload,
   onDownload,
   onDelete,
+  getFileURL,
 }: {
+  workspaceSlug: string;
+  projectId: string;
   attachments: TStageReviewAttachment[];
   editable: boolean;
   isMutating: boolean;
-  onUpload: (file: File) => void;
+  onUpload: (file: File, onProgress: (percentage: number) => void) => Promise<unknown>;
   onDownload: (assetId: string) => void;
-  onDelete: (assetId: string) => void;
+  onDelete: (assetId: string) => Promise<unknown>;
+  getFileURL: (assetId: string) => Promise<string | undefined>;
 }) => {
   const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const { maxFileSize } = useFileSize();
+  const [upload, setUpload] = useState<{ name: string; progress: number } | null>(null);
+  const [deleting, setDeleting] = useState<TStageReviewAttachment | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { requestPreview, previewModals } = useStageReviewAttachmentPreview({ workspaceSlug, projectId, getFileURL });
+
+  const onDrop = useCallback(
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      if (rejectedFiles.length > 0) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message:
+            acceptedFiles.length + rejectedFiles.length > 1
+              ? t("attachment.only_one_file_allowed")
+              : t("attachment.file_size_limit", { size: maxFileSize / 1024 / 1024 }),
+        });
+        return;
+      }
+      const file = acceptedFiles[0];
+      if (!file) return;
+      setUpload({ name: file.name, progress: 0 });
+      void onUpload(file, (progress) => setUpload({ name: file.name, progress })).finally(() => setUpload(null));
+    },
+    [maxFileSize, onUpload, t]
+  );
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop,
+    maxSize: maxFileSize,
+    multiple: false,
+    noClick: true,
+    noKeyboard: true,
+    disabled: !editable || isMutating || Boolean(upload),
+  });
+
+  const handleDelete = () => {
+    if (!deleting) return;
+    setIsDeleting(true);
+    void onDelete(deleting.id).finally(() => {
+      setIsDeleting(false);
+      setDeleting(null);
+    });
+  };
 
   return (
     <Block
@@ -68,99 +169,88 @@ export const StageReviewAttachments = ({
       count={attachments.length}
       action={
         editable && (
-          <button
-            type="button"
-            disabled={isMutating}
-            onClick={() => inputRef.current?.click()}
-            className={BLOCK_ACTION_CLASS}
-          >
-            <Upload className="size-3" />
-            {t(`${I18N}.detail.upload`)}
-          </button>
+          <Tooltip tooltipContent={t(`${I18N}.detail.upload`)}>
+            <button
+              type="button"
+              disabled={isMutating || Boolean(upload)}
+              onClick={open}
+              className="grid size-6.5 place-items-center rounded-md text-tertiary transition hover:bg-layer-2 hover:text-secondary disabled:opacity-50"
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          </Tooltip>
         )
       }
     >
-      <input
-        ref={inputRef}
-        type="file"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onUpload(file);
-          // 同一个文件连传两次也要触发 change
-          event.target.value = "";
-        }}
+      {previewModals}
+      <AlertModalCore
+        isOpen={Boolean(deleting)}
+        handleClose={() => setDeleting(null)}
+        handleSubmit={handleDelete}
+        isSubmitting={isDeleting}
+        title={t("attachment.delete")}
+        content={t(`${I18N}.detail.delete_attachment_confirm`, { name: deleting?.name ?? "" })}
       />
 
-      {attachments.length === 0 ? (
-        editable ? (
-          <button
-            type="button"
-            disabled={isMutating}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-              const file = event.dataTransfer.files?.[0];
-              if (file) onUpload(file);
-            }}
-            className={cn(
-              "flex h-10.5 items-center justify-center gap-2 rounded-lg border border-dashed border-strong",
-              "text-13 text-placeholder transition hover:border-accent-strong hover:text-tertiary",
-              isDragging && "border-accent-strong bg-accent-subtle text-accent-primary"
-            )}
-          >
-            <Paperclip className="size-3.5" />
-            {t(`${I18N}.detail.drop_hint`)}
-          </button>
-        ) : (
-          <p className="text-14 text-placeholder">{t(`${I18N}.detail.no_attachments`)}</p>
-        )
-      ) : (
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {attachments.map((asset) => (
-            <li
-              key={asset.id}
-              className="group flex min-w-0 items-center gap-2.5 rounded-lg border border-subtle px-2.5 py-2"
-            >
-              <FileKindIcon name={asset.name} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-13 text-primary">{asset.name}</span>
-                <span className="block truncate text-12 tabular-nums text-placeholder">
-                  {formatSize(asset.size)} · {asset.created_by_detail?.display_name ?? "—"} ·{" "}
-                  {renderFormattedDate(asset.created_at)}
-                </span>
-              </span>
-              <button
-                type="button"
-                title={t(`${I18N}.detail.download`)}
-                className="rounded p-1 text-tertiary transition hover:bg-layer-2 hover:text-secondary"
-                onClick={() => onDownload(asset.id)}
-              >
-                <Download className="size-3.5" />
-              </button>
-              {editable && (
-                <button
-                  type="button"
-                  title={t(`${I18N}.actions.delete`)}
-                  className={cn(
-                    "rounded p-1 text-tertiary opacity-0 transition",
-                    "hover:bg-danger-subtle hover:text-danger-primary group-hover:opacity-100"
-                  )}
-                  onClick={() => onDelete(asset.id)}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+      <div
+        {...getRootProps()}
+        className={cn("relative flex flex-col", isDragActive && attachments.length < 3 && "min-h-[200px]")}
+      >
+        <input {...getInputProps()} />
+        {isDragActive && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface-2/75">
+            <div className="flex items-center justify-center rounded-md bg-surface-1 p-1">
+              <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-strong px-5 py-6">
+                <UploadCloud className="size-7" />
+                <span className="text-13 text-tertiary">{t("attachment.drag_and_drop")}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {upload && (
+          <div className="pointer-events-none -mx-2 flex h-11 items-center justify-between gap-3 rounded-md bg-surface-2 px-2">
+            <div className="flex min-w-0 items-center gap-3 text-13">
+              <span className="shrink-0">{getFileIcon(getFileExtension(upload.name), 18)}</span>
+              <p className="truncate font-medium text-secondary">{upload.name}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <CircularProgressIndicator size={20} strokeWidth={3} percentage={upload.progress} />
+              <span className="text-13 font-medium tabular-nums">{upload.progress}%</span>
+            </div>
+          </div>
+        )}
+
+        {attachments.map((asset) => (
+          <AttachmentRow
+            key={asset.id}
+            asset={asset}
+            editable={editable}
+            onPreview={(target) => void requestPreview(target)}
+            onDownload={onDownload}
+            onDelete={setDeleting}
+          />
+        ))}
+
+        {attachments.length === 0 &&
+          !upload &&
+          (editable ? (
+            <button
+              type="button"
+              disabled={isMutating}
+              onClick={open}
+              className={cn(
+                "flex h-10.5 items-center justify-center gap-2 rounded-lg border border-dashed border-strong",
+                "text-13 text-placeholder transition hover:border-accent-strong hover:text-tertiary"
               )}
-            </li>
+            >
+              <Paperclip className="size-3.5" />
+              {t(`${I18N}.detail.drop_hint`)}
+            </button>
+          ) : (
+            <p className="text-14 text-placeholder">{t(`${I18N}.detail.no_attachments`)}</p>
           ))}
-        </ul>
-      )}
+      </div>
     </Block>
   );
 };

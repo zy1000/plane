@@ -75,6 +75,7 @@ FILESTORE_ENTITY_TYPE = FileAsset.EntityTypeContext.PROJECT_FILESTORE
 ONLYOFFICE_ENTITY_TYPES = (
     FILESTORE_ENTITY_TYPE,
     FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+    FileAsset.EntityTypeContext.STAGE_REVIEW_FILE,
 )
 # 能交给 OnlyOffice 打开的扩展名；项目级编辑/预览与工作区级需求附件预览共用
 ONLYOFFICE_PREVIEW_EXTENSIONS = (
@@ -961,11 +962,15 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
         is_issue_attachment = (
             asset.entity_type == FileAsset.EntityTypeContext.ISSUE_ATTACHMENT
         )
-        # 工作项附件、PDF、或显式请求预览：本质只读，与编辑权限无关。
+        is_stage_review_file = (
+            asset.entity_type == FileAsset.EntityTypeContext.STAGE_REVIEW_FILE
+        )
+        # 工作项 / 评审附件、PDF、或显式请求预览：本质只读，与编辑权限无关。
         view_only = (
             requested_mode == "view"
             or source_version is not None
             or is_issue_attachment
+            or is_stage_review_file
             or document_type == "pdf"
         )
         # 其余均为编辑请求：必须具备「编辑项目资产」权限，否则直接拒绝并提示，
@@ -987,7 +992,14 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
             download_permission_key = PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD
         else:
             download_permission_key = PermissionKey.PROJECT_ASSET_DOWNLOAD
-        can_download = download_permission_key in user_permission_keys
+        can_download = download_permission_key in user_permission_keys or (
+            # 评审附件在抽屉里能看评审就能下载，预览里口径一致
+            is_stage_review_file
+            and (
+                PermissionKey.PROJECT_STAGE_REVIEW_VIEW in user_permission_keys
+                or PermissionKey.PROJECT_STAGE_REVIEW_MANAGE in user_permission_keys
+            )
+        )
 
         source_version_id = source_version.version_id if source_version else None
         if mode == "edit":

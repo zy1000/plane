@@ -159,7 +159,7 @@ export const useNavigationItems = ({
         // 与发布、里程碑同属项目节奏这一组
         i18n_key: "sidebar.review_tailorings",
         key: "review_tailorings",
-        name: "评审裁剪",
+        name: "裁剪表",
         href: `/${workspaceSlug}/projects/${projectId}/review-tailorings`,
         icon: Scissors,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],

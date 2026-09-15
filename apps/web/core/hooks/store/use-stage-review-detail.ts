@@ -110,11 +110,11 @@ export const useStageReviewDetail = (
   }, [workspaceSlug, projectId, reviewId, runMutation]);
 
   const uploadAttachment = useCallback(
-    async (file: File) => {
+    async (file: File, onProgress?: (percentage: number) => void) => {
       if (!workspaceSlug || !projectId || !reviewId) return undefined;
       setIsMutating(true);
       try {
-        const created = await service.uploadFile(workspaceSlug, projectId, reviewId, file);
+        const created = await service.uploadFile(workspaceSlug, projectId, reviewId, file, onProgress);
         setAttachments((current) => [...current, created]);
         refreshActivities();
         return created;
@@ -140,14 +140,29 @@ export const useStageReviewDetail = (
     [workspaceSlug, projectId, reviewId, refreshActivities]
   );
 
-  /** 下载走后端换预签名地址，再让浏览器自己取对象（口径同发布单附件） */
-  const downloadAttachment = useCallback(
+  /** 下载与预览都走后端换预签名地址，再让浏览器自己取对象（口径同发布单附件） */
+  const getAttachmentUrl = useCallback(
     async (assetId: string) => {
-      if (!workspaceSlug || !projectId || !reviewId) return;
-      const url = await service.getFileDownloadUrl(workspaceSlug, projectId, reviewId, assetId);
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      if (!workspaceSlug || !projectId || !reviewId) return undefined;
+      return service.getFileDownloadUrl(workspaceSlug, projectId, reviewId, assetId);
     },
     [workspaceSlug, projectId, reviewId]
+  );
+
+  const downloadAttachment = useCallback(
+    async (assetId: string) => {
+      const url = await getAttachmentUrl(assetId);
+      if (!url) return;
+      // 预签名地址带 Content-Disposition: attachment，当前页直接跳过去只会触发下载、不会离开页面；
+      // 用 window.open 开新标签会先闪出一个空白页再自己关掉
+      const link = document.createElement("a");
+      link.href = url;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    },
+    [getAttachmentUrl]
   );
 
   const createComment = useCallback(
@@ -196,6 +211,7 @@ export const useStageReviewDetail = (
     uploadAttachment,
     deleteAttachment,
     downloadAttachment,
+    getAttachmentUrl,
     createComment,
     deleteComment,
   };
