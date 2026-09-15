@@ -1,3 +1,4 @@
+from .product import ProductStageReviewViewSet
 from .review import (
     StageReviewActivityEndpoint,
     StageReviewCommentViewSet,

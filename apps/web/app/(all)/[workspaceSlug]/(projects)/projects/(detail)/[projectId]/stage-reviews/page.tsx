@@ -27,7 +27,7 @@ function ProjectStageReviewsPage({ params }: Route.ComponentProps) {
   return (
     <>
       <PageHead title={pageTitle} />
-      <StageReviewList workspaceSlug={workspaceSlug} projectId={projectId} />
+      <StageReviewList workspaceSlug={workspaceSlug} scope={{ kind: "project", projectId }} />
     </>
   );
 }

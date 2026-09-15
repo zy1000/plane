@@ -4,7 +4,8 @@
 的那一刻，把勾选状态同步成一批真实的评审实例（``StageReview``）。**
 
 **两个轴都是人挑出来的**：横轴 ``ReviewTailoringProduct``、纵轴 ``ReviewTailoringTemplate``
-（只存顶层评审，它的评审活动跟着整块进来），格子是两者的交叉积。没进轴的评审压根不出现
+（评审与评审活动各占一行、各自独立挑选，可以只挑某个活动而不挑它所属的评审），格子是
+两者的交叉积。没进轴的评审压根不出现
 在表里，也就不必为它写裁剪原因 —— 全量铺开时「凡是没勾的都要写理由」才是真正劝退人的
 地方。所以建表只要一个标题，建出来是一张零行零列的空表。
 
@@ -133,8 +134,8 @@ def _axis_product_ids(tailoring):
     )
 
 
-def _axis_root_ids(tailoring):
-    """纵轴上的顶层评审 id。"""
+def _axis_template_ids(tailoring):
+    """纵轴上的模板节点 id（评审或评审活动，各自独立）。"""
     return list(
         ReviewTailoringTemplate.objects.filter(tailoring=tailoring).values_list(
             "template_id", flat=True
@@ -142,42 +143,33 @@ def _axis_root_ids(tailoring):
     )
 
 
-def _expand_templates(root_ids):
-    """把选中的顶层评审展开成真正要铺的节点：它自己 + 它下面**当前启用**的评审活动。
+def _expand_templates(template_ids):
+    """把纵轴上的模板 id 取成真正要铺的节点：只取**当前启用**的，不再自动带出子活动。
 
-    纵轴只存顶层，展开放在读的时候做 —— 模板库后来给这个评审加的新活动才进得来，那正是
-    修订时 ``sync_items`` 该补上的东西。
+    评审与活动各自独立挑选 —— 只挑了活动就只有活动那一行，挑了评审也不会连带它的活动。
 
     排序口径与模板库列表一致（``views/stage_review/template.py:48``）：阶段之间按字典值
     的 ``sort_order``，阶段内按节点的 ``sort_order``。``select_related("stage")`` 是给
     序列化器用的 —— 行要透出阶段标签。
     """
-    root_ids = list(root_ids)
-    if not root_ids:
+    template_ids = list(template_ids)
+    if not template_ids:
         return []
     return list(
-        StageReviewTemplate.objects.filter(
-            Q(id__in=root_ids) | Q(parent_id__in=root_ids), is_active=True
-        )
+        StageReviewTemplate.objects.filter(id__in=template_ids, is_active=True)
         .select_related("stage")
         .order_by("stage__sort_order", "sort_order", "created_at", "id")
     )
 
 
 def axis_templates(tailoring):
-    """纵轴展开后的全部节点。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
-    return _expand_templates(_axis_root_ids(tailoring))
-
-
-def _sort_templates_root_first(templates):
-    """先根后子：生成评审实例时父必须先有 id，取消勾选时父先删。"""
-    roots = [item for item in templates if item.parent_id is None]
-    children = [item for item in templates if item.parent_id is not None]
-    return roots + children
+    """纵轴上当前启用的全部节点。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
+    return _expand_templates(_axis_template_ids(tailoring))
 
 
 def _build_items(tailoring, templates, product_ids, actor):
-    """按 (产品 × 模板节点) 铺格子。
+    """按 (产品 × 模板节点) 铺格子。新格子默认「保留」—— 挑进表里的评审默认是要做的，
+    裁掉才需要人去点、去写原因。
 
     ``bulk_create`` 绕过 ``save()``，所以 ``title`` 快照与 ``created_by`` 都要显式给
     （``ReviewTailoringItem.save()`` 本来负责补 title）。
@@ -188,7 +180,7 @@ def _build_items(tailoring, templates, product_ids, actor):
             product_id=product_id,
             template=template,
             title=template.title,
-            selected=False,
+            selected=True,
             reason="",
             created_by=actor,
             updated_by=actor,
@@ -283,11 +275,10 @@ def add_products(*, tailoring, product_ids, actor):
 
 
 def add_reviews(*, tailoring, template_ids, actor):
-    """给纵轴加几个评审，并按当前横轴把这几行的格子铺满。
+    """给纵轴加几行（评审或评审活动都行，各自独立），并按当前横轴把这几行的格子铺满。
 
-    只收**顶层节点**（评审，或直接挂在阶段下的评审活动）—— 它下面的评审活动跟着整块进
-    矩阵。「这个评审要做，但其中某个活动不做」由矩阵里取消勾选 + 写裁剪原因表达，而不是
-    靠纵轴少加一行；反过来，跟本项目无关的评审根本不进表，也就不用为它编理由。
+    挑了评审不会连带它的活动，只挑某个活动也不必挑它所属的评审 —— 跟本项目无关的节点
+    根本不进表，也就不用为它编裁剪理由。
     """
     _require_status(
         tailoring,
@@ -309,17 +300,8 @@ def add_reviews(*, tailoring, template_ids, actor):
             code="REVIEW_TAILORING_TEMPLATE_INVALID",
             detail={"template_ids": invalid},
         )
-    not_root = [
-        str(tid) for tid in template_ids if candidates[tid].parent_id is not None
-    ]
-    if not_root:
-        raise ReviewTailoringError(
-            "Only a top-level review can be added to the matrix.",
-            code="REVIEW_TAILORING_TEMPLATE_NOT_ROOT",
-            detail={"template_ids": not_root},
-        )
 
-    existing = set(_axis_root_ids(tailoring))
+    existing = set(_axis_template_ids(tailoring))
     fresh = [tid for tid in template_ids if tid not in existing]
     if not fresh:
         return 0
@@ -410,7 +392,7 @@ def remove_product(*, tailoring, product_id, actor):
 
 
 def remove_review(*, tailoring, template_id, actor):
-    """移除纵轴的一行（顶层评审连同它的评审活动）。"""
+    """移除纵轴的一行。只移这一个节点 —— 评审与活动各自独立，移评审不会带走它的活动。"""
     _require_status(
         tailoring,
         EDITABLE_STATUSES,
@@ -426,11 +408,8 @@ def remove_review(*, tailoring, template_id, actor):
             code="REVIEW_TAILORING_AXIS_NOT_FOUND",
         )
 
-    # 停用后的活动不在 _expand_templates 里，但它的格子还在，所以按 template 的父子关系查
     items = list(
-        ReviewTailoringItem.objects.filter(tailoring=tailoring).filter(
-            Q(template_id=template_id) | Q(template__parent_id=template_id)
-        )
+        ReviewTailoringItem.objects.filter(tailoring=tailoring, template_id=template_id)
     )
     _assert_axis_removable(items)
 
@@ -450,11 +429,11 @@ def remove_review(*, tailoring, template_id, actor):
 
 
 def sync_items(*, tailoring, actor):
-    """把格子对齐「当前横轴 × 当前纵轴展开后的节点」。
+    """把格子对齐「当前横轴 × 当前纵轴上启用的节点」。
 
-    开始修订时跑一次：这期间模板库可能给某个已选评审加了新活动、也可能停用了旧活动。
+    开始修订时跑一次：这期间模板库可能停用了表上的某个评审或活动。
 
-    顺带收一下轴自己的烂摊子：产品被解除了与本项目的关联、顶层评审被停用或删除，那一
+    顺带收一下轴自己的烂摊子：产品被解除了与本项目的关联、评审节点被停用或删除，那一
     行 / 那一列就不该继续留在表上。
 
     删的分寸：只删还没生成过评审的格子 —— 已经生成的评审是既成事实，产品被解除关联不该
@@ -485,16 +464,16 @@ def sync_items(*, tailoring, actor):
             id__in=[column.id for column in stale_columns]
         ).delete(soft=False)
 
-    live_root_ids = set(
+    live_template_ids = set(
         StageReviewTemplate.objects.filter(
-            id__in=_axis_root_ids(tailoring), is_active=True
+            id__in=_axis_template_ids(tailoring), is_active=True
         ).values_list("id", flat=True)
     )
     generated_templates = {item.template_id for item in items if item.stage_review_id}
     stale_rows = [
         row
         for row in ReviewTailoringTemplate.objects.filter(tailoring=tailoring)
-        if row.template_id not in live_root_ids
+        if row.template_id not in live_template_ids
         and row.template_id not in generated_templates
     ]
     if stale_rows:
@@ -510,19 +489,9 @@ def sync_items(*, tailoring, actor):
     present = {(item.product_id, item.template_id) for item in items}
 
     missing = [
-        ReviewTailoringItem(
-            tailoring=tailoring,
-            product_id=product_id,
-            template=template,
-            title=template.title,
-            selected=False,
-            reason="",
-            created_by=actor,
-            updated_by=actor,
-        )
-        for product_id in product_ids
-        for template in templates
-        if (product_id, template.id) not in present
+        item
+        for item in _build_items(tailoring, templates, product_ids, actor)
+        if (item.product_id, item.template_id) not in present
     ]
     if missing:
         ReviewTailoringItem.objects.bulk_create(missing, batch_size=500)
@@ -556,11 +525,10 @@ def sync_items(*, tailoring, actor):
 
 
 def save_cells(*, tailoring, cells, actor):
-    """保存勾选与裁剪原因，并把父子联动收敛好。
+    """保存勾选与裁剪原因。
 
-    联动规则（产品决策）：勾一个评审活动 → 它所属的评审自动勾上；取消一个评审 →
-    它下面的活动全部取消。前端也做同样的联动，这里再做一遍是因为**前端的联动只是
-    交互糖**，服务端不能相信客户端算对了。
+    评审与评审活动各自独立、互不带动（产品决策）：裁掉评审不会连带裁掉它的活动，保留活动
+    也不会把评审拉回来。
 
     草稿态允许原因留空 —— 逼着边勾边写会让人没法先把矩阵勾完。缺原因在提交签批时才拦。
     """
@@ -595,8 +563,6 @@ def save_cells(*, tailoring, cells, actor):
             item.selected = bool(cell["selected"])
         if "reason" in cell:
             item.reason = (cell["reason"] or "").strip()
-
-    _cascade_selection(items.values())
 
     # 勾上的格子不该留着上一次的裁剪原因 —— 它会在明细表里显示成「要做，但原因是…」
     for item in items.values():
@@ -647,33 +613,6 @@ def save_cells(*, tailoring, cells, actor):
     return list(items.values())
 
 
-def _cascade_selection(items):
-    """父子联动，就地改 ``selected``。
-
-    只处理「有父」的活动格子：没有父的活动直接挂在阶段下（有些阶段没有汇总评审），
-    它自己就是顶层，无从联动。
-    """
-    by_key = {(item.product_id, item.template_id): item for item in items}
-    for item in items:
-        parent_template_id = item.template.parent_id
-        if not parent_template_id:
-            continue
-        parent = by_key.get((item.product_id, parent_template_id))
-        if parent is None:
-            continue
-        if item.selected and not parent.selected:
-            # 勾了活动就必须做它所属的评审
-            parent.selected = True
-            parent.reason = ""
-    # 第二遍：父被取消的，子一律取消（顺序不能反，否则刚被子勾起来的父又被清掉）
-    for item in items:
-        parent_template_id = item.template.parent_id
-        if not parent_template_id:
-            continue
-        parent = by_key.get((item.product_id, parent_template_id))
-        if parent is not None and not parent.selected and item.selected:
-            item.selected = False
-
 
 def update_header(*, tailoring, title=None, description_html=None, actor):
     """改标题与描述。
@@ -710,7 +649,7 @@ def update_header(*, tailoring, title=None, description_html=None, actor):
 
 
 def _validate_before_submit(tailoring):
-    """提交签批前的四道闸门，一次全查完再抛，别让人改一处提一次。"""
+    """提交签批前的三道闸门，一次全查完再抛，别让人改一处提一次。"""
     items = list(
         ReviewTailoringItem.objects.filter(tailoring=tailoring).select_related(
             "template", "stage_review"
@@ -735,26 +674,7 @@ def _validate_before_submit(tailoring):
             detail={"items": missing_reason},
         )
 
-    by_key = {(item.product_id, item.template_id): item for item in items}
-
-    # 2. 勾了活动就必须勾它所属的评审（save_cells 会自动收敛，这里防的是绕过它的写入）
-    orphan = [
-        {"item_id": str(item.id), "title": item.title}
-        for item in items
-        if item.selected
-        and item.template.parent_id
-        and not getattr(
-            by_key.get((item.product_id, item.template.parent_id)), "selected", False
-        )
-    ]
-    if orphan:
-        raise ReviewTailoringError(
-            "A selected review activity requires its parent review to be selected.",
-            code="REVIEW_TAILORING_PARENT_REQUIRED",
-            detail={"items": orphan},
-        )
-
-    # 3. 新勾的格子，模板不能是停用/已删的
+    # 2. 新勾的格子，模板不能是停用/已删的
     disabled = [
         {"item_id": str(item.id), "title": item.title}
         for item in items
@@ -1025,19 +945,28 @@ def withdraw(*, tailoring, actor):
 # --- 生效 -----------------------------------------------------------------
 
 
-def _delete_stage_reviews(review_ids):
+def _delete_stage_reviews(review_ids, keep_ids=()):
     """同步软删一批评审及其下挂的一切。
 
     **不能调 ``instance.delete()``** —— 它的级联是 Celery 任务，投递在事务提交之前，
     没有 worker 就永远不跑，结果是评审没了但评论、附件、指针全留着。这里一次性把
     子活动、评论、附件、反向指针都处理掉。
+
+    评审与评审活动各自独立：父评审被裁掉、活动还保留着的，活动评审不删，只断开父子变成
+    独立的活动评审，免得它的轨迹、评论、附件跟着父评审一起没了。``keep_ids`` 是还保留着的评审。
     """
     if not review_ids:
         return []
 
+    keep_ids = set(keep_ids)
+    if keep_ids:
+        StageReview.objects.filter(parent_id__in=review_ids, id__in=keep_ids).update(
+            parent=None
+        )
+
     all_ids = list(
         StageReview.objects.filter(
-            Q(id__in=review_ids) | Q(parent_id__in=review_ids)
+            Q(id__in=review_ids) | (Q(parent_id__in=review_ids) & ~Q(id__in=keep_ids))
         )
         .select_for_update(of=("self",))
         .order_by("id")
@@ -1143,7 +1072,11 @@ def _apply_effective(*, tailoring, actor):
         for item in items
         if not item.selected and item.stage_review_id
     ]
-    deleted_ids = _delete_stage_reviews(to_delete)
+    # 还保留着的评审（多为父评审被裁、自己保留着的活动）不能被连带删掉
+    keep_ids = {
+        item.stage_review_id for item in items if item.selected and item.stage_review_id
+    }
+    deleted_ids = _delete_stage_reviews(to_delete, keep_ids)
     if deleted_ids:
         # 上面按 stage_review_id 批量置空了，本地对象也要跟上
         for item in items:

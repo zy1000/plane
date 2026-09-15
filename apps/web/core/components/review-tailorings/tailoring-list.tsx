@@ -82,10 +82,10 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
 
   const handleCreate = async (payload: TCreateReviewTailoringPayload) => {
     try {
-      const created = await createTailoring(payload);
+      // 建完留在列表：新表已经乐观插到最前面，要进去自己点
+      await createTailoring(payload);
       setIsCreateOpen(false);
       setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.created`) });
-      if (created) router.push(detailPath(created.id));
     } catch (requestError) {
       setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.toast.failed`), message: translateError(requestError) });
     }

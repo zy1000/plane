@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   TActReviewTailoringPayload,
+  TAddReviewTailoringAxesPayload,
   TReviewTailoringCellPayload,
   TReviewTailoringDetail,
   TReviewTailoringItem,
@@ -14,36 +15,12 @@ import { getTailoringError } from "./use-review-tailorings";
 const service = new ReviewTailoringService();
 
 /**
- * 父子联动：勾评审活动 → 自动勾它所属的评审；取消评审 → 它下面的活动全部取消。
+ * 保留的格子不留裁剪原因，否则明细表会显示成「要做，但原因是…」。
  *
- * 与后端 `utils/review_tailoring.py::_cascade_selection` 同一套规则。两边都做是因为
- * 前端这份只是交互糖（勾完当场看到父被点亮），服务端那份才是规则本身。
- *
- * 两遍的顺序不能反：先把子拉起父，再让被取消的父带走子，否则刚被子点亮的父会被清掉。
+ * 评审与评审活动各自独立、互不带动：裁掉评审不会连带裁掉它的活动，保留活动也不会把评审拉回来。
  */
-const cascadeSelection = (items: TReviewTailoringItem[]): TReviewTailoringItem[] => {
-  const next = items.map((item) => ({ ...item }));
-  const byKey = new Map(next.map((item) => [`${item.product_id}:${item.template_id}`, item]));
-
-  for (const item of next) {
-    if (!item.parent_template_id || !item.selected) continue;
-    const parent = byKey.get(`${item.product_id}:${item.parent_template_id}`);
-    if (parent && !parent.selected) {
-      parent.selected = true;
-      parent.reason = "";
-    }
-  }
-  for (const item of next) {
-    if (!item.parent_template_id || !item.selected) continue;
-    const parent = byKey.get(`${item.product_id}:${item.parent_template_id}`);
-    if (parent && !parent.selected) item.selected = false;
-  }
-  // 勾上的格子不留裁剪原因，否则明细表会显示成「要做，但原因是…」
-  for (const item of next) {
-    if (item.selected && item.reason) item.reason = "";
-  }
-  return next;
-};
+const clearKeptReasons = (items: TReviewTailoringItem[]): TReviewTailoringItem[] =>
+  items.map((item) => (item.selected && item.reason ? { ...item, reason: "" } : item));
 
 /**
  * 裁剪表详情 + 矩阵的本地编辑。
@@ -96,25 +73,23 @@ export const useReviewTailoringDetail = (
     [detail]
   );
 
-  /** 改一个格子。联动在本地立刻算好，不等服务端 */
+  /** 改一个格子，本地立刻生效，保存时再一起发给服务端 */
   const setCell = useCallback(
     (itemId: string, patch: { selected?: boolean; reason?: string }) => {
       setItems((current) =>
-        cascadeSelection(
-          current.map((item) => (item.id === itemId ? { ...item, ...patch } : item))
-        )
+        clearKeptReasons(current.map((item) => (item.id === itemId ? { ...item, ...patch } : item)))
       );
       setIsDirty(true);
     },
     []
   );
 
-  /** 一次改一批格子的勾选（矩阵行首的整行勾选）。联动只算一遍 */
+  /** 一次改一批格子的勾选（批量保留 / 裁剪） */
   const setCells = useCallback((itemIds: string[], selected: boolean) => {
     if (itemIds.length === 0) return;
     const targets = new Set(itemIds);
     setItems((current) =>
-      cascadeSelection(current.map((item) => (targets.has(item.id) ? { ...item, selected } : item)))
+      clearKeptReasons(current.map((item) => (targets.has(item.id) ? { ...item, selected } : item)))
     );
     setIsDirty(true);
   }, []);
@@ -181,10 +156,11 @@ export const useReviewTailoringDetail = (
     [workspaceSlug, projectId, tailoringId, run]
   );
 
-  const addProducts = useCallback(
-    async (productIds: string[]) => {
+  /** 评审与产品一次加完，只打一次接口、只回一份详情 */
+  const addAxes = useCallback(
+    async (payload: TAddReviewTailoringAxesPayload) => {
       if (!workspaceSlug || !projectId || !tailoringId) return undefined;
-      return run(() => service.addProducts(workspaceSlug, projectId, tailoringId, productIds));
+      return run(() => service.addAxes(workspaceSlug, projectId, tailoringId, payload));
     },
     [workspaceSlug, projectId, tailoringId, run]
   );
@@ -193,14 +169,6 @@ export const useReviewTailoringDetail = (
     async (productId: string) => {
       if (!workspaceSlug || !projectId || !tailoringId) return undefined;
       return run(() => service.removeProduct(workspaceSlug, projectId, tailoringId, productId));
-    },
-    [workspaceSlug, projectId, tailoringId, run]
-  );
-
-  const addReviews = useCallback(
-    async (templateIds: string[]) => {
-      if (!workspaceSlug || !projectId || !tailoringId) return undefined;
-      return run(() => service.addReviews(workspaceSlug, projectId, tailoringId, templateIds));
     },
     [workspaceSlug, projectId, tailoringId, run]
   );
@@ -283,9 +251,8 @@ export const useReviewTailoringDetail = (
     resetCells,
     saveCells,
     updateHeader,
-    addProducts,
+    addAxes,
     removeProduct,
-    addReviews,
     removeReview,
     submit,
     withdraw,

@@ -8,6 +8,7 @@ export const STAGE_REVIEW_FILTER_PROPERTY_KEYS = [
   "leader_id",
   "auditor_id",
   "product_id",
+  "project_id",
   "kind",
   "start_date",
   "end_date",

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { CircleDot, ClipboardCheck, Package, Type, UserCheck } from "lucide-react";
+import { CircleDot, ClipboardCheck, FolderKanban, Package, Type, UserCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { DueDatePropertyIcon, LayersIcon, MembersPropertyIcon, StartDatePropertyIcon } from "@plane/propel/icons";
 import type { IUserLite, TFilterConfig, TStageReview, TSupportedOperators } from "@plane/types";
@@ -24,6 +24,7 @@ import {
   getTextInputConfig,
 } from "@plane/utils";
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
+import type { TStageReviewScopeKind } from "../scope";
 import { StageReviewStatusIcon } from "../status-icon";
 import type { TStageReviewFilterProperty } from "./types";
 import { STAGE_REVIEW_FILTER_ME, STAGE_REVIEW_FILTER_NONE } from "./types";
@@ -68,15 +69,19 @@ const avatar = (user: Pick<IUserLite, "display_name" | "avatar_url">) => (
 /**
  * 筛选行可加的属性。选项全部从**当前阶段的评审**里取：列出这个阶段根本没有的产品 /
  * 负责人只会让人筛出空表。负责人与审核者的第一项是「我」，最后一项是「未指定」。
+ *
+ * 「产品」只在项目页可加，「项目」只在产品页可加 —— 作用域自己那一维筛不出东西。
  */
 export const useStageReviewFiltersConfig = ({
   reviews,
   workspaceSlug,
   currentUser,
+  scopeKind,
 }: {
   reviews: TStageReview[];
   workspaceSlug: string;
   currentUser: IUserLite | undefined;
+  scopeKind: TStageReviewScopeKind;
 }) => {
   const { t } = useTranslation();
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
@@ -117,6 +122,18 @@ export const useStageReviewFiltersConfig = ({
         });
       }
     }
+    const projects = new Map<string, TOption>();
+    for (const review of reviews) {
+      if (review.project_detail && !projects.has(review.project_id)) {
+        projects.set(review.project_id, {
+          id: review.project_id,
+          value: review.project_id,
+          label: review.project_detail.name,
+        });
+      }
+    }
+    const isProductEnabled = scopeKind === "project" && products.size > 0;
+    const isProjectEnabled = scopeKind === "product" && projects.size > 0;
 
     return [
       createFilterConfig<TStageReviewFilterProperty>({
@@ -185,8 +202,19 @@ export const useStageReviewFiltersConfig = ({
         id: "product_id",
         label: t(`${I18N}.filters.product`),
         icon: Package,
-        isEnabled: products.size > 0,
-        supportedOperatorConfigsMap: multiSelect([...products.values()], { ...params, isEnabled: products.size > 0 }, isLabel),
+        isEnabled: isProductEnabled,
+        supportedOperatorConfigsMap: multiSelect([...products.values()], { ...params, isEnabled: isProductEnabled }, isLabel),
+      }),
+      createFilterConfig<TStageReviewFilterProperty>({
+        id: "project_id",
+        label: t(`${I18N}.filters.project`),
+        icon: FolderKanban,
+        isEnabled: isProjectEnabled,
+        supportedOperatorConfigsMap: multiSelect(
+          [...projects.values()].sort((a, b) => a.label.localeCompare(b.label)),
+          { ...params, isEnabled: isProjectEnabled },
+          isLabel
+        ),
       }),
       createFilterConfig<TStageReviewFilterProperty>({
         id: "kind",
@@ -220,7 +248,7 @@ export const useStageReviewFiltersConfig = ({
     ];
     // t 每次渲染都是新引用，放进依赖会让配置每帧重建、筛选行反复重注册；语言切换极少，忽略它
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviews, currentUser, operatorConfigs.allowedOperators, operatorConfigs.allowNegative]);
+  }, [reviews, currentUser, scopeKind, operatorConfigs.allowedOperators, operatorConfigs.allowNegative]);
 
   return { areAllConfigsInitialized: true, configs };
 };

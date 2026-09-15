@@ -20,13 +20,15 @@ export const STAGE_REVIEW_GROUP_NONE = "__none__";
 /** 分组方式为「无」时唯一的那一组 */
 export const STAGE_REVIEW_GROUP_ALL = "__all__";
 
-/** 一条评审落在哪个分组里。按研发阶段 / 产品分时父子一定同组，其它方式可能拆开 */
+/** 一条评审落在哪个分组里。按研发阶段 / 产品 / 项目分时父子一定同组，其它方式可能拆开 */
 export const stageReviewGroupKey = (groupBy: TStageReviewGroupBy, review: TStageReview): string => {
   switch (groupBy) {
     case "stage":
       return review.stage_id;
     case "product":
       return review.product_id;
+    case "project":
+      return review.project_id;
     case "status":
       return review.status;
     case "leader":
@@ -107,7 +109,7 @@ export const buildStageReviewRowsByGroup = ({
   );
   const rowsByKey = new Map<string, TStageReviewRow[]>();
 
-  if (groupBy === "none" || groupBy === "stage" || groupBy === "product") {
+  if (groupBy === "none" || groupBy === "stage" || groupBy === "product" || groupBy === "project") {
     const carried = new Set<string>();
     const childrenOf = new Map<string, TStageReview[]>();
     for (const review of reviews) {

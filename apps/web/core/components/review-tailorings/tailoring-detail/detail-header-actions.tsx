@@ -1,4 +1,4 @@
-import { FileText, Link2, MoreHorizontal, PenLine, Send, Trash2, Undo2 } from "lucide-react";
+import { Link2, MoreHorizontal, PenLine, Send, Trash2, Undo2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { getIconButtonStyling } from "@plane/propel/icon-button";
@@ -12,7 +12,7 @@ const I18N = "review_tailoring";
  * 顶栏右侧：一个主按钮 + 「⋯」。
  *
  * 主按钮按状态只出一个 —— 可编辑时是「提交签批」，已生效时是「开始修订」，签批中没有
- * （操作都在签批面板上）。低频动作（编辑描述、取消修订、复制链接、删除）收进「⋯」，
+ * （操作都在签批面板上）。低频动作（取消修订、复制链接、删除）收进「⋯」，
  * 不再和「添加评审 / 添加产品 / 保存」挤成一排。
  */
 export const DetailHeaderActions = ({
@@ -21,7 +21,6 @@ export const DetailHeaderActions = ({
   isMutating,
   onSubmit,
   onRevise,
-  onEditDescription,
   onCancelRevision,
   onCopyLink,
   onDelete,
@@ -31,7 +30,6 @@ export const DetailHeaderActions = ({
   isMutating: boolean;
   onSubmit: () => void;
   onRevise: () => void;
-  onEditDescription: () => void;
   onCancelRevision: () => void;
   onCopyLink: () => void;
   onDelete: () => void;
@@ -54,12 +52,6 @@ export const DetailHeaderActions = ({
         placement="bottom-end"
         closeOnSelect
       >
-        {canManage && (
-          <CustomMenu.MenuItem onClick={onEditDescription} className="flex items-center gap-2">
-            <FileText className="size-3.5" />
-            {t(`${I18N}.detail.edit_description`)}
-          </CustomMenu.MenuItem>
-        )}
         {canManage && status === EReviewTailoringStatus.REVISING && (
           <CustomMenu.MenuItem onClick={onCancelRevision} className="flex items-center gap-2">
             <Undo2 className="size-3.5" />

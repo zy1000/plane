@@ -14,7 +14,19 @@ const BAR_ORDER = [...STAGE_REVIEW_STATUS_ORDER].reverse();
 const shortDate = (value: string) => value.slice(5, 10);
 
 /**
- * 阶段摘要：阶段名 + 条数 / 产品数 / 计划区间 + 完成百分比 + 分段条 + 状态图例。
+ * 标题下那行「N 条评审 · M 个 x」数的是哪一维：项目页数产品；产品页数项目，按项目分组时
+ * 一组只有一个项目，改数阶段。
+ */
+export type TStageReviewSummaryMeta = "products" | "projects" | "stages";
+
+const SUMMARY_META: Record<TStageReviewSummaryMeta, { key: string; pick: (review: TStageReview) => string }> = {
+  products: { key: "summary_meta", pick: (review) => review.product_id },
+  projects: { key: "summary_meta_projects", pick: (review) => review.project_id },
+  stages: { key: "summary_meta_stages", pick: (review) => review.stage_id },
+};
+
+/**
+ * 阶段摘要：阶段名 + 条数 / 产品（项目、阶段）数 / 计划区间 + 完成百分比 + 分段条 + 状态图例。
  *
  * 数字按**当前阶段的全部评审**算，不受筛选影响。图例点一下等于在筛选行里加（或去掉）
  * 一个「状态」值 —— 同一个条件，两边同步亮。
@@ -22,17 +34,22 @@ const shortDate = (value: string) => value.slice(5, 10);
 export const StageReviewSummary = ({
   label,
   reviews,
+  meta = "products",
+  isCurrentStage = false,
   activeStatuses,
   onToggleStatus,
 }: {
   label: string;
   reviews: TStageReview[];
+  meta?: TStageReviewSummaryMeta;
+  /** 产品页：这一组是产品档案里的当前阶段，标题后带「当前阶段」 */
+  isCurrentStage?: boolean;
   activeStatuses: EStageReviewStatus[];
   onToggleStatus: (status: EStageReviewStatus) => void;
 }) => {
   const { t } = useTranslation();
 
-  const { counts, productCount, planRange, percent } = useMemo(() => {
+  const { counts, dimensionCount, planRange, percent } = useMemo(() => {
     const nextCounts = countByStatus(reviews);
     const starts = reviews.map((review) => review.start_date).filter((value): value is string => Boolean(value));
     const ends = reviews.map((review) => review.end_date).filter((value): value is string => Boolean(value));
@@ -40,18 +57,30 @@ export const StageReviewSummary = ({
     const to = ends.length > 0 ? ends.reduce((max, value) => (value > max ? value : max)) : null;
     return {
       counts: nextCounts,
-      productCount: new Set(reviews.map((review) => review.product_id)).size,
+      dimensionCount: new Set(reviews.map(SUMMARY_META[meta].pick)).size,
       planRange: from || to ? [from, to].map((value) => (value ? shortDate(value) : "—")).join(" → ") : null,
       percent: reviews.length === 0 ? 0 : Math.round((nextCounts[EStageReviewStatus.COMPLETED] / reviews.length) * 100),
     };
-  }, [reviews]);
+  }, [reviews, meta]);
 
   return (
     <div className="flex shrink-0 flex-col gap-3 border-b border-subtle px-6 pt-4 pb-3.5">
       <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-        <h2 className="text-18 font-semibold text-primary">{label}</h2>
+        <h2 className="flex items-center gap-2 text-18 font-semibold text-primary">
+          {label}
+          {isCurrentStage && (
+            <span className="rounded bg-accent-subtle px-1.5 text-12 leading-5 font-semibold text-accent-primary">
+              {t(`${I18N}.list.current_stage`)}
+            </span>
+          )}
+        </h2>
         <span className="text-13 text-tertiary">
-          {t(`${I18N}.list.summary_meta`, { reviews: reviews.length, products: productCount })}
+          {t(`${I18N}.list.${SUMMARY_META[meta].key}`, {
+            reviews: reviews.length,
+            products: dimensionCount,
+            projects: dimensionCount,
+            stages: dimensionCount,
+          })}
           {planRange && ` · ${t(`${I18N}.list.summary_plan`, { range: planRange })}`}
         </span>
         <span className="ml-auto text-13 text-tertiary">

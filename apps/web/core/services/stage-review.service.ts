@@ -1,5 +1,6 @@
 import type {
   TCreateStageReviewPayload,
+  TProductStageReviewsResponse,
   TFileSignedURLResponse,
   TStageReview,
   TStageReviewActivity,
@@ -29,6 +30,28 @@ export class StageReviewService extends APIService {
 
   private base(workspaceSlug: string, projectId: string) {
     return `/api/workspaces/${workspaceSlug}/projects/${projectId}/stage-reviews`;
+  }
+
+  private productBase(workspaceSlug: string, productId: string) {
+    return `/api/workspaces/${workspaceSlug}/products/${productId}/stage-reviews`;
+  }
+
+  /** 产品页左栏：关联项目里这个产品有评审的阶段 + 完成进度 + 涉及项目数 */
+  async listProductStages(workspaceSlug: string, productId: string): Promise<TStageReviewStageSummary[]> {
+    return this.get(`${this.productBase(workspaceSlug, productId)}/stages/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 产品页：关联项目里这个产品的全部评审（只含当前用户能看阶段评审的项目），只读 */
+  async listByProduct(workspaceSlug: string, productId: string): Promise<TProductStageReviewsResponse> {
+    return this.get(`${this.productBase(workspaceSlug, productId)}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
   }
 
   /** 左栏：有评审的阶段 + 完成进度 */

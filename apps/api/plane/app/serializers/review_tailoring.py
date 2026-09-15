@@ -331,7 +331,7 @@ class ReviewTailoringProductsSerializer(serializers.Serializer):
 
 
 class ReviewTailoringReviewsSerializer(serializers.Serializer):
-    """加纵轴。只收顶层评审 id —— 是不是顶层、属不属于本工作区在 utils 里查。"""
+    """加纵轴。评审或评审活动的 id 都收，属不属于本工作区、是否启用在 utils 里查。"""
 
     template_ids = serializers.ListField(
         child=serializers.UUIDField(), allow_empty=False
@@ -339,6 +339,30 @@ class ReviewTailoringReviewsSerializer(serializers.Serializer):
 
     def validate_template_ids(self, value):
         return list(dict.fromkeys(value))
+
+
+class ReviewTailoringAxesSerializer(serializers.Serializer):
+    """一次加纵轴与横轴。两边都可以为空，但不能同时为空。"""
+
+    template_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
+    product_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
+
+    def validate_template_ids(self, value):
+        return list(dict.fromkeys(value))
+
+    def validate_product_ids(self, value):
+        return list(dict.fromkeys(value))
+
+    def validate(self, attrs):
+        if not attrs.get("template_ids") and not attrs.get("product_ids"):
+            raise serializers.ValidationError(
+                "Pick at least one review or product."
+            )
+        return attrs
 
 
 class ReviewTailoringSubmitSerializer(serializers.Serializer):

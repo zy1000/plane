@@ -1,5 +1,6 @@
 import type {
   TActReviewTailoringPayload,
+  TAddReviewTailoringAxesPayload,
   TCreateReviewTailoringPayload,
   TReviewTailoring,
   TReviewTailoringActivity,
@@ -91,13 +92,14 @@ export class ReviewTailoringService extends APIService {
       });
   }
 
-  async addProducts(
+  /** 一次加纵轴与横轴。评审只收顶层 id，它下面的评审活动由后端整块带进矩阵 */
+  async addAxes(
     workspaceSlug: string,
     projectId: string,
     tailoringId: string,
-    productIds: string[]
+    payload: TAddReviewTailoringAxesPayload
   ): Promise<TReviewTailoringDetail> {
-    return this.post(`${this.base(workspaceSlug, projectId)}/${tailoringId}/products/`, { product_ids: productIds })
+    return this.post(`${this.base(workspaceSlug, projectId)}/${tailoringId}/axes/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -111,20 +113,6 @@ export class ReviewTailoringService extends APIService {
     productId: string
   ): Promise<TReviewTailoringDetail> {
     return this.delete(`${this.base(workspaceSlug, projectId)}/${tailoringId}/products/${productId}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /** 加纵轴。只收顶层评审 id，它下面的评审活动由后端整块带进矩阵 */
-  async addReviews(
-    workspaceSlug: string,
-    projectId: string,
-    tailoringId: string,
-    templateIds: string[]
-  ): Promise<TReviewTailoringDetail> {
-    return this.post(`${this.base(workspaceSlug, projectId)}/${tailoringId}/reviews/`, { template_ids: templateIds })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

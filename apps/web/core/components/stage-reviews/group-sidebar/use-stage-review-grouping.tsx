@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { Package } from "lucide-react";
+import { FolderKanban, Package } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { Logo } from "@plane/propel/emoji-icon-picker";
 import { LayersIcon } from "@plane/propel/icons";
 import type { IUserLite, TStageReview, TStageReviewStageSummary } from "@plane/types";
 import { EStageReviewKind, EStageReviewResult, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
@@ -27,6 +28,8 @@ export type TStageReviewSidebarGroup = {
   icon: ReactNode;
   /** 只有按研发阶段分组时有：阶段的整体完成度，画分段进度条用，不受筛选影响 */
   stage?: TStageReviewStageSummary;
+  /** 产品页按研发阶段分组时：这一组就是产品档案里的当前阶段 */
+  isCurrent?: boolean;
 };
 
 const RESULT_ORDER: string[] = [
@@ -72,11 +75,14 @@ export const useStageReviewGrouping = ({
   stages,
   isHit,
   settings,
+  currentStageId = null,
 }: {
   reviews: TStageReview[];
   stages: TStageReviewStageSummary[];
   isHit: (review: TStageReview) => boolean;
   settings: TStageReviewDisplaySettings;
+  /** 产品页传产品档案里的「产品阶段」，对应那一组标「当前」；项目页不传 */
+  currentStageId?: string | null;
 }) => {
   const { t } = useTranslation();
   const { groupBy, orderBy, showActivities, showEmptyGroups } = settings;
@@ -122,6 +128,9 @@ export const useStageReviewGrouping = ({
       case "product":
         keys = byName((review) => review.product_detail?.name ?? "");
         break;
+      case "project":
+        keys = byName((review) => review.project_detail?.name ?? "");
+        break;
       case "leader":
         keys = byName((review) => review.leader_detail?.display_name ?? "");
         break;
@@ -129,7 +138,7 @@ export const useStageReviewGrouping = ({
         keys = byName((review) => review.auditor_detail?.display_name ?? "");
     }
 
-    const describe = (key: string): Pick<TStageReviewSidebarGroup, "name" | "icon" | "stage"> => {
+    const describe = (key: string): Pick<TStageReviewSidebarGroup, "name" | "icon" | "stage" | "isCurrent"> => {
       const sample = sampleByKey.get(key);
       switch (groupBy) {
         case "stage": {
@@ -137,6 +146,7 @@ export const useStageReviewGrouping = ({
           return {
             name: stage?.label ?? "—",
             stage,
+            isCurrent: Boolean(currentStageId) && key === currentStageId,
             icon: <span className={cn("size-2.5 shrink-0 rounded-full border-2", stageNodeClassName(stage))} />,
           };
         }
@@ -144,6 +154,15 @@ export const useStageReviewGrouping = ({
           return {
             name: sample?.product_detail?.name ?? "—",
             icon: <Package className="size-4 shrink-0 text-tertiary" strokeWidth={2} />,
+          };
+        case "project":
+          return {
+            name: sample?.project_detail?.name ?? "—",
+            icon: sample?.project_detail ? (
+              <Logo logo={sample.project_detail.logo_props} size={14} />
+            ) : (
+              <FolderKanban className="size-4 shrink-0 text-tertiary" strokeWidth={2} />
+            ),
           };
         case "status":
           return {
@@ -185,7 +204,7 @@ export const useStageReviewGrouping = ({
       .filter((group) => showEmptyGroups || group.count > 0);
     // t 每次渲染都是新引用，放进依赖会让分组栏每帧重建；语言切换极少，忽略它
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy, reviews, stages, rowsByGroup, showEmptyGroups]);
+  }, [groupBy, reviews, stages, rowsByGroup, showEmptyGroups, currentStageId]);
 
   const rowsOf = (groupId: string | null): TStageReviewRow[] =>
     rowsByGroup.get(groupBy === "none" ? STAGE_REVIEW_GROUP_ALL : (groupId ?? "")) ?? [];

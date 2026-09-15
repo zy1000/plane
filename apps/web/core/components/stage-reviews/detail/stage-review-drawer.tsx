@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
-import { Check, CircleX, Info, MoveRight, Play, Send, Undo2 } from "lucide-react";
+import { Check, CircleX, ExternalLink, Info, MoveRight, Play, Send, Undo2 } from "lucide-react";
+import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
@@ -71,6 +72,10 @@ const SUBMIT_TOAST: Partial<Record<EStageReviewResult, string>> = {
  * 负责人、日期、结论、O 阶段那两组），**动作条钉在底部**：滚到评论区也能直接推进。
  *
  * 宽度比工作项抽屉宽一档（2xl 下 70%）—— 这一屏要同时铺开正文与 312px 的属性栏。
+ *
+ * `projectId` 永远是**这条评审自己的项目**：产品页里一屏评审横跨多个项目，所有读写都要打到
+ * 评审所在项目的端点上。`showProjectCrumb` 给产品页用：面包屑第一段换成项目名，右侧多一个
+ * 「在项目中打开」。
  */
 export const StageReviewDrawer = ({
   workspaceSlug,
@@ -78,6 +83,7 @@ export const StageReviewDrawer = ({
   projectId,
   reviewId,
   canManage,
+  showProjectCrumb = false,
   onClose,
   onUpdated,
 }: {
@@ -86,6 +92,7 @@ export const StageReviewDrawer = ({
   projectId: string;
   reviewId: string | null;
   canManage: boolean;
+  showProjectCrumb?: boolean;
   onClose: () => void;
   onUpdated: (review: TStageReview) => void;
 }) => {
@@ -190,6 +197,7 @@ export const StageReviewDrawer = ({
                 comments={comments}
                 activities={activities}
                 canManage={canManage}
+                showProjectCrumb={showProjectCrumb}
                 isMutating={isMutating}
                 titleDraft={titleDraft}
                 setTitleDraft={setTitleDraft}
@@ -234,6 +242,7 @@ type DrawerBodyProps = {
   comments: TStageReviewComment[];
   activities: TStageReviewActivity[];
   canManage: boolean;
+  showProjectCrumb: boolean;
   isMutating: boolean;
   titleDraft: string;
   setTitleDraft: (next: string) => void;
@@ -261,6 +270,7 @@ const DrawerBody = ({
   comments,
   activities,
   canManage,
+  showProjectCrumb,
   isMutating,
   titleDraft,
   setTitleDraft,
@@ -308,7 +318,9 @@ const DrawerBody = ({
           <MoveRight className="size-4" />
         </button>
         <span className="ml-1 flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-medium text-secondary">{detail.product_detail?.name ?? "—"}</span>
+          <span className="truncate font-medium text-secondary">
+            {(showProjectCrumb ? detail.project_detail?.name : detail.product_detail?.name) ?? "—"}
+          </span>
           <span className="text-placeholder">/</span>
           <span className="whitespace-nowrap font-medium text-secondary">{detail.stage_detail?.label ?? "—"}</span>
           {detail.parent_title && (
@@ -320,6 +332,15 @@ const DrawerBody = ({
           <span className="text-placeholder">/</span>
           <span className="truncate">{detail.title}</span>
         </span>
+        {showProjectCrumb && (
+          <Link
+            to={`/${workspaceSlug}/projects/${detail.project_id}/stage-reviews?review=${detail.id}`}
+            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-12 text-tertiary transition hover:bg-layer-2 hover:text-secondary"
+          >
+            <ExternalLink className="size-3.5" />
+            {t(`${I18N}.detail.open_in_project`)}
+          </Link>
+        )}
       </div>
 
       {/* 名片式标题区：阶段 + 类型 + 来源一行，大标题，状态药丸靠右；下面是四段进度 */}

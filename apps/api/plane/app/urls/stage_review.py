@@ -1,6 +1,7 @@
 from django.urls import path
 
 from plane.app.views.stage_review import (
+    ProductStageReviewViewSet,
     ReviewTailoringActivityEndpoint,
     ReviewTailoringCommentViewSet,
     ReviewTailoringViewSet,
@@ -69,6 +70,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/reviews/",
         ReviewTailoringViewSet.as_view({"post": "reviews"}),
         name="review-tailoring-reviews",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/axes/",
+        ReviewTailoringViewSet.as_view({"post": "axes"}),
+        name="review-tailoring-axes",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/"
@@ -194,5 +200,17 @@ urlpatterns = [
         "<uuid:stage_review_id>/files/<uuid:asset_id>/download/",
         StageReviewFileAPI.as_view({"get": "download"}),
         name="stage-review-file-download",
+    ),
+    # --- 阶段评审（产品侧聚合，只读）---------------------------------------
+    # 关联项目里这个产品的评审；写动作仍打上面的项目级端点。
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/stage-reviews/",
+        ProductStageReviewViewSet.as_view({"get": "list"}),
+        name="product-stage-reviews",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/stage-reviews/stages/",
+        ProductStageReviewViewSet.as_view({"get": "stages"}),
+        name="product-stage-review-stages",
     ),
 ]

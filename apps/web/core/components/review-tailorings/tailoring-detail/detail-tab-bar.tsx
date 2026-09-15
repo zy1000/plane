@@ -50,3 +50,45 @@ export const DetailTabBar = ({
     {tools && <div className="ml-auto flex items-center gap-1.5 py-1.5">{tools}</div>}
   </div>
 );
+
+/** Tab 条右侧的分段筛选：全部 / 裁剪 N / 待补原因 N */
+export const TabBarSegments = <T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { key: T; label: string; count?: number; tone?: "warning" }[];
+  onChange: (value: T) => void;
+}) => (
+  <div role="radiogroup" className="flex h-7.5 items-center gap-0.5 rounded-lg border border-subtle bg-layer-1 p-0.5">
+    {options.map((option) => {
+      const isActive = option.key === value;
+      return (
+        <button
+          key={option.key}
+          type="button"
+          role="radio"
+          aria-checked={isActive}
+          className={cn(
+            "flex h-full items-center gap-1.5 rounded-md px-2.5 text-12 whitespace-nowrap transition-colors",
+            isActive ? "bg-surface-1 font-medium text-primary shadow-raised-100" : "text-tertiary hover:text-secondary"
+          )}
+          onClick={() => onChange(option.key)}
+        >
+          {option.label}
+          {typeof option.count === "number" && (
+            <span
+              className={cn(
+                "text-11 tabular-nums",
+                option.tone === "warning" && option.count > 0 ? "text-warning-primary" : "text-placeholder"
+              )}
+            >
+              {option.count}
+            </span>
+          )}
+        </button>
+      );
+    })}
+  </div>
+);

@@ -1,20 +1,23 @@
 import type { ReactNode } from "react";
 import { MessageSquare, Paperclip } from "lucide-react";
+import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { Logo } from "@plane/propel/emoji-icon-picker";
 import type { IUserLite, TStageReview } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
-import type { TStageReviewDisplayProperty, TStageReviewDisplaySettings } from "./display/display-settings";
-import { STAGE_REVIEW_DISPLAY_PROPERTIES } from "./display/display-settings";
+import type { TStageReviewColumn } from "./display/display-settings";
 import type { TStageReviewRow } from "./stage-review-rows";
 import { StageReviewStatusIcon } from "./status-icon";
 
 const I18N = "stage_review";
 
-const COLUMN_WIDTH: Record<TStageReviewDisplayProperty, string> = {
+const COLUMN_WIDTH: Record<TStageReviewColumn, string> = {
   product: "minmax(120px, 180px)",
+  project: "minmax(150px, 200px)",
+  stage: "minmax(88px, 120px)",
   status: "96px",
   result: "84px",
   leader: "124px",
@@ -62,30 +65,57 @@ const Count = ({ icon, value }: { icon: ReactNode; value: number }) =>
   );
 
 /**
- * 左侧选中那一组的评审表：「显示属性」里开了哪些就出哪些列。分组在左侧分组栏里，这张表
- * 本身不分组；评审活动缩进挂在所属评审下，或铺平时带「所属评审 ›」。
+ * 左侧选中那一组的评审表：列由调用方算好（「显示属性」里开了哪些 + 作用域换列）。分组在左侧
+ * 分组栏里，这张表本身不分组；评审活动缩进挂在所属评审下，或铺平时带「所属评审 ›」。
  */
 export const StageReviewTable = ({
+  workspaceSlug,
   rows,
-  settings,
+  columns,
+  stageLabelOf,
   today,
   activeReviewId,
   onOpen,
 }: {
+  workspaceSlug: string;
   rows: TStageReviewRow[];
-  settings: TStageReviewDisplaySettings;
+  columns: TStageReviewColumn[];
+  /** 「研发阶段」列的阶段名，来自阶段汇总 */
+  stageLabelOf: (stageId: string) => string | undefined;
   /** `YYYY-MM-DD`，判断计划日期是否逾期 */
   today: string;
   activeReviewId: string | null;
   onOpen: (reviewId: string) => void;
 }) => {
   const { t } = useTranslation();
-  const columns = STAGE_REVIEW_DISPLAY_PROPERTIES.filter((property) => settings.properties[property]);
   const gridTemplateColumns = ["minmax(240px, 1fr)", ...columns.map((column) => COLUMN_WIDTH[column])].join(" ");
   const unassigned = t(`${I18N}.list.unassigned`);
+  const openInProject = t(`${I18N}.detail.open_in_project`);
 
-  const renderCell = (column: TStageReviewDisplayProperty, review: TStageReview) => {
+  const renderCell = (column: TStageReviewColumn, review: TStageReview) => {
     switch (column) {
+      case "project":
+        // 点项目名去那个项目的阶段评审页并自动打开这一条；不触发行点击
+        return review.project_detail ? (
+          <Link
+            to={`/${workspaceSlug}/projects/${review.project_id}/stage-reviews?review=${review.id}`}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            title={`${review.project_detail.name} · ${openInProject}`}
+            className="flex min-w-0 items-center gap-1.5 text-13 text-secondary hover:text-accent-primary hover:underline"
+          >
+            <span className="grid size-4 shrink-0 place-items-center">
+              <Logo logo={review.project_detail.logo_props} size={14} />
+            </span>
+            <span className="truncate">{review.project_detail.name}</span>
+          </Link>
+        ) : (
+          <Empty />
+        );
+      case "stage": {
+        const label = stageLabelOf(review.stage_id);
+        return label ? <span className="truncate text-13 text-secondary">{label}</span> : <Empty />;
+      }
       case "product":
         return review.product_detail ? (
           <span className="truncate text-13 text-secondary" title={review.product_detail.name}>
@@ -141,7 +171,7 @@ export const StageReviewTable = ({
         <span>{t(`${I18N}.table.title`)}</span>
         {columns.map((column) => (
           <span key={column} className="truncate">
-            {t(`${I18N}.display.property.${column}`)}
+            {column === "stage" ? t(`${I18N}.display.group.stage`) : t(`${I18N}.display.property.${column}`)}
           </span>
         ))}
       </div>

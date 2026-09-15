@@ -88,7 +88,14 @@ export const StageReviewGroupSidebar = ({
                     <span className="grid size-4 flex-shrink-0 place-items-center">{group.icon}</span>
                     {!isCollapsed && (
                       <>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{group.name}</span>
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">{group.name}</span>
+                          {group.isCurrent && (
+                            <span className="shrink-0 rounded bg-accent-subtle px-1 text-11 leading-4 font-semibold text-accent-primary">
+                              {t(`${I18N}.list.current`)}
+                            </span>
+                          )}
+                        </span>
                         <span className="min-w-[24px] flex-shrink-0 text-center text-xs font-medium tabular-nums text-primary">
                           {group.count}
                         </span>

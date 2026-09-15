@@ -1,84 +1,107 @@
-import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
 import { Checkbox, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { CellReasonModal } from "./cell-reason-modal";
-import { MatrixCell, ReadonlyCheck } from "./matrix-cell";
-import type { TMatrixGroup, TMatrixRow } from "./tailoring-matrix-model";
-import {
-  collectGroupCells,
-  countChildren,
-  getGroupSelectionCount,
-  getSelectionState,
-} from "./tailoring-matrix-model";
+import { MatrixCell } from "./matrix-cell";
+import { StackBar } from "./stack-bar";
+import type { TCellCounts, TMatrixGroup, TMatrixRow } from "./tailoring-matrix-model";
+import { collectGroupCells, countCells, countChildren, splitChildTitle } from "./tailoring-matrix-model";
+import type { TCellSelection } from "./use-cell-selection";
 
-const ROW_HEAD = "sticky left-0 w-[340px] min-w-[340px] max-w-[340px]";
+const ROW_HEAD = "sticky left-0 w-[380px] min-w-[380px] max-w-[380px]";
+const PRODUCT_COL = "min-w-[250px]";
+const ADD_COL = "w-[128px] min-w-[128px] max-w-[128px]";
 
-/** 整行 / 整列 / 整段 / 整表共用的批量勾选框：全勾了就整批取消，否则整批勾上 */
-const BulkCheckbox = ({
-  cells,
-  editable,
-  label,
-  onToggle,
-}: {
-  cells: TReviewTailoringItem[];
-  editable: boolean;
+type TAxisMenuItem = {
+  key: string;
   label: string;
-  onToggle: (cells: TReviewTailoringItem[]) => void;
-}) => {
-  const state = getSelectionState(cells);
-  if (!editable) return <ReadonlyCheck checked={state === "all"} indeterminate={state === "some"} />;
+  icon: ReactNode;
+  danger?: boolean;
+  onClick: () => void;
+};
+
+/** 行 / 列的「⋯」菜单，只放「移除」 */
+const AxisMenu = ({ items, portalElement }: { items: TAxisMenuItem[]; portalElement?: HTMLElement | null }) => {
+  const { t } = useTranslation();
   return (
-    <span className="flex shrink-0 items-center" title={label}>
-      <Checkbox
-        checked={state === "all"}
-        indeterminate={state === "some"}
-        disabled={cells.length === 0}
-        onChange={() => onToggle(cells)}
-        aria-label={label}
-      />
-    </span>
+    <CustomMenu
+      customButton={
+        <span
+          title={t("review_tailoring.detail.more")}
+          className="grid size-6 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
+        >
+          <MoreHorizontal className="size-3.5" />
+        </span>
+      }
+      placement="bottom-end"
+      closeOnSelect
+      // 挂到表格外：首列 sticky 会自建层叠，菜单留在格内会被下一行盖住，overflow 还会裁掉
+      portalElement={portalElement}
+    >
+      {items.map((item) => (
+        <CustomMenu.MenuItem
+          key={item.key}
+          onClick={item.onClick}
+          className={cn("flex items-center gap-2", item.danger && "text-danger-primary")}
+        >
+          {item.icon}
+          {item.label}
+        </CustomMenu.MenuItem>
+      ))}
+    </CustomMenu>
   );
 };
 
-/** 图例：四种格子与四种评审状态各是什么样子 */
-const MatrixLegend = () => {
-  const { t } = useTranslation();
-  const dot = (tone: string, label: string) => (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn("size-1.5 rounded-full bg-current", tone)} />
-      {label}
-    </span>
-  );
+/** 整表 / 整列 / 整段 / 整行的选中复选框：全选中是勾，选了一部分是半选 */
+const ScopeCheckbox = ({
+  cells,
+  selection,
+  label,
+}: {
+  cells: TReviewTailoringItem[];
+  selection: TCellSelection;
+  label: string;
+}) => {
+  const state = selection.stateOf(cells);
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-6 pt-3 pb-4 text-12 text-tertiary">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-3.5 rounded-sm border border-strong bg-layer-1" />
-        {t("review_tailoring.matrix.legend_cut")}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-3.5 rounded-sm border border-subtle bg-layer-3" />
-        {t("review_tailoring.matrix.legend_locked")}
-      </span>
-      {dot("text-tertiary", t("stage_review.status.not_started"))}
-      {dot("text-accent-primary", t("stage_review.status.in_review"))}
-      {dot("text-warning-primary", t("stage_review.status.in_approval"))}
-      {dot("text-success-primary", t("stage_review.status.completed"))}
-      <span className="ml-auto inline-flex items-center gap-1.5">
-        <span className="size-1.5 rounded-full bg-accent-primary" />
-        {t("review_tailoring.matrix.legend_dirty")}
-      </span>
-    </div>
+    <Checkbox
+      checked={state === "all"}
+      indeterminate={state === "some"}
+      disabled={cells.length === 0}
+      onChange={() => selection.toggle(cells)}
+      aria-label={label}
+      title={label}
+    />
+  );
+};
+
+/** 「64 保留 · 2 裁剪 · 1 待补原因」 */
+const CellSummary = ({ counts }: { counts: TCellCounts }) => {
+  const { t } = useTranslation();
+  return (
+    <span className="truncate tabular-nums">
+      {t("review_tailoring.matrix.summary", { kept: counts.kept, cut: counts.cut })}
+      {counts.missing > 0 && (
+        <span className="text-warning-primary">
+          {" · "}
+          {t("review_tailoring.matrix.summary_missing", { count: counts.missing })}
+        </span>
+      )}
+    </span>
   );
 };
 
 /**
  * 二维裁剪矩阵：纵轴是挑进来的评审（按阶段分段，评审活动缩进挂在所属评审下），横轴是产品。
  *
- * 表头与首列都 sticky，滚动容器是详情页的内容区（这里不再套一层 max-h 滚动框，免得双滚动）。
- * 可编辑时表尾各留一个虚线入口加评审 / 加产品；行首勾选框整行勾选 / 取消，并显示半选态。
+ * 表头与首列都 sticky，滚动容器是详情页的内容区。产品列不定宽、撑满剩余宽度。
+ * 批量：表头、列头、阶段行、行首各一个复选框，勾的是「选中」（当前筛选下可见的那批格子），
+ * 保留 / 裁剪由页面底部的操作条一次应用。列头与阶段行的小计按全表算，不随筛选变。
+ * 移除行列是低频危险操作，收在「⋯」里。
  */
 export const TailoringMatrix = ({
   groups,
@@ -90,16 +113,15 @@ export const TailoringMatrix = ({
   collapsed,
   onToggleGroup,
   onToggle,
-  onToggleCells,
+  selection,
   onReasonChange,
   onRemoveReview,
   onRemoveProduct,
-  onAddReviews,
-  onAddProducts,
+  onAddAxes,
 }: {
   /** 当前筛选下要画的段 */
   groups: TMatrixGroup[];
-  /** 未筛选的全部段：行首的「N 个活动」、表头的行数按它算，不随筛选变 */
+  /** 未筛选的全部段：行数、列头与阶段行的小计按它算 */
   allGroups: TMatrixGroup[];
   items: TReviewTailoringItem[];
   products: TReviewTailoringProduct[];
@@ -108,31 +130,43 @@ export const TailoringMatrix = ({
   collapsed: Set<string>;
   onToggleGroup: (stageId: string) => void;
   onToggle: (itemId: string, selected: boolean) => void;
-  /** 批量勾选：传一批格子进来，由调用方决定是整批勾上还是整批取消 */
-  onToggleCells: (cells: TReviewTailoringItem[]) => void;
+  /** 批量选中，由页面持有：底部操作条要读它 */
+  selection: TCellSelection;
   onReasonChange: (itemId: string, reason: string) => void;
   onRemoveReview: (row: TMatrixRow) => void;
   onRemoveProduct: (product: TReviewTailoringProduct) => void;
-  onAddReviews: () => void;
-  onAddProducts: () => void;
+  onAddAxes: () => void;
 }) => {
   const { t } = useTranslation();
   const [openReasonId, setOpenReasonId] = useState<string | null>(null);
+  const [menuPortalEl, setMenuPortalEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setMenuPortalEl(document.body);
+  }, []);
 
-  const { childCount, rowCount } = useMemo(() => {
+  const { childCount, rowCount, stageCounts } = useMemo(() => {
     const counts = new Map<string, number>();
+    const byStage = new Map<string, TCellCounts>();
     let total = 0;
     for (const group of allGroups) {
       total += group.rows.length;
+      byStage.set(group.stageId, countCells(collectGroupCells([group])));
       group.rows.forEach((row, index) => {
         if (!row.isChild) counts.set(row.templateId, countChildren(group.rows, index));
       });
     }
-    return { childCount: counts, rowCount: total };
+    return { childCount: counts, rowCount: total, stageCounts: byStage };
   }, [allGroups]);
+
+  const productCounts = useMemo(
+    () => new Map(products.map((product) => [product.id, countCells(collectGroupCells(allGroups, product.id))])),
+    [allGroups, products]
+  );
 
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const openItem = openReasonId ? itemById.get(openReasonId) : undefined;
+
+  const stageColSpan = products.length + (editable ? 2 : 1);
 
   return (
     <>
@@ -142,98 +176,105 @@ export const TailoringMatrix = ({
             <th
               className={cn(
                 ROW_HEAD,
-                "top-0 z-[4] h-11 border-b border-subtle bg-surface-1 px-4 text-left text-12 font-normal text-tertiary"
+                "top-0 z-[4] h-12 border-b border-subtle bg-surface-1 pr-3 pl-6 text-left text-12 font-normal text-tertiary"
               )}
             >
               <div className="flex items-center gap-2.5">
-                <BulkCheckbox
-                  cells={collectGroupCells(groups)}
-                  editable={editable}
-                  label={t("review_tailoring.matrix.select_all")}
-                  onToggle={onToggleCells}
-                />
-                {t("review_tailoring.matrix.review_column")}
-                <span className="text-placeholder tabular-nums">
-                  {t("review_tailoring.matrix.rows_count", { count: rowCount })}
+                {editable && (
+                  <ScopeCheckbox
+                    cells={collectGroupCells(groups)}
+                    selection={selection}
+                    label={t("review_tailoring.matrix.select_all")}
+                  />
+                )}
+                <span className="min-w-0 truncate">
+                  {t("review_tailoring.matrix.review_column")}
+                  <span className="ml-1.5 text-placeholder tabular-nums">
+                    {t("review_tailoring.matrix.rows_count", { count: rowCount })}
+                  </span>
                 </span>
               </div>
             </th>
             {products.map((product) => (
               <th
                 key={product.id}
-                className="group/col sticky top-0 z-[2] h-11 w-[156px] min-w-[156px] border-b border-l border-subtle bg-surface-1 px-3.5 text-left font-normal"
+                className={cn(
+                  PRODUCT_COL,
+                  "sticky top-0 z-[2] h-12 border-b border-l border-subtle bg-surface-1 px-3.5 text-left font-normal"
+                )}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <BulkCheckbox
-                    cells={collectGroupCells(groups, product.id)}
-                    editable={editable}
-                    label={t("review_tailoring.matrix.select_column")}
-                    onToggle={onToggleCells}
-                  />
-                  <span className="truncate text-13 font-medium text-primary" title={product.name}>
-                    {product.name}
-                  </span>
+                <div className="flex min-w-0 items-center gap-2.5">
                   {editable && (
-                    <div className="ml-auto opacity-0 transition-opacity group-hover/col:opacity-100 focus-within:opacity-100">
-                      <CustomMenu
-                        customButton={
-                          <span className="grid size-5.5 place-items-center rounded-sm text-tertiary hover:bg-layer-transparent-hover">
-                            <MoreHorizontal className="size-3.5" />
-                          </span>
-                        }
-                        placement="bottom-end"
-                        closeOnSelect
-                      >
-                        <CustomMenu.MenuItem
-                          onClick={() => onRemoveProduct(product)}
-                          className="flex items-center gap-2 text-danger-primary"
-                        >
-                          <Trash2 className="size-3.5" />
-                          {t("review_tailoring.matrix.remove_column")}
-                        </CustomMenu.MenuItem>
-                      </CustomMenu>
-                    </div>
+                    <ScopeCheckbox
+                      cells={collectGroupCells(groups, product.id)}
+                      selection={selection}
+                      label={t("review_tailoring.matrix.select_column")}
+                    />
+                  )}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-13 font-semibold text-primary" title={product.name}>
+                      {product.name}
+                    </span>
+                    <span className="flex min-w-0 text-12 text-tertiary">
+                      <CellSummary counts={productCounts.get(product.id) ?? { kept: 0, cut: 0, missing: 0 }} />
+                    </span>
+                  </div>
+                  {editable && (
+                    <AxisMenu
+                      portalElement={menuPortalEl}
+                      items={[
+                        {
+                          key: "remove",
+                          label: t("review_tailoring.matrix.remove_column"),
+                          icon: <Trash2 className="size-3.5" />,
+                          danger: true,
+                          onClick: () => onRemoveProduct(product),
+                        },
+                      ]}
+                    />
                   )}
                 </div>
               </th>
             ))}
             {editable && (
-              <th className="sticky top-0 z-[2] h-11 w-[124px] min-w-[124px] border-b border-l border-dashed border-subtle bg-surface-1 px-2 text-left font-normal">
+              <th
+                className={cn(
+                  ADD_COL,
+                  "sticky top-0 z-[2] h-12 border-b border-l border-dashed border-subtle bg-surface-1 px-2 text-left font-normal"
+                )}
+              >
                 <button
                   type="button"
-                  className="flex h-7 items-center gap-1 rounded-md px-2 text-12 text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
-                  onClick={onAddProducts}
+                  className="flex h-7 items-center gap-1 rounded-md px-2 text-12 whitespace-nowrap text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
+                  onClick={onAddAxes}
                 >
                   <Plus className="size-3.5" />
                   {t("review_tailoring.actions.add_products")}
                 </button>
               </th>
             )}
-            <th className="sticky top-0 z-[2] w-full border-b border-subtle bg-surface-1" aria-hidden />
           </tr>
         </thead>
 
         <tbody>
           {groups.map((group) => {
             const isCollapsed = collapsed.has(group.stageId);
-            const { selected, total } = getGroupSelectionCount(group);
+            const counts = stageCounts.get(group.stageId) ?? { kept: 0, cut: 0, missing: 0 };
             return (
               <Fragment key={group.stageId}>
                 <tr>
-                  <td
-                    colSpan={products.length + (editable ? 3 : 2)}
-                    className="h-8.5 border-b border-subtle bg-layer-1 p-0"
-                  >
-                    <div className={cn(ROW_HEAD, "flex h-8.5 items-center gap-2.5 bg-layer-1 px-4")}>
-                      <BulkCheckbox
-                        cells={collectGroupCells([group])}
-                        editable={editable}
-                        label={t("review_tailoring.matrix.select_stage")}
-                        onToggle={onToggleCells}
-                      />
+                  <td colSpan={stageColSpan} className="h-9 border-b border-subtle bg-layer-1 p-0">
+                    <div className={cn(ROW_HEAD, "flex h-9 items-center gap-2.5 bg-layer-1 pr-3 pl-6")}>
+                      {editable && (
+                        <ScopeCheckbox
+                          cells={collectGroupCells([group])}
+                          selection={selection}
+                          label={t("review_tailoring.matrix.select_stage")}
+                        />
+                      )}
                       <button
                         type="button"
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        className="flex min-w-0 shrink items-center gap-1.5 text-left"
                         onClick={() => onToggleGroup(group.stageId)}
                       >
                         {isCollapsed ? (
@@ -242,16 +283,11 @@ export const TailoringMatrix = ({
                           <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
                         )}
                         <span className="truncate text-13 font-semibold text-secondary">{group.stageLabel}</span>
-                        <span className="ml-1.5 block h-1 w-16 shrink-0 overflow-hidden rounded-full bg-layer-3">
-                          <span
-                            className="block h-full rounded-full bg-accent-primary"
-                            style={{ width: `${total ? Math.round((selected / total) * 100) : 0}%` }}
-                          />
-                        </span>
-                        <span className="shrink-0 text-12 text-tertiary tabular-nums">
-                          {selected} / {total}
-                        </span>
                       </button>
+                      <StackBar kept={counts.kept} cut={counts.cut} missing={counts.missing} className="h-1 w-16" />
+                      <span className="flex min-w-0 flex-1 text-12 text-tertiary">
+                        <CellSummary counts={counts} />
+                      </span>
                     </div>
                   </td>
                 </tr>
@@ -261,56 +297,80 @@ export const TailoringMatrix = ({
                     const cells = [...row.cells.values()];
                     const isLastChild = row.isChild && !group.rows[index + 1]?.isChild;
                     const children = childCount.get(row.templateId) ?? 0;
+                    const cutCount = cells.filter((cell) => !cell.selected).length;
+                    let parentTitle: string | undefined;
+                    if (row.isChild) {
+                      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+                        if (!group.rows[cursor].isChild) {
+                          parentTitle = group.rows[cursor].title;
+                          break;
+                        }
+                      }
+                    }
+                    const { prefix, rest } = splitChildTitle(parentTitle, row.title);
+                    const isRowSelected = editable && selection.stateOf(cells) === "all";
                     return (
                       <tr key={row.templateId} className="group">
                         <td
                           className={cn(
                             ROW_HEAD,
-                            "z-[1] h-11.5 border-b border-subtle bg-surface-1 p-0 group-hover:bg-layer-1-hover"
+                            "z-[1] h-11.5 border-b border-subtle p-0",
+                            isRowSelected ? "bg-accent-subtle" : "bg-surface-1 group-hover:bg-layer-1-hover"
                           )}
                         >
                           <div
                             className={cn(
                               "relative flex h-11.5 items-center gap-2.5 pr-3",
-                              row.isChild ? "pl-10" : "pl-4",
+                              row.isChild ? "pl-12" : "pl-6",
                               // 子行画一段树枝：竖线连到父行，横线指向自己
                               row.isChild &&
-                                "before:absolute before:top-0 before:left-6 before:border-l before:border-subtle after:absolute after:top-1/2 after:left-6 after:w-2.5 after:border-t after:border-subtle",
+                                "before:absolute before:top-0 before:left-8 before:border-l before:border-subtle after:absolute after:top-1/2 after:left-8 after:w-2.5 after:border-t after:border-subtle",
                               row.isChild && (isLastChild ? "before:bottom-1/2" : "before:bottom-0")
                             )}
                           >
-                            <BulkCheckbox
-                              cells={cells}
-                              editable={editable}
-                              label={t("review_tailoring.matrix.select_row")}
-                              onToggle={onToggleCells}
-                            />
+                            {editable && (
+                              <ScopeCheckbox
+                                cells={cells}
+                                selection={selection}
+                                label={t("review_tailoring.matrix.select_row")}
+                              />
+                            )}
                             <span
                               className={cn(
                                 "min-w-0 flex-1 truncate text-primary",
-                                row.isChild ? "text-13" : "text-14 font-medium"
+                                row.isChild ? "text-13" : "text-14 font-semibold"
                               )}
                               title={row.title}
                             >
-                              {row.title}
+                              {prefix && <span className="font-normal text-placeholder">{prefix}</span>}
+                              {rest}
                             </span>
-                            <span className="shrink-0 text-12 text-placeholder tabular-nums">
-                              {!row.isChild && children > 0
-                                ? t("review_tailoring.actions.add_reviews_activity_count", { count: children })
-                                : cells.length > 0
-                                  ? `${cells.filter((cell) => cell.selected).length}/${cells.length}`
-                                  : ""}
-                            </span>
-                            {/* 纵轴按顶层评审整块加减，所以评审活动那一行不给移除入口 */}
-                            {editable && !row.isChild && (
-                              <button
-                                type="button"
-                                title={t("review_tailoring.matrix.remove_row")}
-                                className="grid size-5.5 shrink-0 place-items-center rounded-sm text-tertiary opacity-0 transition group-hover:opacity-100 hover:bg-layer-transparent-hover hover:text-danger-primary focus-visible:opacity-100"
-                                onClick={() => onRemoveReview(row)}
-                              >
-                                <X className="size-3.5" />
-                              </button>
+                            {!row.isChild && children > 0 ? (
+                              <span className="shrink-0 text-12 text-placeholder tabular-nums">
+                                {t("review_tailoring.actions.add_reviews_activity_count", { count: children })}
+                              </span>
+                            ) : (
+                              cutCount > 0 && (
+                                <span className="shrink-0 rounded-full bg-layer-3 px-1.5 text-11 leading-5 text-secondary tabular-nums">
+                                  {t("review_tailoring.matrix.row_cut_count", { count: cutCount })}
+                                </span>
+                              )
+                            )}
+                            {editable && (
+                              <span className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                                <AxisMenu
+                                  portalElement={menuPortalEl}
+                                  items={[
+                                    {
+                                      key: "remove",
+                                      label: t("review_tailoring.matrix.remove_row"),
+                                      icon: <Trash2 className="size-3.5" />,
+                                      danger: true,
+                                      onClick: () => onRemoveReview(row),
+                                    },
+                                  ]}
+                                />
+                              </span>
                             )}
                           </div>
                         </td>
@@ -321,7 +381,7 @@ export const TailoringMatrix = ({
                             return (
                               <td
                                 key={product.id}
-                                className="h-11.5 w-[156px] min-w-[156px] border-b border-l border-subtle bg-layer-1"
+                                className={cn(PRODUCT_COL, "h-11.5 border-b border-l border-subtle bg-layer-1")}
                               />
                             );
                           }
@@ -331,16 +391,20 @@ export const TailoringMatrix = ({
                               cell={cell}
                               editable={editable}
                               isDirty={dirtyIds.has(cell.id)}
-                              isReasonOpen={openReasonId === cell.id}
+                              isSelected={editable && selection.selectedIds.has(cell.id)}
                               onToggle={(next) => onToggle(cell.id, next)}
                               onOpenReason={() => setOpenReasonId(cell.id)}
                             />
                           );
                         })}
                         {editable && (
-                          <td className="w-[124px] min-w-[124px] border-b border-l border-dashed border-subtle group-hover:bg-layer-1-hover" />
+                          <td
+                            className={cn(
+                              ADD_COL,
+                              "border-b border-l border-dashed border-subtle group-hover:bg-layer-1-hover"
+                            )}
+                          />
                         )}
-                        <td className="border-b border-subtle group-hover:bg-layer-1-hover" />
                       </tr>
                     );
                   })}
@@ -350,23 +414,21 @@ export const TailoringMatrix = ({
 
           {editable && (
             <tr>
-              <td className={cn(ROW_HEAD, "z-[1] h-11 bg-surface-1 px-2")}>
+              <td className={cn(ROW_HEAD, "z-[1] h-11 bg-surface-1 px-4")}>
                 <button
                   type="button"
                   className="flex h-7 items-center gap-1.5 rounded-md px-2 text-13 text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
-                  onClick={onAddReviews}
+                  onClick={onAddAxes}
                 >
                   <Plus className="size-3.5" />
                   {t("review_tailoring.actions.add_reviews")}
                 </button>
               </td>
-              <td colSpan={products.length + 2} />
+              <td colSpan={products.length + 1} />
             </tr>
           )}
         </tbody>
       </table>
-
-      <MatrixLegend />
 
       <CellReasonModal
         isOpen={Boolean(openItem)}

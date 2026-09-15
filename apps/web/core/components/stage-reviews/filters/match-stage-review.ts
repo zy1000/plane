@@ -76,6 +76,8 @@ const matchCondition = (review: TStageReview, condition: TStageReviewCondition, 
       return person(review.auditor_id);
     case "product_id":
       return matchOption(review.product_id, condition.operator, selected);
+    case "project_id":
+      return matchOption(review.project_id, condition.operator, selected);
     case "kind":
       return matchOption(review.kind, condition.operator, selected);
     case "start_date":

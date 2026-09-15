@@ -178,6 +178,12 @@ export type TUpdateReviewTailoringHeaderPayload = {
   description_html?: string | null;
 };
 
+/** 一次加纵轴与横轴：只收顶层评审 id，两边可以只填一边 */
+export type TAddReviewTailoringAxesPayload = {
+  template_ids: string[];
+  product_ids: string[];
+};
+
 export type TReviewTailoringCellPayload = {
   id: string;
   selected?: boolean;

@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
-import { FolderKanban, Rocket } from "lucide-react";
+import { ClipboardCheck, FolderKanban, Rocket } from "lucide-react";
 import { RequirementIcon } from "@plane/propel/icons";
 
-export type TProductTabKey = "dashboard" | "requirements" | "projects" | "releases";
+export type TProductTabKey = "dashboard" | "requirements" | "projects" | "stage-reviews" | "releases";
 
 export type TProductNavigationItem = {
   key: TProductTabKey;
@@ -22,6 +22,12 @@ export const PRODUCT_NAVIGATION_ITEMS: TProductNavigationItem[] = [
     key: "projects",
     icon: FolderKanban,
     i18nKey: "workspace_products.navigation.projects",
+    managerOnly: false,
+  },
+  {
+    key: "stage-reviews",
+    icon: ClipboardCheck,
+    i18nKey: "workspace_products.navigation.stage_reviews",
     managerOnly: false,
   },
   {

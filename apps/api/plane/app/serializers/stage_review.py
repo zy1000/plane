@@ -39,12 +39,26 @@ class StageReviewProductSerializer(serializers.Serializer):
     identifier = serializers.CharField(read_only=True)
 
 
+class StageReviewProjectSerializer(serializers.Serializer):
+    """产品页按项目分组 / 项目列 / 抽屉面包屑要的字段。
+
+    不复用 ProjectLiteSerializer：那个带 cover_image_url，会逐行触碰封面资产外键。
+    """
+
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    identifier = serializers.CharField(read_only=True)
+    logo_props = serializers.JSONField(read_only=True)
+
+
 class StageReviewListSerializer(BaseSerializer):
     """列表行。附件数由 view 的 queryset annotate 出来，不在这里反查。
 
     ``is_manual`` 就是「模板为空」—— 手工新建的评审不进裁剪表，列表要能一眼认出来。
+    ``project_detail`` 给产品页用（一个产品横跨多个项目）；queryset 都已 select_related project。
     """
 
+    project_detail = StageReviewProjectSerializer(source="project", read_only=True)
     product_id = serializers.UUIDField(read_only=True)
     product_detail = StageReviewProductSerializer(source="product", read_only=True)
     stage_id = serializers.UUIDField(read_only=True)
@@ -61,6 +75,7 @@ class StageReviewListSerializer(BaseSerializer):
         fields = [
             "id",
             "project_id",
+            "project_detail",
             "workspace_id",
             "product_id",
             "product_detail",

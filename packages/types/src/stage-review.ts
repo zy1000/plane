@@ -1,3 +1,4 @@
+import type { TLogoProps } from "./common";
 import type { TDataDictionaryItemLite } from "./data-dictionary";
 import type { EStageReviewKind } from "./stage-review-template";
 import type { IUserLite } from "./users";
@@ -50,9 +51,18 @@ export type TStageReviewProduct = {
   identifier: string;
 };
 
+/** 所属项目：产品页横跨多个项目，按项目分组 / 项目列 / 抽屉面包屑都靠它 */
+export type TStageReviewProject = {
+  id: string;
+  name: string;
+  identifier: string;
+  logo_props: TLogoProps;
+};
+
 export type TStageReview = {
   id: string;
   project_id: string;
+  project_detail: TStageReviewProject | null;
   workspace_id: string;
   product_id: string;
   product_detail: TStageReviewProduct | null;
@@ -111,10 +121,22 @@ export type TStageReviewStageSummary = {
   stage_id: string;
   label: string;
   total: number;
+  /** 只有产品级汇总有：这个阶段的评审分布在几个项目里 */
+  project_count?: number;
   not_started: number;
   in_review: number;
   in_approval: number;
   completed: number;
+};
+
+/**
+ * 产品页的阶段评审：关联项目里这个产品的全部评审（只含当前用户能看的项目）。
+ * `linked_project_count` 为 0 时是「还没有关联项目」，而不是「关联了但还没生成评审」。
+ */
+export type TProductStageReviewsResponse = {
+  linked_project_count: number;
+  linked_project_ids: string[];
+  reviews: TStageReview[];
 };
 
 export type TStageReviewComment = {

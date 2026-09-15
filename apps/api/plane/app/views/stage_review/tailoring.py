@@ -18,6 +18,7 @@ from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.review_tailoring import (
     ReviewTailoringActSerializer,
     ReviewTailoringActivitySerializer,
+    ReviewTailoringAxesSerializer,
     ReviewTailoringCellsSerializer,
     ReviewTailoringCommentSerializer,
     ReviewTailoringCreateSerializer,
@@ -140,6 +141,8 @@ class ReviewTailoringViewSet(BaseViewSet):
                 ),
             )
             .distinct()
+            # 列表默认最新建的在前。模型 Meta 里也是这个顺序，这里写死是不让它随 Meta 改动悄悄变
+            .order_by("-created_at")
         )
 
     # --- 详情组装 ---------------------------------------------------------
@@ -176,7 +179,8 @@ class ReviewTailoringViewSet(BaseViewSet):
         tailoring.item_count = len(items)
         tailoring.selected_count = sum(1 for item in items if item.selected)
         tailoring.product_count = len(products)
-        tailoring.review_count = sum(1 for row in rows if row.parent_id is None)
+        # 评审与活动各占一行，轴上每个节点都算一行
+        tailoring.review_count = len(rows)
         attach_detail_progress(tailoring, items, approvals)
         serializer = ReviewTailoringDetailSerializer(
             tailoring,
@@ -331,7 +335,7 @@ class ReviewTailoringViewSet(BaseViewSet):
 
     @allow_fine_permission(TAILORING_MANAGE_KEY)
     def reviews(self, request, slug, project_id, pk):
-        """加纵轴。只收顶层评审 —— 它下面的评审活动跟着整块进矩阵。"""
+        """加纵轴。评审与评审活动各自独立，挑谁加谁，不会连带父子。"""
         serializer = ReviewTailoringReviewsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -344,6 +348,38 @@ class ReviewTailoringViewSet(BaseViewSet):
                     template_ids=serializer.validated_data["template_ids"],
                     actor=request.user,
                 )
+        except ReviewTailoringError as exc:
+            return tailoring_error_response(exc)
+        return self._detail_response(self.get_queryset().filter(pk=pk).first())
+
+    @allow_fine_permission(TAILORING_MANAGE_KEY)
+    def axes(self, request, slug, project_id, pk):
+        """评审与产品一次加完，只回一份详情。
+
+        先加行再加列：add_products 按全部纵轴铺格子，会连刚加的行一起铺；
+        add_reviews 只展开这次新加的根，两边不会重复建格。
+        """
+        serializer = ReviewTailoringAxesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        template_ids = serializer.validated_data["template_ids"]
+        product_ids = serializer.validated_data["product_ids"]
+        try:
+            with transaction.atomic():
+                tailoring = self._locked(pk)
+                if tailoring is None:
+                    return self._not_found()
+                if template_ids:
+                    add_reviews(
+                        tailoring=tailoring,
+                        template_ids=template_ids,
+                        actor=request.user,
+                    )
+                if product_ids:
+                    add_products(
+                        tailoring=tailoring,
+                        product_ids=product_ids,
+                        actor=request.user,
+                    )
         except ReviewTailoringError as exc:
             return tailoring_error_response(exc)
         return self._detail_response(self.get_queryset().filter(pk=pk).first())

@@ -7,20 +7,22 @@ import { stageReviewFiltersAdapter } from "./adapter";
 import type { TStageReviewFilterExpression, TStageReviewFilterProperty } from "./types";
 
 /**
- * 筛选行的实例。条件按项目记在本地：切阶段不清空，下次进来还是上次的筛选。
+ * 筛选行的实例。条件按作用域（项目 / 产品）记在本地：切阶段不清空，下次进来还是上次的筛选。
  * 筛选全在前端做 —— 一个阶段是几十条量级，没有必要再打一次接口。
+ *
+ * `storageScope` 见 `getStageReviewStorageScope`：项目侧仍是裸 projectId，老的条件不丢。
  */
 export const useStageReviewFilter = ({
   areAllConfigsInitialized,
   configs,
-  projectId,
+  storageScope,
 }: {
   areAllConfigsInitialized: boolean;
   configs: TFilterConfig<TStageReviewFilterProperty>[];
-  projectId: string;
+  storageScope: string;
 }) => {
   const { t } = useTranslation();
-  const storageKey = `stage-reviews-filter:${projectId}`;
+  const storageKey = `stage-reviews-filter:${storageScope}`;
   const clearLabel = t("stage_review.list.clear_filters");
 
   const filter = useMemo(

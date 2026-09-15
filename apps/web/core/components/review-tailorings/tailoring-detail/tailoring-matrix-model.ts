@@ -100,17 +100,36 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
     .sort((a, b) => a.sortOrder - b.sortOrder || a.stageLabel.localeCompare(b.stageLabel));
 };
 
-/** 一段里有多少个格子勾上了，用于分组行上的计数 */
-export const getGroupSelectionCount = (group: TMatrixGroup): { selected: number; total: number } => {
-  let selected = 0;
-  let total = 0;
-  for (const row of group.rows) {
-    for (const cell of row.cells.values()) {
-      total += 1;
-      if (cell.selected) selected += 1;
+export type TCellCounts = { kept: number; cut: number; missing: number };
+
+/** 一批格子里保留、裁剪（含缺原因）、缺原因各几格。产品列头、阶段行、行首小计共用 */
+export const countCells = (cells: Iterable<TReviewTailoringItem>): TCellCounts => {
+  const counts: TCellCounts = { kept: 0, cut: 0, missing: 0 };
+  for (const cell of cells) {
+    if (cell.selected) {
+      counts.kept += 1;
+      continue;
+    }
+    counts.cut += 1;
+    if (!cell.reason.trim()) counts.missing += 1;
+  }
+  return counts;
+};
+
+const CHILD_TITLE_JOINERS = ["-", "－", "–", "—"];
+
+/**
+ * 评审活动的标题往往带着父评审的全名当前缀（「I阶段评审-需求评审（软件&整机）」），
+ * 在树里重复一遍既占宽又会把真正的名字截掉。拆出前缀交给渲染层画淡，数据不动。
+ */
+export const splitChildTitle = (parentTitle: string | undefined, title: string): { prefix: string; rest: string } => {
+  if (parentTitle) {
+    for (const joiner of CHILD_TITLE_JOINERS) {
+      const prefix = `${parentTitle}${joiner}`;
+      if (title.startsWith(prefix) && title.length > prefix.length) return { prefix, rest: title.slice(prefix.length) };
     }
   }
-  return { selected, total };
+  return { prefix: "", rest: title };
 };
 
 /** 矩阵横轴：产品按后端给的顺序（identifier）排，这里只做一次浅拷贝防止调用方就地改 */
@@ -131,19 +150,7 @@ export const getCellLockReason = (item: TReviewTailoringItem, nextSelected: bool
 export const collectMissingReasons = (items: TReviewTailoringItem[]): TReviewTailoringItem[] =>
   items.filter((item) => !item.selected && !item.reason.trim());
 
-/** 一批格子的勾选态，用于整行 / 整列 / 整段 / 整表勾选框的半选显示 */
-export const getSelectionState = (cells: TReviewTailoringItem[]): "none" | "some" | "all" => {
-  if (cells.length === 0) return "none";
-  const selected = cells.filter((cell) => cell.selected).length;
-  if (selected === 0) return "none";
-  return selected === cells.length ? "all" : "some";
-};
-
-/** 一行里有多少个产品勾上了，用于渲染行级的半选态 */
-export const getRowSelectionState = (row: TMatrixRow): "none" | "some" | "all" =>
-  getSelectionState([...row.cells.values()]);
-
-/** 段内全部格子（整段勾选）。传多段进来就是整表 */
+/** 段内全部格子（整段批量保留 / 裁剪）。传多段进来就是整表，传 productId 就是整列 */
 export const collectGroupCells = (groups: TMatrixGroup[], productId?: string): TReviewTailoringItem[] => {
   const cells: TReviewTailoringItem[] = [];
   for (const group of groups) {
