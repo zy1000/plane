@@ -15,6 +15,7 @@ export const STAGE_REVIEW_DISPLAY_PROPERTIES = [
   "attachment_count",
   "comment_count",
   "kind",
+  "tailoring",
   "updated_at",
 ] as const;
 
@@ -27,8 +28,8 @@ export type TStageReviewDisplayProperty = (typeof STAGE_REVIEW_DISPLAY_PROPERTIE
 export type TStageReviewColumn = TStageReviewDisplayProperty | "stage";
 
 /**
- * 分组方式 —— 决定**左侧分组栏**按什么分（照工作项）。默认「研发阶段」；「无」时不出分组栏，
- * 右侧直接列出全部评审。
+ * 分组方式 —— 决定**左侧分组栏**按什么分（照工作项）。默认见 `DEFAULT_STAGE_REVIEW_GROUP_BY`；
+ * 「无」时不出分组栏，右侧直接列出全部评审。
  */
 export const STAGE_REVIEW_GROUP_BY = [
   "stage",
@@ -43,6 +44,14 @@ export const STAGE_REVIEW_GROUP_BY = [
 ] as const;
 
 export type TStageReviewGroupBy = (typeof STAGE_REVIEW_GROUP_BY)[number];
+
+/**
+ * 默认分组方式按作用域分：项目页按「产品」分组；产品页没有「产品」这一维，退回「研发阶段」。
+ */
+export const DEFAULT_STAGE_REVIEW_GROUP_BY: Record<TStageReviewScopeKind, TStageReviewGroupBy> = {
+  project: "product",
+  product: "stage",
+};
 
 /** `template` = 后端给的顺序（产品 / 项目 → 模板排序） */
 export const STAGE_REVIEW_ORDER_BY = ["template", "-created_at", "-updated_at", "start_date", "end_date"] as const;
@@ -69,9 +78,10 @@ export const DEFAULT_STAGE_REVIEW_DISPLAY: TStageReviewDisplaySettings = {
     attachment_count: false,
     comment_count: false,
     kind: false,
+    tailoring: false,
     updated_at: false,
   },
-  groupBy: "stage",
+  groupBy: DEFAULT_STAGE_REVIEW_GROUP_BY.project,
   orderBy: "template",
   showActivities: true,
   showEmptyGroups: false,
@@ -97,7 +107,8 @@ export type TStageReviewDisplayPatch = Partial<Omit<TStageReviewDisplaySettings,
  * 这个键，按默认值显示，而不是被当成关掉。
  *
  * 键带版本号：v1 时分组默认「无」且整份设置一起存，改成默认按研发阶段分组后，旧值会把
- * 默认顶掉，所以换 v2 让所有人回到默认。**改默认值时同理要升版本。**
+ * 默认顶掉，所以换 v2 让所有人回到默认；项目页默认改成按产品分组时同理换 v3。
+ * **改默认值时同理要升版本。**
  */
 export const useStageReviewDisplay = (
   storageScope: string,
@@ -105,19 +116,20 @@ export const useStageReviewDisplay = (
   userId: string | undefined
 ) => {
   const { storedValue, setValue } = useLocalStorage<TStageReviewDisplaySettings | null>(
-    `stage-reviews-display:v2:${storageScope}:${userId ?? "anonymous"}`,
+    `stage-reviews-display:v3:${storageScope}:${userId ?? "anonymous"}`,
     null
   );
 
   const settings = useMemo<TStageReviewDisplaySettings>(() => {
     const merged = {
       ...DEFAULT_STAGE_REVIEW_DISPLAY,
+      groupBy: DEFAULT_STAGE_REVIEW_GROUP_BY[scopeKind],
       ...storedValue,
       properties: { ...DEFAULT_STAGE_REVIEW_DISPLAY.properties, ...storedValue?.properties },
     };
     // 作用域自己那一维不能当分组（比如产品页存进了「按产品」），落回默认
     if (merged.groupBy === STAGE_REVIEW_SCOPE_HIDDEN_DIMENSION[scopeKind]) {
-      merged.groupBy = DEFAULT_STAGE_REVIEW_DISPLAY.groupBy;
+      merged.groupBy = DEFAULT_STAGE_REVIEW_GROUP_BY[scopeKind];
     }
     return merged;
   }, [storedValue, scopeKind]);

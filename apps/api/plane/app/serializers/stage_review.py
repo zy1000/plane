@@ -64,6 +64,10 @@ class StageReviewListSerializer(BaseSerializer):
     stage_id = serializers.UUIDField(read_only=True)
     parent_id = serializers.UUIDField(read_only=True)
     template_id = serializers.UUIDField(read_only=True)
+    # 来源裁剪表：同一产品的同一评审在多张表里都保留时会各生成一条，列表靠这个区分。
+    # 反向关系，由 view annotate 出来，不在这里逐行反查；手工新建的评审为空。
+    tailoring_id = serializers.UUIDField(read_only=True, default=None)
+    tailoring_title = serializers.CharField(read_only=True, default=None)
     leader_detail = UserLiteSerializer(source="leader", read_only=True)
     auditor_detail = UserLiteSerializer(source="auditor", read_only=True)
     attachment_count = serializers.IntegerField(read_only=True, default=0)
@@ -82,6 +86,8 @@ class StageReviewListSerializer(BaseSerializer):
             "stage_id",
             "parent_id",
             "template_id",
+            "tailoring_id",
+            "tailoring_title",
             "kind",
             "title",
             "status",

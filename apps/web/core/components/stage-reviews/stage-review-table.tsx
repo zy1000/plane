@@ -26,6 +26,7 @@ const COLUMN_WIDTH: Record<TStageReviewColumn, string> = {
   attachment_count: "56px",
   comment_count: "56px",
   kind: "104px",
+  tailoring: "minmax(120px, 180px)",
   updated_at: "80px",
 };
 
@@ -153,6 +154,15 @@ export const StageReviewTable = ({
         return <Count icon={<MessageSquare className="size-3.5" />} value={review.comment_count} />;
       case "kind":
         return <StageReviewKindBadge kind={review.kind} />;
+      case "tailoring":
+        // 同一产品的同一评审在多张裁剪表里都保留时会各生成一条，标题一模一样，靠这列区分
+        return review.tailoring_title ? (
+          <span className="truncate text-13 text-secondary" title={review.tailoring_title}>
+            {review.tailoring_title}
+          </span>
+        ) : (
+          <Empty />
+        );
       case "updated_at":
         return review.updated_at ? (
           <span className="text-13 tabular-nums text-tertiary">{shortDate(review.updated_at)}</span>

@@ -1,7 +1,6 @@
 import { useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
-import { Inbox, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -75,7 +74,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
 
   const visible = useMemo(() => filterTailorings(tailorings, search, filters), [tailorings, search, filters]);
   const pendingMineCount = tailorings.filter((item) => item.my_approval_pending).length;
-  /** 本项目里等我签或我签过的表，有才出页头的「待我签批」 */
+  /** 本项目里等我签或我签过的表，有才出页头的「待签批」 */
   const hasMySigning = tailorings.some((item) => item.my_approval_pending || item.my_approval_action);
 
   const detailPath = (id: string) => `/${workspaceSlug}/projects/${projectId}/review-tailorings/${id}`;
@@ -119,13 +118,6 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
 
   const headerActions = (
     <>
-      {hasMySigning && (
-        <Button variant="secondary" size="lg" onClick={() => setInbox({ isOpen: true })}>
-          <Inbox className="size-3.5" />
-          {t(`${I18N}.approval.inbox_button`)}
-          <TailoringCountBadge count={pendingMineCount} />
-        </Button>
-      )}
       <PageSearchInput
         searchQuery={search}
         updateSearchQuery={setSearch}
@@ -134,8 +126,13 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
       <TailoringFiltersDropdown tailorings={tailorings} filters={filters} onChange={setFilters} />
       {canManage && (
         <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
-          <Plus className="size-3.5" />
-          {t(`${I18N}.create`)}
+          {t(`${I18N}.create_action`) === `${I18N}.create_action` ? "新建" : t(`${I18N}.create_action`)}
+        </Button>
+      )}
+      {hasMySigning && (
+        <Button variant="secondary" size="lg" onClick={() => setInbox({ isOpen: true })}>
+          {t(`${I18N}.approval.inbox_button`) === "待我签批" ? "待签批" : t(`${I18N}.approval.inbox_button`)}
+          <TailoringCountBadge count={pendingMineCount} />
         </Button>
       )}
     </>

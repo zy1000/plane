@@ -2120,6 +2120,7 @@ export default {
     breadcrumb: "裁剪表",
     page_title: "裁剪表",
     create: "新建裁剪表",
+    create_action: "新建",
     search_placeholder: "搜索裁剪表",
     error_title: "加载失败",
     status: {
@@ -2287,7 +2288,7 @@ export default {
       remove_approver: "移除签批人",
       n_of_m_short: "指定人数",
       progress: "{approved} / {total} 已通过",
-      inbox_button: "待我签批",
+      inbox_button: "待签批",
       inbox_title: "裁剪表签批",
       tab_pending: "待我签批",
       tab_done: "我已签批",
@@ -2534,6 +2535,7 @@ export default {
         attachment_count: "附件数量",
         comment_count: "评论数量",
         kind: "类型",
+        tailoring: "来源裁剪表",
         updated_at: "最近更新",
       },
       order: {

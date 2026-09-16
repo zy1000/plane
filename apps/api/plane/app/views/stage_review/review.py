@@ -14,7 +14,7 @@
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -38,6 +38,7 @@ from plane.db.models import (
     Product,
     ProductProject,
     Project,
+    ReviewTailoringItem,
     StageReview,
     StageReviewActivity,
     StageReviewComment,
@@ -100,6 +101,22 @@ def _attachment_count_annotation():
     )
 
 
+def _tailoring_annotations():
+    """来源裁剪表的 id 与标题。列表里区分同名评审用 —— 同一产品的同一评审在多张裁剪表
+    里都保留时会各生成一条，标题一模一样。
+
+    是反向关系（``ReviewTailoringItem.stage_review``），一条评审最多被一个格子指向，
+    所以取第一条即可。手工新建的评审不来自裁剪表，两个字段都是 NULL。
+    """
+    items = ReviewTailoringItem.objects.filter(
+        stage_review_id=OuterRef("pk"), deleted_at__isnull=True
+    )
+    return {
+        "tailoring_id": Subquery(items.values("tailoring_id")[:1]),
+        "tailoring_title": Subquery(items.values("tailoring__title")[:1]),
+    }
+
+
 class StageReviewViewSet(BaseViewSet):
     """阶段评审：项目级资源，按 project.stage_review.* 鉴权。
 
@@ -144,6 +161,7 @@ class StageReviewViewSet(BaseViewSet):
                     filter=Q(comments__deleted_at__isnull=True),
                     distinct=True,
                 ),
+                **_tailoring_annotations(),
             )
             .distinct()
         )

@@ -2035,6 +2035,7 @@ export default {
         attachment_count: "附件数量",
         comment_count: "评论数量",
         kind: "类型",
+        tailoring: "来源裁剪表",
         updated_at: "最近更新",
       },
       order: {
@@ -2216,6 +2217,7 @@ export default {
     breadcrumb: "Review tailoring",
     page_title: "Review tailoring",
     create: "New tailoring",
+    create_action: "New",
     search_placeholder: "Search tailorings",
     error_title: "Failed to load",
     status: {

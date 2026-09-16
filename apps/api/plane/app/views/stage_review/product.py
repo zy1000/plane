@@ -19,7 +19,7 @@ from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.mixins import get_scoped_product
 from plane.db.models import Project, ProductProject, StageReview, StageReviewStatus
 
-from .review import _attachment_count_annotation
+from .review import _attachment_count_annotation, _tailoring_annotations
 
 #: 与项目侧 STAGE_REVIEW_READ_KEYS 同一口径：查看或维护任一即可
 READ_KEYS = {
@@ -105,6 +105,7 @@ class ProductStageReviewViewSet(BaseViewSet):
                     filter=Q(comments__deleted_at__isnull=True),
                     distinct=True,
                 ),
+                **_tailoring_annotations(),
             )
             .order_by("project__name", "sort_order", "created_at", "id")
         )

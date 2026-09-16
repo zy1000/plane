@@ -71,6 +71,9 @@ export type TStageReview = {
   parent_id: string | null;
   /** 来源模板节点，null = 手工新建（不进裁剪表） */
   template_id: string | null;
+  /** 来源裁剪表，null = 手工新建。多张表都保留同一个评审时，靠它区分同名行 */
+  tailoring_id: string | null;
+  tailoring_title: string | null;
   kind: EStageReviewKind;
   title: string;
   status: EStageReviewStatus;
