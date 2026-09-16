@@ -25,9 +25,12 @@ const NODE_TONE: Record<TTone, string> = {
   danger: "bg-danger-primary text-on-color",
 };
 
-const QUOTE_TONE: Record<"warning" | "danger", string> = {
+type TQuoteTone = "warning" | "danger" | "success";
+
+const QUOTE_TONE: Record<TQuoteTone, string> = {
   warning: "border-warning-strong bg-warning-subtle text-warning-primary",
   danger: "border-danger-strong bg-danger-subtle text-danger-primary",
+  success: "border-success-strong bg-success-subtle text-success-primary",
 };
 
 const STATUSES = Object.values(EStageReviewStatus) as string[];
@@ -40,7 +43,7 @@ const asText = (value: unknown) => (typeof value === "string" && value.trim() ? 
 
 const PILL_CLASS = "rounded-md px-2 py-0.5 text-12";
 
-/** 状态节点外壳：彩色圆节点 + 一句 14px 的话 + 右侧时间，下面可挂一段引用（结论说明 / 退回理由） */
+/** 状态节点外壳：彩色圆节点 + 一句 14px 的话 + 右侧时间，下面可挂一段引用（结论说明 / 退回理由 / 审核意见） */
 const MilestoneShell = ({
   position,
   icon: Icon,
@@ -53,7 +56,7 @@ const MilestoneShell = ({
   icon: LucideIcon;
   tone: TTone;
   at: string;
-  quote?: { label: string; text: string; tone: "warning" | "danger" } | null;
+  quote?: { label: string; text: string; tone: TQuoteTone } | null;
   children: ReactNode;
 }) => (
   <TimelineRow
@@ -193,8 +196,14 @@ export const StageReviewMilestoneRow = ({
   }
 
   if (from === EStageReviewStatus.IN_APPROVAL && to === EStageReviewStatus.COMPLETED) {
+    const comment = asText(activity.extra?.approval_comment);
     return (
-      <MilestoneShell {...shell} icon={Check} tone="success">
+      <MilestoneShell
+        {...shell}
+        icon={Check}
+        tone="success"
+        quote={comment ? { label: t(`${I18N}.activity.approval_comment`), text: comment, tone: "success" } : null}
+      >
         <Actor activity={activity} />
         <span>{t(`${I18N}.activity.approve`)}</span>
         {toBadge}

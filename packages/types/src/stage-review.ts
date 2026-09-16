@@ -245,6 +245,13 @@ export type TRollbackStageReviewPayload = {
   reason: string;
 };
 
+/**
+ * 审核通过时的审核意见，选填。同退回理由，只进轨迹（`extra.approval_comment`），不落评审字段。
+ */
+export type TApproveStageReviewPayload = {
+  approval_comment?: string;
+};
+
 export type TSubmitStageReviewPayload = {
   result: EStageReviewResult;
   conditional_reason?: string;

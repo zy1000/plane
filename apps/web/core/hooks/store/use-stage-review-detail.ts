@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  TApproveStageReviewPayload,
   TRollbackStageReviewPayload,
   TStageReviewActivity,
   TStageReviewAttachment,
@@ -96,9 +97,9 @@ export const useStageReviewDetail = (
     [workspaceSlug, projectId, reviewId, runMutation]
   );
 
-  /** 推进一步。评审中 → 审核中 这一跳要带结论，其余两跳 payload 留空 */
+  /** 推进一步。评审中 → 审核中 这一跳要带结论，审核中 → 已评审 可带审核意见，开始 payload 留空 */
   const advance = useCallback(
-    async (payload?: TSubmitStageReviewPayload) => {
+    async (payload?: TSubmitStageReviewPayload | TApproveStageReviewPayload) => {
       if (!workspaceSlug || !projectId || !reviewId) return undefined;
       return runMutation(() => service.advance(workspaceSlug, projectId, reviewId, payload));
     },

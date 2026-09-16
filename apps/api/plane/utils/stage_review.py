@@ -245,6 +245,9 @@ def advance(review, *, actor, payload=None):
     「提交审核」（评审中那一跳）顺带把结论写进去 —— 结论与「提交」是同一个动作的两
     面，分成两个接口会出现「提交了但没结论」的中间态。落点由结论决定（``SUBMIT_TARGET``）：
     不通过**不推进**，只记下结论与说明；其余结论都进审核中。
+
+    「审核通过」（审核中那一跳）可以带一段**审核意见**（选填）。它与退回理由同口径，
+    是事件属性：只进这条轨迹的 ``extra.approval_comment``，不占评审字段。
     """
     if review.status not in NEXT_STATUS:
         raise StageReviewError(
@@ -292,6 +295,18 @@ def advance(review, *, actor, payload=None):
     review.status = new_status
     review.save(update_fields=[*update_fields, "status"])
 
+    # 结论说明随「提交审核」这次事件一起记下：之后退回重提会覆盖评审上的字段，
+    # 活动时间线要能看到每一次提交当时写的是什么
+    extra = (
+        {"result": review.result, "conditional_reason": review.conditional_reason}
+        if review.result
+        else {}
+    )
+    if old_status == StageReviewStatus.IN_APPROVAL:
+        approval_comment = ((payload or {}).get("approval_comment") or "").strip()
+        if approval_comment:
+            extra["approval_comment"] = approval_comment
+
     write_activity(
         review,
         actor=actor,
@@ -300,13 +315,7 @@ def advance(review, *, actor, payload=None):
         old_value=old_status,
         new_value=new_status,
         comment=ADVANCE_VERB[old_status],
-        # 结论说明随「提交审核」这次事件一起记下：之后退回重提会覆盖评审上的字段，
-        # 活动时间线要能看到每一次提交当时写的是什么
-        extra=(
-            {"result": review.result, "conditional_reason": review.conditional_reason}
-            if review.result
-            else None
-        ),
+        extra=extra or None,
     )
     return review
 

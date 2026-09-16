@@ -2,6 +2,7 @@ import type {
   TCreateStageReviewPayload,
   TProductStageReviewsResponse,
   TFileSignedURLResponse,
+  TApproveStageReviewPayload,
   TRollbackStageReviewPayload,
   TStageReview,
   TStageReviewActivity,
@@ -114,12 +115,12 @@ export class StageReviewService extends APIService {
       });
   }
 
-  /** 推进一步。评审中 → 审核中 这一跳要带结论，其余两跳不用带 */
+  /** 推进一步。评审中 → 审核中 这一跳要带结论，审核中 → 已评审 可带审核意见，开始不用带 */
   async advance(
     workspaceSlug: string,
     projectId: string,
     reviewId: string,
-    payload?: TSubmitStageReviewPayload
+    payload?: TSubmitStageReviewPayload | TApproveStageReviewPayload
   ): Promise<TStageReviewDetail> {
     return this.post(`${this.base(workspaceSlug, projectId)}/${reviewId}/advance/`, payload ?? {})
       .then((response) => response?.data)

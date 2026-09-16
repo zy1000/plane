@@ -26,6 +26,7 @@ from plane.app.serializers.stage_review import (
     StageReviewCreateSerializer,
     StageReviewDetailSerializer,
     StageReviewListSerializer,
+    StageReviewApproveSerializer,
     StageReviewRollbackSerializer,
     StageReviewSubmitSerializer,
     StageReviewUpdateSerializer,
@@ -381,7 +382,7 @@ class StageReviewViewSet(BaseViewSet):
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
     def advance(self, request, slug, project_id, pk):
-        """推进一步。``评审中 → 审核中`` 这一跳要带结论。"""
+        """推进一步。``评审中 → 审核中`` 这一跳要带结论，``审核中 → 已评审`` 可带审核意见。"""
         payload = {}
         try:
             with transaction.atomic():
@@ -390,6 +391,10 @@ class StageReviewViewSet(BaseViewSet):
                     return self._not_found()
                 if review.status == StageReviewStatus.IN_REVIEW:
                     serializer = StageReviewSubmitSerializer(data=request.data)
+                    serializer.is_valid(raise_exception=True)
+                    payload = serializer.validated_data
+                elif review.status == StageReviewStatus.IN_APPROVAL:
+                    serializer = StageReviewApproveSerializer(data=request.data)
                     serializer.is_valid(raise_exception=True)
                     payload = serializer.validated_data
                 advance_review(review, actor=request.user, payload=payload)

@@ -2189,6 +2189,13 @@ export default {
       reason_placeholder: "写明为什么退回、要补什么",
       confirm: "确认退回",
     },
+    approve: {
+      title: "审核通过",
+      description: "通过后评审完成并定稿，审核意见会记进变更轨迹。",
+      comment: "审核意见",
+      comment_placeholder: "可补充审核结论、遗留事项或后续要求",
+      confirm: "确认通过",
+    },
     toast: {
       started: "已进入评审中",
       submitted: "已提交审核",
@@ -2204,6 +2211,7 @@ export default {
       created_tailoring: "由裁剪表生成了这条评审",
       rollback_reason: "退回理由",
       conclusion_reason: "结论说明",
+      approval_comment: "审核意见",
       start: "开始评审",
       submit: "提交审核",
       submit_with_result: "提交审核，结论",

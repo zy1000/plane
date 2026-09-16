@@ -23,6 +23,7 @@ import { StageReviewKindBadge } from "@/components/template-management/reviews/s
 import useKeypress from "@/hooks/use-keypress";
 import { getStageReviewError } from "@/hooks/store/use-stage-reviews";
 import { useStageReviewDetail } from "@/hooks/store/use-stage-review-detail";
+import { ApproveStageReviewModal } from "../approve-review-modal";
 import { StageReviewStatusBadge } from "../badges";
 import { RollbackStageReviewModal } from "../rollback-review-modal";
 import { SubmitStageReviewModal } from "../submit-review-modal";
@@ -132,6 +133,7 @@ export const StageReviewDrawer = ({
   const { t } = useTranslation();
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isRollbackOpen, setIsRollbackOpen] = useState(false);
+  const [isApproveOpen, setIsApproveOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const {
     detail,
@@ -156,7 +158,7 @@ export const StageReviewDrawer = ({
 
   const isOpen = Boolean(reviewId);
   useKeypress("Escape", () => {
-    if (isOpen && !isSubmitOpen) onClose();
+    if (isOpen && !isSubmitOpen && !isApproveOpen) onClose();
   });
 
   /** 动作统一在这里吞错：领域错误码有中文文案，其余回落到服务端原文 */
@@ -187,6 +189,11 @@ export const StageReviewDrawer = ({
   const handleRollback = async (reason: string) => {
     const next = await run(() => rollback({ reason }), "rolled_back");
     if (next) setIsRollbackOpen(false);
+  };
+
+  const handleApprove = async (comment: string) => {
+    const next = await run(() => advance({ approval_comment: comment }), "completed");
+    if (next) setIsApproveOpen(false);
   };
 
   const portalContainer = typeof document !== "undefined" ? document.getElementById("full-screen-portal") : null;
@@ -247,7 +254,7 @@ export const StageReviewDrawer = ({
                 onUpdate={(payload) => void run(() => updateReview(payload), "updated")}
                 onStart={() => void run(advance, "started")}
                 onOpenSubmit={() => setIsSubmitOpen(true)}
-                onApprove={() => void run(advance, "completed")}
+                onApprove={() => setIsApproveOpen(true)}
                 onRollback={() => setIsRollbackOpen(true)}
                 onUpload={(file, onProgress) => run(() => uploadAttachment(file, onProgress), "attachment_uploaded")}
                 onDownload={(assetId) => void downloadAttachment(assetId)}
@@ -273,6 +280,12 @@ export const StageReviewDrawer = ({
                   isSubmitting={isMutating}
                   onClose={() => setIsRollbackOpen(false)}
                   onSubmit={handleRollback}
+                />
+                <ApproveStageReviewModal
+                  isOpen={isApproveOpen}
+                  isSubmitting={isMutating}
+                  onClose={() => setIsApproveOpen(false)}
+                  onSubmit={handleApprove}
                 />
               </>
             )}

@@ -257,6 +257,14 @@ class StageReviewRollbackSerializer(serializers.Serializer):
     reason = serializers.CharField(allow_blank=True, default="")
 
 
+class StageReviewApproveSerializer(serializers.Serializer):
+    """审核通过时的审核意见，选填。只进轨迹的 extra，不落评审字段。"""
+
+    approval_comment = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
+
+
 class StageReviewSubmitSerializer(serializers.Serializer):
     """提交审核时的结论。必填与否按 kind 判，规则在 utils 里。"""
 
