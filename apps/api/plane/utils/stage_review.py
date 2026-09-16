@@ -12,7 +12,8 @@
    连续的线。**每一步由这一步的主人推进和退回**（``_assert_step_owner``）：未评审 / 评审中
    归负责人，审核中归审核者；主人没指定就不能动，也不允许任何人代推 —— 管理权限只决定
    能不能改字段（包括指定负责人 / 审核者），不决定能不能替人签字。提交审核前还必须已经
-   指定审核者，否则会停在一个没人能推的审核中。
+   指定审核者，否则会停在一个没人能推的审核中。「开始评审」与「审核通过」会顺手把
+   空着的开始日期 / 结束日期补成当天（已填的不动），见 ``_auto_fill_date``。
 2. **结论在提交审核那一刻定稿。** ``result`` 不是随便改的字段：它只在 ``advance()``
    里写入，除通过外的结论都必须带结论说明，O 阶段的两种类型必须同时给生产方式与出货
    评估。校验集中在 ``_validate_result``，模型的 ``clean()`` 只做兜底。
@@ -26,6 +27,7 @@
 
 from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.utils import timezone
 
 from plane.db.models import (
     FileAsset,
@@ -239,6 +241,23 @@ def _validate_result(review, payload):
 # --- 状态推进 -------------------------------------------------------------
 
 
+def _auto_fill_date(review, field, today):
+    """``field`` 为空才补成 ``today``，返回补上的值；已填的不动，返回 ``None``。
+
+    补的值不能违反模型「结束日期不能早于开始日期」的约束（``advance`` 不跑 ``full_clean``）：
+    开始日期不晚于已填的结束日期，结束日期不早于已填的开始日期。
+    """
+    if getattr(review, field) is not None:
+        return None
+    value = today
+    if field == "start_date" and review.end_date and review.end_date < value:
+        value = review.end_date
+    if field == "end_date" and review.start_date and review.start_date > value:
+        value = review.start_date
+    setattr(review, field, value)
+    return value
+
+
 def advance(review, *, actor, payload=None):
     """把评审往前推。调用方负责事务与行锁。
 
@@ -248,6 +267,9 @@ def advance(review, *, actor, payload=None):
 
     「审核通过」（审核中那一跳）可以带一段**审核意见**（选填）。它与退回理由同口径，
     是事件属性：只进这条轨迹的 ``extra.approval_comment``，不占评审字段。
+
+    「开始评审」补空的开始日期、「审核通过」补空的结束日期，都取操作人时区的当天
+    （``BaseViewSet`` 已按用户时区 activate），各记一条与手工修改同形的日期轨迹。
     """
     if review.status not in NEXT_STATUS:
         raise StageReviewError(
@@ -292,6 +314,15 @@ def advance(review, *, actor, payload=None):
         )
         return review
 
+    today = timezone.localdate()
+    filled_dates = []
+    if old_status == StageReviewStatus.NOT_STARTED:
+        filled_dates.append(("start_date", _auto_fill_date(review, "start_date", today)))
+    if new_status == StageReviewStatus.COMPLETED:
+        filled_dates.append(("end_date", _auto_fill_date(review, "end_date", today)))
+    filled_dates = [(field, value) for field, value in filled_dates if value is not None]
+    update_fields += [field for field, _ in filled_dates]
+
     review.status = new_status
     review.save(update_fields=[*update_fields, "status"])
 
@@ -317,6 +348,14 @@ def advance(review, *, actor, payload=None):
         comment=ADVANCE_VERB[old_status],
         extra=extra or None,
     )
+    for field, value in filled_dates:
+        write_activity(
+            review,
+            actor=actor,
+            verb="updated",
+            field=field,
+            new_value=_activity_value(field, value),
+        )
     return review
 
 

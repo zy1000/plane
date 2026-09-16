@@ -25,7 +25,8 @@ const MemberLabel = ({ user }: { user: IUserLite }) => (
  * 模板上存的是角色名称文本（发起者 / 主导者 / 审核者），生成评审时留空，在这里才解析
  * 成人。
  *
- * 候选人**打开时才拉**：一屏抽屉有两个这样的选择器，进页就拉等于每次开抽屉多两个请求。
+ * 候选人**随抽屉预拉**：打开下拉时才拉会先闪一下空列表再出人。只读（disabled）时不拉；
+ * 预拉失败的话，打开下拉时再补拉一次。
  */
 export const RoleMemberSelect = ({
   workspaceSlug,
@@ -57,8 +58,21 @@ export const RoleMemberSelect = ({
       .catch(() => undefined);
   }, [candidates, workspaceSlug, projectId, reviewId, role]);
 
-  // 换一条评审时把上一条的候选人丢掉：角色名与产品都变了
-  useEffect(() => setCandidates(null), [reviewId, role]);
+  // 换一条评审时丢掉上一条的候选人（角色名与产品都变了），并预拉这一条的
+  useEffect(() => {
+    setCandidates(null);
+    if (disabled) return;
+    let cancelled = false;
+    void service
+      .listCandidates(workspaceSlug, projectId, reviewId, role)
+      .then((next) => {
+        if (!cancelled) setCandidates(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceSlug, projectId, reviewId, role, disabled]);
 
   const options = (candidates?.results ?? []).map((user) => ({
     value: user.id,
