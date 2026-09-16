@@ -1,41 +1,61 @@
 import { useMemo, useState } from "react";
+import { AlertTriangle, MessageSquare, Pencil } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
 import { cn, renderFormattedDate } from "@plane/utils";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
-import { collectMissingReasons } from "./tailoring-matrix-model";
+import type { TBulkReasonScope } from "./bulk-reason-modal";
+import { BulkReasonModal } from "./bulk-reason-modal";
+import { CellReasonModal } from "./cell-reason-modal";
+import { KeepCutSegment } from "./keep-cut-segment";
+import { collectMissingReasons, getCellLockReason } from "./tailoring-matrix-model";
 
 /**
  * 裁剪明细：把矩阵摊平成一行一格，字段与原始裁剪表一致（产品 / 阶段 / 评审类型 /
  * 评审名称 / 是否裁剪 / 裁剪原因 / 创建人 / 创建时间）。
  *
- * 矩阵适合勾，明细适合读和补原因 —— 所以原因在这里可以行内改，改的还是同一份格子。
+ * 矩阵适合一片一片地勾，明细适合逐条读和逐条改 —— 两边用的是同一套控件（「保留 | 裁剪」
+ * 两段式 + 原因大弹窗），改的也是同一份本地格子，所以在哪边改都算同一批未保存改动。
  */
 export const TailoringItemsTable = ({
   items,
   products,
+  productFilter,
+  onlyMissing,
   editable,
+  dirtyIds,
+  onToggle,
   onReasonChange,
   onBulkReason,
 }: {
   items: TReviewTailoringItem[];
   products: TReviewTailoringProduct[];
+  /** 产品筛选在 Tab 条右上角，这里只消费 */
+  productFilter: string;
+  /** 只看待补原因，同样来自 Tab 条 */
+  onlyMissing: boolean;
   editable: boolean;
+  /** 与服务端有差异的格子：行首画一道蓝线 */
+  dirtyIds: Set<string>;
+  onToggle: (itemId: string, selected: boolean) => void;
   onReasonChange: (itemId: string, reason: string) => void;
   onBulkReason: (itemIds: string[], reason: string) => void;
 }) => {
   const { t } = useTranslation();
-  const [productFilter, setProductFilter] = useState<string>("all");
-  const [bulkReason, setBulkReason] = useState("");
-  const [showBulk, setShowBulk] = useState(false);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [openReasonId, setOpenReasonId] = useState<string | null>(null);
 
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const missing = useMemo(() => collectMissingReasons(items), [items]);
 
   const visible = useMemo(() => {
-    const rows = productFilter === "all" ? items : items.filter((item) => item.product_id === productFilter);
+    const rows = items.filter(
+      (item) =>
+        (productFilter === "all" || item.product_id === productFilter) &&
+        (!onlyMissing || (!item.selected && !item.reason.trim()))
+    );
     // 先按产品、再按阶段、最后按模板顺序，读起来是「这个产品每个阶段要做什么」
     return [...rows].sort((a, b) => {
       const left = productById.get(a.product_id)?.name ?? "";
@@ -44,57 +64,27 @@ export const TailoringItemsTable = ({
       if (a.stage_sort_order !== b.stage_sort_order) return a.stage_sort_order - b.stage_sort_order;
       return a.template_sort_order - b.template_sort_order;
     });
-  }, [items, productFilter, productById]);
+  }, [items, productFilter, onlyMissing, productById]);
+
+  const openItem = openReasonId ? items.find((item) => item.id === openReasonId) : undefined;
+  /** 「当前筛选下的裁剪项」批量范围：看得见的那批裁剪格子 */
+  const visibleCut = useMemo(() => visible.filter((item) => !item.selected), [visible]);
+
+  const applyBulk = (scope: TBulkReasonScope, reason: string) => {
+    const targets = scope === "missing" ? missing : visibleCut;
+    onBulkReason(
+      targets.map((item) => item.id),
+      reason
+    );
+  };
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={productFilter}
-          onChange={(event) => setProductFilter(event.target.value)}
-          className="focus:border-accent-primary h-8 rounded border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
-        >
-          <option value="all">{t("review_tailoring.items.filter_all_products")}</option>
-          {products.map((product) => (
-            <option key={product.id} value={product.id}>
-              {product.name}
-            </option>
-          ))}
-        </select>
-
-        {editable && missing.length > 0 && (
-          <Button variant="secondary" size="sm" onClick={() => setShowBulk((current) => !current)}>
-            {t("review_tailoring.items.bulk_reason")} ({missing.length})
+      {editable && (missing.length > 0 || visibleCut.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setIsBulkOpen(true)}>
+            {t("review_tailoring.items.bulk_reason")}
           </Button>
-        )}
-      </div>
-
-      {showBulk && editable && missing.length > 0 && (
-        <div className="rounded-md border border-subtle bg-layer-1 p-3">
-          <p className="mb-2 text-12 text-secondary">{t("review_tailoring.items.bulk_reason_title")}</p>
-          <div className="flex gap-2">
-            <input
-              value={bulkReason}
-              onChange={(event) => setBulkReason(event.target.value)}
-              placeholder={t("review_tailoring.matrix.reason_placeholder")}
-              className="focus:border-accent-primary h-8 flex-1 rounded border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!bulkReason.trim()}
-              onClick={() => {
-                onBulkReason(
-                  missing.map((item) => item.id),
-                  bulkReason.trim()
-                );
-                setBulkReason("");
-                setShowBulk(false);
-              }}
-            >
-              {t("review_tailoring.items.bulk_reason_apply", { count: missing.length })}
-            </Button>
-          </div>
         </div>
       )}
 
@@ -126,10 +116,18 @@ export const TailoringItemsTable = ({
             </TableRow>
           ) : (
             visible.map((item) => {
-              const tailoredOut = !item.selected;
+              const reason = item.reason.trim();
+              const isMissing = !item.selected && !reason;
+              const keepLock = item.selected ? null : getCellLockReason(item, true);
               return (
-                <TableRow key={item.id} className="bg-surface-1 hover:bg-surface-2">
-                  <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
+                <TableRow key={item.id} className={cn(item.selected ? "bg-surface-1" : "bg-layer-1", "hover:bg-surface-2")}>
+                  <TableCell
+                    className={cn(
+                      "border-r border-b border-subtle px-3 py-2 whitespace-nowrap",
+                      // 有未保存改动的行，行首一道蓝线（与矩阵格子的蓝角标同义）
+                      dirtyIds.has(item.id) && "shadow-[inset_3px_0_0_var(--bg-accent-primary)]"
+                    )}
+                  >
                     {productById.get(item.product_id)?.name ?? "—"}
                   </TableCell>
                   <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
@@ -140,30 +138,41 @@ export const TailoringItemsTable = ({
                   </TableCell>
                   <TableCell className="border-r border-b border-subtle px-3 py-2">{item.title}</TableCell>
                   <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                    <span className={cn("text-12", tailoredOut ? "text-danger-primary" : "text-secondary")}>
-                      {t(`review_tailoring.items.tailored_${tailoredOut ? "yes" : "no"}`)}
-                    </span>
+                    <KeepCutSegment
+                      value={item.selected}
+                      editable={editable}
+                      keepLockReason={keepLock ? t(`review_tailoring.matrix.${keepLock}`) : null}
+                      onChange={(keep) => onToggle(item.id, keep)}
+                    />
                   </TableCell>
-                  <TableCell className="min-w-[220px] border-r border-b border-subtle px-3 py-2">
-                    {tailoredOut ? (
-                      editable ? (
-                        <input
-                          defaultValue={item.reason}
-                          placeholder={t("review_tailoring.matrix.reason_placeholder")}
-                          // blur 才提交：边打字边推状态会让整张表每个字符重渲一次
-                          onBlur={(event) => {
-                            const next = event.target.value.trim();
-                            if (next !== item.reason) onReasonChange(item.id, next);
-                          }}
+                  <TableCell className="min-w-[260px] border-r border-b border-subtle px-3 py-2">
+                    {!item.selected ? (
+                      reason || editable ? (
+                        <button
+                          type="button"
                           className={cn(
-                            "focus:border-accent-primary h-7 w-full rounded border bg-surface-1 px-2 text-12 text-primary outline-none",
-                            item.reason.trim() ? "border-subtle" : "border-warning-primary"
+                            "group flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-13 transition-colors",
+                            editable && "hover:bg-layer-transparent-hover",
+                            isMissing ? "font-medium text-warning-primary" : "text-secondary"
                           )}
-                        />
+                          title={reason || undefined}
+                          disabled={!editable && !reason}
+                          onClick={() => setOpenReasonId(item.id)}
+                        >
+                          {isMissing ? (
+                            <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2.4} />
+                          ) : (
+                            <MessageSquare className="size-3.5 shrink-0 text-placeholder" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">
+                            {reason || t("review_tailoring.matrix.write_reason")}
+                          </span>
+                          {editable && (
+                            <Pencil className="size-3.5 shrink-0 text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+                          )}
+                        </button>
                       ) : (
-                        <span className={cn("text-12", item.reason ? "text-primary" : "text-warning-primary")}>
-                          {item.reason || t("review_tailoring.matrix.reason_missing")}
-                        </span>
+                        <span className="text-12 text-placeholder">{t("review_tailoring.matrix.reason_missing")}</span>
                       )
                     ) : (
                       <span className="text-tertiary">—</span>
@@ -181,6 +190,32 @@ export const TailoringItemsTable = ({
           )}
         </TableBody>
       </Table>
+
+      <CellReasonModal
+        isOpen={Boolean(openItem)}
+        value={openItem?.reason ?? ""}
+        // 明细里一屏一百多条，不说清是哪一条容易改错行
+        subtitle={
+          openItem
+            ? [productById.get(openItem.product_id)?.name, openItem.stage_label, openItem.title]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
+        editable={editable}
+        onSave={(next) => {
+          if (openItem) onReasonChange(openItem.id, next);
+        }}
+        onClose={() => setOpenReasonId(null)}
+      />
+
+      <BulkReasonModal
+        isOpen={isBulkOpen}
+        missingCount={missing.length}
+        visibleCount={visibleCut.length}
+        onApply={applyBulk}
+        onClose={() => setIsBulkOpen(false)}
+      />
     </div>
   );
 };

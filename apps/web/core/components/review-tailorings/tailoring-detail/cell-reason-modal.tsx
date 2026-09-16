@@ -13,12 +13,15 @@ import { TailoringModalHeader } from "./modal-header";
 export const CellReasonModal = ({
   isOpen,
   value,
+  subtitle,
   editable,
   onSave,
   onClose,
 }: {
   isOpen: boolean;
   value: string;
+  /** 改的是哪一条（产品 · 阶段 · 评审名）。矩阵里位置本身就说明了，只有明细传 */
+  subtitle?: string;
   editable: boolean;
   onSave: (reason: string) => void;
   onClose: () => void;
@@ -48,6 +51,7 @@ export const CellReasonModal = ({
       <TailoringModalHeader
         icon={<MessageSquare className="size-5" />}
         title={t("review_tailoring.matrix.reason")}
+        subtitle={subtitle}
         onClose={onClose}
       />
       <div className="px-6">
@@ -66,7 +70,8 @@ export const CellReasonModal = ({
         />
       </div>
       {editable && (
-        <div className="flex items-center justify-end gap-2.5 px-6 pt-4 pb-5">
+        <div className="flex items-center gap-2.5 px-6 pt-4 pb-5">
+          <span className="mr-auto text-12 text-tertiary">{t("review_tailoring.matrix.reason_shortcut")}</span>
           <Button variant="secondary" size="xl" onClick={onClose}>
             {t("cancel")}
           </Button>

@@ -4,7 +4,7 @@ import { cn } from "@plane/utils";
 export type TDetailTab = "matrix" | "items" | "activity" | "comments";
 
 /**
- * Tab 条：左边四个 Tab（带计数徽章），右边是当前 Tab 自己的工具（矩阵的筛选、折叠、加轴）。
+ * Tab 条：左边四个 Tab（带计数徽章），右边是当前 Tab 自己的工具（矩阵的筛选 / 折叠 / 加轴，明细的产品筛选）。
  * 加评审 / 加产品从页头挪到这里 —— 它们是对矩阵的操作，跟着矩阵走。
  */
 export const DetailTabBar = ({

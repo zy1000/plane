@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
-import { Boxes, ChevronsDownUp, ChevronsUpDown, ListChecks, Plus } from "lucide-react";
+import { AlertTriangle, Boxes, ChevronsDownUp, ChevronsUpDown, ListChecks, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -13,7 +13,7 @@ import type {
   TSubmitReviewTailoringPayload,
 } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Loader } from "@plane/ui";
-import { copyUrlToClipboard } from "@plane/utils";
+import { cn, copyUrlToClipboard } from "@plane/utils";
 import { useReviewTailoringDetail } from "@/hooks/store/use-review-tailoring-detail";
 import { useReviewTailoringFeed } from "@/hooks/store/use-review-tailoring-feed";
 import { getTailoringError } from "@/hooks/store/use-review-tailorings";
@@ -108,6 +108,10 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   /** 矩阵的快速筛选：全部 / 裁剪 / 待补原因（只读时没有「待补原因」） */
   const [filter, setFilter] = useState<TMatrixFilter>("all");
+  /** 明细 Tab 按产品筛，挂在 Tab 条右上角 */
+  const [productFilter, setProductFilter] = useState("all");
+  /** 明细 Tab 只看待补原因，同样挂在 Tab 条右上角 */
+  const [onlyMissing, setOnlyMissing] = useState(false);
   /** 收起的阶段。默认全展开 —— 建表后第一次进来应该看得见全貌 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -223,6 +227,41 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
       : []),
   ];
 
+  const itemsTools = tab === "items" && (
+    <>
+      <select
+        value={productFilter}
+        onChange={(event) => setProductFilter(event.target.value)}
+        className="focus:border-accent-primary h-7 rounded border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
+      >
+        <option value="all">{t(`${I18N}.items.filter_all_products`)}</option>
+        {detail.products.map((product) => (
+          <option key={product.id} value={product.id}>
+            {product.name}
+          </option>
+        ))}
+      </select>
+      {/* 待补原因是明细里最要紧的一批行，给它一个常驻入口；和矩阵的同名筛选是一套口径 */}
+      {editable && (stats.missing > 0 || onlyMissing) && (
+        <button
+          type="button"
+          aria-pressed={onlyMissing}
+          className={cn(
+            "flex h-7 items-center gap-1.5 rounded-md border px-2 text-12 whitespace-nowrap transition-colors",
+            onlyMissing
+              ? "border-warning-strong bg-warning-subtle font-medium text-warning-primary"
+              : "border-subtle text-secondary hover:border-strong"
+          )}
+          onClick={() => setOnlyMissing((current) => !current)}
+        >
+          <AlertTriangle className="size-3.5" strokeWidth={2.4} />
+          {t(`${I18N}.detail.filter_missing`)}
+          <span className="tabular-nums">{stats.missing}</span>
+        </button>
+      )}
+    </>
+  );
+
   const matrixTools = tab === "matrix" && hasMatrix && (
     <>
       {(stats.cut > 0 || activeFilter !== "all") && (
@@ -289,7 +328,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         />
       </div>
 
-      <DetailTabBar tabs={tabs} active={tab} onChange={setTab} tools={matrixTools || undefined} />
+      <DetailTabBar tabs={tabs} active={tab} onChange={setTab} tools={matrixTools || itemsTools || undefined} />
 
       <div className="relative min-h-0 flex-1">
         <div className={editable && (dirtyIds.size > 0 || selectedCells.length > 0) ? "h-full overflow-auto pb-20" : "h-full overflow-auto"}>
@@ -346,7 +385,11 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
               <TailoringItemsTable
                 items={items}
                 products={detail.products}
+                productFilter={productFilter}
+                onlyMissing={onlyMissing}
                 editable={editable}
+                dirtyIds={dirtyIds}
+                onToggle={handleToggle}
                 onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
                 onBulkReason={store.setReasonForMany}
               />
