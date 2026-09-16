@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  TRollbackStageReviewPayload,
   TStageReviewActivity,
   TStageReviewAttachment,
   TStageReviewComment,
@@ -104,10 +105,14 @@ export const useStageReviewDetail = (
     [workspaceSlug, projectId, reviewId, runMutation]
   );
 
-  const rollback = useCallback(async () => {
-    if (!workspaceSlug || !projectId || !reviewId) return undefined;
-    return runMutation(() => service.rollback(workspaceSlug, projectId, reviewId));
-  }, [workspaceSlug, projectId, reviewId, runMutation]);
+  /** 退回一步。理由必填，只进轨迹 */
+  const rollback = useCallback(
+    async (payload: TRollbackStageReviewPayload) => {
+      if (!workspaceSlug || !projectId || !reviewId) return undefined;
+      return runMutation(() => service.rollback(workspaceSlug, projectId, reviewId, payload));
+    },
+    [workspaceSlug, projectId, reviewId, runMutation]
+  );
 
   const uploadAttachment = useCallback(
     async (file: File, onProgress?: (percentage: number) => void) => {

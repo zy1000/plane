@@ -15,19 +15,12 @@ const CURRENT_FILL: Record<EStageReviewStatus, string> = {
   [EStageReviewStatus.COMPLETED]: "bg-success-primary",
 };
 
-/** 免审完成的评审没进过审核中：那一段画成「跳过」，而不是绿勾 */
-const skippedStep = (status: EStageReviewStatus, result: EStageReviewResult | "") =>
-  status === EStageReviewStatus.COMPLETED && result === EStageReviewResult.WAIVED
-    ? EStageReviewStatus.IN_APPROVAL
-    : null;
-
 /**
  * 每一段右侧挂的一句话：走过的段写「哪天离开的」，当前段写「在等谁」。
  *
  * 日期从轨迹里取，只看状态记录（不通过是 field=result 的记录，不参与）：
- * 走过的段取「从它出发」那条记录（old_value）的时间 —— 免审从评审中直达已评审，
- * 按「下一步的进入时间」算会取不到；当前段是已评审时取「进入已评审」的时间。
- * 退回再前进会有多条，都取最近一条。
+ * 走过的段取「从它出发」那条记录（old_value）的时间；当前段是已评审时取「进入已评审」
+ * 的时间。退回再前进会有多条，都取最近一条。
  */
 export const useStepHints = (detail: TStageReviewDetail, activities: TStageReviewActivity[]) => {
   const { t } = useTranslation();
@@ -44,7 +37,6 @@ export const useStepHints = (detail: TStageReviewDetail, activities: TStageRevie
     keepLatest(leftAt, activity.old_value, activity.created_at);
   }
   const shortDate = (iso: string | undefined) => (iso ? format(new Date(iso), "MM-dd") : undefined);
-  const skipped = skippedStep(detail.status, detail.result);
 
   const currentHint = (() => {
     switch (detail.status) {
@@ -66,7 +58,6 @@ export const useStepHints = (detail: TStageReviewDetail, activities: TStageRevie
 
   return STAGE_REVIEW_STATUS_ORDER.map((step, index) => {
     if (step === detail.status) return currentHint;
-    if (step === skipped) return t(`${I18N}.detail.step_skipped_waived`);
     return index < STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) ? shortDate(leftAt.get(step)) : undefined;
   });
 };
@@ -75,8 +66,8 @@ export const useStepHints = (detail: TStageReviewDetail, activities: TStageRevie
  * 四段进度：每一步是一段实条 + 段名。它只**读**当前走到哪一步，点不动 —— 状态只能由
  * 底部那颗主按钮推进，把步骤做成可点的等于给了一个隐形的状态下拉框。
  *
- * 走过的段绿色打勾，当前段用状态色，没到的段灰色。两种由结论带来的特例：
- * 评审中且上次不通过，当前段红色；免审完成，审核中那段画成跳过（灰条 + 短横）。
+ * 走过的段绿色打勾，当前段用状态色，没到的段灰色。唯一由结论带来的特例：评审中且
+ * 上次不通过，当前段红色。
  */
 export const StageReviewStepper = ({
   status,
@@ -90,7 +81,6 @@ export const StageReviewStepper = ({
 }) => {
   const { t } = useTranslation();
   const currentIndex = STAGE_REVIEW_STATUS_ORDER.indexOf(status);
-  const skipped = skippedStep(status, result);
   const currentFill =
     status === EStageReviewStatus.IN_REVIEW && result === EStageReviewResult.REJECTED
       ? "bg-danger-primary"
@@ -99,8 +89,7 @@ export const StageReviewStepper = ({
   return (
     <div className="grid grid-cols-4 gap-2">
       {STAGE_REVIEW_STATUS_ORDER.map((step, index) => {
-        const isSkipped = step === skipped;
-        const isPast = index < currentIndex && !isSkipped;
+        const isPast = index < currentIndex;
         const isCurrent = index === currentIndex;
         const showCheck = isPast || (isCurrent && step === EStageReviewStatus.COMPLETED);
         const hint = hints[index];
@@ -113,19 +102,17 @@ export const StageReviewStepper = ({
               className={cn(
                 "flex min-w-0 items-center gap-1.5 text-13 whitespace-nowrap text-tertiary",
                 isPast && "text-secondary",
-                isSkipped && "text-placeholder",
                 isCurrent && "font-semibold text-primary"
               )}
             >
               <span
                 className={cn(
                   "grid size-4.5 shrink-0 place-items-center rounded-full border border-strong text-11 tabular-nums",
-                  isSkipped && "border-dashed",
                   isPast && "border-transparent bg-success-primary text-on-color",
                   isCurrent && cn("border-transparent text-on-color", currentFill)
                 )}
               >
-                {showCheck ? <Check className="size-2.5" strokeWidth={3.5} /> : isSkipped ? "–" : index + 1}
+                {showCheck ? <Check className="size-2.5" strokeWidth={3.5} /> : index + 1}
               </span>
               {t(`${I18N}.status.${step}`)}
               {hint && (

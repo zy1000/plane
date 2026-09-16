@@ -300,6 +300,7 @@ export const StageReviewList = observer(function StageReviewList({
         projectId={drawerProjectId}
         reviewId={drawerProjectId ? openReviewId : null}
         canManage={canManage}
+        currentUserId={currentUser?.id}
         showProjectCrumb={scopeKind === "product"}
         onClose={() => setOpenReviewId(null)}
         onUpdated={applyReview}

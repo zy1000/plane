@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
 import { Check, CircleX, ExternalLink, Info, MoveRight, Play, Send, Undo2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import type {
   TStageReview,
   TStageReviewActivity,
@@ -22,7 +24,10 @@ import useKeypress from "@/hooks/use-keypress";
 import { getStageReviewError } from "@/hooks/store/use-stage-reviews";
 import { useStageReviewDetail } from "@/hooks/store/use-stage-review-detail";
 import { StageReviewStatusBadge } from "../badges";
+import { RollbackStageReviewModal } from "../rollback-review-modal";
 import { SubmitStageReviewModal } from "../submit-review-modal";
+import type { TStageReviewActionGuard } from "./stage-review-action-guard";
+import { getStageReviewActionGuard } from "./stage-review-action-guard";
 import { StageReviewAttachments } from "./stage-review-attachments";
 import { StageReviewContent } from "./stage-review-content";
 import { StageReviewSidebar } from "./stage-review-sidebar";
@@ -37,12 +42,44 @@ const FOOT_PRIMARY = cn(FOOT_BUTTON, "bg-accent-primary text-on-color shadow-rai
 const FOOT_SUCCESS = cn(FOOT_BUTTON, "bg-success-primary text-on-color shadow-raised-100 hover:opacity-90");
 const FOOT_GHOST = cn(FOOT_BUTTON, "border border-strong bg-surface-1 text-secondary hover:bg-layer-2");
 
+/** 退回之后落到哪一步。已评审是终态，没有上一步可退（与后端 rollback 一致） */
+const previousStatusOf = (detail: TStageReviewDetail) =>
+  detail.status === EStageReviewStatus.COMPLETED
+    ? undefined
+    : STAGE_REVIEW_STATUS_ORDER[STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) - 1];
+
+type TTranslate = ReturnType<typeof useTranslation>["t"];
+
+/** 按钮被拦的原因。推进与退回在「不是本人」时文案不同，「没指定人」共用 */
+const blockedText = (t: TTranslate, action: "advance" | "rollback", guard: TStageReviewActionGuard) => {
+  if (guard.allowed) return "";
+  const isNotOwner = guard.reason === "not_leader" || guard.reason === "not_auditor";
+  const key = isNotOwner && action === "rollback" ? `rollback_${guard.reason}` : guard.reason;
+  return t(`${I18N}.actions.blocked_${key}`, { name: guard.ownerName || "—" });
+};
+
+/** 被拦的按钮包一层 Tooltip 说原因；disabled 的 button 收不到指针事件，所以套在 span 上 */
+const GuardedAction = ({ guard, text, children }: { guard: TStageReviewActionGuard; text: string; children: ReactNode }) =>
+  guard.allowed ? (
+    <>{children}</>
+  ) : (
+    <Tooltip tooltipContent={text}>
+      <span className="inline-flex">{children}</span>
+    </Tooltip>
+  );
+
 /**
  * 动作条左侧那句话。评审中且上次不通过时提醒整改后重提；已评审时从轨迹里找到完成那条，
- * 写成「已于某天由谁审核通过 / 免审完成」；其余按状态给固定提示。
+ * 写成「已于某天由谁审核通过」；其余按状态给固定提示。
  */
-const useFootHint = (detail: TStageReviewDetail, activities: TStageReviewActivity[]) => {
+const useFootHint = (
+  detail: TStageReviewDetail,
+  activities: TStageReviewActivity[],
+  advanceGuard: TStageReviewActionGuard
+) => {
   const { t } = useTranslation();
+  // 推进被拦（没指定人 / 不是本人）时，先说清楚该谁来做，比「提交时填写评审结果」这类提示更要紧
+  if (!advanceGuard.allowed) return blockedText(t, "advance", advanceGuard);
   if (detail.status === EStageReviewStatus.IN_REVIEW && detail.result === EStageReviewResult.REJECTED) {
     return t(`${I18N}.actions.hint_in_review_rejected`);
   }
@@ -51,17 +88,10 @@ const useFootHint = (detail: TStageReviewDetail, activities: TStageReviewActivit
     .reverse()
     .find((activity) => activity.field === "status" && activity.new_value === EStageReviewStatus.COMPLETED);
   if (!completion) return t(`${I18N}.actions.hint_completed`);
-  const key = detail.result === EStageReviewResult.WAIVED ? "completed_waived_by" : "completed_by";
-  return t(`${I18N}.actions.${key}`, {
+  return t(`${I18N}.actions.completed_by`, {
     date: renderFormattedDate(completion.created_at),
     name: completion.actor_detail?.display_name ?? "—",
   });
-};
-
-/** 提交审核成功后的提示按结论区分：不通过没有「提交」出去，免审直接完成了 */
-const SUBMIT_TOAST: Partial<Record<EStageReviewResult, string>> = {
-  [EStageReviewResult.REJECTED]: "rejected",
-  [EStageReviewResult.WAIVED]: "waived_completed",
 };
 
 /**
@@ -83,6 +113,7 @@ export const StageReviewDrawer = ({
   projectId,
   reviewId,
   canManage,
+  currentUserId,
   showProjectCrumb = false,
   onClose,
   onUpdated,
@@ -92,12 +123,15 @@ export const StageReviewDrawer = ({
   projectId: string;
   reviewId: string | null;
   canManage: boolean;
+  /** 推进 / 退回只认负责人、审核者本人，按钮要拿它判断能不能点 */
+  currentUserId: string | undefined;
   showProjectCrumb?: boolean;
   onClose: () => void;
   onUpdated: (review: TStageReview) => void;
 }) => {
   const { t } = useTranslation();
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
+  const [isRollbackOpen, setIsRollbackOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const {
     detail,
@@ -144,8 +178,15 @@ export const StageReviewDrawer = ({
   };
 
   const handleSubmitResult = async (payload: TSubmitStageReviewPayload) => {
-    const next = await run(() => advance(payload), SUBMIT_TOAST[payload.result] ?? "submitted");
+    // 不通过没有「提交」出去，状态留在评审中，提示要跟着换
+    const toastKey = payload.result === EStageReviewResult.REJECTED ? "rejected" : "submitted";
+    const next = await run(() => advance(payload), toastKey);
     if (next) setIsSubmitOpen(false);
+  };
+
+  const handleRollback = async (reason: string) => {
+    const next = await run(() => rollback({ reason }), "rolled_back");
+    if (next) setIsRollbackOpen(false);
   };
 
   const portalContainer = typeof document !== "undefined" ? document.getElementById("full-screen-portal") : null;
@@ -197,6 +238,7 @@ export const StageReviewDrawer = ({
                 comments={comments}
                 activities={activities}
                 canManage={canManage}
+                currentUserId={currentUserId}
                 showProjectCrumb={showProjectCrumb}
                 isMutating={isMutating}
                 titleDraft={titleDraft}
@@ -206,7 +248,7 @@ export const StageReviewDrawer = ({
                 onStart={() => void run(advance, "started")}
                 onOpenSubmit={() => setIsSubmitOpen(true)}
                 onApprove={() => void run(advance, "completed")}
-                onRollback={() => void run(rollback, "rolled_back")}
+                onRollback={() => setIsRollbackOpen(true)}
                 onUpload={(file, onProgress) => run(() => uploadAttachment(file, onProgress), "attachment_uploaded")}
                 onDownload={(assetId) => void downloadAttachment(assetId)}
                 onDeleteAttachment={(assetId) => run(() => deleteAttachment(assetId), "attachment_deleted")}
@@ -217,13 +259,22 @@ export const StageReviewDrawer = ({
             )}
 
             {detail && (
-              <SubmitStageReviewModal
-                isOpen={isSubmitOpen}
-                detail={detail}
-                isSubmitting={isMutating}
-                onClose={() => setIsSubmitOpen(false)}
-                onSubmit={handleSubmitResult}
-              />
+              <>
+                <SubmitStageReviewModal
+                  isOpen={isSubmitOpen}
+                  detail={detail}
+                  isSubmitting={isMutating}
+                  onClose={() => setIsSubmitOpen(false)}
+                  onSubmit={handleSubmitResult}
+                />
+                <RollbackStageReviewModal
+                  isOpen={isRollbackOpen}
+                  targetStatus={previousStatusOf(detail)}
+                  isSubmitting={isMutating}
+                  onClose={() => setIsRollbackOpen(false)}
+                  onSubmit={handleRollback}
+                />
+              </>
             )}
           </div>
         </Transition.Child>
@@ -242,6 +293,7 @@ type DrawerBodyProps = {
   comments: TStageReviewComment[];
   activities: TStageReviewActivity[];
   canManage: boolean;
+  currentUserId: string | undefined;
   showProjectCrumb: boolean;
   isMutating: boolean;
   titleDraft: string;
@@ -270,6 +322,7 @@ const DrawerBody = ({
   comments,
   activities,
   canManage,
+  currentUserId,
   showProjectCrumb,
   isMutating,
   titleDraft,
@@ -289,14 +342,13 @@ const DrawerBody = ({
 }: DrawerBodyProps) => {
   const { t } = useTranslation();
   const stepHints = useStepHints(detail, activities);
-  const footHint = useFootHint(detail, activities);
+  const guard = getStageReviewActionGuard(detail, currentUserId);
+  const footHint = useFootHint(detail, activities, guard.advance);
+  const advanceBlockedText = blockedText(t, "advance", guard.advance);
 
   const isCompleted = detail.status === EStageReviewStatus.COMPLETED;
   const isRejected = detail.status === EStageReviewStatus.IN_REVIEW && detail.result === EStageReviewResult.REJECTED;
-  // 已评审是终态，没有上一步可退（与后端 rollback 一致）
-  const previousStatus = isCompleted
-    ? undefined
-    : STAGE_REVIEW_STATUS_ORDER[STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) - 1];
+  const previousStatus = previousStatusOf(detail);
   // 已评审即定稿：字段与附件都改不了也退不回，要重做去裁剪表取消勾选后重新生成
   const editable = canManage && !isCompleted;
   const source = detail.parent_title
@@ -445,28 +497,56 @@ const DrawerBody = ({
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-2.5">
             {previousStatus && (
-              <button type="button" className={FOOT_GHOST} disabled={isMutating} onClick={onRollback}>
-                <Undo2 className="size-3.5" />
-                {t(`${I18N}.actions.rollback_plain`)}
-              </button>
+              <GuardedAction guard={guard.rollback} text={blockedText(t, "rollback", guard.rollback)}>
+                <button
+                  type="button"
+                  className={FOOT_GHOST}
+                  disabled={isMutating || !guard.rollback.allowed}
+                  onClick={onRollback}
+                >
+                  <Undo2 className="size-3.5" />
+                  {t(`${I18N}.actions.rollback_plain`)}
+                </button>
+              </GuardedAction>
             )}
             {detail.status === EStageReviewStatus.NOT_STARTED && (
-              <button type="button" className={FOOT_PRIMARY} disabled={isMutating} onClick={onStart}>
-                <Play className="size-3.5 fill-current" />
-                {t(`${I18N}.actions.start`)}
-              </button>
+              <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                <button
+                  type="button"
+                  className={FOOT_PRIMARY}
+                  disabled={isMutating || !guard.advance.allowed}
+                  onClick={onStart}
+                >
+                  <Play className="size-3.5 fill-current" />
+                  {t(`${I18N}.actions.start`)}
+                </button>
+              </GuardedAction>
             )}
             {detail.status === EStageReviewStatus.IN_REVIEW && (
-              <button type="button" className={FOOT_PRIMARY} disabled={isMutating} onClick={onOpenSubmit}>
-                <Send className="size-3.5" />
-                {t(`${I18N}.actions.submit_for_approval`)}
-              </button>
+              <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                <button
+                  type="button"
+                  className={FOOT_PRIMARY}
+                  disabled={isMutating || !guard.advance.allowed}
+                  onClick={onOpenSubmit}
+                >
+                  <Send className="size-3.5" />
+                  {t(`${I18N}.actions.submit_for_approval`)}
+                </button>
+              </GuardedAction>
             )}
             {detail.status === EStageReviewStatus.IN_APPROVAL && (
-              <button type="button" className={FOOT_SUCCESS} disabled={isMutating} onClick={onApprove}>
-                <Check className="size-3.5" strokeWidth={2.5} />
-                {t(`${I18N}.actions.approve`)}
-              </button>
+              <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                <button
+                  type="button"
+                  className={FOOT_SUCCESS}
+                  disabled={isMutating || !guard.advance.allowed}
+                  onClick={onApprove}
+                >
+                  <Check className="size-3.5" strokeWidth={2.5} />
+                  {t(`${I18N}.actions.approve`)}
+                </button>
+              </GuardedAction>
             )}
           </span>
         </div>

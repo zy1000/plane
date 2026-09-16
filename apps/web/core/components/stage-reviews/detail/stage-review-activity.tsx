@@ -1,215 +1,214 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import {
-  Activity,
-  AlignLeft,
-  ArrowRight,
-  CalendarDays,
-  CircleDot,
-  CircleX,
-  ClipboardCheck,
-  FilePlus2,
-  ListOrdered,
-  Package,
-  Paperclip,
-  Type,
-  UserRound,
-  UserRoundCheck,
-} from "lucide-react";
+import { ArrowRight, Check, Plus, Play, Send, Undo2, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TStageReviewActivity, TStageReviewDetail } from "@plane/types";
-import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { EStageReviewResult, EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
+import { cn } from "@plane/utils";
 import { HistoryTime } from "@/components/requirements/requirement-detail/requirement-history-timeline";
-import { StageReviewStatusIcon } from "../status-icon";
+import { StageReviewResultBadge, StageReviewStatusBadge } from "../badges";
+import type { TTimelineRowPosition } from "./stage-review-timeline-rail";
+import { TimelineRow } from "./stage-review-timeline-rail";
 
 const I18N = "stage_review";
 
-/** 轨迹记的是模型列名，展示要走人读的字段 key */
-const ACTIVITY_FIELD_I18N: Record<string, string> = {
-  description_html: "description",
+/** 行上下各 10px，节点 28px：圆心离行顶 24px */
+const MILESTONE_NODE_CENTER = 24;
+
+type TTone = "neutral" | "warning" | "accent" | "success" | "danger";
+
+const NODE_TONE: Record<TTone, string> = {
+  neutral: "bg-layer-3 text-secondary",
+  warning: "bg-warning-primary text-on-color",
+  accent: "bg-accent-primary text-on-color",
+  success: "bg-success-primary text-on-color",
+  danger: "bg-danger-primary text-on-color",
 };
 
-const FIELD_ICON: Record<string, LucideIcon> = {
-  status: CircleDot,
-  result: ClipboardCheck,
-  title: Type,
-  description_html: AlignLeft,
-  work_instruction: ListOrdered,
-  leader: UserRound,
-  auditor: UserRoundCheck,
-  start_date: CalendarDays,
-  end_date: CalendarDays,
-  attachment: Paperclip,
-  akf_code: Package,
-  production_quantity: Package,
-  product_config: Package,
-  baseline_archive_code: Package,
-  components: Package,
-  component_version: Package,
+const QUOTE_TONE: Record<"warning" | "danger", string> = {
+  warning: "border-warning-strong bg-warning-subtle text-warning-primary",
+  danger: "border-danger-strong bg-danger-subtle text-danger-primary",
 };
 
-/** 只记「改了」的长文本字段：时间线也只写「更新了描述」，同工作项 */
-const TEXT_ONLY_FIELDS = ["description_html", "work_instruction"];
-const MEMBER_FIELDS = ["leader", "auditor"];
-const DATE_FIELDS = ["start_date", "end_date"];
 const STATUSES = Object.values(EStageReviewStatus) as string[];
+const RESULTS = Object.values(EStageReviewResult) as string[];
+const asStatus = (value: unknown) =>
+  typeof value === "string" && STATUSES.includes(value) ? (value as EStageReviewStatus) : null;
+const asResult = (value: unknown) =>
+  typeof value === "string" && RESULTS.includes(value) ? (value as EStageReviewResult) : null;
+const asText = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
 
-/** 单条外壳：竖线 + 28px 图标方块 + 一行文字 + 相对时间，与工作项活动的一条同一个结构 */
-const RowShell = ({
+const PILL_CLASS = "rounded-md px-2 py-0.5 text-12";
+
+/** 状态节点外壳：彩色圆节点 + 一句 14px 的话 + 右侧时间，下面可挂一段引用（结论说明 / 退回理由） */
+const MilestoneShell = ({
+  position,
   icon: Icon,
-  iconClassName,
-  actor,
+  tone,
   at,
+  quote,
   children,
 }: {
+  position: TTimelineRowPosition;
   icon: LucideIcon;
-  iconClassName?: string;
-  actor?: string;
+  tone: TTone;
   at: string;
+  quote?: { label: string; text: string; tone: "warning" | "danger" } | null;
   children: ReactNode;
 }) => (
-  <li className="relative flex items-start gap-3 py-2">
-    <span className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
-    <span
-      className={cn(
-        "relative z-[3] grid size-7 shrink-0 place-items-center rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100",
-        iconClassName
-      )}
-    >
-      <Icon className="size-3.5" />
-    </span>
-    <div className="flex min-h-7 min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-13 text-secondary">
-      {actor && <span className="font-medium text-primary">{actor}</span>}
+  <TimelineRow
+    item={position.rail}
+    isFirst={position.isFirst}
+    isLast={position.isLast}
+    nodeCenter={MILESTONE_NODE_CENTER}
+    className="py-2.5"
+    node={
+      <span className={cn("grid size-7 place-items-center rounded-full shadow-[0_0_0_3px_var(--bg-surface-1)]", NODE_TONE[tone])}>
+        <Icon className="size-3.5" strokeWidth={2.4} />
+      </span>
+    }
+  >
+    <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 text-14 text-secondary">
       {children}
-      <HistoryTime value={at} className="ml-1" />
+      <HistoryTime value={at} className="ml-auto pl-2" />
     </div>
-  </li>
+    {quote && (
+      <p
+        className={cn(
+          "mt-1.5 max-w-[60ch] rounded-r-lg border-l-2 px-3 py-2 text-13 leading-relaxed break-words",
+          QUOTE_TONE[quote.tone]
+        )}
+      >
+        <b className="mr-1.5 font-semibold">{quote.label}</b>
+        {quote.text}
+      </p>
+    )}
+  </TimelineRow>
 );
 
-/** 句子里加粗的值；太长截断，悬停看全 */
-const Value = ({ children }: { children: string }) => (
-  <span className="inline-block max-w-[240px] truncate align-bottom font-medium text-primary" title={children}>
-    {children}
-  </span>
-);
-
-const StatusValue = ({ status }: { status: string | null }) => {
+const Actor = ({ activity }: { activity: TStageReviewActivity }) => {
   const { t } = useTranslation();
-  if (!status || !STATUSES.includes(status)) return <Value>{status ?? "—"}</Value>;
   return (
-    <span className="inline-flex items-center gap-1 font-medium text-primary">
-      <StageReviewStatusIcon status={status as EStageReviewStatus} className="size-3.5" />
-      {t(`${I18N}.status.${status}`)}
+    <span className="font-semibold text-primary">
+      {activity.actor_detail?.display_name ?? t(`${I18N}.activity.system`)}
     </span>
   );
 };
 
 /**
- * 一条轨迹翻成一句话，旧值与新值直接写进句子：「把负责人从 A 改为 B」。
- *
- * 老记录（这次改版前写的）没有旧值，退化成「把 X 设为 新值」；老的负责人 / 审核者记录
- * 值是「用户名 <邮箱>」且没有 identifier，只写「更新了负责人」不露那串值。
+ * 一条状态推进记录。动作看旧值 → 新值认，不靠后端写的文案：
+ * 未评审 → 评审中 = 开始；评审中 → 往后 = 提交审核（老数据里直达已评审的是免审完成）；
+ * 审核中 → 已评审 = 审核通过；往回走 = 退回。`field=result` 是「评审不通过」，状态原地不动。
  */
-const useActivitySentence = () => {
+export const StageReviewMilestoneRow = ({
+  activity,
+  position,
+}: {
+  activity: TStageReviewActivity;
+  position: TTimelineRowPosition;
+}) => {
   const { t } = useTranslation();
+  const shell = { position, at: activity.created_at };
 
-  const fieldLabel = (field: string) => {
-    const key = ACTIVITY_FIELD_I18N[field] ?? field;
-    return t(`${I18N}.fields.${key}`, { defaultValue: key });
-  };
-  const display = (field: string, value: string) => (DATE_FIELDS.includes(field) ? renderFormattedDate(value) : value);
+  if (activity.field === "result") {
+    const reason = asText(activity.extra?.conditional_reason);
+    const result = asResult(activity.new_value);
+    return (
+      <MilestoneShell
+        {...shell}
+        icon={X}
+        tone="danger"
+        quote={reason ? { label: t(`${I18N}.activity.conclusion_reason`), text: reason, tone: "danger" } : null}
+      >
+        <Actor activity={activity} />
+        <span>{t(`${I18N}.activity.rejected`)}</span>
+        {result && (
+          <StageReviewResultBadge result={result} className={PILL_CLASS} />
+        )}
+      </MilestoneShell>
+    );
+  }
 
-  return (activity: TStageReviewActivity): ReactNode => {
-    const field = activity.field ?? "";
+  const from = asStatus(activity.old_value);
+  const to = asStatus(activity.new_value);
+  const order = STAGE_REVIEW_STATUS_ORDER;
+  const toBadge = to && <StageReviewStatusBadge status={to} className={PILL_CLASS} />;
 
-    if (field === "status") {
+  // 退回：往回走一步，理由挂在下面
+  if (from && to && order.indexOf(to) < order.indexOf(from)) {
+    const reason = asText(activity.extra?.rollback_reason);
+    return (
+      <MilestoneShell
+        {...shell}
+        icon={Undo2}
+        tone="warning"
+        quote={reason ? { label: t(`${I18N}.activity.rollback_reason`), text: reason, tone: "warning" } : null}
+      >
+        <Actor activity={activity} />
+        <span>{t(`${I18N}.activity.rollback_to`)}</span>
+        {toBadge}
+      </MilestoneShell>
+    );
+  }
+
+  if (from === EStageReviewStatus.NOT_STARTED) {
+    return (
+      <MilestoneShell {...shell} icon={Play} tone="warning">
+        <Actor activity={activity} />
+        <span>{t(`${I18N}.activity.start`)}</span>
+        {toBadge}
+      </MilestoneShell>
+    );
+  }
+
+  if (from === EStageReviewStatus.IN_REVIEW) {
+    const result = asResult(activity.extra?.result);
+    // 老数据：免审曾经直达已评审
+    if (to === EStageReviewStatus.COMPLETED && result === EStageReviewResult.WAIVED) {
       return (
-        <>
-          <span>{activity.comment}</span>
-          <StatusValue status={activity.old_value} />
-          <ArrowRight className="size-3 text-placeholder" aria-hidden />
-          <StatusValue status={activity.new_value} />
-        </>
+        <MilestoneShell {...shell} icon={Check} tone="success">
+          <Actor activity={activity} />
+          <span>{t(`${I18N}.activity.waive_done`)}</span>
+          {toBadge}
+        </MilestoneShell>
       );
     }
+    const reason = asText(activity.extra?.conditional_reason);
+    return (
+      <MilestoneShell
+        {...shell}
+        icon={Send}
+        tone="accent"
+        quote={reason ? { label: t(`${I18N}.activity.conclusion_reason`), text: reason, tone: "warning" } : null}
+      >
+        <Actor activity={activity} />
+        <span>{t(`${I18N}.activity.${result ? "submit_with_result" : "submit"}`)}</span>
+        {result && (
+          <StageReviewResultBadge result={result} className={PILL_CLASS} />
+        )}
+        {result && <ArrowRight className="size-3 text-placeholder" aria-hidden />}
+        {toBadge}
+      </MilestoneShell>
+    );
+  }
 
-    if (field === "result") {
-      const reason = activity.extra?.conditional_reason;
-      return (
-        <>
-          <span className="font-medium text-danger-primary">{activity.comment}</span>
-          {typeof reason === "string" && reason && <span className="min-w-0 break-words">{reason}</span>}
-        </>
-      );
-    }
+  if (from === EStageReviewStatus.IN_APPROVAL && to === EStageReviewStatus.COMPLETED) {
+    return (
+      <MilestoneShell {...shell} icon={Check} tone="success">
+        <Actor activity={activity} />
+        <span>{t(`${I18N}.activity.approve`)}</span>
+        {toBadge}
+      </MilestoneShell>
+    );
+  }
 
-    if (field === "attachment") {
-      const isDeleted = activity.verb === "deleted";
-      const name = (isDeleted ? activity.old_value : activity.new_value) ?? "";
-      return (
-        <>
-          <span>{t(`${I18N}.activity.${isDeleted ? "attachment_deleted" : "attachment_created"}`)}</span>
-          {name && <Value>{name}</Value>}
-        </>
-      );
-    }
-
-    const label = fieldLabel(field);
-    const isLegacyMember =
-      MEMBER_FIELDS.includes(field) && !activity.old_identifier && !activity.new_identifier && activity.new_value;
-    if (TEXT_ONLY_FIELDS.includes(field) || isLegacyMember) {
-      return <span>{t(`${I18N}.activity.updated_plain`, { field: label })}</span>;
-    }
-
-    const { old_value: oldValue, new_value: newValue } = activity;
-    if (oldValue && newValue) {
-      return (
-        <>
-          <span>{t(`${I18N}.activity.change_from`, { field: label })}</span>
-          <Value>{display(field, oldValue)}</Value>
-          <span>{t(`${I18N}.activity.change_to`)}</span>
-          <Value>{display(field, newValue)}</Value>
-        </>
-      );
-    }
-    if (newValue) {
-      return (
-        <>
-          <span>{t(`${I18N}.activity.set_to`, { field: label })}</span>
-          <Value>{display(field, newValue)}</Value>
-        </>
-      );
-    }
-    if (oldValue) {
-      return (
-        <>
-          <span>{t(`${I18N}.activity.cleared`, { field: label })}</span>
-          <span>
-            （{t(`${I18N}.activity.was`)} <Value>{display(field, oldValue)}</Value>）
-          </span>
-        </>
-      );
-    }
-    return <span>{t(`${I18N}.activity.updated_plain`, { field: label })}</span>;
-  };
-};
-
-/** 时间线上的一条变更记录 */
-export const StageReviewActivityRow = ({ activity }: { activity: TStageReviewActivity }) => {
-  const { t } = useTranslation();
-  const buildSentence = useActivitySentence();
-  const isRejected = activity.field === "result" && activity.new_value === EStageReviewResult.REJECTED;
-
+  // 认不出的流转：照后端文案写
   return (
-    <RowShell
-      icon={isRejected ? CircleX : (FIELD_ICON[activity.field ?? ""] ?? Activity)}
-      iconClassName={isRejected ? "text-danger-primary" : undefined}
-      actor={activity.actor_detail?.display_name ?? t(`${I18N}.activity.system`)}
-      at={activity.created_at}
-    >
-      {buildSentence(activity)}
-    </RowShell>
+    <MilestoneShell {...shell} icon={Send} tone="neutral">
+      <Actor activity={activity} />
+      <span>{activity.comment}</span>
+      {toBadge}
+    </MilestoneShell>
   );
 };
 
@@ -217,11 +216,18 @@ export const StageReviewActivityRow = ({ activity }: { activity: TStageReviewAct
  * 时间线的第一条「创建」。裁剪表生成的评审后端没有创建记录，所以前端按 created_at 补；
  * 文案按来源分，不写人 —— 裁剪生成是签批生效触发的，写成某个人反而不对。
  */
-export const StageReviewCreatedRow = ({ detail }: { detail: TStageReviewDetail }) => {
+export const StageReviewCreatedRow = ({
+  detail,
+  position,
+}: {
+  detail: TStageReviewDetail;
+  position: TTimelineRowPosition;
+}) => {
   const { t } = useTranslation();
   return (
-    <RowShell icon={FilePlus2} at={detail.created_at}>
+    <MilestoneShell position={position} icon={Plus} tone="neutral" at={detail.created_at}>
       <span>{t(`${I18N}.activity.${detail.is_manual ? "created_manual" : "created_tailoring"}`)}</span>
-    </RowShell>
+      <StageReviewStatusBadge status={EStageReviewStatus.NOT_STARTED} className={PILL_CLASS} />
+    </MilestoneShell>
   );
 };

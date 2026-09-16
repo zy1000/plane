@@ -20,8 +20,16 @@ const RESULTS: EStageReviewResult[] = [
   EStageReviewResult.CONDITIONAL,
 ];
 
-/** 必须带结论说明的结论：条件通过写放行条件，不通过写整改要求 */
-const REASON_RESULTS: EStageReviewResult[] = [EStageReviewResult.CONDITIONAL, EStageReviewResult.REJECTED];
+/** 只有「通过」的说明是选填，其余三种都要写清楚为什么是这个结论 */
+const isReasonRequired = (result: EStageReviewResult | "") => Boolean(result) && result !== EStageReviewResult.PASSED;
+
+/** 说明框的提示语按结论换：问的不是同一件事 */
+const REASON_PLACEHOLDER: Record<EStageReviewResult, string> = {
+  [EStageReviewResult.PASSED]: "reason_placeholder_passed",
+  [EStageReviewResult.REJECTED]: "reason_placeholder_rejected",
+  [EStageReviewResult.WAIVED]: "reason_placeholder_waived",
+  [EStageReviewResult.CONDITIONAL]: "reason_placeholder_conditional",
+};
 
 const O_STAGE_KINDS: EStageReviewKind[] = [EStageReviewKind.O_STAGE_REVIEW, EStageReviewKind.O_STAGE_ACTIVITY];
 
@@ -61,9 +69,9 @@ const Option = ({
  * 提交审核弹窗。
  *
  * 规则都在这一屏里：**评审结果是提交的门槛**（不选就点不动主按钮）；**结论决定落点**
- * —— 通过 / 条件通过进审核中，不通过留在评审中，免审直接完成，副标题与主按钮跟着结论
- * 说清楚点下去会发生什么；条件通过与不通过要写结论说明；**生产方式与出货评估只在 O 阶段
- * 的两种类型上出现**，出现了就必填。前后端两侧同一套判断，后端那份才是规则本身
+ * —— 不通过留在评审中，其余（通过 / 免审 / 条件通过）都进审核中，副标题与主按钮跟着结论
+ * 说清楚点下去会发生什么；**结论说明常显**，除「通过」外都必填；**生产方式与出货评估只在
+ * O 阶段的两种类型上出现**，出现了就必填。前后端两侧同一套判断，后端那份才是规则本身
  * （utils/stage_review.py）。
  */
 export const SubmitStageReviewModal = ({
@@ -102,7 +110,7 @@ export const SubmitStageReviewModal = ({
     setReason(option === detail.result ? detail.conditional_reason : "");
   };
 
-  const needsReason = Boolean(result) && REASON_RESULTS.includes(result as EStageReviewResult);
+  const needsReason = isReasonRequired(result);
   const canSubmit =
     Boolean(result) &&
     (!needsReason || reason.trim().length > 0) &&
@@ -111,7 +119,6 @@ export const SubmitStageReviewModal = ({
   const effect = (() => {
     if (!result) return t(`${I18N}.submit.description`);
     if (result === EStageReviewResult.REJECTED) return t(`${I18N}.submit.effect_rejected`);
-    if (result === EStageReviewResult.WAIVED) return t(`${I18N}.submit.effect_waived`);
     return detail.auditor_detail
       ? t(`${I18N}.submit.effect_approval`, { auditor: detail.auditor_detail.display_name })
       : t(`${I18N}.submit.effect_approval_no_auditor`);
@@ -120,9 +127,7 @@ export const SubmitStageReviewModal = ({
   const confirmLabel =
     result === EStageReviewResult.REJECTED
       ? t(`${I18N}.submit.confirm_rejected`)
-      : result === EStageReviewResult.WAIVED
-        ? t(`${I18N}.submit.confirm_waived`)
-        : t(`${I18N}.actions.submit_for_approval`);
+      : t(`${I18N}.actions.submit_for_approval`);
 
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
@@ -158,27 +163,29 @@ export const SubmitStageReviewModal = ({
           </div>
         </div>
 
-        {needsReason && (
-          <div>
-            <label className="mb-2 block text-12 font-medium text-primary">
-              {t(`${I18N}.submit.reason`)}
+        <div>
+          <label className="mb-2 block text-12 font-medium text-primary">
+            {t(`${I18N}.submit.reason`)}
+            {needsReason ? (
               <span className="ml-0.5 text-danger-primary">*</span>
-            </label>
-            <textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder={
-                result === EStageReviewResult.REJECTED
-                  ? t(`${I18N}.submit.reason_placeholder_rejected`)
-                  : t(`${I18N}.submit.reason_placeholder_conditional`)
-              }
-              className={cn(
-                "min-h-18 w-full rounded-lg border border-subtle bg-surface-1 px-3 py-2.5 text-13 leading-relaxed",
-                "text-primary placeholder:text-tertiary focus:border-accent-strong focus:outline-none"
-              )}
-            />
-          </div>
-        )}
+            ) : (
+              <span className="ml-1 font-normal text-tertiary">{t(`${I18N}.submit.reason_optional`)}</span>
+            )}
+          </label>
+          <textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={
+              result
+                ? t(`${I18N}.submit.${REASON_PLACEHOLDER[result]}`)
+                : t(`${I18N}.submit.reason_placeholder`)
+            }
+            className={cn(
+              "min-h-18 w-full rounded-lg border border-subtle bg-surface-1 px-3 py-2.5 text-13 leading-relaxed",
+              "text-primary placeholder:text-tertiary focus:border-accent-strong focus:outline-none"
+            )}
+          />
+        </div>
 
         {isOStage && (
           <>
@@ -223,7 +230,7 @@ export const SubmitStageReviewModal = ({
           onClick={() =>
             onSubmit({
               result: result as EStageReviewResult,
-              conditional_reason: needsReason ? reason.trim() : "",
+              conditional_reason: reason.trim(),
               production_mode: isOStage ? productionMode : "",
               shipment_assessment: isOStage ? shipment : "",
             })

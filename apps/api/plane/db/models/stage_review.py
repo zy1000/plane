@@ -152,7 +152,7 @@ class StageReviewStatus(models.TextChoices):
 class StageReviewResult(models.TextChoices):
     """评审结论。提交审核时必填，空串表示还没有结论。
 
-    结论决定提交后的落点：通过 / 条件通过进审核中，不通过留在评审中，免审直接已评审
+    结论决定提交后的落点：不通过留在评审中，其余（通过 / 免审 / 条件通过）都进审核中
     （见 ``utils/stage_review.py`` 的 ``SUBMIT_TARGET``）。
     """
 
@@ -497,10 +497,17 @@ class StageReview(ProjectBaseModel):
         validate_node_kind(self)
         validate_kind_stage(self)
         if (
-            self.result in (StageReviewResult.CONDITIONAL, StageReviewResult.REJECTED)
+            self.result
+            in (
+                StageReviewResult.REJECTED,
+                StageReviewResult.WAIVED,
+                StageReviewResult.CONDITIONAL,
+            )
             and not self.conditional_reason
         ):
-            raise ValidationError({"conditional_reason": "条件通过 / 不通过必须填写结论说明"})
+            raise ValidationError(
+                {"conditional_reason": "不通过 / 免审 / 条件通过必须填写结论说明"}
+            )
         if self.start_date and self.end_date and self.start_date > self.end_date:
             raise ValidationError({"end_date": "结束日期不能早于开始日期"})
         # O 阶段字段只能出现在对应类型上，否则数据一乱就分不清是历史遗留还是填错了

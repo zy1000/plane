@@ -200,21 +200,22 @@ export const StageReviewSidebar = ({
             <span className="text-placeholder">{t(`${I18N}.detail.result_pending`)}</span>
           )}
         </Row>
-        {/* 结论说明：条件通过写放行条件（琥珀），不通过写整改要求（红） */}
-        {(detail.result === EStageReviewResult.CONDITIONAL || detail.result === EStageReviewResult.REJECTED) &&
-          detail.conditional_reason && (
-            <p
-              className={cn(
-                "mt-1.5 rounded-r-lg border-l-2 px-2.5 py-2 text-12 leading-relaxed",
-                detail.result === EStageReviewResult.REJECTED
-                  ? "border-danger-strong bg-danger-subtle text-danger-primary"
-                  : "border-warning-strong bg-warning-subtle text-warning-primary"
-              )}
-            >
-              <b className="block font-semibold">{t(`${I18N}.fields.conditional_reason`)}</b>
-              {detail.conditional_reason}
-            </p>
-          )}
+        {/* 结论说明：四种结论都可能有（通过是选填），不通过标红、条件通过标琥珀，其余中性 */}
+        {detail.conditional_reason && (
+          <p
+            className={cn(
+              "mt-1.5 rounded-r-lg border-l-2 px-2.5 py-2 text-12 leading-relaxed",
+              "border-subtle bg-layer-2 text-secondary",
+              detail.result === EStageReviewResult.REJECTED &&
+                "border-danger-strong bg-danger-subtle text-danger-primary",
+              detail.result === EStageReviewResult.CONDITIONAL &&
+                "border-warning-strong bg-warning-subtle text-warning-primary"
+            )}
+          >
+            <b className="block font-semibold">{t(`${I18N}.fields.conditional_reason`)}</b>
+            {detail.conditional_reason}
+          </p>
+        )}
         {isOStage && detail.production_mode && (
           <Row icon={Layers} label={t(`${I18N}.submit.production_mode`)}>
             {t(`${I18N}.production_mode.${detail.production_mode}`)}

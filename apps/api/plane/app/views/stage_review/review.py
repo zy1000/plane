@@ -26,6 +26,7 @@ from plane.app.serializers.stage_review import (
     StageReviewCreateSerializer,
     StageReviewDetailSerializer,
     StageReviewListSerializer,
+    StageReviewRollbackSerializer,
     StageReviewSubmitSerializer,
     StageReviewUpdateSerializer,
 )
@@ -76,13 +77,20 @@ CONFLICT_CODES = {
     "STAGE_REVIEW_FROM_TAILORING_UNDELETABLE",
 }
 
+#: 「不是这一步的主人」：有管理权限但不是负责人 / 审核者本人，回 403
+FORBIDDEN_CODES = {
+    "STAGE_REVIEW_NOT_LEADER",
+    "STAGE_REVIEW_NOT_AUDITOR",
+}
+
 
 def stage_review_error_response(exc):
-    http_status = (
-        status.HTTP_409_CONFLICT
-        if exc.code in CONFLICT_CODES
-        else status.HTTP_400_BAD_REQUEST
-    )
+    if exc.code in CONFLICT_CODES:
+        http_status = status.HTTP_409_CONFLICT
+    elif exc.code in FORBIDDEN_CODES:
+        http_status = status.HTTP_403_FORBIDDEN
+    else:
+        http_status = status.HTTP_400_BAD_REQUEST
     return Response(
         {"error": exc.message, "code": exc.code, **exc.detail}, status=http_status
     )
@@ -391,13 +399,17 @@ class StageReviewViewSet(BaseViewSet):
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
     def rollback(self, request, slug, project_id, pk):
-        """退回上一步。只回一步。"""
+        """退回上一步。只回一步，且必须带理由。"""
+        serializer = StageReviewRollbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
                 review = self._locked(pk)
                 if review is None:
                     return self._not_found()
-                rollback_review(review, actor=request.user)
+                rollback_review(
+                    review, actor=request.user, reason=serializer.validated_data["reason"]
+                )
         except StageReviewError as exc:
             return stage_review_error_response(exc)
         return self._detail_response(pk)

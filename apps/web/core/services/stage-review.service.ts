@@ -2,6 +2,7 @@ import type {
   TCreateStageReviewPayload,
   TProductStageReviewsResponse,
   TFileSignedURLResponse,
+  TRollbackStageReviewPayload,
   TStageReview,
   TStageReviewActivity,
   TStageReviewAttachment,
@@ -127,9 +128,14 @@ export class StageReviewService extends APIService {
       });
   }
 
-  /** 退回上一步。只回一步 */
-  async rollback(workspaceSlug: string, projectId: string, reviewId: string): Promise<TStageReviewDetail> {
-    return this.post(`${this.base(workspaceSlug, projectId)}/${reviewId}/rollback/`, {})
+  /** 退回上一步。只回一步，且必须带理由 */
+  async rollback(
+    workspaceSlug: string,
+    projectId: string,
+    reviewId: string,
+    payload: TRollbackStageReviewPayload
+  ): Promise<TStageReviewDetail> {
+    return this.post(`${this.base(workspaceSlug, projectId)}/${reviewId}/rollback/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

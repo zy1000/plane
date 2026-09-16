@@ -234,9 +234,17 @@ export type TUpdateStageReviewPayload = Partial<{
 }>;
 
 /**
- * 提交审核时的结论。条件通过与不通过必须带结论说明（conditional_reason），O 阶段必须带
- * 生产方式与出货评估。落点由结论决定：不通过留在评审中，免审直接已评审，其余进审核中。
+ * 提交审核时的结论。除「通过」外都必须带结论说明（conditional_reason），O 阶段必须带
+ * 生产方式与出货评估。落点由结论决定：不通过留在评审中，其余进审核中。
  */
+/**
+ * 退回上一步的理由，必填。它只进轨迹（`extra.rollback_reason`），不落在评审字段上 ——
+ * 一条评审可以被退回多次，每次的理由都属于那一次事件。与结论说明不是同一项。
+ */
+export type TRollbackStageReviewPayload = {
+  reason: string;
+};
+
 export type TSubmitStageReviewPayload = {
   result: EStageReviewResult;
   conditional_reason?: string;

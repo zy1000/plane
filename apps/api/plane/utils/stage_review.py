@@ -5,13 +5,16 @@
 
 1. **状态只能顺着走。** ``未评审 → 评审中 → 审核中 → 已评审`` 每一步都是一个显式
    动作，没有「直接改状态」的写入口 —— 前端也就没有状态下拉框。唯一由结论决定落点
-   的是「提交审核」：**不通过留在评审中**（整改后再提），**免审直接已评审**（不经
-   审核），通过 / 条件通过才进审核中。退回只回一步。**已评审是终态**：不能退回，
+   的是「提交审核」：**不通过留在评审中**（整改后再提），其余结论（通过 / 免审 /
+   条件通过）一律进审核中 —— 免审免的是评审本身，不是审核。退回只回一步。**已评审是终态**：不能退回，
    内容字段与附件也不能再改（评论仍开放）；点错了只能去裁剪表取消勾选、签批生效删掉
    后重新生成。这样「谁在什么时候把它推到哪一步」在 ``StageReviewActivity`` 里是一条
-   连续的线。
+   连续的线。**每一步由这一步的主人推进和退回**（``_assert_step_owner``）：未评审 / 评审中
+   归负责人，审核中归审核者；主人没指定就不能动，也不允许任何人代推 —— 管理权限只决定
+   能不能改字段（包括指定负责人 / 审核者），不决定能不能替人签字。提交审核前还必须已经
+   指定审核者，否则会停在一个没人能推的审核中。
 2. **结论在提交审核那一刻定稿。** ``result`` 不是随便改的字段：它只在 ``advance()``
-   里写入，条件通过与不通过必须带结论说明，O 阶段的两种类型必须同时给生产方式与出货
+   里写入，除通过外的结论都必须带结论说明，O 阶段的两种类型必须同时给生产方式与出货
    评估。校验集中在 ``_validate_result``，模型的 ``clean()`` 只做兜底。
 3. **评审与评审活动一视同仁。** 两者是同一张表的两行，父评审**不汇总**子活动的结论
    （产品决策）—— 所以这里没有任何「子活动没评完就不许提交父评审」的联动，各推各的。
@@ -67,16 +70,20 @@ ADVANCE_VERB = {
     StageReviewStatus.IN_APPROVAL: "审核通过",
 }
 
-#: 「提交审核」这一跳由结论决定落点：不通过留在原地整改，免审直达完成，其余进审核中
+#: 「提交审核」这一跳由结论决定落点：不通过留在原地整改，其余一律进审核中
 SUBMIT_TARGET = {
     StageReviewResult.REJECTED: StageReviewStatus.IN_REVIEW,
-    StageReviewResult.WAIVED: StageReviewStatus.COMPLETED,
 }
 REJECT_VERB = "评审不通过"
-WAIVE_VERB = "免审完成"
+ROLLBACK_VERB = "退回"
 
-#: 必须带结论说明的结论：条件通过要写放行条件，不通过要写整改什么
-REASON_REQUIRED_RESULTS = (StageReviewResult.CONDITIONAL, StageReviewResult.REJECTED)
+#: 必须带结论说明的结论：不通过要写整改什么，免审要写为什么免，条件通过要写放行条件。
+#: 只有「通过」可以不写。
+REASON_REQUIRED_RESULTS = (
+    StageReviewResult.REJECTED,
+    StageReviewResult.WAIVED,
+    StageReviewResult.CONDITIONAL,
+)
 
 
 def write_activity(
@@ -118,6 +125,51 @@ def write_activity(
     )
 
 
+#: 每个状态由谁推进 / 退回。已评审是终态，不在表里（由 ALREADY_COMPLETED / LOCKED 挡）
+STEP_OWNER_FIELD = {
+    StageReviewStatus.NOT_STARTED: "leader",
+    StageReviewStatus.IN_REVIEW: "leader",
+    StageReviewStatus.IN_APPROVAL: "auditor",
+}
+
+#: 主人字段 → (没指定的错误码, 不是本人的错误码)
+_OWNER_ERRORS = {
+    "leader": ("STAGE_REVIEW_LEADER_REQUIRED", "STAGE_REVIEW_NOT_LEADER"),
+    "auditor": ("STAGE_REVIEW_AUDITOR_REQUIRED", "STAGE_REVIEW_NOT_AUDITOR"),
+}
+
+_OWNER_MESSAGES = {
+    "STAGE_REVIEW_LEADER_REQUIRED": "请先指定负责人",
+    "STAGE_REVIEW_AUDITOR_REQUIRED": "请先指定审核者",
+    "STAGE_REVIEW_NOT_LEADER": "只有负责人能推进或退回这一步",
+    "STAGE_REVIEW_NOT_AUDITOR": "只有审核者能审核或退回这一步",
+}
+
+
+def _assert_owner(review, actor, field):
+    """``field`` 上的人必须已指定，且就是 ``actor`` 本人。口径同裁剪表签批：只认身份，不认权限。"""
+    required_code, not_owner_code = _OWNER_ERRORS[field]
+    owner_id = getattr(review, f"{field}_id")
+    if owner_id is None:
+        raise StageReviewError(
+            _OWNER_MESSAGES[required_code], code=required_code, detail={"field": field}
+        )
+    if owner_id != actor.id:
+        owner = getattr(review, field)
+        raise StageReviewError(
+            _OWNER_MESSAGES[not_owner_code],
+            code=not_owner_code,
+            detail={"field": field, "owner": owner.display_name if owner else ""},
+        )
+
+
+def _assert_step_owner(review, actor):
+    """当前这一步的主人才能推进或退回（见 ``STEP_OWNER_FIELD``）。"""
+    field = STEP_OWNER_FIELD.get(review.status)
+    if field:
+        _assert_owner(review, actor, field)
+
+
 def _validated(review):
     """跑模型校验，把 Django 的 ValidationError 翻成带错误码的领域异常。
 
@@ -152,15 +204,12 @@ def _validate_result(review, payload):
     reason = (payload.get("conditional_reason") or "").strip()
     if result in REASON_REQUIRED_RESULTS and not reason:
         raise StageReviewError(
-            "条件通过 / 不通过必须填写结论说明",
+            "不通过 / 免审 / 条件通过必须填写结论说明",
             code="STAGE_REVIEW_CONDITIONAL_REASON_REQUIRED",
             detail={"field": "conditional_reason"},
         )
-    # 换成不需要说明的结论时把上一次的说明清掉，免得详情页挂着一段对不上的话
-    fields = {
-        "result": result,
-        "conditional_reason": reason if result in REASON_REQUIRED_RESULTS else "",
-    }
+    # 通过也可以带说明，直接存提交上来的内容
+    fields = {"result": result, "conditional_reason": reason}
 
     production_mode = payload.get("production_mode") or ""
     shipment_assessment = payload.get("shipment_assessment") or ""
@@ -195,11 +244,20 @@ def advance(review, *, actor, payload=None):
 
     「提交审核」（评审中那一跳）顺带把结论写进去 —— 结论与「提交」是同一个动作的两
     面，分成两个接口会出现「提交了但没结论」的中间态。落点由结论决定（``SUBMIT_TARGET``）：
-    不通过**不推进**，只记下结论与说明；免审直接已评审；其余进审核中。
+    不通过**不推进**，只记下结论与说明；其余结论都进审核中。
     """
     if review.status not in NEXT_STATUS:
         raise StageReviewError(
             "已评审的评审不能再往前推进", code="STAGE_REVIEW_ALREADY_COMPLETED"
+        )
+
+    _assert_step_owner(review, actor)
+    if review.status == StageReviewStatus.IN_REVIEW and review.auditor_id is None:
+        # 不区分结论统一要求：否则通过后会停在一个没人能推的审核中
+        raise StageReviewError(
+            _OWNER_MESSAGES["STAGE_REVIEW_AUDITOR_REQUIRED"],
+            code="STAGE_REVIEW_AUDITOR_REQUIRED",
+            detail={"field": "auditor"},
         )
 
     old_status = review.status
@@ -234,7 +292,6 @@ def advance(review, *, actor, payload=None):
     review.status = new_status
     review.save(update_fields=[*update_fields, "status"])
 
-    is_waived = old_status == StageReviewStatus.IN_REVIEW and review.result == StageReviewResult.WAIVED
     write_activity(
         review,
         actor=actor,
@@ -242,8 +299,14 @@ def advance(review, *, actor, payload=None):
         field="status",
         old_value=old_status,
         new_value=new_status,
-        comment=WAIVE_VERB if is_waived else ADVANCE_VERB[old_status],
-        extra={"result": review.result} if review.result else None,
+        comment=ADVANCE_VERB[old_status],
+        # 结论说明随「提交审核」这次事件一起记下：之后退回重提会覆盖评审上的字段，
+        # 活动时间线要能看到每一次提交当时写的是什么
+        extra=(
+            {"result": review.result, "conditional_reason": review.conditional_reason}
+            if review.result
+            else None
+        ),
     )
     return review
 
@@ -256,8 +319,12 @@ def assert_not_locked(review):
         )
 
 
-def rollback(review, *, actor):
-    """退回上一步。只回一步，且不清结论 —— 退回多半是为了改结论再提一次。
+def rollback(review, *, actor, reason=""):
+    """退回上一步，**必须写明理由**。只回一步，且不清结论 —— 退回多半是为了改结论再提一次。
+
+    理由是**事件属性**：同一条评审可以被退回多次，每次原因不一样，所以它落在轨迹那条记录的
+    ``extra`` 里单独一项，既不占评审的字段，也不与结论说明（``conditional_reason``）共用 ——
+    那一项说的是「这次评审的结论为什么是它」，跟「为什么退回去重来」不是一回事。
 
     已评审不能退回（``assert_not_locked``），所以只剩审核中 → 评审中、评审中 → 未评审。
     """
@@ -265,6 +332,15 @@ def rollback(review, *, actor):
     if review.status not in PREVIOUS_STATUS:
         raise StageReviewError(
             "未评审的评审没有上一步可退", code="STAGE_REVIEW_NO_PREVIOUS_STATUS"
+        )
+    _assert_step_owner(review, actor)
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise StageReviewError(
+            "退回必须填写理由",
+            code="STAGE_REVIEW_ROLLBACK_REASON_REQUIRED",
+            detail={"field": "reason"},
         )
 
     old_status = review.status
@@ -289,7 +365,8 @@ def rollback(review, *, actor):
         field="status",
         old_value=old_status,
         new_value=new_status,
-        comment="退回",
+        comment=ROLLBACK_VERB,
+        extra={"rollback_reason": reason},
     )
     return review
 

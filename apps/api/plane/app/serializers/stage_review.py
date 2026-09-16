@@ -251,6 +251,12 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
         ]
 
 
+class StageReviewRollbackSerializer(serializers.Serializer):
+    """退回上一步时的理由。非空判断同样下沉到 utils，这里只管类型。"""
+
+    reason = serializers.CharField(allow_blank=True, default="")
+
+
 class StageReviewSubmitSerializer(serializers.Serializer):
     """提交审核时的结论。必填与否按 kind 判，规则在 utils 里。"""
 
