@@ -601,3 +601,30 @@ def test_case_activity(
     except Exception as exc:  # noqa: BLE001
         log_exception(exc)
         return
+
+
+@shared_task
+def test_case_bulk_update_activity(items, actor_id, epoch):
+    """批量改属性后逐条记活动：一个任务处理整批，避免上千条用例各派一个任务。
+
+    items: [{"case_id", "requested_data", "current_instance"}]，两个 data 都是 JSON 字符串。
+    """
+    try:
+        activities: list[TestCaseActivity] = []
+        for item in items:
+            case_id = item.get("case_id")
+            if not case_id or not is_valid_uuid(str(case_id)):
+                continue
+            update_case_activity(
+                requested_data=item.get("requested_data"),
+                current_instance=item.get("current_instance"),
+                case_id=case_id,
+                actor_id=actor_id,
+                activities=activities,
+                epoch=epoch,
+            )
+        if activities:
+            TestCaseActivity.objects.bulk_create(activities, batch_size=500)
+    except Exception as exc:  # noqa: BLE001
+        log_exception(exc)
+        return

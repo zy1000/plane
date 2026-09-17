@@ -24,6 +24,10 @@ from plane.app.views.qa.case import (
     CaseLabelAPIView,
     CaseModuleView,
 )
+from plane.app.views.qa.case_bulk import (
+    CaseBulkUpdateAPIView,
+    TemplateCaseBulkUpdateAPIView,
+)
 from plane.app.views.qa.case_requirement import (
     CaseLinkableRequirementAPIView,
     CaseRequirementAPIView,
@@ -132,6 +136,11 @@ urlpatterns = [
         CaseAPIView.as_view(),
         name="test-case",
     ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/bulk-update/",
+        CaseBulkUpdateAPIView.as_view(),
+        name="test-case-bulk-update",
+    ),
     # 用例侧的需求关联。项目作用域（而非 workspace 级的 CaseAPI）是为了吃现成的
     # QA_CASE_* 权限 —— 另一扇门在产品侧要 can_edit_product_requirements，
     # 这边裸奔就成了绕过口。见 views/qa/case_requirement.py
@@ -189,6 +198,11 @@ urlpatterns = [
         "workspaces/<str:slug>/test/template-case/",
         TemplateCaseAPIView.as_view(),
         name="test-template-case",
+    ),
+    path(
+        "workspaces/<str:slug>/test/template-case/bulk-update/",
+        TemplateCaseBulkUpdateAPIView.as_view(),
+        name="test-template-case-bulk-update",
     ),
     path(
         "workspaces/<str:slug>/test/template-case/import/",

@@ -85,6 +85,8 @@ type TCasesTableProps = {
   renderUpdatedAt: (value?: string) => ReactNode;
   selectedCaseIds: string[];
   setColumnWidth: (key: string, width: number) => void;
+  /** 批量修改后短暂高亮的格子：行 id × 列 key */
+  flashedCells?: { ids: Set<string>; columns: Set<TCaseDisplayPropertyKey> } | null;
 };
 
 const ResizableHead = ({ children, className, hostSelect = false, minWidth = 80, onResize, style }: TResizableHeadProps) => {
@@ -151,6 +153,7 @@ export const CasesTable = ({
   renderUpdatedAt,
   selectedCaseIds,
   setColumnWidth,
+  flashedCells = null,
 }: TCasesTableProps) => {
   const selectedKeySet = useMemo(() => new Set(selectedCaseIds.map((id) => String(id))), [selectedCaseIds]);
   const currentPageIds = useMemo(() => cases.map((item) => String(item.id)), [cases]);
@@ -180,10 +183,11 @@ export const CasesTable = ({
 
   const isColumnVisible = (key: keyof TCaseDisplayProperties) => displayProperties?.[key] ?? true;
   const selectHost = SELECT_HOST_ORDER.find((key) => isColumnVisible(key)) ?? null;
-  const hostCellClass = (key: TCaseDisplayPropertyKey) =>
+  const hostCellClass = (key: TCaseDisplayPropertyKey, recordId?: string) =>
     cn(
-      "relative h-12 border-r border-b border-subtle py-0",
-      selectHost === key ? SELECT_HOST_PAD_CLASS : "px-page-x"
+      "relative h-12 border-r border-b border-subtle py-0 transition-colors duration-700",
+      selectHost === key ? SELECT_HOST_PAD_CLASS : "px-page-x",
+      recordId && flashedCells?.ids.has(recordId) && flashedCells.columns.has(key) && "bg-success-subtle"
     );
 
   const renderHoverSelect = ({
@@ -426,13 +430,13 @@ export const CasesTable = ({
                 </TableCell>
               )}
               {isColumnVisible("type") && (
-                <TableCell className={hostCellClass("type")} style={getWidthStyle("type", 110)}>
+                <TableCell className={hostCellClass("type", recordId)} style={getWidthStyle("type", 110)}>
                   {renderRowSelect("type", recordId)}
                   {renderTypeTag(record.type)}
                 </TableCell>
               )}
               {isColumnVisible("priority") && (
-                <TableCell className={hostCellClass("priority")} style={getWidthStyle("priority", 100)}>
+                <TableCell className={hostCellClass("priority", recordId)} style={getWidthStyle("priority", 100)}>
                   {renderRowSelect("priority", recordId)}
                   {renderPriorityTag(record.priority)}
                 </TableCell>
@@ -454,7 +458,7 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("assignee") && (
-                <TableCell className={hostCellClass("assignee")} style={getWidthStyle("assignee", 150)}>
+                <TableCell className={hostCellClass("assignee", recordId)} style={getWidthStyle("assignee", 150)}>
                   {renderRowSelect("assignee", recordId)}
                   {record.assignee?.id ? (
                     <MemberDropdown
@@ -477,7 +481,7 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("labels") && (
-                <TableCell className={hostCellClass("labels")} style={getWidthStyle("labels", 130)}>
+                <TableCell className={hostCellClass("labels", recordId)} style={getWidthStyle("labels", 130)}>
                   {renderRowSelect("labels", recordId)}
                   {renderLabels(record.labels)}
                 </TableCell>

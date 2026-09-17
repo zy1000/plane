@@ -761,3 +761,40 @@ class ReviewCaseRecordsSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewRecord
         fields = "__all__"
+
+
+class CaseBulkUpdateSerializer(serializers.Serializer):
+    """批量改用例属性的请求体。
+
+    属性字段「出现即修改」，不出现就保持不变；assignee 传 null 表示清空维护人。
+    标签按加减语义：add_labels 给每条用例加上，remove_labels 从每条用例移除，不覆盖其余标签。
+    """
+
+    cases_id = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+    assignee = serializers.UUIDField(required=False, allow_null=True)
+    priority = serializers.ChoiceField(choices=TestCase.Priority.choices, required=False)
+    type = serializers.ChoiceField(choices=TestCase.Type.choices, required=False)
+    test_type = serializers.ChoiceField(choices=TestCase.TestType.choices, required=False)
+    add_labels = serializers.ListField(child=serializers.UUIDField(), required=False)
+    remove_labels = serializers.ListField(child=serializers.UUIDField(), required=False)
+
+    def validate_assignee(self, value):
+        if value is None:
+            return value
+        from plane.db.models import WorkspaceMember
+
+        if not WorkspaceMember.objects.filter(
+            workspace__slug=self.context["slug"], member_id=value, is_active=True
+        ).exists():
+            raise serializers.ValidationError("维护人不是本工作区成员")
+        return value
+
+    def validate(self, attrs):
+        add_labels = set(attrs.get("add_labels") or [])
+        remove_labels = set(attrs.get("remove_labels") or [])
+        if add_labels & remove_labels:
+            raise serializers.ValidationError("同一个标签不能同时添加和移除")
+        changed = any(k in attrs for k in ("assignee", "priority", "type", "test_type"))
+        if not changed and not add_labels and not remove_labels:
+            raise serializers.ValidationError("没有要修改的属性")
+        return attrs

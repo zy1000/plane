@@ -38,6 +38,9 @@ import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { CasesDisplayFilters, DEFAULT_CASE_DISPLAY_PROPERTIES } from "./cases-display-filters";
 import type { TCaseDisplayProperties } from "./cases-display-filters";
 import { CasesTable } from "./cases-table";
+import { CasesBulkEditPanel } from "./cases-bulk-edit-panel";
+import { CasesBulkOperationsBar } from "./cases-bulk-operations-bar";
+import { useCasesBulkEdit } from "./use-cases-bulk-edit";
 import type { TCaseTableRecord } from "./cases-table";
 import { casesExpressionToQueryParams } from "./filters/expression-to-query";
 import type { TCasesFilterQueryParams } from "./filters/expression-to-query";
@@ -96,6 +99,8 @@ const QA_CASE_CREATE_PERMISSION_KEY = "qa.case.create" as const;
 const QA_CASE_EDIT_PERMISSION_KEY = "qa.case.edit" as const;
 const QA_CASE_DELETE_PERMISSION_KEY = "qa.case.delete" as const;
 const QA_CASE_IMPORT_EXPORT_PERMISSION_KEY = "qa.case.import_export" as const;
+// 删除走 DELETE ?id__in=，跨页全选上千条时分批发，避免 URL 超长
+const DELETE_BATCH_SIZE = 100;
 
 // 独立的输入组件，避免 Tree 渲染导致输入法中断
 const ModuleInput = ({
@@ -187,6 +192,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   // 分页状态管理
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -487,8 +493,11 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
         if (!workspaceSlug) return;
         if (!isTemplateMode && !projectId) return;
         try {
-          if (isTemplateMode) await caseService.deleteTemplateCases(workspaceSlugString, selectedCaseIds);
-          else await caseService.deleteCase(workspaceSlug as string, String(projectId), selectedCaseIds);
+          for (let i = 0; i < selectedCaseIds.length; i += DELETE_BATCH_SIZE) {
+            const batch = selectedCaseIds.slice(i, i + DELETE_BATCH_SIZE);
+            if (isTemplateMode) await caseService.deleteTemplateCases(workspaceSlugString, batch);
+            else await caseService.deleteCase(workspaceSlug as string, String(projectId), batch);
+          }
           qaCaseSetToastSuccess("删除成功");
           setSelectedCaseIds([]);
           await fetchModules();
@@ -501,6 +510,26 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
         }
       },
     });
+  };
+
+  // 当前库 + 模块 + 搜索/筛选，列表分页与「选择全部」共用
+  const buildCaseQueryParams = (filterParams: typeof filters) => {
+    const queryParams: any = { repository_id: repositoryId };
+
+    // 新增：如果有选中模块，添加 module_id 参数
+    if (selectedModuleId && selectedModuleId !== "all") {
+      queryParams.module_id = selectedModuleId;
+    }
+
+    // search + rich filters
+    if (filterParams.search) queryParams.search = filterParams.search;
+    if (filterParams.review__in) queryParams.review__in = filterParams.review__in;
+    if (filterParams.type__in) queryParams.type__in = filterParams.type__in;
+    if (filterParams.priority__in) queryParams.priority__in = filterParams.priority__in;
+    if (filterParams.assignee__in) queryParams.assignee__in = filterParams.assignee__in;
+    if (filterParams.labels__name__icontains)
+      queryParams.labels__name__icontains = filterParams.labels__name__icontains;
+    return queryParams;
   };
 
   const fetchCases = async (
@@ -519,24 +548,10 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       const queryParams: any = {
         page,
         page_size: size,
-        repository_id: repositoryId,
+        ...buildCaseQueryParams(filterParams),
       };
 
       if (effectiveOrdering) queryParams.ordering = effectiveOrdering;
-
-      // 新增：如果有选中模块，添加 module_id 参数
-      if (selectedModuleId && selectedModuleId !== "all") {
-        queryParams.module_id = selectedModuleId;
-      }
-
-      // search + rich filters
-      if (filterParams.search) queryParams.search = filterParams.search;
-      if (filterParams.review__in) queryParams.review__in = filterParams.review__in;
-      if (filterParams.type__in) queryParams.type__in = filterParams.type__in;
-      if (filterParams.priority__in) queryParams.priority__in = filterParams.priority__in;
-      if (filterParams.assignee__in) queryParams.assignee__in = filterParams.assignee__in;
-      if (filterParams.labels__name__icontains)
-        queryParams.labels__name__icontains = filterParams.labels__name__icontains;
 
       const response: TestCaseResponse = isTemplateMode
         ? await caseService.getTemplateCases(workspaceSlugString, queryParams)
@@ -848,6 +863,33 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       return Array.from(next);
     });
   };
+
+  const handleSelectAllCases = async () => {
+    if (!workspaceSlug || !repositoryId) return;
+    if (!isTemplateMode && !projectId) return;
+    setSelectingAll(true);
+    try {
+      const queryParams = { ...buildCaseQueryParams(filters), only_ids: "true" };
+      const response = isTemplateMode
+        ? await caseService.getTemplateCases(workspaceSlugString, queryParams)
+        : await caseService.getCases(workspaceSlugString, String(projectId), queryParams);
+      setSelectedCaseIds((response?.data || []).map((id: string) => String(id)));
+    } catch (e) {
+      qaCaseSetToastError(e, t, "选择全部失败");
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
+  const bulkEdit = useCasesBulkEdit({
+    isTemplateMode,
+    workspaceSlug: workspaceSlugString,
+    projectId,
+    cases: cases as TCaseTableRecord[],
+    selectedCaseIds,
+    clearSelection: () => setSelectedCaseIds([]),
+    onUpdated: () => fetchCases(currentPage, pageSize, filters),
+  });
 
   const handleSetColumnWidth = (columnKey: string, width: number) => {
     setColumnWidths((prev) => ({ ...prev, [columnKey]: width }));
@@ -1196,55 +1238,38 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
                           renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
                           renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
                           renderUpdatedAt={(value) => formatDateTime(value || "")}
+                          flashedCells={bulkEdit.flashedCells}
                         />
                       </div>
-                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                      <div className="relative flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                        <CasesBulkOperationsBar
+                          selectedCount={selectedCaseIds.length}
+                          total={total}
+                          selectingAll={selectingAll}
+                          onSelectAll={handleSelectAllCases}
+                          onClearSelection={() => setSelectedCaseIds([])}
+                          isEditPanelOpen={bulkEdit.isPanelOpen}
+                          onToggleEditPanel={bulkEdit.togglePanel}
+                          editPanel={
+                            <CasesBulkEditPanel
+                              workspaceSlug={workspaceSlugString}
+                              projectId={projectId}
+                              repositoryId={repositoryId}
+                              selectedCount={selectedCaseIds.length}
+                              knownCases={bulkEdit.knownCases}
+                              submitting={bulkEdit.submitting}
+                              onCancel={bulkEdit.closePanel}
+                              onApply={bulkEdit.apply}
+                            />
+                          }
+                          canEdit={canEditCase}
+                          canCreate={canCreateCase}
+                          canDelete={canDeleteCase}
+                          onMove={() => canEditCase && setIsMoveModalOpen(true)}
+                          onCopy={() => canCreateCase && setIsCopyModalOpen(true)}
+                          onDelete={confirmDeleteCases}
+                        />
                         <div className="flex items-center gap-4 text-sm">
-                          {selectedCaseIds.length > 0 && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-secondary">已选择 {selectedCaseIds.length} 条</span>
-                              <span
-                                className="cursor-pointer text-sm transition-colors"
-                                style={{ color: "#2a83ff" }}
-                                onClick={() => setSelectedCaseIds([])}
-                              >
-                                清除选择
-                              </span>
-                              <span
-                                className={`text-sm transition-colors ${
-                                  canEditCase ? "cursor-pointer" : "cursor-not-allowed opacity-50"
-                                }`}
-                                style={{ color: "#2a83ff" }}
-                                onClick={() => {
-                                  if (!canEditCase) return;
-                                  setIsMoveModalOpen(true);
-                                }}
-                              >
-                                移动到
-                              </span>
-                              <span
-                                className={`text-sm transition-colors ${
-                                  canCreateCase ? "cursor-pointer" : "cursor-not-allowed opacity-50"
-                                }`}
-                                style={{ color: "#2a83ff" }}
-                                onClick={() => {
-                                  if (!canCreateCase) return;
-                                  setIsCopyModalOpen(true);
-                                }}
-                              >
-                                复制到
-                              </span>
-                              <span
-                                className={`text-sm transition-colors ${
-                                  canDeleteCase ? "cursor-pointer" : "cursor-not-allowed opacity-50"
-                                }`}
-                                style={{ color: "#ff4d4f" }}
-                                onClick={confirmDeleteCases}
-                              >
-                                删除
-                              </span>
-                            </div>
-                          )}
                           <span className="text-secondary">
                             {total > 0
                               ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(

@@ -98,6 +98,10 @@ class TemplateCaseAPIView(BaseAPIView):
         )
 
         cases = self.filter_queryset(queryset)
+        # 「选择全部 N 条」：按当前模块与筛选返回全部 id，不分页
+        if request.query_params.get("only_ids") == "true":
+            ids = list(dict.fromkeys(str(i) for i in cases.values_list("id", flat=True)))
+            return list_response(data=ids, count=len(ids))
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)

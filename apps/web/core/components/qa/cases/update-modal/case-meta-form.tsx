@@ -47,7 +47,7 @@ const selectClassName =
 const selectPointerClassName =
   "[&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-search-input]:!cursor-pointer";
 
-const priorityDotClass = (label: string) => {
+export const priorityDotClass = (label: string) => {
   if (label.includes("高")) return "bg-danger-primary";
   if (label.includes("中")) return "bg-warning-primary";
   if (label.includes("低")) return "bg-accent-primary";

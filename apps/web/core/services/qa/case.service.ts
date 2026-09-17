@@ -10,6 +10,17 @@ import { FileUploadService } from "@/services/file-upload.service";
 
 export type ModuleCountResponse = { total: number } & Record<string, number>;
 
+/** 批量改属性：属性字段出现即修改（assignee 传 null 清空），标签按加减语义 */
+export type TCaseBulkUpdatePayload = {
+  cases_id: string[];
+  assignee?: string | null;
+  priority?: number;
+  type?: number;
+  test_type?: number;
+  add_labels?: string[];
+  remove_labels?: string[];
+};
+
 export class CaseService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -218,7 +229,27 @@ export class CaseService extends APIService {
       });
   }
 
+  async bulkUpdateCases(
+    workspaceSlug: string,
+    projectId: string,
+    data: TCaseBulkUpdatePayload
+  ): Promise<{ updated: number }> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/bulk-update/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   // ---- 模板用例（工作区级，只作用于 is_template=true 的模板库）----
+
+  async bulkUpdateTemplateCases(workspaceSlug: string, data: TCaseBulkUpdatePayload): Promise<{ updated: number }> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/template-case/bulk-update/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 
   async getTemplateCases(workspaceSlug: string, queries?: any): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/template-case/`, {
@@ -656,6 +687,14 @@ export class CaseService extends APIService {
   async downloadImportTemplate(workspaceSlug: string): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/import-template/`, {}, { responseType: "blob" })
       .then((response) => response)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getCaseLabels(workspaceSlug: string, repositoryId: string): Promise<{ id: string; name: string }[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/label/`, { params: { repository_id: repositoryId } })
+      .then((response) => response?.data || [])
       .catch((error) => {
         throw error?.response?.data;
       });
