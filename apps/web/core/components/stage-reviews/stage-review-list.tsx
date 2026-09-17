@@ -19,6 +19,10 @@ import { PROJECT_ME_INFORMATION } from "@/constants/fetch-keys";
 import { useStageReviews } from "@/hooks/store/use-stage-reviews";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { StageReviewBulkBar } from "./bulk/stage-review-bulk-bar";
+import { StageReviewBulkEditPanel } from "./bulk/stage-review-bulk-edit-panel";
+import { useStageReviewBulkEdit } from "./bulk/use-stage-review-bulk-edit";
+import { useStageReviewSelection } from "./bulk/use-stage-review-selection";
 import { StageReviewDrawer } from "./detail/stage-review-drawer";
 import { StageReviewDisplayDropdown } from "./display/display-dropdown";
 import type { TStageReviewColumn } from "./display/display-settings";
@@ -34,6 +38,7 @@ import { ProductStageReviewsEmptyState } from "./product-empty-state";
 import type { TStageReviewScope } from "./scope";
 import { getStageReviewScopeId, getStageReviewStorageScope } from "./scope";
 import { STAGE_REVIEW_GROUP_ALL, stageReviewGroupKey } from "./stage-review-rows";
+import type { TStageReviewTableSelection } from "./stage-review-table";
 import { StageReviewTable } from "./stage-review-table";
 import { StageReviewSummary } from "./stage-summary";
 
@@ -70,7 +75,7 @@ export const StageReviewList = observer(function StageReviewList({
   const storageScope = getStageReviewStorageScope(scope);
   const currentStageId = scope.kind === "product" ? scope.currentStageId : null;
 
-  const { stages, reviews, linkedProjectIds, isLoading, error, applyReview } = useStageReviews(
+  const { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews } = useStageReviews(
     workspaceSlug,
     scopeKind,
     scopeId
@@ -166,6 +171,35 @@ export const StageReviewList = observer(function StageReviewList({
         : visible;
     return swapped.filter((column) => column !== effectiveGroupBy);
   }, [scopeKind, settings.properties, effectiveGroupBy]);
+  // 批量改属性只在项目页、有维护权限时开：批量接口是项目级的，产品页的评审横跨多个项目。
+  // 已评审是终态不能勾；「能勾的行」随分组 / 筛选 / 搜索变化，勾选跟着收窄
+  const canBulkEdit = scope.kind === "project" && canManage;
+  const selectableKey = canBulkEdit
+    ? rows
+        .filter(({ review }) => review.status !== EStageReviewStatus.COMPLETED)
+        .map(({ review }) => review.id)
+        .join(",")
+    : "";
+  const selectableIds = useMemo(() => (selectableKey ? selectableKey.split(",") : []), [selectableKey]);
+  const selection = useStageReviewSelection(selectableIds);
+  const bulkEdit = useStageReviewBulkEdit({
+    workspaceSlug,
+    projectId: scope.kind === "project" ? scope.projectId : "",
+    selectedIds: selection.selectedIds,
+    replaceSelection: selection.replace,
+    applyReviews,
+  });
+  const tableSelection: TStageReviewTableSelection | undefined = canBulkEdit
+    ? {
+        selectedSet: selection.selectedSet,
+        allSelected: selection.allSelected,
+        someSelected: selection.someSelected,
+        isSelectable: (review) => review.status !== EStageReviewStatus.COMPLETED,
+        onToggle: selection.toggle,
+        onToggleAll: selection.toggleAll,
+      }
+    : undefined;
+
   const stageLabelById = useMemo(() => new Map(stages.map((stage) => [stage.stage_id, stage.label])), [stages]);
   const stageLabelOf = useCallback((stageId: string) => stageLabelById.get(stageId), [stageLabelById]);
 
@@ -266,6 +300,8 @@ export const StageReviewList = observer(function StageReviewList({
         today={today}
         activeReviewId={openReviewId}
         onOpen={setOpenReviewId}
+        selection={tableSelection}
+        flashedCells={bulkEdit.flashedCells}
       />
     );
   };
@@ -296,6 +332,25 @@ export const StageReviewList = observer(function StageReviewList({
             />
           )}
           <div className="min-h-0 flex-1 overflow-auto">{renderBody()}</div>
+          {canBulkEdit && scope.kind === "project" && (
+            <div className="relative">
+              <StageReviewBulkBar
+                selectedCount={selection.selectedIds.length}
+                onClearSelection={selection.clear}
+                isEditPanelOpen={bulkEdit.isPanelOpen}
+                onToggleEditPanel={bulkEdit.togglePanel}
+                editPanel={
+                  <StageReviewBulkEditPanel
+                    projectId={scope.projectId}
+                    selectedCount={selection.selectedIds.length}
+                    submitting={bulkEdit.submitting}
+                    onCancel={bulkEdit.closePanel}
+                    onApply={(changes) => void bulkEdit.apply(changes)}
+                  />
+                }
+              />
+            </div>
+          )}
         </div>
       </div>
 

@@ -14,11 +14,13 @@ from rest_framework import serializers
 from plane.app.serializers.data_dictionary import DataDictionaryItemLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
+    ProjectMember,
     StageReview,
     StageReviewActivity,
     StageReviewComment,
     StageReviewKind,
     StageReviewResult,
+    User,
 )
 from plane.db.models.stage_review import (
     COMPONENT_VERSION_FIELDS,
@@ -249,6 +251,62 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
             *FINISHED_GOODS_FIELDS,
             *COMPONENT_VERSION_FIELDS,
         ]
+
+
+#: 批量改属性一次最多改多少条。列表一次取全，一个项目一两百条，留足余量
+STAGE_REVIEW_BULK_LIMIT = 500
+
+#: 批量能改的属性。只放「一批评审能共用同一个值」的字段 —— 标题、描述、O 阶段成品信息
+#: 各条不同，状态与结论只能由本人推进（见 ``StageReviewUpdateSerializer``）
+STAGE_REVIEW_BULK_FIELDS = ("leader", "auditor", "start_date", "end_date")
+
+
+class StageReviewBulkUpdateSerializer(serializers.Serializer):
+    """列表勾选后批量改属性。
+
+    属性字段「出现即修改」，不出现就保持不变；``leader`` / ``auditor`` 传 null 表示清空。
+    负责人 / 审核者必须是本项目的活跃成员（``context["project_id"]``）—— 单条抽屉里按产品
+    角色筛候选，但一批评审的角色名各不相同，批量只能退到项目成员这一层。
+    """
+
+    review_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+        max_length=STAGE_REVIEW_BULK_LIMIT,
+    )
+    leader = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True), required=False, allow_null=True
+    )
+    auditor = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True), required=False, allow_null=True
+    )
+    start_date = serializers.DateField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
+
+    def _validate_member(self, user):
+        if user is None:
+            return user
+        if not ProjectMember.objects.filter(
+            project_id=self.context.get("project_id"),
+            member_id=user.id,
+            is_active=True,
+        ).exists():
+            raise serializers.ValidationError("该成员不在本项目中")
+        return user
+
+    def validate_leader(self, value):
+        return self._validate_member(value)
+
+    def validate_auditor(self, value):
+        return self._validate_member(value)
+
+    def validate(self, attrs):
+        if not any(field in attrs for field in STAGE_REVIEW_BULK_FIELDS):
+            raise serializers.ValidationError("没有要修改的属性")
+        start, end = attrs.get("start_date"), attrs.get("end_date")
+        if start and end and end < start:
+            raise serializers.ValidationError({"end_date": "结束日期不能早于开始日期"})
+        return attrs
 
 
 class StageReviewRollbackSerializer(serializers.Serializer):

@@ -1,4 +1,6 @@
 import type {
+  TBulkUpdateStageReviewPayload,
+  TBulkUpdateStageReviewResponse,
   TCreateStageReviewPayload,
   TProductStageReviewsResponse,
   TFileSignedURLResponse,
@@ -101,6 +103,19 @@ export class StageReviewService extends APIService {
     payload: TUpdateStageReviewPayload
   ): Promise<TStageReviewDetail> {
     return this.patch(`${this.base(workspaceSlug, projectId)}/${reviewId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 列表勾选后批量改负责人 / 审核人 / 计划日期；部分成功，返回改到的行 */
+  async bulkUpdate(
+    workspaceSlug: string,
+    projectId: string,
+    payload: TBulkUpdateStageReviewPayload
+  ): Promise<TBulkUpdateStageReviewResponse> {
+    return this.post(`${this.base(workspaceSlug, projectId)}/bulk-update/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

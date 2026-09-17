@@ -233,6 +233,28 @@ export type TUpdateStageReviewPayload = Partial<{
   component_version: string;
 }>;
 
+/** 列表批量改属性能改的字段：出现即修改，不出现保持不变；成员传 null 表示清空 */
+export type TStageReviewBulkChanges = Partial<{
+  leader: string | null;
+  auditor: string | null;
+  start_date: string | null;
+  end_date: string | null;
+}>;
+
+export type TBulkUpdateStageReviewPayload = TStageReviewBulkChanges & {
+  review_ids: string[];
+};
+
+export type TBulkUpdateStageReviewResponse = {
+  updated: number;
+  /** 已评审（终态）被跳过的 id */
+  skipped_locked: string[];
+  /** 逐条校验没过的（比如新开始日期晚于它已有的结束日期），其余照改 */
+  failed: { id: string; title: string; code: string; error: string }[];
+  /** 改到的行，列表就地替换 */
+  reviews: TStageReview[];
+};
+
 /**
  * 提交审核时的结论。除「通过」外都必须带结论说明（conditional_reason），O 阶段必须带
  * 生产方式与出货评估。落点由结论决定：不通过留在评审中，其余进审核中。

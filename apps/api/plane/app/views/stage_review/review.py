@@ -27,6 +27,7 @@ from plane.app.serializers.stage_review import (
     StageReviewDetailSerializer,
     StageReviewListSerializer,
     StageReviewApproveSerializer,
+    StageReviewBulkUpdateSerializer,
     StageReviewRollbackSerializer,
     StageReviewSubmitSerializer,
     StageReviewUpdateSerializer,
@@ -53,6 +54,7 @@ from plane.utils.stage_review import (
     StageReviewError,
     advance as advance_review,
     assert_not_locked,
+    bulk_update_reviews,
     create_manual_review,
     delete_review,
     resolve_role_candidates,
@@ -365,6 +367,45 @@ class StageReviewViewSet(BaseViewSet):
         except StageReviewError as exc:
             return stage_review_error_response(exc)
         return self._detail_response(pk)
+
+    @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
+    def bulk_update(self, request, slug, project_id):
+        """列表勾选后批量改负责人 / 审核者 / 计划日期。
+
+        id 只在本项目、当前用户可见的范围里找，别处的 id 静默忽略。逐条走 ``update_review``，
+        已评审的跳过、校验不过的单条失败，其余照改；回改到的行给前端就地替换。
+        """
+        serializer = StageReviewBulkUpdateSerializer(
+            data=request.data, context={"project_id": project_id}
+        )
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        review_ids = [str(review_id) for review_id in data.pop("review_ids")]
+
+        with transaction.atomic():
+            # 成员可见性是跨表过滤，行锁又不能配 DISTINCT，按 id 去重兜住重复行
+            reviews = {
+                review.id: review
+                for review in self._scoped_queryset()
+                .filter(id__in=review_ids)
+                .select_for_update(of=("self",))
+                .order_by("id")
+            }.values()
+            updated, skipped_locked, failed = bulk_update_reviews(
+                reviews, actor=request.user, changes=data
+            )
+
+        updated_ids = [review.id for review in updated]
+        rows = self.get_queryset().filter(id__in=updated_ids) if updated_ids else []
+        return Response(
+            {
+                "updated": len(updated_ids),
+                "skipped_locked": skipped_locked,
+                "failed": failed,
+                "reviews": StageReviewListSerializer(rows, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
     def destroy(self, request, slug, project_id, pk):

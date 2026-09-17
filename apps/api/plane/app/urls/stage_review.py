@@ -138,6 +138,11 @@ urlpatterns = [
         name="stage-review-stages",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/bulk-update/",
+        StageReviewViewSet.as_view({"post": "bulk_update"}),
+        name="stage-review-bulk-update",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/",
         StageReviewViewSet.as_view(
             {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}

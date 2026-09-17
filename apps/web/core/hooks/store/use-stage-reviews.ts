@@ -99,5 +99,12 @@ export const useStageReviews = (
     [workspaceSlug, scopeId, loadStages]
   );
 
-  return { stages, reviews, linkedProjectIds, isLoading, error, applyReview, refresh: fetchAll };
+  /** 批量改属性后把改到的那几行换掉。批量只改人与日期，状态不变，不用刷阶段汇总 */
+  const applyReviews = useCallback((next: TStageReview[]) => {
+    if (next.length === 0) return;
+    const byId = new Map(next.map((item) => [item.id, item]));
+    setReviews((current) => current.map((item) => (byId.has(item.id) ? { ...item, ...byId.get(item.id) } : item)));
+  }, []);
+
+  return { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews, refresh: fetchAll };
 };

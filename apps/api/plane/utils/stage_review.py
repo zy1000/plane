@@ -26,6 +26,7 @@
 """
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -596,6 +597,37 @@ def update_review(review, *, actor, validated_data):
             new_identifier=_activity_identifier(field, new),
         )
     return review
+
+
+def bulk_update_reviews(reviews, *, actor, changes):
+    """列表勾选后批量改属性：逐条走 ``update_review``，规则与活动记录和单条完全一致。
+
+    **部分成功**：已评审的跳过（终态全锁，前端也不让勾）；某条因为自己的旧日期和新值冲突
+    （比如新开始日期晚于它已有的结束日期）被模型校验挡下时，只回滚这一条（保存点），其余照改。
+    调用方负责外层事务。
+
+    返回 ``(updated, skipped_locked, failed)``：改到的评审对象、跳过的 id、失败明细。
+    """
+    updated, skipped_locked, failed = [], [], []
+    for review in reviews:
+        if review.status == StageReviewStatus.COMPLETED:
+            skipped_locked.append(str(review.id))
+            continue
+        try:
+            with transaction.atomic():
+                update_review(review, actor=actor, validated_data=dict(changes))
+        except StageReviewError as exc:
+            failed.append(
+                {
+                    "id": str(review.id),
+                    "title": review.title,
+                    "code": exc.code,
+                    "error": exc.message,
+                }
+            )
+            continue
+        updated.append(review)
+    return updated, skipped_locked, failed
 
 
 def delete_review(review):

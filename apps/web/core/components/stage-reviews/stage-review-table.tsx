@@ -5,9 +5,10 @@ import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import type { IUserLite, TStageReview } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
-import { Avatar } from "@plane/ui";
+import { Avatar, Checkbox } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
+import type { TStageReviewFlashedCells } from "./bulk/use-stage-review-bulk-edit";
 import type { TStageReviewColumn } from "./display/display-settings";
 import type { TStageReviewRow } from "./stage-review-rows";
 import { StageReviewStatusIcon } from "./status-icon";
@@ -55,6 +56,60 @@ const Person = ({ user, unassigned }: { user: IUserLite | null; unassigned: stri
     </span>
   );
 
+/** 行左侧留白里的勾选框：平时藏着，悬停该行或已经有勾选时才出来，不占列宽 */
+const RowCheckbox = ({
+  checked,
+  indeterminate,
+  disabled,
+  visible,
+  hoverGroup,
+  title,
+  onToggle,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  disabled?: boolean;
+  visible: boolean;
+  hoverGroup: "header" | "row";
+  title: string;
+  onToggle: () => void;
+}) => (
+  <span
+    className="absolute inset-y-0 left-1.5 z-[1] grid w-3.5 place-items-center"
+    title={title}
+    onClick={(event) => event.stopPropagation()}
+    onKeyDown={(event) => event.stopPropagation()}
+    role="presentation"
+  >
+    <Checkbox
+      className="size-3.5 !outline-none"
+      iconClassName="size-3"
+      checked={checked}
+      indeterminate={indeterminate}
+      disabled={disabled}
+      aria-label={title}
+      onChange={onToggle}
+      containerClassName={cn(
+        "pointer-events-none opacity-0 transition-opacity",
+        hoverGroup === "header"
+          ? "group-hover/header:pointer-events-auto group-hover/header:opacity-100"
+          : "group-hover/row:pointer-events-auto group-hover/row:opacity-100",
+        (visible || checked) && "pointer-events-auto opacity-100"
+      )}
+    />
+  </span>
+);
+
+export type TStageReviewTableSelection = {
+  selectedSet: Set<string>;
+  allSelected: boolean;
+  someSelected: boolean;
+  /** 已评审是终态，不能勾 */
+  isSelectable: (review: TStageReview) => boolean;
+  onToggle: (reviewId: string) => void;
+  onToggleAll: () => void;
+};
+
 const Count = ({ icon, value }: { icon: ReactNode; value: number }) =>
   value > 0 ? (
     <span className="flex items-center gap-1 text-12 tabular-nums text-tertiary">
@@ -77,6 +132,8 @@ export const StageReviewTable = ({
   today,
   activeReviewId,
   onOpen,
+  selection,
+  flashedCells,
 }: {
   workspaceSlug: string;
   rows: TStageReviewRow[];
@@ -87,11 +144,16 @@ export const StageReviewTable = ({
   today: string;
   activeReviewId: string | null;
   onOpen: (reviewId: string) => void;
+  /** 不传就没有勾选（产品页 / 没有维护权限） */
+  selection?: TStageReviewTableSelection;
+  /** 批量改完后闪一下改到的格子 */
+  flashedCells?: TStageReviewFlashedCells | null;
 }) => {
   const { t } = useTranslation();
   const gridTemplateColumns = ["minmax(240px, 1fr)", ...columns.map((column) => COLUMN_WIDTH[column])].join(" ");
   const unassigned = t(`${I18N}.list.unassigned`);
   const openInProject = t(`${I18N}.detail.open_in_project`);
+  const hasSelection = Boolean(selection && selection.selectedSet.size > 0);
 
   const renderCell = (column: TStageReviewColumn, review: TStageReview) => {
     switch (column) {
@@ -175,9 +237,19 @@ export const StageReviewTable = ({
   return (
     <div className="min-w-fit">
       <div
-        className="sticky top-0 z-[1] grid h-9 items-center gap-x-3 border-b border-subtle bg-layer-1 px-6 text-12 text-tertiary"
+        className="group/header sticky top-0 z-[2] grid h-9 items-center gap-x-3 border-b border-subtle bg-layer-1 px-6 text-12 text-tertiary"
         style={{ gridTemplateColumns }}
       >
+        {selection && (
+          <RowCheckbox
+            checked={selection.allSelected}
+            indeterminate={selection.someSelected}
+            visible={hasSelection}
+            hoverGroup="header"
+            title={t(`${I18N}.bulk.select_all`)}
+            onToggle={selection.onToggleAll}
+          />
+        )}
         <span>{t(`${I18N}.table.title`)}</span>
         {columns.map((column) => (
           <span key={column} className="truncate">
@@ -186,46 +258,66 @@ export const StageReviewTable = ({
         ))}
       </div>
 
-      {rows.map(({ review, depth, carried, title, parentTitle }) => (
-        <div
-          key={review.id}
-          role="button"
-          tabIndex={0}
-          onClick={() => onOpen(review.id)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onOpen(review.id);
-          }}
-          className={cn(
-            "grid h-11 cursor-pointer items-center gap-x-3 border-b border-subtle px-6 transition-colors",
-            review.id === activeReviewId ? "bg-accent-subtle" : "hover:bg-layer-1",
-            carried && "opacity-60"
-          )}
-          style={{ gridTemplateColumns }}
-        >
-          <span className={cn("relative flex h-full min-w-0 items-center gap-1.5", depth === 1 && "pl-7")}>
-            {depth === 1 && (
-              <span
-                className="absolute top-0 left-2.5 h-1/2 w-3 rounded-bl-md border-b border-l border-subtle"
-                aria-hidden
+      {rows.map(({ review, depth, carried, title, parentTitle }) => {
+        const selectable = selection?.isSelectable(review) ?? false;
+        const flashed = flashedCells?.ids.has(review.id) ? flashedCells.columns : null;
+        return (
+          <div
+            key={review.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpen(review.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onOpen(review.id);
+            }}
+            className={cn(
+              "group/row relative grid h-11 cursor-pointer items-center gap-x-3 border-b border-subtle px-6 transition-colors",
+              review.id === activeReviewId || selection?.selectedSet.has(review.id) ? "bg-accent-subtle" : "hover:bg-layer-1",
+              carried && "opacity-60"
+            )}
+            style={{ gridTemplateColumns }}
+          >
+            {selection && (
+              <RowCheckbox
+                checked={selection.selectedSet.has(review.id)}
+                disabled={!selectable}
+                visible={hasSelection && selectable}
+                hoverGroup="row"
+                title={selectable ? t(`${I18N}.bulk.select_row`) : t(`${I18N}.bulk.locked_hint`)}
+                onToggle={() => selection.onToggle(review.id)}
               />
             )}
-            {parentTitle && (
-              <span className="max-w-[40%] shrink-0 truncate text-13 text-placeholder">{parentTitle} ›</span>
-            )}
-            <span
-              className={depth === 0 && !parentTitle ? "truncate text-13 font-medium text-primary" : "truncate text-13 text-primary"}
-              title={review.title}
-            >
-              {title}
+            <span className={cn("relative flex h-full min-w-0 items-center gap-1.5", depth === 1 && "pl-7")}>
+              {depth === 1 && (
+                <span
+                  className="absolute top-0 left-2.5 h-1/2 w-3 rounded-bl-md border-b border-l border-subtle"
+                  aria-hidden
+                />
+              )}
+              {parentTitle && (
+                <span className="max-w-[40%] shrink-0 truncate text-13 text-placeholder">{parentTitle} ›</span>
+              )}
+              <span
+                className={depth === 0 && !parentTitle ? "truncate text-13 font-medium text-primary" : "truncate text-13 text-primary"}
+                title={review.title}
+              >
+                {title}
+              </span>
             </span>
-          </span>
-          {columns.map((column) => (
-            <span key={column} className="flex min-w-0 items-center">
-              {renderCell(column, review)}
-            </span>
-          ))}
-        </div>
-      ))}
+            {columns.map((column) => (
+              <span
+                key={column}
+                className={cn(
+                  "-mx-1.5 flex h-8 min-w-0 items-center rounded px-1.5 transition-colors duration-700",
+                  flashed?.has(column) && "bg-success-subtle"
+                )}
+              >
+                {renderCell(column, review)}
+              </span>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 };

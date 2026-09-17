@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, ChevronDown, Minus, Plus, Search, X } from "lucide-react";
+import { Check, ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { CustomSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { BulkEditFieldRow as FieldRow, BulkEditFieldShell as FieldShell } from "@/components/common/bulk-edit-field";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CaseService } from "@/services/qa/case.service";
 import type { TCaseBulkUpdatePayload } from "@/services/qa/case.service";
@@ -371,38 +372,6 @@ export function CasesBulkEditPanel(props: TProps) {
           应用到 {selectedCount} 条
         </Button>
       </div>
-    </div>
-  );
-}
-
-function FieldRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-[72px] shrink-0 text-13 text-secondary">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function FieldShell({ isSet, onReset, children }: { isSet: boolean; onReset: () => void; children: ReactNode }) {
-  return (
-    <div
-      className={cn(
-        "flex h-9 min-w-0 flex-1 items-center rounded-md border transition-colors",
-        isSet ? "border-accent-strong bg-accent-subtle" : "border-subtle bg-surface-1 hover:border-strong"
-      )}
-    >
-      {children}
-      {isSet && (
-        <button
-          type="button"
-          className="mr-2 flex size-5 shrink-0 items-center justify-center rounded-full text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
-          onClick={onReset}
-          aria-label="改回保持不变"
-        >
-          <X className="size-3" />
-        </button>
-      )}
     </div>
   );
 }

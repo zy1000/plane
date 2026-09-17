@@ -73,7 +73,7 @@ export const DEFAULT_STAGE_REVIEW_DISPLAY: TStageReviewDisplaySettings = {
     status: true,
     result: true,
     leader: true,
-    auditor: false,
+    auditor: true,
     dates: true,
     attachment_count: false,
     comment_count: false,
@@ -109,7 +109,7 @@ export type TStageReviewDisplayPatch = Partial<Omit<TStageReviewDisplaySettings,
  *
  * 键带版本号：v1 时分组默认「无」且整份设置一起存，改成默认按研发阶段分组后，旧值会把
  * 默认顶掉，所以换 v2 让所有人回到默认；项目页默认改成按产品分组时同理换 v3；「来源裁剪表」列
- * 默认打开时换 v4。**改默认值时同理要升版本。**
+ * 默认打开时换 v4；「审核人」列默认打开时换 v5。**改默认值时同理要升版本。**
  */
 export const useStageReviewDisplay = (
   storageScope: string,
@@ -117,7 +117,7 @@ export const useStageReviewDisplay = (
   userId: string | undefined
 ) => {
   const { storedValue, setValue } = useLocalStorage<TStageReviewDisplaySettings | null>(
-    `stage-reviews-display:v4:${storageScope}:${userId ?? "anonymous"}`,
+    `stage-reviews-display:v5:${storageScope}:${userId ?? "anonymous"}`,
     null
   );
 
