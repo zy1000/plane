@@ -28,6 +28,21 @@ const railTone = (phase: EStageReviewStatus | null) => (phase ? RAIL_TONE[phase]
  */
 export const TimelineRow = ({
   item,
+  ...rest
+}: {
+  item: TStageReviewTimelineRail;
+  isFirst: boolean;
+  isLast: boolean;
+  node: ReactNode;
+  nodeCenter: number;
+  className?: string;
+  children: ReactNode;
+}) => <TimelineRailRow {...rest} railBefore={railTone(item.phaseBefore)} railAfter={railTone(item.phaseAfter)} />;
+
+/** 不绑定状态类型的底座：上下两段轨道的 border 色由调用方直接给（裁剪表的变更历史也用） */
+export const TimelineRailRow = ({
+  railBefore,
+  railAfter,
   isFirst,
   isLast,
   node,
@@ -35,7 +50,8 @@ export const TimelineRow = ({
   className,
   children,
 }: {
-  item: TStageReviewTimelineRail;
+  railBefore: string;
+  railAfter: string;
   isFirst: boolean;
   isLast: boolean;
   node: ReactNode;
@@ -47,14 +63,14 @@ export const TimelineRow = ({
     {!isFirst && (
       <span
         aria-hidden
-        className={cn("absolute top-0 left-[13px] w-0 border-l-2", railTone(item.phaseBefore))}
+        className={cn("absolute top-0 left-[13px] w-0 border-l-2", railBefore)}
         style={{ height: nodeCenter }}
       />
     )}
     {!isLast && (
       <span
         aria-hidden
-        className={cn("absolute bottom-0 left-[13px] w-0 border-l-2", railTone(item.phaseAfter))}
+        className={cn("absolute bottom-0 left-[13px] w-0 border-l-2", railAfter)}
         style={{ top: nodeCenter }}
       />
     )}

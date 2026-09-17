@@ -154,11 +154,14 @@ export const DetailHero = ({
               />
             )}
             {(status === EReviewTailoringStatus.PENDING || status === EReviewTailoringStatus.REVISING) && (
-              <LegendItem
-                value={`+${stats.toCreate} −${stats.toDelete}`}
-                label={t(`${I18N}.detail.stat_after`)}
-                valueClassName="text-accent-primary"
-              />
+              // 先说明后数字：「生效后 +4 −0」，新建绿、删除灰，竖线与保留 / 裁剪计数隔开
+              <span className="inline-flex items-center gap-2 border-l border-subtle pl-5 whitespace-nowrap">
+                <span>{t(`${I18N}.detail.stat_after`)}</span>
+                <span className="text-18 leading-none font-semibold text-success-primary tabular-nums">
+                  +{stats.toCreate}
+                </span>
+                <span className="text-18 leading-none font-semibold text-tertiary tabular-nums">−{stats.toDelete}</span>
+              </span>
             )}
             {status === EReviewTailoringStatus.APPROVED && (
               <LegendItem

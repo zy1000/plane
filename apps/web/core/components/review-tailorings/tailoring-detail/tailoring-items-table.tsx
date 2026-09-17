@@ -4,7 +4,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn, renderFormattedDateTime } from "@plane/utils";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import type { TBulkReasonScope } from "./bulk-reason-modal";
 import { BulkReasonModal } from "./bulk-reason-modal";
@@ -182,7 +182,8 @@ export const TailoringItemsTable = ({
                     {item.created_by_detail?.display_name ?? "—"}
                   </TableCell>
                   <TableCell className="border-r border-b border-subtle px-3 py-2 whitespace-nowrap">
-                    {renderFormattedDate(item.created_at) ?? "—"}
+                    {/* 按本地时区取日期，写成 2026-09-15，与整页中文口径一致 */}
+                    {renderFormattedDateTime(item.created_at).slice(0, 10) || "—"}
                   </TableCell>
                 </TableRow>
               );

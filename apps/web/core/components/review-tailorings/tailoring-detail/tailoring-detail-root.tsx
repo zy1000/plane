@@ -41,6 +41,8 @@ import { TailoringItemsTable } from "./tailoring-items-table";
 import { TailoringMatrix } from "./tailoring-matrix";
 import type { TMatrixFilter } from "./tailoring-matrix-model";
 import { buildMatrixGroups, filterMatrixGroups, getCellLockReason, getTailoringStats } from "./tailoring-matrix-model";
+import type { TTimelineFilter } from "./tailoring-timeline-model";
+import { countTimeline } from "./tailoring-timeline-model";
 import { useCellSelection } from "./use-cell-selection";
 
 const I18N = "review_tailoring";
@@ -112,6 +114,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [productFilter, setProductFilter] = useState("all");
   /** 明细 Tab 只看待补原因，同样挂在 Tab 条右上角 */
   const [onlyMissing, setOnlyMissing] = useState(false);
+  /** 变更历史的筛选：全部 / 状态 / 修改，挂在 Tab 条右上角 */
+  const [timelineFilter, setTimelineFilter] = useState<TTimelineFilter>("all");
   /** 收起的阶段。默认全展开 —— 建表后第一次进来应该看得见全貌 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -262,6 +266,19 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     </>
   );
 
+  const timelineCounts = countTimeline(feed.activities);
+  const activityTools = tab === "activity" && feed.activities.length > 0 && (
+    <TabBarSegments
+      value={timelineFilter}
+      options={[
+        { key: "all" as const, label: t(`${I18N}.activity.filter_all`), count: timelineCounts.all },
+        { key: "status" as const, label: t(`${I18N}.activity.filter_status`), count: timelineCounts.status },
+        { key: "edits" as const, label: t(`${I18N}.activity.filter_edits`), count: timelineCounts.edits },
+      ]}
+      onChange={setTimelineFilter}
+    />
+  );
+
   const matrixTools = tab === "matrix" && hasMatrix && (
     <>
       {(stats.cut > 0 || activeFilter !== "all") && (
@@ -328,7 +345,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         />
       </div>
 
-      <DetailTabBar tabs={tabs} active={tab} onChange={setTab} tools={matrixTools || itemsTools || undefined} />
+      <DetailTabBar tabs={tabs} active={tab} onChange={setTab} tools={matrixTools || itemsTools || activityTools || undefined} />
 
       <div className="relative min-h-0 flex-1">
         <div className={editable && (dirtyIds.size > 0 || selectedCells.length > 0) ? "h-full overflow-auto pb-20" : "h-full overflow-auto"}>
@@ -398,7 +415,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
 
           {tab === "activity" && (
             <div className="px-6 py-4">
-              <TailoringActivityFeed activities={feed.activities} />
+              <TailoringActivityFeed activities={feed.activities} products={detail.products} filter={timelineFilter} />
             </div>
           )}
 

@@ -91,7 +91,7 @@ export const TailoringComments = observer(function TailoringComments({
           }}
         />
         <div className="flex justify-end border-t border-subtle px-2 py-1.5">
-          <Button variant="primary" size="sm" disabled={isEmpty || isMutating} onClick={handleSubmit}>
+          <Button variant="primary" size="lg" disabled={isEmpty || isMutating} onClick={handleSubmit}>
             {t("review_tailoring.comments.submit")}
           </Button>
         </div>

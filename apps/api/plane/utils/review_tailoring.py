@@ -593,6 +593,8 @@ def save_cells(*, tailoring, cells, actor):
                         "product_id": str(item.product_id),
                         "template_id": str(item.template_id),
                         "title": item.title,
+                        # 裁掉时原因往往同一次保存里写，这条记录不会再单独记原因
+                        "reason": "" if item.selected else item.reason,
                     },
                 )
             elif old_reason != item.reason:
@@ -904,7 +906,7 @@ def act_on_tailoring(*, tailoring, approver, action, comment=""):
         )
         return tailoring, None
 
-    result = _apply_effective(tailoring=tailoring, actor=approver)
+    result = _apply_effective(tailoring=tailoring, actor=approver, comment=comment)
     notify_approval_approved(tailoring, actor=approver)
     return tailoring, result
 
@@ -1055,7 +1057,7 @@ def _create_stage_reviews(tailoring, items, actor):
     return created_ids
 
 
-def _apply_effective(*, tailoring, actor):
+def _apply_effective(*, tailoring, actor, comment=""):
     """签批通过的那一刻：把勾选状态同步成真实的评审实例。
 
     顺序是「先删后建」：同一格子不可能同时既删又建，但先删能让被删评审占用的资源
@@ -1116,6 +1118,7 @@ def _apply_effective(*, tailoring, actor):
         field="status",
         old_value=ReviewTailoringStatus.PENDING,
         new_value=ReviewTailoringStatus.APPROVED,
+        comment=comment or "",
         extra={
             "round": tailoring.round,
             "revision": tailoring.revision,
