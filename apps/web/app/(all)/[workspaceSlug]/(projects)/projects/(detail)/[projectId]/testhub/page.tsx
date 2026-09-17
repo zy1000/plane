@@ -186,9 +186,7 @@ export default function TestManagementHomePage() {
           }}
           style={{ cursor: "pointer" }}
         >
-          <Tooltip title={text || ""} placement="topLeft">
-            <span className="block max-w-[440px] truncate text-primary">{text || "-"}</span>
-          </Tooltip>
+          <span className="block max-w-[440px] truncate text-primary">{text || "-"}</span>
         </a>
       ),
       ...getColumnSearchProps("name"),
