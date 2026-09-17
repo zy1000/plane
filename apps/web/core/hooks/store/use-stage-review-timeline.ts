@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { E_SORT_ORDER } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import type { TStageReviewActivity, TStageReviewComment, TStageReviewDetail } from "@plane/types";
@@ -21,10 +21,8 @@ export type TStageReviewTimelineItem = TStageReviewTimelineRail &
     | { kind: "edits"; key: string; at: string; activities: TStageReviewActivity[] }
   );
 
-// 与工作项活动区同一个口径：页签与排序记在本机，跨评审共用
-const TAB_STORAGE_KEY = "stage_review_activity_tab";
+// 排序记在本机、跨评审共用；页签不记 —— 每次打开评审都从「全部」看起
 const SORT_STORAGE_KEY = "stage_review_activity_sort";
-const TABS: TStageReviewTimelineTab[] = ["all", "status", "comments", "edits"];
 
 /** 同一个人连着改、相邻两条间隔不超过这么久，合成一条「修改了 N 项」 */
 const EDIT_MERGE_WINDOW_MS = 10 * 60 * 1000;
@@ -95,12 +93,17 @@ export const useStageReviewTimeline = ({
   comments: TStageReviewComment[];
   activities: TStageReviewActivity[];
 }) => {
-  const { storedValue: storedTab, setValue: setTab } = useLocalStorage<TStageReviewTimelineTab>(TAB_STORAGE_KEY, "all");
+  // 页签跟着评审走：抽屉里换到另一条评审时组件不一定重挂，按评审 id 判断，换了就回到「全部」
+  const [tabState, setTabState] = useState<{ reviewId: string; tab: TStageReviewTimelineTab }>({
+    reviewId: detail.id,
+    tab: "all",
+  });
+  const tab: TStageReviewTimelineTab = tabState.reviewId === detail.id ? tabState.tab : "all";
+  const setTab = (next: TStageReviewTimelineTab) => setTabState({ reviewId: detail.id, tab: next });
   const { storedValue: storedSort, setValue: setSortOrder } = useLocalStorage<E_SORT_ORDER>(
     SORT_STORAGE_KEY,
     E_SORT_ORDER.ASC
   );
-  const tab: TStageReviewTimelineTab = storedTab && TABS.includes(storedTab) ? storedTab : "all";
   const sortOrder = storedSort === E_SORT_ORDER.DESC ? E_SORT_ORDER.DESC : E_SORT_ORDER.ASC;
 
   const rawItems = useMemo(() => {

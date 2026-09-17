@@ -113,6 +113,9 @@ const COMMENT_NODE_CENTER = 24;
 export const StageReviewCommentCard = ({
   comment,
   position,
+  workspaceSlug,
+  workspaceId,
+  projectId,
   leaderId,
   auditorId,
   currentUserId,
@@ -120,6 +123,9 @@ export const StageReviewCommentCard = ({
 }: {
   comment: TStageReviewComment;
   position: TTimelineRowPosition;
+  workspaceSlug: string;
+  workspaceId: string;
+  projectId: string;
   leaderId: string | null;
   auditorId: string | null;
   currentUserId: string | undefined;
@@ -175,10 +181,18 @@ export const StageReviewCommentCard = ({
             <HistoryTime value={comment.created_at} />
           </span>
         </div>
-        <div
-          className="prose prose-sm mt-1 max-w-none text-14 leading-relaxed text-secondary"
-          // 评论内容由后端 strip 过标签后落库，这里渲染的是编辑器产出的受控 HTML
-          dangerouslySetInnerHTML={{ __html: comment.comment_html }}
+        {/* 正文里的图片只存了 asset id（<image-component src="id">），直接塞 HTML 显示不出来，
+            要走只读编辑器把 id 换成地址 —— 与工作项评论一致 */}
+        <LiteTextEditor
+          editable={false}
+          id={`stage_review_comment_view_${comment.id}`}
+          initialValue={comment.comment_html ?? ""}
+          workspaceId={workspaceId}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          containerClassName="!p-0 mt-1"
+          parentClassName="border-none"
+          displayConfig={{ fontSize: "small-font" }}
         />
       </div>
     </TimelineRow>
