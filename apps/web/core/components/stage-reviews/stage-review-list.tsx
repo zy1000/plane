@@ -154,12 +154,15 @@ export const StageReviewList = observer(function StageReviewList({
   // 标题下那行数什么：项目页数产品；产品页数项目，按项目分组时一组只有一个项目，改数阶段
   const summaryMeta = scopeKind === "project" ? "products" : settings.groupBy === "project" ? "stages" : "projects";
 
-  // 列 = 这个作用域下开着的显示属性；产品页按项目分组时「项目」列换成「研发阶段」列
+  // 列 = 这个作用域下开着的显示属性；产品页按项目分组时「项目」列换成「研发阶段」列。
+  // 右侧只列选中那一组，当前分组维度那一列整列都是同一个值，藏掉（按产品分组时不出「产品」列）
   const columns = useMemo<TStageReviewColumn[]>(() => {
     const visible = getStageReviewDisplayProperties(scopeKind).filter((property) => settings.properties[property]);
-    return scopeKind === "product" && settings.groupBy === "project"
-      ? visible.map((property) => (property === "project" ? "stage" : property))
-      : visible;
+    const swapped =
+      scopeKind === "product" && settings.groupBy === "project"
+        ? visible.map((property): TStageReviewColumn => (property === "project" ? "stage" : property))
+        : visible;
+    return swapped.filter((column) => column !== settings.groupBy);
   }, [scopeKind, settings.properties, settings.groupBy]);
   const stageLabelById = useMemo(() => new Map(stages.map((stage) => [stage.stage_id, stage.label])), [stages]);
   const stageLabelOf = useCallback((stageId: string) => stageLabelById.get(stageId), [stageLabelById]);

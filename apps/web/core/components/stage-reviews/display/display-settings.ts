@@ -78,7 +78,8 @@ export const DEFAULT_STAGE_REVIEW_DISPLAY: TStageReviewDisplaySettings = {
     attachment_count: false,
     comment_count: false,
     kind: false,
-    tailoring: false,
+    // 同一产品的同一评审在多张裁剪表里都保留时会各生成一条，标题完全一样，默认开着这列才分得开
+    tailoring: true,
     updated_at: false,
   },
   groupBy: DEFAULT_STAGE_REVIEW_GROUP_BY.project,
@@ -107,8 +108,8 @@ export type TStageReviewDisplayPatch = Partial<Omit<TStageReviewDisplaySettings,
  * 这个键，按默认值显示，而不是被当成关掉。
  *
  * 键带版本号：v1 时分组默认「无」且整份设置一起存，改成默认按研发阶段分组后，旧值会把
- * 默认顶掉，所以换 v2 让所有人回到默认；项目页默认改成按产品分组时同理换 v3。
- * **改默认值时同理要升版本。**
+ * 默认顶掉，所以换 v2 让所有人回到默认；项目页默认改成按产品分组时同理换 v3；「来源裁剪表」列
+ * 默认打开时换 v4。**改默认值时同理要升版本。**
  */
 export const useStageReviewDisplay = (
   storageScope: string,
@@ -116,7 +117,7 @@ export const useStageReviewDisplay = (
   userId: string | undefined
 ) => {
   const { storedValue, setValue } = useLocalStorage<TStageReviewDisplaySettings | null>(
-    `stage-reviews-display:v3:${storageScope}:${userId ?? "anonymous"}`,
+    `stage-reviews-display:v4:${storageScope}:${userId ?? "anonymous"}`,
     null
   );
 
