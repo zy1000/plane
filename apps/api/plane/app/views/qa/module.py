@@ -4,10 +4,14 @@ from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from plane.app.permissions import PermissionKey
-from plane.app.serializers.qa import CaseModuleCreateUpdateSerializer, CaseModuleListSerializer
+from plane.app.serializers.qa import (
+    CaseModuleCreateUpdateSerializer,
+    CaseModuleListSerializer,
+    CaseModuleMoveSerializer,
+)
 from plane.app.views import BaseAPIView
 from plane.app.views.qa.template_permissions import (
     CASE_TEMPLATE_READ_KEYS,
@@ -86,6 +90,56 @@ class CaseModuleDetailAPIView(BaseAPIView):
             serializer.save()
         except IntegrityError:
             return Response({"error": "同级模块名称已存在"}, status=status.HTTP_400_BAD_REQUEST)
+
+        module.refresh_from_db()
+        return Response(CaseModuleListSerializer(instance=module).data, status=status.HTTP_200_OK)
+
+
+#: 同级重排后的序号步长，与 CaseModule.sort_order 默认值一致
+SORT_ORDER_STEP = 65535
+
+
+class CaseModuleMoveAPIView(BaseAPIView):
+    """库内移动模块（拖拽 / 「移动到」弹窗共用）：只改模块的 parent 与同级 sort_order，用例挂载不变。
+
+    存量同级 sort_order 大多相同，前端无法靠取中点排序，所以由这里整组重编号。
+    """
+
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
+    def post(self, request, slug):
+        serializer = CaseModuleMoveSerializer(data=request.data, context={"slug": slug})
+        serializer.is_valid(raise_exception=True)
+        module = serializer.validated_data["module"]
+        target_parent = serializer.validated_data["target_parent"]
+        anchor = serializer.validated_data["anchor"]
+        placement = serializer.validated_data["placement"]
+
+        siblings = list(
+            CaseModule.objects.filter(
+                repository_id=module.repository_id,
+                parent=target_parent,
+                deleted_at__isnull=True,
+            )
+            .exclude(id=module.id)
+            .order_by("sort_order", "-created_at")
+        )
+        if anchor is None:
+            index = len(siblings)
+        else:
+            index = next(i for i, s in enumerate(siblings) if s.id == anchor.id)
+            if placement == "after":
+                index += 1
+        siblings.insert(index, module)
+
+        module.parent = target_parent
+        for i, sibling in enumerate(siblings):
+            sibling.sort_order = (i + 1) * SORT_ORDER_STEP
+
+        try:
+            with transaction.atomic():
+                CaseModule.objects.bulk_update(siblings, ["parent", "sort_order"])
+        except IntegrityError:
+            return Response({"error": "目标位置已存在同名模块"}, status=status.HTTP_400_BAD_REQUEST)
 
         module.refresh_from_db()
         return Response(CaseModuleListSerializer(instance=module).data, status=status.HTTP_200_OK)

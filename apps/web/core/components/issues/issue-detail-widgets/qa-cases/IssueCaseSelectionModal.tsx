@@ -7,6 +7,7 @@ import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
 import useDebounce from "@/hooks/use-debounce";
 import styles from "../../../qa/review/TestCaseSelectionModal.module.css";
+import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
 import {
   globalEnums,
   getEnums,
@@ -341,7 +342,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       dataIndex: "priority",
       key: "priority",
       width: 120,
-      render: (v) => renderEnumTag("case_priority", v, "warning"),
+      render: (v) => <CasePriorityPill value={v} />,
     },
   ];
 

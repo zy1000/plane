@@ -1791,6 +1791,11 @@ class CaseModuleView(BaseViewSet):
             target_parent = get_object_or_404(
                 CaseModule, id=target_module_id, repository__workspace__slug=slug, deleted_at__isnull=True
             )
+            if str(target_parent.id) in expand_module_subtree_ids(source_module.id):
+                return Response(
+                    {"error": "不能复制到自身或其子模块下"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             target_repository = target_parent.repository
             target_repository_id = target_repository.id
         else:

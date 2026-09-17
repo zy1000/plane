@@ -2,10 +2,11 @@ import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(de
 
 export const CASE_PICKER_MODAL_CLASS = "qa-case-picker-modal";
 
-const priorityPillStyle: Record<number, { bg: string; text: string; dot: string }> = {
-  0: { bg: "var(--label-indigo-bg)", text: "var(--label-indigo-text)", dot: "var(--priority-low)" },
-  1: { bg: "var(--label-yellow-bg)", text: "var(--label-yellow-text)", dot: "var(--priority-medium)" },
-  2: { bg: "var(--label-orange-bg)", text: "var(--label-orange-text)", dot: "var(--priority-high)" },
+// 用例优先级底色：L 蓝 / M 黄 / H 红，按枚举数值取色，与标签文案无关
+const priorityPillClass: Record<number, string> = {
+  0: "bg-accent-subtle text-accent-primary",
+  1: "bg-warning-subtle text-warning-primary",
+  2: "bg-danger-subtle text-danger-primary",
 };
 
 const getEnumLabel = (group: "case_type" | "case_priority", value?: number | null) => {
@@ -27,34 +28,13 @@ export const CaseTypePill = ({ value }: { value?: number | null }) => {
   );
 };
 
-export const CasePriorityPill = ({ value }: { value?: number | null }) => {
-  const label = getEnumLabel("case_priority", value);
-  if (!label) return <span className="text-placeholder">-</span>;
-  const style =
-    value !== null && value !== undefined
-      ? priorityPillStyle[value]
-      : {
-          bg: "var(--label-grey-bg)",
-          text: "var(--label-grey-text)",
-          dot: "var(--priority-none)",
-        };
-
-  const fallbackStyle = {
-    bg: "var(--label-grey-bg)",
-    text: "var(--label-grey-text)",
-    dot: "var(--priority-none)",
-  };
-
-  const safeStyle = style ?? fallbackStyle;
+export const CasePriorityPill = ({ value, label }: { value?: number | string | null; label?: string }) => {
+  const text = label ?? getEnumLabel("case_priority", value === null || value === undefined ? value : Number(value));
+  if (!text) return <span className="text-placeholder">-</span>;
+  const colorClass = priorityPillClass[Number(value)] ?? "bg-layer-1 text-secondary";
 
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs"
-      style={{ background: safeStyle.bg, color: safeStyle.text }}
-    >
-      <span className="size-1.5 rounded-full" style={{ background: safeStyle.dot }} />
-      {label}
-    </span>
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${colorClass}`}>{text}</span>
   );
 };
 

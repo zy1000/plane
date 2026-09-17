@@ -11,6 +11,7 @@ import { Tag, Tree } from "antd";
 import { CircleAlert, CircleCheck, CircleDashed, CircleX, Flag, LayoutList, Tag as TagIcon } from "lucide-react";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import type { TPlanGroupTree, TPlanGroupTreeNode } from "@/services/qa/plan.service";
+import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
 
 type Props = {
   tree: TPlanGroupTree | null;
@@ -22,9 +23,8 @@ type Props = {
   resultColors?: Record<string, string>;
 };
 
-/** 类型 / 优先级 Tag 配色，列表列与分组树共用 */
+/** 类型 Tag 配色，列表列与分组树共用；优先级走 CasePriorityPill */
 export const PLAN_CASE_TYPE_TAG_COLOR = "magenta";
-export const PLAN_CASE_PRIORITY_TAG_COLOR = "warning";
 
 /** 执行结果颜色名 → 节点图标：成功 / 失败 / 阻塞 / 未执行、无效 */
 const RESULT_ICONS: Record<string, ReactNode> = {
@@ -53,7 +53,6 @@ const renderNodeIcon = (node: TPlanGroupTreeNode, resultColors?: Record<string, 
 /** 与列表里对应列的 Tag 配色一致；执行结果的 gray 不是 antd 预设色，退回 default */
 const getNodeTagColor = (node: TPlanGroupTreeNode, resultColors?: Record<string, string>) => {
   if (node.kind === "type") return PLAN_CASE_TYPE_TAG_COLOR;
-  if (node.kind === "priority") return PLAN_CASE_PRIORITY_TAG_COLOR;
   const color = resultColors?.[node.id] || "gray";
   return color === "gray" ? "default" : color;
 };
@@ -74,9 +73,13 @@ export const PlanCaseGroupTree = ({ tree, loading = false, selectedKey, onSelect
       children: (tree.children || []).map((node) => ({
         key: `${node.kind}:${node.id}`,
         title: renderRow(
-          <Tag color={getNodeTagColor(node, resultColors)} className="m-0">
-            {node.name || "-"}
-          </Tag>,
+          node.kind === "priority" ? (
+            <CasePriorityPill value={node.id} label={node.name || "-"} />
+          ) : (
+            <Tag color={getNodeTagColor(node, resultColors)} className="m-0">
+              {node.name || "-"}
+            </Tag>
+          ),
           renderNodeIcon(node, resultColors),
           node.count
         ),

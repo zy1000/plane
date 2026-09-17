@@ -15,6 +15,8 @@ import { ImportFromTemplateModal } from "./import-from-template-modal";
 import { MoveCaseModal } from "./move-modal";
 import { CopyCaseModal } from "./copy-modal";
 import { CopyModuleModal } from "./copy-module-modal";
+import { ModulePickerModal } from "./module-picker-modal";
+import { useCaseModuleMove } from "./use-case-module-move";
 import CasesExportModal from "./cases-export-modal";
 import { CasesSearchInput } from "./cases-search";
 import { CaseModuleService } from "@/services/qa";
@@ -38,6 +40,7 @@ import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { CasesDisplayFilters, DEFAULT_CASE_DISPLAY_PROPERTIES } from "./cases-display-filters";
 import type { TCaseDisplayProperties } from "./cases-display-filters";
 import { CasesTable } from "./cases-table";
+import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
 import { CasesBulkEditPanel } from "./cases-bulk-edit-panel";
 import { CasesBulkOperationsBar } from "./cases-bulk-operations-bar";
 import { useCasesBulkEdit } from "./use-cases-bulk-edit";
@@ -242,6 +245,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
   const [copyingModule, setCopyingModule] = useState<{ id: string; name: string } | null>(null);
+  const [movingModule, setMovingModule] = useState<{ id: string; name: string } | null>(null);
 
   // 新增状态：模块树数据、选中模块
   const [modules, setModules] = useState<any[]>([]);
@@ -686,6 +690,24 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
         ),
       },
       {
+        key: "move",
+        label: (
+          <Button
+            type="text"
+            size="small"
+            disabled={!canEditCase}
+            onClick={() => {
+              if (!canEditCase) return;
+              if (actualId && actualId !== "all") {
+                setMovingModule({ id: actualId, name: title });
+              }
+            }}
+          >
+            移动
+          </Button>
+        ),
+      },
+      {
         key: "delete",
         label: (
           <Button
@@ -838,6 +860,21 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       ],
     },
   ];
+
+  const moduleMove = useCaseModuleMove({
+    workspaceSlug: workspaceSlug as string | undefined,
+    modules,
+    canEdit: canEditCase,
+    renamingModuleId,
+    onMoved: async (newParentId) => {
+      if (newParentId) {
+        setExpandedKeys((prev) => (prev.includes(newParentId) ? prev : [...prev, newParentId]));
+      }
+      // 选中的是祖先模块时右侧列表范围会变，一起刷新
+      await fetchModules();
+      await fetchCases(currentPage, pageSize, filters);
+    },
+  });
 
   const handlePaginationChange = (page: number, size?: number) => {
     const newPageSize = size || pageSize;
@@ -1170,6 +1207,9 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
               />
               <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto pt-3">
                 <Tree
+                  draggable={moduleMove.draggable}
+                  allowDrop={moduleMove.allowDrop}
+                  onDrop={moduleMove.onDrop}
                   showLine={false}
                   defaultExpandAll
                   switcherIcon={(nodeProps) => (
@@ -1236,7 +1276,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
                           renderReviewTag={renderReviewTag}
                           renderLastExecutionResult={renderLastExecutionResult}
                           renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
-                          renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
+                          renderPriorityTag={(value) => <CasePriorityPill value={value} />}
                           renderUpdatedAt={(value) => formatDateTime(value || "")}
                           flashedCells={bulkEdit.flashedCells}
                         />
@@ -1446,6 +1486,25 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           onSuccess={() => {
             setCopyingModule(null);
             fetchModules();
+          }}
+        />
+      )}
+
+      {movingModule && repositoryId && (
+        <ModulePickerModal
+          isOpen={!!movingModule}
+          title={`移动模块「${movingModule.name}」`}
+          handleClose={() => setMovingModule(null)}
+          workspaceSlug={workspaceSlug as string}
+          repositoryId={repositoryId}
+          disabledSubtreeOf={movingModule.id}
+          allowRoot
+          onConfirm={async (targetParentId) => {
+            const moved = await moduleMove.moveModule(movingModule.id, targetParentId);
+            if (moved) {
+              qaCaseSetToastSuccess("移动成功");
+              setMovingModule(null);
+            }
           }}
         />
       )}

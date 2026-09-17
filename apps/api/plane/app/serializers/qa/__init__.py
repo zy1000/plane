@@ -67,7 +67,7 @@ class CaseModuleListSerializer(serializers.ModelSerializer):
         """
         # 获取直接子节点（未删除的）
         direct_children = obj.children.filter(deleted_at__isnull=True).order_by(
-            "sort_order"
+            "sort_order", "-created_at"
         )
 
         # 使用相同的序列化器递归序列化子节点
@@ -499,6 +499,18 @@ class ProjectCaseListSerializer(serializers.ModelSerializer):
         ]
 
 
+def is_module_self_or_descendant(module_id, candidate):
+    """candidate 是否为 module_id 自身或其子孙模块：沿 candidate 的父链向上找。"""
+    visited = set()
+    current = candidate
+    while current is not None and current.id not in visited:
+        if current.id == module_id:
+            return True
+        visited.add(current.id)
+        current = current.parent
+    return False
+
+
 class CaseModuleCreateUpdateSerializer(ModelSerializer):
     """创建和更新用例"""
 
@@ -513,6 +525,9 @@ class CaseModuleCreateUpdateSerializer(ModelSerializer):
 
         if parent and repository and parent.repository_id != repository.id:
             raise serializers.ValidationError({"error": "父模块不属于当前用例库"})
+
+        if self.instance and "parent" in attrs and parent and is_module_self_or_descendant(self.instance.id, parent):
+            raise serializers.ValidationError({"error": "不能移动到自身或其子模块下"})
 
         if name and repository:
             duplicate_modules = CaseModule.objects.filter(
@@ -534,6 +549,71 @@ class CaseModuleCreateUpdateSerializer(ModelSerializer):
         extra_kwargs = {
             "parent": {"required": False, "allow_null": True, "default": None}
         }
+
+
+class CaseModuleMoveSerializer(serializers.Serializer):
+    """库内移动模块：改父级，并按锚点插到同级的前/后（无锚点追加到末尾）。
+
+    context 需要 slug；校验通过后 validated_data 里是模型实例：module / target_parent / anchor。
+    """
+
+    module_id = serializers.UUIDField()
+    target_parent_id = serializers.UUIDField(required=False, allow_null=True)
+    anchor_id = serializers.UUIDField(required=False, allow_null=True)
+    placement = serializers.ChoiceField(choices=["before", "after"], required=False, default="after")
+
+    def _get_module(self, module_id, error):
+        module = (
+            CaseModule.objects.filter(
+                id=module_id,
+                repository__workspace__slug=self.context["slug"],
+                deleted_at__isnull=True,
+            )
+            .select_related("parent")
+            .first()
+        )
+        if module is None:
+            raise serializers.ValidationError({"error": error})
+        return module
+
+    def validate(self, attrs):
+        module = self._get_module(attrs["module_id"], "模块不存在")
+
+        target_parent = None
+        if attrs.get("target_parent_id"):
+            target_parent = self._get_module(attrs["target_parent_id"], "目标模块不存在")
+            if target_parent.repository_id != module.repository_id:
+                raise serializers.ValidationError({"error": "只能在当前用例库内移动"})
+            if is_module_self_or_descendant(module.id, target_parent):
+                raise serializers.ValidationError({"error": "不能移动到自身或其子模块下"})
+
+        anchor = None
+        if attrs.get("anchor_id"):
+            anchor = self._get_module(attrs["anchor_id"], "目标位置不存在")
+            target_parent_pk = target_parent.id if target_parent else None
+            if (
+                anchor.id == module.id
+                or anchor.repository_id != module.repository_id
+                or anchor.parent_id != target_parent_pk
+            ):
+                raise serializers.ValidationError({"error": "目标位置无效"})
+
+        if (
+            CaseModule.objects.filter(
+                repository_id=module.repository_id,
+                parent=target_parent,
+                name=module.name,
+                deleted_at__isnull=True,
+            )
+            .exclude(id=module.id)
+            .exists()
+        ):
+            raise serializers.ValidationError({"error": "目标位置已存在同名模块"})
+
+        attrs["module"] = module
+        attrs["target_parent"] = target_parent
+        attrs["anchor"] = anchor
+        return attrs
 
 
 class CaseLabelCreateSerializer(serializers.ModelSerializer):

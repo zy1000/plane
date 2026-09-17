@@ -79,4 +79,21 @@ export class CaseModuleService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  /** 库内移动模块：target_parent_id 为空 = 根级；anchor_id + placement 指定插在某个同级模块前/后，不传则追加到末尾 */
+  async moveModule(
+    workspaceSlug: string,
+    data: {
+      module_id: string;
+      target_parent_id: string | null;
+      anchor_id?: string;
+      placement?: "before" | "after";
+    }
+  ): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/module/move/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }

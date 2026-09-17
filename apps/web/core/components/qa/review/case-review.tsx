@@ -27,6 +27,7 @@ import { ReviewRecordsPanel } from "./review-records";
 import { ReviewCaseFilterBar, useReviewCaseFilter } from "./review-case-filter";
 import { ReviewCaseList } from "./review-case-list";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
+import { CasePriorityPill } from "../shared/case-picker-modal-styles";
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
@@ -1034,7 +1035,10 @@ export default function CaseReview() {
                           <div className="col-span-1">
                             <div className="text-sm leading-5 font-medium text-secondary mb-1">等级</div>
                             <div className="h-8 flex items-center">
-                              <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
+                              <CasePriorityPill
+                                value={caseDetail?.priority}
+                                label={enumsData.case_priority?.[String(caseDetail?.priority)]}
+                              />
                             </div>
                           </div>
                           <div className="col-span-1">

@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
 import type { ReviewCaseListItem } from "@/services/qa/review.service";
 import type { TReviewCaseDisplayProperties } from "./review-case-display-filters";
 
@@ -53,7 +54,6 @@ const COLUMN_WIDTHS: Record<string, number> = {
   actions: 140,
 };
 
-const priorityLabelMap: Record<number, string> = { 0: "低", 1: "中", 2: "高" };
 
 const ReviewCaseTableHead = ({ children, className, style }: THeadProps) => (
   <TableHead
@@ -246,7 +246,7 @@ export const ReviewCaseDetailTable = ({
                     className="h-12 border-r border-b border-subtle px-page-x py-0"
                     style={getWidthStyle("priority")}
                   >
-                    {priorityLabelMap[record.priority] ?? "-"}
+                    <CasePriorityPill value={record.priority} />
                   </TableCell>
                 )}
 

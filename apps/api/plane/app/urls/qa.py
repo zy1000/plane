@@ -36,7 +36,7 @@ from plane.app.views.qa.case_version import (
     CaseVersionAPIView,
     CaseVersionCompareAPIView,
 )
-from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
+from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView, CaseModuleMoveAPIView
 from plane.app.views.qa.plan import (
     PlanModuleDetailAPIView,
     PlanListAPIView,
@@ -120,6 +120,11 @@ urlpatterns = [
         "workspaces/<str:slug>/test/module/copy/",
         CaseModuleView.as_view({"post": "copy"}),
         name="test-case-module-copy",
+    ),
+    path(
+        "workspaces/<str:slug>/test/module/move/",
+        CaseModuleMoveAPIView.as_view(),
+        name="test-case-module-move",
     ),
     path(
         "workspaces/<str:slug>/test/module/<uuid:module_id>/",
