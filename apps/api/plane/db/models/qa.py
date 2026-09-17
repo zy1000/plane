@@ -22,7 +22,7 @@ def generate_case_code(*, project_id, project_identifier, repository_id=None):
 
     max_number = 0
     for code in queryset.filter(code__startswith=prefix).values_list("code", flat=True):
-        suffix = code[len(prefix):]
+        suffix = code[len(prefix) :]
         if suffix.isdigit():
             max_number = max(max_number, int(suffix))
 
@@ -31,14 +31,25 @@ def generate_case_code(*, project_id, project_identifier, repository_id=None):
 
 class TestCaseRepository(BaseModel):
     name = models.CharField(max_length=255, verbose_name="TestCaseRepository Name")
-    description = models.TextField(verbose_name="TestCaseRepository Description", blank=True)
+    description = models.TextField(
+        verbose_name="TestCaseRepository Description", blank=True
+    )
 
-    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
-                                related_name="project_%(class)s")
-    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="workspace_%(class)s")
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
+    workspace = models.ForeignKey(
+        "db.Workspace", on_delete=models.CASCADE, related_name="workspace_%(class)s"
+    )
     # 模板库：工作区级的模板用例容器（is_template=True 时 project 必为空）。
     # 注意不能拿 project 为空当模板语义——存量“跨项目共享库”同样 project 为空。
-    is_template = models.BooleanField(default=False, verbose_name="Is Template Repository")
+    is_template = models.BooleanField(
+        default=False, verbose_name="Is Template Repository"
+    )
 
     class Meta:
         db_table = "test_repository"
@@ -47,8 +58,12 @@ class TestCaseRepository(BaseModel):
 
 class CaseLabel(BaseModel):
     name = models.CharField(max_length=20)
-    repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
-                                   related_name="labels")
+    repository = models.ForeignKey(
+        TestCaseRepository,
+        on_delete=models.CASCADE,
+        verbose_name="TestCaseRepository",
+        related_name="labels",
+    )
 
     class Meta:
         constraints = [
@@ -78,8 +93,12 @@ class CaseModule(BaseModel):
     )
     name = models.CharField(max_length=30)
     sort_order = models.FloatField(default=65535)
-    repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
-                                   related_name="modules")
+    repository = models.ForeignKey(
+        TestCaseRepository,
+        on_delete=models.CASCADE,
+        verbose_name="TestCaseRepository",
+        related_name="modules",
+    )
 
     @property
     def get_all_children(self) -> list:
@@ -97,74 +116,107 @@ class CaseModule(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["repository", "name"],
-                condition=Q(repository__isnull=False, parent__isnull=True, deleted_at__isnull=True),
+                condition=Q(
+                    repository__isnull=False,
+                    parent__isnull=True,
+                    deleted_at__isnull=True,
+                ),
                 name="unique_case_module_root_repo_name_not_deleted",
             ),
             models.UniqueConstraint(
                 fields=["repository", "name", "parent"],
-                condition=Q(repository__isnull=False, parent__isnull=False, deleted_at__isnull=True),
+                condition=Q(
+                    repository__isnull=False,
+                    parent__isnull=False,
+                    deleted_at__isnull=True,
+                ),
                 name="unique_case_module_child_repo_name_parent_not_deleted",
             ),
         ]
         db_table = "test_modules"
-        ordering = ('sort_order', "-created_at",)
+        ordering = (
+            "sort_order",
+            "-created_at",
+        )
 
 
 class TestCase(BaseModel):
     class State(models.IntegerChoices):
-        PENDING_REVIEW = 0, '待评审'
-        APPROVED = 1, '已通过'
-        REJECTED = 2, '已拒绝'
+        PENDING_REVIEW = 0, "待评审"
+        APPROVED = 1, "已通过"
+        REJECTED = 2, "已拒绝"
 
     class Type(models.IntegerChoices):
-        FUNCTIONAL = 0, '功能测试'
-        PERFORMANCE = 1, '性能测试'
-        SECURITY = 2, '安全测试'
-        COMPATIBILITY = 4, '兼容测试'
-        REGRESSION = 5, '回归测试'
-        INTEGRATION = 7, '集成测试'
-        OTHER = 99, '其他'
-
+        FUNCTIONAL = 0, "功能测试"
+        PERFORMANCE = 1, "性能测试"
+        SECURITY = 2, "安全测试"
+        COMPATIBILITY = 4, "兼容测试"
+        REGRESSION = 5, "回归测试"
+        INTEGRATION = 7, "集成测试"
+        OTHER = 99, "其他"
 
     class Priority(models.IntegerChoices):
-        LOW = 0, '低'
-        MEDIUM = 1, '中'
-        HIGH = 2, '高'
+        LOW = 0, "L"
+        MEDIUM = 1, "M"
+        HIGH = 2, "H"
 
     class TestType(models.IntegerChoices):
-        MANUAL = 0, '手动'
-        AUTO = 1, '自动'
+        MANUAL = 0, "手动"
+        AUTO = 1, "自动"
 
     class StepType(models.IntegerChoices):
         STEP = 0
         TEXT = 1
 
-    code = models.CharField(
-        max_length=50,
-        verbose_name="TestCase Code",
-        blank=True
-    )
+    code = models.CharField(max_length=50, verbose_name="TestCase Code", blank=True)
     name = models.CharField(max_length=255, verbose_name="TestCase Name")
 
-    precondition = models.TextField(verbose_name="TestCase Precondition", blank=True, default='<p></p>')
-    steps = models.JSONField(verbose_name="TestCase Steps", blank=True, default=dict, null=True)
+    precondition = models.TextField(
+        verbose_name="TestCase Precondition", blank=True, default="<p></p>"
+    )
+    steps = models.JSONField(
+        verbose_name="TestCase Steps", blank=True, default=dict, null=True
+    )
     # 新增文本描述模式
     mode = models.IntegerField(choices=StepType.choices, default=StepType.STEP)
-    text_description = models.TextField(null=True, blank=True, default='<p></p>')
-    text_result = models.TextField(null=True, blank=True, default='<p></p>')
+    text_description = models.TextField(null=True, blank=True, default="<p></p>")
+    text_result = models.TextField(null=True, blank=True, default="<p></p>")
 
+    remark = models.TextField(
+        verbose_name="TestCase Remark", blank=True, default="<p></p>"
+    )
+    type = models.IntegerField(
+        choices=Type.choices, default=Type.FUNCTIONAL, verbose_name="TestCase Type"
+    )
+    test_type = models.IntegerField(
+        choices=TestType.choices, default=TestType.AUTO, verbose_name="TestType Type"
+    )
+    priority = models.IntegerField(
+        choices=Priority.choices,
+        default=Priority.MEDIUM,
+        verbose_name="TestCase Priority",
+    )
 
-    remark = models.TextField(verbose_name="TestCase Remark", blank=True, default='<p></p>')
-    type = models.IntegerField(choices=Type.choices, default=Type.FUNCTIONAL, verbose_name="TestCase Type")
-    test_type = models.IntegerField(choices=TestType.choices, default=TestType.AUTO, verbose_name="TestType Type")
-    priority = models.IntegerField(choices=Priority.choices, default=Priority.MEDIUM, verbose_name="TestCase Priority")
-
-    repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
-                                   related_name="cases")
-    module = models.ForeignKey(CaseModule, on_delete=models.CASCADE, blank=True, null=True,
-                               related_name="cases")
-    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True,
-                                 related_name="cases")
+    repository = models.ForeignKey(
+        TestCaseRepository,
+        on_delete=models.CASCADE,
+        verbose_name="TestCaseRepository",
+        related_name="cases",
+    )
+    module = models.ForeignKey(
+        CaseModule,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="cases",
+    )
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="cases",
+    )
     labels = models.ManyToManyField(CaseLabel, blank=True, related_name="cases")
     issues = models.ManyToManyField(Issue, blank=True, related_name="cases")
 
@@ -179,7 +231,9 @@ class TestCase(BaseModel):
         if last_record:
             return last_record.crt.result
 
-        crt = CaseReviewThrough.objects.filter(case=self).order_by("-created_at").first()
+        crt = (
+            CaseReviewThrough.objects.filter(case=self).order_by("-created_at").first()
+        )
         return crt.result if crt else CaseReviewThrough.Result.NOT_START
 
     def save(self, *args, **kwargs):
@@ -225,7 +279,9 @@ class TestCase(BaseModel):
 
 
 class TestCaseVersion(BaseModel):
-    case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="versions")
+    case = models.ForeignKey(
+        TestCase, on_delete=models.CASCADE, related_name="versions"
+    )
     version = models.FloatField(default=1)
     repository_id = models.CharField(max_length=36)
     module_id = models.CharField(max_length=36, null=True, blank=True)
@@ -233,19 +289,22 @@ class TestCaseVersion(BaseModel):
     code = models.CharField(max_length=50, blank=True)
     name = models.CharField(max_length=255)
     precondition = models.TextField(blank=True, default="<p></p>")
-    mode = models.IntegerField(choices=TestCase.StepType.choices, default=TestCase.StepType.STEP)
-    text_description = models.TextField(null=True, blank=True, default='<p></p>')
-    text_result = models.TextField(null=True, blank=True, default='<p></p>')
+    mode = models.IntegerField(
+        choices=TestCase.StepType.choices, default=TestCase.StepType.STEP
+    )
+    text_description = models.TextField(null=True, blank=True, default="<p></p>")
+    text_result = models.TextField(null=True, blank=True, default="<p></p>")
     steps = models.JSONField(blank=True, default=dict)
     remark = models.TextField(blank=True, default="<p></p>")
     type = models.IntegerField(choices=TestCase.Type.choices)
     test_type = models.IntegerField(choices=TestCase.TestType.choices)
     priority = models.IntegerField(choices=TestCase.Priority.choices)
-    state = models.IntegerField(choices=TestCase.State.choices, default=TestCase.State.PENDING_REVIEW)
+    state = models.IntegerField(
+        choices=TestCase.State.choices, default=TestCase.State.PENDING_REVIEW
+    )
     label_ids = models.JSONField(blank=True, default=list)
     issue_ids = models.JSONField(blank=True, default=list)
     updated_at = models.DateTimeField(verbose_name="Last Modified At")
-
 
     class Meta:
         db_table = "test_case_versions"
@@ -328,8 +387,13 @@ class PlanModule(BaseModel):
         related_name="children",
     )
     name = models.CharField(max_length=30)
-    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
-                                related_name="project_%(class)s")
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
     is_default = models.BooleanField(default=False)
 
     class Meta:
@@ -347,28 +411,66 @@ class PlanModule(BaseModel):
 
 class TestPlan(BaseModel):
     class State(models.TextChoices):
-        NOT_START = '未开始', 'gray'
-        PROGRESS = '进行中', 'blue'
-        COMPLETED = '已完成', 'green'
+        NOT_START = "未开始", "gray"
+        PROGRESS = "进行中", "blue"
+        COMPLETED = "已完成", "green"
 
     name = models.CharField(max_length=255, verbose_name="TestPlan Name")
-    description = models.TextField(verbose_name="TestPlan Description", blank=True, null=True)
-    begin_time = models.DateField(null=True, blank=True, verbose_name="TestPlan Begin Time")
+    description = models.TextField(
+        verbose_name="TestPlan Description", blank=True, null=True
+    )
+    begin_time = models.DateField(
+        null=True, blank=True, verbose_name="TestPlan Begin Time"
+    )
     end_time = models.DateField(null=True, blank=True, verbose_name="TestPlan End Time")
-    state = models.CharField(choices=State.choices, default=State.NOT_START, verbose_name="TestPlan State")
-    result = models.CharField(max_length=30, default='-', verbose_name="TestPlan execute result")
-    threshold = models.IntegerField(null=True, blank=True, default=100, verbose_name="TestPlan Threshold")
+    state = models.CharField(
+        choices=State.choices, default=State.NOT_START, verbose_name="TestPlan State"
+    )
+    result = models.CharField(
+        max_length=30, default="-", verbose_name="TestPlan execute result"
+    )
+    threshold = models.IntegerField(
+        null=True, blank=True, default=100, verbose_name="TestPlan Threshold"
+    )
 
-    module = models.ForeignKey(PlanModule, null=True, on_delete=models.SET_NULL, verbose_name="PlanModule",
-                               related_name="plans")
-    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
-                                related_name="project_%(class)s")
-    cases = models.ManyToManyField(TestCase, blank=True, related_name="plans", through="PlanCase",
-                                   through_fields=("plan", "case"))
+    module = models.ForeignKey(
+        PlanModule,
+        null=True,
+        on_delete=models.SET_NULL,
+        verbose_name="PlanModule",
+        related_name="plans",
+    )
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
+    cases = models.ManyToManyField(
+        TestCase,
+        blank=True,
+        related_name="plans",
+        through="PlanCase",
+        through_fields=("plan", "case"),
+    )
 
-    cycle = models.ForeignKey("db.Cycle", null=True, blank=True, related_name="plans", on_delete=models.DO_NOTHING)
-    modules = models.ManyToManyField("db.Module", blank=True, related_name="plans", db_table="plan_modules_relations")
-    releases = models.ManyToManyField("db.Release", blank=True, related_name="plans", db_table="plan_releases_relations")
+    cycle = models.ForeignKey(
+        "db.Cycle",
+        null=True,
+        blank=True,
+        related_name="plans",
+        on_delete=models.DO_NOTHING,
+    )
+    modules = models.ManyToManyField(
+        "db.Module", blank=True, related_name="plans", db_table="plan_modules_relations"
+    )
+    releases = models.ManyToManyField(
+        "db.Release",
+        blank=True,
+        related_name="plans",
+        db_table="plan_releases_relations",
+    )
 
     @property
     def state_display(self):
@@ -389,22 +491,29 @@ class TestPlan(BaseModel):
 
 class PlanCase(BaseModel):
     class Result(models.TextChoices):
-        SUCCESS = '成功', 'green'
-        FAIL = '失败', 'red'
-        BLOCK = '阻塞', 'gold'
-        NOT_START = '未执行', 'gray'
-        INVALID = '无效', 'gray'
+        SUCCESS = "成功", "green"
+        FAIL = "失败", "red"
+        BLOCK = "阻塞", "gold"
+        NOT_START = "未执行", "gray"
+        INVALID = "无效", "gray"
 
-    case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="plan_cases")
-    plan = models.ForeignKey(TestPlan, on_delete=models.CASCADE, related_name="plan_cases")
+    case = models.ForeignKey(
+        TestCase, on_delete=models.CASCADE, related_name="plan_cases"
+    )
+    plan = models.ForeignKey(
+        TestPlan, on_delete=models.CASCADE, related_name="plan_cases"
+    )
     # 执行人（多选）：任一执行人提交执行即视为本用例结果，后一次执行覆盖前一次
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name="assigned_plan_cases",
     )
-    result = models.CharField(choices=Result.choices, default=Result.NOT_START,
-                              verbose_name="PlanCase Execute Result")
+    result = models.CharField(
+        choices=Result.choices,
+        default=Result.NOT_START,
+        verbose_name="PlanCase Execute Result",
+    )
     issue = models.ManyToManyField(Issue, related_name="plan_cases")
 
     class Meta:
@@ -416,21 +525,38 @@ class PlanCase(BaseModel):
 
 class PlanCaseRecord(BaseModel):
     class Result(models.TextChoices):
-        SUCCESS = '成功', 'green'
-        FAIL = '失败', 'red'
-        BLOCK = '阻塞', 'gold'
-        INVALID = '无效', 'gray'
+        SUCCESS = "成功", "green"
+        FAIL = "失败", "red"
+        BLOCK = "阻塞", "gold"
+        INVALID = "无效", "gray"
 
-    result = models.CharField(choices=Result.choices, default=Result.SUCCESS,
-                              verbose_name="PlanCaseRecord Result")
-    reason = models.TextField(verbose_name="PlanCaseRecord Reason", blank=True, null=True)
+    result = models.CharField(
+        choices=Result.choices,
+        default=Result.SUCCESS,
+        verbose_name="PlanCaseRecord Result",
+    )
+    reason = models.TextField(
+        verbose_name="PlanCaseRecord Reason", blank=True, null=True
+    )
     steps = models.JSONField(verbose_name="TestCase Steps", blank=True, default=dict)
-    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True,
-                                 related_name="plan_case_records")
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="plan_case_records",
+    )
 
-    plan_case = models.ForeignKey(PlanCase, on_delete=models.SET_NULL, blank=True, null=True,
-                                  related_name="plan_case_records")
-    files = models.ManyToManyField("db.File", blank=True, related_name="plan_case_records")
+    plan_case = models.ForeignKey(
+        PlanCase,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="plan_case_records",
+    )
+    files = models.ManyToManyField(
+        "db.File", blank=True, related_name="plan_case_records"
+    )
 
     class Meta:
         db_table = "test_plan_case_records"
@@ -467,7 +593,9 @@ class TestCaseComment(BaseModel):
     )
 
     def save(self, *args, **kwargs):
-        self.comment_stripped = strip_tags(self.comment_html) if self.comment_html else ""
+        self.comment_stripped = (
+            strip_tags(self.comment_html) if self.comment_html else ""
+        )
         super().save(*args, **kwargs)
 
     class Meta:
@@ -482,6 +610,7 @@ class TestCaseComment(BaseModel):
 
 class TestCaseActivity(BaseModel):
     """用例操作活动记录，仿 CycleActivity 设计"""
+
     case = models.ForeignKey(
         TestCase,
         on_delete=models.CASCADE,
@@ -489,7 +618,9 @@ class TestCaseActivity(BaseModel):
         verbose_name="TestCase",
     )
     verb = models.CharField(max_length=255, verbose_name="Action", default="created")
-    field = models.CharField(max_length=255, verbose_name="Field Name", blank=True, null=True)
+    field = models.CharField(
+        max_length=255, verbose_name="Field Name", blank=True, null=True
+    )
     old_value = models.TextField(verbose_name="Old Value", blank=True, null=True)
     new_value = models.TextField(verbose_name="New Value", blank=True, null=True)
     comment = models.TextField(verbose_name="Comment", blank=True)
@@ -530,8 +661,13 @@ class CaseReviewModule(BaseModel):
         related_name="children",
     )
     name = models.CharField(max_length=30)
-    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
-                                related_name="project_%(class)s")
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
     is_default = models.BooleanField(default=False)
 
     class Meta:
@@ -551,33 +687,58 @@ class CaseReviewModule(BaseModel):
 
 class CaseReview(BaseModel):
     class State(models.TextChoices):
-        NOT_START = '未开始', 'gray'
-        PROGRESS = '进行中', 'blue'
-        COMPLETED = '已完成', 'green'
+        NOT_START = "未开始", "gray"
+        PROGRESS = "进行中", "blue"
+        COMPLETED = "已完成", "green"
 
     class ReviewMode(models.TextChoices):
-        SINGLE = '单人评审', 'green'
-        MULTIPLE = '多人评审', 'blue'
+        SINGLE = "单人评审", "green"
+        MULTIPLE = "多人评审", "blue"
 
     name = models.CharField(max_length=255)
     description = models.TextField(verbose_name="CaseReview Description", blank=True)
-    state = models.CharField(choices=State.choices, default=State.NOT_START, verbose_name="CaseReview State")
+    state = models.CharField(
+        choices=State.choices, default=State.NOT_START, verbose_name="CaseReview State"
+    )
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name="review_assignee",
     )
-    mode = models.CharField(choices=ReviewMode.choices, default=ReviewMode.SINGLE, verbose_name="CaseReview Mode")
+    mode = models.CharField(
+        choices=ReviewMode.choices,
+        default=ReviewMode.SINGLE,
+        verbose_name="CaseReview Mode",
+    )
 
-    module = models.ForeignKey(CaseReviewModule, null=True, on_delete=models.SET_NULL, verbose_name="CaseReviewModule",
-                               related_name="reviews")
-    started_at = models.DateField(null=True, blank=True, verbose_name="CaseReview Started Time")
-    ended_at = models.DateField(null=True, blank=True, verbose_name="CaseReview Ended Time")
+    module = models.ForeignKey(
+        CaseReviewModule,
+        null=True,
+        on_delete=models.SET_NULL,
+        verbose_name="CaseReviewModule",
+        related_name="reviews",
+    )
+    started_at = models.DateField(
+        null=True, blank=True, verbose_name="CaseReview Started Time"
+    )
+    ended_at = models.DateField(
+        null=True, blank=True, verbose_name="CaseReview Ended Time"
+    )
 
-    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
-                                related_name="project_%(class)s")
-    cases = models.ManyToManyField(TestCase, blank=True, related_name="reviews", through="CaseReviewThrough",
-                                   through_fields=("review", "case"))
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
+    cases = models.ManyToManyField(
+        TestCase,
+        blank=True,
+        related_name="reviews",
+        through="CaseReviewThrough",
+        through_fields=("review", "case"),
+    )
 
     class Meta:
         verbose_name = "CaseReview"
@@ -586,13 +747,17 @@ class CaseReview(BaseModel):
             # 同项目同模块下不允许重名（module 有值时）
             models.UniqueConstraint(
                 fields=["project", "module", "name"],
-                condition=Q(project__isnull=False, deleted_at__isnull=True, module__isnull=False),
+                condition=Q(
+                    project__isnull=False, deleted_at__isnull=True, module__isnull=False
+                ),
                 name="unique_review_project_module_name_when_not_deleted",
             ),
             # 同项目下未指定模块时不允许重名（module 为 null 时）
             models.UniqueConstraint(
                 fields=["project", "name"],
-                condition=Q(project__isnull=False, deleted_at__isnull=True, module__isnull=True),
+                condition=Q(
+                    project__isnull=False, deleted_at__isnull=True, module__isnull=True
+                ),
                 name="unique_review_project_name_when_module_null_not_deleted",
             ),
         ]
@@ -602,22 +767,29 @@ class CaseReview(BaseModel):
 
 class CaseReviewThrough(BaseModel):
     class Result(models.TextChoices):
-        PASS = '通过', 'green'
-        FAIL = '不通过', 'red'
-        RE_REVIEW = '重新提审', 'gold'
-        PROCESS = '评审中', 'blue'
-        NOT_START = '未评审', 'gray'
+        PASS = "通过", "green"
+        FAIL = "不通过", "red"
+        RE_REVIEW = "重新提审", "gold"
+        PROCESS = "评审中", "blue"
+        NOT_START = "未评审", "gray"
 
-    case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="review_cases")
-    review = models.ForeignKey(CaseReview, on_delete=models.CASCADE, related_name="review_cases")
+    case = models.ForeignKey(
+        TestCase, on_delete=models.CASCADE, related_name="review_cases"
+    )
+    review = models.ForeignKey(
+        CaseReview, on_delete=models.CASCADE, related_name="review_cases"
+    )
     # 评审人（多选）：每条评审用例独立指定，聚合规则见 utils/qa.update_case_review_status
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name="assigned_review_cases",
     )
-    result = models.CharField(choices=Result.choices, default=Result.NOT_START,
-                              verbose_name="CaseReview Result")
+    result = models.CharField(
+        choices=Result.choices,
+        default=Result.NOT_START,
+        verbose_name="CaseReview Result",
+    )
 
     class Meta:
         verbose_name = "CaseReviewThrough"
@@ -628,24 +800,33 @@ class CaseReviewThrough(BaseModel):
 
 class CaseReviewRecord(BaseModel):
     class Result(models.TextChoices):
-        PASS = '通过', 'green'
-        FAIL = '不通过', 'red'
-        RE_REVIEW = '重新提审', 'gold'
-        SUGGEST = '建议', 'gold'
+        PASS = "通过", "green"
+        FAIL = "不通过", "red"
+        RE_REVIEW = "重新提审", "gold"
+        SUGGEST = "建议", "gold"
 
-    result = models.CharField(choices=Result.choices, default=Result.PASS,
-                              verbose_name="CaseReview Result")
+    result = models.CharField(
+        choices=Result.choices, default=Result.PASS, verbose_name="CaseReview Result"
+    )
     reason = models.TextField(verbose_name="CaseReview Reason", blank=True, null=True)
-    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True,
-                                 related_name="review_records")
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="review_records",
+    )
     confirmed = models.BooleanField(
-        default=False,
-        verbose_name="已确认",
-        help_text="标记该评审记录是否已被确认"
+        default=False, verbose_name="已确认", help_text="标记该评审记录是否已被确认"
     )
 
-    crt = models.ForeignKey(CaseReviewThrough, on_delete=models.SET_NULL, blank=True, null=True,
-                            related_name="review_records")
+    crt = models.ForeignKey(
+        CaseReviewThrough,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="review_records",
+    )
 
     class Meta:
         ordering = ("-created_at",)
@@ -655,19 +836,32 @@ class TestReport(BaseModel):
     """测试报告：聚合一个或多个测试计划的执行数据，统计实时计算。"""
 
     class ReportType(models.TextChoices):
-        PLAN = '计划报告', 'blue'
-        EXTERNAL = '对外报告', 'gold'
+        PLAN = "计划报告", "blue"
+        EXTERNAL = "对外报告", "gold"
 
     name = models.CharField(max_length=255, verbose_name="TestReport Name")
-    report_type = models.CharField(choices=ReportType.choices, default=ReportType.PLAN,
-                                   verbose_name="TestReport Type")
-    summary_html = models.TextField(blank=True, default="<p></p>", verbose_name="TestReport Summary HTML")
-    summary_json = models.JSONField(blank=True, default=dict, verbose_name="TestReport Summary JSON")
+    report_type = models.CharField(
+        choices=ReportType.choices,
+        default=ReportType.PLAN,
+        verbose_name="TestReport Type",
+    )
+    summary_html = models.TextField(
+        blank=True, default="<p></p>", verbose_name="TestReport Summary HTML"
+    )
+    summary_json = models.JSONField(
+        blank=True, default=dict, verbose_name="TestReport Summary JSON"
+    )
 
-    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
-                                related_name="project_%(class)s")
-    plans = models.ManyToManyField(TestPlan, blank=True, related_name="reports",
-                                   db_table="test_report_plans")
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
+    plans = models.ManyToManyField(
+        TestPlan, blank=True, related_name="reports", db_table="test_report_plans"
+    )
 
     class Meta:
         verbose_name = "TestReport"
