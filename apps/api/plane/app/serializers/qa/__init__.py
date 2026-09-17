@@ -386,11 +386,19 @@ class CaseCreateUpdateSerializer(ModelSerializer):
         return instance
 
 
+class _CaseModuleInCaseSerializer(serializers.ModelSerializer):
+    """用例里嵌的所属模块：不带 children，CaseModuleListSerializer 的递归子树每行都会查一次库"""
+
+    class Meta:
+        model = CaseModule
+        fields = ["id", "name", "sort_order", "created_at", "updated_at", "repository"]
+
+
 class CaseListSerializer(ModelSerializer):
     """用例查询"""
 
     # 替换 depth=1，改为显式序列化需要的关联字段
-    module = CaseModuleListSerializer(read_only=True)
+    module = _CaseModuleInCaseSerializer(read_only=True)
     assignee = UserLiteSerializer(read_only=True)
     labels = CaseLabelListSerializer(many=True, read_only=True)
     repository_name = serializers.CharField(source="repository.name", read_only=True)
@@ -402,12 +410,18 @@ class CaseListSerializer(ModelSerializer):
     review = serializers.SerializerMethodField()
 
     def get_review(self, obj):
+        # 列表视图已用子查询注解了同口径的 _review_result，优先用它免得每行查两次评审表
+        annotated_review = getattr(obj, "_review_result", None)
+        if annotated_review is not None:
+            return annotated_review
         return obj.review
 
     def get_version(self, obj: TestCase):
-        if not obj.versions.exists():
+        # .all() 能吃到视图的 prefetch；没 prefetch 时也只查一次
+        versions = list(obj.versions.all())
+        if not versions:
             return 1.0
-        last_version = obj.versions.order_by("-version").first()
+        last_version = max(versions, key=lambda v: v.version)
         if obj.updated_at == last_version.updated_at:
             return last_version.version
         else:
@@ -446,9 +460,10 @@ class CaseListSerializer(ModelSerializer):
         return self._get_latest_execution_data(obj).get("result")
 
     def get_latest_execution_plan_id(self, obj: TestCase):
-        annotated_plan_id = getattr(obj, "_latest_execution_plan_id", None)
-        if annotated_plan_id is not None:
-            return str(annotated_plan_id)
+        # 视图注解过就以注解为准（没有执行记录时注解本身就是 None），不再逐行回查
+        if hasattr(obj, "_latest_execution_plan_id"):
+            annotated_plan_id = obj._latest_execution_plan_id
+            return str(annotated_plan_id) if annotated_plan_id else None
         plan_id = self._get_latest_execution_data(obj).get("plan_id")
         return str(plan_id) if plan_id else None
 

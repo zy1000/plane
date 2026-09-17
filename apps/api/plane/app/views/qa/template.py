@@ -1,7 +1,7 @@
 import json
 
 from django.db import transaction
-from django.db.models import CharField, Value
+from django.db.models import CharField, Prefetch, UUIDField, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -22,7 +22,7 @@ from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
 from plane.app.views.qa.template_permissions import CASE_TEMPLATE_READ_KEYS
 from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
 from plane.bgtasks.test_case_activities_task import test_case_activity
-from plane.db.models import PlanCase, TestCase, TestCaseRepository
+from plane.db.models import CaseReviewThrough, PlanCase, TestCase, TestCaseRepository, TestCaseVersion
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -64,7 +64,14 @@ class TemplateCaseAPIView(BaseAPIView):
                 repository__is_template=True,
             )
             .select_related("repository", "module", "assignee")
-            .prefetch_related("labels", "issues")
+            .prefetch_related(
+                "labels",
+                "issues",
+                Prefetch(
+                    "versions",
+                    queryset=TestCaseVersion.objects.only("id", "case", "version", "updated_at"),
+                ),
+            )
         )
 
     def _get_template_repository(self, slug, repository_id):
@@ -90,10 +97,14 @@ class TemplateCaseAPIView(BaseAPIView):
         if module_id:
             queryset = queryset.filter(module_id__in=expand_module_subtree_ids(module_id))
 
-        # 模板用例没有执行语境，注解常量短路 serializer 的逐行执行结果回查
+        # 模板用例没有评审/执行语境，注解常量短路 serializer 的逐行评审与执行回查
         queryset = queryset.annotate(
             _latest_execution_result=Value(
                 PlanCase.Result.NOT_START, output_field=CharField()
+            ),
+            _latest_execution_plan_id=Value(None, output_field=UUIDField()),
+            _review_result=Value(
+                CaseReviewThrough.Result.NOT_START, output_field=CharField()
             ),
         )
 

@@ -70,6 +70,7 @@ from plane.db.models import (
     ReleaseIssue,
     CaseReviewRecord,
     CaseReviewThrough,
+    TestCaseVersion,
 )
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import invalid_workspace_member_ids as _invalid_workspace_member_ids
@@ -1532,7 +1533,15 @@ class CaseAPIView(BaseAPIView):
     model = TestCase
     queryset = TestCase.objects.select_related(
         "repository", "module", "assignee"
-    ).prefetch_related("labels", "issues")
+    ).prefetch_related(
+        "labels",
+        "issues",
+        # CaseListSerializer.get_version 只看版本号与更新时间，不拉整份快照
+        Prefetch(
+            "versions",
+            queryset=TestCaseVersion.objects.only("id", "case", "version", "updated_at"),
+        ),
+    )
     pagination_class = CustomPaginator
     serializer_class = CaseListSerializer
     filter_backends = (
