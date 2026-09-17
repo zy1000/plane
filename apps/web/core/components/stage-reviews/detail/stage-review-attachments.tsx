@@ -13,7 +13,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
-import { Block } from "./stage-review-content";
+import { Block, BlockAction, EmptyLine } from "./stage-review-content";
 import { useStageReviewAttachmentPreview } from "./use-stage-review-attachment-preview";
 
 const I18N = "stage_review";
@@ -39,16 +39,15 @@ const AttachmentRow = ({
     <div
       role="button"
       tabIndex={0}
-      className="group -mx-2 flex h-11 cursor-pointer items-center justify-between gap-3 rounded-md px-2 hover:bg-surface-2"
+      className="group -mx-2 flex h-10 cursor-pointer items-center justify-between gap-3 rounded-md px-2 hover:bg-layer-2"
       onClick={() => onPreview(asset)}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3 text-13">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <span className="flex shrink-0">{getFileIcon(getFileExtension(asset.name), 18)}</span>
         <Tooltip tooltipContent={asset.name} isMobile={isMobile}>
-          <p className="truncate font-medium text-secondary">{asset.name}</p>
+          <p className="truncate text-14 text-primary">{asset.name}</p>
         </Tooltip>
-        <span className="flex size-1.5 shrink-0 rounded-full bg-layer-1" />
-        <span className="shrink-0 text-placeholder">{convertBytesToSize(asset.size)}</span>
+        <span className="shrink-0 text-12 text-placeholder tabular-nums">{convertBytesToSize(asset.size)}</span>
       </div>
 
       {/* 右侧操作区不冒泡到整行，点头像 / 菜单不触发预览 */}
@@ -93,7 +92,7 @@ const AttachmentRow = ({
  * 评审附件，列表与交互照工作项附件：整行点开预览（Office / PDF / xmind / 图片），「⋯」里下载与删除，
  * 删除要确认，整块可拖入上传并显示进度。走 FileAsset 的预签名两步上传，文件不经过 Django。
  *
- * 标题行保持抽屉其他区块的样式，上传入口是标题右侧的「+」；空态是一条虚线投放区。
+ * 标题行保持抽屉其他区块的样式，上传入口是标题右侧的「+」；空态是一行灰字，拖文件进来时整块高亮。
  * 已评审（editable=false）时只能预览与下载。
  */
 export const StageReviewAttachments = ({
@@ -169,16 +168,12 @@ export const StageReviewAttachments = ({
       count={attachments.length}
       action={
         editable && (
-          <Tooltip tooltipContent={t(`${I18N}.detail.upload`)}>
-            <button
-              type="button"
-              disabled={isMutating || Boolean(upload)}
-              onClick={open}
-              className="grid size-6.5 place-items-center rounded-md text-tertiary transition hover:bg-layer-2 hover:text-secondary disabled:opacity-50"
-            >
-              <PlusIcon className="size-4" />
-            </button>
-          </Tooltip>
+          <BlockAction
+            icon={PlusIcon}
+            label={t(`${I18N}.detail.upload`)}
+            disabled={isMutating || Boolean(upload)}
+            onClick={open}
+          />
         )
       }
     >
@@ -209,14 +204,14 @@ export const StageReviewAttachments = ({
         )}
 
         {upload && (
-          <div className="pointer-events-none -mx-2 flex h-11 items-center justify-between gap-3 rounded-md bg-surface-2 px-2">
-            <div className="flex min-w-0 items-center gap-3 text-13">
+          <div className="pointer-events-none -mx-2 flex h-10 items-center justify-between gap-3 rounded-md bg-layer-2 px-2">
+            <div className="flex min-w-0 items-center gap-2.5">
               <span className="shrink-0">{getFileIcon(getFileExtension(upload.name), 18)}</span>
-              <p className="truncate font-medium text-secondary">{upload.name}</p>
+              <p className="truncate text-14 text-primary">{upload.name}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <CircularProgressIndicator size={20} strokeWidth={3} percentage={upload.progress} />
-              <span className="text-13 font-medium tabular-nums">{upload.progress}%</span>
+              <CircularProgressIndicator size={18} strokeWidth={3} percentage={upload.progress} />
+              <span className="text-12 text-tertiary tabular-nums">{upload.progress}%</span>
             </div>
           </div>
         )}
@@ -235,20 +230,9 @@ export const StageReviewAttachments = ({
         {attachments.length === 0 &&
           !upload &&
           (editable ? (
-            <button
-              type="button"
-              disabled={isMutating}
-              onClick={open}
-              className={cn(
-                "flex h-10.5 items-center justify-center gap-2 rounded-lg border border-dashed border-strong",
-                "text-13 text-placeholder transition hover:border-accent-strong hover:text-tertiary"
-              )}
-            >
-              <Paperclip className="size-3.5" />
-              {t(`${I18N}.detail.drop_hint`)}
-            </button>
+            <EmptyLine icon={Paperclip} text={t(`${I18N}.detail.drop_hint`)} disabled={isMutating} onClick={open} />
           ) : (
-            <p className="text-14 text-placeholder">{t(`${I18N}.detail.no_attachments`)}</p>
+            <EmptyLine text={t(`${I18N}.detail.no_attachments`)} />
           ))}
       </div>
     </Block>

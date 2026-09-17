@@ -13,13 +13,14 @@ const KIND_CLASS: Record<EStageReviewKind, string> = {
   [EStageReviewKind.O_STAGE_ACTIVITY]: "bg-warning-subtle/70 text-warning-primary",
 };
 
-export function StageReviewKindBadge({ kind }: { kind: EStageReviewKind }) {
+export function StageReviewKindBadge({ kind, className }: { kind: EStageReviewKind; className?: string }) {
   const { t } = useTranslation();
   return (
     <span
       className={cn(
         "inline-flex h-5.5 items-center rounded px-1.5 text-11 font-medium whitespace-nowrap",
-        KIND_CLASS[kind]
+        KIND_CLASS[kind],
+        className
       )}
     >
       {t(`workspace_templates.reviews.kind.${kind}`)}

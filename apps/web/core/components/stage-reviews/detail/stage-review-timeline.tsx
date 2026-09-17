@@ -1,15 +1,14 @@
 import { ArrowDownWideNarrow, ArrowUpWideNarrow } from "lucide-react";
 import { E_SORT_ORDER } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { IconButton } from "@plane/propel/icon-button";
 import type { TStageReviewActivity, TStageReviewComment, TStageReviewDetail } from "@plane/types";
-import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TStageReviewTimelineTab } from "@/hooks/store/use-stage-review-timeline";
 import { useStageReviewTimeline } from "@/hooks/store/use-stage-review-timeline";
 import { useUser } from "@/hooks/store/user";
 import { StageReviewCreatedRow, StageReviewMilestoneRow } from "./stage-review-activity";
 import { StageReviewCommentCard, StageReviewCommentComposer } from "./stage-review-comments";
+import { Block, BlockAction, EmptyLine } from "./stage-review-content";
 import { StageReviewEditRow } from "./stage-review-edit-row";
 
 const I18N = "stage_review";
@@ -71,53 +70,50 @@ export const StageReviewTimeline = ({
     />
   );
 
-  return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2 border-b border-subtle pb-2.5">
-        <h4 className="text-14 font-semibold text-primary">{t(`${I18N}.detail.timeline_title`)}</h4>
-        <span className="text-12 text-placeholder tabular-nums">{counts.all}</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="flex items-center gap-0.5 rounded-lg bg-layer-1 p-0.5" role="tablist">
-            {TABS.map((item) => {
-              const isActive = item.key === tab;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setTab(item.key)}
-                  className={cn(
-                    "flex h-6.5 items-center gap-1.5 rounded-md px-2.5 text-13 transition",
-                    isActive
-                      ? "bg-surface-1 font-medium text-primary shadow-raised-100"
-                      : "text-tertiary hover:text-secondary"
-                  )}
-                >
-                  {item.dot && <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} aria-hidden />}
-                  {t(`${I18N}.detail.${item.label}`)}
-                  <span className={cn("text-12 tabular-nums", isActive ? "text-secondary" : "text-placeholder")}>
-                    {counts[item.key]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <Tooltip tooltipContent={t(`${I18N}.detail.${isDesc ? "sort_desc" : "sort_asc"}`)}>
-            <IconButton
-              variant="tertiary"
-              icon={isDesc ? ArrowDownWideNarrow : ArrowUpWideNarrow}
-              onClick={toggleSort}
-              aria-label={t(`${I18N}.detail.${isDesc ? "sort_desc" : "sort_asc"}`)}
-            />
-          </Tooltip>
-        </div>
-      </div>
+  const tabs = (
+    <div className="flex items-center gap-0.5 rounded-lg bg-layer-1 p-0.5" role="tablist">
+      {TABS.map((item) => {
+        const isActive = item.key === tab;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => setTab(item.key)}
+            className={cn(
+              "flex h-6 items-center gap-1.5 rounded-md px-2 text-13 transition",
+              isActive ? "bg-surface-1 font-medium text-primary shadow-raised-100" : "text-tertiary hover:text-secondary"
+            )}
+          >
+            {item.dot && <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} aria-hidden />}
+            {t(`${I18N}.detail.${item.label}`)}
+            <span className={cn("text-12 tabular-nums", isActive ? "text-secondary" : "text-placeholder")}>
+              {counts[item.key]}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
+  const sortLabel = t(`${I18N}.detail.${isDesc ? "sort_desc" : "sort_asc"}`);
+
+  return (
+    <Block
+      title={t(`${I18N}.detail.timeline_title`)}
+      count={counts.all}
+      action={
+        <>
+          {tabs}
+          <BlockAction icon={isDesc ? ArrowDownWideNarrow : ArrowUpWideNarrow} label={sortLabel} onClick={toggleSort} />
+        </>
+      }
+    >
       {isDesc && composer}
 
       {items.length === 0 ? (
-        <p className="py-2 text-13 text-placeholder">{t(`${I18N}.detail.${activeTab.empty}`)}</p>
+        <EmptyLine text={t(`${I18N}.detail.${activeTab.empty}`)} />
       ) : (
         <ul className="flex flex-col">
           {items.map((item, index) => {
@@ -151,6 +147,6 @@ export const StageReviewTimeline = ({
       )}
 
       {!isDesc && composer}
-    </section>
+    </Block>
   );
 };

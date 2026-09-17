@@ -166,7 +166,7 @@ const EditDetailItem = ({ activity }: { activity: TStageReviewActivity }) => {
   }
 
   return (
-    <li className="grid min-h-6.5 grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2 text-13 text-tertiary">
+    <li className="grid min-h-6.5 grid-cols-[96px_minmax(0,1fr)] items-center gap-x-2 text-13 text-tertiary">
       <span className="flex min-w-0 items-center gap-1.5">
         <Icon className="size-3.5 shrink-0 text-placeholder" />
         <span className="truncate">{fieldLabel(field)}</span>
@@ -224,12 +224,12 @@ export const StageReviewEditRow = ({
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
-        className="-mx-1 flex min-w-0 flex-wrap items-center gap-1.5 rounded px-1 text-left transition hover:bg-layer-1"
+        className="-mx-1 flex min-w-0 flex-wrap items-center gap-1.5 rounded-md px-1 text-left transition hover:bg-layer-1"
       >
         <span>{t(`${I18N}.activity.edits_count`, { count: activities.length })}</span>
         {!isOpen &&
           fieldLabels.map((label) => (
-            <span key={label} className="rounded bg-layer-1 px-1.5 text-12 leading-5 text-secondary">
+            <span key={label} className="rounded-md bg-layer-1 px-1.5 text-12 leading-5 text-secondary">
               {label}
             </span>
           ))}
@@ -250,7 +250,7 @@ export const StageReviewEditRow = ({
       node={<span className="size-2 rounded-full bg-(--text-color-placeholder) shadow-[0_0_0_3px_var(--bg-surface-1)]" />}
     >
       <div className="flex min-h-7 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-13 text-tertiary">
-        <span className="font-medium text-secondary">
+        <span className="font-medium text-primary">
           {first.actor_detail?.display_name ?? t(`${I18N}.activity.system`)}
         </span>
         {sentence}

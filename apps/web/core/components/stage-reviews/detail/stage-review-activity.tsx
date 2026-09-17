@@ -41,8 +41,6 @@ const asResult = (value: unknown) =>
   typeof value === "string" && RESULTS.includes(value) ? (value as EStageReviewResult) : null;
 const asText = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
 
-const PILL_CLASS = "rounded-md px-2 py-0.5 text-12";
-
 /** 状态节点外壳：彩色圆节点 + 一句 14px 的话 + 右侧时间，下面可挂一段引用（结论说明 / 退回理由 / 审核意见） */
 const MilestoneShell = ({
   position,
@@ -92,7 +90,7 @@ const MilestoneShell = ({
 const Actor = ({ activity }: { activity: TStageReviewActivity }) => {
   const { t } = useTranslation();
   return (
-    <span className="font-semibold text-primary">
+    <span className="font-medium text-primary">
       {activity.actor_detail?.display_name ?? t(`${I18N}.activity.system`)}
     </span>
   );
@@ -125,9 +123,7 @@ export const StageReviewMilestoneRow = ({
       >
         <Actor activity={activity} />
         <span>{t(`${I18N}.activity.rejected`)}</span>
-        {result && (
-          <StageReviewResultBadge result={result} className={PILL_CLASS} />
-        )}
+        {result && <StageReviewResultBadge result={result} />}
       </MilestoneShell>
     );
   }
@@ -135,7 +131,7 @@ export const StageReviewMilestoneRow = ({
   const from = asStatus(activity.old_value);
   const to = asStatus(activity.new_value);
   const order = STAGE_REVIEW_STATUS_ORDER;
-  const toBadge = to && <StageReviewStatusBadge status={to} className={PILL_CLASS} />;
+  const toBadge = to && <StageReviewStatusBadge status={to} />;
 
   // 退回：往回走一步，理由挂在下面
   if (from && to && order.indexOf(to) < order.indexOf(from)) {
@@ -186,9 +182,7 @@ export const StageReviewMilestoneRow = ({
       >
         <Actor activity={activity} />
         <span>{t(`${I18N}.activity.${result ? "submit_with_result" : "submit"}`)}</span>
-        {result && (
-          <StageReviewResultBadge result={result} className={PILL_CLASS} />
-        )}
+        {result && <StageReviewResultBadge result={result} />}
         {result && <ArrowRight className="size-3 text-placeholder" aria-hidden />}
         {toBadge}
       </MilestoneShell>
@@ -236,7 +230,7 @@ export const StageReviewCreatedRow = ({
   return (
     <MilestoneShell position={position} icon={Plus} tone="neutral" at={detail.created_at}>
       <span>{t(`${I18N}.activity.${detail.is_manual ? "created_manual" : "created_tailoring"}`)}</span>
-      <StageReviewStatusBadge status={EStageReviewStatus.NOT_STARTED} className={PILL_CLASS} />
+      <StageReviewStatusBadge status={EStageReviewStatus.NOT_STARTED} />
     </MilestoneShell>
   );
 };

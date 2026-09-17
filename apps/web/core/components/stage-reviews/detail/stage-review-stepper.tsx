@@ -64,7 +64,7 @@ export const useStepHints = (detail: TStageReviewDetail, activities: TStageRevie
 
 /**
  * 四段进度：每一步是一段实条 + 段名。它只**读**当前走到哪一步，点不动 —— 状态只能由
- * 底部那颗主按钮推进，把步骤做成可点的等于给了一个隐形的状态下拉框。
+ * 标题行右侧的主按钮推进，把步骤做成可点的等于给了一个隐形的状态下拉框。
  *
  * 走过的段绿色打勾，当前段用状态色，没到的段灰色。唯一由结论带来的特例：评审中且
  * 上次不通过，当前段红色。
@@ -96,11 +96,11 @@ export const StageReviewStepper = ({
         return (
           <div key={step} className="flex min-w-0 flex-col gap-2">
             <span
-              className={cn("h-1.25 rounded-full bg-layer-3", isPast && "bg-success-primary", isCurrent && currentFill)}
+              className={cn("h-1 rounded-full bg-layer-3", isPast && "bg-success-primary", isCurrent && currentFill)}
             />
             <span
               className={cn(
-                "flex min-w-0 items-center gap-1.5 text-13 whitespace-nowrap text-tertiary",
+                "flex min-h-4.5 min-w-0 items-center gap-1.5 text-13 whitespace-nowrap text-tertiary",
                 isPast && "text-secondary",
                 isCurrent && "font-semibold text-primary"
               )}
@@ -115,10 +115,9 @@ export const StageReviewStepper = ({
                 {showCheck ? <Check className="size-2.5" strokeWidth={3.5} /> : index + 1}
               </span>
               {t(`${I18N}.status.${step}`)}
+              {/* 提示紧跟段名，不再推到最右 —— 推到最右会挤到下一段的序号旁，读成下一段的 */}
               {hint && (
-                <span className="ml-auto min-w-0 truncate pl-1 text-12 font-normal tabular-nums text-placeholder">
-                  {hint}
-                </span>
+                <span className="min-w-0 truncate text-12 font-normal tabular-nums text-placeholder">· {hint}</span>
               )}
             </span>
           </div>

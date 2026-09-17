@@ -2,17 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import type { IUserLite, TStageReviewCandidates } from "@plane/types";
 import { Avatar, CustomSearchSelect } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 import { StageReviewService } from "@/services/stage-review.service";
+import { INLINE_FIELD_CLASS } from "./stage-review-content";
 
 const service = new StageReviewService();
 const I18N = "stage_review";
 
 /** 没人时的占位：灰字动词，和工作项「指定负责人」同一个口气，不画空头像以免和上面的值错开 */
-const EmptyMember = ({ label }: { label: string }) => <span className="text-13 text-placeholder">{label}</span>;
+const EmptyMember = ({ label }: { label: string }) => <span className="text-14 text-placeholder">{label}</span>;
 
 const MemberLabel = ({ user }: { user: IUserLite }) => (
-  <span className="flex min-w-0 items-center gap-2 text-13 text-primary">
+  <span className="flex min-w-0 items-center gap-2 text-14 text-primary">
     <Avatar size="md" name={user.display_name} src={getFileURL(user.avatar_url ?? "")} />
     <span className="truncate">{user.display_name}</span>
   </span>
@@ -95,7 +96,7 @@ export const RoleMemberSelect = ({
       onOpen={fetchCandidates}
       options={options}
       maxHeight="lg"
-      buttonClassName="-mx-2 w-[calc(100%+1rem)] justify-between rounded-md border-none bg-transparent px-2 py-1 hover:bg-layer-2"
+      buttonClassName={cn(INLINE_FIELD_CLASS, "justify-between")}
       noResultsMessage={t(`${I18N}.detail.no_candidates`)}
       label={valueDetail ? <MemberLabel user={valueDetail} /> : <EmptyMember label={t(`${I18N}.detail.pick_${role}`)} />}
     />

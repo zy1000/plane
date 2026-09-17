@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ListOrdered, Pencil } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { IconButton } from "@plane/propel/icon-button";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TStageReviewDetail, TUpdateStageReviewPayload } from "@plane/types";
 import { EFileAssetType } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -18,21 +21,19 @@ const isBlankRichText = (html: string | null | undefined) => {
   return text.length === 0 && !/<(img|image-component|video|table)\b/i.test(html ?? "");
 };
 
-/** 区块标题右侧的小动作：描边小按钮（上传附件）或安静的文字（编辑） */
-export const BLOCK_ACTION_CLASS = cn(
-  "inline-flex h-6.5 items-center gap-1 rounded-md px-2 text-12 font-medium transition disabled:opacity-50",
-  "border border-strong bg-surface-1 text-secondary hover:bg-layer-2"
-);
-export const BLOCK_ACTION_QUIET_CLASS =
-  "inline-flex h-6.5 items-center gap-1 rounded-md px-2 text-12 font-medium text-placeholder transition hover:bg-layer-2 hover:text-secondary";
-
+/**
+ * 编辑区的外壳：平时没有框，悬停出一圈淡边，聚焦出蓝边 —— 与标题、右栏就地编辑格同一口径。
+ * 编辑器正文的 14px 靠 globals.css 里 `.stage-review-drawer-body .editor-container.large-font` 覆盖。
+ */
 const FIELD_BOX_CLASS =
-  "-mx-2.5 rounded-lg border border-subtle px-2.5 py-1.5 transition focus-within:bg-surface-1";
-/** 跟描述 RichTextEditor 同一套字：large-font = 1rem / 1.5rem，Inter */
-const FIELD_EDITOR_CLASS = "editor-container large-font sans-serif line-spacing-regular";
+  "-mx-2.5 rounded-lg border border-transparent px-2.5 py-1.5 transition hover:border-subtle focus-within:border-accent-strong";
 const FIELD_LINE_CLASS =
   "min-h-7 [font-family:var(--font-style)] text-[length:var(--font-size-regular)] leading-[var(--line-height-regular)]";
 
+/**
+ * 抽屉正文的区块：描述 / 工作指引 / 附件 / 活动共用这一条头 ——
+ * 28px 高，14 号加粗名称 + 12 号计数，右侧放动作（28px 图标按钮或页签组）。
+ */
 export const Block = ({
   title,
   count,
@@ -44,23 +45,76 @@ export const Block = ({
   action?: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <section className="flex flex-col gap-2.5">
-    <h4 className="flex min-h-6.5 items-center gap-2 text-14 font-semibold text-primary">
-      {title}
-      {count !== undefined && count > 0 && (
-        <span className="text-12 font-medium text-placeholder tabular-nums">{count}</span>
-      )}
-      {action && <span className="ml-auto flex items-center">{action}</span>}
-    </h4>
+  <section className="flex flex-col gap-2">
+    <div className="flex min-h-7 flex-wrap items-center gap-2">
+      <h4 className="text-14 font-semibold text-primary">{title}</h4>
+      {count !== undefined && count > 0 && <span className="text-12 text-placeholder tabular-nums">{count}</span>}
+      {action && <div className="ml-auto flex items-center gap-1.5">{action}</div>}
+    </div>
     {children}
   </section>
 );
 
+/** 区块头右侧的图标动作：Plane 标准 IconButton（28px），悬停出名字 */
+export const BlockAction = ({
+  icon,
+  label,
+  disabled,
+  onClick,
+}: {
+  icon: React.FC<{ className?: string }>;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) => (
+  <Tooltip tooltipContent={label}>
+    <IconButton variant="ghost" size="lg" icon={icon} aria-label={label} disabled={disabled} onClick={onClick} />
+  </Tooltip>
+);
+
+/**
+ * 就地编辑格的统一外观：平时无边框，悬停浅底，聚焦蓝边。输入框、日期、成员选择三种都照这个来，
+ * 左右各伸出 8px 让文字与上下行的值对齐。
+ */
+export const INLINE_FIELD_CLASS =
+  "-mx-2 h-7 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 text-14 hover:bg-layer-2";
+
+const EMPTY_LINE_CLASS = "-mx-2 flex h-8 w-fit max-w-full items-center gap-2 rounded-md px-2 text-14 text-placeholder";
+
+/**
+ * 空态一律一行灰字：能改时是可点的「图标 + 添加…」，悬停出浅底；只读时是一行「暂未填写」。
+ * 不画空输入框、不画虚线框 —— 空着的评审本来就空，框子只会让它显得又空又乱。
+ */
+export const EmptyLine = ({
+  icon: Icon,
+  text,
+  disabled,
+  onClick,
+}: {
+  icon?: LucideIcon;
+  text: string;
+  disabled?: boolean;
+  onClick?: () => void;
+}) =>
+  onClick ? (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(EMPTY_LINE_CLASS, "transition hover:bg-layer-2 hover:text-tertiary disabled:opacity-50")}
+    >
+      {Icon && <Icon className="size-3.5 shrink-0" />}
+      <span className="truncate">{text}</span>
+    </button>
+  ) : (
+    <p className={EMPTY_LINE_CLASS}>{text}</p>
+  );
+
 /**
  * 抽屉正文里「要读的那两块」：描述与工作指引。
  *
- * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传），空着也画框；
- * 工作指引是纯文本，模型上就是 TextField，没有 HTML 列可存，读的时候按行渲成编号清单。
+ * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传）；
+ * 工作指引是纯文本，模型上就是 TextField，没有 HTML 列可存。
  */
 export const StageReviewContent = ({
   workspaceSlug,
@@ -94,6 +148,8 @@ export const StageReviewContent = ({
  * 描述。内联图片走 PROJECT_DESCRIPTION 资产，与迭代描述（CycleRichTextEditor）同一个
  * 取舍：单开一个 entity_type 要连带改 FileAsset 外键、file_path 解析和资产目录树三处。
  *
+ * 空着时只是一行「添加描述」，点了才挂编辑器；写完仍是空的，失焦后收回那一行。
+ *
  * 存在**焦点离开整块**时：contenteditable 的 focusout 会冒泡到外层 div，点工具栏按钮
  * 也算 focusout，所以要用 relatedTarget 判断焦点是不是还留在块内。
  */
@@ -117,11 +173,16 @@ const DescriptionEditor = ({
   const isBlank = isBlankRichText(detail.description_html);
   const saved = isBlank ? EMPTY_RICH_TEXT : (detail.description_html as string);
   const [draft, setDraft] = useState(saved);
+  const [isOpen, setIsOpen] = useState(false);
 
   // 换一条评审、或存完之后回灌
   useEffect(() => {
     setDraft(saved);
   }, [detail.id, saved]);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [detail.id]);
 
   const handleUploadFile = useCallback(
     async (blockId: string | undefined, file: File) => {
@@ -157,7 +218,7 @@ const DescriptionEditor = ({
     return (
       <Block title={title}>
         {isBlank ? (
-          <p className="text-14 text-placeholder">{t(`${I18N}.detail.empty_value`)}</p>
+          <EmptyLine text={t(`${I18N}.detail.empty_value`)} />
         ) : (
           <RichTextEditor
             id={`stage_review_description_${detail.id}`}
@@ -175,6 +236,14 @@ const DescriptionEditor = ({
     );
   }
 
+  if (isBlank && !isOpen) {
+    return (
+      <Block title={title}>
+        <EmptyLine icon={Pencil} text={t(`${I18N}.detail.add_description`)} onClick={() => setIsOpen(true)} />
+      </Block>
+    );
+  }
+
   return (
     <Block title={title}>
       <div
@@ -183,6 +252,8 @@ const DescriptionEditor = ({
           // 焦点还在块内（比如点了工具栏按钮）就不算改完
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
           if (draft !== saved) onUpdate({ description_html: draft });
+          // 什么都没写就收回成一行；写了东西则等保存回灌，不先收起免得闪一下空态
+          if (isBlankRichText(draft)) setIsOpen(false);
         }}
       >
         <RichTextEditor
@@ -190,6 +261,7 @@ const DescriptionEditor = ({
           key={detail.id}
           id={`stage_review_description_${detail.id}`}
           editable
+          autofocus={isOpen}
           initialValue={saved}
           value={null}
           onChange={(_json, html) => setDraft(html)}
@@ -233,13 +305,13 @@ const WorkInstruction = ({
   const title = t(`${I18N}.fields.work_instruction`);
   const isBlank = !detail.work_instruction.trim();
 
-  if (editable && (isOpen || isBlank)) {
+  if (editable && isOpen) {
     return (
       <Block title={title}>
-        <div className={cn(FIELD_BOX_CLASS, FIELD_EDITOR_CLASS)}>
+        <div className={FIELD_BOX_CLASS}>
           <textarea
             value={draft}
-            autoFocus={isOpen}
+            autoFocus
             rows={Math.max(1, draft.split(/\r?\n/).length)}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={() => {
@@ -248,9 +320,8 @@ const WorkInstruction = ({
             }}
             placeholder={t(`${I18N}.detail.add_work_instruction`)}
             className={cn(
-              "block w-full resize-none bg-transparent p-0 pb-1 text-primary outline-none",
-              "placeholder:text-placeholder placeholder:opacity-100",
-              FIELD_LINE_CLASS
+              "block min-h-7 w-full resize-none bg-transparent p-0 text-14 leading-6 text-primary outline-none",
+              "placeholder:text-placeholder placeholder:opacity-100"
             )}
           />
         </div>
@@ -261,7 +332,11 @@ const WorkInstruction = ({
   if (isBlank) {
     return (
       <Block title={title}>
-        <p className="text-14 text-placeholder">{t(`${I18N}.detail.empty_value`)}</p>
+        {editable ? (
+          <EmptyLine icon={ListOrdered} text={t(`${I18N}.detail.add_work_instruction`)} onClick={() => setIsOpen(true)} />
+        ) : (
+          <EmptyLine text={t(`${I18N}.detail.empty_value`)} />
+        )}
       </Block>
     );
   }
@@ -269,16 +344,9 @@ const WorkInstruction = ({
   return (
     <Block
       title={title}
-      action={
-        editable && (
-          <button type="button" className={BLOCK_ACTION_QUIET_CLASS} onClick={() => setIsOpen(true)}>
-            <Pencil className="size-3" />
-            {t(`${I18N}.detail.edit`)}
-          </button>
-        )
-      }
+      action={editable && <BlockAction icon={Pencil} label={t(`${I18N}.detail.edit`)} onClick={() => setIsOpen(true)} />}
     >
-      <p className="whitespace-pre-wrap text-14 leading-relaxed text-secondary">{detail.work_instruction}</p>
+      <p className="text-14 leading-6 whitespace-pre-wrap text-secondary">{detail.work_instruction}</p>
     </Block>
   );
 };

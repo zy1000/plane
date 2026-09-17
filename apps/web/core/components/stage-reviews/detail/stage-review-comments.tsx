@@ -45,7 +45,9 @@ export const StageReviewCommentComposer = ({
 
   const handleSubmit = async () => {
     if (isCommentEmpty(draft) || isMutating) return;
-    await onCreate(draft);
+    // 发送失败时（抽屉会弹错误提示）保留草稿，不清空输入框
+    const created = await onCreate(draft);
+    if (!created) return;
     setDraft("<p></p>");
     editorRef.current?.clearEditor();
   };
@@ -71,7 +73,7 @@ export const StageReviewCommentComposer = ({
         submitButtonText={`${I18N}.detail.comment_send`}
         isSubmitting={isMutating}
         onEnterKeyPress={() => void handleSubmit()}
-        parentClassName="min-w-0 rounded-lg px-3 py-2 focus-within:border-accent-strong"
+        parentClassName="min-w-0 rounded-lg border border-subtle px-3 py-2 focus-within:border-accent-strong"
         displayConfig={{ fontSize: "small-font" }}
         onChange={(_json, html) => setDraft(html)}
         uploadFile={async (blockId, file) => {
@@ -148,11 +150,11 @@ export const StageReviewCommentCard = ({
         </span>
       }
     >
-      <div className="group min-w-0 rounded-lg border border-subtle bg-surface-1 px-3.5 py-2.5 shadow-raised-100">
+      <div className="group min-w-0 rounded-lg border border-subtle bg-surface-1 px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-13 font-semibold text-primary">{comment.actor_detail?.display_name ?? "—"}</span>
+          <span className="truncate text-14 font-medium text-primary">{comment.actor_detail?.display_name ?? "—"}</span>
           {roleKey && (
-            <span className="shrink-0 rounded bg-layer-2 px-1.5 text-12 leading-5 text-tertiary">
+            <span className="shrink-0 rounded-md bg-layer-2 px-1.5 text-12 leading-5 text-tertiary">
               {t(`${I18N}.detail.${roleKey}`)}
             </span>
           )}
@@ -162,7 +164,7 @@ export const StageReviewCommentCard = ({
                 type="button"
                 title={t(`${I18N}.actions.delete`)}
                 className={cn(
-                  "rounded p-1 text-tertiary opacity-0 transition focus-visible:opacity-100",
+                  "rounded-md p-1 text-tertiary opacity-0 transition focus-visible:opacity-100",
                   "hover:bg-danger-subtle hover:text-danger-primary group-hover:opacity-100"
                 )}
                 onClick={() => onDelete(comment.id)}

@@ -2,9 +2,10 @@ import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Transition } from "@headlessui/react";
-import { Check, CircleX, ExternalLink, Info, MoveRight, Play, Send, Undo2 } from "lucide-react";
+import { Check, ExternalLink, MoveRight, Play, Send, Undo2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type {
@@ -18,10 +19,11 @@ import type {
 } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
 import { Loader } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import useKeypress from "@/hooks/use-keypress";
 import { getStageReviewError } from "@/hooks/store/use-stage-reviews";
+import type { TStageReviewSaveState } from "@/hooks/store/use-stage-review-detail";
 import { useStageReviewDetail } from "@/hooks/store/use-stage-review-detail";
 import { ApproveStageReviewModal } from "../approve-review-modal";
 import { StageReviewStatusBadge } from "../badges";
@@ -31,17 +33,16 @@ import type { TStageReviewActionGuard } from "./stage-review-action-guard";
 import { getStageReviewActionGuard } from "./stage-review-action-guard";
 import { StageReviewAttachments } from "./stage-review-attachments";
 import { StageReviewContent } from "./stage-review-content";
+import { StageReviewSaveStatus } from "./stage-review-save-status";
 import { StageReviewSidebar } from "./stage-review-sidebar";
 import { StageReviewStepper, useStepHints } from "./stage-review-stepper";
 import { StageReviewTimeline } from "./stage-review-timeline";
 
 const I18N = "stage_review";
 
-/** 动作条的按钮：主按钮 36px 带图标，退回始终是描边的幽灵按钮 */
-const FOOT_BUTTON = "inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-14 font-medium transition disabled:opacity-50";
-const FOOT_PRIMARY = cn(FOOT_BUTTON, "bg-accent-primary text-on-color shadow-raised-100 hover:bg-accent-primary-hover");
-const FOOT_SUCCESS = cn(FOOT_BUTTON, "bg-success-primary text-on-color shadow-raised-100 hover:opacity-90");
-const FOOT_GHOST = cn(FOOT_BUTTON, "border border-strong bg-surface-1 text-secondary hover:bg-layer-2");
+/** 标题：编辑态与只读态同一个盒子，切换时不跳；悬停出浅底，聚焦才出蓝边 —— 与右栏就地编辑格同一口径 */
+const TITLE_CLASS =
+  "-mx-2 h-9 min-w-0 rounded-md border border-transparent px-2 text-20 leading-snug font-semibold text-primary";
 
 /** 退回之后落到哪一步。已评审是终态，没有上一步可退（与后端 rollback 一致） */
 const previousStatusOf = (detail: TStageReviewDetail) =>
@@ -64,43 +65,20 @@ const GuardedAction = ({ guard, text, children }: { guard: TStageReviewActionGua
   guard.allowed ? (
     <>{children}</>
   ) : (
-    <Tooltip tooltipContent={text}>
+    <Tooltip tooltipContent={text} position="bottom-end">
       <span className="inline-flex">{children}</span>
     </Tooltip>
   );
 
 /**
- * 动作条左侧那句话。评审中且上次不通过时提醒整改后重提；已评审时从轨迹里找到完成那条，
- * 写成「已于某天由谁审核通过」；其余按状态给固定提示。
- */
-const useFootHint = (
-  detail: TStageReviewDetail,
-  activities: TStageReviewActivity[],
-  advanceGuard: TStageReviewActionGuard
-) => {
-  const { t } = useTranslation();
-  // 推进被拦（没指定人 / 不是本人）时，先说清楚该谁来做，比「提交时填写评审结果」这类提示更要紧
-  if (!advanceGuard.allowed) return blockedText(t, "advance", advanceGuard);
-  if (detail.status === EStageReviewStatus.IN_REVIEW && detail.result === EStageReviewResult.REJECTED) {
-    return t(`${I18N}.actions.hint_in_review_rejected`);
-  }
-  if (detail.status !== EStageReviewStatus.COMPLETED) return t(`${I18N}.actions.hint_${detail.status}`);
-  const completion = [...activities]
-    .reverse()
-    .find((activity) => activity.field === "status" && activity.new_value === EStageReviewStatus.COMPLETED);
-  if (!completion) return t(`${I18N}.actions.hint_completed`);
-  return t(`${I18N}.actions.completed_by`, {
-    date: renderFormattedDate(completion.created_at),
-    name: completion.actor_detail?.display_name ?? "—",
-  });
-};
-
-/**
  * 评审详情抽屉。**评审与评审活动共用这一套** —— 两者字段几乎一样，只有层级不同。
  *
- * 布局分三段：头（面包屑 / 名片式标题区 / 四段进度）、身（正文 + 右侧属性栏）、脚（动作条）。
- * 正文放「要读的」（描述、工作指引、附件、讨论与轨迹），右栏放「要查的」（产品、阶段、
- * 负责人、日期、结论、O 阶段那两组），**动作条钉在底部**：滚到评论区也能直接推进。
+ * 布局分两段：头（面包屑 + 保存状态 / 名片式标题区 + 动作按钮 / 四段进度）、身（正文 + 右侧属性栏）。
+ * 正文放「要读的」（描述、工作指引、附件、活动），右栏放「要查的」（产品、阶段、负责人、日期、
+ * 结论、O 阶段那两组）。**动作按钮住在标题行右侧**，紧挨着状态药丸：状态和「下一步」读在一起。
+ *
+ * 写入分两种回执：开始 / 提交 / 审核 / 退回 是动作，成功弹 toast；改字段、传删附件、发评论是
+ * 随手改，只在顶栏显示保存状态，失败才弹 toast —— 右下角的 toast 不该每改一个字段就冒一次。
  *
  * 宽度比工作项抽屉宽一档（2xl 下 70%）—— 这一屏要同时铺开正文与 312px 的属性栏。
  *
@@ -142,6 +120,8 @@ export const StageReviewDrawer = ({
     activities,
     isLoading,
     isMutating,
+    saveState,
+    retryLastSave,
     updateReview,
     advance,
     rollback,
@@ -161,38 +141,59 @@ export const StageReviewDrawer = ({
     if (isOpen && !isSubmitOpen && !isApproveOpen) onClose();
   });
 
-  /** 动作统一在这里吞错：领域错误码有中文文案，其余回落到服务端原文 */
-  const run = async (action: () => Promise<unknown>, successKey: string) => {
+  /** 领域错误码有中文文案，其余回落到服务端原文 */
+  const toastError = (error: unknown) => {
+    const { message, code } = getStageReviewError(error);
+    setToast({
+      type: TOAST_TYPE.ERROR,
+      title: t(`${I18N}.toast.failed`),
+      message: code ? t(`${I18N}.errors.${code}`, { defaultValue: message }) : message,
+    });
+  };
+
+  /** 动作：成功弹 toast 作回执，并把新状态同步回列表 */
+  const runAction = async (action: () => Promise<TStageReview | undefined>, successKey: string) => {
     try {
-      const next = (await action()) as TStageReview | undefined;
+      const next = await action();
       if (next) onUpdated(next);
       setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.${successKey}`) });
       return next;
     } catch (error) {
-      const { message, code } = getStageReviewError(error);
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t(`${I18N}.toast.failed`),
-        message: code ? t(`${I18N}.errors.${code}`, { defaultValue: message }) : message,
-      });
+      toastError(error);
       return undefined;
     }
   };
 
+  /** 随手改：成功只看顶栏保存状态（hook 维护），失败才弹 toast */
+  const runSave = async <T,>(save: () => Promise<T>) => {
+    try {
+      return await save();
+    } catch (error) {
+      toastError(error);
+      return undefined;
+    }
+  };
+
+  const handleUpdate = (payload: TUpdateStageReviewPayload) =>
+    void runSave(async () => {
+      const next = await updateReview(payload);
+      if (next) onUpdated(next);
+    });
+
   const handleSubmitResult = async (payload: TSubmitStageReviewPayload) => {
     // 不通过没有「提交」出去，状态留在评审中，提示要跟着换
     const toastKey = payload.result === EStageReviewResult.REJECTED ? "rejected" : "submitted";
-    const next = await run(() => advance(payload), toastKey);
+    const next = await runAction(() => advance(payload), toastKey);
     if (next) setIsSubmitOpen(false);
   };
 
   const handleRollback = async (reason: string) => {
-    const next = await run(() => rollback({ reason }), "rolled_back");
+    const next = await runAction(() => rollback({ reason }), "rolled_back");
     if (next) setIsRollbackOpen(false);
   };
 
   const handleApprove = async (comment: string) => {
-    const next = await run(() => advance({ approval_comment: comment }), "completed");
+    const next = await runAction(() => advance({ approval_comment: comment }), "completed");
     if (next) setIsApproveOpen(false);
   };
 
@@ -248,19 +249,21 @@ export const StageReviewDrawer = ({
                 currentUserId={currentUserId}
                 showProjectCrumb={showProjectCrumb}
                 isMutating={isMutating}
+                saveState={saveState}
                 titleDraft={titleDraft}
                 setTitleDraft={setTitleDraft}
                 onClose={onClose}
-                onUpdate={(payload) => void run(() => updateReview(payload), "updated")}
-                onStart={() => void run(advance, "started")}
+                onRetrySave={() => void runSave(retryLastSave)}
+                onUpdate={handleUpdate}
+                onStart={() => void runAction(advance, "started")}
                 onOpenSubmit={() => setIsSubmitOpen(true)}
                 onApprove={() => setIsApproveOpen(true)}
                 onRollback={() => setIsRollbackOpen(true)}
-                onUpload={(file, onProgress) => run(() => uploadAttachment(file, onProgress), "attachment_uploaded")}
+                onUpload={(file, onProgress) => runSave(() => uploadAttachment(file, onProgress))}
                 onDownload={(assetId) => void downloadAttachment(assetId)}
-                onDeleteAttachment={(assetId) => run(() => deleteAttachment(assetId), "attachment_deleted")}
+                onDeleteAttachment={(assetId) => runSave(() => deleteAttachment(assetId))}
                 getAttachmentUrl={getAttachmentUrl}
-                onCreateComment={createComment}
+                onCreateComment={(commentHtml) => runSave(() => createComment(commentHtml))}
                 onDeleteComment={deleteComment}
               />
             )}
@@ -309,9 +312,11 @@ type DrawerBodyProps = {
   currentUserId: string | undefined;
   showProjectCrumb: boolean;
   isMutating: boolean;
+  saveState: TStageReviewSaveState;
   titleDraft: string;
   setTitleDraft: (next: string) => void;
   onClose: () => void;
+  onRetrySave: () => void;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
   onStart: () => void;
   onOpenSubmit: () => void;
@@ -325,7 +330,7 @@ type DrawerBodyProps = {
   onDeleteComment: (commentId: string) => Promise<unknown>;
 };
 
-/** 抽屉有数据之后的整个内容；拆出来是为了让 hooks（进度提示、完成提示）拿到非空的 detail */
+/** 抽屉有数据之后的整个内容；拆出来是为了让 hooks（进度提示）拿到非空的 detail */
 const DrawerBody = ({
   workspaceSlug,
   workspaceId,
@@ -338,9 +343,11 @@ const DrawerBody = ({
   currentUserId,
   showProjectCrumb,
   isMutating,
+  saveState,
   titleDraft,
   setTitleDraft,
   onClose,
+  onRetrySave,
   onUpdate,
   onStart,
   onOpenSubmit,
@@ -356,14 +363,13 @@ const DrawerBody = ({
   const { t } = useTranslation();
   const stepHints = useStepHints(detail, activities);
   const guard = getStageReviewActionGuard(detail, currentUserId);
-  const footHint = useFootHint(detail, activities, guard.advance);
   const advanceBlockedText = blockedText(t, "advance", guard.advance);
 
   const isCompleted = detail.status === EStageReviewStatus.COMPLETED;
-  const isRejected = detail.status === EStageReviewStatus.IN_REVIEW && detail.result === EStageReviewResult.REJECTED;
   const previousStatus = previousStatusOf(detail);
   // 已评审即定稿：字段与附件都改不了也退不回，要重做去裁剪表取消勾选后重新生成
   const editable = canManage && !isCompleted;
+  const hasActions = canManage && !isCompleted;
   const source = detail.parent_title
     ? t(`${I18N}.detail.belongs_to`, { title: detail.parent_title })
     : detail.is_manual
@@ -372,7 +378,7 @@ const DrawerBody = ({
 
   return (
     <>
-      {/* 头一行：面包屑 44px，关闭按钮在最左，与工作项 peek 一致；评审活动多一级所属评审 */}
+      {/* 头一行：面包屑 44px，关闭按钮在最左，与工作项 peek 一致；评审活动多一级所属评审。右侧是保存状态 */}
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-subtle px-2.5 text-13 text-tertiary">
         <button
           type="button"
@@ -387,7 +393,7 @@ const DrawerBody = ({
             {(showProjectCrumb ? detail.project_detail?.name : detail.product_detail?.name) ?? "—"}
           </span>
           <span className="text-placeholder">/</span>
-          <span className="whitespace-nowrap font-medium text-secondary">{detail.stage_detail?.label ?? "—"}</span>
+          <span className="font-medium whitespace-nowrap text-secondary">{detail.stage_detail?.label ?? "—"}</span>
           {detail.parent_title && (
             <>
               <span className="text-placeholder">/</span>
@@ -397,28 +403,31 @@ const DrawerBody = ({
           <span className="text-placeholder">/</span>
           <span className="truncate">{detail.title}</span>
         </span>
-        {showProjectCrumb && (
-          <Link
-            to={`/${workspaceSlug}/projects/${detail.project_id}/stage-reviews?review=${detail.id}`}
-            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-12 text-tertiary transition hover:bg-layer-2 hover:text-secondary"
-          >
-            <ExternalLink className="size-3.5" />
-            {t(`${I18N}.detail.open_in_project`)}
-          </Link>
-        )}
+        <span className="ml-auto flex shrink-0 items-center gap-1 pl-3">
+          <StageReviewSaveStatus state={saveState} onRetry={onRetrySave} />
+          {showProjectCrumb && (
+            <Link
+              to={`/${workspaceSlug}/projects/${detail.project_id}/stage-reviews?review=${detail.id}`}
+              className="inline-flex h-6.5 items-center gap-1.5 rounded-md px-2 text-13 text-tertiary transition hover:bg-layer-2 hover:text-secondary"
+            >
+              <ExternalLink className="size-3.5" />
+              {t(`${I18N}.detail.open_in_project`)}
+            </Link>
+          )}
+        </span>
       </div>
 
-      {/* 名片式标题区：阶段 + 类型 + 来源一行，大标题，状态药丸靠右；下面是四段进度 */}
+      {/* 名片式标题区：阶段 + 类型 + 来源一行，标题一行（右侧状态药丸 + 动作按钮）；下面是四段进度 */}
       <div className="flex shrink-0 flex-col gap-4 border-b border-subtle px-7 pt-5 pb-4">
-        <div className="flex items-start gap-4">
+        <div className="flex items-end gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex items-center gap-2 text-12 text-tertiary">
               {detail.stage_detail?.label && (
-                <span className="inline-flex h-5.5 items-center rounded bg-layer-2 px-1.5 text-11 font-medium whitespace-nowrap text-secondary">
+                <span className="inline-flex h-5.5 items-center rounded-md bg-layer-2 px-2 text-12 font-medium whitespace-nowrap text-secondary">
                   {detail.stage_detail.label}
                 </span>
               )}
-              <StageReviewKindBadge kind={detail.kind} />
+              <StageReviewKindBadge kind={detail.kind} className="rounded-md px-2 text-12" />
               <span className="truncate">· {source}</span>
             </div>
             {editable ? (
@@ -431,19 +440,74 @@ const DrawerBody = ({
                   if (!next) setTitleDraft(detail.title);
                   else if (next !== detail.title) onUpdate({ title: next });
                 }}
-                className={cn(
-                  "-mx-2 min-w-0 rounded-md border border-transparent px-2 py-0.5 text-22 leading-snug font-semibold",
-                  "text-primary hover:border-subtle focus:border-accent-strong focus:outline-none"
-                )}
+                className={cn(TITLE_CLASS, "hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none")}
               />
             ) : (
-              <h2 className="min-w-0 truncate text-22 leading-snug font-semibold text-primary">{detail.title}</h2>
+              <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{detail.title}</h2>
             )}
           </div>
-          <StageReviewStatusBadge
-            status={detail.status}
-            className="mt-6 h-7.5 gap-2 px-3 text-13 [&>span]:size-2"
-          />
+
+          {/* 状态药丸 · 竖线 · 退回 · 主动作。按钮是 Plane 标准按钮 lg 档（28px） */}
+          <div className="flex h-9 shrink-0 items-center gap-2">
+            <StageReviewStatusBadge status={detail.status} size="md" />
+            {hasActions && (
+              <>
+                <span className="mx-1 h-4.5 border-l border-subtle" aria-hidden />
+                {previousStatus && (
+                  <GuardedAction guard={guard.rollback} text={blockedText(t, "rollback", guard.rollback)}>
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      prependIcon={<Undo2 />}
+                      disabled={isMutating || !guard.rollback.allowed}
+                      onClick={onRollback}
+                    >
+                      {t(`${I18N}.actions.rollback_plain`)}
+                    </Button>
+                  </GuardedAction>
+                )}
+                {detail.status === EStageReviewStatus.NOT_STARTED && (
+                  <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      prependIcon={<Play />}
+                      disabled={isMutating || !guard.advance.allowed}
+                      onClick={onStart}
+                    >
+                      {t(`${I18N}.actions.start`)}
+                    </Button>
+                  </GuardedAction>
+                )}
+                {detail.status === EStageReviewStatus.IN_REVIEW && (
+                  <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      prependIcon={<Send />}
+                      disabled={isMutating || !guard.advance.allowed}
+                      onClick={onOpenSubmit}
+                    >
+                      {t(`${I18N}.actions.submit_for_approval`)}
+                    </Button>
+                  </GuardedAction>
+                )}
+                {detail.status === EStageReviewStatus.IN_APPROVAL && (
+                  <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      prependIcon={<Check />}
+                      disabled={isMutating || !guard.advance.allowed}
+                      onClick={onApprove}
+                    >
+                      {t(`${I18N}.actions.approve`)}
+                    </Button>
+                  </GuardedAction>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         <StageReviewStepper status={detail.status} result={detail.result} hints={stepHints} />
@@ -451,7 +515,7 @@ const DrawerBody = ({
 
       {/* 身：正文与属性栏各自滚动 */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-7 py-5">
+        <div className="stage-review-drawer-body flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-5 pb-8">
           <StageReviewContent
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}
@@ -494,76 +558,6 @@ const DrawerBody = ({
           onUpdate={onUpdate}
         />
       </div>
-
-      {/* 脚：动作条常驻，提示在左、按钮在右，滚到哪都能推进 */}
-      {canManage && (
-        <div className="flex h-15 shrink-0 items-center gap-2.5 border-t border-subtle bg-surface-1 pr-5 pl-7">
-          <span className="flex min-w-0 items-center gap-1.5 text-13 text-tertiary">
-            {isCompleted ? (
-              <Check className="size-3.5 shrink-0 text-success-primary" />
-            ) : isRejected ? (
-              <CircleX className="size-3.5 shrink-0 text-danger-primary" />
-            ) : (
-              <Info className="size-3.5 shrink-0 text-placeholder" />
-            )}
-            <span className="truncate">{footHint}</span>
-          </span>
-          <span className="ml-auto flex shrink-0 items-center gap-2.5">
-            {previousStatus && (
-              <GuardedAction guard={guard.rollback} text={blockedText(t, "rollback", guard.rollback)}>
-                <button
-                  type="button"
-                  className={FOOT_GHOST}
-                  disabled={isMutating || !guard.rollback.allowed}
-                  onClick={onRollback}
-                >
-                  <Undo2 className="size-3.5" />
-                  {t(`${I18N}.actions.rollback_plain`)}
-                </button>
-              </GuardedAction>
-            )}
-            {detail.status === EStageReviewStatus.NOT_STARTED && (
-              <GuardedAction guard={guard.advance} text={advanceBlockedText}>
-                <button
-                  type="button"
-                  className={FOOT_PRIMARY}
-                  disabled={isMutating || !guard.advance.allowed}
-                  onClick={onStart}
-                >
-                  <Play className="size-3.5 fill-current" />
-                  {t(`${I18N}.actions.start`)}
-                </button>
-              </GuardedAction>
-            )}
-            {detail.status === EStageReviewStatus.IN_REVIEW && (
-              <GuardedAction guard={guard.advance} text={advanceBlockedText}>
-                <button
-                  type="button"
-                  className={FOOT_PRIMARY}
-                  disabled={isMutating || !guard.advance.allowed}
-                  onClick={onOpenSubmit}
-                >
-                  <Send className="size-3.5" />
-                  {t(`${I18N}.actions.submit_for_approval`)}
-                </button>
-              </GuardedAction>
-            )}
-            {detail.status === EStageReviewStatus.IN_APPROVAL && (
-              <GuardedAction guard={guard.advance} text={advanceBlockedText}>
-                <button
-                  type="button"
-                  className={FOOT_SUCCESS}
-                  disabled={isMutating || !guard.advance.allowed}
-                  onClick={onApprove}
-                >
-                  <Check className="size-3.5" strokeWidth={2.5} />
-                  {t(`${I18N}.actions.approve`)}
-                </button>
-              </GuardedAction>
-            )}
-          </span>
-        </div>
-      )}
     </>
   );
 };

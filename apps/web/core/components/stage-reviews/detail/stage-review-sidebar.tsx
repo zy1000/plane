@@ -8,6 +8,7 @@ import { cn, getDate, renderFormattedDate, renderFormattedPayloadDate } from "@p
 import { DateDropdown } from "@/components/dropdowns/date";
 import { StageReviewResultBadge } from "../badges";
 import { RoleMemberSelect } from "./role-member-select";
+import { INLINE_FIELD_CLASS } from "./stage-review-content";
 
 const I18N = "stage_review";
 
@@ -15,20 +16,20 @@ const I18N = "stage_review";
 const O_STAGE_KINDS: EStageReviewKind[] = [EStageReviewKind.O_STAGE_REVIEW, EStageReviewKind.O_STAGE_ACTIVITY];
 
 const Group = ({ title, children }: { title?: string; children: React.ReactNode }) => (
-  <div className="flex flex-col gap-0.5 border-b border-subtle pb-3 last:border-b-0">
-    {title && <h5 className="mb-1 text-12 font-semibold tracking-wide text-tertiary">{title}</h5>}
+  <div className="flex flex-col border-b border-subtle pb-3 last:border-b-0">
+    {title && <h5 className="flex h-7 items-center text-12 font-semibold tracking-wide text-tertiary">{title}</h5>}
     {children}
   </div>
 );
 
-/** 一行一项：图标 + 标签固定 96px，值靠左成一列 —— 与工作项抽屉的属性栏同一个口径 */
+/** 一行一项：图标 + 标签固定 96px，值靠左成一列，行高 32 —— 标签 13 号灰、值 14 号黑，与正文同一把尺子 */
 const Row = ({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) => (
-  <div className="grid min-h-8.5 grid-cols-[96px_minmax(0,1fr)] items-center">
+  <div className="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center">
     <span className="flex items-center gap-2 text-13 text-tertiary">
       <Icon className="size-3.75 shrink-0 text-placeholder" strokeWidth={1.8} />
       {label}
     </span>
-    <div className="min-w-0 text-13 text-primary">{children}</div>
+    <div className="min-w-0 text-14 text-primary">{children}</div>
   </div>
 );
 
@@ -61,8 +62,8 @@ const InlineText = ({
         if (draft !== value) onCommit(draft);
       }}
       className={cn(
-        "-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-1",
-        "text-13 text-primary placeholder:text-placeholder hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none",
+        INLINE_FIELD_CLASS,
+        "text-primary placeholder:text-placeholder focus:border-accent-strong focus:bg-surface-1 focus:outline-none",
         mono && "tabular-nums"
       )}
     />
@@ -98,7 +99,7 @@ const PlanDate = ({
       buttonVariant="transparent-with-text"
       // 外层按钮不给宽度会收缩到比文字还窄，里面的 truncate 就把日期截成一半（工作项侧栏同样要传 w-full）
       buttonContainerClassName="w-full text-left"
-      buttonClassName={cn("-mx-2 w-[calc(100%+1rem)] rounded-md px-2 py-1 text-13 hover:bg-layer-2", !value && "text-placeholder")}
+      buttonClassName={cn(INLINE_FIELD_CLASS, !value && "text-placeholder")}
       hideIcon
       isClearable
     />
@@ -111,7 +112,7 @@ const PlanDate = ({
  * 和正文分开的理由很简单：产品、阶段、负责人、日期这些是**查**的，描述与工作指引是
  * **读**的。空值是灰字动词（指定负责人 / 设置日期），悬停才出底色，不画成空输入框。
  *
- * 状态与结论都不在这里改：状态只能由底部按钮一步步推进，结论只在「提交审核」那一刻
+ * 状态与结论都不在这里改：状态只能由标题行的按钮一步步推进，结论只在「提交审核」那一刻
  * 写入（见 utils/stage_review.py）。这里只显示。
  */
 export const StageReviewSidebar = ({
@@ -195,7 +196,7 @@ export const StageReviewSidebar = ({
       <Group title={t(`${I18N}.detail.conclusion`)}>
         <Row icon={ClipboardCheck} label={t(`${I18N}.table.result`)}>
           {detail.result ? (
-            <StageReviewResultBadge result={detail.result} className="h-5.5 rounded-md px-2 text-12" />
+            <StageReviewResultBadge result={detail.result} />
           ) : (
             <span className="text-placeholder">{t(`${I18N}.detail.result_pending`)}</span>
           )}
@@ -204,7 +205,7 @@ export const StageReviewSidebar = ({
         {detail.conditional_reason && (
           <p
             className={cn(
-              "mt-1.5 rounded-r-lg border-l-2 px-2.5 py-2 text-12 leading-relaxed",
+              "mt-1.5 mb-1 rounded-r-lg border-l-2 px-3 py-2 text-13 leading-relaxed break-words",
               "border-subtle bg-layer-2 text-secondary",
               detail.result === EStageReviewResult.REJECTED &&
                 "border-danger-strong bg-danger-subtle text-danger-primary",
@@ -293,7 +294,7 @@ export const StageReviewSidebar = ({
               ) : (
                 <span className="flex flex-wrap gap-1.5">
                   {goods.components.map((component) => (
-                    <span key={component} className="rounded border border-subtle px-1.5 py-0.5 text-12 text-secondary">
+                    <span key={component} className="rounded-md border border-subtle px-1.5 py-0.5 text-12 text-secondary">
                       {component}
                     </span>
                   ))}
@@ -313,12 +314,12 @@ export const StageReviewSidebar = ({
                   }
                 }}
                 className={cn(
-                  "min-h-16 w-full rounded-lg border border-subtle bg-surface-1 px-2.5 py-2 text-13 leading-relaxed",
-                  "text-primary placeholder:text-placeholder focus:border-accent-strong focus:outline-none"
+                  "-mx-2 min-h-16 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-1.5 text-14 leading-relaxed",
+                  "text-primary placeholder:text-placeholder hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none"
                 )}
               />
             ) : (
-              <p className="text-13 leading-relaxed whitespace-pre-line text-secondary">
+              <p className="text-14 leading-relaxed whitespace-pre-line text-secondary">
                 {detail.component_versions.version || "—"}
               </p>
             )}
