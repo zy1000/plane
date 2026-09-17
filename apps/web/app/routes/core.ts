@@ -358,13 +358,24 @@ export const coreRoutes: RouteConfigEntry[] = [
             ]
           ),
 
-          // Stage Reviews
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/layout.tsx", [
+          // Stage Reviews List
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(list)/layout.tsx", [
             route(
               ":workspaceSlug/projects/:projectId/stage-reviews",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/page.tsx"
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(list)/page.tsx"
             ),
           ]),
+
+          // Stage Review Detail
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(detail)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/stage-reviews/:reviewId",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(detail)/[reviewId]/page.tsx"
+              ),
+            ]
+          ),
 
           // Review Tailoring Detail
           layout(

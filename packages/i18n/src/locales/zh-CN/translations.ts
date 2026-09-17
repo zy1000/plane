@@ -2629,6 +2629,7 @@ export default {
       role_source_project: "产品和工作区都没有配「{role}」，这里列的是全部项目成员",
       belongs_to: "属于 {title}",
       open_in_project: "在项目中打开",
+      open_full_page: "在新页面中打开",
       pick_leader: "指定负责人",
       pick_auditor: "指定审核者",
       unassigned: "未指定",
