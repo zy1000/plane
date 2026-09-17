@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { FolderKanban, Package } from "lucide-react";
+import { FolderKanban, Package, Rows3 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { LayersIcon } from "@plane/propel/icons";
@@ -69,6 +69,7 @@ const userIcon = (user: IUserLite | null | undefined) =>
  * - 分组栏列出**当前分组方式下的所有组**，数字是筛选后的命中数；关着「显示空组」时命中 0 的组不列。
  * - 组的顺序：研发阶段按阶段排序；状态 / 结论 / 类型按流程顺序；产品与人按名字，空值沉底。
  * - 右侧只看选中那一组；摘要按这一组**未筛选**的评审算，图例点了才不会把别的状态清零。
+ * - 分组栏最上面固定一行「全部评审」（id 为 `STAGE_REVIEW_GROUP_ALL`），选它右侧按不分组的口径列全部。
  */
 export const useStageReviewGrouping = ({
   reviews,
@@ -90,6 +91,13 @@ export const useStageReviewGrouping = ({
   const rowsByGroup = useMemo(
     () => buildStageReviewRowsByGroup({ reviews, isHit, orderBy, groupBy, showActivities }),
     [reviews, isHit, orderBy, groupBy, showActivities]
+  );
+  const allRows = useMemo(
+    () =>
+      buildStageReviewRowsByGroup({ reviews, isHit, orderBy, groupBy: "none", showActivities }).get(
+        STAGE_REVIEW_GROUP_ALL
+      ) ?? [],
+    [reviews, isHit, orderBy, showActivities]
   );
 
   const sidebarGroups = useMemo<TStageReviewSidebarGroup[]>(() => {
@@ -195,22 +203,34 @@ export const useStageReviewGrouping = ({
       }
     };
 
-    return keys
+    const groups = keys
       .map((key) => ({
         id: key,
         count: (rowsByGroup.get(key) ?? []).filter((row) => !row.carried).length,
         ...describe(key),
       }))
       .filter((group) => showEmptyGroups || group.count > 0);
+    if (groups.length === 0) return groups;
+    return [
+      {
+        id: STAGE_REVIEW_GROUP_ALL,
+        name: t(`${I18N}.list.all_reviews`),
+        count: allRows.filter((row) => !row.carried).length,
+        icon: <Rows3 className="size-4 shrink-0 text-tertiary" strokeWidth={2} />,
+      },
+      ...groups,
+    ];
     // t 每次渲染都是新引用，放进依赖会让分组栏每帧重建；语言切换极少，忽略它
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy, reviews, stages, rowsByGroup, showEmptyGroups, currentStageId]);
+  }, [groupBy, reviews, stages, rowsByGroup, allRows, showEmptyGroups, currentStageId]);
 
   const rowsOf = (groupId: string | null): TStageReviewRow[] =>
-    rowsByGroup.get(groupBy === "none" ? STAGE_REVIEW_GROUP_ALL : (groupId ?? "")) ?? [];
+    groupBy === "none" || groupId === STAGE_REVIEW_GROUP_ALL ? allRows : (rowsByGroup.get(groupId ?? "") ?? []);
 
   const reviewsOf = (groupId: string | null): TStageReview[] =>
-    groupBy === "none" ? reviews : reviews.filter((review) => stageReviewGroupKey(groupBy, review) === groupId);
+    groupBy === "none" || groupId === STAGE_REVIEW_GROUP_ALL
+      ? reviews
+      : reviews.filter((review) => stageReviewGroupKey(groupBy, review) === groupId);
 
   return { sidebarGroups, rowsOf, reviewsOf };
 };

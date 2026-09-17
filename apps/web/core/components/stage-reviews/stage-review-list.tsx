@@ -33,7 +33,7 @@ import { useStageReviewPermissions } from "./permissions";
 import { ProductStageReviewsEmptyState } from "./product-empty-state";
 import type { TStageReviewScope } from "./scope";
 import { getStageReviewScopeId, getStageReviewStorageScope } from "./scope";
-import { stageReviewGroupKey } from "./stage-review-rows";
+import { STAGE_REVIEW_GROUP_ALL, stageReviewGroupKey } from "./stage-review-rows";
 import { StageReviewTable } from "./stage-review-table";
 import { StageReviewSummary } from "./stage-summary";
 
@@ -143,27 +143,29 @@ export const StageReviewList = observer(function StageReviewList({
     setOpenReviewId(target.id);
   }, [deepLinkReviewId, reviews, settings.groupBy]);
 
-  // 选中的组不在当前分组栏里（切了分组方式、被筛没了）就落到第一组，同工作项
+  // 选中的组不在当前分组栏里（切了分组方式、被筛没了）就落到第一组（「全部评审」），同工作项
   const isGrouped = settings.groupBy !== "none";
   const activeGroup = isGrouped
     ? (sidebarGroups.find((group) => group.id === selectedGroupId) ?? sidebarGroups[0] ?? null)
     : null;
+  // 选「全部评审」时右侧按不分组的口径列、列也按不分组出
+  const effectiveGroupBy = isGrouped && activeGroup?.id !== STAGE_REVIEW_GROUP_ALL ? settings.groupBy : "none";
   const rows = isGrouped ? rowsOf(activeGroup?.id ?? null) : rowsOf(null);
   const summaryReviews = isGrouped ? (activeGroup ? reviewsOf(activeGroup.id) : []) : reviews;
   const summaryLabel = isGrouped ? (activeGroup?.name ?? "") : t(`${I18N}.list.all_reviews`);
   // 标题下那行数什么：项目页数产品；产品页数项目，按项目分组时一组只有一个项目，改数阶段
-  const summaryMeta = scopeKind === "project" ? "products" : settings.groupBy === "project" ? "stages" : "projects";
+  const summaryMeta = scopeKind === "project" ? "products" : effectiveGroupBy === "project" ? "stages" : "projects";
 
   // 列 = 这个作用域下开着的显示属性；产品页按项目分组时「项目」列换成「研发阶段」列。
   // 右侧只列选中那一组，当前分组维度那一列整列都是同一个值，藏掉（按产品分组时不出「产品」列）
   const columns = useMemo<TStageReviewColumn[]>(() => {
     const visible = getStageReviewDisplayProperties(scopeKind).filter((property) => settings.properties[property]);
     const swapped =
-      scopeKind === "product" && settings.groupBy === "project"
+      scopeKind === "product" && effectiveGroupBy === "project"
         ? visible.map((property): TStageReviewColumn => (property === "project" ? "stage" : property))
         : visible;
-    return swapped.filter((column) => column !== settings.groupBy);
-  }, [scopeKind, settings.properties, settings.groupBy]);
+    return swapped.filter((column) => column !== effectiveGroupBy);
+  }, [scopeKind, settings.properties, effectiveGroupBy]);
   const stageLabelById = useMemo(() => new Map(stages.map((stage) => [stage.stage_id, stage.label])), [stages]);
   const stageLabelOf = useCallback((stageId: string) => stageLabelById.get(stageId), [stageLabelById]);
 
