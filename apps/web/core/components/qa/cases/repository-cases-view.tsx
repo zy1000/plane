@@ -196,7 +196,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
 
   // 分页状态管理
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(20);
+  const [pageSize, setPageSize] = useState<number>(50);
   const [total, setTotal] = useState<number>(0);
   const [ordering, setOrdering] = useState<string | undefined>(undefined);
   const [caseDisplayProperties, setCaseDisplayProperties] = useState<TCaseDisplayProperties>(() => ({
