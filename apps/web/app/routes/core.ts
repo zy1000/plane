@@ -347,43 +347,53 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/pages/(list)/page.tsx"
             ),
           ]),
-          // Review Tailorings List
+          // Reviews —— 阶段评审与裁剪合并成一个「评审」标签，两者是它的子页
+          // 裸路径 /reviews 转到默认子页（见该 page 的权限判断）
+          route(
+            ":workspaceSlug/projects/:projectId/reviews",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/page.tsx"
+          ),
+
+          // Reviews - Stage Reviews List
           layout(
-            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(list)/layout.tsx",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/stage-reviews/(list)/layout.tsx",
             [
               route(
-                ":workspaceSlug/projects/:projectId/review-tailorings",
-                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(list)/page.tsx"
+                ":workspaceSlug/projects/:projectId/reviews/stage-reviews",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/stage-reviews/(list)/page.tsx"
               ),
             ]
           ),
 
-          // Stage Reviews List
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(list)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/stage-reviews",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(list)/page.tsx"
-            ),
-          ]),
-
-          // Stage Review Detail
+          // Reviews - Stage Review Detail
           layout(
-            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(detail)/layout.tsx",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/stage-reviews/(detail)/layout.tsx",
             [
               route(
-                ":workspaceSlug/projects/:projectId/stage-reviews/:reviewId",
-                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stage-reviews/(detail)/[reviewId]/page.tsx"
+                ":workspaceSlug/projects/:projectId/reviews/stage-reviews/:reviewId",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/stage-reviews/(detail)/[reviewId]/page.tsx"
               ),
             ]
           ),
 
-          // Review Tailoring Detail
+          // Reviews - Tailorings List
           layout(
-            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(detail)/layout.tsx",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/tailorings/(list)/layout.tsx",
             [
               route(
-                ":workspaceSlug/projects/:projectId/review-tailorings/:tailoringId",
-                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/review-tailorings/(detail)/[tailoringId]/page.tsx"
+                ":workspaceSlug/projects/:projectId/reviews/tailorings",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/tailorings/(list)/page.tsx"
+              ),
+            ]
+          ),
+
+          // Reviews - Tailoring Detail
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/tailorings/(detail)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/reviews/tailorings/:tailoringId",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/reviews/tailorings/(detail)/[tailoringId]/page.tsx"
               ),
             ]
           ),
@@ -760,6 +770,13 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Inbox redirect: /:workspaceSlug/projects/:projectId/inbox
   // → /:workspaceSlug/projects/:projectId/intake
   route(":workspaceSlug/projects/:projectId/inbox", "routes/redirects/core/inbox.tsx"),
+
+  // 评审：裁剪表与阶段评审并入 /reviews 之前的旧路径（存量收藏与分享出去的链接）
+  // 裸路径与 splat 都注册，不依赖 splat 能否匹配空串
+  route(":workspaceSlug/projects/:projectId/review-tailorings", "routes/redirects/core/review-tailorings.tsx"),
+  route(":workspaceSlug/projects/:projectId/review-tailorings/*", "routes/redirects/core/review-tailorings.tsx"),
+  route(":workspaceSlug/projects/:projectId/stage-reviews", "routes/redirects/core/stage-reviews.tsx"),
+  route(":workspaceSlug/projects/:projectId/stage-reviews/*", "routes/redirects/core/stage-reviews.tsx"),
 
   // Sign-up redirects
   route("accounts/sign-up", "routes/redirects/core/accounts-signup.tsx"),

@@ -2,10 +2,11 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, ClipboardList } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { reviewsBasePath, stageReviewsPath } from "@/components/reviews";
 import { STAGE_REVIEW_DETAIL_HEADER_ACTIONS_ID, STAGE_REVIEW_DETAIL_HEADER_TITLE_ID } from "@/components/stage-reviews";
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -17,17 +18,29 @@ export const StageReviewDetailHeader = observer(function StageReviewDetailHeader
   const { loader } = useProject();
   const { t } = useTranslation();
 
+  const slug = workspaceSlug?.toString() ?? "";
+  const project = projectId?.toString() ?? "";
+
   return (
     <Header>
       <Header.LeftItem>
         <div className="flex min-w-0 items-center">
           <Breadcrumbs className="grow-0" onBack={router.back} isLoading={loader === "init-loader"}>
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
+            <CommonProjectBreadcrumbs workspaceSlug={slug} projectId={project} />
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label={t("stage_review.breadcrumb")}
-                  href={`/${workspaceSlug}/projects/${projectId}/stage-reviews`}
+                  label={t("reviews.title")}
+                  href={reviewsBasePath(slug, project)}
+                  icon={<ClipboardList className="h-4 w-4 text-tertiary" />}
+                />
+              }
+            />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbLink
+                  label={t("reviews.stage_reviews")}
+                  href={stageReviewsPath(slug, project)}
                   icon={<ClipboardCheck className="h-4 w-4 text-tertiary" />}
                 />
               }

@@ -39,7 +39,7 @@ import {
 } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, Bug, ClipboardCheck, Folder, Milestone, Package, Rocket, Rss, Scissors } from "lucide-react";
+import { ArchiveIcon, Bug, ClipboardList, Folder, Milestone, Package, Rocket, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -155,29 +155,23 @@ export const useNavigationItems = ({
         sortOrder: 3.5,
       },
       {
-        // 评审裁剪：排在发布之后、里程碑之前 —— 它决定的是「这个阶段要做哪些评审」，
-        // 与发布、里程碑同属项目节奏这一组
-        i18n_key: "sidebar.review_tailorings",
-        key: "review_tailorings",
-        name: "裁剪表",
-        href: `/${workspaceSlug}/projects/${projectId}/review-tailorings`,
-        icon: Scissors,
+        // 评审：排在发布之后、里程碑之前 —— 与发布、里程碑同属项目节奏这一组。
+        // 裁剪决定「这个阶段要做哪些评审」，阶段评审是那些评审的执行台，两者是一件事的
+        // 两个环节，合成一个标签，进去后由页头的子页页签切换（components/reviews）。
+        i18n_key: "sidebar.reviews",
+        key: "reviews",
+        name: "评审",
+        href: `/${workspaceSlug}/projects/${projectId}/reviews`,
+        icon: ClipboardList,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
+        // 读接受任一：只配了裁剪或只配了阶段评审的角色都该看到这个标签，
+        // 具体能进哪个子页由子页页签自己再过滤一次
+        permissionKeys: [
+          ...PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
+          ...PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS,
+        ],
         shouldRender: true,
         sortOrder: 3.7,
-      },
-      {
-        // 阶段评审：紧跟裁剪 —— 裁剪决定「要做哪些评审」，这里是那些评审的执行台
-        i18n_key: "sidebar.stage_reviews",
-        key: "stage_reviews",
-        name: "阶段评审",
-        href: `/${workspaceSlug}/projects/${projectId}/stage-reviews`,
-        icon: ClipboardCheck,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS,
-        shouldRender: true,
-        sortOrder: 3.8,
       },
       {
         i18n_key: "sidebar.milestones",

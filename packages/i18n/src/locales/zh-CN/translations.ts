@@ -34,8 +34,7 @@ export default {
     overview: "概览",
     statistics: "统计",
     milestones: "里程碑",
-    review_tailorings: "裁剪表",
-    stage_reviews: "阶段评审",
+    reviews: "评审",
     filestore: "文件",
     help: "帮助",
   },
@@ -2114,6 +2113,12 @@ export default {
       deleted: "需求标准库已删除。",
       failed: "操作失败，请稍后重试。",
     },
+  },
+  // 「评审」标签本身与它的两个子页页签（阶段评审 / 裁剪）
+  reviews: {
+    title: "评审",
+    stage_reviews: "阶段评审",
+    tailorings: "裁剪",
   },
   review_tailoring: {
     title: "裁剪表",

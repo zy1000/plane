@@ -1,6 +1,7 @@
 import { ClipboardCheck, Link2, Scissors } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { reviewTailoringsPath } from "@/components/reviews/routes";
 
 const I18N = "stage_review.product_empty";
 
@@ -29,7 +30,7 @@ export const ProductStageReviewsEmptyState = ({
   const hasProjects = linkedProjectIds.length > 0;
   const projectsHref = `/${workspaceSlug}/products/${productId}/projects`;
   const tailoringHref =
-    linkedProjectIds.length === 1 ? `/${workspaceSlug}/projects/${linkedProjectIds[0]}/review-tailorings` : projectsHref;
+    linkedProjectIds.length === 1 ? reviewTailoringsPath(workspaceSlug, linkedProjectIds[0]) : projectsHref;
   const variant = hasProjects ? "no_reviews" : "no_projects";
 
   return (

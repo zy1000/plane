@@ -13,6 +13,7 @@ import { cn, calculateTimeAgo, renderFormattedDate, renderFormattedTime, getFile
 // helpers
 import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 // hooks
+import { reviewTailoringDetailPath } from "@/components/reviews/routes";
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -87,9 +88,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
     setCurrentSelectedNotificationId(notificationId);
     await markRead();
     if (!reviewTailoring) return;
-    router.push(
-      `/${workspaceSlug}/projects/${reviewTailoring.project_id}/review-tailorings/${reviewTailoring.id}`
-    );
+    router.push(reviewTailoringDetailPath(workspaceSlug, reviewTailoring.project_id, reviewTailoring.id));
   };
 
   const handleNotificationIssuePeekOverview = async () => {

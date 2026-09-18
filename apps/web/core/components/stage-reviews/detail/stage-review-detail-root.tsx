@@ -19,6 +19,7 @@ import type {
 import { EStageReviewResult, EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
 import { Breadcrumbs, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { stageReviewDetailPath, stageReviewsPath } from "@/components/reviews/routes";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import useKeypress from "@/hooks/use-keypress";
 import { getStageReviewError } from "@/hooks/store/use-stage-reviews";
@@ -56,7 +57,7 @@ const HEAD_ICON_CLASS =
 
 /** 独立详情页的地址；抽屉里「在新页面中打开」与产品页「在项目中打开」都指到这里 */
 export const getStageReviewDetailPath = (workspaceSlug: string, projectId: string, reviewId: string) =>
-  `/${workspaceSlug}/projects/${projectId}/stage-reviews/${reviewId}`;
+  stageReviewDetailPath(workspaceSlug, projectId, reviewId);
 
 /** 退回之后落到哪一步。已评审是终态，没有上一步可退（与后端 rollback 一致） */
 const previousStatusOf = (detail: TStageReviewDetail) =>
@@ -114,7 +115,7 @@ export type TStageReviewDetailRootProps = TStageReviewDetailVariant & {
 
 /**
  * 评审详情本体。**评审与评审活动共用这一套** —— 两者字段几乎一样，只有层级不同。抽屉
- * （`StageReviewDrawer`）与独立详情页（`/stage-reviews/:reviewId`）都是它，只差外壳。
+ * （`StageReviewDrawer`）与独立详情页（`/reviews/stage-reviews/:reviewId`）都是它，只差外壳。
  *
  * 布局分两段：头（名片式标题区 + 动作按钮 / 四段进度）、身（正文 + 右侧属性栏）。
  * 正文放「要读的」（描述、工作指引、附件、活动），右栏放「要查的」（产品、阶段、负责人、日期、
@@ -379,7 +380,7 @@ const DetailBody = (props: DetailBodyProps) => {
             <StageReviewSaveStatus state={saveState} onRetry={onRetrySave} />
             {showProjectCrumb && (
               <Link
-                to={`/${workspaceSlug}/projects/${detail.project_id}/stage-reviews?review=${detail.id}`}
+                to={`${stageReviewsPath(workspaceSlug, detail.project_id)}?review=${detail.id}`}
                 className="inline-flex h-6.5 items-center gap-1.5 rounded-md px-2 text-13 text-tertiary transition hover:bg-layer-2 hover:text-secondary"
               >
                 <ExternalLink className="size-3.5" />

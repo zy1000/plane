@@ -2,7 +2,7 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { Scissors } from "lucide-react";
+import { ClipboardList, Scissors } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -10,6 +10,7 @@ import {
   REVIEW_TAILORING_DETAIL_ACTIONS_SLOT_ID,
   REVIEW_TAILORING_DETAIL_TITLE_SLOT_ID,
 } from "@/components/review-tailorings";
+import { reviewTailoringsPath, reviewsBasePath } from "@/components/reviews";
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
@@ -20,17 +21,29 @@ export const ReviewTailoringDetailHeader = observer(function ReviewTailoringDeta
   const { loader } = useProject();
   const { t } = useTranslation();
 
+  const slug = workspaceSlug?.toString() ?? "";
+  const project = projectId?.toString() ?? "";
+
   return (
     <Header>
       <Header.LeftItem>
         <div className="flex min-w-0 items-center">
           <Breadcrumbs className="grow-0" onBack={router.back} isLoading={loader === "init-loader"}>
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
+            <CommonProjectBreadcrumbs workspaceSlug={slug} projectId={project} />
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label={t("review_tailoring.breadcrumb")}
-                  href={`/${workspaceSlug}/projects/${projectId}/review-tailorings`}
+                  label={t("reviews.title")}
+                  href={reviewsBasePath(slug, project)}
+                  icon={<ClipboardList className="h-4 w-4 text-tertiary" />}
+                />
+              }
+            />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbLink
+                  label={t("reviews.tailorings")}
+                  href={reviewTailoringsPath(slug, project)}
                   icon={<Scissors className="h-4 w-4 text-tertiary" />}
                 />
               }

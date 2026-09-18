@@ -77,8 +77,11 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
     cycles: `${baseUrl}/cycles`,
     modules: `${baseUrl}/modules`,
     milestones: `${baseUrl}/milestones`,
-    review_tailorings: `${baseUrl}/review-tailorings`,
-    stage_reviews: `${baseUrl}/stage-reviews`,
+    reviews: `${baseUrl}/reviews`,
+    // 裁剪表与阶段评审已合并成「评审」标签。存量 tab 偏好里还留着这两个旧 key，
+    // 保留映射让它们指到各自的子页，而不是掉进下面的 /issues 兜底。
+    review_tailorings: `${baseUrl}/reviews/tailorings`,
+    stage_reviews: `${baseUrl}/reviews/stage-reviews`,
     views: `${baseUrl}/views`,
     pages: `${baseUrl}/pages`,
     intake: `${baseUrl}/intake`,

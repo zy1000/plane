@@ -14,6 +14,7 @@ import type {
 } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
+import { reviewTailoringDetailPath, reviewTailoringsPath } from "@/components/reviews/routes";
 import { useReviewTailoringDetail } from "@/hooks/store/use-review-tailoring-detail";
 import { useReviewTailoringFeed } from "@/hooks/store/use-review-tailoring-feed";
 import { getTailoringError } from "@/hooks/store/use-review-tailorings";
@@ -241,7 +242,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     selection.clear();
   };
 
-  const detailPath = `${workspaceSlug}/projects/${projectId}/review-tailorings/${tailoringId}`;
+  // copyUrlToClipboard 自己补域名，这里传不带前导斜杠的路径
+  const detailPath = reviewTailoringDetailPath(workspaceSlug, projectId, tailoringId).slice(1);
 
   const tabs: { key: TDetailTab; label: string; count?: number }[] = [
     { key: "matrix", label: t(`${I18N}.matrix.title`) },
@@ -596,7 +598,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           const ok = await run(() => store.deleteTailoring(), "deleted");
           if (!ok) return;
           setIsDeleteOpen(false);
-          router.push(`/${workspaceSlug}/projects/${projectId}/review-tailorings`);
+          router.push(reviewTailoringsPath(workspaceSlug, projectId));
         }}
         isSubmitting={isMutating}
         title={t(`${I18N}.actions.delete_title`)}

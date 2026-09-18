@@ -2267,6 +2267,12 @@ export default {
       STAGE_REVIEW_PRODUCT_NOT_LINKED: "该产品还没有关联到本项目",
     },
   },
+  // The "Reviews" tab itself and its two sub pages (stage reviews / tailoring)
+  reviews: {
+    title: "Reviews",
+    stage_reviews: "Stage reviews",
+    tailorings: "Tailoring",
+  },
   review_tailoring: {
     title: "Review tailoring",
     breadcrumb: "Review tailoring",
@@ -6106,8 +6112,7 @@ export default {
     overview: "Overview",
     statistics: "Statistics",
     milestones: "Milestones",
-    review_tailorings: "Review tailoring",
-    stage_reviews: "Stage reviews",
+    reviews: "Reviews",
     filestore: "Files",
     inbox: "Inbox",
     pro: "Pro",

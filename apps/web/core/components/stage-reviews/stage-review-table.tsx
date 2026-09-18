@@ -7,6 +7,7 @@ import type { IUserLite, TStageReview } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
 import { Avatar, Checkbox } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import { stageReviewsPath } from "@/components/reviews/routes";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import type { TStageReviewFlashedCells } from "./bulk/use-stage-review-bulk-edit";
 import type { TStageReviewColumn } from "./display/display-settings";
@@ -161,7 +162,7 @@ export const StageReviewTable = ({
         // 点项目名去那个项目的阶段评审页并自动打开这一条；不触发行点击
         return review.project_detail ? (
           <Link
-            to={`/${workspaceSlug}/projects/${review.project_id}/stage-reviews?review=${review.id}`}
+            to={`${stageReviewsPath(workspaceSlug, review.project_id)}?review=${review.id}`}
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
             title={`${review.project_detail.name} · ${openInProject}`}

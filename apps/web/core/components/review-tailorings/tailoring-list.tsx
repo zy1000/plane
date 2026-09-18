@@ -12,6 +12,7 @@ import { CountChip } from "@/components/common/count-chip";
 import { PageSearchInput } from "@/components/pages/list/search-input";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import { reviewTailoringDetailPath } from "@/components/reviews/routes";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { getTailoringError, useReviewTailorings } from "@/hooks/store/use-review-tailorings";
 import { useUser } from "@/hooks/store/user";
@@ -88,7 +89,7 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   /** 本项目里等我签或我签过的表，有才出页头的「待签批」 */
   const hasMySigning = tailorings.some((item) => item.my_approval_pending || item.my_approval_action);
 
-  const detailPath = (id: string) => `/${workspaceSlug}/projects/${projectId}/review-tailorings/${id}`;
+  const detailPath = (id: string) => reviewTailoringDetailPath(workspaceSlug, projectId, id);
 
   const translateError = (requestError: unknown) => {
     const { message, code } = getTailoringError(requestError);
