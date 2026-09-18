@@ -96,7 +96,14 @@ class ProductStageReviewViewSet(BaseViewSet):
         reviews = (
             self._base_queryset(slug, product, project_ids)
             .select_related(
-                "product", "stage", "stage__dictionary", "leader", "auditor", "project"
+                "product",
+                "stage",
+                "stage__dictionary",
+                "leader",
+                "leader__avatar_asset",
+                "auditor",
+                "auditor__avatar_asset",
+                "project",
             )
             .annotate(
                 attachment_count=_attachment_count_annotation(),

@@ -157,7 +157,16 @@ class StageReviewViewSet(BaseViewSet):
                 project__archived_at__isnull=True,
             )
             .select_related(
-                "product", "stage", "stage__dictionary", "leader", "auditor", "project"
+                "product",
+                "stage",
+                "stage__dictionary",
+                "leader",
+                # 负责人 / 审核者的头像走 User.avatar_url → avatar_asset，不跟着 join
+                # 的话列表每行都要单查一次 file_assets
+                "leader__avatar_asset",
+                "auditor",
+                "auditor__avatar_asset",
+                "project",
             )
         )
 
