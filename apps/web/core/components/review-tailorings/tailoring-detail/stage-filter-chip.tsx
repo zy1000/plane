@@ -25,6 +25,7 @@ export const StageFilterChip = ({
   value,
   options,
   allHint,
+  variant = "chip",
   onChange,
 }: {
   label: string;
@@ -34,43 +35,60 @@ export const StageFilterChip = ({
   value: string | null;
   options: TStageFilterOption[];
   allHint?: string;
+  /** chip = 独立的一枚筛选药丸；icon = 挤在表格列头里的漏斗按钮 */
+  variant?: "chip" | "icon";
   onChange: (stageId: string | null) => void;
 }) => {
   const active = options.find((option) => option.id === value);
+  /** 选中态的 ✕：CustomMenu 把 customButton 整个塞进它自己的 <button> 里，
+   * 不拦住冒泡的话点 ✕ 会连带把菜单打开 */
+  const clearIcon = (
+    <X
+      className="size-3.5 shrink-0"
+      role="button"
+      aria-label={allLabel}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onChange(null);
+      }}
+    />
+  );
   return (
     <CustomMenu
       customButton={
-        <span
-          className={cn(
-            "flex h-7.5 items-center gap-1.5 rounded-lg border px-2.5 text-12 whitespace-nowrap",
-            active
-              ? "border-accent-strong bg-accent-subtle text-accent-primary"
-              : "border-subtle text-secondary hover:bg-layer-transparent-hover"
-          )}
-        >
-          <ListFilter className="size-3.5 shrink-0" />
-          <span className={cn(active ? "opacity-70" : "text-tertiary")}>{label}</span>
-          <span className="max-w-24 truncate font-medium">{active ? active.label : allLabel}</span>
-          {active ? (
-            <X
-              className="size-3.5 shrink-0"
-              role="button"
-              aria-label={allLabel}
-              // CustomMenu 把 customButton 整个塞进它自己的 <button> 里，
-              // 不拦住冒泡的话点 ✕ 会连带把菜单打开
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onChange(null);
-              }}
-            />
-          ) : (
-            <ChevronDown className="size-3.5 shrink-0" />
-          )}
-        </span>
+        variant === "icon" ? (
+          <span
+            title={label}
+            className={cn(
+              "flex h-6 items-center gap-1 rounded-md px-1",
+              active
+                ? "bg-accent-subtle text-accent-primary"
+                : "text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
+            )}
+          >
+            <ListFilter className="size-3.5 shrink-0" />
+            {active && clearIcon}
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "flex h-7.5 items-center gap-1.5 rounded-lg border px-2.5 text-12 whitespace-nowrap",
+              active
+                ? "border-accent-strong bg-accent-subtle text-accent-primary"
+                : "border-subtle text-secondary hover:bg-layer-transparent-hover"
+            )}
+          >
+            <ListFilter className="size-3.5 shrink-0" />
+            <span className={cn(active ? "opacity-70" : "text-tertiary")}>{label}</span>
+            <span className="max-w-24 truncate font-medium">{active ? active.label : allLabel}</span>
+            {active ? clearIcon : <ChevronDown className="size-3.5 shrink-0" />}
+          </span>
+        )
       }
-      placement="bottom-end"
+      // 列头那颗贴着表格最左边，菜单往右展开；独立 chip 在工具区右侧，往左展开
+      placement={variant === "icon" ? "bottom-start" : "bottom-end"}
       maxHeight="lg"
       closeOnSelect
     >

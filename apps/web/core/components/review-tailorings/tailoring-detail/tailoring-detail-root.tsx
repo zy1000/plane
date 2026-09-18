@@ -37,7 +37,6 @@ import { ItemsBulkBar } from "./items-bulk-bar";
 import { ProductPager } from "./product-pager";
 import { SaveBar } from "./save-bar";
 import { SelectionBar } from "./selection-bar";
-import { StageFilterChip } from "./stage-filter-chip";
 import { SubmitApprovalModal } from "./submit-approval-modal";
 import { TailoringActivityFeed } from "./tailoring-activity-feed";
 import { TailoringComments } from "./tailoring-comments";
@@ -289,30 +288,12 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     />
   );
 
-  /** 阶段筛选的选项：各段多少行；行数与矩阵表头的「N 行」同一口径 */
-  const allRowCount = allGroups.reduce((sum, group) => sum + group.rows.length, 0);
-  const stageOptions = allGroups.map((group) => ({
-    id: group.stageId,
-    label: group.stageLabel,
-    hint: t(`${I18N}.matrix.rows_count`, { count: group.rows.length }),
-  }));
-
   const matrixTools = tab === "matrix" && hasMatrix && (
     <>
       {(stats.cut > 0 || activeFilter !== "all") && (
         <TabBarSegments value={activeFilter} options={filterOptions} onChange={changeFilter} />
       )}
       <ProductPager scroll={scroll} />
-      {allGroups.length > 1 && (
-        <StageFilterChip
-          label={t(`${I18N}.matrix.stage_column`)}
-          allLabel={t(`${I18N}.detail.filter_all`)}
-          value={stageFilter}
-          options={stageOptions}
-          allHint={t(`${I18N}.matrix.rows_count`, { count: allRowCount })}
-          onChange={changeStageFilter}
-        />
-      )}
       {editable && (
         <Button variant="secondary" size="lg" onClick={() => setIsAddAxesOpen(true)}>
           {t("add")}
@@ -393,10 +374,6 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 action={editable ? t(`${I18N}.detail.add_axes`) : undefined}
                 onAction={() => setIsAddAxesOpen(true)}
               />
-            ) : groups.length === 0 ? (
-              <p className="px-6 py-10 text-center text-13 text-tertiary">
-                {t(activeFilter === "missing" ? `${I18N}.detail.filtered_empty_missing` : `${I18N}.detail.filtered_empty_cut`)}
-              </p>
             ) : (
               <TailoringMatrix
                 groups={groups}
@@ -406,6 +383,19 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 editable={editable}
                 dirtyIds={dirtyIds}
                 isScrolled={scroll.isScrolled}
+                stageFilter={stageFilter}
+                emptyMessage={
+                  groups.length === 0
+                    ? t(
+                        activeFilter === "missing"
+                          ? `${I18N}.detail.filtered_empty_missing`
+                          : activeFilter === "cut"
+                            ? `${I18N}.detail.filtered_empty_cut`
+                            : `${I18N}.detail.filtered_empty_stage`
+                      )
+                    : undefined
+                }
+                onStageFilterChange={changeStageFilter}
                 onToggle={handleToggle}
                 selection={selection}
                 onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
