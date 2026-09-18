@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
 import { Checkbox, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -220,9 +221,12 @@ export const TailoringMatrix = ({
                     />
                   )}
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-13 font-semibold text-primary" title={product.name}>
-                      {product.name}
-                    </span>
+                    {/* 列头写开发编号：产品名往往很长，一屏摆不下几列；全名挂在 hover 上 */}
+                    <Tooltip tooltipContent={product.name}>
+                      <span className="w-fit max-w-full truncate text-13 font-semibold text-primary">
+                        {product.identifier || product.name}
+                      </span>
+                    </Tooltip>
                     <span className="flex min-w-0 text-12 text-tertiary">
                       <CellSummary counts={productCounts.get(product.id) ?? { kept: 0, cut: 0, missing: 0 }} />
                     </span>
