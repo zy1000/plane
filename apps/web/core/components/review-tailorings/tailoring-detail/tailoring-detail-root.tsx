@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
-import { AlertTriangle, Boxes, ChevronsDownUp, ChevronsUpDown, ListChecks, Plus } from "lucide-react";
+import { Boxes, ChevronsDownUp, ChevronsUpDown, ListChecks, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -23,6 +23,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { useReviewTailoringPermissions } from "../permissions";
 import { AddAxesModal } from "./add-axes-modal";
 import { ReviewTailoringApprovalModal } from "./approval-modal";
+import { BulkReasonModal } from "./bulk-reason-modal";
 import { DetailHeaderActions } from "./detail-header-actions";
 import { DetailHero } from "./detail-hero";
 import type { TDetailTab } from "./detail-tab-bar";
@@ -32,18 +33,21 @@ import {
   REVIEW_TAILORING_DETAIL_TITLE_SLOT_ID,
   useHeaderSlot,
 } from "./header-slots";
+import { ItemsBulkBar } from "./items-bulk-bar";
+import { ProductPager } from "./product-pager";
 import { SaveBar } from "./save-bar";
 import { SelectionBar } from "./selection-bar";
 import { SubmitApprovalModal } from "./submit-approval-modal";
 import { TailoringActivityFeed } from "./tailoring-activity-feed";
 import { TailoringComments } from "./tailoring-comments";
-import { TailoringItemsTable } from "./tailoring-items-table";
+import { buildItemRows, TailoringItemsTable } from "./tailoring-items-table";
 import { TailoringMatrix } from "./tailoring-matrix";
 import type { TMatrixFilter } from "./tailoring-matrix-model";
 import { buildMatrixGroups, filterMatrixGroups, getCellLockReason, getTailoringStats } from "./tailoring-matrix-model";
 import type { TTimelineFilter } from "./tailoring-timeline-model";
 import { countTimeline } from "./tailoring-timeline-model";
 import { useCellSelection } from "./use-cell-selection";
+import { useMatrixScroll } from "./use-matrix-scroll";
 
 const I18N = "review_tailoring";
 
@@ -105,6 +109,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
   const [isAddAxesOpen, setIsAddAxesOpen] = useState(false);
+  /** 明细里勾了几行之后点「填写原因」开的那只弹窗 */
+  const [isBulkReasonOpen, setIsBulkReasonOpen] = useState(false);
   const [toRemove, setToRemove] = useState<TRemoveTarget | null>(null);
   const [isCancelRevisionOpen, setIsCancelRevisionOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -112,8 +118,6 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [filter, setFilter] = useState<TMatrixFilter>("all");
   /** 明细 Tab 按产品筛，挂在 Tab 条右上角 */
   const [productFilter, setProductFilter] = useState("all");
-  /** 明细 Tab 只看待补原因，同样挂在 Tab 条右上角 */
-  const [onlyMissing, setOnlyMissing] = useState(false);
   /** 变更历史的筛选：全部 / 状态 / 修改，挂在 Tab 条右上角 */
   const [timelineFilter, setTimelineFilter] = useState<TTimelineFilter>("all");
   /** 收起的阶段。默认全展开 —— 建表后第一次进来应该看得见全貌 */
@@ -122,7 +126,16 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const { detail, items, isLoading, isMutating, isEditable, dirtyIds } = store;
   const stats = useMemo(() => getTailoringStats(items), [items]);
   const allGroups = useMemo(() => buildMatrixGroups(detail?.rows ?? [], items), [detail?.rows, items]);
+  /** 明细 Tab 当前筛选下的行：表格、表头全选、底部操作条的「选择全部」算的都是它 */
+  const itemRows = useMemo(
+    () => buildItemRows(items, detail?.products ?? [], productFilter),
+    [items, detail?.products, productFilter]
+  );
   const selection = useCellSelection();
+  /** 矩阵的横向滚动：首列投影、右缘渐隐、产品列翻页器共用 */
+  const scroll = useMatrixScroll(
+    `${tab}:${detail?.products.length ?? 0}:${allGroups.length}:${collapsed.size}:${filter}`
+  );
 
   const translateError = (requestError: unknown) => {
     const { message, code } = getTailoringError(requestError);
@@ -163,7 +176,12 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const groups = filterMatrixGroups(allGroups, activeFilter);
   const hasMatrix = detail.rows.length > 0 && detail.products.length > 0;
   /** 选中的格子以当前数据为准：行列被移除后，残留的 id 自然不算 */
-  const selectedCells = editable && tab === "matrix" ? items.filter((item) => selection.selectedIds.has(item.id)) : [];
+  const selectedCells =
+    editable && (tab === "matrix" || tab === "items")
+      ? items.filter((item) => selection.selectedIds.has(item.id))
+      : [];
+  /** 选中的行里真正能写原因的那批：保留项不留原因，自动跳过 */
+  const selectedCut = selectedCells.filter((cell) => !cell.selected);
 
   const handleToggle = (itemId: string, selected: boolean) => {
     const item = items.find((entry) => entry.id === itemId);
@@ -188,6 +206,16 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const changeFilter = (next: TMatrixFilter) => {
     setFilter(next);
     // 筛选一变，看得见的格子就变了，留着看不见的选中容易误改
+    selection.clear();
+  };
+
+  /** 换 Tab、换明细的筛选，同理：看得见的那批变了就清掉选中 */
+  const changeTab = (next: TDetailTab) => {
+    setTab(next);
+    selection.clear();
+  };
+  const changeProductFilter = (next: string) => {
+    setProductFilter(next);
     selection.clear();
   };
 
@@ -235,7 +263,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     <>
       <select
         value={productFilter}
-        onChange={(event) => setProductFilter(event.target.value)}
+        onChange={(event) => changeProductFilter(event.target.value)}
         className="focus:border-accent-primary h-7 rounded border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
       >
         <option value="all">{t(`${I18N}.items.filter_all_products`)}</option>
@@ -245,24 +273,6 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           </option>
         ))}
       </select>
-      {/* 待补原因是明细里最要紧的一批行，给它一个常驻入口；和矩阵的同名筛选是一套口径 */}
-      {editable && (stats.missing > 0 || onlyMissing) && (
-        <button
-          type="button"
-          aria-pressed={onlyMissing}
-          className={cn(
-            "flex h-7 items-center gap-1.5 rounded-md border px-2 text-12 whitespace-nowrap transition-colors",
-            onlyMissing
-              ? "border-warning-strong bg-warning-subtle font-medium text-warning-primary"
-              : "border-subtle text-secondary hover:border-strong"
-          )}
-          onClick={() => setOnlyMissing((current) => !current)}
-        >
-          <AlertTriangle className="size-3.5" strokeWidth={2.4} />
-          {t(`${I18N}.detail.filter_missing`)}
-          <span className="tabular-nums">{stats.missing}</span>
-        </button>
-      )}
     </>
   );
 
@@ -284,6 +294,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
       {(stats.cut > 0 || activeFilter !== "all") && (
         <TabBarSegments value={activeFilter} options={filterOptions} onChange={changeFilter} />
       )}
+      <ProductPager scroll={scroll} />
       <Button
         variant="ghost"
         size="lg"
@@ -345,10 +356,17 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         />
       </div>
 
-      <DetailTabBar tabs={tabs} active={tab} onChange={setTab} tools={matrixTools || itemsTools || activityTools || undefined} />
+      <DetailTabBar tabs={tabs} active={tab} onChange={changeTab} tools={matrixTools || itemsTools || activityTools || undefined} />
 
       <div className="relative min-h-0 flex-1">
-        <div className={editable && (dirtyIds.size > 0 || selectedCells.length > 0) ? "h-full overflow-auto pb-20" : "h-full overflow-auto"}>
+        <div
+          ref={scroll.ref}
+          // 全局默认把滚动条藏了，这两个类才让它画出来 —— 产品多的时候横向滚动条是唯一的出路
+          className={cn(
+            "horizontal-scrollbar vertical-scrollbar scrollbar-lg h-full overflow-auto",
+            editable && (dirtyIds.size > 0 || selectedCells.length > 0) && "pb-20"
+          )}
+        >
           {tab === "matrix" &&
             // 两个轴各自的空态：谁空先引导谁，纵轴优先 —— 没有评审的表连一行都画不出来
             (detail.rows.length === 0 ? (
@@ -380,6 +398,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 editable={editable}
                 dirtyIds={dirtyIds}
                 collapsed={collapsed}
+                isScrolled={scroll.isScrolled}
                 onToggleGroup={toggleGroup}
                 onToggle={handleToggle}
                 selection={selection}
@@ -397,20 +416,17 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
               />
             ))}
 
+          {/* 明细表和矩阵一样满宽铺开：外面不再套一层内边距，左右上都不留空档 */}
           {tab === "items" && (
-            <div className="px-6 py-4">
-              <TailoringItemsTable
-                items={items}
-                products={detail.products}
-                productFilter={productFilter}
-                onlyMissing={onlyMissing}
-                editable={editable}
-                dirtyIds={dirtyIds}
-                onToggle={handleToggle}
-                onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
-                onBulkReason={store.setReasonForMany}
-              />
-            </div>
+            <TailoringItemsTable
+              rows={itemRows}
+              products={detail.products}
+              editable={editable}
+              dirtyIds={dirtyIds}
+              selection={selection}
+              onToggle={handleToggle}
+              onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
+            />
           )}
 
           {tab === "activity" && (
@@ -434,14 +450,35 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           )}
         </div>
 
+        {/* 右边还有列没露出来时，最后一列上压一条渐隐 —— 光有滚动条不够显眼 */}
+        {tab === "matrix" && hasMatrix && scroll.hasMore && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-12 right-0 bottom-4 w-14 bg-[linear-gradient(90deg,transparent,var(--bg-surface-1))]"
+          />
+        )}
+
         {/* 有选中时操作条占住底部的位置；取消选中后改动条再出来 */}
         {selectedCells.length > 0 ? (
-          <SelectionBar
-            count={selectedCells.length}
-            onKeep={() => handleSetCells(selectedCells, true)}
-            onCut={() => handleSetCells(selectedCells, false)}
-            onClear={selection.clear}
-          />
+          tab === "items" ? (
+            <ItemsBulkBar
+              count={selectedCells.length}
+              total={itemRows.length}
+              cutCount={selectedCut.length}
+              onSelectAll={() => selection.toggle(itemRows)}
+              onClear={selection.clear}
+              onKeep={() => handleSetCells(selectedCells, true)}
+              onCut={() => handleSetCells(selectedCells, false)}
+              onReason={() => setIsBulkReasonOpen(true)}
+            />
+          ) : (
+            <SelectionBar
+              count={selectedCells.length}
+              onKeep={() => handleSetCells(selectedCells, true)}
+              onCut={() => handleSetCells(selectedCells, false)}
+              onClear={selection.clear}
+            />
+          )
         ) : (
           editable && (
             <SaveBar
@@ -483,6 +520,21 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           // 每个签批动作都会写一条活动，历史那一栏要跟着刷
           void feed.fetchFeed().catch(() => undefined);
         }}
+      />
+
+      <BulkReasonModal
+        isOpen={isBulkReasonOpen}
+        selectedCount={selectedCells.length}
+        cutCount={selectedCut.length}
+        overwriteCount={selectedCut.filter((cell) => cell.reason.trim()).length}
+        onApply={(reason) => {
+          store.setReasonForMany(
+            selectedCut.map((cell) => cell.id),
+            reason
+          );
+          selection.clear();
+        }}
+        onClose={() => setIsBulkReasonOpen(false)}
       />
 
       <AddAxesModal

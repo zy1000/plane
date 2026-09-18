@@ -15,6 +15,8 @@ import type { TCellSelection } from "./use-cell-selection";
 const ROW_HEAD = "sticky left-0 w-[380px] min-w-[380px] max-w-[380px]";
 const PRODUCT_COL = "min-w-[250px]";
 const ADD_COL = "w-[128px] min-w-[128px] max-w-[128px]";
+/** 往右滚之后，首列右侧的一道投影：说明底下还压着列 */
+const EDGE_SHADOW = "shadow-[6px_0_10px_-6px_rgba(0,0,0,0.18)]";
 
 type TAxisMenuItem = {
   key: string;
@@ -111,6 +113,7 @@ export const TailoringMatrix = ({
   editable,
   dirtyIds,
   collapsed,
+  isScrolled,
   onToggleGroup,
   onToggle,
   selection,
@@ -128,6 +131,8 @@ export const TailoringMatrix = ({
   editable: boolean;
   dirtyIds: Set<string>;
   collapsed: Set<string>;
+  /** 容器已经往右滚：首列画一道投影 */
+  isScrolled: boolean;
   onToggleGroup: (stageId: string) => void;
   onToggle: (itemId: string, selected: boolean) => void;
   /** 批量选中，由页面持有：底部操作条要读它 */
@@ -174,9 +179,11 @@ export const TailoringMatrix = ({
         <thead>
           <tr>
             <th
+              data-row-head
               className={cn(
                 ROW_HEAD,
-                "top-0 z-[4] h-12 border-b border-subtle bg-surface-1 pr-3 pl-6 text-left text-12 font-normal text-tertiary"
+                "top-0 z-[4] h-12 border-b border-subtle bg-surface-1 pr-3 pl-6 text-left text-12 font-normal text-tertiary",
+                isScrolled && EDGE_SHADOW
               )}
             >
               <div className="flex items-center gap-2.5">
@@ -198,6 +205,7 @@ export const TailoringMatrix = ({
             {products.map((product) => (
               <th
                 key={product.id}
+                data-product-col
                 className={cn(
                   PRODUCT_COL,
                   "sticky top-0 z-[2] h-12 border-b border-l border-subtle bg-surface-1 px-3.5 text-left font-normal"
@@ -264,7 +272,13 @@ export const TailoringMatrix = ({
               <Fragment key={group.stageId}>
                 <tr>
                   <td colSpan={stageColSpan} className="h-9 border-b border-subtle bg-layer-1 p-0">
-                    <div className={cn(ROW_HEAD, "flex h-9 items-center gap-2.5 bg-layer-1 pr-3 pl-6")}>
+                    <div
+                      className={cn(
+                        ROW_HEAD,
+                        "flex h-9 items-center gap-2.5 bg-layer-1 pr-3 pl-6",
+                        isScrolled && EDGE_SHADOW
+                      )}
+                    >
                       {editable && (
                         <ScopeCheckbox
                           cells={collectGroupCells([group])}
@@ -315,7 +329,8 @@ export const TailoringMatrix = ({
                           className={cn(
                             ROW_HEAD,
                             "z-[1] h-11.5 border-b border-subtle p-0",
-                            isRowSelected ? "bg-accent-subtle" : "bg-surface-1 group-hover:bg-layer-1-hover"
+                            isRowSelected ? "bg-accent-subtle" : "bg-surface-1 group-hover:bg-layer-1-hover",
+                            isScrolled && EDGE_SHADOW
                           )}
                         >
                           <div
@@ -414,7 +429,7 @@ export const TailoringMatrix = ({
 
           {editable && (
             <tr>
-              <td className={cn(ROW_HEAD, "z-[1] h-11 bg-surface-1 px-4")}>
+              <td className={cn(ROW_HEAD, "z-[1] h-11 bg-surface-1 px-4", isScrolled && EDGE_SHADOW)}>
                 <button
                   type="button"
                   className="flex h-7 items-center gap-1.5 rounded-md px-2 text-13 text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"

@@ -17,8 +17,11 @@ const REVIEW_STATUS_PILL: Record<string, string> = {
 /**
  * 矩阵的一格：「保留 | 裁剪」控件 + 右侧一条信息。
  * - 保留：右侧是评审状态药丸（生成过评审才有）
- * - 裁剪：灰底，原因直接写在格里，点开弹窗编辑；没写原因是琥珀色的「补充裁剪原因」
+ * - 裁剪：原因直接写在格里，点开弹窗编辑；没写原因是琥珀色的「补充裁剪原因」
  * - 有未保存的改动：右上角一枚蓝色角标
+ *
+ * 裁剪格不铺底色：一张表整屏都是裁剪项是常态，铺了会把整个表面染灰，
+ * 连阶段行和表头都分不出来。状态由「保留 | 裁剪」和原因那条文字表达。
  */
 export const MatrixCell = ({
   cell,
@@ -46,7 +49,7 @@ export const MatrixCell = ({
     <td
       className={cn(
         "relative h-11.5 min-w-[250px] border-b border-l border-subtle px-3.5",
-        isSelected ? "bg-accent-subtle" : !cell.selected && "bg-layer-1"
+        isSelected && "bg-accent-subtle"
       )}
     >
       <div className="flex min-w-0 items-center gap-2.5">

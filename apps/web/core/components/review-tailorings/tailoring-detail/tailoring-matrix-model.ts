@@ -146,10 +146,6 @@ export const getCellLockReason = (item: TReviewTailoringItem, nextSelected: bool
   return null;
 };
 
-/** 未勾选但没写裁剪原因的格子。提交签批前要拦，明细表的「批量填写原因」也用它 */
-export const collectMissingReasons = (items: TReviewTailoringItem[]): TReviewTailoringItem[] =>
-  items.filter((item) => !item.selected && !item.reason.trim());
-
 /** 段内全部格子（整段批量保留 / 裁剪）。传多段进来就是整表，传 productId 就是整列 */
 export const collectGroupCells = (groups: TMatrixGroup[], productId?: string): TReviewTailoringItem[] => {
   const cells: TReviewTailoringItem[] = [];

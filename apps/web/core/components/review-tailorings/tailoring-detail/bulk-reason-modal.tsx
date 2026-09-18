@@ -3,54 +3,47 @@ import { MessageSquare } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { cn } from "@plane/utils";
 import { TailoringModalHeader } from "./modal-header";
 
-export type TBulkReasonScope = "missing" | "visible";
-
 /**
- * 明细里的「批量填写原因」。原来是行内一条小输入框，一次只能写一行 —— 裁剪原因常常要写两三行，
- * 和单格原因一样收进大弹窗：先选范围，再写一次，落到这批格子。
+ * 明细里的「填写原因」。范围就是勾中的那些行 —— 不再让人先挑「待补原因 / 当前筛选」，
+ * 挑范围这件事交给表格上的勾选和筛选去做。
+ *
+ * 裁剪原因常常要写两三行，所以和单格原因一样收在大弹窗里，没有行内小输入框。
  */
 export const BulkReasonModal = ({
   isOpen,
-  missingCount,
-  visibleCount,
+  selectedCount,
+  cutCount,
+  overwriteCount,
   onApply,
   onClose,
 }: {
   isOpen: boolean;
-  /** 待补原因的格子数 */
-  missingCount: number;
-  /** 当前筛选下裁剪掉的格子数（含已经写了原因的，写进去会覆盖） */
-  visibleCount: number;
-  onApply: (scope: TBulkReasonScope, reason: string) => void;
+  /** 勾中的行数，写在标题下 */
+  selectedCount: number;
+  /** 其中的裁剪项：真正会被写入的那批 */
+  cutCount: number;
+  /** 裁剪项里已经有原因的，会被覆盖 */
+  overwriteCount: number;
+  onApply: (reason: string) => void;
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
-  const [scope, setScope] = useState<TBulkReasonScope>("missing");
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setDraft("");
-    setScope(missingCount > 0 ? "missing" : "visible");
-  }, [isOpen, missingCount]);
+    if (isOpen) setDraft("");
+  }, [isOpen]);
 
-  const count = scope === "missing" ? missingCount : visibleCount;
-  const canApply = Boolean(draft.trim()) && count > 0;
+  const canApply = Boolean(draft.trim()) && cutCount > 0;
 
   const apply = () => {
     if (!canApply) return;
-    onApply(scope, draft.trim());
+    onApply(draft.trim());
     onClose();
   };
-
-  const scopes: { key: TBulkReasonScope; label: string; count: number }[] = [
-    { key: "missing", label: t("review_tailoring.items.bulk_scope_missing"), count: missingCount },
-    { key: "visible", label: t("review_tailoring.items.bulk_scope_visible"), count: visibleCount },
-  ];
 
   return (
     <ModalCore
@@ -62,37 +55,21 @@ export const BulkReasonModal = ({
     >
       <TailoringModalHeader
         icon={<MessageSquare className="size-5" />}
-        title={t("review_tailoring.items.bulk_reason")}
+        title={t("review_tailoring.items.bulk_reason_title")}
+        subtitle={t("review_tailoring.items.selected_count", { count: selectedCount })}
         onClose={onClose}
       />
       <div className="space-y-3 px-6">
-        <div className="space-y-1.5">
-          <p className="text-12 text-tertiary">{t("review_tailoring.items.bulk_reason_title")}</p>
-          <div role="radiogroup" className="flex flex-col gap-1.5">
-            {scopes.map((option) => {
-              const isActive = option.key === scope;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  role="radio"
-                  aria-checked={isActive}
-                  disabled={option.count === 0}
-                  className={cn(
-                    "flex h-10 items-center gap-2 rounded-lg border px-3.5 text-13 transition-colors",
-                    isActive ? "border-accent-strong bg-accent-subtle text-primary" : "border-subtle text-secondary",
-                    option.count === 0 ? "cursor-not-allowed text-placeholder" : "hover:border-strong"
-                  )}
-                  onClick={() => setScope(option.key)}
-                >
-                  <span className="min-w-0 flex-1 truncate text-left">{option.label}</span>
-                  <span className="shrink-0 text-12 text-tertiary tabular-nums">
-                    {t("review_tailoring.items.bulk_scope_count", { count: option.count })}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-layer-1 px-3.5 py-2.5 text-13 text-secondary">
+          <span className="tabular-nums">{t("review_tailoring.items.bulk_reason_scope", { count: cutCount })}</span>
+          {overwriteCount > 0 && (
+            <span className="tabular-nums text-warning-primary">
+              {t("review_tailoring.items.bulk_reason_overwrite", { count: overwriteCount })}
+            </span>
+          )}
+          {cutCount < selectedCount && (
+            <span className="ml-auto text-12 text-tertiary">{t("review_tailoring.items.bulk_reason_skip")}</span>
+          )}
         </div>
 
         <textarea
@@ -114,7 +91,7 @@ export const BulkReasonModal = ({
           {t("cancel")}
         </Button>
         <Button variant="primary" size="xl" disabled={!canApply} onClick={apply}>
-          {t("review_tailoring.items.bulk_reason_apply", { count })}
+          {t("review_tailoring.items.bulk_reason_apply", { count: cutCount })}
         </Button>
       </div>
     </ModalCore>
