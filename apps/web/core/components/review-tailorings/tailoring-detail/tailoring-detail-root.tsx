@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
-import { Boxes, ChevronsDownUp, ChevronsUpDown, ListChecks, Plus } from "lucide-react";
+import { Boxes, ListChecks, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -37,6 +37,7 @@ import { ItemsBulkBar } from "./items-bulk-bar";
 import { ProductPager } from "./product-pager";
 import { SaveBar } from "./save-bar";
 import { SelectionBar } from "./selection-bar";
+import { StageFilterChip } from "./stage-filter-chip";
 import { SubmitApprovalModal } from "./submit-approval-modal";
 import { TailoringActivityFeed } from "./tailoring-activity-feed";
 import { TailoringComments } from "./tailoring-comments";
@@ -120,8 +121,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [productFilter, setProductFilter] = useState("all");
   /** 变更历史的筛选：全部 / 状态 / 修改，挂在 Tab 条右上角 */
   const [timelineFilter, setTimelineFilter] = useState<TTimelineFilter>("all");
-  /** 收起的阶段。默认全展开 —— 建表后第一次进来应该看得见全貌 */
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** 矩阵只看某个阶段的行。null = 全部阶段；纵轴平铺后靠它顶替原来的折叠 */
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
 
   const { detail, items, isLoading, isMutating, isEditable, dirtyIds } = store;
   const stats = useMemo(() => getTailoringStats(items), [items]);
@@ -134,7 +135,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const selection = useCellSelection();
   /** 矩阵的横向滚动：首列投影、右缘渐隐、产品列翻页器共用 */
   const scroll = useMatrixScroll(
-    `${tab}:${detail?.products.length ?? 0}:${allGroups.length}:${collapsed.size}:${filter}`
+    `${tab}:${detail?.products.length ?? 0}:${allGroups.length}:${stageFilter ?? ""}:${filter}`
   );
 
   const translateError = (requestError: unknown) => {
@@ -173,7 +174,9 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   /** 编辑权 = 有 manage 且表处在可编辑状态 */
   const editable = canManage && isEditable;
   const activeFilter: TMatrixFilter = !editable && filter === "missing" ? "all" : filter;
-  const groups = filterMatrixGroups(allGroups, activeFilter);
+  /** 阶段筛选与保留 / 裁剪筛选叠加生效；选中的阶段被移除后自动退回全部 */
+  const stageGroups = stageFilter ? allGroups.filter((group) => group.stageId === stageFilter) : allGroups;
+  const groups = filterMatrixGroups(stageGroups.length > 0 ? stageGroups : allGroups, activeFilter);
   const hasMatrix = detail.rows.length > 0 && detail.products.length > 0;
   /** 选中的格子以当前数据为准：行列被移除后，残留的 id 自然不算 */
   const selectedCells =
@@ -233,14 +236,11 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     });
   };
 
-  const toggleGroup = (stageId: string) =>
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(stageId)) next.delete(stageId);
-      else next.add(stageId);
-      return next;
-    });
-  const isAllCollapsed = allGroups.length > 0 && allGroups.every((group) => collapsed.has(group.stageId));
+  /** 换阶段跟换筛选一样：看得见的格子变了就清掉选中 */
+  const changeStageFilter = (next: string | null) => {
+    setStageFilter(next);
+    selection.clear();
+  };
 
   const detailPath = `${workspaceSlug}/projects/${projectId}/review-tailorings/${tailoringId}`;
 
@@ -289,22 +289,30 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     />
   );
 
+  /** 阶段筛选的选项：各段多少行；行数与矩阵表头的「N 行」同一口径 */
+  const allRowCount = allGroups.reduce((sum, group) => sum + group.rows.length, 0);
+  const stageOptions = allGroups.map((group) => ({
+    id: group.stageId,
+    label: group.stageLabel,
+    hint: t(`${I18N}.matrix.rows_count`, { count: group.rows.length }),
+  }));
+
   const matrixTools = tab === "matrix" && hasMatrix && (
     <>
       {(stats.cut > 0 || activeFilter !== "all") && (
         <TabBarSegments value={activeFilter} options={filterOptions} onChange={changeFilter} />
       )}
       <ProductPager scroll={scroll} />
-      <Button
-        variant="ghost"
-        size="lg"
-        prependIcon={isAllCollapsed ? <ChevronsUpDown /> : <ChevronsDownUp />}
-        onClick={() =>
-          setCollapsed(isAllCollapsed ? new Set() : new Set(allGroups.map((group) => group.stageId)))
-        }
-      >
-        {t(isAllCollapsed ? `${I18N}.detail.expand_all` : `${I18N}.detail.collapse_all`)}
-      </Button>
+      {allGroups.length > 1 && (
+        <StageFilterChip
+          label={t(`${I18N}.matrix.stage_column`)}
+          allLabel={t(`${I18N}.detail.filter_all`)}
+          value={stageFilter}
+          options={stageOptions}
+          allHint={t(`${I18N}.matrix.rows_count`, { count: allRowCount })}
+          onChange={changeStageFilter}
+        />
+      )}
       {editable && (
         <Button variant="secondary" size="lg" onClick={() => setIsAddAxesOpen(true)}>
           {t("add")}
@@ -397,9 +405,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 products={detail.products}
                 editable={editable}
                 dirtyIds={dirtyIds}
-                collapsed={collapsed}
                 isScrolled={scroll.isScrolled}
-                onToggleGroup={toggleGroup}
                 onToggle={handleToggle}
                 selection={selection}
                 onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
@@ -501,7 +507,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           setIsSubmitOpen(false);
           setTab("matrix");
           changeFilter("missing");
-          setCollapsed(new Set());
+          // 待补原因可能散在别的阶段，跳过去之前先把阶段筛选放开
+          setStageFilter(null);
         }}
         onSubmit={async (payload: TSubmitReviewTailoringPayload) => {
           const ok = await run(() => store.submit(payload), "submitted");

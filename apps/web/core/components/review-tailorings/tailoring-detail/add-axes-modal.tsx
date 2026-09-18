@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
-import { Boxes, ChevronDown, ClipboardCheck, ListChecks, ListFilter, Package, Plus, X } from "lucide-react";
+import { Boxes, ClipboardCheck, ListChecks, Package, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
@@ -11,13 +11,14 @@ import type {
   TStageReviewTemplate,
 } from "@plane/types";
 import { EProductDictionaryKey, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
-import { Checkbox, CustomMenu, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { DictionaryColorDot, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useStageReviewTemplates } from "@/hooks/store/use-stage-review-templates";
 import { ModalSearch, TailoringModalHeader } from "./modal-header";
+import { StageFilterChip } from "./stage-filter-chip";
 import { splitChildTitle } from "./tailoring-matrix-model";
 
 const I18N = "review_tailoring.actions";
@@ -334,13 +335,18 @@ export const AddAxesModal = observer(function AddAxesModal({
   const blockedLabel = (blocked: Exclude<TBlocked, null>) =>
     t(blocked === "in_matrix" ? `${I18N}.add_reviews_in_matrix` : `${I18N}.add_reviews_inactive`);
 
-  const activeStage = stageChoices.find((choice) => choice.id === stageFilter);
-  const stageCountLabel = (choice: TStageChoice) =>
-    choice.available > 0
-      ? t(`${I18N}.add_axes_stage_count`, { count: choice.available })
-      : choice.allInMatrix
-        ? t(`${I18N}.add_axes_stage_in_matrix`)
-        : t(`${I18N}.add_axes_stage_none`);
+  const stageOptions = stageChoices.map((choice) => ({
+    id: choice.id,
+    label: choice.label,
+    color: choice.color,
+    dim: choice.available === 0,
+    hint:
+      choice.available > 0
+        ? t(`${I18N}.add_axes_stage_count`, { count: choice.available })
+        : choice.allInMatrix
+          ? t(`${I18N}.add_axes_stage_in_matrix`)
+          : t(`${I18N}.add_axes_stage_none`),
+  }));
 
   const renderRow = (row: TFlatRow) => {
     const { node, blocked, parentTitle } = row;
@@ -402,74 +408,14 @@ export const AddAxesModal = observer(function AddAxesModal({
               onChange={setReviewQuery}
               className="h-full flex-1 border-b-0"
             />
-            <CustomMenu
-              customButton={
-                <span
-                  className={cn(
-                    "flex h-7.5 items-center gap-1.5 rounded-lg border px-2.5 text-12 whitespace-nowrap",
-                    activeStage
-                      ? "border-accent-strong bg-accent-subtle text-accent-primary"
-                      : "border-subtle text-secondary hover:bg-layer-transparent-hover"
-                  )}
-                >
-                  <ListFilter className="size-3.5 shrink-0" />
-                  <span className={cn(activeStage ? "opacity-70" : "text-tertiary")}>
-                    {t(`${I18N}.add_axes_stage_filter`)}
-                  </span>
-                  <span className="max-w-24 truncate font-medium">
-                    {activeStage ? activeStage.label : t(`${I18N}.add_axes_stage_all`)}
-                  </span>
-                  {activeStage ? (
-                    <X
-                      className="size-3.5 shrink-0"
-                      role="button"
-                      aria-label={t(`${I18N}.add_axes_stage_all`)}
-                      // CustomMenu 把 customButton 整个塞进它自己的 <button> 里，
-                      // 不拦住冒泡的话点 ✕ 会连带把菜单打开
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setStageFilter(null);
-                      }}
-                    />
-                  ) : (
-                    <ChevronDown className="size-3.5 shrink-0" />
-                  )}
-                </span>
-              }
-              placement="bottom-end"
-              maxHeight="lg"
-              closeOnSelect
-            >
-              <CustomMenu.MenuItem onClick={() => setStageFilter(null)} className="flex items-center gap-2">
-                <span className={cn("flex-1", !stageFilter && "font-medium text-accent-primary")}>
-                  {t(`${I18N}.add_axes_stage_all`)}
-                </span>
-                <span className="text-11 text-tertiary tabular-nums">
-                  {rows.filter((row) => !row.blocked).length}
-                </span>
-              </CustomMenu.MenuItem>
-              {stageChoices.map((choice) => (
-                <CustomMenu.MenuItem
-                  key={choice.id}
-                  onClick={() => setStageFilter(choice.id)}
-                  className="flex items-center gap-2"
-                >
-                  {choice.color && <DictionaryColorDot color={choice.color} size="sm" />}
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate",
-                      choice.id === stageFilter && "font-medium text-accent-primary",
-                      choice.available === 0 && "text-tertiary"
-                    )}
-                  >
-                    {choice.label}
-                  </span>
-                  <span className="shrink-0 text-11 text-tertiary tabular-nums">{stageCountLabel(choice)}</span>
-                </CustomMenu.MenuItem>
-              ))}
-            </CustomMenu>
+            <StageFilterChip
+              label={t(`${I18N}.add_axes_stage_filter`)}
+              allLabel={t(`${I18N}.add_axes_stage_all`)}
+              value={stageFilter}
+              options={stageOptions}
+              allHint={String(rows.filter((row) => !row.blocked).length)}
+              onChange={setStageFilter}
+            />
           </div>
           <ListHeader
             columns={REVIEW_COLS}

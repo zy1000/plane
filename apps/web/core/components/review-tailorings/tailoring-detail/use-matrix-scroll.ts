@@ -22,9 +22,13 @@ type TState = Pick<TMatrixScroll, "isScrolled" | "hasMore" | "firstVisible" | "l
 
 const INITIAL: TState = { isScrolled: false, hasMore: false, firstVisible: 0, lastVisible: 0, total: 0 };
 
-/** 产品列在滚动内容里的左偏移（已扣掉 sticky 首列的宽度） */
+/** 产品列在滚动内容里的左偏移（已扣掉 sticky 纵轴列的宽度） */
 const readColumnOffsets = (el: HTMLElement) => {
-  const head = el.querySelector<HTMLElement>("[data-row-head]")?.offsetWidth ?? 0;
+  // 纵轴是两列（阶段 + 评审），两列都钉在左边，遮住的是它们的宽度之和
+  const head = [...el.querySelectorAll<HTMLElement>("thead [data-row-head]")].reduce(
+    (sum, cell) => sum + cell.offsetWidth,
+    0
+  );
   // getBoundingClientRect 是视口坐标，减去这个原点才是滚动内容里的坐标
   const origin = el.getBoundingClientRect().left - el.scrollLeft;
   const columns = [...el.querySelectorAll<HTMLElement>("[data-product-col]")].map((column) => {
@@ -40,7 +44,7 @@ const readColumnOffsets = (el: HTMLElement) => {
  * 列宽由表格自己分配（`min-w-[250px]` 起，剩余宽度均摊），所以一律实测列的位置，
  * 不按固定列宽推算 —— 产品少的时候列会被撑宽，算出来的序号会错位。
  *
- * `contentKey` 一变就重测：换 Tab、加减产品、折叠阶段都会改变表格宽度，
+ * `contentKey` 一变就重测：换 Tab、加减产品、筛阶段都会改变表格宽度，
  * 而容器自身尺寸没变，ResizeObserver 不会响。
  */
 export const useMatrixScroll = (contentKey: string): TMatrixScroll => {

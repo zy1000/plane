@@ -2193,8 +2193,6 @@ export default {
       stat_missing: "待补原因",
       stat_after: "生效后",
       stat_generated: "已生成评审",
-      collapse_all: "折叠全部",
-      expand_all: "展开全部",
       filtered_empty_missing: "裁掉的格子都写了原因",
       filtered_empty_cut: "没有裁掉的格子",
       filter_all: "全部",
@@ -2209,6 +2207,7 @@ export default {
     matrix: {
       title: "裁剪矩阵",
       review_column: "评审 / 评审活动",
+      stage_column: "阶段",
       reason: "裁剪原因",
       reason_placeholder: "说明为什么这个产品在本阶段不做这个评审",
       reason_shortcut: "Ctrl + Enter 保存",
@@ -2243,7 +2242,6 @@ export default {
       clear_selection: "取消选择",
       select_all: "选中整表",
       select_column: "选中整列",
-      select_stage: "选中本阶段",
       select_row: "选中整行",
     },
     items: {

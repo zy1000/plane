@@ -2345,8 +2345,6 @@ export default {
       stat_missing: "Need reasons",
       stat_after: "Once effective",
       stat_generated: "Reviews created",
-      collapse_all: "Collapse all",
-      expand_all: "Expand all",
       filtered_empty_missing: "Every tailored-out cell has a reason",
       filtered_empty_cut: "Nothing is tailored out",
       filter_all: "All",
@@ -2361,6 +2359,7 @@ export default {
     matrix: {
       title: "Tailoring matrix",
       review_column: "Review / activity",
+      stage_column: "Stage",
       reason: "Tailoring reason",
       reason_placeholder: "Why this product skips this review in this stage",
       reason_shortcut: "Ctrl + Enter to save",
@@ -2396,7 +2395,6 @@ export default {
       clear_selection: "Clear selection",
       select_all: "Select whole table",
       select_column: "Select whole column",
-      select_stage: "Select this stage",
       select_row: "Select whole row",
     },
     items: {

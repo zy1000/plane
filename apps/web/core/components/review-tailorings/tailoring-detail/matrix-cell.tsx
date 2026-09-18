@@ -28,6 +28,7 @@ export const MatrixCell = ({
   editable,
   isDirty,
   isSelected,
+  className,
   onToggle,
   onOpenReason,
 }: {
@@ -36,6 +37,8 @@ export const MatrixCell = ({
   isDirty: boolean;
   /** 被批量选中：整格涂淡蓝 */
   isSelected: boolean;
+  /** 整行要加的边框（换阶段那道分隔线）由调用方给 */
+  className?: string;
   onToggle: (selected: boolean) => void;
   onOpenReason: () => void;
 }) => {
@@ -49,7 +52,8 @@ export const MatrixCell = ({
     <td
       className={cn(
         "relative h-11.5 min-w-[250px] border-b border-l border-subtle px-3.5",
-        isSelected && "bg-accent-subtle"
+        isSelected && "bg-accent-subtle",
+        className
       )}
     >
       <div className="flex min-w-0 items-center gap-2.5">
