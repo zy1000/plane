@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { cn } from "@plane/utils";
 
 /**
  * 裁剪表弹窗统一的头：图标方块 + 标题 + 关闭。版式与新建裁剪表弹窗一致。
@@ -46,13 +47,18 @@ export const ModalSearch = ({
   value,
   placeholder,
   onChange,
+  className,
 }: {
   id: string;
   value: string;
   placeholder: string;
   onChange: (value: string) => void;
+  className?: string;
 }) => (
-  <label htmlFor={id} className="flex h-10 shrink-0 items-center gap-2 border-b border-subtle px-4 text-13">
+  <label
+    htmlFor={id}
+    className={cn("flex h-10 shrink-0 items-center gap-2 border-b border-subtle px-4 text-13", className)}
+  >
     <Search className="size-3.5 shrink-0 text-placeholder" />
     <input
       id={id}
