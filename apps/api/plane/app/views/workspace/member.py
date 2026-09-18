@@ -156,7 +156,15 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         )
         serializer = serializer_class(
             workspace_members,
-            fields=("id", "member", "role", "custom_role_ids", "group_role_ids", "group_ids"),
+            fields=(
+                "id",
+                "member",
+                "role",
+                "custom_role_ids",
+                "group_role_ids",
+                "group_ids",
+                "is_active",
+            ),
             many=True,
             context={
                 "group_role_ids_by_member": self._get_group_role_ids_by_member(

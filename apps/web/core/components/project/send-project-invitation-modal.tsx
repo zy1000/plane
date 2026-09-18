@@ -78,11 +78,13 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const uninvitedPeople = useMemo(
     () =>
       workspaceMemberIds?.filter((userId) => {
+        // 已停用的工作区成员不能被加入项目，后端会直接拒绝
+        if (getWorkspaceMemberDetails(userId)?.is_active === false) return false;
         const projectMemberDetails = getProjectMemberDetails(userId, projectId);
         const isInvited = projectMemberDetails?.member.id && projectMemberDetails?.original_role;
         return !isInvited;
       }) ?? [],
-    [getProjectMemberDetails, projectId, workspaceMemberIds]
+    [getProjectMemberDetails, getWorkspaceMemberDetails, projectId, workspaceMemberIds]
   );
   const selectedMemberIds = new Set(
     watchedMembers.map((item) => item?.member_id).filter((memberId): memberId is string => Boolean(memberId))
