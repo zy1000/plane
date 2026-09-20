@@ -31,6 +31,9 @@ import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { formatCNDateTime } from "./util";
 import styles from "./update-modal.module.css";
 import { ExecutionRecordDetailModal } from "../execution/execution-records";
+import type { TPlanCaseReviewRecord } from "@/services/qa/plan.service";
+import { PlanCaseReviewRecordList } from "../plans/plan-case-review-records";
+import { PlanCaseReviewStatusTag } from "../plans/plan-case-tags";
 import { TestCaseActivityTab } from "./test-case-activity/test-case-activity-tab";
 import { useTranslation } from "@plane/i18n";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -210,6 +213,10 @@ function UpdateModalBody({
     created_by?: string | null;
     created_at?: string;
     steps?: any;
+    /** 该用例在所属计划里的复核状态 */
+    review_status?: string | null;
+    /** 本次执行的复核记录 */
+    review_records?: TPlanCaseReviewRecord[];
   };
   const [execDetailModalOpen, setExecDetailModalOpen] = React.useState<boolean>(false);
   const [execDetailRecord, setExecDetailRecord] = React.useState<TExecRecord | null>(null);
@@ -497,6 +504,7 @@ function UpdateModalBody({
     case_priority?: Record<string, string>;
     case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
+    plan_case_review_status?: Record<string, string>;
   }>({});
   const fetchEnums = async (seq?: number) => {
     if (!workspaceSlug) return;
@@ -509,6 +517,7 @@ function UpdateModalBody({
         case_priority: enums.case_priority || {},
         case_state: enums.case_state || {},
         plan_case_result: enums.plan_case_result || {},
+        plan_case_review_status: enums.plan_case_review_status || {},
       });
     } catch {
       if (seq && seq !== loadSeqRef.current) return;
@@ -518,6 +527,7 @@ function UpdateModalBody({
         case_priority: {},
         case_state: {},
         plan_case_result: {},
+        plan_case_review_status: {},
       });
     }
   };
@@ -1125,6 +1135,17 @@ function UpdateModalBody({
                           setExecPage(1);
                         },
                       }}
+                      expandable={{
+                        // 展开看这次执行的复核结论与原因
+                        rowExpandable: (record: TExecRecord) => (record.review_records?.length ?? 0) > 0,
+                        expandedRowRender: (record: TExecRecord) => (
+                          <PlanCaseReviewRecordList
+                            records={record.review_records ?? []}
+                            colors={enumsData?.plan_case_review_status}
+                            compact
+                          />
+                        ),
+                      }}
                       columns={[
                         { title: "计划名称", dataIndex: "name", key: "name" },
                         {
@@ -1154,6 +1175,15 @@ function UpdateModalBody({
                               showUserDetails={true}
                               optionsClassName="z-[1200]"
                             />
+                          ),
+                        },
+                        {
+                          title: "复核状态",
+                          dataIndex: "review_status",
+                          key: "review_status",
+                          width: 110,
+                          render: (value: string | null) => (
+                            <PlanCaseReviewStatusTag value={value} colors={enumsData?.plan_case_review_status} />
                           ),
                         },
                         {
@@ -1206,6 +1236,7 @@ function UpdateModalBody({
                 created_by: r.created_by ?? null,
                 created_at: r.created_at,
                 steps: r.steps,
+                review_records: r.review_records,
               }))}
               workspaceSlug={workspaceSlug}
             />

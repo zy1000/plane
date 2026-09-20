@@ -1,5 +1,4 @@
 # filters.py
-from django.db.models import Exists, OuterRef
 from django_filters import rest_framework as filters
 
 from plane.db.models import TestPlan, PlanModule, PlanCase, CaseReview, CaseReviewModule
@@ -7,7 +6,7 @@ from plane.utils.filters.filterset import UUIDInFilter
 
 
 class TestPlanFilter(filters.FilterSet):
-    assignee_display_name = filters.CharFilter(field_name='plan_cases__assignees__display_name', lookup_expr='icontains')
+    assignee_display_name = filters.CharFilter(field_name='plan_cases__assignee__display_name', lookup_expr='icontains')
     module_id = filters.UUIDFilter(method="filter_module_id")
 
     def filter_module_id(self, queryset, name, value):
@@ -39,42 +38,20 @@ class TestPlanFilter(filters.FilterSet):
 
 
 class PlanCaseFilter(filters.FilterSet):
-    # 执行人是 M2M，用 through 表子查询过滤，避免 join 产生重复行再 distinct
-    assignee_id = filters.UUIDFilter(method="filter_assignee_id")
-    assignee_id__in = UUIDInFilter(method="filter_assignee_id_in")
-    assignee_isnull = filters.BooleanFilter(method="filter_assignee_isnull")
-
-    def filter_assignee_isnull(self, queryset, name, value):
-        if value is None:
-            return queryset
-        through = PlanCase.assignees.through
-        has_assignee = Exists(through.objects.filter(plancase_id=OuterRef("id")))
-        return queryset.filter(~has_assignee if value else has_assignee)
-
-    def filter_assignee_id(self, queryset, name, value):
-        return self._filter_by_assignees(queryset, [value])
-
-    def filter_assignee_id_in(self, queryset, name, value):
-        return self._filter_by_assignees(queryset, value)
-
-    @staticmethod
-    def _filter_by_assignees(queryset, user_ids):
-        if not user_ids:
-            return queryset
-        through = PlanCase.assignees.through
-        return queryset.filter(
-            id__in=through.objects.filter(user_id__in=user_ids).values("plancase_id")
-        )
+    # 前端历史参数名是 assignee_isnull（无双下划线），保留别名
+    assignee_isnull = filters.BooleanFilter(field_name="assignee", lookup_expr="isnull")
 
     class Meta:
         model = PlanCase
         fields = {
             "plan_id": ["exact", "in"],
+            "assignee_id": ["exact", "in", "isnull"],
             "case__repository_id": ["exact", "in"],
             "case__module_id": ["exact", "in"],
             "case__type": ["exact", "in"],
             "case__priority": ["exact", "in"],
             "result": ["exact", "in"],
+            "review_status": ["exact", "in"],
         }
 
 

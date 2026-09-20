@@ -1,5 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
+import { PlanReviewRuleFields } from "./plan-review-rule-fields";
+import { usePlanReviewRule } from "./use-plan-review-rule";
+import type { TPlanReviewApprovalType } from "@/services/qa/plan.service";
 import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 import { Button } from "@plane/propel/button";
 import { Input, TextArea, EModalPosition, EModalWidth, ModalCore, CustomSearchSelect } from "@plane/ui";
@@ -33,6 +36,9 @@ type Props = {
     begin_time?: string | Date | null;
     end_time?: string | Date | null;
     threshold?: number | null;
+    reviewers?: string[] | null;
+    review_approval_type?: TPlanReviewApprovalType | null;
+    review_required_count?: number | null;
   } | null;
   // 创建成功/编辑成功回调（用于刷新列表或其它联动）
   onSuccess?: () => void | Promise<void>;
@@ -63,6 +69,11 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const [description, setDescription] = useState<string>(initialData?.description ?? "");
   const [moduleId, setModuleId] = useState<string | null>(initialData?.module ?? null);
   const [cycleId, setCycleId] = useState<string | null>(initialData?.cycle ?? null);
+  const reviewRule = usePlanReviewRule({
+    reviewers: initialData?.reviewers,
+    review_approval_type: initialData?.review_approval_type,
+    review_required_count: initialData?.review_required_count,
+  });
 
   const [beginTime, setBeginTime] = useState<Date | null>(
     initialData?.begin_time ? new Date(initialData?.begin_time as any) : null
@@ -92,6 +103,11 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     setDescription(initialData?.description ?? "");
     setModuleId(initialData?.module ?? null);
     setCycleId(initialData?.cycle ?? null);
+    reviewRule.reset({
+      reviewers: initialData?.reviewers,
+      review_approval_type: initialData?.review_approval_type,
+      review_required_count: initialData?.review_required_count,
+    });
     if (mode === "create") {
       setBeginTime(null);
       setEndTime(null);
@@ -117,6 +133,11 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
       setDescription(initialData?.description ?? "");
       setModuleId(initialData?.module ?? null);
       setCycleId(initialData?.cycle ?? null);
+      reviewRule.reset({
+      reviewers: initialData?.reviewers,
+      review_approval_type: initialData?.review_approval_type,
+      review_required_count: initialData?.review_required_count,
+    });
       setBeginTime(initialData?.begin_time ? new Date(initialData?.begin_time as any) : null);
       setEndTime(initialData?.end_time ? new Date(initialData?.end_time as any) : null);
     } else {
@@ -124,6 +145,11 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
       setDescription(initialData?.description ?? "");
       setModuleId(initialData?.module ?? null);
       setCycleId(initialData?.cycle ?? null);
+      reviewRule.reset({
+      reviewers: initialData?.reviewers,
+      review_approval_type: initialData?.review_approval_type,
+      review_required_count: initialData?.review_required_count,
+    });
       setBeginTime(null);
       setEndTime(null);
     }
@@ -213,6 +239,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         threshold,
         module: moduleId,
         cycle: cycleId,
+        ...reviewRule.buildPayload(),
       };
 
       if (mode === "create") {
@@ -227,6 +254,9 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           end_time: payload.end_time,
           module: payload.module,
           cycle: payload.cycle,
+          reviewers: payload.reviewers,
+          review_approval_type: payload.review_approval_type,
+          review_required_count: payload.review_required_count,
         });
       }
 
@@ -323,6 +353,17 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
               }
             />
           </div>
+
+          {/* 复核人（可选，可多人）+ 通过规则：只有复核人能复核该计划下用例的执行结果 */}
+          <PlanReviewRuleFields
+            projectId={projectId ? String(projectId) : undefined}
+            reviewerIds={reviewRule.reviewerIds}
+            approvalType={reviewRule.approvalType}
+            requiredCount={reviewRule.requiredCount}
+            onReviewerIdsChange={reviewRule.setReviewerIds}
+            onApprovalTypeChange={reviewRule.setApprovalType}
+            onRequiredCountChange={reviewRule.setRequiredCount}
+          />
 
           {/* 计划起止时间样式参照 CreateReviewModal.tsx L177-200 */}
           <div className="col-span-1">

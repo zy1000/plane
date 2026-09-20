@@ -315,7 +315,7 @@ export interface IProfileMetricRelease extends Omit<IProfileMetricCycle, "entity
 }
 
 export interface IProfileMetricExecutionCase {
-  assignees: IProfileMetricUser[];
+  assignee: IProfileMetricUser | null;
   case_id: string;
   code: string;
   entity_type: "execution_case";

@@ -18,6 +18,7 @@ export type TPlanCaseFilterQueryParams = {
   case__repository_id__in?: string;
   case__type__in?: string;
   result__in?: string;
+  review_status__in?: string;
 };
 
 const toStringArray = (value: unknown): string[] => {
@@ -52,6 +53,9 @@ const applyCondition = (
   switch (property) {
     case "result":
       mergeCsvValue(params, "result__in", toStringArray(value));
+      break;
+    case "review_status":
+      mergeCsvValue(params, "review_status__in", toStringArray(value));
       break;
     case "type":
       mergeCsvValue(params, "case__type__in", toStringArray(value));

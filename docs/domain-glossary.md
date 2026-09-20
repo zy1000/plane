@@ -187,7 +187,8 @@
 结构分四块：
 - 用例：`TestCaseRepository`（根容器）→ `CaseModule`（目录树）/ `CaseLabel` → `TestCase` → `TestCaseVersion` / `TestCaseComment` / `TestCaseActivity`
 - 计划执行：`PlanModule` → `TestPlan` →（through `PlanCase`）→ `PlanCaseRecord`（单次执行记录）
-- 评审：`CaseReviewModule` → `CaseReview` →（through `CaseReviewThrough`）→ `CaseReviewRecord`
+- 计划复核：`PlanCaseReviewRecord`，复核对象是**执行结果**（同时挂 `plan_case` 与该次执行的 `plan_case_record`）。计划上配 `reviewers` + 通过规则 `review_approval_type`（只有 `all` / `n_of_m`，**没有 any**，见 `ReviewApprovalType`），折算结果落在 `PlanCase.review_status`（未复核/复核中/通过/不通过）。重新执行会作废旧票（`invalidated_at`）并重置状态。判定逻辑在 `plane/utils/qa.py::compute_plan_case_review_status`。**界面统一叫「复核」**，代码标识符仍是 `review_*`
+- 用例评审：`CaseReviewModule` → `CaseReview` →（through `CaseReviewThrough`）→ `CaseReviewRecord`。与上面的计划复核是**两套独立功能**（URL `/test/review/` vs `/test/plan/review/`），不要混用
 - 报告：`TestReport`，M2M plans，**统计实时算不落库**
 
 `TestPlan` 是挂钩原生概念最密集的地方：一对一 FK `cycle`，M2M `modules`（原生 Module）、M2M `releases`。`TestCase.issues` 和 `PlanCase.issue` 双向连到 Issue。

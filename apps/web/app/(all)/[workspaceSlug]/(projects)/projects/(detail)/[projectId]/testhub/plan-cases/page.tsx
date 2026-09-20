@@ -19,12 +19,13 @@ import { CaseService } from "@/services/qa/case.service";
 import {
   PLAN_CASE_ENUM_GROUP_QUERY_PARAM,
   PlanService,
+  getPlanReviewRuleLabel,
   isPlanCaseEnumGroupBy,
   type TPlanCaseItem,
   type TPlanListItem,
 } from "@/services/qa/plan.service";
 import { AppstoreOutlined } from "@ant-design/icons";
-import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2, Copy } from "lucide-react";
+import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2, Copy, ShieldCheck } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -54,6 +55,9 @@ import { PLAN_CASE_TYPE_TAG_COLOR, PlanCaseGroupTree } from "@/components/qa/pla
 import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
+import { PlanCaseResultTag, PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
+import { PlanCaseReviewModal } from "@/components/qa/plans/plan-case-review-modal";
+import { usePlanCaseReview } from "@/components/qa/plans/use-plan-case-review";
 import {
   planCaseExpressionToQueryParams,
   type TPlanCaseFilterQueryParams,
@@ -88,15 +92,6 @@ type TPlanCaseListFilters = {
 
 const EMPTY_PLAN_CASE_FILTER_EXPRESSION: TPlanCaseFilterExpression = {};
 const DEFAULT_PLAN_CASE_ORDERING: TPlanCaseOrderBy = "-case__updated_at";
-const PLAN_CASE_RESULT_COLOR_MAP: Record<string, string> = {
-  成功: "green",
-  通过: "green",
-  失败: "red",
-  阻塞: "gold",
-  未执行: "gray",
-  无效: "gray",
-};
-
 const toStringArray = (value: unknown): string[] => {
   if (value === null || value === undefined) return [];
   if (Array.isArray(value)) {
@@ -209,15 +204,12 @@ export default function PlanCasesPage() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
-  const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
-  const [selectedPlanCaseToAssigneeMap, setSelectedPlanCaseToAssigneeMap] = useState<Record<string, string[]>>({});
+  // 选中行的快照：批量执行要 case_id 与执行人，批量复核还要执行结果，跨页选择时当前页拿不到行数据
+  const [selectedPlanCaseMetaMap, setSelectedPlanCaseMetaMap] = useState<
+    Record<string, { caseId?: string; assignee: string | null; result?: string; name?: string }>
+  >({});
   const [bulkExecuteLoading, setBulkExecuteLoading] = useState<boolean>(false);
   const [bulkAssigneeUpdating, setBulkAssigneeUpdating] = useState<boolean>(false);
-  // 批量分配执行人的待应用选择，点「应用」后整体覆盖选中行的执行人
-  const [bulkAssignees, setBulkAssignees] = useState<string[]>([]);
-  useEffect(() => {
-    if (selectedCaseIds.length === 0) setBulkAssignees([]);
-  }, [selectedCaseIds.length]);
 
   const [planList, setPlanList] = useState<TPlanListItem[]>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
@@ -241,6 +233,17 @@ export default function PlanCasesPage() {
     () =>
       Object.fromEntries(
         Object.entries((Enums as any)?.plan_case_result || {}).map(([value, color]) => [String(value), String(color)])
+      ) as Record<string, string>,
+    [Enums]
+  );
+
+  const planCaseReviewStatusEnums = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries((Enums as any)?.plan_case_review_status || {}).map(([value, color]) => [
+          String(value),
+          String(color),
+        ])
       ) as Record<string, string>,
     [Enums]
   );
@@ -326,8 +329,7 @@ export default function PlanCasesPage() {
   useEffect(() => {
     if (lastSelectionContextKeyRef.current !== null && lastSelectionContextKeyRef.current !== selectionContextKey) {
       setSelectedCaseIds([]);
-      setSelectedPlanCaseToCaseIdMap({});
-      setSelectedPlanCaseToAssigneeMap({});
+      setSelectedPlanCaseMetaMap({});
     }
     lastSelectionContextKeyRef.current = selectionContextKey;
   }, [selectionContextKey]);
@@ -556,6 +558,7 @@ export default function PlanCasesPage() {
     caseTypeEnums,
     moduleOptions: moduleFilterOptions,
     planCaseResultEnums,
+    planCaseReviewStatusEnums,
     projectId: String(projectId || ""),
     repositoryOptions: repositoryFilterOptions,
     workspaceSlug: String(workspaceSlug || ""),
@@ -666,8 +669,7 @@ export default function PlanCasesPage() {
       await planService.cancelPlanCase(String(workspaceSlug), String(projectId), ids);
       if (Array.isArray(ids)) {
         setSelectedCaseIds([]);
-        setSelectedPlanCaseToCaseIdMap({});
-        setSelectedPlanCaseToAssigneeMap({});
+        setSelectedPlanCaseMetaMap({});
       }
       await refreshGroupTrees();
       await fetchCases(1, pageSize);
@@ -702,16 +704,15 @@ export default function PlanCasesPage() {
       return;
     }
     const currentUserId = String(currentUser.id);
-    const unauthorizedPlanCases = selectedCaseIds.filter((planCaseId) => {
-      const assigned = selectedPlanCaseToAssigneeMap[String(planCaseId)] ?? [];
-      return !assigned.map(String).includes(currentUserId);
-    });
+    const unauthorizedPlanCases = selectedCaseIds.filter(
+      (planCaseId) => String(selectedPlanCaseMetaMap[String(planCaseId)]?.assignee ?? "") !== currentUserId
+    );
     if (unauthorizedPlanCases.length > 0) {
       message.warning("选中用例中包含非本人执行项或未设置执行人的项，请调整后重试");
       return;
     }
     const caseIds = Array.from(
-      new Set(selectedCaseIds.map((planCaseId) => selectedPlanCaseToCaseIdMap[String(planCaseId)]).filter(Boolean))
+      new Set(selectedCaseIds.map((planCaseId) => selectedPlanCaseMetaMap[String(planCaseId)]?.caseId).filter(Boolean))
     );
     if (caseIds.length === 0) {
       message.warning("未找到选中用例的 case_id");
@@ -731,8 +732,7 @@ export default function PlanCasesPage() {
       await planService.caseExecute(String(workspaceSlug), payload);
       message.success("批量执行结果提交成功");
       setSelectedCaseIds([]);
-      setSelectedPlanCaseToCaseIdMap({});
-      setSelectedPlanCaseToAssigneeMap({});
+      setSelectedPlanCaseMetaMap({});
       await refreshGroupTrees();
       await fetchCases(currentPage, pageSize);
     } catch (e: any) {
@@ -743,36 +743,38 @@ export default function PlanCasesPage() {
     }
   };
 
-  const handlePlanCaseAssigneeChange = async (planCaseId: string, assignees: string[]) => {
+  const handlePlanCaseAssigneeChange = async (planCaseId: string, assignee: string | null) => {
     if (!workspaceSlug || !projectId) return;
     const id = String(planCaseId);
-    const nextAssignees = assignees.map(String);
-    const previousAssignees = ((cases || []).find((item) => String(item.id) === id)?.assignees ?? []).map(String);
-    const applyLocalAssignees = (value: string[]) => {
+    const nextAssignee = assignee ? String(assignee) : null;
+    const previousAssignee = (cases || []).find((item) => String(item.id) === id)?.assignee ?? null;
+    const applyLocalAssignee = (value: string | null) => {
       setCases((prev) =>
-        (prev || []).map((item) => (String(item.id) === id ? Object.assign({}, item, { assignees: value }) : item))
+        (prev || []).map((item) => (String(item.id) === id ? Object.assign({}, item, { assignee: value }) : item))
       );
-      setSelectedPlanCaseToAssigneeMap((prev) => ({ ...prev, [id]: value }));
+      setSelectedPlanCaseMetaMap((prev) =>
+        prev[id] ? { ...prev, [id]: { ...prev[id], assignee: value } } : prev
+      );
     };
-    // 多选逐个勾选时先乐观更新，避免上一次请求未返回前用旧值发起下一次请求
-    applyLocalAssignees(nextAssignees);
+    // 先乐观更新，失败再回滚
+    applyLocalAssignee(nextAssignee);
     try {
       await planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
         plan_case_id: id,
-        assignees: nextAssignees,
+        assignee: nextAssignee,
       });
       qaCaseSetToastSuccess("执行人已更新");
       void refreshAssigneeTree();
       // 左树选中了某执行人/未分配时，行的归属可能已变化，按当前筛选重取
       if (selectedAssigneeKey) fetchCases(currentPage, pageSize);
     } catch (e: unknown) {
-      applyLocalAssignees(previousAssignees);
+      applyLocalAssignee(previousAssignee);
       qaCaseSetToastError(e, t, "更新执行人失败");
     }
   };
 
-  // 批量分配：选中行的执行人整体覆盖为所选人员
-  const handleBulkPlanCaseAssigneeChange = async (assignees: string[]) => {
+  // 批量分配：选中行的执行人统一覆盖为所选人员
+  const handleBulkPlanCaseAssigneeChange = async (assignee: string) => {
     if (!workspaceSlug || !projectId) return;
     const targetPlanCaseIds = Array.from(new Set((selectedCaseIds || []).map((id) => String(id))));
     if (targetPlanCaseIds.length === 0) {
@@ -786,7 +788,7 @@ export default function PlanCasesPage() {
         targetPlanCaseIds.map((planCaseId) =>
           planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
             plan_case_id: String(planCaseId),
-            assignees,
+            assignee,
           })
         )
       );
@@ -803,24 +805,24 @@ export default function PlanCasesPage() {
 
       if (successPlanCaseIds.length > 0) {
         const successIdSet = new Set(successPlanCaseIds.map((id) => String(id)));
-        const nextAssignees = assignees.map(String);
+        const nextAssignee = String(assignee);
 
         setCases((prev) =>
           (prev || []).map((item) =>
-            successIdSet.has(String(item.id)) ? Object.assign({}, item, { assignees: nextAssignees }) : item
+            successIdSet.has(String(item.id)) ? Object.assign({}, item, { assignee: nextAssignee }) : item
           )
         );
-        setSelectedPlanCaseToAssigneeMap((prev) => {
-          const next = { ...prev } as Record<string, string[]>;
+        setSelectedPlanCaseMetaMap((prev) => {
+          const next = { ...prev };
           successPlanCaseIds.forEach((planCaseId) => {
-            next[String(planCaseId)] = nextAssignees;
+            const key = String(planCaseId);
+            if (next[key]) next[key] = { ...next[key], assignee: nextAssignee };
           });
           return next;
         });
       }
 
       if (failedErrors.length === 0) {
-        setBulkAssignees([]);
         qaCaseSetToastSuccess("批量更新执行人成功");
       } else if (successPlanCaseIds.length > 0) {
         message.warning(`已更新 ${successPlanCaseIds.length} 条，${failedErrors.length} 条失败`);
@@ -851,30 +853,58 @@ export default function PlanCasesPage() {
 
     const currentPageSelected = new Set(selectedKeysOnCurrentPage.map((id) => String(id)));
 
-    setSelectedPlanCaseToCaseIdMap((prev) => {
-      const next = { ...prev } as Record<string, string>;
+    setSelectedPlanCaseMetaMap((prev) => {
+      const next = { ...prev };
       currentPageIds.forEach((planCaseId) => {
         if (!currentPageSelected.has(planCaseId)) delete next[planCaseId];
       });
       currentPageSelected.forEach((planCaseId) => {
         const row = (cases || []).find((item) => String(item.id) === planCaseId);
-        const caseId = row?.case?.id;
-        if (caseId) next[planCaseId] = String(caseId);
+        next[planCaseId] = {
+          caseId: row?.case?.id ? String(row.case.id) : undefined,
+          assignee: row?.assignee ? String(row.assignee) : null,
+          result: row?.result,
+          name: row?.case?.name,
+        };
       });
       return next;
     });
+  };
 
-    setSelectedPlanCaseToAssigneeMap((prev) => {
-      const next = { ...prev } as Record<string, string[]>;
-      currentPageIds.forEach((planCaseId) => {
-        if (!currentPageSelected.has(planCaseId)) delete next[planCaseId];
-      });
-      currentPageSelected.forEach((planCaseId) => {
-        const row = (cases || []).find((item) => String(item.id) === planCaseId);
-        next[planCaseId] = (row?.assignees ?? []).map(String);
-      });
-      return next;
-    });
+  // 复核权限：当前用户在该计划的复核人名单里才能复核
+  const isCurrentUserPlanReviewer = Boolean(
+    currentUser?.id && (currentPlan?.reviewers ?? []).map(String).includes(String(currentUser.id))
+  );
+
+  const planReviewRuleLabel = getPlanReviewRuleLabel(currentPlan);
+  const planReviewerCount = (currentPlan?.reviewers ?? []).length;
+
+  const planCaseReview = usePlanCaseReview({
+    workspaceSlug: workspaceSlug ? String(workspaceSlug) : undefined,
+    projectId: projectId ? String(projectId) : undefined,
+    planId,
+    onReviewed: (statuses) => {
+      // 多人复核时本次投票未必就是最终状态，用后端按规则折算的结果回填
+      setCases((prev) =>
+        (prev || []).map((item) =>
+          statuses[String(item.id)] ? Object.assign({}, item, { review_status: statuses[String(item.id)] }) : item
+        )
+      );
+      void refreshGroupTree();
+      // 正按复核状态分组时，行的归属已变化，按当前筛选重取
+      if (groupBy === "review_status" && selectedGroupValue) fetchCases(currentPage, pageSize);
+      setSelectedCaseIds([]);
+      setSelectedPlanCaseMetaMap({});
+    },
+  });
+
+  const handleBulkReview = () => {
+    planCaseReview.openReview(
+      selectedCaseIds.map((planCaseId) => {
+        const meta = selectedPlanCaseMetaMap[String(planCaseId)];
+        return { id: String(planCaseId), name: meta?.name, result: meta?.result };
+      })
+    );
   };
 
   const handleSetColumnWidth = (columnKey: string, width: number) => {
@@ -904,17 +934,11 @@ export default function PlanCasesPage() {
     return <Tag color={color}>{label}</Tag>;
   };
 
-  const renderResultTag = (value?: string) => {
-    const label = value || "-";
-    if (label === "-") return <span className="text-placeholder">-</span>;
-    const rawColor = (Enums as any)?.plan_case_result?.[label] || PLAN_CASE_RESULT_COLOR_MAP[label] || "default";
-    const color = rawColor === "gray" ? "default" : rawColor;
-    return (
-      <Tag color={color} className="!inline-flex w-[55px] justify-center">
-        {label}
-      </Tag>
-    );
-  };
+  const renderResultTag = (value?: string) => <PlanCaseResultTag value={value} colors={planCaseResultEnums} />;
+
+  const renderReviewStatusTag = (value?: string) => (
+    <PlanCaseReviewStatusTag value={value} colors={planCaseReviewStatusEnums} />
+  );
 
   return (
     <div className="h-full w-full">
@@ -982,6 +1006,7 @@ export default function PlanCasesPage() {
                 selectedKey={selectedTreeKey}
                 onSelect={handleGroupTreeSelect}
                 resultColors={planCaseResultEnums}
+                reviewStatusColors={planCaseReviewStatusEnums}
               />
             )}
           </div>
@@ -1031,6 +1056,28 @@ export default function PlanCasesPage() {
                       }
                     />
                   </Breadcrumbs>
+                  {(currentPlan?.reviewers ?? []).length > 0 && (
+                    <div className="ml-3 flex items-center gap-1.5 border-l border-subtle pl-3">
+                      <span className="text-xs whitespace-nowrap text-secondary">复核人</span>
+                      <MemberDropdown
+                        multiple
+                        value={(currentPlan?.reviewers ?? []).map(String)}
+                        onChange={() => {}}
+                        disabled
+                        projectId={projectId ? String(projectId) : undefined}
+                        placeholder=""
+                        className="text-sm"
+                        buttonContainerClassName="p-0 cursor-default"
+                        buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+                        buttonVariant="transparent-with-text"
+                        showUserDetails
+                        optionsClassName="z-[60]"
+                      />
+                      {planReviewRuleLabel && (
+                        <span className="text-xs whitespace-nowrap text-tertiary">（{planReviewRuleLabel}）</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <CasesSearchInput
@@ -1130,7 +1177,14 @@ export default function PlanCasesPage() {
                         onViewExecution={handleViewExecution}
                         projectId={projectId ? String(projectId) : undefined}
                         bulkAssigneeUpdating={bulkAssigneeUpdating}
+                        canReview={isCurrentUserPlanReviewer}
+                        onReview={(record) =>
+                          planCaseReview.openReview([
+                            { id: String(record.id), name: record.case?.name, result: record.result },
+                          ])
+                        }
                         renderResultTag={renderResultTag}
+                        renderReviewStatusTag={renderReviewStatusTag}
                         renderTypeTag={(value) => renderEnumTag("case_type", value, PLAN_CASE_TYPE_TAG_COLOR)}
                         renderPriorityTag={(value) => <CasePriorityPill value={value} />}
                         renderUpdatedAt={(value) => (value ? formatDateTime(value) : "-")}
@@ -1149,10 +1203,13 @@ export default function PlanCasesPage() {
 
                             <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-[var(--border-color-subtle)]" />
 
+                            {/* 单选下拉选中即提交，不再需要「应用」按钮 */}
                             <MemberDropdown
-                              multiple
-                              value={bulkAssignees}
-                              onChange={(value) => setBulkAssignees(value)}
+                              multiple={false}
+                              value={null}
+                              onChange={(value) => {
+                                if (value) void handleBulkPlanCaseAssigneeChange(String(value));
+                              }}
                               disabled={bulkAssigneeUpdating}
                               projectId={projectId ? String(projectId) : undefined}
                               buttonVariant="transparent-with-text"
@@ -1165,22 +1222,19 @@ export default function PlanCasesPage() {
                                   ) : (
                                     <UserCog className="h-3.5 w-3.5" />
                                   )}
-                                  {bulkAssigneeUpdating
-                                    ? "更新中"
-                                    : bulkAssignees.length > 0
-                                      ? `分配执行人（${bulkAssignees.length}）`
-                                      : "分配执行人"}
+                                  {bulkAssigneeUpdating ? "更新中" : "分配执行人"}
                                 </span>
                               }
                             />
-                            {bulkAssignees.length > 0 && !bulkAssigneeUpdating && (
+
+                            {isCurrentUserPlanReviewer && (
                               <button
                                 type="button"
-                                className="inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-colors hover:bg-accent-subtle"
-                                onClick={() => handleBulkPlanCaseAssigneeChange(bulkAssignees)}
+                                onClick={handleBulkReview}
+                                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-primary"
                               >
-                                <CheckCheck className="h-3.5 w-3.5" />
-                                应用
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                复核
                               </button>
                             )}
 
@@ -1232,8 +1286,7 @@ export default function PlanCasesPage() {
                               type="button"
                               onClick={() => {
                                 setSelectedCaseIds([]);
-                                setSelectedPlanCaseToCaseIdMap({});
-                                setSelectedPlanCaseToAssigneeMap({});
+                                setSelectedPlanCaseMetaMap({});
                               }}
                               className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-surface-2 hover:text-primary"
                             >
@@ -1347,9 +1400,19 @@ export default function PlanCasesPage() {
             selectedPlanCaseIds={selectedCaseIds}
             onSuccess={() => {
               setSelectedCaseIds([]);
-              setSelectedPlanCaseToCaseIdMap({});
-              setSelectedPlanCaseToAssigneeMap({});
+              setSelectedPlanCaseMetaMap({});
             }}
+          />
+          <PlanCaseReviewModal
+            open={planCaseReview.isOpen}
+            targets={planCaseReview.targets}
+            skippedCount={planCaseReview.skippedCount}
+            submitting={planCaseReview.submitting}
+            workspaceSlug={workspaceSlug ? String(workspaceSlug) : undefined}
+            reviewStatusColors={planCaseReviewStatusEnums}
+            reviewerCount={planReviewerCount}
+            onClose={planCaseReview.close}
+            onSubmit={planCaseReview.submit}
           />
         </>
       )}

@@ -31,6 +31,7 @@ type TUsePlanCaseFiltersConfigProps = {
   caseTypeEnums: Record<string, string>;
   moduleOptions: TPlanCaseFilterSelectOption[];
   planCaseResultEnums: Record<string, string>;
+  planCaseReviewStatusEnums: Record<string, string>;
   projectId: string;
   repositoryOptions: TPlanCaseFilterSelectOption[];
   workspaceSlug: string;
@@ -66,6 +67,7 @@ export const usePlanCaseFiltersConfig = ({
   caseTypeEnums,
   moduleOptions,
   planCaseResultEnums,
+  planCaseReviewStatusEnums,
   projectId,
   repositoryOptions,
   workspaceSlug,
@@ -89,6 +91,14 @@ export const usePlanCaseFiltersConfig = ({
       label: String(value),
     }));
   }, [planCaseResultEnums]);
+
+  const reviewStatusOptions = useMemo<TPlanCaseFilterSelectOption[]>(() => {
+    return Object.entries(planCaseReviewStatusEnums || {}).map(([value]) => ({
+      id: String(value),
+      value: String(value),
+      label: String(value),
+    }));
+  }, [planCaseReviewStatusEnums]);
 
   const typeOptions = useMemo<TPlanCaseFilterSelectOption[]>(() => {
     return Object.entries(caseTypeEnums || {}).map(([value, label]) => ({
@@ -120,6 +130,22 @@ export const usePlanCaseFiltersConfig = ({
         }),
       }),
     [operatorConfigs.allowNegative, operatorConfigs.allowedOperators, resultOptions]
+  );
+
+  const reviewStatusFilterConfig = useMemo<TFilterConfig<TPlanCaseFilterProperty>>(
+    () =>
+      createFilterConfig<TPlanCaseFilterProperty>({
+        id: "review_status",
+        label: "复核状态",
+        icon: StatePropertyIcon,
+        isEnabled: reviewStatusOptions.length > 0,
+        supportedOperatorConfigsMap: getMultiSelectOperatorConfigs(reviewStatusOptions, {
+          isEnabled: reviewStatusOptions.length > 0,
+          allowedOperators: operatorConfigs.allowedOperators,
+          allowNegative: operatorConfigs.allowNegative,
+        }),
+      }),
+    [operatorConfigs.allowNegative, operatorConfigs.allowedOperators, reviewStatusOptions]
   );
 
   const typeFilterConfig = useMemo<TFilterConfig<TPlanCaseFilterProperty>>(
@@ -221,6 +247,7 @@ export const usePlanCaseFiltersConfig = ({
     areAllConfigsInitialized: true,
     configs: [
       resultFilterConfig,
+      reviewStatusFilterConfig,
       typeFilterConfig,
       priorityFilterConfig,
       assigneeFilterConfig,

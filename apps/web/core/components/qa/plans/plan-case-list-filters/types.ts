@@ -9,6 +9,7 @@ import { LOGICAL_OPERATOR } from "@plane/types";
 
 export const PLAN_CASE_FILTER_PROPERTY_KEYS = [
   "result",
+  "review_status",
   "type",
   "priority",
   "assignee",

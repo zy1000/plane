@@ -73,7 +73,7 @@ export const PlanCasesModal: React.FC<Props> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [existingIds, setExistingIds] = useState<string[]>([]);
   const [selectedNewIds, setSelectedNewIds] = useState<string[]>([]);
-  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
   const [checkedTreeKeys, setCheckedTreeKeys] = useState<string[]>([]);
   const nodeCaseIdsCacheRef = useRef<Record<string, string[]>>({});
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,7 +129,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
-    setSelectedAssignees([]);
+    setSelectedAssignee(null);
     if (!isOpen || !workspaceSlug || !planId) return;
     fetchPlanTree();
     fetchCases(1, undefined, undefined);
@@ -423,7 +423,7 @@ export const PlanCasesModal: React.FC<Props> = ({
         qaCaseSetToastWarning("请先选择要关联的用例");
         return;
       }
-      if (selectedAssignees.length === 0) {
+      if (!selectedAssignee) {
         qaCaseSetToastWarning("请选择执行人");
         return;
       }
@@ -431,7 +431,7 @@ export const PlanCasesModal: React.FC<Props> = ({
       await planService.addPlanCases(String(workspaceSlug), String(projectId || ""), {
         plan_id: String(planId),
         case_ids: selectedNewIds.map(String),
-        assignees: selectedAssignees,
+        assignee: selectedAssignee,
       });
       qaCaseSetToastSuccess("用例关联已更新");
       closeModal();
@@ -522,10 +522,10 @@ export const PlanCasesModal: React.FC<Props> = ({
                     </span>
                     <div className="w-48">
                       <MemberDropdown
-                        multiple
+                        multiple={false}
                         projectId={projectId ? String(projectId) : undefined}
-                        value={selectedAssignees}
-                        onChange={(value) => setSelectedAssignees(value)}
+                        value={selectedAssignee}
+                        onChange={(value) => setSelectedAssignee(value ? String(value) : null)}
                         placeholder="请选择执行人"
                         buttonVariant="border-with-text"
                         showUserDetails

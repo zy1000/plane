@@ -64,7 +64,7 @@ export type TReportCaseRow = {
   priority: number | null;
   result: string;
   module: string;
-  assignee_ids: string[];
+  assignee_id: string | null;
   assignee_name: string | null;
   defect_count: number;
   plan_name: string;

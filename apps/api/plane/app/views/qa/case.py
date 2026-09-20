@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.http import FileResponse
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
@@ -36,7 +36,8 @@ from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.views.qa.utils import expand_module_subtree_ids
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
-    CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
+    CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion, \
+    PlanCaseRecord, PlanCaseReviewRecord
 from plane.bgtasks.copy_case_assets_task import copy_case_assets
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.exception_logger import log_exception
@@ -399,12 +400,24 @@ class CaseAPI(BaseViewSet):
         case_id = request.query_params.get('case_id')
         result = []
 
-        plan_cases = PlanCase.objects.filter(case_id=case_id)
-        for plan_case in plan_cases:
-            record = plan_case.plan_case_records.first()
-            if not record:
+        plan_cases = PlanCase.objects.filter(case_id=case_id).select_related("plan")
+        records_prefetch = Prefetch(
+            "plan_case_records",
+            queryset=PlanCaseRecord.objects.prefetch_related(
+                Prefetch(
+                    "review_records",
+                    queryset=PlanCaseReviewRecord.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("reviewer"),
+                )
+            ),
+        )
+        for plan_case in plan_cases.prefetch_related(records_prefetch):
+            records = list(plan_case.plan_case_records.all())
+            if not records:
                 continue
-            serializer = CaseExecuteRecordSerializer(record)
+            # PlanCaseRecord.Meta.ordering 是 -created_at，第一条即最近一次执行
+            serializer = CaseExecuteRecordSerializer(records[0])
             result.append(serializer.data)
         return list_response(data=result, count=len(result))
 

@@ -11,6 +11,17 @@ from django.utils.html import strip_tags
 from . import BaseModel, Issue
 
 
+class ReviewApprovalType(models.TextChoices):
+    """测试计划复核的通过规则。
+
+    不复用 workflow 的 ApprovalType：那里的 any 与本处「至少 1 人通过」语义重复，
+    产品决策是只保留 all 与 n_of_m 两种。
+    """
+
+    ALL = "all", "全部通过"
+    N_OF_M = "n_of_m", "至少 N 人通过"
+
+
 def generate_case_code(*, project_id, project_identifier, repository_id=None):
     prefix = f"{project_identifier}-"
 
@@ -433,6 +444,28 @@ class TestPlan(BaseModel):
         null=True, blank=True, default=100, verbose_name="TestPlan Threshold"
     )
 
+    # 复核人（可多人）：只有复核人本人可以复核本计划下各条用例的执行结果
+    reviewers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="reviewed_test_plans",
+        db_table="test_plan_reviewers",
+    )
+    # 多人复核的通过规则；单人时规则没有意义，存 all（语义等价）。
+    # 判定实现见 plane/utils/qa.py::compute_plan_case_review_status
+    review_approval_type = models.CharField(
+        max_length=10,
+        choices=ReviewApprovalType.choices,
+        default=ReviewApprovalType.ALL,
+        verbose_name="TestPlan Review Approval Type",
+    )
+    # 仅 n_of_m 规则时必填，表示至少需要多少人通过
+    review_required_count = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="TestPlan Review Required Count",
+    )
+
     module = models.ForeignKey(
         PlanModule,
         null=True,
@@ -477,14 +510,20 @@ class TestPlan(BaseModel):
         return self.get_state_display()
 
     class Meta:
-        # constraints = [
-        #     # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
-        #     models.UniqueConstraint(
-        #         fields=["repository", "name"],
-        #         condition=Q(repository__isnull=False, deleted_at__isnull=True),
-        #         name="unique_plan_repository_name_when_not_deleted",
-        #     ),
-        # ]
+        constraints = [
+            # n_of_m 必须带人数且至少 1；其余规则必须为空
+            models.CheckConstraint(
+                check=(
+                    Q(review_approval_type=ReviewApprovalType.N_OF_M)
+                    & Q(review_required_count__gte=1)
+                )
+                | (
+                    ~Q(review_approval_type=ReviewApprovalType.N_OF_M)
+                    & Q(review_required_count__isnull=True)
+                ),
+                name="test_plan_review_required_count_consistent",
+            ),
+        ]
         db_table = "test_plan"
         ordering = ("-created_at",)
 
@@ -497,22 +536,36 @@ class PlanCase(BaseModel):
         NOT_START = "未执行", "gray"
         INVALID = "无效", "gray"
 
+    class ReviewStatus(models.TextChoices):
+        NOT_START = "未复核", "gray"
+        PROCESS = "复核中", "blue"
+        PASS = "通过", "green"
+        FAIL = "不通过", "red"
+
     case = models.ForeignKey(
         TestCase, on_delete=models.CASCADE, related_name="plan_cases"
     )
     plan = models.ForeignKey(
         TestPlan, on_delete=models.CASCADE, related_name="plan_cases"
     )
-    # 执行人（多选）：任一执行人提交执行即视为本用例结果，后一次执行覆盖前一次
-    assignees = models.ManyToManyField(
+    # 执行人（单选）：只有执行人本人可以提交执行结果，后一次执行覆盖前一次
+    assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
         blank=True,
-        related_name="assigned_plan_cases",
+        null=True,
+        related_name="plan_case_assignees",
     )
     result = models.CharField(
         choices=Result.choices,
         default=Result.NOT_START,
         verbose_name="PlanCase Execute Result",
+    )
+    # 复核状态：由计划的复核人对本条用例的「执行结果」复核，重新执行后重置为未复核
+    review_status = models.CharField(
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.NOT_START,
+        verbose_name="PlanCase Review Status",
     )
     issue = models.ManyToManyField(Issue, related_name="plan_cases")
 
@@ -560,6 +613,57 @@ class PlanCaseRecord(BaseModel):
 
     class Meta:
         db_table = "test_plan_case_records"
+        ordering = ("-created_at",)
+
+
+class PlanCaseReviewRecord(BaseModel):
+    """计划用例的单次复核记录。
+
+    复核对象是该用例的「执行结果」，只有所属计划的复核人可以写入；
+    PlanCase.review_status 只存最新状态，历史留在本表。
+    """
+
+    class Result(models.TextChoices):
+        PASS = "通过", "green"
+        FAIL = "不通过", "red"
+
+    result = models.CharField(
+        choices=Result.choices,
+        default=Result.PASS,
+        verbose_name="PlanCaseReviewRecord Result",
+    )
+    reason = models.TextField(
+        verbose_name="PlanCaseReviewRecord Reason", blank=True, null=True
+    )
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="plan_case_review_records",
+    )
+    plan_case = models.ForeignKey(
+        PlanCase,
+        on_delete=models.CASCADE,
+        related_name="review_records",
+    )
+    # 本次复核针对的那一次执行；用于把复核记录挂到对应的执行记录下展示。
+    # 历史数据可能为空（该字段晚于复核功能本身加入）
+    plan_case_record = models.ForeignKey(
+        PlanCaseRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="review_records",
+    )
+    # 用例重新执行后此前的复核结论作废：聚合只看 invalidated_at 为空的记录，
+    # 但历史仍然保留可查
+    invalidated_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="PlanCaseReviewRecord Invalidated At"
+    )
+
+    class Meta:
+        db_table = "test_plan_case_review_records"
         ordering = ("-created_at",)
 
 

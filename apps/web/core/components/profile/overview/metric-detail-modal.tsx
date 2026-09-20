@@ -289,8 +289,7 @@ function QaCaseTable({
       <TableBody>
         {items.map((item) => {
           const executionItem = item.entity_type === "execution_case" ? item : null;
-          const executionAssigneeNames =
-            (executionItem?.assignees ?? []).map((assignee) => assignee.display_name).join("、") || "-";
+          const executionAssigneeName = executionItem?.assignee?.display_name || "-";
           const reviewItem = item.entity_type === "review_case" ? item : null;
           const parent = executionItem?.plan ?? reviewItem?.review;
           const href = executionItem
@@ -312,8 +311,8 @@ function QaCaseTable({
               </TableCell>
               <TableCell>{item.priority}</TableCell>
               {isExecution && (
-                <TableCell className="truncate" title={executionAssigneeNames}>
-                  {executionAssigneeNames}
+                <TableCell className="truncate" title={executionAssigneeName}>
+                  {executionAssigneeName}
                 </TableCell>
               )}
               <TableCell>{executionItem?.result ?? reviewItem?.personal_review_status ?? "-"}</TableCell>

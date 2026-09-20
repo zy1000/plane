@@ -45,15 +45,19 @@ export type TGlobalEnums = {
   case_type: Record<number | string, string>;
   case_priority: Record<number | string, string>;
   plan_case_result: Record<number | string, string>;
+  plan_case_review_status: Record<number | string, string>;
+  plan_review_approval_type: Record<string, string>;
 };
 
 export const globalEnums = {
-  Enums: { 
-    plan_state: {}, 
-    case_state: {}, 
-    case_type: {}, 
+  Enums: {
+    plan_state: {},
+    case_state: {},
+    case_type: {},
     case_priority: {},
-    plan_case_result: {}
+    plan_case_result: {},
+    plan_case_review_status: {},
+    plan_review_approval_type: {}
   } as TGlobalEnums,
   setEnums: (value: TGlobalEnums) => {
     globalEnums.Enums = value;

@@ -15,6 +15,7 @@ import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import type { TPlanCaseItem } from "@/services/qa/plan.service";
 import type { TPlanCaseDisplayProperties } from "./plan-case-display-filters";
+import { isPlanCaseReviewable } from "./use-plan-case-review";
 
 type TResizableHeadProps = {
   children: ReactNode;
@@ -26,18 +27,21 @@ type TResizableHeadProps = {
 
 type TPlanCasesTableProps = {
   bulkAssigneeUpdating?: boolean;
+  canReview?: boolean;
   cases: TPlanCaseItem[];
   columnWidths: Record<string, number>;
   currentUserId?: string;
   displayProperties: TPlanCaseDisplayProperties;
-  onAssigneeChange: (planCaseId: string, assignees: string[]) => void;
+  onAssigneeChange: (planCaseId: string, assignee: string | null) => void;
   onCancelRelation: (planCaseId: string) => void;
   onOpenCase: (caseId?: string) => void;
+  onReview: (record: TPlanCaseItem) => void;
   onRowSelectChange: (selectedKeysOnCurrentPage: string[]) => void;
   onViewExecution: (record: TPlanCaseItem) => void;
   projectId?: string;
   renderPriorityTag: (value?: number | null) => ReactNode;
   renderResultTag: (value?: string) => ReactNode;
+  renderReviewStatusTag: (value?: string) => ReactNode;
   renderTypeTag: (value?: number | null) => ReactNode;
   renderUpdatedAt: (value?: string | null) => ReactNode;
   selectedPlanCaseIds: string[];
@@ -92,6 +96,7 @@ const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: 
 
 export const PlanCasesTable = ({
   bulkAssigneeUpdating = false,
+  canReview = false,
   cases,
   columnWidths,
   currentUserId,
@@ -99,11 +104,13 @@ export const PlanCasesTable = ({
   onAssigneeChange,
   onCancelRelation,
   onOpenCase,
+  onReview,
   onRowSelectChange,
   onViewExecution,
   projectId,
   renderPriorityTag,
   renderResultTag,
+  renderReviewStatusTag,
   renderTypeTag,
   renderUpdatedAt,
   selectedPlanCaseIds,
@@ -217,6 +224,15 @@ export const PlanCasesTable = ({
             </ResizableHead>
           )}
 
+          {isColumnVisible("review_status") && (
+            <ResizableHead
+              style={getWidthStyle("review_status", 110)}
+              onResize={(width) => setColumnWidth("review_status", width)}
+            >
+              复核状态
+            </ResizableHead>
+          )}
+
           {isColumnVisible("updated_at") && (
             <ResizableHead
               style={getWidthStyle("updated_at", 180)}
@@ -226,7 +242,7 @@ export const PlanCasesTable = ({
             </ResizableHead>
           )}
 
-          <ResizableHead className="sticky right-0 z-[3] border-l bg-layer-1" style={getWidthStyle("actions", 140)}>
+          <ResizableHead className="sticky right-0 z-[3] border-l bg-layer-1" style={getWidthStyle("actions", 160)}>
             操作
           </ResizableHead>
         </TableRow>
@@ -244,9 +260,11 @@ export const PlanCasesTable = ({
         {cases.map((record) => {
           const recordId = String(record.id);
           const caseId = record.case?.id ? String(record.case.id) : undefined;
-          const assigneeIds = (record?.assignees ?? []).map(String);
-          const isAssignedToCurrentUser = Boolean(currentUserId) && assigneeIds.includes(String(currentUserId));
+          const assigneeId = record?.assignee ? String(record.assignee) : null;
+          const isAssignedToCurrentUser = Boolean(currentUserId) && assigneeId === String(currentUserId);
           const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
+          // 复核对象是执行结果，未执行的用例没有可复核的内容
+          const isReviewable = canReview && isPlanCaseReviewable(record.result);
 
           return (
             <TableRow key={recordId} className="group h-12 bg-surface-1 transition-colors hover:bg-surface-2">
@@ -329,15 +347,15 @@ export const PlanCasesTable = ({
                   style={getWidthStyle("assignee", 170)}
                 >
                   <MemberDropdown
-                    multiple
-                    value={assigneeIds}
-                    onChange={(value) => onAssigneeChange(recordId, value)}
+                    multiple={false}
+                    value={assigneeId}
+                    onChange={(value) => onAssigneeChange(recordId, value ? String(value) : null)}
                     disabled={bulkAssigneeUpdating}
                     projectId={projectId}
                     placeholder="请选择执行人"
                     className="w-full text-sm"
                     buttonContainerClassName="w-full text-left p-0"
-                    buttonVariant={assigneeIds.length > 1 ? "transparent-without-text" : "transparent-with-text"}
+                    buttonVariant="transparent-with-text"
                     buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                     showUserDetails
                     optionsClassName="z-[80]"
@@ -372,6 +390,15 @@ export const PlanCasesTable = ({
                 </TableCell>
               )}
 
+              {isColumnVisible("review_status") && (
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("review_status", 110)}
+                >
+                  {renderReviewStatusTag(record.review_status)}
+                </TableCell>
+              )}
+
               {isColumnVisible("updated_at") && (
                 <TableCell
                   className="h-12 border-r border-b border-subtle px-page-x py-0"
@@ -383,12 +410,17 @@ export const PlanCasesTable = ({
 
               <TableCell
                 className="sticky right-0 z-[1] h-12 border-r border-b border-l border-subtle bg-surface-1 px-page-x py-0 group-hover:bg-surface-2"
-                style={getWidthStyle("actions", 140)}
+                style={getWidthStyle("actions", 160)}
               >
                 <div className="flex items-center gap-2">
                   <Button size="small" type="link" className="px-0" onClick={() => onViewExecution(record)}>
                     {actionLabel}
                   </Button>
+                  {isReviewable && (
+                    <Button size="small" type="link" className="px-0" onClick={() => onReview(record)}>
+                      复核
+                    </Button>
+                  )}
                   <Popconfirm
                     title="确定取关该用例？"
                     onConfirm={() => onCancelRelation(recordId)}

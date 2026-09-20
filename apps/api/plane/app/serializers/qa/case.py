@@ -1,14 +1,21 @@
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
+from plane.app.serializers.qa.plan import PlanCaseReviewRecordSerializer
 from plane.db.models import PlanCaseRecord, CaseLabel, TestCaseVersion
 
 
 class CaseExecuteRecordSerializer(ModelSerializer):
     name = serializers.SerializerMethodField()
+    # 用例详情里跨计划看执行记录时，也要能看到这次执行的复核结论
+    review_status = serializers.SerializerMethodField()
+    review_records = PlanCaseReviewRecordSerializer(many=True, read_only=True)
 
     def get_name(self, obj: PlanCaseRecord):
         return obj.plan_case.plan.name
+
+    def get_review_status(self, obj: PlanCaseRecord):
+        return obj.plan_case.review_status if obj.plan_case else None
 
     class Meta:
         model = PlanCaseRecord

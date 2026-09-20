@@ -38,6 +38,7 @@ import {
 } from "@/components/qa/plans/plan-case-display-filters";
 import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
 import { PlanCaseGroupTree } from "@/components/qa/plans/plan-case-group-tree";
+import { PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
 
@@ -55,14 +56,15 @@ type PlanCaseRow = {
   case: string | number;
   name: string;
   priority: number;
-  assignees: string[];
+  assignee: string | null;
   result: string;
+  review_status?: string;
   created_by: string | number | null;
 };
 
-// 多执行人：当前用户在执行人列表中即可提交执行结果
+// 单执行人：只有执行人本人可提交执行结果
 const isPlanCaseAssignee = (row: PlanCaseRow | undefined, userId?: string | number | null) =>
-  Boolean(userId) && (row?.assignees ?? []).map(String).includes(String(userId));
+  Boolean(userId) && String(row?.assignee ?? "") === String(userId);
 
 const StepTypeSwitcher: React.FC<{ mode: number; onChange: (mode: number) => void }> = ({ mode, onChange }) => (
   <Dropdown
@@ -151,6 +153,7 @@ export default function TestExecutionPage() {
     case_priority?: Record<string, string>;
     case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
+    plan_case_review_status?: Record<string, string>;
   }>({});
   const {
     activeKey: executionFilterKey,
@@ -198,7 +201,9 @@ export default function TestExecutionPage() {
   const [reasonDraft, setReasonDraft] = React.useState<string>("");
   const [submitLoading, setSubmitLoading] = React.useState<boolean>(false);
   const [recordsRefreshKey, setRecordsRefreshKey] = React.useState<number>(0);
-  const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
+  const [isCurrentUserAssignee, setIsCurrentUserAssignee] = React.useState<boolean>(false);
+  /** 所属计划的复核人数，用于复核记录区的通过进度 */
+  const [planReviewerCount, setPlanReviewerCount] = React.useState<number>(0);
   const [stepActualResultMap, setStepActualResultMap] = React.useState<Record<number, string>>({});
   const [stepExecResultMap, setStepExecResultMap] = React.useState<Record<number, string>>({});
   const [stepViewMode, setStepViewMode] = React.useState<number>(0);
@@ -255,6 +260,7 @@ export default function TestExecutionPage() {
     if (groupBy === "type") return { case__type: groupValue };
     if (groupBy === "priority") return { case__priority: groupValue };
     if (groupBy === "result") return { result: groupValue };
+    if (groupBy === "review_status") return { review_status: groupValue };
     return {};
   };
 
@@ -312,6 +318,7 @@ export default function TestExecutionPage() {
         case_priority: enums.case_priority || {},
         case_state: enums.case_state || {},
         plan_case_result: enums.plan_case_result || {},
+        plan_case_review_status: enums.plan_case_review_status || {},
       });
     } catch {}
   };
@@ -406,13 +413,15 @@ export default function TestExecutionPage() {
     setMounted(true);
   }, []);
 
+  // 计划名可能已在 sessionStorage 里，但复核人数只能从接口拿，所以这里不再按 planName 短路
   React.useEffect(() => {
-    if (!planId || !workspaceSlug || !projectId || planName) return;
+    if (!planId || !workspaceSlug || !projectId) return;
     planService
       .getPlanList(String(workspaceSlug), { project_id: String(projectId) })
       .then((list) => {
         const found = list.find((p) => String(p.id) === String(planId));
         if (found?.name) setPlanName(found.name);
+        setPlanReviewerCount((found?.reviewers ?? []).length);
       })
       .catch(() => {});
   }, [planId, workspaceSlug, projectId]);
@@ -629,7 +638,7 @@ export default function TestExecutionPage() {
 
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
-    setIsCurrentUserReviewer(isPlanCaseAssignee(row, currentUser?.id));
+    setIsCurrentUserAssignee(isPlanCaseAssignee(row, currentUser?.id));
   }, [cases, selectedCaseId, currentUser?.id]);
 
   React.useEffect(() => {
@@ -639,11 +648,11 @@ export default function TestExecutionPage() {
   React.useEffect(() => {
     if (!selectedCaseId) return;
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
-    const isReviewer = isPlanCaseAssignee(row, currentUser?.id);
+    const isAssignee = isPlanCaseAssignee(row, currentUser?.id);
     const map = enumsData?.plan_case_result || {};
     const keys = Object.keys(map).filter((k) => k !== "未执行");
     let def: string | null = null;
-    if (isReviewer && keys.includes("通过")) def = "通过";
+    if (isAssignee && keys.includes("通过")) def = "通过";
     else def = keys[0] ?? null;
     setReviewValue(def);
     setReason("");
@@ -797,7 +806,7 @@ export default function TestExecutionPage() {
   }, [debouncedSubmit]);
 
   const handleSubmitReview = () => {
-    if (!isCurrentUserReviewer) {
+    if (!isCurrentUserAssignee) {
       message.warning("当前用例仅执行人可提交执行结果");
       return;
     }
@@ -1158,6 +1167,7 @@ export default function TestExecutionPage() {
                   selectedKey={selectedTreeKey}
                   onSelect={handleGroupTreeSelect}
                   resultColors={enumsData.plan_case_result}
+                  reviewStatusColors={enumsData.plan_case_review_status}
                 />
               )}
             </div>
@@ -1224,10 +1234,9 @@ export default function TestExecutionPage() {
                       filteredCases.map((item) => {
                         const caseId = String(item.case);
                         const isActive = String(selectedCaseId || "") === caseId;
-                        const assigneeName =
-                          (item.assignees ?? [])
-                            .map((id) => getUserDetails(String(id))?.display_name || "未知用户")
-                            .join("、") || "未分配";
+                        const assigneeName = item.assignee
+                          ? getUserDetails(String(item.assignee))?.display_name || "未知用户"
+                          : "未分配";
                         return (
                           <Card
                             key={item.id}
@@ -1243,9 +1252,18 @@ export default function TestExecutionPage() {
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="text-sm leading-5 font-medium truncate">{item.name}</div>
-                                <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
-                                  {item.result || "-"}
-                                </Tag>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
+                                    {item.result || "-"}
+                                  </Tag>
+                                  {/* 未复核是默认态，不占位 */}
+                                  {item.review_status && item.review_status !== "未复核" && (
+                                    <PlanCaseReviewStatusTag
+                                      value={item.review_status}
+                                      colors={enumsData?.plan_case_review_status}
+                                    />
+                                  )}
+                                </div>
                               </div>
                               <div className="text-xs leading-4 text-secondary truncate">执行人: {assigneeName}</div>
                             </div>
@@ -1549,11 +1567,13 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "history" && (
+                            /* 每次执行的复核结论挂在对应的执行记录卡片下 */
                             <ExecutionRecordsPanel
                               key={`${selectedCaseId}-${recordsRefreshKey}`}
                               workspaceSlug={workspaceSlug}
                               reviewId={reviewId}
                               caseId={selectedCaseId}
+                              reviewerCount={planReviewerCount}
                             />
                           )}
                         </Transition>
@@ -1587,7 +1607,7 @@ export default function TestExecutionPage() {
                 <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
                   <div className="p-4">
                     <div className="px-0 py-3 flex flex-col gap-3">
-                      <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId || !isCurrentUserReviewer}>
+                      <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId || !isCurrentUserAssignee}>
                         {Object.keys(enumsData?.plan_case_result || {})
                           .filter((k) => k !== "未执行")
                           .map((k, idx) => (
@@ -1608,7 +1628,7 @@ export default function TestExecutionPage() {
                           autoSize={{ minRows: 1, maxRows: 1 }}
                           placeholder="请输入原因（双击可全屏输入）"
                           allowClear
-                          disabled={!isCurrentUserReviewer}
+                          disabled={!isCurrentUserAssignee}
                           className="resize-none"
                           onKeyDownCapture={(e) => {
                             if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
@@ -1616,7 +1636,7 @@ export default function TestExecutionPage() {
                           }}
                         />
                       </div>
-                      {!isCurrentUserReviewer && (
+                      {!isCurrentUserAssignee && (
                         <div className="text-xs text-danger-primary">当前用例仅执行人可提交执行结果</div>
                       )}
                       {pendingFiles.length > 0 && (
@@ -1659,7 +1679,7 @@ export default function TestExecutionPage() {
                           <button
                             type="button"
                             onClick={handleSubmitReview}
-                            disabled={!selectedCaseId || submitLoading || !isCurrentUserReviewer}
+                            disabled={!selectedCaseId || submitLoading || !isCurrentUserAssignee}
                             className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {submitLoading ? "提交中..." : "提交结果"}
@@ -1685,7 +1705,7 @@ export default function TestExecutionPage() {
                             >
                               <button
                                 type="button"
-                                disabled={!selectedCaseId || !isCurrentUserReviewer}
+                                disabled={!selectedCaseId || !isCurrentUserAssignee}
                                 className="border border-subtle text-secondary hover:bg-layer-1 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <LucideIcons.Paperclip size={13} />

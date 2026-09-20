@@ -2,8 +2,18 @@ import uuid
 from collections import defaultdict
 
 from django.db.models import Count
+from django.utils import timezone
 
-from plane.db.models import CaseReview, CaseReviewRecord, CaseReviewThrough, TestCase, WorkspaceMember
+from plane.db.models import (
+    CaseReview,
+    CaseReviewRecord,
+    CaseReviewThrough,
+    PlanCase,
+    PlanCaseReviewRecord,
+    ReviewApprovalType,
+    TestCase,
+    WorkspaceMember,
+)
 
 
 def invalid_workspace_member_ids(slug, member_ids):
@@ -133,6 +143,101 @@ def update_case_review_status(cr, crt):
     crt.save()
 
     update_review_status(cr)
+
+
+def compute_plan_case_review_status(
+    last_vote_by_reviewer, reviewer_ids, approval_type, required_count
+):
+    """按计划的通过规则，把「每位复核人的最后一票」折算成该用例的复核状态。
+
+    - 一票否决：任一复核人不通过 → 不通过（不再看票数）
+    - 通过线：all = 全部复核人，n_of_m = required_count
+    - 没设复核人或一票没投 → 未复核；投了但没达线 → 复核中
+    """
+    if not reviewer_ids or not last_vote_by_reviewer:
+        return PlanCase.ReviewStatus.NOT_START
+
+    if any(
+        result == PlanCaseReviewRecord.Result.FAIL
+        for result in last_vote_by_reviewer.values()
+    ):
+        return PlanCase.ReviewStatus.FAIL
+
+    if approval_type == ReviewApprovalType.N_OF_M:
+        required = required_count or len(reviewer_ids)
+    else:
+        required = len(reviewer_ids)
+
+    approved_count = sum(
+        1
+        for result in last_vote_by_reviewer.values()
+        if result == PlanCaseReviewRecord.Result.PASS
+    )
+    if approved_count >= required:
+        return PlanCase.ReviewStatus.PASS
+    return PlanCase.ReviewStatus.PROCESS
+
+
+def recompute_plan_case_review_statuses(plan, plan_case_ids=None):
+    """重算计划下（或指定几条）计划用例的复核状态，返回 {plan_case_id: status}。
+
+    复核人或通过规则变更后也要调用：老票按新规则重新折算。
+    每位复核人只算最后一票，已作废（重新执行过）的记录不参与。
+    """
+    reviewer_ids = [str(rid) for rid in plan.reviewers.values_list("id", flat=True)]
+
+    plan_cases = PlanCase.objects.filter(plan=plan, deleted_at__isnull=True)
+    if plan_case_ids is not None:
+        plan_cases = plan_cases.filter(id__in=list(plan_case_ids))
+    plan_cases = list(plan_cases.only("id", "review_status"))
+    if not plan_cases:
+        return {}
+
+    votes_by_plan_case = defaultdict(dict)
+    if reviewer_ids:
+        records = (
+            PlanCaseReviewRecord.objects.filter(
+                plan_case_id__in=[pc.id for pc in plan_cases],
+                reviewer_id__in=reviewer_ids,
+                invalidated_at__isnull=True,
+                deleted_at__isnull=True,
+            )
+            .order_by("plan_case_id", "reviewer_id", "-created_at")
+            .values_list("plan_case_id", "reviewer_id", "result")
+        )
+        for plan_case_id, reviewer_id, result in records:
+            votes = votes_by_plan_case[plan_case_id]
+            # order_by 已把每人最新的一条排在前面，后面的都是旧票
+            votes.setdefault(str(reviewer_id), result)
+
+    statuses = {}
+    changed = []
+    for plan_case in plan_cases:
+        status = compute_plan_case_review_status(
+            votes_by_plan_case.get(plan_case.id, {}),
+            reviewer_ids,
+            plan.review_approval_type,
+            plan.review_required_count,
+        )
+        statuses[str(plan_case.id)] = status
+        if plan_case.review_status != status:
+            plan_case.review_status = status
+            changed.append(plan_case)
+
+    if changed:
+        PlanCase.objects.bulk_update(changed, ["review_status"], batch_size=1000)
+
+    return statuses
+
+
+def invalidate_plan_case_review_records(plan_case_ids):
+    """作废这些计划用例此前的复核记录（重新执行后旧结论不再算数，但历史保留可查）。"""
+    plan_case_ids = list(plan_case_ids or [])
+    if not plan_case_ids:
+        return
+    PlanCaseReviewRecord.objects.filter(
+        plan_case_id__in=plan_case_ids, invalidated_at__isnull=True
+    ).update(invalidated_at=timezone.now())
 
 
 def re_approval_case(case: TestCase):

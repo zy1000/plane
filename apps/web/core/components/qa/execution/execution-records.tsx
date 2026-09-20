@@ -7,7 +7,8 @@ import { Download, Trash2 } from "lucide-react";
 import { Button as PropelButton } from "@plane/propel/button";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { cn, renderFormattedDate } from "@plane/utils";
-import { PlanService as PlanApiService } from "@/services/qa/plan.service";
+import { PlanService as PlanApiService, type TPlanCaseReviewRecord } from "@/services/qa/plan.service";
+import { PlanCaseReviewRecordList } from "@/components/qa/plans/plan-case-review-records";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
@@ -23,6 +24,8 @@ type ExecRecord = {
   created_at?: string;
   steps?: StepItem[] | null;
   file_count?: number;
+  /** 本次执行的复核记录，随执行记录接口一起下发 */
+  review_records?: TPlanCaseReviewRecord[];
 };
 
 type ExecutionRecordDetailTab = "steps" | "files" | "history";
@@ -48,6 +51,8 @@ type Props = {
   reviewId: string | undefined;
   caseId: string | undefined;
   className?: string;
+  /** 所属计划的复核人数，用于复核记录区的通过进度 */
+  reviewerCount?: number;
 };
 
 export type ExecutionRecordDetailRecord = {
@@ -62,6 +67,8 @@ type ExecutionRecordDetailModalProps = {
   records?: ExecRecord[];
   workspaceSlug: string | undefined;
   initialTab?: ExecutionRecordDetailTab;
+  /** 所属计划的复核人数，用于「执行历史」里复核记录区的通过进度 */
+  reviewerCount?: number;
 };
 
 const normalizeStepsForDetail = (steps: any): StepItem[] => {
@@ -86,6 +93,10 @@ type ExecutionRecordListProps = {
   onOpenDetail: (record: ExecRecord, tab?: ExecutionRecordDetailTab) => void;
   className?: string;
   showDetailAction?: boolean;
+  /** 复核状态标签的颜色表 */
+  reviewStatusColorMap?: Record<string, string>;
+  /** 计划的复核人数；有值时复核记录区显示通过进度 */
+  reviewerCount?: number;
 };
 
 export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
@@ -94,6 +105,8 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
   onOpenDetail,
   className,
   showDetailAction = true,
+  reviewStatusColorMap,
+  reviewerCount,
 }) => {
   const { getUserDetails } = useMember();
 
@@ -115,69 +128,81 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
         const name = user?.display_name || "未知用户";
         const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
         const fileCount = Number(r.file_count ?? 0);
+        const reviewRecords = r.review_records ?? [];
         return (
-          <div
-            key={String(r.id)}
-            className="flex items-start justify-between gap-4 rounded-md bg-surface-1 p-4 shadow-sm"
-          >
-            <div className="flex items-start gap-3 min-w-0">
+          <div key={String(r.id)} className="flex flex-col rounded-md bg-surface-1 p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex-shrink-0">
+                  <MemberDropdown
+                    buttonVariant="transparent-with-text"
+                    multiple={false}
+                    value={uid}
+                    onChange={() => {}}
+                    disabled
+                    placeholder={name}
+                    className="text-sm"
+                    buttonContainerClassName="p-0 cursor-default"
+                    buttonClassName="p-0 hover:bg-transparent hover:bg-inherit"
+                    showUserDetails
+                    optionsClassName="z-[60]"
+                    button={<ButtonAvatars showTooltip={false} userIds={uid} size="lg" />}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{name}</div>
+                  {r.reason ? (
+                    <div className="text-sm text-secondary whitespace-pre-wrap break-words">
+                      {String(r.reason)}
+                    </div>
+                  ) : null}
+                  <div className="text-xs text-placeholder mt-2">{time}</div>
+                </div>
+              </div>
               <div className="flex-shrink-0">
-                <MemberDropdown
-                  buttonVariant="transparent-with-text"
-                  multiple={false}
-                  value={uid}
-                  onChange={() => {}}
-                  disabled
-                  placeholder={name}
-                  className="text-sm"
-                  buttonContainerClassName="p-0 cursor-default"
-                  buttonClassName="p-0 hover:bg-transparent hover:bg-inherit"
-                  showUserDetails
-                  optionsClassName="z-[60]"
-                  button={<ButtonAvatars showTooltip={false} userIds={uid} size="lg" />}
+                <div className="flex items-center gap-2">
+                  {fileCount > 0 ? (
+                    <Tooltip title={`查看附件（${fileCount}）`} mouseEnterDelay={0.2} placement="top">
+                      <button
+                        type="button"
+                        aria-label={`查看附件，共 ${fileCount} 个`}
+                        onClick={() => onOpenDetail(r, "files")}
+                        className="inline-flex items-center gap-1 rounded-sm border border-subtle px-1.5 py-0.5 text-xs text-secondary hover:bg-layer-1-hover hover:text-blue-600"
+                      >
+                        <LucideIcons.Paperclip size={13} aria-hidden="true" />
+                        <span>{fileCount}</span>
+                      </button>
+                    </Tooltip>
+                  ) : null}
+                  {renderResult(r.result)}
+                  {showDetailAction ? (
+                    <Tooltip title="详情" mouseEnterDelay={0.2} placement="top">
+                      <button
+                        type="button"
+                        aria-label="查看详情"
+                        aria-haspopup="dialog"
+                        onClick={() => onOpenDetail(r)}
+                        className="p-1 rounded hover:bg-layer-1-hover active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-500 hover:text-blue-600"
+                      >
+                        <LucideIcons.ListOrdered size={16} aria-hidden="true" />
+                      </button>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            {reviewRecords.length > 0 && (
+              /* 这次执行的复核结论：执行人要能看到被打回的原因 */
+              <div className="mt-3 flex flex-col gap-2 border-t border-subtle pt-3">
+                <div className="text-xs font-medium text-secondary">复核记录</div>
+                <PlanCaseReviewRecordList
+                  records={reviewRecords}
+                  colors={reviewStatusColorMap}
+                  reviewerCount={reviewerCount}
+                  compact
                 />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{name}</div>
-                {r.reason ? (
-                  <div className="text-sm text-secondary whitespace-pre-wrap break-words">
-                    {String(r.reason)}
-                  </div>
-                ) : null}
-                <div className="text-xs text-placeholder mt-2">{time}</div>
-              </div>
-            </div>
-            <div className="flex-shrink-0">
-              <div className="flex items-center gap-2">
-                {fileCount > 0 ? (
-                  <Tooltip title={`查看附件（${fileCount}）`} mouseEnterDelay={0.2} placement="top">
-                    <button
-                      type="button"
-                      aria-label={`查看附件，共 ${fileCount} 个`}
-                      onClick={() => onOpenDetail(r, "files")}
-                      className="inline-flex items-center gap-1 rounded-sm border border-subtle px-1.5 py-0.5 text-xs text-secondary hover:bg-layer-1-hover hover:text-blue-600"
-                    >
-                      <LucideIcons.Paperclip size={13} aria-hidden="true" />
-                      <span>{fileCount}</span>
-                    </button>
-                  </Tooltip>
-                ) : null}
-                {renderResult(r.result)}
-                {showDetailAction ? (
-                  <Tooltip title="详情" mouseEnterDelay={0.2} placement="top">
-                    <button
-                      type="button"
-                      aria-label="查看详情"
-                      aria-haspopup="dialog"
-                      onClick={() => onOpenDetail(r)}
-                      className="p-1 rounded hover:bg-layer-1-hover active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-500 hover:text-blue-600"
-                    >
-                      <LucideIcons.ListOrdered size={16} aria-hidden="true" />
-                    </button>
-                  </Tooltip>
-                ) : null}
-              </div>
-            </div>
+            )}
           </div>
         );
       })}
@@ -192,9 +217,11 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   records,
   workspaceSlug,
   initialTab = "steps",
+  reviewerCount,
 }) => {
   const planService = React.useMemo(() => new PlanApiService(), []);
   const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
+  const [reviewStatusColorMap, setReviewStatusColorMap] = React.useState<Record<string, string>>({});
   const [attachmentFiles, setAttachmentFiles] = React.useState<FileItem[]>([]);
   const [attachmentLoading, setAttachmentLoading] = React.useState(false);
   const [uploadLoading, setUploadLoading] = React.useState(false);
@@ -220,7 +247,10 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   React.useEffect(() => {
     if (!open || !workspaceSlug) return;
     getEnums(String(workspaceSlug))
-      .then((enums) => setResultColorMap(enums?.plan_case_result || {}))
+      .then((enums) => {
+        setResultColorMap(enums?.plan_case_result || {});
+        setReviewStatusColorMap(enums?.plan_case_review_status || {});
+      })
       .catch(() => {});
   }, [open, workspaceSlug]);
 
@@ -437,6 +467,8 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
               <ExecutionRecordList
                 records={records ?? []}
                 resultColorMap={resultColorMap}
+                reviewStatusColorMap={reviewStatusColorMap}
+                reviewerCount={reviewerCount}
                 showDetailAction={false}
                 onOpenDetail={(r, tab) => {
                   setActiveRecord({ id: String(r.id), steps: r.steps });
@@ -537,7 +569,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
 };
 
 export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
-  const { workspaceSlug, reviewId, caseId, className = "" } = props;
+  const { workspaceSlug, reviewId, caseId, className = "", reviewerCount } = props;
   const planService = React.useMemo(() => new PlanApiService(), []);
   const searchParams = useSearchParams();
   const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
@@ -546,6 +578,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
   const [error, setError] = React.useState<string | null>(null);
   const [records, setRecords] = React.useState<ExecRecord[]>([]);
   const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
+  const [reviewStatusColorMap, setReviewStatusColorMap] = React.useState<Record<string, string>>({});
 
   const [stepsModalOpen, setStepsModalOpen] = React.useState(false);
   const [stepsModalSteps, setStepsModalSteps] = React.useState<StepItem[]>([]);
@@ -584,6 +617,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
       const enums = await getEnums(String(workspaceSlug));
       const map = enums?.plan_case_result || {};
       setResultColorMap(map);
+      setReviewStatusColorMap(enums?.plan_case_review_status || {});
     } catch {}
   };
 
@@ -653,6 +687,8 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
           <ExecutionRecordList
             records={records}
             resultColorMap={resultColorMap}
+            reviewStatusColorMap={reviewStatusColorMap}
+            reviewerCount={reviewerCount}
             onOpenDetail={openStepsModal}
           />
         )}
@@ -673,6 +709,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
         records={records}
         workspaceSlug={workspaceSlug}
         initialTab={stepsModalTab}
+        reviewerCount={reviewerCount}
       />
     </>
   );

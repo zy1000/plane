@@ -21,6 +21,8 @@ type Props = {
   onSelect: (key: string) => void;
   /** 执行结果 → 颜色名（green/red/gold/gray），用于结果节点的图标与 Tag */
   resultColors?: Record<string, string>;
+  /** 复核状态 → 颜色名，用于复核状态节点的图标与 Tag */
+  reviewStatusColors?: Record<string, string>;
 };
 
 /** 类型 Tag 配色，列表列与分组树共用；优先级走 CasePriorityPill */
@@ -44,21 +46,43 @@ const renderRow = (label: ReactNode, icon: ReactNode, count?: number) => (
   </div>
 );
 
-const renderNodeIcon = (node: TPlanGroupTreeNode, resultColors?: Record<string, string>) => {
+/** 枚举值 → 颜色名的映射按分组维度取：复核状态走自己的色表，其余走执行结果色表 */
+const getNodeColors = (
+  node: TPlanGroupTreeNode,
+  resultColors?: Record<string, string>,
+  reviewStatusColors?: Record<string, string>
+) => (node.kind === "review_status" ? reviewStatusColors : resultColors);
+
+const renderNodeIcon = (
+  node: TPlanGroupTreeNode,
+  resultColors?: Record<string, string>,
+  reviewStatusColors?: Record<string, string>
+) => {
   if (node.kind === "type") return <TagIcon size={14} />;
   if (node.kind === "priority") return <Flag size={14} />;
-  return RESULT_ICONS[resultColors?.[node.id] || ""] || RESULT_ICONS.gray;
+  return RESULT_ICONS[getNodeColors(node, resultColors, reviewStatusColors)?.[node.id] || ""] || RESULT_ICONS.gray;
 };
 
 /** 与列表里对应列的 Tag 配色一致；执行结果的 gray 不是 antd 预设色，退回 default */
-const getNodeTagColor = (node: TPlanGroupTreeNode, resultColors?: Record<string, string>) => {
+const getNodeTagColor = (
+  node: TPlanGroupTreeNode,
+  resultColors?: Record<string, string>,
+  reviewStatusColors?: Record<string, string>
+) => {
   if (node.kind === "type") return PLAN_CASE_TYPE_TAG_COLOR;
-  const color = resultColors?.[node.id] || "gray";
+  const color = getNodeColors(node, resultColors, reviewStatusColors)?.[node.id] || "gray";
   return color === "gray" ? "default" : color;
 };
 
 /** 计划用例「按类型 / 优先级 / 执行结果分组」的左侧树：全部 / 各枚举值（含数量） */
-export const PlanCaseGroupTree = ({ tree, loading = false, selectedKey, onSelect, resultColors }: Props) => {
+export const PlanCaseGroupTree = ({
+  tree,
+  loading = false,
+  selectedKey,
+  onSelect,
+  resultColors,
+  reviewStatusColors,
+}: Props) => {
   if (loading && !tree) return <div className="px-2 py-4 text-sm text-secondary">加载中...</div>;
   if (!tree) return null;
 
@@ -76,11 +100,11 @@ export const PlanCaseGroupTree = ({ tree, loading = false, selectedKey, onSelect
           node.kind === "priority" ? (
             <CasePriorityPill value={node.id} label={node.name || "-"} />
           ) : (
-            <Tag color={getNodeTagColor(node, resultColors)} className="m-0">
+            <Tag color={getNodeTagColor(node, resultColors, reviewStatusColors)} className="m-0">
               {node.name || "-"}
             </Tag>
           ),
-          renderNodeIcon(node, resultColors),
+          renderNodeIcon(node, resultColors, reviewStatusColors),
           node.count
         ),
       })),

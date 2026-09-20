@@ -1,10 +1,12 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { getPlanReviewRuleLabel, type TPlanReviewApprovalType } from "@/services/qa/plan.service";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { PlanService } from "@/services/qa/plan.service";
-import { Space, Table, Tag, Input, Button, Dropdown, Modal, Tooltip, Pagination, Tree } from "antd";
+import { Space, Table, Tag, Input, Button, Dropdown, Modal, Pagination, Tree } from "antd";
 import {
   SearchOutlined,
   PlusOutlined,
@@ -38,6 +40,10 @@ type TestPlan = {
   module_id?: string | null;
   pass_rate?: Record<string, number> | null;
   result?: string | null;
+  assignee_ids?: string[];
+  reviewers?: string[];
+  review_approval_type?: TPlanReviewApprovalType;
+  review_required_count?: number | null;
 };
 type TestPlanResponse = { data: TestPlan[]; count: number };
 import { formatDate, formatDateTime, globalEnums } from "../util";
@@ -325,64 +331,6 @@ export default function TestPlanDetailPage() {
     return <Tag color={color}>{text}</Tag>;
   };
 
-  const renderPassRate = (passRate: any, record: TestPlan) => {
-    const orderKeys = ["成功", "失败", "阻塞", "无效", "未执行"];
-    const totalCount = orderKeys.reduce((s, k) => s + Number(passRate?.[k] || 0), 0);
-    const passed = Number(passRate?.["成功"] || 0);
-    const percent = totalCount > 0 ? Math.floor((passed / totalCount) * 100) : 0;
-    const colorHexMap: Record<string, string> = {
-      green: "#52c41a",
-      red: "#ff4d4f",
-      gold: "#faad14",
-      blue: "#1677ff",
-      gray: "#bfbfbf",
-      mediumBlue: "#3b5999",
-      default: "#d9d9d9",
-    };
-    const categoryColor: Record<string, string> = {
-      成功: colorHexMap.green,
-      失败: colorHexMap.red,
-      阻塞: colorHexMap.gold,
-      无效: colorHexMap.mediumBlue,
-      未执行: colorHexMap.gray,
-    };
-    const segments = orderKeys.map((k) => {
-      const count = Number(passRate?.[k] || 0);
-      const color = categoryColor[k] || colorHexMap.default;
-      const widthPct = totalCount > 0 ? (count / totalCount) * 100 : 0;
-      return { key: k, count, color, widthPct };
-    });
-    const tooltipContent = (
-      <div className={styles.legend}>
-        {orderKeys.map((k) => (
-          <div key={k} className={styles.legendItem}>
-            <span className={styles.legendColor} style={{ backgroundColor: categoryColor[k] || colorHexMap.default }} />
-            <span className={styles.legendLabel}>{k}</span>
-            <span className={styles.legendCount}>{Number(passRate?.[k] || 0)}</span>
-          </div>
-        ))}
-      </div>
-    );
-    return (
-      <div className={styles.passRateCell}>
-        <Tooltip mouseEnterDelay={0.25} overlayClassName={styles.lightTooltip} title={tooltipContent}>
-          <div className={styles.progressWrap}>
-            <div className={styles.progressBar}>
-              {segments.map((seg, idx) => (
-                <div
-                  key={`${seg.key}-${idx}`}
-                  className={styles.progressSegment}
-                  style={{ width: `${seg.widthPct}%`, backgroundColor: seg.color }}
-                />
-              ))}
-            </div>
-          </div>
-        </Tooltip>
-        <span className={styles.progressPercent}>{percent}%</span>
-      </div>
-    );
-  };
-
   const renderResult = (result: any) => {
     if (!result || result === "-") return null;
     const colorMap: Record<string, string> = {
@@ -491,18 +439,67 @@ export default function TestPlanDetailPage() {
     },
     { title: "状态", dataIndex: "state", key: "state", width: 120, render: (state: any) => renderState(state as any) },
     {
-      title: "通过率",
-      dataIndex: "pass_rate",
-      key: "pass_rate",
-      width: 180,
-      render: (passRate: any, record: TestPlan) => renderPassRate(passRate, record),
-    },
-    {
       title: "执行结果",
       dataIndex: "result",
       key: "result",
       width: 120,
       render: (result: any) => renderResult(result),
+    },
+    {
+      title: "执行人",
+      dataIndex: "assignee_ids",
+      key: "assignee_ids",
+      width: 160,
+      render: (_: unknown, record: TestPlan) => {
+        const assignees = (record.assignee_ids ?? []).map(String);
+        if (assignees.length === 0) return <span className="text-placeholder">-</span>;
+        return (
+          <MemberDropdown
+            multiple
+            value={assignees}
+            onChange={() => {}}
+            disabled
+            projectId={projectId ? String(projectId) : undefined}
+            placeholder=""
+            className="w-full text-sm"
+            buttonContainerClassName="w-full text-left p-0 cursor-default"
+            buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+            buttonVariant="transparent-with-text"
+            showUserDetails
+            optionsClassName="z-[60]"
+          />
+        );
+      },
+    },
+    {
+      title: "复核人",
+      dataIndex: "reviewers",
+      key: "reviewers",
+      width: 160,
+      render: (_: unknown, record: TestPlan) => {
+        const reviewers = (record.reviewers ?? []).map(String);
+        if (reviewers.length === 0) return <span className="text-placeholder">-</span>;
+        const ruleLabel = getPlanReviewRuleLabel(record);
+        return (
+          <div className="flex flex-col gap-0.5">
+            <MemberDropdown
+              multiple
+              value={reviewers}
+              onChange={() => {}}
+              disabled
+              projectId={projectId ? String(projectId) : undefined}
+              placeholder=""
+              className="w-full text-sm"
+              buttonContainerClassName="w-full text-left p-0 cursor-default"
+              buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+              buttonVariant="transparent-with-text"
+              showUserDetails
+              optionsClassName="z-[60]"
+            />
+            {ruleLabel && <span className="text-xs text-secondary">{ruleLabel}</span>}
+          </div>
+        );
+      },
     },
     {
       title: "起止日期",
@@ -1219,6 +1216,9 @@ export default function TestPlanDetailPage() {
                     (editingPlan as any)?.module?.id ??
                     (editingPlan as any)?.module ??
                     null,
+                  reviewers: editingPlan.reviewers ?? [],
+                  review_approval_type: editingPlan.review_approval_type ?? "all",
+                  review_required_count: editingPlan.review_required_count ?? null,
                 } as any)
               : null
           }

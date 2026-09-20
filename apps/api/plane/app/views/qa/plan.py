@@ -14,7 +14,6 @@ from django.db.models import (
     Case,
     CharField,
     Count,
-    Exists,
     F,
     Func,
     IntegerField,
@@ -48,6 +47,8 @@ from plane.app.serializers.qa.plan import (
     PlanCaseCardSerializer,
     PlanCaseRecordSerializer,
     PlanCaseCopySerializer,
+    PlanCaseReviewSerializer,
+    PlanCaseReviewRecordSerializer,
 )
 from plane.app.views.qa.filters import TestPlanFilter, PlanCaseFilter
 from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
@@ -59,9 +60,11 @@ from plane.db.models import (
     CaseLabel,
     FileAsset,
     Workspace,
+    ReviewApprovalType,
     PlanModule,
     PlanCase,
     PlanCaseRecord,
+    PlanCaseReviewRecord,
     Issue,
     Cycle,
     CycleIssue,
@@ -73,7 +76,11 @@ from plane.db.models import (
     TestCaseVersion,
 )
 from plane.utils.paginator import CustomPaginator
-from plane.utils.qa import invalid_workspace_member_ids as _invalid_workspace_member_ids
+from plane.utils.qa import (
+    invalid_workspace_member_ids as _invalid_workspace_member_ids,
+    invalidate_plan_case_review_records,
+    recompute_plan_case_review_statuses,
+)
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.serializers import (
@@ -286,11 +293,14 @@ class PlanAPIView(BaseAPIView):
     filterset_class = TestPlanFilter
 
     def get_queryset(self):
-        return TestPlan.objects.all()
+        # reviewers 是 M2M，列表逐行取会 N+1
+        return TestPlan.objects.prefetch_related("reviewers")
 
     @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(
+            data=request.data, context={"workspace_slug": slug}
+        )
         serializer.is_valid(raise_exception=True)
         test_plan = serializer.save()
         serializer = TestPlanDetailSerializer(instance=test_plan)
@@ -318,11 +328,14 @@ class PlanAPIView(BaseAPIView):
         plan_id = request.data.pop("id")
         plan = self.queryset.get(id=plan_id)
         update_serializer = self.serializer_class(
-            instance=plan, data=request.data, partial=True
+            instance=plan,
+            data=request.data,
+            partial=True,
+            context={"workspace_slug": slug},
         )
         update_serializer.is_valid(raise_exception=True)
         updated_plan = update_serializer.save()
-        serializer = TestPlanDetailSerializer(instance=plan)
+        serializer = TestPlanDetailSerializer(instance=updated_plan)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.QA_PLAN_DELETE)
@@ -341,9 +354,11 @@ class PlanListAPIView(BaseAPIView):
     }
 
     def get(self, request, slug):
-        queryset = self.filter_queryset(
-            self.queryset.filter(project__workspace__slug=slug)
-        ).distinct()
+        queryset = (
+            self.filter_queryset(self.queryset.filter(project__workspace__slug=slug))
+            .prefetch_related("reviewers")
+            .distinct()
+        )
         # 一次查出工作区内全部计划模块，序列化时在内存中回溯祖先链，避免逐计划查询
         module_map = {
             mid: (name, parent_id)
@@ -375,7 +390,7 @@ class PlanCaseAPIView(BaseAPIView):
             "case",
             "case__repository",
             "case__module",
-        ).prefetch_related("assignees")
+        )
         if slug:
             queryset = queryset.filter(plan__project__workspace__slug=slug)
 
@@ -383,7 +398,9 @@ class PlanCaseAPIView(BaseAPIView):
             "id",
             "plan_id",
             "case_id",
+            "assignee_id",
             "result",
+            "review_status",
             "created_at",
             "updated_at",
             "case__id",
@@ -550,28 +567,6 @@ class PlanModuleCountAPIView(BaseAPIView):
         return Response(data=result)
 
 
-def _set_plan_case_assignees(plan_case_ids, assignee_ids):
-    """整体覆盖一批计划用例的执行人。
-
-    必须先删再插：软删不会清 through 行，复活的计划用例会残留旧执行人。
-    """
-    plan_case_ids = list(plan_case_ids)
-    if not plan_case_ids:
-        return
-    through = PlanCase.assignees.through
-    through.objects.filter(plancase_id__in=plan_case_ids).delete()
-    assignee_ids = list(dict.fromkeys(assignee_ids or []))
-    if assignee_ids:
-        through.objects.bulk_create(
-            [
-                through(plancase_id=plan_case_id, user_id=user_id)
-                for plan_case_id in plan_case_ids
-                for user_id in assignee_ids
-            ],
-            batch_size=1000,
-        )
-
-
 # 计划用例枚举分组维度 → (PlanCase 上的查询字段, 有序的 (值, 展示名) 列表)
 PLAN_CASE_ENUM_GROUPS = {
     "type": ("case__type", list(TestCase.Type.choices)),
@@ -579,6 +574,10 @@ PLAN_CASE_ENUM_GROUPS = {
     "priority": ("case__priority", list(reversed(TestCase.Priority.choices))),
     # Result 的 value 即中文，label 位存的是颜色，所以展示名直接用 value
     "result": ("result", [(v, v) for v in PlanCase.Result.values]),
+    "review_status": (
+        "review_status",
+        [(v, v) for v in PlanCase.ReviewStatus.values],
+    ),
 }
 
 
@@ -586,32 +585,29 @@ class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
     def _filtered_plan_case_qs(self, request):
-        query = (
-            PlanCase.objects.select_related("case")
-            .prefetch_related("assignees")
-            .filter(plan_id=request.query_params["plan_id"])
+        query = PlanCase.objects.select_related("case", "assignee").filter(
+            plan_id=request.query_params["plan_id"]
         )
         if name := request.query_params.get("name__icontains"):
             query = query.filter(case__name__icontains=name)
 
-        # getlist 对单值也返回 [x]；执行人是 M2M，走 through 表子查询避免重复行
+        # getlist 对单值也返回 [x]
         assignee_ids = request.query_params.getlist("assignee_id")
         if assignee_ids:
-            through = PlanCase.assignees.through
-            query = query.filter(
-                id__in=through.objects.filter(user_id__in=assignee_ids).values("plancase_id")
-            )
+            query = query.filter(assignee_id__in=assignee_ids)
 
-        # 执行页分组树「未分配」：没有任何执行人
+        # 执行页分组树「未分配」：没有执行人
         assignee_isnull = str(request.query_params.get("assignee_isnull", "")).strip().lower()
         if assignee_isnull in {"1", "true", "yes"}:
-            through = PlanCase.assignees.through
-            query = query.filter(
-                ~Exists(through.objects.filter(plancase_id=OuterRef("id")))
-            )
+            query = query.filter(assignee_id__isnull=True)
 
-        # 执行页分组树 类型/优先级/执行结果 的 exact 过滤；非法值直接忽略，不让手写过滤抛 500
-        for param, cast in (("result", str), ("case__type", int), ("case__priority", int)):
+        # 执行页分组树 类型/优先级/执行结果/复核状态 的 exact 过滤；非法值直接忽略，不让手写过滤抛 500
+        for param, cast in (
+            ("result", str),
+            ("review_status", str),
+            ("case__type", int),
+            ("case__priority", int),
+        ):
             raw = request.query_params.get(param)
             if raw in (None, ""):
                 continue
@@ -708,26 +704,25 @@ class PlanView(BaseViewSet):
             plan__project__workspace__slug=slug,
             case__deleted_at__isnull=True,
         )
-        through = PlanCase.assignees.through
-        # 软删的计划用例不会清 through 行，必须按存活的 plancase_id 收敛
         rows = (
-            through.objects.filter(plancase_id__in=base.values("id"))
-            .values("user_id", "user__display_name", "user__email")
-            .annotate(count=Count("plancase_id"))
+            base.filter(assignee_id__isnull=False)
+            .values("assignee_id", "assignee__display_name", "assignee__email")
+            .annotate(count=Count("id"))
+            .order_by()
         )
         assignees = [
             {
-                "id": str(r["user_id"]),
-                "name": r["user__display_name"] or r["user__email"] or str(r["user_id"]),
+                "id": str(r["assignee_id"]),
+                "name": r["assignee__display_name"]
+                or r["assignee__email"]
+                or str(r["assignee_id"]),
                 "kind": "assignee",
                 "count": r["count"],
             }
             for r in rows
         ]
         assignees.sort(key=lambda x: x["name"].lower())
-        unassigned_count = base.filter(
-            ~Exists(through.objects.filter(plancase_id=OuterRef("id")))
-        ).count()
+        unassigned_count = base.filter(assignee_id__isnull=True).count()
         children = assignees + [
             {"id": "unassigned", "name": "未分配", "kind": "unassigned", "count": unassigned_count}
         ]
@@ -808,23 +803,16 @@ class PlanView(BaseViewSet):
             queryset = queryset.filter(plan__project_id=project_id)
         plan_case = get_object_or_404(queryset)
 
-        # 整体覆盖执行人列表；空列表即清空
-        assignee_ids = request.data.get("assignees")
-        if assignee_ids is None:
-            assignee_ids = []
-        if not isinstance(assignee_ids, list):
-            return Response(
-                {"error": "assignees must be a list"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if _invalid_workspace_member_ids(slug, assignee_ids):
+        # 覆盖执行人；传 null 即清空
+        assignee_id = request.data.get("assignee")
+        if assignee_id and _invalid_workspace_member_ids(slug, [assignee_id]):
             return Response(
                 {"error": "assignee is invalid"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        plan_case.assignees.set(list(dict.fromkeys(assignee_ids)))
-        plan_case.save(update_fields=["updated_at"])
+        plan_case.assignee_id = assignee_id or None
+        plan_case.save(update_fields=["assignee", "updated_at"])
         return Response(PlanCaseCardSerializer(plan_case).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="execute")
@@ -858,16 +846,13 @@ class PlanView(BaseViewSet):
                 case_id=case_id,
                 deleted_at__isnull=True,
             )
-            # 任一执行人都可提交；结果按最后一次执行覆盖（见下方 plan_case.result = result）
-            assignee_ids = {
-                str(user_id) for user_id in plan_case.assignees.values_list("id", flat=True)
-            }
-            if not assignee_ids:
+            # 只有执行人本人可提交；结果按最后一次执行覆盖（见下方 plan_case.result = result）
+            if not plan_case.assignee_id:
                 return Response(
                     status=status.HTTP_403_FORBIDDEN,
                     data={"msg": f'用例"{plan_case.case.name}"尚未设置执行人'},
                 )
-            if str(request.user.id) not in assignee_ids:
+            if str(request.user.id) != str(plan_case.assignee_id):
                 return Response(
                     status=status.HTTP_403_FORBIDDEN,
                     data={"msg": f'你没有权限执行"{plan_case.case.name}"'},
@@ -887,7 +872,10 @@ class PlanView(BaseViewSet):
                 {"case_id": str(case_id), "record_id": str(pcr.id)}
             )
             plan_case.result = result
-            plan_case.save()
+            # 重新执行后结果变了，此前的复核结论作废，回到未复核
+            plan_case.review_status = PlanCase.ReviewStatus.NOT_START
+            plan_case.save(update_fields=["result", "review_status", "updated_at"])
+            invalidate_plan_case_review_records([plan_case.id])
 
             # 触发执行情况活动
             if old_result != result:
@@ -916,6 +904,111 @@ class PlanView(BaseViewSet):
         return Response(
             status=status.HTTP_201_CREATED,
             data={"records": created_records},
+        )
+
+    @action(detail=False, methods=["post"], url_path="review")
+    def review(self, request, slug):
+        """复核人对一批计划用例的执行结果给出复核结论。
+
+        只有计划的复核人可以复核；未执行的用例会被跳过（进 skipped_ids）。
+        多人复核时本次投票只是一票，最终状态由计划的通过规则折算（见 utils/qa.py）。
+        复核状态不参与计划状态与通过率计算，只做展示与筛选。
+        """
+        serializer = PlanCaseReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        plan = get_object_or_404(
+            TestPlan.objects.filter(
+                id=data["plan_id"],
+                deleted_at__isnull=True,
+                project__workspace__slug=slug,
+            )
+        )
+        if not plan.reviewers.exists():
+            return Response(
+                status=status.HTTP_403_FORBIDDEN,
+                data={"msg": "该计划尚未设置复核人"},
+            )
+        if not plan.reviewers.filter(id=request.user.id).exists():
+            return Response(
+                status=status.HTTP_403_FORBIDDEN,
+                data={"msg": "你不是该计划的复核人，无法复核"},
+            )
+
+        result = data["result"]
+        reason = (data.get("reason") or "").strip() or None
+        plan_cases = list(
+            PlanCase.objects.filter(
+                plan_id=plan.id,
+                id__in=data["plan_case_ids"],
+                deleted_at__isnull=True,
+            )
+        )
+
+        # 复核针对的是最近一次执行，记录下来才能把结论挂到对应的执行记录上
+        latest_record_id_by_plan_case = dict(
+            PlanCaseRecord.objects.filter(plan_case__in=plan_cases)
+            .order_by("plan_case_id", "-created_at")
+            .distinct("plan_case_id")
+            .values_list("plan_case_id", "id")
+        )
+
+        updated_ids, skipped_ids = [], []
+        records = []
+        for plan_case in plan_cases:
+            # 复核对象是执行结果，没执行过就没有可复核的内容
+            if plan_case.result == PlanCase.Result.NOT_START:
+                skipped_ids.append(str(plan_case.id))
+                continue
+            records.append(
+                PlanCaseReviewRecord(
+                    plan_case=plan_case,
+                    plan_case_record_id=latest_record_id_by_plan_case.get(plan_case.id),
+                    reviewer_id=request.user.id,
+                    result=result,
+                    reason=reason,
+                    # bulk_create 不走 BaseModel.save，审计字段要显式带上
+                    created_by_id=request.user.id,
+                    updated_by_id=request.user.id,
+                )
+            )
+            updated_ids.append(plan_case.id)
+
+        statuses = {}
+        if records:
+            PlanCaseReviewRecord.objects.bulk_create(records, batch_size=1000)
+            # 本次投票未必就是最终状态：多人复核要按通过规则折算
+            statuses = recompute_plan_case_review_statuses(plan, updated_ids)
+            PlanCase.objects.filter(id__in=updated_ids).update(updated_at=timezone.now())
+
+        return Response(
+            status=status.HTTP_200_OK,
+            data={
+                "updated_ids": [str(pk) for pk in updated_ids],
+                "skipped_ids": skipped_ids,
+                "statuses": statuses,
+            },
+        )
+
+    @action(detail=False, methods=["get"], url_path="review-records")
+    def review_records(self, request, slug):
+        """某条计划用例的复核记录，按时间倒序。"""
+        plan_case_id = request.query_params.get("plan_case_id")
+        if not plan_case_id:
+            return Response(
+                {"error": "plan_case_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        records = PlanCaseReviewRecord.objects.select_related("reviewer").filter(
+            plan_case_id=plan_case_id,
+            deleted_at__isnull=True,
+            plan_case__plan__project__workspace__slug=slug,
+        )
+        return Response(
+            PlanCaseReviewRecordSerializer(records, many=True).data,
+            status=status.HTTP_200_OK,
         )
 
     @action(detail=False, methods=["post"], url_path="export")
@@ -1108,14 +1201,25 @@ class PlanView(BaseViewSet):
         plan_id = request.query_params["plan_id"]
         case_id = request.query_params["case_id"]
         plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
-        records = PlanCaseRecord.objects.filter(plan_case=plan_case).annotate(
-            file_count=Count(
-                "assets",
-                filter=Q(
-                    assets__is_deleted=False,
-                    assets__is_uploaded=True,
-                    assets__entity_type=FileAsset.EntityTypeContext.PLAN_CASE_RECORD_FILE,
-                ),
+        records = (
+            PlanCaseRecord.objects.filter(plan_case=plan_case)
+            .annotate(
+                file_count=Count(
+                    "assets",
+                    filter=Q(
+                        assets__is_deleted=False,
+                        assets__is_uploaded=True,
+                        assets__entity_type=FileAsset.EntityTypeContext.PLAN_CASE_RECORD_FILE,
+                    ),
+                )
+            )
+            .prefetch_related(
+                Prefetch(
+                    "review_records",
+                    queryset=PlanCaseReviewRecord.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("reviewer"),
+                )
             )
         )
         serializer = PlanCaseRecordSerializer(instance=records, many=True)
@@ -1179,7 +1283,7 @@ class PlanView(BaseViewSet):
     def add_cases(self, request, slug):
         plan_id = request.data.get("plan_id")
         raw_case_ids = request.data.get("case_ids")
-        assignee_ids = request.data.get("assignees") or []
+        assignee_id = request.data.get("assignee") or None
 
         if not plan_id:
             return Response(
@@ -1189,12 +1293,6 @@ class PlanView(BaseViewSet):
         if not isinstance(raw_case_ids, list) or len(raw_case_ids) == 0:
             return Response(
                 {"error": "case_ids must be a non-empty list"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not isinstance(assignee_ids, list):
-            return Response(
-                {"error": "assignees must be a list"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1221,7 +1319,7 @@ class PlanView(BaseViewSet):
             plan_lookup["project_id"] = project_id
         plan = get_object_or_404(TestPlan, **plan_lookup)
 
-        if _invalid_workspace_member_ids(slug, assignee_ids):
+        if assignee_id and _invalid_workspace_member_ids(slug, [assignee_id]):
             return Response(
                 {"error": "assignee is invalid"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1260,22 +1358,26 @@ class PlanView(BaseViewSet):
         soft_deleted_rows = list(soft_deleted_qs.values_list("id", "case_id"))
         soft_deleted_case_ids = {case_id for _, case_id in soft_deleted_rows}
         if soft_deleted_rows:
-            soft_deleted_qs.update(deleted_at=None, result=PlanCase.Result.NOT_START)
-
-        to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
-        created_plan_cases = []
-        if to_create_case_ids:
-            created_plan_cases = PlanCase.objects.bulk_create(
-                [PlanCase(plan=plan, case_id=case_id) for case_id in to_create_case_ids],
-                batch_size=1000,
+            # 复活行会残留旧执行人与旧复核结论，一并覆盖
+            soft_deleted_qs.update(
+                deleted_at=None,
+                result=PlanCase.Result.NOT_START,
+                review_status=PlanCase.ReviewStatus.NOT_START,
+                assignee_id=assignee_id,
+            )
+            invalidate_plan_case_review_records(
+                [plan_case_id for plan_case_id, _ in soft_deleted_rows]
             )
 
-        # 复活行 + 新建行统一覆盖执行人（复活行会残留旧执行人）
-        _set_plan_case_assignees(
-            [plan_case_id for plan_case_id, _ in soft_deleted_rows]
-            + [plan_case.id for plan_case in created_plan_cases],
-            assignee_ids,
-        )
+        to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
+        if to_create_case_ids:
+            PlanCase.objects.bulk_create(
+                [
+                    PlanCase(plan=plan, case_id=case_id, assignee_id=assignee_id)
+                    for case_id in to_create_case_ids
+                ],
+                batch_size=1000,
+            )
 
         return Response(status=status.HTTP_200_OK)
 
@@ -1285,7 +1387,7 @@ class PlanView(BaseViewSet):
     def copy_cases(self, request, slug):
         """将源计划中选中的计划用例复制到目标计划（同项目），执行结果重置为未执行。
 
-        不复制执行记录 / 缺陷关联；默认沿用各用例原执行人，传 assignees 列表则统一覆盖。
+        不复制执行记录 / 缺陷关联；默认沿用各用例原执行人，传 assignee 则统一覆盖。
         """
         serializer = PlanCaseCopySerializer(data=request.data)
         if not serializer.is_valid():
@@ -1297,8 +1399,9 @@ class PlanView(BaseViewSet):
             )
         data = serializer.validated_data
         plan_case_ids = data["plan_case_ids"]
-        # None = 沿用源执行人；list（含空列表）= 统一覆盖
-        override_assignee_ids = data.get("assignees")
+        # 字段缺省 = 沿用源执行人；显式传 null = 清空；传 id = 统一覆盖
+        has_override_assignee = "assignee" in data
+        override_assignee_id = data.get("assignee")
 
         project_id = request.query_params.get("project_id")
         plan_lookup = {"deleted_at__isnull": True, "project__workspace__slug": slug}
@@ -1312,7 +1415,9 @@ class PlanView(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if override_assignee_ids and _invalid_workspace_member_ids(slug, override_assignee_ids):
+        if override_assignee_id and _invalid_workspace_member_ids(
+            slug, [override_assignee_id]
+        ):
             return Response(
                 {"error": "assignee is invalid"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1320,7 +1425,7 @@ class PlanView(BaseViewSet):
 
         source_rows = list(
             PlanCase.objects.filter(plan=source_plan, id__in=plan_case_ids).values_list(
-                "id", "case_id", "case__deleted_at"
+                "id", "case_id", "case__deleted_at", "assignee_id"
             )
         )
         missing_ids = set(plan_case_ids) - {row[0] for row in source_rows}
@@ -1331,28 +1436,18 @@ class PlanView(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        through = PlanCase.assignees.through
-        source_assignees_map = defaultdict(list)
-        if override_assignee_ids is None:
-            for plan_case_id, user_id in through.objects.filter(
-                plancase_id__in=plan_case_ids
-            ).values_list("plancase_id", "user_id"):
-                source_assignees_map[plan_case_id].append(user_id)
-
-        # case_id -> 目标执行人列表；同一用例多行取首行，用例已删除的跳过
-        case_assignees_map = {}
+        # case_id -> 目标执行人；同一用例多行取首行，用例已删除的跳过
+        case_assignee_map = {}
         deleted_case_count = 0
-        for plan_case_id, case_id, case_deleted_at in source_rows:
+        for _plan_case_id, case_id, case_deleted_at, source_assignee_id in source_rows:
             if case_deleted_at is not None:
                 deleted_case_count += 1
                 continue
-            if case_id not in case_assignees_map:
-                case_assignees_map[case_id] = (
-                    list(override_assignee_ids)
-                    if override_assignee_ids is not None
-                    else source_assignees_map.get(plan_case_id, [])
+            if case_id not in case_assignee_map:
+                case_assignee_map[case_id] = (
+                    override_assignee_id if has_override_assignee else source_assignee_id
                 )
-        case_ids = list(case_assignees_map.keys())
+        case_ids = list(case_assignee_map.keys())
 
         existing_case_ids = set(
             PlanCase.objects.filter(plan=target_plan, case_id__in=case_ids).values_list(
@@ -1360,7 +1455,7 @@ class PlanView(BaseViewSet):
             )
         )
 
-        # 目标计划中已软删的行：复活并重置结果（执行人在下方与新建行一起覆盖）
+        # 目标计划中已软删的行：复活并重置结果与复核结论，按执行人分组批量覆盖
         soft_deleted_rows = list(
             PlanCase.all_objects.filter(plan=target_plan, case_id__in=case_ids)
             .exclude(deleted_at__isnull=True)
@@ -1369,9 +1464,19 @@ class PlanView(BaseViewSet):
         )
         soft_deleted_case_ids = {case_id for _, case_id in soft_deleted_rows}
         if soft_deleted_rows:
-            PlanCase.all_objects.filter(
-                id__in=[plan_case_id for plan_case_id, _ in soft_deleted_rows]
-            ).update(deleted_at=None, result=PlanCase.Result.NOT_START)
+            revive_groups = defaultdict(list)
+            for plan_case_id, case_id in soft_deleted_rows:
+                revive_groups[case_assignee_map[case_id]].append(plan_case_id)
+            for group_assignee_id, group_plan_case_ids in revive_groups.items():
+                PlanCase.all_objects.filter(id__in=group_plan_case_ids).update(
+                    deleted_at=None,
+                    result=PlanCase.Result.NOT_START,
+                    review_status=PlanCase.ReviewStatus.NOT_START,
+                    assignee_id=group_assignee_id,
+                )
+            invalidate_plan_case_review_records(
+                [plan_case_id for plan_case_id, _ in soft_deleted_rows]
+            )
 
         # 其余新建；不传 result 走模型默认（未执行），不复制 issue / 执行记录
         to_create_case_ids = [
@@ -1379,21 +1484,18 @@ class PlanView(BaseViewSet):
             for case_id in case_ids
             if case_id not in existing_case_ids and case_id not in soft_deleted_case_ids
         ]
-        created_plan_cases = []
         if to_create_case_ids:
-            created_plan_cases = PlanCase.objects.bulk_create(
-                [PlanCase(plan=target_plan, case_id=case_id) for case_id in to_create_case_ids],
+            PlanCase.objects.bulk_create(
+                [
+                    PlanCase(
+                        plan=target_plan,
+                        case_id=case_id,
+                        assignee_id=case_assignee_map[case_id],
+                    )
+                    for case_id in to_create_case_ids
+                ],
                 batch_size=1000,
             )
-
-        # 复活行 + 新建行按执行人组合分组覆盖（复活行会残留旧执行人）
-        assignee_groups = defaultdict(list)
-        for plan_case_id, case_id in soft_deleted_rows + [
-            (plan_case.id, plan_case.case_id) for plan_case in created_plan_cases
-        ]:
-            assignee_groups[tuple(case_assignees_map[case_id])].append(plan_case_id)
-        for group_assignee_ids, group_plan_case_ids in assignee_groups.items():
-            _set_plan_case_assignees(group_plan_case_ids, list(group_assignee_ids))
 
         return Response(
             {
@@ -1970,6 +2072,8 @@ class EnumDataAPIView(BaseAPIView):
         case_priority = dict(TestCase.Priority.choices)
         case_test_type = dict(TestCase.TestType.choices)
         plan_case_result = dict(PlanCase.Result.choices)
+        plan_case_review_status = dict(PlanCase.ReviewStatus.choices)
+        plan_review_approval_type = dict(ReviewApprovalType.choices)
         return Response(
             dict(
                 plan_state=plan_state,
@@ -1978,6 +2082,8 @@ class EnumDataAPIView(BaseAPIView):
                 case_priority=case_priority,
                 case_test_type=case_test_type,
                 plan_case_result=plan_case_result,
+                plan_case_review_status=plan_case_review_status,
+                plan_review_approval_type=plan_review_approval_type,
             )
         )
 

@@ -16,7 +16,7 @@ const COLOR_NAME_TO_HEX: Record<string, string> = {
 
 type ExecutionCaseFilterTarget = {
   result: string;
-  assignees?: Array<string | number | null>;
+  assignee?: string | number | null;
 };
 
 const orderStatuses = (statuses: string[]): string[] => {
@@ -39,9 +39,9 @@ const toDotColor = (colorName?: string) => {
 
 const isPendingExecution = (result: string) => String(result || "") === "未执行";
 const normalizeUserId = (id?: string | number | null) => (id === null || id === undefined ? "" : String(id));
-// 多执行人：当前用户在执行人列表中即视为「我的」用例
+// 单执行人：当前用户即执行人时视为「我的」用例
 const isAssignedTo = (item: ExecutionCaseFilterTarget, userId: string) =>
-  Boolean(userId) && (item.assignees ?? []).some((id) => normalizeUserId(id) === userId);
+  Boolean(userId) && normalizeUserId(item.assignee) === userId;
 
 export const useExecutionCaseFilter = <T extends ExecutionCaseFilterTarget>(
   cases: T[],

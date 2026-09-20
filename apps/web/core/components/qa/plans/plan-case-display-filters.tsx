@@ -20,6 +20,7 @@ export type TPlanCaseDisplayPropertyKey =
   | "type"
   | "priority"
   | "result"
+  | "review_status"
   | "updated_at";
 
 export type TPlanCaseDisplayProperties = Record<TPlanCaseDisplayPropertyKey, boolean>;
@@ -62,6 +63,7 @@ export const DEFAULT_PLAN_CASE_DISPLAY_PROPERTIES: TPlanCaseDisplayProperties = 
   type: true,
   priority: true,
   result: true,
+  review_status: true,
   updated_at: true,
 };
 
@@ -74,6 +76,7 @@ const DISPLAY_PROPERTY_OPTIONS: TDisplayPropertyOption[] = [
   { key: "type", label: "类型" },
   { key: "priority", label: "优先级" },
   { key: "result", label: "执行结果" },
+  { key: "review_status", label: "复核状态" },
   { key: "updated_at", label: "更新时间" },
 ];
 
@@ -85,6 +88,7 @@ const GROUP_BY_OPTIONS: TGroupByOption[] = [
   { key: "type", label: "类型" },
   { key: "priority", label: "优先级" },
   { key: "result", label: "执行结果" },
+  { key: "review_status", label: "复核状态" },
 ];
 
 /** URL 等外部来源的分组值是否合法，用于执行页解析 group_by */

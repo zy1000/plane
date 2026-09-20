@@ -1305,7 +1305,7 @@ class ProjectAPI(BaseViewSet):
                     "plan_cases",
                     queryset=PlanCase.objects.filter(
                         deleted_at__isnull=True,
-                    ).prefetch_related("assignees"),
+                    ).select_related("assignee"),
                     to_attr="active_plan_cases_with_assignee",
                 )
             )
@@ -1344,12 +1344,14 @@ class ProjectAPI(BaseViewSet):
         test_plan_data = []
         for plan in paginated_test_plans:
             plan_result_counts = plan_case_result_map.get(str(plan.id), {})
-            first_assignee = None
-            for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
-                assignees = list(plan_case.assignees.all())
-                if assignees:
-                    first_assignee = assignees[0]
-                    break
+            first_assignee = next(
+                (
+                    plan_case.assignee
+                    for plan_case in getattr(plan, "active_plan_cases_with_assignee", [])
+                    if plan_case.assignee_id
+                ),
+                None,
+            )
             test_plan_data.append(
                 {
                     "id": str(plan.id),

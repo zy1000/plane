@@ -15,6 +15,7 @@ from plane.app.serializers import (
     ProjectDetailSerializer,
 )
 from plane.db.models import (
+    ReviewApprovalType,
     TestPlan,
     TestCaseRepository,
     User,
@@ -34,7 +35,11 @@ from plane.db.models import (
     TestCaseVersion,
     TestReport,
 )
-from plane.utils.qa import re_approval_case
+from plane.utils.qa import (
+    invalid_workspace_member_ids,
+    re_approval_case,
+    recompute_plan_case_review_statuses,
+)
 
 from .plan import *
 from .report import *
@@ -86,9 +91,60 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
         queryset=TestCase.objects.all(), many=True, required=False
     )
 
+    def validate_reviewers(self, users):
+        """复核人必须是本工作区的活跃成员；去重保序"""
+        users = list(dict.fromkeys(users or []))
+        slug = self.context.get("workspace_slug")
+        if slug and users and invalid_workspace_member_ids(slug, [u.id for u in users]):
+            raise serializers.ValidationError("复核人必须是工作区的活跃成员")
+        return users
+
+    def validate(self, attrs):
+        """通过规则与复核人数必须自洽（约束同 DB 层 test_plan_review_required_count_consistent）。
+
+        partial 更新时只传了其中一个字段，另一个按实例现值补齐后再校验。
+        """
+        attrs = super().validate(attrs)
+        instance = self.instance
+
+        def current(field, default):
+            if field in attrs:
+                return attrs[field]
+            if instance is not None:
+                value = getattr(instance, field)
+                # reviewers 是 M2M，实例上要查库
+                return list(value.all()) if field == "reviewers" else value
+            return default
+
+        approval_type = current("review_approval_type", ReviewApprovalType.ALL)
+        required_count = current("review_required_count", None)
+        reviewers = current("reviewers", [])
+
+        if approval_type == ReviewApprovalType.N_OF_M:
+            if required_count is None:
+                raise serializers.ValidationError(
+                    {"review_required_count": "选择「至少 N 人通过」时必须填写人数"}
+                )
+            if required_count > len(reviewers):
+                raise serializers.ValidationError(
+                    {"review_required_count": "最少通过人数不能超过复核人数"}
+                )
+        elif required_count is not None:
+            raise serializers.ValidationError(
+                {"review_required_count": "只有「至少 N 人通过」规则才能填写人数"}
+            )
+        return attrs
+
     def update(self, instance, validated_data):
         cases = validated_data.pop("cases", None)
+        # 复核人或规则变了，老票要按新规则重算
+        review_rule_changed = any(
+            field in validated_data
+            for field in ("reviewers", "review_approval_type", "review_required_count")
+        )
         instance = super().update(instance, validated_data)
+        if review_rule_changed:
+            recompute_plan_case_review_statuses(instance)
         if cases is not None:
             current_ids = set(
                 PlanCase.objects.filter(plan=instance).values_list("case_id", flat=True)
@@ -115,6 +171,9 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             "threshold",
             "cases",
             "cycle",
+            "reviewers",
+            "review_approval_type",
+            "review_required_count",
         ]
 
 
@@ -135,7 +194,18 @@ class PlanListSerializer(ModelSerializer):
 
     class Meta:
         model = TestPlan
-        fields = ["name", "id", "begin_time", "end_time", "state", "module", "module_path"]
+        fields = [
+            "name",
+            "id",
+            "begin_time",
+            "end_time",
+            "state",
+            "module",
+            "module_path",
+            "reviewers",
+            "review_approval_type",
+            "review_required_count",
+        ]
 
 
 class CaseDetailSerializer(ModelSerializer):
@@ -209,6 +279,7 @@ def build_plan_stats_map(plan_ids):
             "case_count": 0,
             "success_count": 0,
             "pass_rate": dict(empty_pass_rate),
+            "assignee_ids": [],
         }
         for plan_id in plan_ids
     }
@@ -227,6 +298,18 @@ def build_plan_stats_map(plan_ids):
             entry["pass_rate"][row["result"]] = row["count"]
         if row["result"] == PlanCase.Result.SUCCESS:
             entry["success_count"] += row["count"]
+
+    # 计划下所有计划用例的执行人集合，同样整页一次查询，避免逐计划取。
+    # order_by 必须显式覆盖：PlanCase.Meta.ordering 的 created_at 会被带进
+    # DISTINCT 的 SELECT 列，导致去重按 (plan_id, assignee_id, created_at) 生效。
+    assignee_rows = (
+        PlanCase.objects.filter(plan_id__in=plan_ids, assignee_id__isnull=False)
+        .values_list("plan_id", "assignee_id")
+        .order_by("plan_id", "assignee_id")
+        .distinct()
+    )
+    for plan_id, assignee_id in assignee_rows:
+        stats[plan_id]["assignee_ids"].append(str(assignee_id))
     return stats
 
 
@@ -239,6 +322,7 @@ class TestPlanListSerializer(ModelSerializer):
     case_count = serializers.SerializerMethodField()
     pass_rate = serializers.SerializerMethodField()
     result = serializers.SerializerMethodField()
+    assignee_ids = serializers.SerializerMethodField()
     repository_name = serializers.SlugRelatedField(
         source="repository", read_only=True, slug_field="name"
     )
@@ -249,6 +333,7 @@ class TestPlanListSerializer(ModelSerializer):
             "case_count": 0,
             "success_count": 0,
             "pass_rate": {label: 0 for label in PlanCase.Result.values},
+            "assignee_ids": [],
         }
 
     def get_case_count(self, obj: TestPlan):
@@ -256,6 +341,9 @@ class TestPlanListSerializer(ModelSerializer):
 
     def get_pass_rate(self, obj: TestPlan):
         return dict(self._stats(obj)["pass_rate"])
+
+    def get_assignee_ids(self, obj: TestPlan):
+        return list(self._stats(obj)["assignee_ids"])
 
     def get_result(self, obj: TestPlan):
         stats = self._stats(obj)

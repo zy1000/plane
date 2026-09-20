@@ -1,7 +1,14 @@
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
-from plane.db.models import PlanModule, PlanCase, PlanCaseRecord, TestCase
+from plane.app.serializers.user import UserLiteSerializer
+from plane.db.models import (
+    PlanModule,
+    PlanCase,
+    PlanCaseRecord,
+    PlanCaseReviewRecord,
+    TestCase,
+)
 
 
 class PlanModuleCreateUpdateSerializer(ModelSerializer):
@@ -47,12 +54,21 @@ class PlanCaseListSerializer(ModelSerializer):
                       'assignee' ]
 
     plan = serializers.UUIDField(source="plan_id", read_only=True)
-    assignees = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    assignee = serializers.UUIDField(source="assignee_id", read_only=True, allow_null=True)
     case = TestCaseLiteSerializer(read_only=True)
 
     class Meta:
         model = PlanCase
-        fields = ["id", "plan", "case", "assignees", "result", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "plan",
+            "case",
+            "assignee",
+            "result",
+            "review_status",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class PlanCaseCardSerializer(ModelSerializer):
@@ -70,8 +86,28 @@ class PlanCaseCardSerializer(ModelSerializer):
         fields = '__all__'
 
 
+class PlanCaseReviewRecordSerializer(ModelSerializer):
+    reviewer_detail = UserLiteSerializer(source="reviewer", read_only=True)
+
+    class Meta:
+        model = PlanCaseReviewRecord
+        fields = [
+            "id",
+            "plan_case",
+            "plan_case_record",
+            "result",
+            "reason",
+            "reviewer",
+            "reviewer_detail",
+            "invalidated_at",
+            "created_at",
+        ]
+
+
 class PlanCaseRecordSerializer(ModelSerializer):
     file_count = serializers.SerializerMethodField()
+    # 本次执行对应的复核记录；需要视图侧 prefetch 才不会 N+1
+    review_records = PlanCaseReviewRecordSerializer(many=True, read_only=True)
 
     def get_file_count(self, obj: PlanCaseRecord):
         count = getattr(obj, "file_count", None)
@@ -90,16 +126,34 @@ class PlanCaseCopySerializer(serializers.Serializer):
     source_plan_id = serializers.UUIDField()
     target_plan_id = serializers.UUIDField()
     plan_case_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
-    assignees = serializers.ListField(
-        child=serializers.UUIDField(),
+    assignee = serializers.UUIDField(
         required=False,
         allow_null=True,
-        help_text="缺省 / null 沿用源计划用例的执行人；传列表（含空列表）则统一覆盖",
+        help_text="缺省沿用源计划用例的执行人；null 清空；传 id 则统一覆盖",
     )
 
     def validate(self, attrs):
         if attrs["source_plan_id"] == attrs["target_plan_id"]:
             raise serializers.ValidationError("目标计划不能与当前计划相同")
         # 去重并保序，避免同一计划用例被重复提交
+        attrs["plan_case_ids"] = list(dict.fromkeys(attrs["plan_case_ids"]))
+        return attrs
+
+
+class PlanCaseReviewSerializer(serializers.Serializer):
+    """复核人对一批计划用例的执行结果给出复核结论"""
+
+    plan_id = serializers.UUIDField()
+    plan_case_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False
+    )
+    result = serializers.ChoiceField(choices=PlanCaseReviewRecord.Result.choices)
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    def validate(self, attrs):
+        if attrs["result"] == PlanCaseReviewRecord.Result.FAIL and not (
+            attrs.get("reason") or ""
+        ).strip():
+            raise serializers.ValidationError("复核不通过时必须填写原因")
         attrs["plan_case_ids"] = list(dict.fromkeys(attrs["plan_case_ids"]))
         return attrs

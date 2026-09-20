@@ -172,7 +172,7 @@ class WorkspaceUserMetricItemSerializer(serializers.Serializer):
                 "project": _project_data(instance.plan.project),
                 "plan": {"id": instance.plan_id, "name": instance.plan.name},
                 "priority": instance.case.get_priority_display(),
-                "assignees": [_user_data(user) for user in instance.assignees.all()],
+                "assignee": _user_data(instance.assignee) if instance.assignee else None,
                 "result": instance.result,
             }
 
