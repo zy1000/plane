@@ -1,25 +1,13 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { getPlanReviewRuleLabel, type TPlanReviewApprovalType } from "@/services/qa/plan.service";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
-import { PlanService } from "@/services/qa/plan.service";
-import { Space, Table, Tag, Input, Button, Dropdown, Modal, Pagination, Tree } from "antd";
-import {
-  SearchOutlined,
-  PlusOutlined,
-  AppstoreOutlined,
-  EllipsisOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  DownOutlined,
-} from "@ant-design/icons";
+import { PlanService, type TPlanListRow } from "@/services/qa/plan.service";
+import { Input, Button, Dropdown, Modal, Pagination, Tree } from "antd";
+import { AppstoreOutlined, EllipsisOutlined } from "@ant-design/icons";
 import { FolderOpenDot } from "lucide-react";
-import type { TableProps, InputRef, TableColumnType } from "antd";
 import type { TreeProps } from "antd";
-import type { FilterDropdownProps } from "antd/es/table/interface";
 import { ChevronDownIcon } from "@plane/propel/icons";
 type PlanModule = {
   id: string;
@@ -29,26 +17,10 @@ type PlanModule = {
   children?: PlanModule[];
   total?: number;
 };
-type TestPlan = {
-  id: string;
-  name: string;
-  begin_time?: string | null;
-  end_time?: string | null;
-  cases?: any[];
-  state?: string | number;
-  module?: string | null;
-  module_id?: string | null;
-  pass_rate?: Record<string, number> | null;
-  result?: string | null;
-  assignee_ids?: string[];
-  reviewers?: string[];
-  review_approval_type?: TPlanReviewApprovalType;
-  review_required_count?: number | null;
-};
+type TestPlan = TPlanListRow;
 type TestPlanResponse = { data: TestPlan[]; count: number };
-import { formatDate, formatDateTime, globalEnums } from "../util";
 import { CreateUpdatePlanModal } from "@/components/qa/plans/create-update-modal";
-import styles from "../reviews/reviews.module.css";
+import { PlanListTable } from "@/components/qa/plans/plan-list-table";
 import { useTestHub } from "../testhub-context";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
@@ -64,7 +36,6 @@ export default function TestPlanDetailPage() {
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const Enums = globalEnums.Enums;
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const moduleIdFromUrl = searchParams.get("moduleId");
   const repositoryId =
@@ -83,9 +54,6 @@ export default function TestPlanDetailPage() {
   const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchText, setSearchText] = useState("");
-  const [searchedColumn, setSearchedColumn] = useState("");
-  const searchInput = useRef<InputRef>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { registerOpenNewPlanModal, registerPlanSearch, setPlanSearchValue } = useTestHub();
   useEffect(() => {
@@ -95,7 +63,7 @@ export default function TestPlanDetailPage() {
     });
   }, [canCreatePlan, registerOpenNewPlanModal]);
   const planService = new PlanService();
-  const [leftWidth, setLeftWidth] = useState<number>(300);
+  const [leftWidth, setLeftWidth] = useState<number>(220);
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
@@ -110,7 +78,7 @@ export default function TestPlanDetailPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
-  const [filters, setFilters] = useState<{ name?: string; states?: number[] }>({});
+  const [filters, setFilters] = useState<{ name?: string; states?: string[] }>({});
 
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
   const [moduleCounts, setModuleCounts] = useState<Record<string, number>>({});
@@ -245,11 +213,20 @@ export default function TestPlanDetailPage() {
     const newFilters = { ...filters };
     if (trimmedQuery) newFilters.name = trimmedQuery;
     else delete newFilters.name;
-    setSearchText(trimmedQuery);
-    setSearchedColumn("name");
     setFilters(newFilters);
     setPlanSearchValue(trimmedQuery);
     fetchTestPlans(1, pageSize, newFilters, selectedModuleId ?? undefined);
+  };
+
+  const openPlan = (plan: TestPlan) => {
+    if (!plan?.id) return;
+    try {
+      sessionStorage.setItem("selectedPlanName", plan?.name || "");
+    } catch {}
+    const ws = (workspaceSlug as string) || "";
+    const pid = (projectId as string) || "";
+    const repoQuery = repositoryId ? `&repositoryId=${encodeURIComponent(String(repositoryId))}` : "";
+    router.push(`/${ws}/projects/${pid}/testhub/plan-cases?planId=${plan.id}${repoQuery}`);
   };
 
   useEffect(() => {
@@ -260,96 +237,6 @@ export default function TestPlanDetailPage() {
     setPlanSearchValue("");
     return () => setPlanSearchValue("");
   }, [setPlanSearchValue]);
-
-  const getColumnSearchProps = (dataIndex: keyof TestPlan | string): TableColumnType<TestPlan> => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`搜索 ${dataIndex === "name" ? "名称" : "其他"}`}
-          value={selectedKeys[0]}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], dataIndex, close)}
-          style={{ marginBottom: 8, display: "block" }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], dataIndex, close)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            搜索
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters, dataIndex)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            重置
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? "#1677ff" : undefined }} />,
-    onFilterDropdownOpenChange: (visible) => {
-      if (visible) setTimeout(() => searchInput.current?.select(), 100);
-    },
-    filteredValue: dataIndex === "name" ? (filters.name ? [filters.name] : null) : null,
-  });
-
-  const handleSearch = (selectedKeys: string[], dataIndex: keyof TestPlan | string, close?: () => void) => {
-    setSearchText(selectedKeys[0]);
-    setSearchedColumn(dataIndex);
-    const newFilters = { ...filters };
-    if (selectedKeys[0]) {
-      if (dataIndex === "name") newFilters.name = selectedKeys[0];
-    } else {
-      if (dataIndex === "name") delete newFilters.name;
-    }
-    setFilters(newFilters);
-    if (dataIndex === "name") setPlanSearchValue(selectedKeys[0] || "");
-    fetchTestPlans(1, pageSize, newFilters);
-    close?.();
-  };
-
-  const handleReset = (clearFilters: () => void, dataIndex: keyof TestPlan | string) => {
-    clearFilters();
-    setSearchText("");
-    const newFilters = { ...filters };
-    if (dataIndex === "name") delete newFilters.name;
-    setFilters(newFilters);
-    if (dataIndex === "name") setPlanSearchValue("");
-    fetchTestPlans(1, pageSize, newFilters);
-  };
-
-  const renderState = (state: any) => {
-    const rawColor = (Enums?.plan_state as any)?.[state] || "default";
-    const color = rawColor === "gray" ? "default" : rawColor;
-    const text = state ?? "-";
-    return <Tag color={color}>{text}</Tag>;
-  };
-
-  const renderResult = (result: any) => {
-    if (!result || result === "-") return null;
-    const colorMap: Record<string, string> = {
-      通过: "success",
-      不通过: "error",
-    };
-    const color = colorMap[result] ?? (Enums?.plan_case_result as any)?.[result] ?? "default";
-    return <Tag color={color}>{result}</Tag>;
-  };
-
-  const handleTableChange: TableProps<TestPlan>["onChange"] = (_pagination, tableFilters) => {
-    const selectedStates = (tableFilters?.state as number[] | undefined) || [];
-    const newFilters = { ...filters, states: selectedStates.length ? selectedStates.map((v) => Number(v)) : undefined };
-    const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
-    const nextPage = filtersChanged ? 1 : currentPage;
-    setCurrentPage(nextPage);
-    if (filtersChanged) setFilters(newFilters);
-    fetchTestPlans(nextPage, pageSize, filtersChanged ? newFilters : filters);
-  };
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TestPlan | null>(null);
@@ -403,142 +290,6 @@ export default function TestPlanDetailPage() {
       },
     });
   };
-
-  const columns: TableProps<TestPlan>["columns"] = [
-    {
-      title: "计划名称",
-      dataIndex: "name",
-      key: "name",
-      minWidth: 160,
-      ...getColumnSearchProps("name"),
-      render: (_name: string, record: TestPlan) => (
-        <Button
-          type="link"
-          className="!p-0 !text-primary hover:!text-primary"
-          onClick={() => {
-            if (!record?.id) return;
-            try {
-              sessionStorage.setItem("selectedPlanName", record?.name || "");
-            } catch {}
-            const ws = (workspaceSlug as string) || "";
-            const pid = (projectId as string) || "";
-            const repoQuery = repositoryId ? `&repositoryId=${encodeURIComponent(String(repositoryId))}` : "";
-            router.push(`/${ws}/projects/${pid}/testhub/plan-cases?planId=${record.id}${repoQuery}`);
-          }}
-        >
-          <span className="truncate text-inherit">{record.name}</span>
-        </Button>
-      ),
-    },
-    {
-      title: "用例数",
-      dataIndex: "case_count",
-      key: "case_count",
-      width: 90,
-      render: (case_count: number) => (case_count ? case_count : 0),
-    },
-    { title: "状态", dataIndex: "state", key: "state", width: 120, render: (state: any) => renderState(state as any) },
-    {
-      title: "执行结果",
-      dataIndex: "result",
-      key: "result",
-      width: 120,
-      render: (result: any) => renderResult(result),
-    },
-    {
-      title: "执行人",
-      dataIndex: "assignee_ids",
-      key: "assignee_ids",
-      width: 160,
-      render: (_: unknown, record: TestPlan) => {
-        const assignees = (record.assignee_ids ?? []).map(String);
-        if (assignees.length === 0) return <span className="text-placeholder">-</span>;
-        return (
-          <MemberDropdown
-            multiple
-            value={assignees}
-            onChange={() => {}}
-            disabled
-            projectId={projectId ? String(projectId) : undefined}
-            placeholder=""
-            className="w-full text-sm"
-            buttonContainerClassName="w-full text-left p-0 cursor-default"
-            buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-            buttonVariant="transparent-with-text"
-            showUserDetails
-            optionsClassName="z-[60]"
-          />
-        );
-      },
-    },
-    {
-      title: "复核人",
-      dataIndex: "reviewers",
-      key: "reviewers",
-      width: 160,
-      render: (_: unknown, record: TestPlan) => {
-        const reviewers = (record.reviewers ?? []).map(String);
-        if (reviewers.length === 0) return <span className="text-placeholder">-</span>;
-        const ruleLabel = getPlanReviewRuleLabel(record);
-        return (
-          <div className="flex flex-col gap-0.5">
-            <MemberDropdown
-              multiple
-              value={reviewers}
-              onChange={() => {}}
-              disabled
-              projectId={projectId ? String(projectId) : undefined}
-              placeholder=""
-              className="w-full text-sm"
-              buttonContainerClassName="w-full text-left p-0 cursor-default"
-              buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-              buttonVariant="transparent-with-text"
-              showUserDetails
-              optionsClassName="z-[60]"
-            />
-            {ruleLabel && <span className="text-xs text-secondary">{ruleLabel}</span>}
-          </div>
-        );
-      },
-    },
-    {
-      title: "起止日期",
-      key: "date_range",
-      width: 220,
-      render: (_: unknown, record: TestPlan) => {
-        const begin = record.begin_time ? formatDate(record.begin_time) : "-";
-        const end = record.end_time ? formatDate(record.end_time) : "-";
-        if (!record.begin_time && !record.end_time) return null;
-        return `${begin}-${end}`;
-      },
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 120,
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            aria-label="编辑"
-            disabled={!canEditPlan}
-            onClick={() => openEditModal(record)}
-          />
-          <Button
-            type="text"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            aria-label="删除"
-            disabled={!canDeletePlan}
-            onClick={() => confirmDelete(record)}
-          />
-        </Space>
-      ),
-    },
-  ];
 
   const fetchTestPlans = async (
     page: number = currentPage,
@@ -1017,143 +768,76 @@ export default function TestPlanDetailPage() {
                     onMouseDown={onMouseDownResize}
                   />
                 </div>
-                <div className="flex-1 overflow-hidden p-0">
-                  {loading && (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="text-secondary">加载中...</div>
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                  {error ? (
+                    <div className="m-4 rounded-md border border-danger-subtle bg-danger-subtle p-4 text-13 text-danger-primary">
+                      {error}
                     </div>
-                  )}
-                  {error && (
-                    <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
-                      <div className="text-red-800 text-sm">{error}</div>
-                    </div>
-                  )}
-                  {!loading && !error && (
-                    <div className="flex h-full flex-col overflow-hidden">
-                      <div
-                        className={`${styles.reviewLikeAntTable} testhub-plans-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
-                          pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
-                        }`}
-                      >
-                        <Table
-                          dataSource={testPlans}
-                          columns={columns}
-                          loading={loading}
-                          rowKey="id"
-                          bordered={true}
-                          onChange={handleTableChange}
-                          pagination={false}
-                          scroll={{ x: 1210 }}
+                  ) : (
+                    <div
+                      className={`testhub-plans-table-scroll relative min-h-0 flex-1 overflow-auto ${
+                        pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
+                      }`}
+                    >
+                      {loading ? (
+                        <div className="flex items-center justify-center py-12 text-13 text-secondary">加载中...</div>
+                      ) : (
+                        <PlanListTable
+                          plans={testPlans}
+                          canEdit={canEditPlan}
+                          canDelete={canDeletePlan}
+                          onOpen={openPlan}
+                          onEdit={openEditModal}
+                          onDelete={confirmDelete}
                         />
-                      </div>
-                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="text-secondary">
-                            {total > 0
-                              ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
-                                  currentPage * pageSize,
-                                  total
-                                )} 条，共 ${total} 条`
-                              : ""}
-                          </span>
-                        </div>
-                        <Pagination
-                          simple
-                          current={currentPage}
-                          pageSize={pageSize}
-                          total={total}
-                          showSizeChanger
-                          pageSizeOptions={["10", "20", "50", "100"]}
-                          onChange={handlePaginationChange}
-                          onShowSizeChange={handlePaginationChange}
-                          size="small"
-                        />
-                      </div>
+                      )}
                     </div>
                   )}
+                  <div className="flex shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-5 py-2.5">
+                    <span className="text-13 text-secondary tabular-nums">
+                      {total > 0
+                        ? `第 ${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                        : ""}
+                    </span>
+                    <Pagination
+                      simple
+                      current={currentPage}
+                      pageSize={pageSize}
+                      total={total}
+                      showSizeChanger
+                      pageSizeOptions={["10", "20", "50", "100"]}
+                      onChange={handlePaginationChange}
+                      onShowSizeChange={handlePaginationChange}
+                      size="small"
+                    />
+                  </div>
                   <style
                     dangerouslySetInnerHTML={{
                       __html: `
                       .testhub-plans-table-scroll{
                         scrollbar-gutter: stable both-edges;
                       }
-
-                      .testhub-plans-table-scroll .ant-table-thead > tr > th{
-                        position: sticky;
-                        top: 0;
-                        z-index: 5;
-                        background: var(--bg-layer-1);
-                        font-size: 13px !important;
-                        font-weight: 500 !important;
-                        color: var(--text-color-secondary) !important;
-                      }
-
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong{
                         overflow-y: scroll;
                         scrollbar-width: auto;
                         scrollbar-color: var(--scrollbar-thumb) transparent;
                       }
-
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar{
                         width: 12px;
                         height: 12px;
                       }
-
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-thumb{
                         background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
                         border-radius: 999px;
                         border: 3px solid var(--bg-surface-1);
                       }
-
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-track{
                         background: transparent;
-                      }
-
-                      .testhub-plans-table-scroll .ant-table-content::-webkit-scrollbar,
-                      .testhub-plans-table-scroll .ant-table-body::-webkit-scrollbar {
-                        height: 4px;
-                        background: transparent;
-                      }
-                      .testhub-plans-table-scroll .ant-table-content::-webkit-scrollbar-thumb,
-                      .testhub-plans-table-scroll .ant-table-body::-webkit-scrollbar-thumb {
-                        background-color: transparent;
-                        border-radius: 2px;
-                        transition: background-color 0.3s ease;
-                      }
-                      .testhub-plans-table-scroll .ant-table-content::-webkit-scrollbar-track,
-                      .testhub-plans-table-scroll .ant-table-body::-webkit-scrollbar-track {
-                        background: transparent;
-                      }
-                      .testhub-plans-table-scroll .ant-table-content:hover::-webkit-scrollbar,
-                      .testhub-plans-table-scroll .ant-table-body:hover::-webkit-scrollbar {
-                        height: 4px;
-                      }
-                      .testhub-plans-table-scroll .ant-table-content:hover::-webkit-scrollbar-thumb,
-                      .testhub-plans-table-scroll .ant-table-body:hover::-webkit-scrollbar-thumb {
-                        background-color: #dddde0;
-                      }
-
-                      .testhub-plans-table-scroll .ant-table-content {
-                        scrollbar-width: thin;
-                        scrollbar-color: transparent transparent;
-                      }
-                      .testhub-plans-table-scroll .ant-table-content:hover {
-                        scrollbar-width: thin;
-                        scrollbar-color: #dddde0 transparent;
-                      }
-                      .testhub-plans-table-scroll .ant-table-body {
-                        scrollbar-width: thin;
-                        scrollbar-color: transparent transparent;
-                      }
-                      .testhub-plans-table-scroll .ant-table-body:hover {
-                        scrollbar-width: thin;
-                        scrollbar-color: #dddde0 transparent;
                       }
 
                       .testhub-plan-module-tree .ant-tree-draggable-icon{
                         display: none !important;
                       }
-
                       .custom-tree-indent .ant-tree-indent-unit {
                         width: 10px !important;
                       }
@@ -1162,7 +846,28 @@ export default function TestPlanDetailPage() {
                         margin-inline-end: 2px !important;
                       }
                       .custom-tree-indent .ant-tree-node-content-wrapper {
-                        padding-inline: 4px !important;
+                        display: flex;
+                        align-items: center;
+                        min-height: 32px;
+                        padding-inline: 6px !important;
+                        border-radius: 6px;
+                      }
+                      .testhub-plan-module-tree .ant-tree-title {
+                        display: block;
+                        flex: 1;
+                        min-width: 0;
+                      }
+                      .testhub-plan-module-tree .ant-tree-node-content-wrapper:hover {
+                        background: var(--bg-layer-1) !important;
+                      }
+                      .testhub-plan-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected,
+                      .testhub-plan-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected:hover {
+                        background: var(--bg-accent-subtle) !important;
+                        color: var(--text-color-accent-primary) !important;
+                      }
+                      .testhub-plan-module-tree .ant-tree-node-selected .text-primary,
+                      .testhub-plan-module-tree .ant-tree-node-selected .text-secondary {
+                        color: inherit !important;
                       }
                     `,
                     }}

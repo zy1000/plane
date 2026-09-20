@@ -78,6 +78,36 @@ export type TPlanListItem = {
   review_required_count?: number | null;
 };
 
+/** 计划状态（TestPlan.State） */
+export type TPlanState = "未开始" | "进行中" | "已完成";
+
+/** 计划用例执行结果各状态的计数（PlanCase.Result） */
+export type TPlanPassRate = Record<"成功" | "失败" | "阻塞" | "未执行" | "无效", number>;
+
+/** 计划列表页一行（`GET /test/plane/`，TestPlanListSerializer + build_plan_stats_map） */
+export type TPlanListRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  begin_time?: string | null;
+  end_time?: string | null;
+  state?: TPlanState | string | null;
+  module?: string | null;
+  module_id?: string | null;
+  cycle?: string | null;
+  /** 通过阈值 0-100 */
+  threshold?: number | null;
+  case_count?: number;
+  pass_rate?: Partial<TPlanPassRate> | null;
+  /** 按阈值折算："通过" / "不通过" / "-" */
+  result?: string | null;
+  /** 计划下所有用例的执行人（去重） */
+  assignee_ids?: string[];
+  reviewers?: string[];
+  review_approval_type?: TPlanReviewApprovalType;
+  review_required_count?: number | null;
+};
+
 /** 计划复核的通过规则：全部通过 / 至少 N 人通过 */
 export type TPlanReviewApprovalType = "all" | "n_of_m";
 
