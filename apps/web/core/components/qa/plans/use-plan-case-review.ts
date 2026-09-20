@@ -16,6 +16,7 @@ export const isPlanCaseReviewable = (result?: string | null) => Boolean(result) 
 
 export type TPlanCaseReviewTarget = {
   id: string;
+  code?: string;
   name?: string;
   result?: string;
 };

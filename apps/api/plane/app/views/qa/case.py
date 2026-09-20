@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.http import FileResponse
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
@@ -534,30 +534,36 @@ class CaseAPI(BaseViewSet):
         if not plan_id:
             return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 按 用例库 / 模块 聚合计划用例数，左栏每个节点都要带计数
         rows = (
-            PlanCase.objects.filter(plan_id=plan_id, case__deleted_at__isnull=True,
+            PlanCase.objects.filter(plan_id=plan_id, deleted_at__isnull=True, case__deleted_at__isnull=True,
                                     case__repository__workspace__slug=slug)
             .values('case__repository_id', 'case__repository__name', 'case__module_id')
-            .distinct()
+            .annotate(count=Count('id'))
         )
 
         repo_ids: set[str] = set()
         repo_name_by_id: dict[str, str] = {}
         module_ids_by_repo: dict[str, set[str]] = defaultdict(set)
+        repo_counts: dict[str, int] = defaultdict(int)
+        base_module_counts: dict[str, int] = defaultdict(int)
 
         for r in rows:
             repo_id = r.get('case__repository_id')
             if not repo_id:
                 continue
             repo_id = str(repo_id)
+            count = int(r.get('count') or 0)
             repo_ids.add(repo_id)
             repo_name_by_id[repo_id] = r.get('case__repository__name') or repo_id
+            repo_counts[repo_id] += count
             module_id = r.get('case__module_id')
             if module_id:
                 module_ids_by_repo[repo_id].add(str(module_id))
+                base_module_counts[str(module_id)] += count
 
         if not repo_ids:
-            return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []},
+            return Response({"id": "all", "name": "全部用例", "kind": "root", "count": 0, "children": []},
                             status=status.HTTP_200_OK)
 
         expanded_ids_by_repo: dict[str, set[str]] = {rid: set(mids) for rid, mids in module_ids_by_repo.items()}
@@ -612,6 +618,17 @@ class CaseAPI(BaseViewSet):
             for pid in list(children_map.keys()):
                 children_map[pid].sort(key=name_key)
 
+            memo: dict[str, int] = {}
+
+            def subtree_count(mid: str) -> int:
+                if mid in memo:
+                    return memo[mid]
+                total = int(base_module_counts.get(mid, 0))
+                for child in children_map.get(mid, []):
+                    total += subtree_count(child)
+                memo[mid] = total
+                return total
+
             def build(mid: str):
                 m = by_id.get(mid) or {}
                 return {
@@ -619,6 +636,7 @@ class CaseAPI(BaseViewSet):
                     "name": m.get("name") or "-",
                     "kind": "module",
                     "repository_id": repo_id,
+                    "count": subtree_count(mid),
                     "children": [build(child) for child in children_map.get(mid, [])],
                 }
 
@@ -628,27 +646,32 @@ class CaseAPI(BaseViewSet):
         repo_pairs.sort(key=lambda x: (x[1] or '').lower())
 
         children = []
+        total = 0
         for repo_id, repo_name in repo_pairs:
             module_tree = build_module_tree(repo_id)
+            repo_total = int(repo_counts.get(repo_id, 0))
+            total += repo_total
             children.append(
                 {
                     "id": repo_id,
                     "name": repo_name or "-",
                     "kind": "repository",
                     "repository_id": repo_id,
+                    "count": repo_total,
                     "children": [
                         {
                             "id": f"{repo_id}:all_modules",
                             "name": "全部模块",
                             "kind": "repository_modules_all",
                             "repository_id": repo_id,
+                            "count": repo_total,
                             "children": module_tree,
                         }
                     ],
                 }
             )
 
-        return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": children},
+        return Response({"id": "all", "name": "全部用例", "kind": "root", "count": total, "children": children},
                         status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='review-case-tree')
@@ -912,6 +935,8 @@ class CaseAPI(BaseViewSet):
         repository_id = request.query_params.get('repository_id')
         module_id = request.query_params.get('module_id')
         name__icontains = request.query_params.get('name__icontains')
+        case_type = request.query_params.get('type')
+        case_priority = request.query_params.get('priority')
 
         cases = TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True).exclude(
             plan_cases__plan__id=plan_id, plan_cases__deleted_at__isnull=True
@@ -923,7 +948,12 @@ class CaseAPI(BaseViewSet):
                                             repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
         if name__icontains:
-            cases = cases.filter(name__icontains=name__icontains)
+            # 规划用例弹窗的搜索框同时匹配编号与名称
+            cases = cases.filter(Q(name__icontains=name__icontains) | Q(code__icontains=name__icontains))
+        if case_type not in (None, ""):
+            cases = cases.filter(type=case_type)
+        if case_priority not in (None, ""):
+            cases = cases.filter(priority=case_priority)
 
         cases = cases.order_by('-created_at')
         paginator = self.pagination_class()

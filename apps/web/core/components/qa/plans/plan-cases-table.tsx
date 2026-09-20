@@ -6,24 +6,15 @@
 
 "use client";
 
-import { useMemo, useRef } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { Button, Popconfirm } from "antd";
+import { useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, UIEvent } from "react";
+import { Popconfirm } from "antd";
 import { Checkbox } from "@plane/ui";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import type { TPlanCaseItem } from "@/services/qa/plan.service";
-import type { TPlanCaseDisplayProperties } from "./plan-case-display-filters";
+import type { TPlanCaseDisplayProperties, TPlanCaseDisplayPropertyKey } from "./plan-case-display-filters";
 import { isPlanCaseReviewable } from "./use-plan-case-review";
-
-type TResizableHeadProps = {
-  children: ReactNode;
-  className?: string;
-  minWidth?: number;
-  onResize?: (width: number) => void;
-  style?: CSSProperties;
-};
 
 type TPlanCasesTableProps = {
   bulkAssigneeUpdating?: boolean;
@@ -48,22 +39,47 @@ type TPlanCasesTableProps = {
   setColumnWidth: (key: string, width: number) => void;
 };
 
-const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: TResizableHeadProps) => {
-  const thRef = useRef<HTMLTableCellElement>(null);
+type TColumnDef = {
+  key: TPlanCaseDisplayPropertyKey;
+  label: string;
+  width: number;
+};
 
+/** 勾选列与操作列固定在两端，中间的属性列随内容横向滚动 */
+const SELECT_COLUMN_WIDTH = 44;
+const ACTIONS_COLUMN_WIDTH = 150;
+/** 左端冻结的属性列，顺序与 COLUMN_DEFS 一致 */
+const FROZEN_LEFT_KEYS: TPlanCaseDisplayPropertyKey[] = ["code", "name"];
+
+const COLUMN_DEFS: TColumnDef[] = [
+  { key: "code", label: "编号", width: 150 },
+  { key: "name", label: "用例名称", width: 300 },
+  { key: "repository", label: "用例库", width: 150 },
+  { key: "priority", label: "优先级", width: 92 },
+  { key: "type", label: "类型", width: 110 },
+  { key: "module", label: "模块", width: 120 },
+  { key: "assignee", label: "执行人", width: 160 },
+  { key: "result", label: "执行结果", width: 110 },
+  { key: "review_status", label: "复核状态", width: 110 },
+  { key: "updated_at", label: "更新时间", width: 170 },
+];
+
+const CELL_CLASS = "flex h-full min-w-0 items-center border-r border-b border-subtle px-3";
+const MIN_COLUMN_WIDTH = 80;
+
+const ResizeHandle = ({ onResize }: { onResize: (width: number) => void }) => {
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!onResize || event.button !== 0) return;
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
 
     const startX = event.clientX;
-    const startWidth = thRef.current?.getBoundingClientRect().width ?? 0;
+    const startWidth = (event.currentTarget.parentElement?.getBoundingClientRect().width ?? MIN_COLUMN_WIDTH) as number;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX;
-      onResize(Math.round(Math.max(minWidth, startWidth + delta)));
+      onResize(Math.round(Math.max(MIN_COLUMN_WIDTH, startWidth + delta)));
     };
-
     const handleMouseUp = () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
@@ -74,23 +90,11 @@ const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: 
   };
 
   return (
-    <TableHead
-      ref={thRef}
-      className={cn(
-        "relative h-12 border-r border-b border-subtle px-page-x py-0 align-middle text-13 font-medium text-secondary",
-        className
-      )}
-      style={style}
-    >
-      {children}
-      {onResize && (
-        <div
-          className="absolute top-0 right-0 h-full w-2 cursor-col-resize"
-          onMouseDown={handleMouseDown}
-          role="presentation"
-        />
-      )}
-    </TableHead>
+    <div
+      className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize"
+      onMouseDown={handleMouseDown}
+      role="presentation"
+    />
   );
 };
 
@@ -116,10 +120,10 @@ export const PlanCasesTable = ({
   selectedPlanCaseIds,
   setColumnWidth,
 }: TPlanCasesTableProps) => {
-  const selectedKeySet = useMemo(
-    () => new Set(selectedPlanCaseIds.map((id) => String(id))),
-    [selectedPlanCaseIds]
-  );
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollState, setScrollState] = useState<{ atStart: boolean; atEnd: boolean }>({ atStart: true, atEnd: true });
+
+  const selectedKeySet = useMemo(() => new Set(selectedPlanCaseIds.map((id) => String(id))), [selectedPlanCaseIds]);
   const currentPageIds = useMemo(() => cases.map((item) => String(item.id)), [cases]);
   const selectedOnCurrentPage = useMemo(
     () => currentPageIds.filter((id) => selectedKeySet.has(id)),
@@ -128,6 +132,65 @@ export const PlanCasesTable = ({
 
   const allSelectedOnCurrentPage = currentPageIds.length > 0 && selectedOnCurrentPage.length === currentPageIds.length;
   const isIndeterminate = selectedOnCurrentPage.length > 0 && !allSelectedOnCurrentPage;
+
+  const getColumnWidth = (key: string, fallback: number) => columnWidths[key] ?? fallback;
+
+  const visibleColumns = useMemo(
+    () => COLUMN_DEFS.filter((column) => displayProperties?.[column.key] ?? true),
+    [displayProperties]
+  );
+
+  const gridTemplateColumns = useMemo(
+    () =>
+      [
+        `${SELECT_COLUMN_WIDTH}px`,
+        ...visibleColumns.map((column) => `${getColumnWidth(column.key, column.width)}px`),
+        `${getColumnWidth("actions", ACTIONS_COLUMN_WIDTH)}px`,
+      ].join(" "),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleColumns, columnWidths]
+  );
+
+  /** 冻结列的 left 偏移量：勾选列固定 0，其后依次累加前面冻结列的宽度 */
+  const frozenLeftOffsets = useMemo(() => {
+    const offsets: Record<string, number> = { select: 0 };
+    let offset = SELECT_COLUMN_WIDTH;
+    FROZEN_LEFT_KEYS.forEach((key) => {
+      if (!visibleColumns.some((column) => column.key === key)) return;
+      offsets[key] = offset;
+      const definition = COLUMN_DEFS.find((column) => column.key === key);
+      offset += getColumnWidth(key, definition?.width ?? MIN_COLUMN_WIDTH);
+    });
+    return offsets;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleColumns, columnWidths]);
+
+  const lastFrozenLeftKey = useMemo(() => {
+    const frozenVisible = FROZEN_LEFT_KEYS.filter((key) => visibleColumns.some((column) => column.key === key));
+    return frozenVisible.length > 0 ? frozenVisible[frozenVisible.length - 1] : "select";
+  }, [visibleColumns]);
+
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const element = event.currentTarget;
+    const atStart = element.scrollLeft <= 1;
+    const atEnd = element.scrollLeft + element.clientWidth >= element.scrollWidth - 1;
+    if (atStart !== scrollState.atStart || atEnd !== scrollState.atEnd) setScrollState({ atStart, atEnd });
+  };
+
+  const getFrozenLeftStyle = (key: string): CSSProperties | undefined => {
+    const left = frozenLeftOffsets[key];
+    if (left === undefined) return undefined;
+    return {
+      left,
+      ...(key === lastFrozenLeftKey && !scrollState.atStart
+        ? { boxShadow: "8px 0 8px -6px rgb(20 24 32 / 0.14)" }
+        : {}),
+    };
+  };
+
+  const frozenRightStyle: CSSProperties = scrollState.atEnd
+    ? {}
+    : { boxShadow: "-8px 0 8px -6px rgb(20 24 32 / 0.14)" };
 
   const handleSelectAllOnPage = (checked: boolean) => {
     onRowSelectChange(checked ? currentPageIds : []);
@@ -140,286 +203,189 @@ export const PlanCasesTable = ({
     onRowSelectChange(nextSelected);
   };
 
-  const getWidthStyle = (key: string, fallback: number): CSSProperties => ({
-    width: columnWidths[key] ?? fallback,
-    minWidth: columnWidths[key] ?? fallback,
-  });
+  const isFrozenLeft = (key: string) => frozenLeftOffsets[key] !== undefined;
 
-  const isColumnVisible = (key: keyof TPlanCaseDisplayProperties) => displayProperties?.[key] ?? true;
+  const renderCellContent = (column: TColumnDef, record: TPlanCaseItem) => {
+    const recordId = String(record.id);
+    const caseId = record.case?.id ? String(record.case.id) : undefined;
 
-  const visibleContentColumnCount = Object.entries(displayProperties).filter(([, isVisible]) => isVisible).length;
-  const emptyColSpan = visibleContentColumnCount + 2;
+    switch (column.key) {
+      case "code":
+        return (
+          <button
+            type="button"
+            className="truncate text-left text-13 text-secondary transition-colors hover:text-accent-primary hover:underline"
+            title={record.case?.code || ""}
+            onClick={() => onOpenCase(caseId)}
+          >
+            {record.case?.code || ""}
+          </button>
+        );
+      case "name":
+        return (
+          <button
+            type="button"
+            className="truncate text-left text-13 text-primary transition-colors hover:text-accent-primary hover:underline"
+            title={record.case?.name || ""}
+            onClick={() => onOpenCase(caseId)}
+          >
+            {record.case?.name || ""}
+          </button>
+        );
+      case "repository":
+        return (
+          <span className="truncate text-13 text-secondary" title={record.case?.repository_name || ""}>
+            {record.case?.repository_name || ""}
+          </span>
+        );
+      case "module":
+        return (
+          <span className="truncate text-13 text-secondary" title={record.case?.module || ""}>
+            {record.case?.module || ""}
+          </span>
+        );
+      case "assignee":
+        return (
+          <MemberDropdown
+            multiple={false}
+            value={record?.assignee ? String(record.assignee) : null}
+            onChange={(value) => onAssigneeChange(recordId, value ? String(value) : null)}
+            disabled={bulkAssigneeUpdating}
+            projectId={projectId}
+            placeholder="未分配"
+            className="w-full text-13"
+            buttonContainerClassName="w-full text-left p-0"
+            buttonVariant="transparent-with-text"
+            buttonClassName="text-13 p-0 hover:bg-transparent hover:bg-inherit"
+            showUserDetails
+            optionsClassName="z-[80]"
+          />
+        );
+      case "type":
+        return renderTypeTag(record.case?.type);
+      case "priority":
+        return renderPriorityTag(record.case?.priority);
+      case "result":
+        return renderResultTag(record.result);
+      case "review_status":
+        return renderReviewStatusTag(record.review_status);
+      case "updated_at":
+        return <span className="truncate text-13 text-secondary tabular-nums">{renderUpdatedAt(record.case?.updated_at)}</span>;
+      default:
+        return null;
+    }
+  };
 
   return (
-    <Table
-      className="min-w-full table-fixed border-separate border-spacing-0 border-t border-l border-subtle"
-      wrapperClassName="h-full overflow-auto testhub-plan-cases-table-scroll scrollbar-always-visible"
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className="testhub-plan-cases-table-scroll max-h-full overflow-auto"
     >
-      <TableHeader className="sticky top-0 z-[2] bg-layer-1">
-        <TableRow>
-          <TableHead className="h-12 w-10 min-w-10 border-r border-b border-subtle px-0 py-0">
-            <div className="flex h-12 w-full items-center justify-center">
-              <Checkbox
-                checked={allSelectedOnCurrentPage}
-                indeterminate={isIndeterminate}
-                onChange={(event) => handleSelectAllOnPage(event.target.checked)}
-              />
+      <div className="min-w-max">
+        {/* 表头 */}
+        <div
+          className="sticky top-0 z-[4] grid h-9 border-b border-subtle bg-layer-1 text-12 font-medium text-tertiary"
+          style={{ gridTemplateColumns }}
+        >
+          <div
+            className={cn(CELL_CLASS, "sticky z-[5] justify-center border-b-0 bg-layer-1 px-0")}
+            style={getFrozenLeftStyle("select")}
+          >
+            <Checkbox
+              checked={allSelectedOnCurrentPage}
+              indeterminate={isIndeterminate}
+              onChange={(event) => handleSelectAllOnPage(event.target.checked)}
+            />
+          </div>
+
+          {visibleColumns.map((column) => (
+            <div
+              key={column.key}
+              className={cn(
+                CELL_CLASS,
+                "relative border-b-0",
+                isFrozenLeft(column.key) && "sticky z-[5] bg-layer-1"
+              )}
+              style={getFrozenLeftStyle(column.key)}
+            >
+              <span className="truncate">{column.label}</span>
+              <ResizeHandle onResize={(width) => setColumnWidth(column.key, width)} />
             </div>
-          </TableHead>
+          ))}
 
-          {isColumnVisible("code") && (
-            <ResizableHead style={getWidthStyle("code", 150)} onResize={(width) => setColumnWidth("code", width)}>
-              用例编号
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("name") && (
-            <ResizableHead style={getWidthStyle("name", 260)} onResize={(width) => setColumnWidth("name", width)}>
-              用例名称
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("repository") && (
-            <ResizableHead
-              style={getWidthStyle("repository", 150)}
-              onResize={(width) => setColumnWidth("repository", width)}
-            >
-              用例库
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("module") && (
-            <ResizableHead style={getWidthStyle("module", 140)} onResize={(width) => setColumnWidth("module", width)}>
-              模块
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("assignee") && (
-            <ResizableHead
-              style={getWidthStyle("assignee", 170)}
-              onResize={(width) => setColumnWidth("assignee", width)}
-            >
-              执行人
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("type") && (
-            <ResizableHead style={getWidthStyle("type", 100)} onResize={(width) => setColumnWidth("type", width)}>
-              类型
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("priority") && (
-            <ResizableHead
-              style={getWidthStyle("priority", 100)}
-              onResize={(width) => setColumnWidth("priority", width)}
-            >
-              优先级
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("result") && (
-            <ResizableHead style={getWidthStyle("result", 120)} onResize={(width) => setColumnWidth("result", width)}>
-              执行结果
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("review_status") && (
-            <ResizableHead
-              style={getWidthStyle("review_status", 110)}
-              onResize={(width) => setColumnWidth("review_status", width)}
-            >
-              复核状态
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("updated_at") && (
-            <ResizableHead
-              style={getWidthStyle("updated_at", 180)}
-              onResize={(width) => setColumnWidth("updated_at", width)}
-            >
-              更新时间
-            </ResizableHead>
-          )}
-
-          <ResizableHead className="sticky right-0 z-[3] border-l bg-layer-1" style={getWidthStyle("actions", 160)}>
+          <div
+            className={cn(CELL_CLASS, "sticky right-0 z-[5] border-r-0 border-b-0 border-l border-subtle bg-layer-1")}
+            style={frozenRightStyle}
+          >
             操作
-          </ResizableHead>
-        </TableRow>
-      </TableHeader>
+          </div>
+        </div>
 
-      <TableBody>
-        {cases.length === 0 && (
-          <TableRow>
-            <TableCell colSpan={emptyColSpan} className="h-32 border-r border-b border-subtle text-center text-secondary">
-              暂无计划用例
-            </TableCell>
-          </TableRow>
-        )}
+        {/* 行 */}
+        {cases.length === 0 ? (
+          <div className="flex h-48 items-center justify-center text-13 text-placeholder">暂无计划用例</div>
+        ) : (
+          cases.map((record) => {
+            const recordId = String(record.id);
+            const assigneeId = record?.assignee ? String(record.assignee) : null;
+            const isAssignedToCurrentUser = Boolean(currentUserId) && assigneeId === String(currentUserId);
+            const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
+            // 复核对象是执行结果，未执行的用例没有可复核的内容
+            const isReviewable = isPlanCaseReviewable(record.result);
 
-        {cases.map((record) => {
-          const recordId = String(record.id);
-          const caseId = record.case?.id ? String(record.case.id) : undefined;
-          const assigneeId = record?.assignee ? String(record.assignee) : null;
-          const isAssignedToCurrentUser = Boolean(currentUserId) && assigneeId === String(currentUserId);
-          const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
-          // 复核对象是执行结果，未执行的用例没有可复核的内容
-          const isReviewable = canReview && isPlanCaseReviewable(record.result);
-
-          return (
-            <TableRow key={recordId} className="group h-12 bg-surface-1 transition-colors hover:bg-surface-2">
-              <TableCell className="h-12 w-10 min-w-10 border-r border-b border-subtle px-0 py-0">
-                <div className="flex h-12 w-full items-center justify-center">
+            return (
+              <div
+                key={recordId}
+                className="group grid h-[50px] bg-surface-1 transition-colors hover:bg-surface-2"
+                style={{ gridTemplateColumns }}
+              >
+                <div
+                  className={cn(CELL_CLASS, "sticky z-[2] justify-center bg-inherit px-0")}
+                  style={getFrozenLeftStyle("select")}
+                >
                   <Checkbox
                     checked={selectedKeySet.has(recordId)}
                     onChange={(event) => handleSelectRow(recordId, event.target.checked)}
                   />
                 </div>
-              </TableCell>
 
-              {isColumnVisible("code") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("code", 150)}
+                {visibleColumns.map((column) => (
+                  <div
+                    key={column.key}
+                    className={cn(CELL_CLASS, isFrozenLeft(column.key) && "sticky z-[2] bg-inherit")}
+                    style={getFrozenLeftStyle(column.key)}
+                  >
+                    {renderCellContent(column, record)}
+                  </div>
+                ))}
+
+                <div
+                  className={cn(CELL_CLASS, "sticky right-0 z-[2] gap-3 border-r-0 border-l border-subtle bg-inherit")}
+                  style={frozenRightStyle}
                 >
                   <button
                     type="button"
-                    className="block truncate text-left hover:text-accent-primary hover:underline"
-                    style={{ maxWidth: Math.max(40, (columnWidths.code ?? 150) - 20) }}
-                    title={record.case?.code || ""}
-                    onClick={() => onOpenCase(caseId)}
+                    className="text-13 text-accent-primary transition-colors hover:text-accent-primary-hover"
+                    onClick={() => onViewExecution(record)}
                   >
-                    {record.case?.code || "-"}
-                  </button>
-                </TableCell>
-              )}
-
-              {isColumnVisible("name") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("name", 260)}
-                >
-                  <button
-                    type="button"
-                    className="block truncate text-left hover:text-accent-primary hover:underline"
-                    style={{ maxWidth: Math.max(40, (columnWidths.name ?? 260) - 20) }}
-                    title={record.case?.name || ""}
-                    onClick={() => onOpenCase(caseId)}
-                  >
-                    {record.case?.name || "-"}
-                  </button>
-                </TableCell>
-              )}
-
-              {isColumnVisible("repository") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("repository", 150)}
-                >
-                  <span
-                    className="block truncate"
-                    style={{ maxWidth: Math.max(40, (columnWidths.repository ?? 150) - 20) }}
-                    title={record.case?.repository_name || ""}
-                  >
-                    {record.case?.repository_name || "-"}
-                  </span>
-                </TableCell>
-              )}
-
-              {isColumnVisible("module") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("module", 140)}
-                >
-                  <span
-                    className="block truncate"
-                    style={{ maxWidth: Math.max(40, (columnWidths.module ?? 140) - 20) }}
-                    title={record.case?.module || ""}
-                  >
-                    {record.case?.module || "-"}
-                  </span>
-                </TableCell>
-              )}
-
-              {isColumnVisible("assignee") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("assignee", 170)}
-                >
-                  <MemberDropdown
-                    multiple={false}
-                    value={assigneeId}
-                    onChange={(value) => onAssigneeChange(recordId, value ? String(value) : null)}
-                    disabled={bulkAssigneeUpdating}
-                    projectId={projectId}
-                    placeholder="请选择执行人"
-                    className="w-full text-sm"
-                    buttonContainerClassName="w-full text-left p-0"
-                    buttonVariant="transparent-with-text"
-                    buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-                    showUserDetails
-                    optionsClassName="z-[80]"
-                  />
-                </TableCell>
-              )}
-
-              {isColumnVisible("type") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("type", 100)}
-                >
-                  {renderTypeTag(record.case?.type)}
-                </TableCell>
-              )}
-
-              {isColumnVisible("priority") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("priority", 100)}
-                >
-                  {renderPriorityTag(record.case?.priority)}
-                </TableCell>
-              )}
-
-              {isColumnVisible("result") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("result", 120)}
-                >
-                  {renderResultTag(record.result)}
-                </TableCell>
-              )}
-
-              {isColumnVisible("review_status") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("review_status", 110)}
-                >
-                  {renderReviewStatusTag(record.review_status)}
-                </TableCell>
-              )}
-
-              {isColumnVisible("updated_at") && (
-                <TableCell
-                  className="h-12 border-r border-b border-subtle px-page-x py-0"
-                  style={getWidthStyle("updated_at", 180)}
-                >
-                  {renderUpdatedAt(record.case?.updated_at)}
-                </TableCell>
-              )}
-
-              <TableCell
-                className="sticky right-0 z-[1] h-12 border-r border-b border-l border-subtle bg-surface-1 px-page-x py-0 group-hover:bg-surface-2"
-                style={getWidthStyle("actions", 160)}
-              >
-                <div className="flex items-center gap-2">
-                  <Button size="small" type="link" className="px-0" onClick={() => onViewExecution(record)}>
                     {actionLabel}
-                  </Button>
-                  {isReviewable && (
-                    <Button size="small" type="link" className="px-0" onClick={() => onReview(record)}>
+                  </button>
+                  {canReview && (
+                    <button
+                      type="button"
+                      disabled={!isReviewable}
+                      title={isReviewable ? undefined : "用例未执行，暂无可复核的结果"}
+                      className={cn(
+                        "text-13 transition-colors",
+                        isReviewable
+                          ? "text-accent-primary hover:text-accent-primary-hover"
+                          : "cursor-not-allowed text-placeholder"
+                      )}
+                      onClick={() => isReviewable && onReview(record)}
+                    >
                       复核
-                    </Button>
+                    </button>
                   )}
                   <Popconfirm
                     title="确定取关该用例？"
@@ -427,16 +393,16 @@ export const PlanCasesTable = ({
                     okText="确定"
                     cancelText="取消"
                   >
-                    <Button size="small" type="link" danger className="px-0">
+                    <button type="button" className="text-13 text-danger-primary transition-colors hover:opacity-80">
                       取关
-                    </Button>
+                    </button>
                   </Popconfirm>
                 </div>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 };

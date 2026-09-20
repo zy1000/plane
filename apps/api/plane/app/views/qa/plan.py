@@ -1050,6 +1050,8 @@ class PlanView(BaseViewSet):
             "created_at": "创建时间",
             "updated_at": "更新时间",
             "result": "执行结果",
+            "plan_assignee": "执行人",
+            "review_status": "复核状态",
         }
         fields = [f for f in fields if f in allowed.keys()]
         if not fields:
@@ -1064,6 +1066,7 @@ class PlanView(BaseViewSet):
                 "case__repository",
                 "case__module",
                 "case__assignee",
+                "assignee",
             )
             .prefetch_related("case__labels", "case__issues")
             .filter(plan_id=plan_id, deleted_at__isnull=True)
@@ -1157,6 +1160,10 @@ class PlanView(BaseViewSet):
                 )
             if key == "result":
                 return pc.result or ""
+            if key == "plan_assignee":
+                return getattr(getattr(pc, "assignee", None), "display_name", "") or ""
+            if key == "review_status":
+                return pc.review_status or ""
             return ""
 
         for pc in qs.iterator():

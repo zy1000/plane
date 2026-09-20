@@ -140,6 +140,78 @@ export const PlanCaseReviewRecordList = ({
   );
 };
 
+type TPlanCaseReviewProgressProps = {
+  /** 计划的复核人 id 列表 */
+  reviewerIds: string[];
+  records: TPlanCaseReviewRecord[];
+  /** 当前用户 id，用于把自己那一行标成「待复核（你）」 */
+  currentUserId?: string;
+  className?: string;
+};
+
+/**
+ * 复核进度：按计划的复核人逐个列出，已投票的显示结论与时间，未投票的显示待复核。
+ * 只算未作废记录里每人的最后一票，与后端折算口径一致。
+ */
+export const PlanCaseReviewProgress = ({
+  reviewerIds,
+  records,
+  currentUserId,
+  className,
+}: TPlanCaseReviewProgressProps) => {
+  const { getUserDetails } = useMember();
+
+  const lastVoteByReviewer = useMemo(() => {
+    const map = new Map<string, TPlanCaseReviewRecord>();
+    records.forEach((record) => {
+      const reviewerId = record.reviewer ? String(record.reviewer) : "";
+      if (!reviewerId || record.invalidated_at) return;
+      // 记录按时间倒序返回，第一条即最后一票
+      if (!map.has(reviewerId)) map.set(reviewerId, record);
+    });
+    return map;
+  }, [records]);
+
+  if (reviewerIds.length === 0) return null;
+
+  const approvedCount = Array.from(lastVoteByReviewer.values()).filter((record) => record.result === "通过").length;
+
+  return (
+    <div className={cn("flex flex-col gap-2", className)}>
+      <span className="text-13 font-medium text-primary">
+        复核进度
+        <span className="ml-2 text-12 font-normal text-tertiary tabular-nums">
+          {approvedCount} / {reviewerIds.length}
+        </span>
+      </span>
+      <div className="flex flex-col gap-2">
+        {reviewerIds.map((reviewerId) => {
+          const record = lastVoteByReviewer.get(String(reviewerId));
+          const name = getUserDetails(String(reviewerId))?.display_name || "未知用户";
+          const time = record?.created_at ? renderFormattedDate(record.created_at, "MM-DD HH:mm") : "";
+          const isCurrentUser = currentUserId ? String(currentUserId) === String(reviewerId) : false;
+          return (
+            <div key={String(reviewerId)} className="flex items-center gap-2 text-13">
+              <ButtonAvatars showTooltip={false} userIds={String(reviewerId)} size="md" />
+              <span className="truncate text-secondary">{name}</span>
+              <span
+                className={cn(
+                  "ml-auto shrink-0 text-12 tabular-nums",
+                  record?.result === "通过" && "text-success-primary",
+                  record?.result === "不通过" && "text-danger-primary",
+                  !record && "text-tertiary"
+                )}
+              >
+                {record ? `${record.result === "通过" ? "✓" : "✕"} ${record.result} · ${time}` : `待复核${isCurrentUser ? "（你）" : ""}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 type TPlanCaseReviewRecordsProps = {
   workspaceSlug?: string;
   planCaseId?: string | null;
