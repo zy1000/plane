@@ -13,8 +13,9 @@ import { useMember } from "@/hooks/store/use-member";
 import { getPlanReviewRuleLabel, type TPlanListRow } from "@/services/qa/plan.service";
 import { PlanPassRate } from "./plan-pass-rate";
 
-/** 名称列吃掉剩余宽度，其余列固定；顺序即视觉顺序 */
-const GRID_TEMPLATE_COLUMNS = "minmax(220px, 1fr) 84px 100px 92px 76px 112px 128px 124px";
+/** 各列按比例分宽度，名称列不独占剩余空间；顺序即视觉顺序 */
+const GRID_TEMPLATE_COLUMNS =
+  "minmax(320px, 2.4fr) minmax(84px, 0.7fr) minmax(96px, 0.8fr) minmax(92px, 0.8fr) minmax(76px, 0.6fr) minmax(112px, 1fr) minmax(116px, 1fr) minmax(112px, 1fr)";
 
 /** 每格自己带右竖线和内边距，最后一格不画线 */
 const CELL = "flex h-full min-w-0 items-center border-r border-subtle px-3 last:border-r-0";
