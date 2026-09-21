@@ -74,7 +74,7 @@ export const TemplateCaseRepositoryList = observer(function TemplateCaseReposito
       key: "name",
       render: (text: string, record) => (
         <Link to={`/${workspaceSlug}/templates/test-cases/${record.id}`} className="cursor-pointer">
-          <Tooltip title={text || ""} placement="topLeft">
+          <Tooltip title={text || ""} placement="topLeft" color="#fff" overlayInnerStyle={{ color: "#333" }}>
             <span className="block max-w-[440px] truncate text-primary">{text || "-"}</span>
           </Tooltip>
         </Link>
@@ -88,7 +88,7 @@ export const TemplateCaseRepositoryList = observer(function TemplateCaseReposito
         const descriptionText = String(description ?? "").trim();
         if (!descriptionText) return null;
         return (
-          <Tooltip title={descriptionText} placement="topLeft">
+          <Tooltip title={descriptionText} placement="topLeft" color="#fff" overlayInnerStyle={{ color: "#333" }}>
             <span className="block max-w-[420px] truncate">{descriptionText}</span>
           </Tooltip>
         );

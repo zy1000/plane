@@ -1115,27 +1115,27 @@ export default function PlanCasesPage() {
                     renderPriorityTag={(value) => <PlanCasePriorityBadge value={value} />}
                     renderUpdatedAt={(value) => (value ? formatDateTime(value).slice(0, 16) : "")}
                   />
-                  <PlanCasesBulkBar
-                    selectedCount={selectedCaseIds.length}
-                    projectId={projectId ? String(projectId) : undefined}
-                    assigneeUpdating={bulkAssigneeUpdating}
-                    executeLoading={bulkExecuteLoading}
-                    canReview={isCurrentUserPlanReviewer}
-                    canCopy={canEditPlan}
-                    onAssigneeChange={(assignee) => void handleBulkPlanCaseAssigneeChange(assignee)}
-                    onReview={handleBulkReview}
-                    onExecute={onBulkExecuteSelected}
-                    onCancelRelation={() => onCancelRelation(selectedCaseIds)}
-                    onCopyToPlan={() => setIsCopyModalOpen(true)}
-                    onClear={() => {
-                      setSelectedCaseIds([]);
-                      setSelectedPlanCaseMetaMap({});
-                    }}
-                  />
                 </>
               )}
             </div>
-            <div className="flex shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+            <div className="relative flex shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+              <PlanCasesBulkBar
+                selectedCount={selectedCaseIds.length}
+                projectId={projectId ? String(projectId) : undefined}
+                assigneeUpdating={bulkAssigneeUpdating}
+                executeLoading={bulkExecuteLoading}
+                canReview={isCurrentUserPlanReviewer}
+                canCopy={canEditPlan}
+                onAssigneeChange={(assignee) => void handleBulkPlanCaseAssigneeChange(assignee)}
+                onReview={handleBulkReview}
+                onExecute={onBulkExecuteSelected}
+                onCancelRelation={() => onCancelRelation(selectedCaseIds)}
+                onCopyToPlan={() => setIsCopyModalOpen(true)}
+                onClear={() => {
+                  setSelectedCaseIds([]);
+                  setSelectedPlanCaseMetaMap({});
+                }}
+              />
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-secondary">
                   {total > 0
