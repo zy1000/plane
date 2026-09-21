@@ -10,6 +10,8 @@ export type MemberDropdownProps = TDropdownProps & {
   tooltipContent?: string;
   onClose?: () => void;
   showUserDetails?: boolean;
+  /** 只读弹层顶部的说明，例如复核规则 */
+  caption?: string;
 } & (
     | {
         multiple: false;

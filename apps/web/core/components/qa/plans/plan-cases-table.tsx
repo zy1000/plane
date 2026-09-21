@@ -140,15 +140,24 @@ export const PlanCasesTable = ({
     [displayProperties]
   );
 
+  /** 名称列（或最后一个可见属性列）吃掉多余宽度，操作列保持固定，大屏不会在右侧留白 */
+  const flexibleColumnKey = useMemo(() => {
+    if (visibleColumns.some((column) => column.key === "name")) return "name";
+    return visibleColumns[visibleColumns.length - 1]?.key;
+  }, [visibleColumns]);
+
   const gridTemplateColumns = useMemo(
     () =>
       [
         `${SELECT_COLUMN_WIDTH}px`,
-        ...visibleColumns.map((column) => `${getColumnWidth(column.key, column.width)}px`),
+        ...visibleColumns.map((column) => {
+          const width = getColumnWidth(column.key, column.width);
+          return column.key === flexibleColumnKey ? `minmax(${width}px, 1fr)` : `${width}px`;
+        }),
         `${getColumnWidth("actions", ACTIONS_COLUMN_WIDTH)}px`,
       ].join(" "),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleColumns, columnWidths]
+    [visibleColumns, columnWidths, flexibleColumnKey]
   );
 
   /** 冻结列的 left 偏移量：勾选列固定 0，其后依次累加前面冻结列的宽度 */
@@ -282,7 +291,7 @@ export const PlanCasesTable = ({
       onScroll={handleScroll}
       className="testhub-plan-cases-table-scroll max-h-full overflow-auto"
     >
-      <div className="min-w-max">
+      <div className="min-w-max w-full">
         {/* 表头 */}
         <div
           className="sticky top-0 z-[4] grid h-9 border-b border-subtle bg-layer-1 text-12 font-medium text-tertiary"

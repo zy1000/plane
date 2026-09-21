@@ -35,6 +35,7 @@ interface Props {
   referenceElement: HTMLButtonElement | null;
   value?: string[] | string | null;
   viewOnly?: boolean;
+  caption?: string;
 }
 
 export const MemberOptions = observer(function MemberOptions(props: Props) {
@@ -48,6 +49,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
     referenceElement,
     value,
     viewOnly = false,
+    caption,
   } = props;
   // router
   const { workspaceSlug } = useParams();
@@ -139,6 +141,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
         }}
         {...attributes.popper}
       >
+        {viewOnly && caption ? <div className="mb-1.5 truncate px-1 text-11 text-tertiary">{caption}</div> : null}
         {!viewOnly && (
           <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">
             <SearchIcon className="h-3.5 w-3.5 text-placeholder" strokeWidth={1.5} />

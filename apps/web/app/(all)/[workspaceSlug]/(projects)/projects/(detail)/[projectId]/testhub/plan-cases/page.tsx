@@ -1032,7 +1032,7 @@ export default function PlanCasesPage() {
             </PlaneButton>
           </div>
         </div>
-        <div className="flex min-h-0 overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <div
             className="relative min-h-0 flex-shrink-0 overflow-y-auto border-r border-subtle pt-3 pl-3"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
@@ -1070,95 +1070,94 @@ export default function PlanCasesPage() {
               />
             )}
           </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-            {/* h-full + min-h-0：内容少时整块跟着表格高度走，内容多时被行高压缩、表格内部滚动 */}
-            <div className="flex h-full min-h-0 min-w-0 flex-col">
-              <div className="min-h-0 min-w-0 overflow-hidden">
-                {loading && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-secondary">加载中...</div>
-                  </div>
-                )}
-                {error && (
-                  <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
-                    <div className="text-red-800 text-sm">{error}</div>
-                  </div>
-                )}
-                {!loading && !error && (
-                  <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-                    <div className="relative min-h-0 min-w-0 overflow-hidden">
-                      <PlanCasesTable
-                        cases={cases}
-                        columnWidths={columnWidths}
-                        currentUserId={currentUser?.id ? String(currentUser.id) : undefined}
-                        displayProperties={planCaseDisplayProperties}
-                        selectedPlanCaseIds={selectedCaseIds}
-                        setColumnWidth={handleSetColumnWidth}
-                        onAssigneeChange={handlePlanCaseAssigneeChange}
-                        onCancelRelation={(planCaseId) => onCancelRelation([planCaseId])}
-                        onOpenCase={handleOpenCaseDetail}
-                        onRowSelectChange={handleRowSelectChange}
-                        onViewExecution={handleViewExecution}
-                        projectId={projectId ? String(projectId) : undefined}
-                        bulkAssigneeUpdating={bulkAssigneeUpdating}
-                        canReview={isCurrentUserPlanReviewer}
-                        onReview={(record) =>
-                          planCaseReview.openReview([
-                            {
-                              id: String(record.id),
-                              code: record.case?.code,
-                              name: record.case?.name,
-                              result: record.result,
-                            },
-                          ])
-                        }
-                        renderResultTag={renderResultTag}
-                        renderReviewStatusTag={renderReviewStatusTag}
-                        renderTypeTag={(value) => renderTypeText(value)}
-                        renderPriorityTag={(value) => <PlanCasePriorityBadge value={value} />}
-                        renderUpdatedAt={(value) => (value ? formatDateTime(value).slice(0, 16) : "")}
-                      />
-                      <PlanCasesBulkBar
-                        selectedCount={selectedCaseIds.length}
-                        projectId={projectId ? String(projectId) : undefined}
-                        assigneeUpdating={bulkAssigneeUpdating}
-                        executeLoading={bulkExecuteLoading}
-                        canReview={isCurrentUserPlanReviewer}
-                        canCopy={canEditPlan}
-                        onAssigneeChange={(assignee) => void handleBulkPlanCaseAssigneeChange(assignee)}
-                        onReview={handleBulkReview}
-                        onExecute={onBulkExecuteSelected}
-                        onCancelRelation={() => onCancelRelation(selectedCaseIds)}
-                        onCopyToPlan={() => setIsCopyModalOpen(true)}
-                        onClear={() => {
-                          setSelectedCaseIds([]);
-                          setSelectedPlanCaseMetaMap({});
-                        }}
-                      />
-                    </div>
-                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="text-secondary">
-                          {total > 0
-                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
-                            : ""}
-                        </span>
-                      </div>
-                      <Pagination
-                        simple
-                        current={currentPage}
-                        pageSize={pageSize}
-                        total={total}
-                        showSizeChanger
-                        pageSizeOptions={["10", "20", "50", "100"]}
-                        onChange={handlePaginationChange}
-                        onShowSizeChange={handlePaginationChange}
-                        size="small"
-                      />
-                    </div>
-                    <style
-                      dangerouslySetInnerHTML={{
-                        __html: `
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+              {loading && (
+                <div className="flex h-full items-center justify-center py-12">
+                  <div className="text-secondary">加载中...</div>
+                </div>
+              )}
+              {error && (
+                <div className="bg-red-50 border-red-200 m-4 rounded-md border p-4">
+                  <div className="text-red-800 text-sm">{error}</div>
+                </div>
+              )}
+              {!loading && !error && (
+                <>
+                  <PlanCasesTable
+                    cases={cases}
+                    columnWidths={columnWidths}
+                    currentUserId={currentUser?.id ? String(currentUser.id) : undefined}
+                    displayProperties={planCaseDisplayProperties}
+                    selectedPlanCaseIds={selectedCaseIds}
+                    setColumnWidth={handleSetColumnWidth}
+                    onAssigneeChange={handlePlanCaseAssigneeChange}
+                    onCancelRelation={(planCaseId) => onCancelRelation([planCaseId])}
+                    onOpenCase={handleOpenCaseDetail}
+                    onRowSelectChange={handleRowSelectChange}
+                    onViewExecution={handleViewExecution}
+                    projectId={projectId ? String(projectId) : undefined}
+                    bulkAssigneeUpdating={bulkAssigneeUpdating}
+                    canReview={isCurrentUserPlanReviewer}
+                    onReview={(record) =>
+                      planCaseReview.openReview([
+                        {
+                          id: String(record.id),
+                          code: record.case?.code,
+                          name: record.case?.name,
+                          result: record.result,
+                        },
+                      ])
+                    }
+                    renderResultTag={renderResultTag}
+                    renderReviewStatusTag={renderReviewStatusTag}
+                    renderTypeTag={(value) => renderTypeText(value)}
+                    renderPriorityTag={(value) => <PlanCasePriorityBadge value={value} />}
+                    renderUpdatedAt={(value) => (value ? formatDateTime(value).slice(0, 16) : "")}
+                  />
+                  <PlanCasesBulkBar
+                    selectedCount={selectedCaseIds.length}
+                    projectId={projectId ? String(projectId) : undefined}
+                    assigneeUpdating={bulkAssigneeUpdating}
+                    executeLoading={bulkExecuteLoading}
+                    canReview={isCurrentUserPlanReviewer}
+                    canCopy={canEditPlan}
+                    onAssigneeChange={(assignee) => void handleBulkPlanCaseAssigneeChange(assignee)}
+                    onReview={handleBulkReview}
+                    onExecute={onBulkExecuteSelected}
+                    onCancelRelation={() => onCancelRelation(selectedCaseIds)}
+                    onCopyToPlan={() => setIsCopyModalOpen(true)}
+                    onClear={() => {
+                      setSelectedCaseIds([]);
+                      setSelectedPlanCaseMetaMap({});
+                    }}
+                  />
+                </>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-secondary">
+                  {total > 0
+                    ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                    : ""}
+                </span>
+              </div>
+              <Pagination
+                simple
+                current={currentPage}
+                pageSize={pageSize}
+                total={total}
+                showSizeChanger
+                pageSizeOptions={["10", "20", "50", "100"]}
+                onChange={handlePaginationChange}
+                onShowSizeChange={handlePaginationChange}
+                size="small"
+              />
+            </div>
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
                   .testhub-plan-cases-table-scroll{
                     scrollbar-gutter: stable;
                     scrollbar-width: thin;
@@ -1184,12 +1183,8 @@ export default function PlanCasesPage() {
                     border-radius: 4px;
                   }
                 `,
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+              }}
+            />
           </div>
         </div>
       </div>

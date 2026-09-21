@@ -32,9 +32,9 @@ type TPlanCaseReviewModalProps = {
   onSubmit: (payload: { result: TPlanCaseReviewResult; reason?: string }) => void;
 };
 
-const CONCLUSION_OPTIONS: { value: TPlanCaseReviewResult; title: string; description: string }[] = [
-  { value: "通过", title: "通过", description: "执行结果可信，计入通过率" },
-  { value: "不通过", title: "不通过", description: "需说明原因，用例退回重新执行" },
+const CONCLUSION_OPTIONS: { value: TPlanCaseReviewResult; title: string }[] = [
+  { value: "通过", title: "通过" },
+  { value: "不通过", title: "不通过" },
 ];
 
 export const PlanCaseReviewModal = ({
@@ -128,7 +128,6 @@ export const PlanCaseReviewModal = ({
           ) : (
             <div className="flex items-center gap-3 rounded-lg border border-subtle bg-layer-1 px-3 py-2.5 text-13">
               <span className="font-medium text-primary tabular-nums">{count} 条用例</span>
-              <span className="text-tertiary">该结论与原因将应用到选中的全部用例</span>
               {skippedCount > 0 && (
                 <span className="ml-auto shrink-0 text-12 text-tertiary tabular-nums">
                   已跳过 {skippedCount} 条未执行
@@ -154,27 +153,33 @@ export const PlanCaseReviewModal = ({
                       setReasonError(undefined);
                     }}
                     className={cn(
-                      "flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-left transition-colors",
+                      "flex items-center gap-2.5 rounded-lg border px-3.5 py-3 text-left transition-colors",
                       isActive
                         ? isReject
-                          ? "border-danger-strong bg-danger-subtle"
-                          : "border-accent-strong bg-accent-subtle"
+                          ? "border-danger-strong bg-danger-subtle ring-1 ring-danger-primary"
+                          : "border-accent-strong bg-accent-subtle ring-1 ring-accent-strong"
                         : "border-subtle hover:bg-layer-1"
                     )}
                   >
                     <span
                       className={cn(
-                        "mt-0.5 size-4 shrink-0 rounded-full border-[1.5px] transition-colors",
+                        "flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors",
                         isActive
                           ? isReject
-                            ? "border-[5px] border-danger-primary bg-surface-1"
-                            : "border-[5px] border-accent-primary bg-surface-1"
+                            ? "border-danger-primary bg-danger-primary"
+                            : "border-accent-strong bg-accent-primary"
                           : "border-strong"
                       )}
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-primary">{option.title}</span>
-                      <span className="block text-12 text-tertiary">{option.description}</span>
+                    >
+                      {isActive && <span className="size-1.5 rounded-full bg-white" />}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-sm font-semibold",
+                        isActive ? (isReject ? "text-danger-primary" : "text-accent-primary") : "text-primary"
+                      )}
+                    >
+                      {option.title}
                     </span>
                   </button>
                 );
@@ -186,7 +191,7 @@ export const PlanCaseReviewModal = ({
             <span className="text-13 font-medium text-primary">
               复核原因
               <span className="ml-1.5 text-12 font-normal text-tertiary">
-                {result === "不通过" ? "必填" : "可选，选「不通过」时必填"}
+                {result === "不通过" ? "必填" : "可选"}
               </span>
             </span>
             <textarea

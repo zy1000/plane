@@ -266,6 +266,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
 
       <StageReviewTemplateFormModal
         isOpen={editor.mode !== "closed"}
+        workspaceSlug={workspaceSlug}
         template={editor.mode === "edit" ? editor.template : null}
         defaultParent={editor.mode === "create" ? editor.parent : null}
         stageRoots={selectedGroup?.nodes.map(({ node }) => node) ?? []}

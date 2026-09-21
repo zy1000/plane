@@ -39,6 +39,7 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
     button,
     buttonClassName,
     buttonContainerClassName,
+    caption,
     buttonVariant,
     className = "",
     disabled = false,
@@ -214,6 +215,7 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
           referenceElement={referenceElement}
           value={value}
           viewOnly={viewOnly}
+          caption={caption}
         />
       )}
     </ComboDropDown>

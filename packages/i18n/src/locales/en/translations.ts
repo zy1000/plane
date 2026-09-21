@@ -2682,6 +2682,9 @@ export default {
         parent_empty: "No matching review in this stage yet. Create a review first.",
         title_placeholder: "e.g. F1 review - BOM review",
         title_required: "Title is required",
+        description_label: "Description (optional)",
+        description_placeholder: "What this review covers and which deliverables it looks at",
+        description_hint: "The description is carried over to every review generated when a tailoring sheet takes effect.",
         role_placeholder: "Role name, e.g. Hardware lead",
         auditor_placeholder: "Leave empty if no approval is needed",
         role_hint:

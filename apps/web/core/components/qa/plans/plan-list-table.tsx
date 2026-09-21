@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Avatar, CustomMenu } from "@plane/ui";
 import { cn, getFileURL, renderFormattedPayloadDate } from "@plane/utils";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
 import { getPlanReviewRuleLabel, type TPlanListRow } from "@/services/qa/plan.service";
@@ -39,7 +40,6 @@ const shortDate = (value: string) => value.slice(5, 10);
 /** 单人显示头像 + 名字，多人显示叠放头像组 */
 const People = observer(function People({ userIds }: { userIds: string[] }) {
   const { getUserDetails } = useMember();
-  if (userIds.length === 0) return <Empty />;
   if (userIds.length === 1) {
     const user = getUserDetails(userIds[0]);
     return (
@@ -50,6 +50,29 @@ const People = observer(function People({ userIds }: { userIds: string[] }) {
     );
   }
   return <ButtonAvatars userIds={userIds} size="sm" showTooltip={false} />;
+});
+
+/** 只读：无编辑权限也能点开查看完整人员名单 */
+const ViewOnlyPeople = observer(function ViewOnlyPeople({
+  userIds,
+  caption,
+}: {
+  userIds: string[];
+  caption?: string;
+}) {
+  if (userIds.length === 0) return <Empty />;
+  return (
+    <MemberDropdown
+      multiple
+      value={userIds}
+      onChange={() => {}}
+      disabled
+      caption={caption}
+      button={<People userIds={userIds} />}
+      buttonContainerClassName="min-w-0 max-w-full overflow-hidden text-left p-0 cursor-pointer text-secondary"
+      optionsClassName="z-[60]"
+    />
+  );
 });
 
 type Props = {
@@ -151,11 +174,10 @@ export const PlanListTable = ({ plans, canEdit, canDelete, onOpen, onEdit, onDel
               )}
             </span>
             <span className={CELL}>
-              <People userIds={assignees} />
+              <ViewOnlyPeople userIds={assignees} />
             </span>
-            <span className={cn(CELL, "flex-col items-start justify-center gap-0.5 leading-tight")}>
-              <People userIds={reviewers} />
-              {ruleLabel && <span className="truncate text-11 text-tertiary">{ruleLabel}</span>}
+            <span className={CELL}>
+              <ViewOnlyPeople userIds={reviewers} caption={ruleLabel || undefined} />
             </span>
             <span className={cn(CELL, "text-13 tabular-nums", isLate ? "text-danger-primary" : "text-secondary")}>
               {plan.begin_time || plan.end_time

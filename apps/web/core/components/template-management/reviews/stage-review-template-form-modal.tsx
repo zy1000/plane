@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { observer } from "mobx-react";
 import { X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -9,14 +10,19 @@ import {
   STAGE_REVIEW_ACTIVITY_KINDS,
   STAGE_REVIEW_ROOT_KINDS,
 } from "@plane/types";
-import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import { cn, isEmptyHtmlString } from "@plane/utils";
+import { RichTextEditor } from "@/components/editor/rich-text";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+import { WorkspaceService } from "@/services/workspace.service";
 
 export type TStageReviewFormValue = {
   kind: EStageReviewKind;
   /** null = 直接归属阶段（有些阶段没有汇总评审，活动本身就是顶层项） */
   parent_id: string | null;
   title: string;
+  /** 富文本 HTML —— 裁剪表生效生成评审实例时原样抄到 StageReview.description_html */
+  description_html: string;
   initiator_role: string;
   leader_role: string;
   auditor_role: string;
@@ -24,6 +30,7 @@ export type TStageReviewFormValue = {
 
 type Props = {
   isOpen: boolean;
+  workspaceSlug: string;
   /** 编辑已有节点；为空即新建 */
   template: TStageReviewTemplate | null;
   stageLabel: string;
@@ -36,6 +43,8 @@ type Props = {
   onSubmit: (value: TStageReviewFormValue) => Promise<unknown>;
 };
 
+const workspaceService = new WorkspaceService();
+const EMPTY_DESCRIPTION = "<p></p>";
 const I18N = "workspace_templates.reviews";
 
 const KIND_OPTIONS = [
@@ -54,10 +63,15 @@ const rootKindFor = (activityKind: EStageReviewKind): EStageReviewKind | null =>
   return (entry?.[0] as EStageReviewKind) ?? null;
 };
 
-export function StageReviewTemplateFormModal(props: Props) {
-  const { isOpen, template, stageLabel, stageRoots, defaultParent, isSubmitting, onClose, onSubmit } = props;
+// observer：workspaceId 取自 MobX 的工作区 store，数据晚到时要能把编辑器从骨架切出来
+export const StageReviewTemplateFormModal = observer(function StageReviewTemplateFormModal(props: Props) {
+  const { isOpen, workspaceSlug, template, stageLabel, stageRoots, defaultParent, isSubmitting, onClose, onSubmit } =
+    props;
   const { t } = useTranslation();
-  const [value, setValue] = useState<TStageReviewFormValue>({
+  const { getWorkspaceBySlug } = useWorkspace();
+  const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id?.toString();
+  // 描述单独拿出来：编辑器自己管内容，只在提交时取一次
+  const [value, setValue] = useState<Omit<TStageReviewFormValue, "description_html">>({
     kind: EStageReviewKind.REVIEW,
     parent_id: null,
     title: "",
@@ -65,6 +79,9 @@ export function StageReviewTemplateFormModal(props: Props) {
     leader_role: "",
     auditor_role: "",
   });
+  const [descriptionHTML, setDescriptionHTML] = useState(EMPTY_DESCRIPTION);
+  // 编辑器只在挂载时由 initialValue 灌一次内容，换编辑对象 / 重开弹窗都要换 key 重挂
+  const [editorVersion, setEditorVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = Boolean(template);
@@ -73,6 +90,7 @@ export function StageReviewTemplateFormModal(props: Props) {
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
+    setEditorVersion((current) => current + 1);
     if (template) {
       setValue({
         kind: template.kind,
@@ -82,6 +100,7 @@ export function StageReviewTemplateFormModal(props: Props) {
         leader_role: template.leader_role,
         auditor_role: template.auditor_role,
       });
+      setDescriptionHTML(template.description_html?.trim() ? template.description_html : EMPTY_DESCRIPTION);
       return;
     }
     // 从某条评审的 ＋ 进来：类型由父级的族推导，归属预选好
@@ -96,6 +115,7 @@ export function StageReviewTemplateFormModal(props: Props) {
       leader_role: "",
       auditor_role: "",
     });
+    setDescriptionHTML(EMPTY_DESCRIPTION);
   }, [isOpen, template, defaultParent]);
 
   /** 归属候选：只列同族的根评审。族不匹配的挂上去后端会 400 */
@@ -123,8 +143,10 @@ export function StageReviewTemplateFormModal(props: Props) {
       setError(t(`${I18N}.form.title_required`));
       return;
     }
+    // 编辑器清空后留下的是 <p></p> 而不是空串，落库前抹平成空
+    const isBlank = isEmptyHtmlString(descriptionHTML, ["img", "image-component", "table"]);
     try {
-      await onSubmit({ ...value, title });
+      await onSubmit({ ...value, title, description_html: isBlank ? "" : descriptionHTML });
     } catch (submitError) {
       const payload = submitError as Record<string, unknown> | undefined;
       const first = payload ? Object.values(payload)[0] : undefined;
@@ -219,6 +241,41 @@ export function StageReviewTemplateFormModal(props: Props) {
           </label>
         )}
 
+        {/* 描述会在裁剪表签批生效、生成评审实例时原样带到评审上 */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-12 text-tertiary">{t(`${I18N}.form.description_label`)}</span>
+          {workspaceId ? (
+            <div className="overflow-hidden rounded-md border border-subtle bg-surface-1 focus-within:border-accent-strong">
+              <div className="vertical-scrollbar scrollbar-sm max-h-48 min-h-20 overflow-y-auto">
+                <RichTextEditor
+                  key={`srt-description-${editorVersion}`}
+                  id={`stage_review_template_description_${template?.id ?? "new"}`}
+                  editable
+                  initialValue={descriptionHTML}
+                  value={null}
+                  onChange={(_json, html) => setDescriptionHTML(html)}
+                  workspaceSlug={workspaceSlug}
+                  workspaceId={workspaceId}
+                  // 模板是工作区级的，没有配套的资产 entity_type，所以不开图片；
+                  // 这两个 handler 只是为了满足 editable 分支的类型要求，禁用后不会被调到。
+                  disabledExtensions={["image"]}
+                  dragDropEnabled={false}
+                  uploadFile={async () => ""}
+                  duplicateFile={async () => ""}
+                  searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
+                  placeholder={t(`${I18N}.form.description_placeholder`)}
+                  containerClassName="min-h-20 pr-3 pt-2 text-13"
+                />
+              </div>
+            </div>
+          ) : (
+            <Loader>
+              <Loader.Item height="80px" />
+            </Loader>
+          )}
+          <p className="text-10 leading-4 text-tertiary">{t(`${I18N}.form.description_hint`)}</p>
+        </div>
+
         <label className="flex flex-col gap-1.5">
           <span className="text-12 text-tertiary">{t(`${I18N}.table.initiator`)}</span>
           <input
@@ -271,4 +328,4 @@ export function StageReviewTemplateFormModal(props: Props) {
       </div>
     </ModalCore>
   );
-}
+});
