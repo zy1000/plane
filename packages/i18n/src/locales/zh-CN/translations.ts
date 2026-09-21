@@ -2862,14 +2862,10 @@ export default {
         title_placeholder: "例如：F1评审-BOM评审",
         title_required: "请填写标题",
         description_label: "描述（选填）",
-        description_placeholder: "说明这条评审要做什么、看哪些材料",
-        // 模板描述不是摆设：它会随着裁剪表生效流到每一条评审实例上
-        description_hint: "描述会在裁剪表签批生效、生成评审时一并带到评审上。",
         role_placeholder: "填角色名称，例如：硬件研发负责人",
         auditor_placeholder: "留空表示无需审核",
         // 模板是工作区级标准流程，落到具体项目 + 产品时才把角色解析成人
         role_hint: "三个角色填的是名称不是具体的人，发起评审时按角色在项目与产品成员里解析。",
-        kind_locked: "类型决定了它能挂在哪、带不带 O 阶段的成品字段，创建后不可改。",
         save_failed: "保存失败，请稍后重试",
       },
       delete_modal: {

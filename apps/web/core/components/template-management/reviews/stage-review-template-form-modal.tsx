@@ -33,7 +33,6 @@ type Props = {
   workspaceSlug: string;
   /** 编辑已有节点；为空即新建 */
   template: TStageReviewTemplate | null;
-  stageLabel: string;
   /** 本阶段的根评审，作为「归属」的候选（按族过滤后展示） */
   stageRoots: TStageReviewTemplate[];
   /** 从某条评审的 ＋ 进来时的预选父级 */
@@ -65,8 +64,7 @@ const rootKindFor = (activityKind: EStageReviewKind): EStageReviewKind | null =>
 
 // observer：workspaceId 取自 MobX 的工作区 store，数据晚到时要能把编辑器从骨架切出来
 export const StageReviewTemplateFormModal = observer(function StageReviewTemplateFormModal(props: Props) {
-  const { isOpen, workspaceSlug, template, stageLabel, stageRoots, defaultParent, isSubmitting, onClose, onSubmit } =
-    props;
+  const { isOpen, workspaceSlug, template, stageRoots, defaultParent, isSubmitting, onClose, onSubmit } = props;
   const { t } = useTranslation();
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id?.toString();
@@ -161,7 +159,6 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
           <h2 className="text-14 font-medium text-primary">
             {t(isEdit ? `${I18N}.form.edit_title` : `${I18N}.form.create_title`)}
           </h2>
-          <p className="mt-0.5 text-11 text-tertiary">{stageLabel}</p>
         </div>
         <button
           type="button"
@@ -212,8 +209,6 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
               </button>
             ))}
           </div>
-          {/* 类型决定它能挂在哪、带不带 O 阶段那几组字段，改了会让已有子节点失配 */}
-          {isEdit && <p className="text-10 text-tertiary">{t(`${I18N}.form.kind_locked`)}</p>}
         </div>
 
         {/* 只有评审活动才谈得上归属；评审恒在顶层 */}
@@ -263,7 +258,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
                   uploadFile={async () => ""}
                   duplicateFile={async () => ""}
                   searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
-                  placeholder={t(`${I18N}.form.description_placeholder`)}
+                  placeholder={() => ""}
                   containerClassName="min-h-20 pr-3 pt-2 text-13"
                 />
               </div>
@@ -273,7 +268,6 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
               <Loader.Item height="80px" />
             </Loader>
           )}
-          <p className="text-10 leading-4 text-tertiary">{t(`${I18N}.form.description_hint`)}</p>
         </div>
 
         <label className="flex flex-col gap-1.5">

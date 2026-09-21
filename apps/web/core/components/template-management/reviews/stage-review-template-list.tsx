@@ -270,7 +270,6 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
         template={editor.mode === "edit" ? editor.template : null}
         defaultParent={editor.mode === "create" ? editor.parent : null}
         stageRoots={selectedGroup?.nodes.map(({ node }) => node) ?? []}
-        stageLabel={selectedGroup?.stageLabel ?? ""}
         isSubmitting={isMutating}
         onClose={() => setEditor({ mode: "closed" })}
         onSubmit={handleSubmit}
