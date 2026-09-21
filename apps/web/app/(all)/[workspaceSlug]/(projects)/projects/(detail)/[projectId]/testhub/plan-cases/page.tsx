@@ -44,7 +44,6 @@ import {
   type TPlanCaseOrderBy,
 } from "@/components/qa/plans/plan-case-display-filters";
 import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
-import { PlanCaseGroupSelect } from "@/components/qa/plans/plan-case-group-select";
 import { PlanCasePriorityBadge } from "@/components/qa/plans/plan-case-priority-badge";
 import { PlanCaseRailTree, type TPlanCaseRailTreeNode } from "@/components/qa/plans/plan-case-rail-tree";
 import { PlanCasesBulkBar } from "@/components/qa/plans/plan-cases-bulk-bar";
@@ -983,8 +982,10 @@ export default function PlanCasesPage() {
             <PlanCaseDisplayFilters
               disabled={!planId}
               displayProperties={planCaseDisplayProperties}
+              groupBy={groupBy}
               ordering={ordering}
               onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+              onGroupByChange={handleGroupByChange}
               onOrderByChange={handleSortChange}
             />
             <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
@@ -1042,9 +1043,6 @@ export default function PlanCasesPage() {
               style={{ cursor: "col-resize", zIndex: 10 }}
               role="presentation"
             />
-            <div className="pr-3 pb-3">
-              <PlanCaseGroupSelect disabled={!planId} value={groupBy} onChange={handleGroupByChange} />
-            </div>
             {groupBy === "module" ? (
               <PlanCaseRailTree
                 nodes={moduleRailNodes}
@@ -1204,7 +1202,6 @@ export default function PlanCasesPage() {
             repositoryId={String(repositoryId)}
             repositoryName={repositoryName || ""}
             planId={String(planId || "")}
-            planName={currentPlan?.name ? String(currentPlan.name) : undefined}
             initialSelectedCaseIds={(cases || []).map((c) => c?.case?.id).filter((id): id is string => Boolean(id))}
             onClosed={() => {
               // 关闭后刷新列表，保留当前查询参数与筛选

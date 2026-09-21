@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Tree, Table, Tooltip, Input, Pagination, Select } from "antd";
+import { Tree, Table, Tooltip, Input, Pagination } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
 import { ChevronDown, Layers, Plus, Search, X } from "lucide-react";
@@ -40,7 +40,6 @@ type Props = {
   repositoryId: string;
   repositoryName?: string;
   planId?: string;
-  planName?: string;
   initialSelectedCaseIds?: string[];
   onClosed?: () => void;
 };
@@ -51,7 +50,6 @@ export const PlanCasesModal: React.FC<Props> = ({
   workspaceSlug,
   projectId,
   planId,
-  planName,
   initialSelectedCaseIds,
   onClosed,
 }) => {
@@ -81,30 +79,13 @@ export const PlanCasesModal: React.FC<Props> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
   const [searchName, setSearchName] = useState<string>("");
-  // 类型 / 优先级筛选：fetchCases 从 ref 里读，避免 setState 后拿到旧值
-  const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
-  const [priorityFilter, setPriorityFilter] = useState<string | undefined>(undefined);
-  const enumFilterRef = useRef<{ type?: string; priority?: string }>({});
 
-  const caseTypeOptions = useMemo(
-    () =>
-      Object.entries((globalEnums.Enums as any)?.case_type || {}).map(([value, label]) => ({
-        value: String(value),
-        label: String(label),
-      })),
-    []
-  );
-  const casePriorityOptions = useMemo(
-    () =>
-      Object.entries((globalEnums.Enums as any)?.case_priority || {}).map(([value, label]) => ({
-        value: String(value),
-        label: String(label),
-      })),
-    []
-  );
   const caseTypeLabelMap = useMemo(
-    () => Object.fromEntries(caseTypeOptions.map((option) => [option.value, option.label])),
-    [caseTypeOptions]
+    () =>
+      Object.fromEntries(
+        Object.entries((globalEnums.Enums as any)?.case_type || {}).map(([value, label]) => [String(value), String(label)])
+      ),
+    []
   );
 
   const [leftWidth, setLeftWidth] = useState<number>(280);
@@ -151,9 +132,6 @@ export const PlanCasesModal: React.FC<Props> = ({
     nodeCaseIdsCacheRef.current = {};
     clearSearchDebounce();
     setSearchName("");
-    setTypeFilter(undefined);
-    setPriorityFilter(undefined);
-    enumFilterRef.current = {};
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
@@ -219,8 +197,6 @@ export const PlanCasesModal: React.FC<Props> = ({
         if (repoId) params.repository_id = repoId;
         if (moduleId) params.module_id = moduleId;
       }
-      if (enumFilterRef.current.type) params.type = enumFilterRef.current.type;
-      if (enumFilterRef.current.priority) params.priority = enumFilterRef.current.priority;
       const response: TestCaseResponse = await caseService.getPlanUnassociatedCases(String(workspaceSlug), params);
       setCases(response?.data || []);
       setTotal(response?.count || 0);
@@ -277,23 +253,6 @@ export const PlanCasesModal: React.FC<Props> = ({
       setSelectedModuleId(moduleId);
       fetchCases(1, repoId || undefined, moduleId || undefined);
     }
-  };
-
-  /** 按当前树选择 / 搜索词重新拉第一页 */
-  const refetchFirstPage = () => {
-    const keyword = searchName.trim();
-    if (keyword) {
-      fetchCases(1, undefined, undefined, keyword);
-      return;
-    }
-    fetchCases(1, selectedRepositoryId || undefined, selectedModuleId || undefined);
-  };
-
-  const handleEnumFilterChange = (key: "type" | "priority", value?: string) => {
-    enumFilterRef.current = { ...enumFilterRef.current, [key]: value || undefined };
-    if (key === "type") setTypeFilter(value || undefined);
-    else setPriorityFilter(value || undefined);
-    refetchFirstPage();
   };
 
   const handleSearchNameChange = (value: string) => {
@@ -497,15 +456,12 @@ export const PlanCasesModal: React.FC<Props> = ({
         <CasePickerModalStyles />
 
         {/* Header */}
-        <div className="flex items-start gap-3.5 border-b border-subtle px-6 pt-5 pb-4">
+        <div className="flex items-center gap-3.5 border-b border-subtle px-6 pt-5 pb-4">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-accent-subtle bg-accent-subtle text-accent-primary">
             <Plus className="size-[18px]" />
           </div>
-          <div className="min-w-0 flex-1 pt-0.5">
+          <div className="min-w-0 flex-1">
             <h3 className="text-base leading-tight font-semibold text-primary">规划用例</h3>
-            <p className="mt-1 truncate text-13 leading-snug text-tertiary">
-              从用例库挑选用例加入{planName ? `「${planName}」` : "本计划"}，已在计划中的不再列出
-            </p>
           </div>
           <button
             type="button"
@@ -569,22 +525,21 @@ export const PlanCasesModal: React.FC<Props> = ({
                     onChange={(e) => handleSearchNameChange(e.target.value)}
                     style={{ width: 240, flex: "none" }}
                   />
-                  <Select
-                    allowClear
-                    placeholder="类型"
-                    value={typeFilter}
-                    options={caseTypeOptions}
-                    onChange={(value) => handleEnumFilterChange("type", value ? String(value) : undefined)}
-                    style={{ width: 120 }}
-                  />
-                  <Select
-                    allowClear
-                    placeholder="优先级"
-                    value={priorityFilter}
-                    options={casePriorityOptions}
-                    onChange={(value) => handleEnumFilterChange("priority", value ? String(value) : undefined)}
-                    style={{ width: 100 }}
-                  />
+                  <span className="text-13 whitespace-nowrap text-secondary">
+                    执行人<span className="ml-0.5 text-danger-primary">*</span>
+                  </span>
+                  <div className="h-8 w-52">
+                    <MemberDropdown
+                      multiple={false}
+                      projectId={projectId ? String(projectId) : undefined}
+                      value={selectedAssignee}
+                      onChange={(value) => setSelectedAssignee(value ? String(value) : null)}
+                      placeholder="请选择执行人"
+                      buttonVariant="border-with-text"
+                      placement="bottom-start"
+                      showUserDetails
+                    />
+                  </div>
                 </div>
                 <span className="shrink-0 text-13 text-tertiary tabular-nums">共 {total} 条</span>
               </div>
@@ -698,21 +653,6 @@ export const PlanCasesModal: React.FC<Props> = ({
             )}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <span className="text-13 whitespace-nowrap text-secondary">
-              执行人<span className="ml-0.5 text-danger-primary">*</span>
-            </span>
-            <div className="w-52">
-              <MemberDropdown
-                multiple={false}
-                projectId={projectId ? String(projectId) : undefined}
-                value={selectedAssignee}
-                onChange={(value) => setSelectedAssignee(value ? String(value) : null)}
-                placeholder="请选择执行人"
-                buttonVariant="border-with-text"
-                placement="top-end"
-                showUserDetails
-              />
-            </div>
             <Button variant="secondary" onClick={closeModal} size="lg">
               取消
             </Button>

@@ -40,7 +40,7 @@ import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { CasesDisplayFilters, DEFAULT_CASE_DISPLAY_PROPERTIES } from "./cases-display-filters";
 import type { TCaseDisplayProperties } from "./cases-display-filters";
 import { CasesTable } from "./cases-table";
-import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
+import { PlanCasePriorityBadge } from "@/components/qa/plans/plan-case-priority-badge";
 import { CasesBulkEditPanel } from "./cases-bulk-edit-panel";
 import { CasesBulkOperationsBar } from "./cases-bulk-operations-bar";
 import { useCasesBulkEdit } from "./use-cases-bulk-edit";
@@ -1276,7 +1276,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
                           renderReviewTag={renderReviewTag}
                           renderLastExecutionResult={renderLastExecutionResult}
                           renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
-                          renderPriorityTag={(value) => <CasePriorityPill value={value} />}
+                          renderPriorityTag={(value) => <PlanCasePriorityBadge value={value} />}
                           renderUpdatedAt={(value) => formatDateTime(value || "")}
                           flashedCells={bulkEdit.flashedCells}
                         />
