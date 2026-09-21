@@ -66,19 +66,21 @@ const COLUMN_DEFS: TColumnDef[] = [
 
 const CELL_CLASS = "flex h-full min-w-0 items-center border-r border-b border-subtle px-3";
 const MIN_COLUMN_WIDTH = 80;
+/** 名称列默认仍吃剩余宽度，但允许拖到比默认 300 更窄 */
+const NAME_COLUMN_MIN_WIDTH = 140;
 
-const ResizeHandle = ({ onResize }: { onResize: (width: number) => void }) => {
+const ResizeHandle = ({ minWidth = MIN_COLUMN_WIDTH, onResize }: { minWidth?: number; onResize: (width: number) => void }) => {
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
 
     const startX = event.clientX;
-    const startWidth = (event.currentTarget.parentElement?.getBoundingClientRect().width ?? MIN_COLUMN_WIDTH) as number;
+    const startWidth = (event.currentTarget.parentElement?.getBoundingClientRect().width ?? minWidth) as number;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX;
-      onResize(Math.round(Math.max(MIN_COLUMN_WIDTH, startWidth + delta)));
+      onResize(Math.round(Math.max(minWidth, startWidth + delta)));
     };
     const handleMouseUp = () => {
       document.removeEventListener("mousemove", handleMouseMove);
@@ -140,11 +142,13 @@ export const PlanCasesTable = ({
     [displayProperties]
   );
 
-  /** 名称列（或最后一个可见属性列）吃掉多余宽度，操作列保持固定，大屏不会在右侧留白 */
+  /** 名称列未手动拖过时吃剩余宽度；拖过之后按像素宽，剩余宽度给最后一列 */
+  const nameHasUserWidth = columnWidths.name != null;
   const flexibleColumnKey = useMemo(() => {
-    if (visibleColumns.some((column) => column.key === "name")) return "name";
-    return visibleColumns[visibleColumns.length - 1]?.key;
-  }, [visibleColumns]);
+    if (visibleColumns.some((column) => column.key === "name") && !nameHasUserWidth) return "name";
+    const lastOther = [...visibleColumns].reverse().find((column) => column.key !== "name");
+    return lastOther?.key ?? visibleColumns[visibleColumns.length - 1]?.key;
+  }, [visibleColumns, nameHasUserWidth]);
 
   const gridTemplateColumns = useMemo(
     () =>
@@ -152,12 +156,17 @@ export const PlanCasesTable = ({
         `${SELECT_COLUMN_WIDTH}px`,
         ...visibleColumns.map((column) => {
           const width = getColumnWidth(column.key, column.width);
+          if (column.key === "name") {
+            return nameHasUserWidth
+              ? `${Math.max(NAME_COLUMN_MIN_WIDTH, width)}px`
+              : `minmax(${NAME_COLUMN_MIN_WIDTH}px, 1fr)`;
+          }
           return column.key === flexibleColumnKey ? `minmax(${width}px, 1fr)` : `${width}px`;
         }),
         `${getColumnWidth("actions", ACTIONS_COLUMN_WIDTH)}px`,
       ].join(" "),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleColumns, columnWidths, flexibleColumnKey]
+    [visibleColumns, columnWidths, flexibleColumnKey, nameHasUserWidth]
   );
 
   /** 冻结列的 left 偏移量：勾选列固定 0，其后依次累加前面冻结列的宽度 */
@@ -319,7 +328,10 @@ export const PlanCasesTable = ({
               style={getFrozenLeftStyle(column.key)}
             >
               <span className="truncate">{column.label}</span>
-              <ResizeHandle onResize={(width) => setColumnWidth(column.key, width)} />
+              <ResizeHandle
+                minWidth={column.key === "name" ? NAME_COLUMN_MIN_WIDTH : MIN_COLUMN_WIDTH}
+                onResize={(width) => setColumnWidth(column.key, width)}
+              />
             </div>
           ))}
 
