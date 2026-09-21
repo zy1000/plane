@@ -1136,12 +1136,14 @@ export default function PlanCasesPage() {
                         }}
                       />
                     </div>
-                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-2.5">
-                      <span className="text-13 text-secondary tabular-nums">
-                        {total > 0
-                          ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
-                          : ""}
-                      </span>
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-secondary">
+                          {total > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                            : ""}
+                        </span>
+                      </div>
                       <Pagination
                         simple
                         current={currentPage}
@@ -1149,7 +1151,6 @@ export default function PlanCasesPage() {
                         total={total}
                         showSizeChanger
                         pageSizeOptions={["10", "20", "50", "100"]}
-                        locale={{ items_per_page: "/ 页" }}
                         onChange={handlePaginationChange}
                         onShowSizeChange={handlePaginationChange}
                         size="small"
