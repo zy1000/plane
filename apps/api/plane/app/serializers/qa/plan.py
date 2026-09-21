@@ -83,7 +83,23 @@ class PlanCaseCardSerializer(ModelSerializer):
 
     class Meta:
         model = PlanCase
-        fields = '__all__'
+        # 不用 __all__：会把 issue 这个 M2M 也带进来，逐行查一次关联表（N+1），
+        # 而列表侧从来不用它
+        fields = [
+            "id",
+            "name",
+            "priority",
+            "case",
+            "plan",
+            "assignee",
+            "result",
+            "review_status",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "created_by",
+            "updated_by",
+        ]
 
 
 class PlanCaseReviewRecordSerializer(ModelSerializer):

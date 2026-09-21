@@ -684,7 +684,8 @@ class PlanView(BaseViewSet):
         all_param = str(request.query_params.get("all", "")).strip().lower()
         if all_param in {"1", "true", "yes"}:
             serializer = PlanCaseCardSerializer(instance=query, many=True)
-            return list_response(data=serializer.data, count=query.count())
+            # 已经把整份数据取到内存了，不用再跑一次 COUNT
+            return list_response(data=serializer.data, count=len(serializer.data))
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
         serializer = PlanCaseCardSerializer(instance=paginated_queryset, many=True)
@@ -1184,14 +1185,24 @@ class PlanView(BaseViewSet):
         case_id = request.query_params["case_id"]
 
         plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
-        case = TestCase.objects.get(pk=case_id)
+        # 与 CaseAPIView 同口径：裸对象会让 CaseListSerializer 逐个关联字段回查，
+        # 且 versions 不加 only 会把整份快照拉出来
+        case = (
+            TestCase.objects.select_related("repository", "module", "assignee")
+            .prefetch_related(
+                Prefetch(
+                    "versions",
+                    queryset=TestCaseVersion.objects.only(
+                        "id", "case", "version", "updated_at"
+                    ),
+                )
+            )
+            .get(pk=case_id)
+        )
         case_data = CaseListSerializer(case).data
 
-        case_data["execute_steps"] = (
-            plan_case.plan_case_records.first().steps
-            if plan_case.plan_case_records.first()
-            else None
-        )
+        latest_record = plan_case.plan_case_records.first()
+        case_data["execute_steps"] = latest_record.steps if latest_record else None
         return Response(case_data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="add-bug")
