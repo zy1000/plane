@@ -173,10 +173,17 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/templates/dev-modes",
             "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/page.tsx"
           ),
-          route(
-            ":workspaceSlug/templates/dev-modes/:devModeId",
-            "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/page.tsx"
-          ),
+          // 详情的头部与子页签在 layout 里，两个子页（阶段 / 组件开关）进 Outlet
+          layout("./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/layout.tsx", [
+            route(
+              ":workspaceSlug/templates/dev-modes/:devModeId",
+              "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/templates/dev-modes/:devModeId/features",
+              "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/features/page.tsx"
+            ),
+          ]),
           route(
             ":workspaceSlug/templates/test-cases",
             "./(all)/[workspaceSlug]/(projects)/templates/test-cases/page.tsx"

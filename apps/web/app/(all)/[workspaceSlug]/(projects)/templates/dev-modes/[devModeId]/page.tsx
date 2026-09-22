@@ -1,20 +1,6 @@
-import { observer } from "mobx-react";
-import { useParams } from "react-router";
-import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
-import { DevModeDetailRoot, useTemplatePermissions } from "@/components/template-management";
-import { useUserPermissions } from "@/hooks/store/user";
+import { DevModeStagesPanel } from "@/components/template-management/dev-modes";
 
-const TemplateDevModeDetailPage = observer(function TemplateDevModeDetailPage() {
-  const { workspaceSlug, devModeId } = useParams();
-  const slug = workspaceSlug?.toString();
-  const modeId = devModeId?.toString();
-  const { workspaceInfoBySlug } = useUserPermissions();
-  const { canViewDevModes } = useTemplatePermissions(slug);
-
-  if (!slug || !modeId) return null;
-  if (workspaceInfoBySlug(slug) && !canViewDevModes) return <NotAuthorizedView className="h-full" />;
-
-  return <DevModeDetailRoot workspaceSlug={slug} devModeId={modeId} />;
-});
-
-export default TemplateDevModeDetailPage;
+/** 模式详情的默认子页：阶段。权限与数据都由 layout 处理。 */
+export default function TemplateDevModeStagesPage() {
+  return <DevModeStagesPanel />;
+}

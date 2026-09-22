@@ -2689,6 +2689,26 @@ export default {
         features_title: "Components",
         features_hint: "Projects can only narrow this further",
       },
+      sub_nav: {
+        stages: "Stages",
+        features: "Components",
+      },
+      features_panel: {
+        description:
+          "Decides which components a project on this dev mode can turn on. The dev mode is the ceiling: project settings can only narrow it further, and components you turn off are hidden in projects right away. No data is deleted.",
+        enabled_of: " / {total} enabled",
+      },
+      feature_hints: {
+        cycle_view: "Timebox work. Hardware stage-gate flows usually skip it.",
+        module_view: "Group work by subsystem, each with its own lead.",
+        release_view: "Plan version releases and the work items that ship with them.",
+        issue_views_view: "Save filters and sorting for the team to share.",
+        page_view: "Documents and notes inside the project.",
+        intake_view: "Screen feedback from non-members before it reaches the board.",
+        is_time_tracking_enabled: "Log time spent on work items.",
+        is_issue_type_enabled: "Give requirements, bugs and tasks their own fields and flows.",
+        review_view: "Tailoring tables and stage reviews. Turning it off hides the Reviews tab in projects.",
+      },
       table: {
         title: "Stages",
         subtitle: "{count} stages · this order groups reviews by stage in projects",
@@ -2737,6 +2757,7 @@ export default {
       panel: {
         title: "Review nodes for {name}",
         description: "The standard review tree of stage type “{type}”. Only references are stored, so renames show up here.",
+        manage_tree: "Maintain this tree on the Reviews tab",
         empty: "This stage type has no review templates yet. Configure them on the Reviews tab.",
         selected: "{selected} / {total} selected",
         unsaved: "Unsaved changes",

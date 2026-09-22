@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
+import { useSearchParams } from "react-router";
 import { AlertCircle, ClipboardCheck, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -50,7 +51,10 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
 
   const isLoading = isTemplatesLoading || isStagesLoading;
 
-  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  // ?stage=<阶段类型 id> 决定初始选中项：研发模式的勾选面板会带着它跳过来。
+  // 只取一次初值，之后由用户点击接管；id 不存在时下面的派生逻辑会落到第一个阶段。
+  const [searchParams] = useSearchParams();
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(() => searchParams.get("stage"));
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<TEditorState>({ mode: "closed" });

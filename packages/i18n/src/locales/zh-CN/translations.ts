@@ -2866,6 +2866,26 @@ export default {
         features_title: "组件开关",
         features_hint: "项目只能在此范围内再关闭",
       },
+      sub_nav: {
+        stages: "阶段",
+        features: "组件开关",
+      },
+      features_panel: {
+        description:
+          "决定用这个模式的项目能打开哪些组件。模式是上限：项目设置里只能在这个范围内再关闭，关掉的组件在项目里立即隐藏，数据不删。",
+        enabled_of: " / {total} 项开启",
+      },
+      feature_hints: {
+        cycle_view: "按时间盒推进工作，硬件阶段门流程通常不用。",
+        module_view: "把工作按子系统分组，各有负责人。",
+        release_view: "规划版本发布与随版工作项。",
+        issue_views_view: "保存筛选与排序，团队共用。",
+        page_view: "项目内的文档与笔记。",
+        intake_view: "非成员提交的反馈先在这里筛一遍。",
+        is_time_tracking_enabled: "在工作项上记录耗时。",
+        is_issue_type_enabled: "需求、缺陷、任务等按类型区分字段与流程。",
+        review_view: "裁剪表与阶段评审。关掉后项目里看不到「评审」页签。",
+      },
       table: {
         title: "阶段",
         subtitle: "{count} 个 · 顺序即项目里评审按阶段分组的顺序",
@@ -2913,6 +2933,7 @@ export default {
       panel: {
         title: "{name} 的评审节点",
         description: "来自阶段类型「{type}」的标准评审树，只存引用，树上改名这里同步。",
+        manage_tree: "去「评审」页签维护这棵树",
         empty: "这个阶段类型下还没有评审模板，先去「评审」页签配置。",
         selected: "已勾选 {selected} / {total}",
         unsaved: "有未保存的改动",

@@ -158,12 +158,7 @@ export function DevModeFormModal({
             {t(`${DEV_MODE_I18N}.form.features_label`)}
             <span className="text-danger-primary">*</span>
           </span>
-          <DevModeFeatureToggles
-            features={value.features}
-            layout="grid"
-            disabled={isSubmitting}
-            onChange={handleFeatureChange}
-          />
+          <DevModeFeatureToggles features={value.features} disabled={isSubmitting} onChange={handleFeatureChange} />
           <p className="text-11 leading-4 text-tertiary">{t(`${DEV_MODE_I18N}.form.features_hint`)}</p>
         </div>
 

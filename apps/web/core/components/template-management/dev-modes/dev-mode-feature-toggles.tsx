@@ -6,32 +6,24 @@ import { cn } from "@plane/utils";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 /**
- * 九个组件开关。详情页头部的开关条与表单弹窗共用这一份 —— 两个地方都是同一组语义，
- * 长得不一样只会让人以为它们管的不是一回事。
+ * 新建 / 编辑模式弹窗里的九个组件开关，两列紧凑排布。
  *
- * `layout`: `row` 给详情页（一行流式排开），`grid` 给弹窗（两列）。
+ * 详情页的开关不走这里 —— 那边是「组件开关」子页的卡片（`dev-mode-features-panel.tsx`），
+ * 有图标和一句说明，尺寸和信息量都不一样，硬凑成一个组件只会两边都别扭。
  */
 export function DevModeFeatureToggles({
   features,
   disabled,
-  layout = "row",
   onChange,
 }: {
   features: TDevModeFeatures;
   disabled?: boolean;
-  layout?: "row" | "grid";
   onChange: (key: TDevModeFeatureKey, value: boolean) => void;
 }) {
   const { t } = useTranslation();
 
   return (
-    <div
-      className={cn(
-        layout === "grid"
-          ? "grid grid-cols-2 gap-x-5 gap-y-2 rounded-md border border-subtle bg-surface-2 px-3.5 py-3"
-          : "flex flex-wrap items-center gap-x-5 gap-y-2"
-      )}
-    >
+    <div className="grid grid-cols-2 gap-x-5 gap-y-2 rounded-md border border-subtle bg-surface-2 px-3.5 py-3">
       {DEV_MODE_FEATURE_KEYS.map((key) => {
         const isOn = features[key];
         const label = t(`${DEV_MODE_I18N}.features.${key}`);
@@ -39,12 +31,11 @@ export function DevModeFeatureToggles({
           <span
             key={key}
             className={cn(
-              "flex items-center gap-2 whitespace-nowrap text-13",
-              layout === "grid" && "justify-between",
+              "flex items-center justify-between gap-2 whitespace-nowrap text-13",
               isOn ? "font-medium text-primary" : "text-tertiary"
             )}
           >
-            {layout === "grid" && label}
+            {label}
             <ToggleSwitch
               size="sm"
               label={label}
@@ -52,7 +43,6 @@ export function DevModeFeatureToggles({
               value={isOn}
               onChange={(value) => onChange(key, value)}
             />
-            {layout === "row" && label}
           </span>
         );
       })}

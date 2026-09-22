@@ -1,10 +1,12 @@
-import { X } from "lucide-react";
+import { Link } from "react-router";
+import { ExternalLink, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TDevModeStage } from "@plane/types";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TDevModeTemplateTreeNode } from "@/hooks/store/use-dev-mode-detail";
+import { reviewTemplatesPath } from "./routes";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 const I18N_REVIEWS = "workspace_templates.reviews";
@@ -16,6 +18,7 @@ const I18N_REVIEWS = "workspace_templates.reviews";
  * 勾父节点变成几十个并发。
  */
 export function DevModeStageTemplatesPanel({
+  workspaceSlug,
   stage,
   tree,
   draftSelection,
@@ -28,6 +31,7 @@ export function DevModeStageTemplatesPanel({
   onReset,
   onSave,
 }: {
+  workspaceSlug: string;
   stage: TDevModeStage;
   tree: TDevModeTemplateTreeNode[];
   draftSelection: Set<string>;
@@ -56,6 +60,14 @@ export function DevModeStageTemplatesPanel({
           <p className="mt-1 text-11 leading-4 text-tertiary">
             {t(`${DEV_MODE_I18N}.panel.description`, { type: stage.stage_type_detail?.name ?? "" })}
           </p>
+          {/* 这棵树只能在「评审」页签维护，面板里只勾选 —— 给一条直达该阶段类型的路 */}
+          <Link
+            to={reviewTemplatesPath(workspaceSlug, stage.stage_type_id)}
+            className="mt-2 inline-flex items-center gap-1 text-11 font-medium text-link-primary transition-colors hover:text-link-primary-hover"
+          >
+            {t(`${DEV_MODE_I18N}.panel.manage_tree`)}
+            <ExternalLink className="size-3" />
+          </Link>
         </div>
         <button
           type="button"
