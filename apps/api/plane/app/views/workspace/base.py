@@ -46,7 +46,7 @@ from plane.bgtasks.event_tracking_task import track_event
 from plane.utils.url import contains_url
 from plane.utils.analytics_events import WORKSPACE_CREATED, WORKSPACE_DELETED
 from plane.utils.csv_utils import sanitize_csv_row
-from plane.utils.stage_review_template import ensure_stage_review_templates
+from plane.utils.dev_mode import ensure_dev_modes
 
 logger = logging.getLogger("plane")
 
@@ -128,13 +128,14 @@ class WorkSpaceViewSet(BaseViewSet):
                     company_role=request.data.get("company_role", ""),
                 )
 
-                # 阶段评审：新工作区自带标准研发流程（顺带补齐 product_stage 的阶段值）。
+                # 阶段评审 + 研发模式：新工作区自带 10 个阶段类型、挂在其上的标准研发流程，
+                # 以及 IDOV / Scrum / 混合模式三个预置模式。ensure_dev_modes 会先把前两者补齐。
                 # 预置失败不能让建工作区 500 —— 工作区和成员已经落库了，报错会让用户重试时撞 slug。
                 try:
-                    ensure_stage_review_templates(workspace, actor=request.user)
+                    ensure_dev_modes(workspace, actor=request.user)
                 except Exception:
                     logger.exception(
-                        "Failed to seed stage review templates for workspace %s",
+                        "Failed to seed dev modes for workspace %s",
                         workspace.id,
                     )
 

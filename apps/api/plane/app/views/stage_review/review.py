@@ -337,6 +337,8 @@ class StageReviewViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         product = Product.objects.filter(id=data["product_id"]).first()
+        # TODO(批次 4)：StageReview.stage 换成 StageType 之后这里改查 StageType。
+        # 目前仍收字典值 id —— 前端没有手工新建评审的入口，只有脚本 / 接口直调会走到。
         stage = DataDictionaryItem.objects.filter(
             id=data["stage_id"], workspace_id=project.workspace_id
         ).first()

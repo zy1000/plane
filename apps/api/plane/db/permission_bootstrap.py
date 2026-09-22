@@ -223,6 +223,20 @@ PERMISSION_OVERRIDES = {
         "category": "评审模板库",
         "sort_order": 2,
     },
+    "workspace.dev_mode.view": {
+        "name": "查看研发模式",
+        "description": "查看研发模式列表、组件开关与阶段配置",
+        "module": "dev_mode",
+        "category": "研发模式",
+        "sort_order": 1,
+    },
+    "workspace.dev_mode.manage": {
+        "name": "维护研发模式",
+        "description": "新建/编辑/删除研发模式，维护组件开关、阶段与阶段下勾选的评审节点",
+        "module": "dev_mode",
+        "category": "研发模式",
+        "sort_order": 2,
+    },
     "project.review_tailoring.view": {
         "name": "查看裁剪表",
         "description": "查看本项目的裁剪表与裁剪明细",

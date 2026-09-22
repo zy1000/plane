@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.stage_review_template import StageReviewTemplateSerializer
 from plane.app.views.base import BaseViewSet
-from plane.db.models import StageReviewTemplate, Workspace
+from plane.db.models import DevModeStageTemplate, StageReviewTemplate, Workspace
 from plane.db.models.stage_review import SORT_ORDER_STEP
 from plane.utils.stage_review_template import ensure_stage_review_templates
 
@@ -37,7 +37,7 @@ class StageReviewTemplateViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.workspace_slug)
-            .select_related("stage", "stage__dictionary", "parent", "created_by", "updated_by")
+            .select_related("stage", "parent", "created_by", "updated_by")
             .annotate(
                 children_count=Count(
                     "children",
@@ -45,7 +45,7 @@ class StageReviewTemplateViewSet(BaseViewSet):
                     distinct=True,
                 )
             )
-            # 阶段顺序取字典值的排序，阶段内按 sort_order；父子的先后由前端建树时决定
+            # 阶段顺序取阶段类型的排序，阶段内按 sort_order；父子的先后由前端建树时决定
             .order_by("stage__sort_order", "sort_order", "created_at", "id")
         )
 
@@ -145,6 +145,16 @@ class StageReviewTemplateViewSet(BaseViewSet):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
+        # 研发模式只存模板节点的引用，删了节点这些引用必须**同步**消失。不能依赖
+        # DevModeStageTemplate.template 的 CASCADE —— 那条路走的是异步软删级联任务，
+        # 中间那段时间模式的勾选面板里还会看到这个已删节点。子节点的引用一起清。
+        node_ids = [template.id] + list(
+            StageReviewTemplate.objects.filter(parent=template).values_list(
+                "id", flat=True
+            )
+        )
+        DevModeStageTemplate.objects.filter(template_id__in=node_ids).delete(soft=False)
+
         # 删评审会连带软删它下面的评审活动（parent CASCADE + soft_delete_related_objects）
         template.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

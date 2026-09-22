@@ -112,6 +112,8 @@ export const WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT_PERMISSION_KEY =
   "workspace.case_template.import_export" as const;
 export const WORKSPACE_REVIEW_TEMPLATE_VIEW_PERMISSION_KEY = "workspace.review_template.view" as const;
 export const WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY = "workspace.review_template.manage" as const;
+export const WORKSPACE_DEV_MODE_VIEW_PERMISSION_KEY = "workspace.dev_mode.view" as const;
+export const WORKSPACE_DEV_MODE_MANAGE_PERMISSION_KEY = "workspace.dev_mode.manage" as const;
 
 /** 读标准库：查看或维护任一即可（后端 LIBRARY_READ_KEYS 的对应物） */
 export const WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS = [
@@ -131,11 +133,18 @@ export const WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS = [
   WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY,
 ];
 
-/** 模板中心入口：三个库任一能看就显示 */
+/** 读研发模式：查看或维护任一即可 */
+export const WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS = [
+  WORKSPACE_DEV_MODE_VIEW_PERMISSION_KEY,
+  WORKSPACE_DEV_MODE_MANAGE_PERMISSION_KEY,
+];
+
+/** 模板中心入口：四个页签任一能看就显示 */
 export const WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS = [
   ...WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
   ...WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   ...WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
+  ...WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
 ];
 
 export const WORKSPACE_SETTINGS = {
@@ -235,6 +244,14 @@ export const WORKSPACE_SETTINGS = {
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/data-dictionaries`),
+  },
+  "stage-types": {
+    key: "stage-types",
+    i18n_label: "workspace_settings.settings.stage_types.title",
+    href: `/settings/stage-types`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    requiresMembership: true,
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/stage-types`),
   },
   changelog: {
     key: "changelog",

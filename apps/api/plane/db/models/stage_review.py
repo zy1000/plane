@@ -18,10 +18,11 @@ QA 的用例评审 ``CaseReview``），这套是研发流程的阶段评审，�
 
 两个和别处不一样的取舍：
 
-- **阶段不新建表**，直接引用数据字典（``product_stage`` 字典，值形如 I 阶段 / O 阶段 /
-  V 阶段）。``Product.stage`` 引用的就是它，新开一张 Stage 表会立刻出现两个「阶段」
-  事实来源。若将来评审阶段要和产品阶段分家，只需新建一个 ``review_stage`` 字典 key，
-  这里的外键指向不变。
+- **模板的阶段指向 ``StageType``**（工作区级的阶段类型表），评审实例的 ``stage`` 暂时
+  还指向 ``product_stage`` 字典值 —— 批次 1 只换了模板那一头，批次 4 再换实例。
+  期间两者靠名字桥接（见 ``utils/review_tailoring.py`` 的 ``resolve_stage_item``）。
+  分家的原因：``product_stage`` 字典是产品的「当前阶段」属性，阶段类型是研发流程的
+  骨架，后续的研发模式也挂在它上面，同一张表承担两种语义会互相绑架。
 - **「评审类型」是四值枚举**：评审 / 评审活动 / O阶段评审 / O阶段评审活动，与原始表一致。
   它同时编码了两件事 —— 层级（根 or 活动）与是否 O 阶段，所以判定层级一律走
   ``ROOT_KINDS`` / ``ACTIVITY_KINDS``，判定 O 阶段一律走 ``O_STAGE_KINDS``，
@@ -94,6 +95,17 @@ def is_o_stage_label(label):
     return bool(label) and str(label).strip().upper().startswith(O_STAGE_LABEL_PREFIX)
 
 
+def stage_display_name(stage):
+    """阶段的显示名。
+
+    模板的 ``stage`` 是 ``StageType``（``name``），评审实例的还是 ``DataDictionaryItem``
+    （``label``）—— 批次 1 只换了模板那一头，批次 4 换完实例后这个兼容取值可以去掉。
+    """
+    if stage is None:
+        return ""
+    return getattr(stage, "name", None) or getattr(stage, "label", "") or ""
+
+
 def validate_kind_stage(node):
     """O 阶段类型不能挂到非 O 系列阶段上。
 
@@ -103,12 +115,13 @@ def validate_kind_stage(node):
     if node.kind not in O_STAGE_KINDS:
         return
     stage = getattr(node, "stage", None)
-    if stage is None or is_o_stage_label(stage.label):
+    label = stage_display_name(stage)
+    if stage is None or is_o_stage_label(label):
         return
     raise ValidationError(
         {
             "kind": f"「{StageReviewKind(node.kind).label}」只能用在 O 系列阶段上，"
-            f"「{stage.label}」不是。"
+            f"「{label}」不是。"
         }
     )
 
@@ -226,12 +239,11 @@ class StageReviewTemplate(BaseModel):
         related_name="stage_review_templates",
         verbose_name="所属工作区",
     )
-    # 指向 product_stage 字典的值（I 阶段 / O 阶段 / V 阶段…）。RESTRICT 与 Product.stage 一致：
-    # 还有模板挂着的阶段值不允许删。
+    # 指向工作区的阶段类型（I阶段 / O-F1 / V阶段…）。RESTRICT：还有模板挂着的类型不允许删。
     stage = models.ForeignKey(
-        "db.DataDictionaryItem",
+        "db.StageType",
         on_delete=models.RESTRICT,
-        related_name="stage_review_templates",
+        related_name="review_templates",
         verbose_name="阶段",
     )
     kind = models.CharField(

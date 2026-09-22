@@ -12,6 +12,7 @@ import {
   Building,
   FolderKanban,
   Layers,
+  Milestone,
   Plug,
   ScrollText,
   ShieldCheck,
@@ -37,5 +38,6 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   "issue-type-categories": Layers,
   "requirement-types": RequirementIcon,
   "data-dictionaries": BookText,
+  "stage-types": Milestone,
   changelog: ScrollText,
 };

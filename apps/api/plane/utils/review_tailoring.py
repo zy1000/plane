@@ -30,6 +30,8 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from plane.db.models import (
+    DataDictionary,
+    DataDictionaryItem,
     FileAsset,
     ProductProject,
     ReviewTailoring,
@@ -46,8 +48,10 @@ from plane.db.models import (
     StageReviewComment,
     StageReviewStatus,
     StageReviewTemplate,
+    StageType,
 )
 from plane.db.models.stage_review import ACTIVITY_KINDS
+from plane.db.seed_data.stage_review_templates import PRODUCT_STAGE_DICTIONARY_KEY
 from plane.utils.requirement import get_requirement_eligible_user_ids
 
 
@@ -991,6 +995,47 @@ def _delete_stage_reviews(review_ids, keep_ids=()):
     return all_ids
 
 
+def _resolve_stage_items(workspace_id, stage_types):
+    """阶段类型 → product_stage 字典值，返回 {stage_type_id: dictionary_item_id}。
+
+    **批次 1 ~ 4 之间的临时桥接**：模板的 ``stage`` 已经换成 ``StageType``，评审实例的
+    还指向字典值，两者靠名字对上。名字对不上（哪边改过名）就在字典里补一个同名值 ——
+    这里硬拦会让整张裁剪表签批通过的那一刻失败，代价远大于字典里多一个值。
+    批次 4 把 ``StageReview.stage`` 换成 ``StageType`` 之后，整个函数连同调用点一起删。
+    """
+    if not stage_types:
+        return {}
+    dictionary = DataDictionary.objects.filter(
+        workspace_id=workspace_id, key=PRODUCT_STAGE_DICTIONARY_KEY
+    ).first()
+    if dictionary is None:
+        dictionary = DataDictionary.objects.create(
+            workspace_id=workspace_id,
+            key=PRODUCT_STAGE_DICTIONARY_KEY,
+            name="产品阶段",
+            is_system=True,
+        )
+    item_by_label = {
+        label: item_id
+        for item_id, label in DataDictionaryItem.objects.filter(
+            dictionary=dictionary
+        ).values_list("id", "label")
+    }
+    resolved = {}
+    for stage_type in stage_types:
+        item_id = item_by_label.get(stage_type.name)
+        if item_id is None:
+            item = DataDictionaryItem.objects.create(
+                dictionary=dictionary,
+                workspace_id=workspace_id,
+                label=stage_type.name,
+            )
+            item_id = item.id
+            item_by_label[stage_type.name] = item_id
+        resolved[stage_type.id] = item_id
+    return resolved
+
+
 def _create_stage_reviews(tailoring, items, actor):
     """把勾上但还没生成的格子变成评审实例。
 
@@ -1014,6 +1059,15 @@ def _create_stage_reviews(tailoring, items, actor):
     for item in pending:
         (children if item.template.kind in ACTIVITY_KINDS and item.template.parent_id else roots).append(item)
 
+    # 评审实例的阶段还是字典值，按名字从模板的阶段类型换算（批次 4 后删）。
+    # 走 stage_id 再批量查，别在循环里点 template.stage（queryset 只 select_related 了 template）
+    stage_item_by_type = _resolve_stage_items(
+        tailoring.workspace_id,
+        StageType.objects.filter(
+            id__in={item.template.stage_id for item in pending}
+        ),
+    )
+
     created_ids = []
     for batch in (roots, children):
         if not batch:
@@ -1031,7 +1085,7 @@ def _create_stage_reviews(tailoring, items, actor):
                 project_id=tailoring.project_id,
                 product_id=item.product_id,
                 # 阶段跟着模板节点走 —— 一张表跨全部阶段，表头上没有阶段可抄
-                stage_id=template.stage_id,
+                stage_id=stage_item_by_type[template.stage_id],
                 kind=template.kind,
                 parent_id=parent_id,
                 template=template,

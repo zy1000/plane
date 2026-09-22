@@ -1,14 +1,11 @@
 import { ChevronDown, ListFilter, X } from "lucide-react";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { DictionaryColorDot } from "@/components/data-dictionaries";
 
 /** 一个阶段选项。`hint` 是右侧那行小字（可加几条 / 几行），`dim` 表示这一段没什么可选的 */
 export type TStageFilterOption = {
   id: string;
   label: string;
-  /** 阶段字典没开彩色显示时为 null，只写文字不画点 */
-  color?: string | null;
   hint?: string;
   dim?: boolean;
 };
@@ -98,7 +95,6 @@ export const StageFilterChip = ({
       </CustomMenu.MenuItem>
       {options.map((option) => (
         <CustomMenu.MenuItem key={option.id} onClick={() => onChange(option.id)} className="flex items-center gap-2">
-          {option.color && <DictionaryColorDot color={option.color} size="sm" />}
           <span
             className={cn(
               "min-w-0 flex-1 truncate",

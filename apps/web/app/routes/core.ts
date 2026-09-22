@@ -170,6 +170,14 @@ export const coreRoutes: RouteConfigEntry[] = [
           ]),
           route(":workspaceSlug/templates/reviews", "./(all)/[workspaceSlug]/(projects)/templates/reviews/page.tsx"),
           route(
+            ":workspaceSlug/templates/dev-modes",
+            "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/templates/dev-modes/:devModeId",
+            "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/page.tsx"
+          ),
+          route(
             ":workspaceSlug/templates/test-cases",
             "./(all)/[workspaceSlug]/(projects)/templates/test-cases/page.tsx"
           ),
@@ -600,6 +608,11 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(
             ":workspaceSlug/settings/data-dictionaries",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/data-dictionaries/page.tsx"
+          ),
+          // Workspace Stage Types
+          route(
+            ":workspaceSlug/settings/stage-types",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/stage-types/page.tsx"
           ),
         ]),
 

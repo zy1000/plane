@@ -1,4 +1,4 @@
-import type { TDataDictionaryItemLite } from "./data-dictionary";
+import type { TStageTypeLite } from "./stage-type";
 
 /**
  * 评审模板库：工作区级的标准研发流程。
@@ -37,7 +37,8 @@ export type TStageReviewTemplate = {
   id: string;
   workspace_id: string;
   stage_id: string;
-  stage_detail: TDataDictionaryItemLite;
+  /** 阶段类型（StageType），不是数据字典值 */
+  stage_detail: TStageTypeLite;
   parent_id: string | null;
   kind: EStageReviewKind;
   title: string;

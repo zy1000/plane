@@ -29,7 +29,7 @@ export type TStageReviewGroup = {
   activityCount: number;
 };
 
-/** 左栏一项 = 数据字典 product_stage 的一个值。字典是阶段的唯一来源 */
+/** 左栏一项 = 工作区的一个阶段类型（StageType）。阶段类型是阶段的唯一来源 */
 export type TStageOption = { id: string; label: string };
 
 const emptyGroup = (stageId: string, stageLabel: string): TStageReviewGroup => ({
@@ -43,8 +43,8 @@ const emptyGroup = (stageId: string, stageLabel: string): TStageReviewGroup => (
 /**
  * 按 (阶段, parent) 把扁平列表折成树。
  *
- * **阶段清单来自数据字典而不是模板** —— 按模板派生的话，还没配模板的阶段在左栏里根本
- * 不存在，也就永远加不了第一条模板。字典还没加载出来时退化成按模板派生，避免首屏空白。
+ * **阶段清单来自阶段类型而不是模板** —— 按模板派生的话，还没配模板的阶段在左栏里根本
+ * 不存在，也就永远加不了第一条模板。类型还没加载出来时退化成按模板派生，避免首屏空白。
  */
 const buildGroups = (templates: TStageReviewTemplate[], stages: TStageOption[]): TStageReviewGroup[] => {
   const childrenByParent = new Map<string, TStageReviewTemplate[]>();
@@ -55,7 +55,7 @@ const buildGroups = (templates: TStageReviewTemplate[], stages: TStageOption[]):
     childrenByParent.set(template.parent_id, bucket);
   }
 
-  // 字典顺序即左栏顺序；没有模板的阶段也占一行（计数 0 · 0）
+  // 阶段类型的顺序即左栏顺序；没有模板的阶段也占一行（计数 0 · 0）
   const groups = new Map<string, TStageReviewGroup>(
     stages.map((stage) => [stage.id, emptyGroup(stage.id, stage.label)])
   );
@@ -66,8 +66,8 @@ const buildGroups = (templates: TStageReviewTemplate[], stages: TStageOption[]):
     const stageId = template.stage_id;
     const group =
       groups.get(stageId) ??
-      // 字典里没有这个值（被删过 / 字典还没加载）——仍然要显示，否则模板会凭空消失
-      emptyGroup(stageId, template.stage_detail?.label ?? "");
+      // 阶段类型清单里没有它（被删过 / 还没加载）——仍然要显示，否则模板会凭空消失
+      emptyGroup(stageId, template.stage_detail?.name ?? "");
     const children = childrenByParent.get(template.id) ?? [];
     group.nodes.push({ node: template, children });
     if (STAGE_REVIEW_ROOT_KINDS.includes(template.kind)) group.reviewCount += 1;

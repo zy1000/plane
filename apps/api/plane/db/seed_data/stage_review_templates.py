@@ -1,10 +1,16 @@
-"""阶段评审的预置规格：product_stage 词表 + 模板树（10 阶段 / 7 评审 / 59 活动）。
+"""阶段评审的预置规格：阶段类型 + product_stage 词表 + 模板树（10 阶段 / 7 评审 / 59 活动）。
+
+阶段词表现在有**两个消费方**：``STAGE_TYPE_SPECS`` 建工作区级的阶段类型（评审模板树
+挂在它上面），``PRODUCT_STAGE_LABELS`` 建 product_stage 字典值（产品的阶段字段）。
+后者由前者派生，初始一致；建完之后两边各自演化，互不影响。
 
 ════════════════════════════════════════════════════════════════════════════════
-本模块**不允许出现任何 import**（含 typing / enum）。它被两处共用：
+本模块**不允许出现任何 import**（含 typing / enum）。它被四处共用：
 
-  - 运行时  plane/utils/stage_review_template.py::ensure_stage_review_templates
+  - 运行时  plane/utils/stage_review_template.py::ensure_stage_types / ensure_stage_review_templates
+  - 运行时  plane/utils/data_dictionary.py::SYSTEM_DICTIONARIES（引用 PRODUCT_STAGE_LABELS）
   - 迁移    plane/db/migrations/0362_seed_stage_review_templates.py
+  - 迁移    plane/db/migrations/0383_backfill_stage_type.py
 
 迁移不能 import 运行时代码（plane/utils/data_dictionary.py 那类模块在 module level
 就 import 了模型），零 import 是两边共用同一份的前提。
@@ -36,18 +42,27 @@ PRODUCT_STAGE_DICTIONARY_NAME = "产品阶段"
 # SYSTEM_DICTIONARIES 里的下标，决定字典头的 sort_order = (INDEX + 1) * SORT_ORDER_STEP
 PRODUCT_STAGE_DICTIONARY_INDEX = 0
 
-PRODUCT_STAGE_LABELS = (
-    "I阶段",
-    "D阶段",
-    "O-F1",
-    "O-F2",
-    "O-SV1",
-    "O-C",
-    "O-T1",
-    "O-F3",
-    "O阶段",
-    "V阶段（包含NPI）",
+# ---- 阶段类型（StageType）：工作区级实体，评审模板树挂在它上面 ----
+# (编码, 名称)。编码占 M010–M100、步进 10，给用户在中间插自定义类型留位。
+# 预置类型的编码与名称不允许改（见 views/stage_type.py），所以这份表是 M 系列编码的
+# 唯一事实来源；追加新类型只能往后加，不能改已有行。
+STAGE_TYPE_SPECS = (
+    ("M010", "I阶段"),
+    ("M020", "D阶段"),
+    ("M030", "O-F1"),
+    ("M040", "O-F2"),
+    ("M050", "O-SV1"),
+    ("M060", "O-C"),
+    ("M070", "O-T1"),
+    ("M080", "O-F3"),
+    ("M090", "O阶段"),
+    ("M100", "V阶段（包含NPI）"),
 )
+
+# product_stage 字典的值。与 STAGE_TYPE_SPECS 的名称同源（两个消费方共用同一份词表）：
+# 产品的「阶段」字段读字典，评审模板树读 StageType。两者从批次 1 起互不相关 —— 改其中
+# 一边的名字不影响另一边，但初始词表是同一份，所以这里派生而不是再抄一遍。
+PRODUCT_STAGE_LABELS = tuple(name for _code, name in STAGE_TYPE_SPECS)
 
 # 根类型 → 它下面活动的类型。没有根评审的阶段，活动固定用 "activity"。
 _ACTIVITY_KIND_BY_ROOT_KIND = {

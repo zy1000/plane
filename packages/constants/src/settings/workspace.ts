@@ -40,10 +40,11 @@ export const GROUPED_WORKSPACE_SETTINGS = {
     WORKSPACE_SETTINGS["templates"],
     WORKSPACE_SETTINGS["requirement-types"],
   ],
-  // 「项目」分区：工作项类别 + 数据字典（产品阶段/类别/状态等下拉值）
+  // 「项目」分区：工作项类别 + 数据字典（产品阶段/类别/状态等下拉值）+ 阶段类型（评审模板树的骨架）
   [WORKSPACE_SETTINGS_CATEGORY.PROJECT]: [
     WORKSPACE_SETTINGS["issue-type-categories"],
     WORKSPACE_SETTINGS["data-dictionaries"],
+    WORKSPACE_SETTINGS["stage-types"],
   ],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
   // 「开发者」分区：Webhooks + 第三方集成（简道云等外部系统的数据同步）

@@ -184,3 +184,5 @@ output/*
 auth.txt
 .playwright*
 .claude*
+docs/*
+image*

@@ -10,13 +10,12 @@ import type {
   TReviewTailoringRow,
   TStageReviewTemplate,
 } from "@plane/types";
-import { EProductDictionaryKey, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
+import { STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { DictionaryColorDot, resolveDictionaryItemColor } from "@/components/data-dictionaries";
-import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useStageReviewTemplates } from "@/hooks/store/use-stage-review-templates";
+import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { ModalSearch, TailoringModalHeader } from "./modal-header";
 import { StageFilterChip } from "./stage-filter-chip";
 import { splitChildTitle } from "./tailoring-matrix-model";
@@ -37,8 +36,6 @@ type TFlatRow = {
   blocked: TBlocked;
   stageId: string;
   stageLabel: string;
-  /** 阶段字典没开彩色显示时为 null，只写文字不画点 */
-  stageColor: string | null;
   isReview: boolean;
   /** 活动行所属评审的标题；评审行为 null */
   parentTitle: string | null;
@@ -46,7 +43,7 @@ type TFlatRow = {
   title: string;
 };
 
-type TStageChoice = { id: string; label: string; color: string | null; available: number; allInMatrix: boolean };
+type TStageChoice = { id: string; label: string; available: number; allInMatrix: boolean };
 
 /** 栏头：图标 + 「评审」/「产品」 + 已选几个 */
 const PaneHeader = ({ icon, label, count }: { icon: ReactNode; label: string; count: number }) => {
@@ -159,20 +156,7 @@ export const AddAxesModal = observer(function AddAxesModal({
 }) {
   const { t } = useTranslation();
 
-  const { getDictionaryByKey } = useDataDictionaries(workspaceSlug);
-  const stageDictionary = getDictionaryByKey(EProductDictionaryKey.STAGE);
-  const stages = useMemo(
-    () => (stageDictionary?.items ?? []).map((item) => ({ id: item.id, label: item.label })),
-    [stageDictionary]
-  );
-  /** 阶段色点跟着数据字典的彩色开关走，没开就只写文字 */
-  const stageColors = useMemo(() => {
-    const map = new Map<string, string | null>();
-    for (const item of stageDictionary?.items ?? []) {
-      map.set(item.id, resolveDictionaryItemColor(item, stageDictionary));
-    }
-    return map;
-  }, [stageDictionary]);
+  const { stageOptions: stages } = useStageTypes(workspaceSlug);
   const { groups, isLoading: isLoadingReviews } = useStageReviewTemplates(workspaceSlug, stages);
   const { links, isLoading: isLoadingProducts } = useProjectProducts({ workspaceSlug, projectId });
 
@@ -202,7 +186,6 @@ export const AddAxesModal = observer(function AddAxesModal({
       const stage = {
         stageId: group.stageId,
         stageLabel: group.stageLabel,
-        stageColor: stageColors.get(group.stageId) ?? null,
       };
       return group.nodes.flatMap(({ node, children }) => [
         {
@@ -223,7 +206,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         })),
       ]);
     });
-  }, [groups, existingRows, stageColors]);
+  }, [groups, existingRows]);
 
   /** 筛选下拉的阶段清单与各自可加条数；不跟搜索词走，免得计数一边打字一边跳 */
   const stageChoices = useMemo<TStageChoice[]>(() => {
@@ -242,7 +225,6 @@ export const AddAxesModal = observer(function AddAxesModal({
       return {
         id: stageId,
         label: bucket[0].stageLabel,
-        color: bucket[0].stageColor,
         available: bucket.filter((row) => !row.blocked).length,
         allInMatrix: bucket.every((row) => row.blocked === "in_matrix"),
       };
@@ -338,7 +320,6 @@ export const AddAxesModal = observer(function AddAxesModal({
   const stageOptions = stageChoices.map((choice) => ({
     id: choice.id,
     label: choice.label,
-    color: choice.color,
     dim: choice.available === 0,
     hint:
       choice.available > 0
@@ -370,7 +351,6 @@ export const AddAxesModal = observer(function AddAxesModal({
           className={cn("flex min-w-0 items-center gap-1.5 text-12.5", blocked ? "text-placeholder" : "text-secondary")}
           title={row.stageLabel}
         >
-          {row.stageColor && <DictionaryColorDot color={row.stageColor} size="sm" className={cn(blocked && "opacity-50")} />}
           <span className="truncate">{row.stageLabel}</span>
         </span>
         <span className="flex min-w-0 items-center gap-2" title={node.title}>

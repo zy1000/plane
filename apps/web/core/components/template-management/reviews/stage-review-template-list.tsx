@@ -6,14 +6,14 @@ import { Button } from "@plane/propel/button";
 import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TStageReviewTemplate } from "@plane/types";
-import { EProductDictionaryKey, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
+import { STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { useStageReviewTemplates } from "@/hooks/store/use-stage-review-templates";
+import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { useTemplatePermissions } from "../permissions";
 import { StageRail } from "./stage-rail";
 import { StageReviewTemplateFormModal, type TStageReviewFormValue } from "./stage-review-template-form-modal";
@@ -33,13 +33,8 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
 }) {
   const { t } = useTranslation();
   const { canManageReviewTemplates } = useTemplatePermissions(workspaceSlug);
-  // 阶段的唯一来源是数据字典 product_stage —— 还没配模板的阶段也要能选中并加第一条
-  const { getDictionaryByKey, isLoading: isStagesLoading } = useDataDictionaries(workspaceSlug);
-  const stageDictionary = getDictionaryByKey(EProductDictionaryKey.STAGE);
-  const stages = useMemo(
-    () => (stageDictionary?.items ?? []).map((item) => ({ id: item.id, label: item.label })),
-    [stageDictionary]
-  );
+  // 阶段的唯一来源是工作区的阶段类型 —— 还没配模板的阶段也要能选中并加第一条
+  const { stageOptions: stages, isLoading: isStagesLoading } = useStageTypes(workspaceSlug);
 
   const {
     groups,

@@ -53,7 +53,8 @@ class ReviewTailoringItemSerializer(BaseSerializer):
         source="template.parent_id", read_only=True
     )
     stage_id = serializers.UUIDField(source="template.stage_id", read_only=True)
-    stage_label = serializers.CharField(source="template.stage.label", read_only=True)
+    # 字段名沿用 stage_label（前端契约不变），值取阶段类型的 name
+    stage_label = serializers.CharField(source="template.stage.name", read_only=True)
     stage_sort_order = serializers.FloatField(
         source="template.stage.sort_order", read_only=True
     )
@@ -114,7 +115,8 @@ class ReviewTailoringRowSerializer(serializers.Serializer):
     template_id = serializers.UUIDField(source="id", read_only=True)
     parent_template_id = serializers.UUIDField(source="parent_id", read_only=True)
     stage_id = serializers.UUIDField(read_only=True)
-    stage_label = serializers.CharField(source="stage.label", read_only=True)
+    # 同上：字段名不变，值取阶段类型的 name
+    stage_label = serializers.CharField(source="stage.name", read_only=True)
     stage_sort_order = serializers.FloatField(source="stage.sort_order", read_only=True)
     kind = serializers.CharField(read_only=True)
     title = serializers.CharField(read_only=True)

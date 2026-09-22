@@ -41,6 +41,10 @@ class PermissionKey(str, Enum):
     WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT = "workspace.case_template.import_export"
     WORKSPACE_REVIEW_TEMPLATE_VIEW = "workspace.review_template.view"
     WORKSPACE_REVIEW_TEMPLATE_MANAGE = "workspace.review_template.manage"
+    # 研发模式（DevMode）。与评审模板库分开给 key —— 模式决定项目能用哪些组件和阶段，
+    # 影响面比评审树大，配得起评审模板不代表该改所有项目的组件开关。
+    WORKSPACE_DEV_MODE_VIEW = "workspace.dev_mode.view"
+    WORKSPACE_DEV_MODE_MANAGE = "workspace.dev_mode.manage"
 
     # Project permissions
     PROJECT_SETTINGS_VIEW = "project.settings.view"

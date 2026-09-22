@@ -2,6 +2,8 @@ import {
   WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT_PERMISSION_KEY,
   WORKSPACE_CASE_TEMPLATE_MANAGE_PERMISSION_KEY,
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
+  WORKSPACE_DEV_MODE_MANAGE_PERMISSION_KEY,
+  WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT_PERMISSION_KEY,
   WORKSPACE_REQUIREMENT_LIBRARY_MANAGE_PERMISSION_KEY,
   WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
@@ -19,7 +21,9 @@ export type TTemplatePermissions = {
   canImportExportCaseTemplates: boolean;
   canViewReviewTemplates: boolean;
   canManageReviewTemplates: boolean;
-  /** 模板中心整体是否可见：三个库任一能看 */
+  canViewDevModes: boolean;
+  canManageDevModes: boolean;
+  /** 模板中心整体是否可见：四个页签任一能看 */
   canAccessTemplates: boolean;
 };
 
@@ -29,7 +33,7 @@ export type TTemplatePermissions = {
  * 后端口径见 plane/app/permissions/keys.py 的 WORKSPACE_REQUIREMENT_LIBRARY_* /
  * WORKSPACE_CASE_TEMPLATE_* / WORKSPACE_REVIEW_TEMPLATE_*：读接受 view 或 manage，
  * 写只认 manage，Excel 另有 import_export（**导入**还要 manage，因为导入本身就是写）。
- * 评审模板库没有导入导出，只有 view / manage 两个 key。
+ * 评审模板库与研发模式都没有导入导出，各只有 view / manage 两个 key。
  *
  * 不做 useMemo：allowWorkspacePermissionKeys 读的是 observable，缓存住会让
  * observer 组件在权限变化时收不到通知。
@@ -41,6 +45,7 @@ export const useTemplatePermissions = (workspaceSlug: string | undefined): TTemp
   const canViewLibraries = allowWorkspacePermissionKeys(WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS, slug);
   const canViewCaseTemplates = allowWorkspacePermissionKeys(WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS, slug);
   const canViewReviewTemplates = allowWorkspacePermissionKeys(WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS, slug);
+  const canViewDevModes = allowWorkspacePermissionKeys(WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS, slug);
 
   return {
     canViewLibraries,
@@ -57,6 +62,8 @@ export const useTemplatePermissions = (workspaceSlug: string | undefined): TTemp
     ),
     canViewReviewTemplates,
     canManageReviewTemplates: allowWorkspacePermissionKeys([WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY], slug),
-    canAccessTemplates: canViewLibraries || canViewCaseTemplates || canViewReviewTemplates,
+    canViewDevModes,
+    canManageDevModes: allowWorkspacePermissionKeys([WORKSPACE_DEV_MODE_MANAGE_PERMISSION_KEY], slug),
+    canAccessTemplates: canViewLibraries || canViewCaseTemplates || canViewReviewTemplates || canViewDevModes,
   };
 };

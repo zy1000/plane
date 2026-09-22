@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from plane.app.serializers.data_dictionary import DataDictionaryItemLiteSerializer
-from plane.db.models import DataDictionaryItem, StageReviewTemplate
+from plane.app.serializers.stage_type import StageTypeLiteSerializer
+from plane.db.models import StageReviewTemplate, StageType
 from plane.db.models.stage_review import (
     ACTIVITY_KIND_BY_ROOT,
     ACTIVITY_KINDS,
@@ -25,11 +25,10 @@ class StageReviewTemplateSerializer(BaseSerializer):
     workspace_id = serializers.UUIDField(read_only=True)
     stage_id = serializers.PrimaryKeyRelatedField(
         source="stage",
-        queryset=DataDictionaryItem.objects.all(),
+        queryset=StageType.objects.all(),
     )
-    # 复用产品 / 项目那套 *_detail 形状，前端可以直接喂给 DictionaryValueTag。
-    # queryset 需 select_related("stage__dictionary")，否则每行多一条查询。
-    stage_detail = DataDictionaryItemLiteSerializer(source="stage", read_only=True)
+    # {id, code, name}。queryset 需 select_related("stage")，否则每行多一条查询。
+    stage_detail = StageTypeLiteSerializer(source="stage", read_only=True)
     parent_id = serializers.PrimaryKeyRelatedField(
         source="parent",
         queryset=StageReviewTemplate.objects.all(),
@@ -112,11 +111,11 @@ class StageReviewTemplateSerializer(BaseSerializer):
 
         # O 阶段类型只能落在 O 系列阶段上。stage 可能刚被上面按父节点改写过，所以放最后判。
         stage = attrs.get("stage", stage)
-        if kind in O_STAGE_KINDS and stage is not None and not is_o_stage_label(stage.label):
+        if kind in O_STAGE_KINDS and stage is not None and not is_o_stage_label(stage.name):
             raise serializers.ValidationError(
                 {
                     "kind": f"「{StageReviewKind(kind).label}」只能用在 O 系列阶段上，"
-                    f"「{stage.label}」不是。"
+                    f"「{stage.name}」不是。"
                 }
             )
 
