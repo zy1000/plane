@@ -128,8 +128,11 @@ class StageReviewTemplateViewSet(BaseViewSet):
         # PROTECT 在这里**兜不住**：软删走的是 soft_delete_related_objects 任务，
         # 它把 PROTECT 当 CASCADE 处理（bgtasks/deletion_task.py），会把引用这个模板的
         # 裁剪格子一起软删掉，历史裁剪表就少了一行且没人知道为什么。所以自己挡在前面。
+        # 纵轴行（ReviewTailoringTemplate）同理：只加了轴还没铺格子的表也算引用，
+        # 否则轴行会被异步级联静默软删，那张表就少了一行评审。
         if (
             template.tailoring_items.exists()
+            or template.tailoring_axis_entries.exists()
             or template.stage_reviews.exists()
             or StageReviewTemplate.objects.filter(parent=template)
             .filter(

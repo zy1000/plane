@@ -73,8 +73,10 @@ def ensure_dev_modes(workspace, actor=None):
     """给 workspace 预置三个研发模式，返回新建的模式数（已有任意模式时返回 0）。
 
     依赖阶段类型与评审树已存在，所以先调 ``ensure_stage_review_templates``（它自己也是
-    幂等的，而且会顺带 ensure 阶段类型）。并发下抢在一起的那一路会撞 dev_mode 的唯一
-    约束，由 IntegrityError 收场。
+    幂等的，而且会顺带 ensure 阶段类型）。三个 ensure 的固定顺序是
+    阶段类型 → 评审树 → 研发模式，工作区创建入口（views/workspace/base.py）只调本函数，
+    靠这里的嵌套保证顺序。并发下抢在一起的那一路会撞 dev_mode 的唯一约束，
+    由 IntegrityError 收场。
     """
     if DevMode.all_objects.filter(workspace_id=workspace.id).exists():
         return 0

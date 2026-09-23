@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, ProtectedError, Q, RestrictedError
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -33,6 +33,13 @@ def stage_in_use(stage):
         if related is not None and related.filter(deleted_at__isnull=True).exists():
             return True
     return False
+
+
+def _stage_in_use_response(message, **extra):
+    return Response(
+        {"error": message, "code": "DEV_MODE_STAGE_IN_USE", **extra},
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 class DevModeStageViewSet(BaseViewSet):
@@ -231,14 +238,17 @@ class DevModeStageViewSet(BaseViewSet):
         if stage is None:
             return self._not_found("Dev mode stage not found.")
         if stage_in_use(stage):
-            return Response(
-                {
-                    "error": "This stage is used by a tailoring or a review.",
-                    "code": "DEV_MODE_STAGE_IN_USE",
-                },
-                status=status.HTTP_409_CONFLICT,
+            return _stage_in_use_response(
+                "This stage is used by a tailoring or a review."
             )
-        stage.delete()
+        try:
+            # 硬删（模型 delete 已强制 soft=False）。stage_in_use 只算活跃行，库里有软删残留的
+            # 格子 / 评审时 DB 的 RESTRICT 仍会拦，照阶段类型的写法收成 409 而不是 500。
+            stage.delete()
+        except (ProtectedError, RestrictedError):
+            return _stage_in_use_response(
+                "This stage is still referenced by deleted tailorings or reviews."
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_MANAGE, level="WORKSPACE")
@@ -255,17 +265,18 @@ class DevModeStageViewSet(BaseViewSet):
             return self._not_found("Some stages were not found in this dev mode.")
         blocked = [stage.name for stage in stages if stage_in_use(stage)]
         if blocked:
-            return Response(
-                {
-                    "error": "Some stages are used by a tailoring or a review.",
-                    "code": "DEV_MODE_STAGE_IN_USE",
-                    "stages": blocked,
-                },
-                status=status.HTTP_409_CONFLICT,
+            return _stage_in_use_response(
+                "Some stages are used by a tailoring or a review.", stages=blocked
             )
-        with transaction.atomic():
-            for stage in stages:
-                stage.delete()
+        try:
+            with transaction.atomic():
+                for stage in stages:
+                    stage.delete()
+        except (ProtectedError, RestrictedError):
+            # 同 destroy：软删残留撞 RESTRICT，整批回滚并回 409
+            return _stage_in_use_response(
+                "Some stages are still referenced by deleted tailorings or reviews."
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_MANAGE, level="WORKSPACE")

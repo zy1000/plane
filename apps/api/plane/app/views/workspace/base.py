@@ -129,7 +129,9 @@ class WorkSpaceViewSet(BaseViewSet):
                 )
 
                 # 阶段评审 + 研发模式：新工作区自带 10 个阶段类型、挂在其上的标准研发流程，
-                # 以及 IDOV / Scrum / 混合模式三个预置模式。ensure_dev_modes 会先把前两者补齐。
+                # 以及 IDOV / Scrum / 混合模式三个预置模式。
+                # 三个 ensure 的顺序固定为 阶段类型 → 评审树 → 研发模式（后者引用前者），
+                # 由 ensure_dev_modes 内部嵌套调用保证，这里只调最外层的一个，不要拆开单独调。
                 # 预置失败不能让建工作区 500 —— 工作区和成员已经落库了，报错会让用户重试时撞 slug。
                 try:
                     ensure_dev_modes(workspace, actor=request.user)

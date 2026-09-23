@@ -21,22 +21,25 @@
 一样」，极难发现。
 ════════════════════════════════════════════════════════════════════════════════
 
-改这份数据的规矩：
+改这份数据的规矩（**同时覆盖 ``STAGE_TYPE_SPECS`` 与模板树**）：
 
-1. **只增不改。** 运行时与迁移的幂等锚点都是「该工作区已有任意模板行就整体跳过」，
+1. **只增不改。** 运行时与迁移的幂等锚点都是「该工作区已有任意一行就整体跳过」——
+   阶段类型看 ``StageType`` 表、模板看 ``StageReviewTemplate`` 表（都含软删行），
    所以往这里追加新行**不会**自动补给老工作区 —— 要补就另写一个 ensure 式的
-   delta 迁移。
+   delta 迁移；新增阶段类型还要决定预置模式（IDOV / 混合模式）要不要跟着补阶段，
+   ``ensure_dev_modes`` 同样不会回头补。
 2. **改名 / 删行必须在同一个 commit 里配一个 RunPython 处理存量**，光改常量会让老库
-   和新库分叉。
+   和新库分叉。阶段类型的名字尤其碰不得：0383 按名字把模板节点回填到类型上，
+   ``DevModeStage.name`` 也是从类型名抄出来的，0389 又按阶段名回填格子与评审实例。
 3. ``kind`` 用裸字符串（不 import StageReviewKind），取值只能是
    review / activity / o_stage_review / o_stage_activity。
 """
 
 SORT_ORDER_STEP = 10000
 
-# ---- 阶段词表：复用产品阶段字典（product_stage），不新建 review_stage ----
+# ---- 产品阶段字典（product_stage）：只服务产品的「阶段」字段，评审树不再引用它 ----
 # 与 plane/utils/data_dictionary.py::SYSTEM_DICTIONARIES 的第 0 项是同一本字典，
-# 那边的 items 直接引用下面这个元组（改这里两边同时生效）。
+# 那边的 items 直接引用下面的 PRODUCT_STAGE_LABELS（改这里两边同时生效）。
 PRODUCT_STAGE_DICTIONARY_KEY = "product_stage"
 PRODUCT_STAGE_DICTIONARY_NAME = "产品阶段"
 # SYSTEM_DICTIONARIES 里的下标，决定字典头的 sort_order = (INDEX + 1) * SORT_ORDER_STEP

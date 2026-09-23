@@ -10,21 +10,31 @@
 就 import 了模型），零 import 是两边共用同一份规格的前提。
 ════════════════════════════════════════════════════════════════════════════════
 
-改这份数据的规矩与 ``stage_review_templates.py`` 一致：幂等锚点是「该工作区已有任意
-DevMode 行即整体跳过」，往这里追加新模式**不会**自动补给老工作区，要补就另写 delta 迁移。
+改这份数据的规矩与 ``stage_review_templates.py`` 一致：
+
+1. **只增不改。** 幂等锚点是「该工作区已有任意 DevMode 行（含软删）即整体跳过」
+   （``utils/dev_mode.py::ensure_dev_modes``），往这里追加新模式**不会**自动补给老工作区，
+   要补就另写 delta 迁移。
+2. **改名 / 删行必须配 RunPython 处理存量。** 尤其 ``DEFAULT_DEV_MODE_NAME``：0387 按它
+   回填存量项目，``default_dev_mode`` 运行时也按它找默认模式，光改常量会让老工作区找不到
+   默认模式。
+3. 往 ``FEATURE_KEYS`` 加 key 要同步 Project 的布尔位、serializer 的映射表与前端，
+   清单见 ``docs/ai-change-map.md`` 的「Add a feature toggle」。
+
+三个预置入口的调用顺序固定为 阶段类型 → 评审树 → 研发模式，由 ``ensure_dev_modes``
+内部嵌套调用保证。
 """
 
 SORT_ORDER_STEP = 10000
 
 # ---- 组件开关 ----------------------------------------------------------------
-# 九个布尔 key，存在 DevMode.features 这个 JSONField 里。前八个对应 Project 上已有或
-# 将有的功能位，第九个（review_view）是本期新增的「评审」组件。
+# 九个布尔 key，存在 DevMode.features 这个 JSONField 里，与 Project 上的九个功能位
+# 同名同义（``release_view`` / ``review_view`` 由 0387 补到 Project 上）。映射表在
+# serializers/project.py::DEV_MODE_FEATURE_TO_PROJECT_FIELD，前端在
+# packages/utils/src/project.ts 有一份同名常量。
 #
-# 注意 ``intake_view``：Project 上这一位的字段名其实是 ``inbox_view``（历史遗留，
-# 前端功能页的 key 叫 intake、属性叫 inbox_view）。模式这边统一用业务名 intake_view，
-# 批次 3 接项目时做一次映射，不把历史拼写扩散到新表里。
-#
-# ``release_view`` 与 ``review_view`` 在 Project 上还不存在，批次 3 补。
+# ``intake_view``：Project 的字段名就是 ``intake_view``，前端读到的 ``inbox_view``
+# 只是 ProjectSerializer 的只读别名，这里不用做映射。
 FEATURE_KEYS = (
     "cycle_view",
     "module_view",
@@ -103,7 +113,8 @@ DEV_MODE_SPECS = (
     },
 )
 
-#: 批次 3 把存量项目回填到这个模式，名字写死在这里供迁移引用。
+#: 0387 把存量项目回填到这个模式，``utils/dev_mode.py::default_dev_mode`` 运行时也按它找
+#: 默认模式（创建项目弹窗默认选中、ORM 直建项目的兜底）。名字写死在这里供两边引用，不要改。
 DEFAULT_DEV_MODE_NAME = "混合模式"
 
 
