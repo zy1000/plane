@@ -1,7 +1,14 @@
 import type { CompleteOrEmpty, TSupportedOperators } from "@plane/types";
 import { LOGICAL_OPERATOR } from "@plane/types";
 
-export const TAILORING_FILTER_PROPERTY_KEYS = ["title", "status", "created_by", "created_at", "updated_at"] as const;
+export const TAILORING_FILTER_PROPERTY_KEYS = [
+  "title",
+  "status",
+  "tailoring_kind",
+  "created_by",
+  "created_at",
+  "updated_at",
+] as const;
 
 export type TTailoringFilterProperty = (typeof TAILORING_FILTER_PROPERTY_KEYS)[number];
 

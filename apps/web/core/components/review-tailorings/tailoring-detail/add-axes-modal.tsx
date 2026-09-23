@@ -10,7 +10,7 @@ import type {
   TReviewTailoringProduct,
   TReviewTailoringRow,
 } from "@plane/types";
-import { type EStageReviewKind, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
+import { type EReviewTailoringKind, type EStageReviewKind, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
@@ -145,6 +145,7 @@ export const AddAxesModal = observer(function AddAxesModal({
   workspaceSlug,
   projectId,
   tailoringId,
+  tailoringKind,
   existingRows,
   existingProducts,
   onClose,
@@ -155,6 +156,8 @@ export const AddAxesModal = observer(function AddAxesModal({
   workspaceSlug: string;
   projectId: string;
   tailoringId: string;
+  /** 候选已由服务端按类型挑过族；这里只用来让空态说清「本类型没有可加的节点」 */
+  tailoringKind: EReviewTailoringKind;
   existingRows: TReviewTailoringRow[];
   existingProducts: TReviewTailoringProduct[];
   onClose: () => void;
@@ -436,7 +439,7 @@ export const AddAxesModal = observer(function AddAxesModal({
             {isLoadingReviews ? (
               listLoader
             ) : rows.length === 0 ? (
-              <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_empty`)}</p>
+              <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_empty_${tailoringKind}`)}</p>
             ) : visibleRows.length === 0 ? (
               <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_no_match`)}</p>
             ) : (

@@ -611,6 +611,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         workspaceSlug={workspaceSlug}
         projectId={projectId}
         tailoringId={detail.id}
+        tailoringKind={detail.tailoring_kind}
         existingRows={detail.rows}
         existingProducts={detail.products}
         onClose={() => setIsAddAxesOpen(false)}

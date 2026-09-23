@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { CircleDot, Type } from "lucide-react";
+import { CircleDot, Scissors, Type } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { CalendarLayoutIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import type { IUserLite, TFilterConfig, TReviewTailoring, TSupportedOperators } from "@plane/types";
@@ -17,7 +17,7 @@ import {
   getTextInputConfig,
 } from "@plane/utils";
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
-import { TAILORING_STATUS_ORDER, TAILORING_STATUS_TONE } from "../filters";
+import { TAILORING_KIND_ORDER, TAILORING_STATUS_ORDER, TAILORING_STATUS_TONE } from "../filters";
 import type { TTailoringFilterProperty } from "./types";
 import { TAILORING_FILTER_ME } from "./types";
 
@@ -118,6 +118,17 @@ export const useTailoringFiltersConfig = ({
             label: t(`${I18N}.status.${status}`),
             icon: <span className={cn("inline-block size-2 rounded-full bg-current", TAILORING_STATUS_TONE[status])} />,
           })),
+          params,
+          isLabel
+        ),
+      }),
+      createFilterConfig<TTailoringFilterProperty>({
+        id: "tailoring_kind",
+        label: t(`${I18N}.filters.tailoring_kind`),
+        icon: Scissors,
+        isEnabled: true,
+        supportedOperatorConfigsMap: multiSelect(
+          TAILORING_KIND_ORDER.map((kind) => ({ id: kind, value: kind, label: t(`${I18N}.kind.${kind}`) })),
           params,
           isLabel
         ),

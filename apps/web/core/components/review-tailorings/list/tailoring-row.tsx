@@ -7,6 +7,7 @@ import type { TReviewTailoring } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
 import { Avatar, CustomMenu } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { ReviewTailoringKindBadge } from "../kind-badge";
 import { ReviewTailoringStatusBadge } from "../status-badge";
 
 type TTranslate = ReturnType<typeof useTranslation>["t"];
@@ -128,7 +129,10 @@ export const TailoringRow = observer(function TailoringRow({
             <Grid3x3 className="size-4" />
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-14 font-medium text-primary">{item.title}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-14 font-medium text-primary">{item.title}</span>
+              <ReviewTailoringKindBadge kind={item.tailoring_kind} className="shrink-0" />
+            </span>
             <span className="mt-0.5 block truncate text-12 text-tertiary">
               {hasAxis
                 ? t("review_tailoring.list.axis_meta", { reviews: item.review_count, products: item.product_count })

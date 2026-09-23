@@ -55,7 +55,7 @@ from plane.db.models import (
     StageReviewStatus,
     StageReviewTemplate,
 )
-from plane.db.models.stage_review import ACTIVITY_KINDS
+from plane.db.models.stage_review import ACTIVITY_KINDS, template_kind_allowed
 from plane.utils.requirement import get_requirement_eligible_user_ids
 
 
@@ -300,8 +300,10 @@ def _build_items(tailoring, rows, product_ids, actor):
 # --- 建表与格子维护 --------------------------------------------------------
 
 
-def create_tailoring(*, project, title, description_html, actor):
+def create_tailoring(*, project, title, tailoring_kind, description_html, actor):
     """新建一张裁剪表。**只建表头，一个格子都不铺。**
+
+    ``tailoring_kind`` 建表时定下、之后只读：纵轴加节点时按它挑族（``add_reviews``）。
 
     矩阵是「产品 × 模式阶段 × 模板节点」，而产品这一维在建表这一刻还不知道 —— 由人在
     详情页逐列添加（``add_products``）。所以新表是一张零列的空表，纵轴要等第一列产品
@@ -321,6 +323,7 @@ def create_tailoring(*, project, title, description_html, actor):
         workspace_id=project.workspace_id,
         project=project,
         title=title,
+        tailoring_kind=tailoring_kind,
         description_html=description_html or None,
         status=ReviewTailoringStatus.DRAFT,
         created_by=actor,
@@ -332,6 +335,7 @@ def create_tailoring(*, project, title, description_html, actor):
         verb="created",
         field="tailoring",
         new_value=title,
+        extra={"tailoring_kind": tailoring_kind},
     )
     return tailoring
 
@@ -434,6 +438,24 @@ def add_reviews(*, tailoring, template_ids, actor):
             detail={
                 "template_ids": [str(tid) for tid in unselected],
                 "titles": [candidates[tid].title for tid in unselected],
+            },
+        )
+
+    # 族是硬边界：O 表只收 O 系列节点，过程表只收其余。这是全链路**唯一**一处按族校验，
+    # 修订同步 / 提交 / 生效都不再判 —— 存量混合表要能照常走完。
+    mismatched = [
+        tid
+        for tid in template_ids
+        if not template_kind_allowed(tailoring.tailoring_kind, candidates[tid].kind)
+    ]
+    if mismatched:
+        raise ReviewTailoringError(
+            "Some reviews do not belong to this tailoring's kind.",
+            code="REVIEW_TAILORING_TEMPLATE_KIND_MISMATCH",
+            detail={
+                "template_ids": [str(tid) for tid in mismatched],
+                "titles": [candidates[tid].title for tid in mismatched],
+                "tailoring_kind": tailoring.tailoring_kind,
             },
         )
 
@@ -794,7 +816,8 @@ def _move_cells(tailoring, items, cells, actor):
     规则一次全查完再抛，别让人改一处提一次：
 
     - 只有评审活动能挪，汇总评审一挪，它下面的活动就留在原阶段没了归属。
-    - 目标阶段必须是本项目研发模式的阶段（不限阶段类型）。
+    - 目标阶段必须是本项目研发模式的阶段（不限阶段类型，也不受 ``tailoring_kind`` 约束：
+      族管的是纵轴上的节点，不是格子落在哪个阶段）。
     - 已评审的活动不能挪 —— 已评审即定稿。签批前才评审完的，生效时跳过（``_apply_effective``）。
     - 目标阶段已经有同一（产品 × 节点）的格子（o-1、o-2 都勾了它）→ 409。按挪完之后的
       整张表查，不靠数据库唯一约束报错。

@@ -6,6 +6,7 @@ import type { TReviewTailoringDetail } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
 import { cn } from "@plane/utils";
 import { descriptionHtmlToText, toDescriptionHtml } from "../description-text";
+import { ReviewTailoringKindBadge } from "../kind-badge";
 import { ReviewTailoringStatusBadge } from "../status-badge";
 import { DescriptionEditor } from "./description-editor";
 import { StackBar } from "./stack-bar";
@@ -110,6 +111,7 @@ export const DetailHero = ({
         <div className="group flex min-w-0 items-center gap-3">
           <h1 className="truncate text-20 leading-snug font-semibold text-primary">{detail.title}</h1>
           <ReviewTailoringStatusBadge status={status} showDot className="px-2.5 py-1 text-12" />
+          <ReviewTailoringKindBadge kind={detail.tailoring_kind} className="shrink-0 px-2.5 py-1 text-12" />
           {canManage && (
             <button
               type="button"

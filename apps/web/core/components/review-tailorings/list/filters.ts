@@ -1,4 +1,10 @@
-import { EReviewTailoringStatus } from "@plane/types";
+import { EReviewTailoringKind, EReviewTailoringStatus } from "@plane/types";
+
+/** 裁剪类型的展示顺序：筛选选项与创建弹窗共用 */
+export const TAILORING_KIND_ORDER: EReviewTailoringKind[] = [
+  EReviewTailoringKind.PROCESS,
+  EReviewTailoringKind.O_STAGE,
+];
 
 /** 页头右侧的挂点：列表组件把搜索 / 过滤 / 新建 portal 进去，状态全留在列表里 */
 export const REVIEW_TAILORINGS_HEADER_ACTIONS_ID = "review-tailorings-header-actions";

@@ -189,6 +189,7 @@ from .stage_review import (
     ReviewTailoringApprovalType,
     ReviewTailoringComment,
     ReviewTailoringItem,
+    ReviewTailoringKind,
     ReviewTailoringProduct,
     ReviewTailoringStatus,
     ReviewTailoringTemplate,

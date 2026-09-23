@@ -212,6 +212,25 @@ class ReviewTailoringStatus(models.TextChoices):
     REVISING = "revising", "修订中"
 
 
+class ReviewTailoringKind(models.TextChoices):
+    """裁剪表的类型：决定纵轴只能从哪一族模板节点里挑。
+
+    过程评审裁剪只收 ``review`` / ``activity``，O 阶段评审裁剪只收 ``O_STAGE_KINDS``。
+    族约束的是**节点**，不是格子所在的阶段 —— 活动跨阶段移动仍不限阶段类型。
+    建表时定下，之后不可改（改了等于让纵轴上的节点整批失配）。
+    """
+
+    PROCESS = "process", "过程评审裁剪"
+    O_STAGE = "o_stage", "O阶段评审裁剪"
+
+
+def template_kind_allowed(tailoring_kind, template_kind):
+    """模板节点的 ``kind`` 能不能进这种类型的裁剪表。O 表 ⇔ 节点属于 O 系列。"""
+    return (template_kind in O_STAGE_KINDS) == (
+        tailoring_kind == ReviewTailoringKind.O_STAGE
+    )
+
+
 class ReviewTailoringApprovalType(models.TextChoices):
     """裁剪表的签批通过规则。
 
@@ -725,6 +744,14 @@ class ReviewTailoring(ProjectBaseModel):
         default=ReviewTailoringStatus.DRAFT,
         db_index=True,
         verbose_name="状态",
+    )
+    # 建表时定下、之后只读。叫 tailoring_kind 而不是 kind，免得和格子 / 行上的模板 kind 混淆。
+    tailoring_kind = models.CharField(
+        max_length=20,
+        choices=ReviewTailoringKind.choices,
+        default=ReviewTailoringKind.PROCESS,
+        db_index=True,
+        verbose_name="裁剪类型",
     )
     # ↓ 签批：规则挂在表头，只保留**最近一轮**；历史轮次的规则在提交活动的 extra 里。
     # 草稿态还没配规则，所以允许空串（CheckConstraint 的第二支）。

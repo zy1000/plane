@@ -46,6 +46,8 @@ const matchCondition = (
       return tailoring.title.toLowerCase().includes(selected.join(",").toLowerCase());
     case "status":
       return matchOption(tailoring.status, condition.operator, selected);
+    case "tailoring_kind":
+      return matchOption(tailoring.tailoring_kind, condition.operator, selected);
     case "created_by":
       return matchOption(
         tailoring.created_by_detail?.id ?? "",

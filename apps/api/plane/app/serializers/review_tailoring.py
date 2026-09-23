@@ -16,6 +16,7 @@ from plane.db.models import (
     ReviewTailoringApprovalType,
     ReviewTailoringComment,
     ReviewTailoringItem,
+    ReviewTailoringKind,
 )
 
 from .base import BaseSerializer
@@ -172,6 +173,7 @@ class ReviewTailoringListSerializer(BaseSerializer):
             "workspace_id",
             "title",
             "status",
+            "tailoring_kind",
             "revision",
             "round",
             "approval_type",
@@ -333,13 +335,14 @@ class ReviewTailoringCommentSerializer(BaseSerializer):
 
 
 class ReviewTailoringCreateSerializer(serializers.Serializer):
-    """建表只问标题。
+    """建表只问标题和裁剪类型。
 
     阶段不再是表的属性（纵轴一次铺全部阶段），产品由详情页逐列添加 —— 建表这一步问得
-    越少越好。
+    越少越好。裁剪类型必填且建完不可改（``ReviewTailoringHeaderSerializer`` 不收它）。
     """
 
     title = serializers.CharField(max_length=255)
+    tailoring_kind = serializers.ChoiceField(choices=ReviewTailoringKind.choices)
     description_html = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=""
     )

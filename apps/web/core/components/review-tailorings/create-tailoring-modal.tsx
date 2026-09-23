@@ -3,19 +3,20 @@ import { observer } from "mobx-react";
 import { AlertCircle, Scissors, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TCreateReviewTailoringPayload } from "@plane/types";
+import type { EReviewTailoringKind, TCreateReviewTailoringPayload } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { toDescriptionHtml } from "./description-text";
+import { TAILORING_KIND_ORDER } from "./list/filters";
 import { TailoringNextSteps } from "./list/next-steps";
 
 const I18N = "review_tailoring.form";
 
 /**
- * 新建裁剪表：标题必填、描述选填，下面亮出建好之后的三步。
+ * 新建裁剪表：标题、裁剪类型必填，描述选填，下面亮出建好之后的三步。
  *
  * 阶段不是表的属性 —— 纵轴一次铺开全部阶段的模板树；评审与产品也不在这里选，
- * 进详情页逐个加。建表这一步问得越少越好。
+ * 进详情页逐个加。建表这一步问得越少越好。裁剪类型建完不可改，所以在这里必须选。
  */
 export const CreateTailoringModal = observer(function CreateTailoringModal({
   isOpen,
@@ -31,23 +32,30 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
   const { t } = useTranslation();
 
   const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<EReviewTailoringKind | null>(null);
   const [description, setDescription] = useState("");
   const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setTitle("");
+    setKind(null);
     setDescription("");
     setTouched(false);
   }, [isOpen]);
 
   const titleError = touched && !title.trim();
+  const kindError = touched && !kind;
 
   const handleSubmit = () => {
     setTouched(true);
-    if (!title.trim()) return;
+    if (!title.trim() || !kind) return;
     const text = description.trim();
-    onSubmit({ title: title.trim(), ...(text ? { description_html: toDescriptionHtml(text) } : {}) });
+    onSubmit({
+      title: title.trim(),
+      tailoring_kind: kind,
+      ...(text ? { description_html: toDescriptionHtml(text) } : {}),
+    });
   };
 
   return (
@@ -95,6 +103,48 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
               <AlertCircle className="size-3.5" />
               {t(`${I18N}.title_required`)}
             </span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span id="create-tailoring-kind-label" className="text-13 font-medium text-secondary">
+            {t(`${I18N}.kind_label`)}
+            <span className="ml-1 text-danger-primary">*</span>
+          </span>
+          <div role="radiogroup" aria-labelledby="create-tailoring-kind-label" className="grid grid-cols-2 gap-2.5">
+            {TAILORING_KIND_ORDER.map((option) => {
+              const selected = kind === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setKind(option)}
+                  className={cn(
+                    "flex flex-col items-start gap-1 rounded-lg border px-3.5 py-3 text-left transition-colors",
+                    selected
+                      ? "border-accent-strong bg-accent-subtle"
+                      : kindError
+                        ? "border-danger-strong bg-surface-1 hover:bg-layer-1"
+                        : "border-subtle bg-surface-1 hover:bg-layer-1"
+                  )}
+                >
+                  <span className={cn("text-14 font-medium", selected ? "text-accent-primary" : "text-primary")}>
+                    {t(`review_tailoring.kind.${option}`)}
+                  </span>
+                  <span className="text-12 leading-relaxed text-tertiary">{t(`${I18N}.kind_hint_${option}`)}</span>
+                </button>
+              );
+            })}
+          </div>
+          {kindError ? (
+            <span className="flex items-center gap-1 text-12 text-danger-primary">
+              <AlertCircle className="size-3.5" />
+              {t(`${I18N}.kind_required`)}
+            </span>
+          ) : (
+            <span className="text-12 text-placeholder">{t(`${I18N}.kind_locked`)}</span>
           )}
         </div>
 

@@ -15,6 +15,14 @@ export enum EReviewTailoringStatus {
   REVISING = "revising",
 }
 
+/** 裁剪类型：决定纵轴只能从哪一族节点里挑。建表时定下，之后只读 */
+export enum EReviewTailoringKind {
+  /** 过程评审裁剪：review / activity */
+  PROCESS = "process",
+  /** O阶段评审裁剪：o_stage_review / o_stage_activity */
+  O_STAGE = "o_stage",
+}
+
 /** 可编辑的两个状态：勾选、加产品、提交签批都只在这里面允许 */
 export const REVIEW_TAILORING_EDITABLE_STATUSES: EReviewTailoringStatus[] = [
   EReviewTailoringStatus.DRAFT,
@@ -126,6 +134,7 @@ export type TReviewTailoring = {
   workspace_id: string;
   title: string;
   status: EReviewTailoringStatus;
+  tailoring_kind: EReviewTailoringKind;
   /** 生效次数，0 = 从未生效 */
   revision: number;
   /** 签批轮次，每提交一次 +1 */
@@ -255,6 +264,7 @@ export type TReviewTailoringComment = {
 
 export type TCreateReviewTailoringPayload = {
   title: string;
+  tailoring_kind: EReviewTailoringKind;
   description_html?: string | null;
 };
 

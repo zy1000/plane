@@ -42,6 +42,7 @@ from plane.db.models import (
     ReviewTailoringTemplate,
     StageReviewTemplate,
 )
+from plane.db.models.stage_review import template_kind_allowed
 from plane.utils.review_tailoring import (
     ReviewTailoringError,
     act_on_tailoring,
@@ -114,7 +115,7 @@ class ReviewTailoringViewSet(BaseViewSet):
     model = ReviewTailoring
     serializer_class = ReviewTailoringListSerializer
     search_fields = ["title"]
-    filterset_fields = {"status": ["exact"]}
+    filterset_fields = {"status": ["exact"], "tailoring_kind": ["exact"]}
 
     def get_queryset(self):
         return self.filter_queryset(
@@ -264,6 +265,7 @@ class ReviewTailoringViewSet(BaseViewSet):
                 tailoring = create_tailoring(
                     project=project,
                     title=serializer.validated_data["title"],
+                    tailoring_kind=serializer.validated_data["tailoring_kind"],
                     description_html=serializer.validated_data.get("description_html"),
                     actor=request.user,
                 )
@@ -381,6 +383,9 @@ class ReviewTailoringViewSet(BaseViewSet):
 
         返回形状按「阶段 → 节点」铺平，同一个节点在两个同类型阶段下各出一条，前端照着
         画那张平铺清单；``in_matrix`` 告诉它哪几条已经在表上了。
+
+        再按表的 ``tailoring_kind`` 挑族：O 表只出 O 系列节点，过程表只出其余。口径与
+        ``add_reviews`` 一致，存量混合表里已在轴上的异族节点在这里看不到，矩阵行不受影响。
         """
         tailoring = self.get_queryset().filter(pk=pk).first()
         if tailoring is None:
@@ -394,6 +399,7 @@ class ReviewTailoringViewSet(BaseViewSet):
             for template in StageReviewTemplate.objects.filter(
                 id__in=picked_ids, is_active=True
             )
+            if template_kind_allowed(tailoring.tailoring_kind, template.kind)
         }
         in_matrix = set(
             ReviewTailoringTemplate.objects.filter(tailoring=tailoring).values_list(
