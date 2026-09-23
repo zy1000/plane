@@ -3,12 +3,13 @@ import type { LucideIcon } from "lucide-react";
 import { Box, CalendarDays, ClipboardCheck, Flag, Layers, Package, UserRound, UserRoundCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TStageReviewDetail, TUpdateStageReviewPayload } from "@plane/types";
-import { EStageReviewKind, EStageReviewResult } from "@plane/types";
+import { EStageReviewKind, EStageReviewResult, STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
 import { cn, getDate, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { StageReviewResultBadge } from "../badges";
 import { RoleMemberSelect } from "./role-member-select";
 import { INLINE_FIELD_CLASS } from "./stage-review-content";
+import { StageSelect } from "./stage-select";
 
 const I18N = "stage_review";
 
@@ -146,7 +147,18 @@ export const StageReviewSidebar = ({
           <span className="block truncate">{detail.product_detail?.name ?? "—"}</span>
         </Row>
         <Row icon={Flag} label={t(`${I18N}.fields.stage`)}>
-          <span className="block truncate">{detail.stage_detail?.name ?? "—"}</span>
+          {/* 只有手工评审的评审活动能在这里挪阶段；裁剪表生成的要走裁剪表修订 */}
+          <StageSelect
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            value={detail.stage_id}
+            label={detail.stage_detail?.name ?? ""}
+            editable={editable}
+            lockReason={
+              detail.template_id ? "tailoring" : STAGE_REVIEW_ACTIVITY_KINDS.includes(detail.kind) ? null : "summary"
+            }
+            onChange={(stageId) => onUpdate({ stage_id: stageId })}
+          />
         </Row>
         <Row icon={UserRound} label={t(`${I18N}.fields.leader`)}>
           <RoleMemberSelect

@@ -1,10 +1,10 @@
-import { Check, MessageSquare, Scissors } from "lucide-react";
+import { ArrowLeftRight, Check, MessageSquare, Scissors } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { BulkOperationsBar } from "@/components/common/bulk-operations-bar";
 
 /**
- * 裁剪明细勾选后浮在底部的批量操作条：保留 / 裁剪 / 填写原因。
+ * 裁剪明细勾选后浮在底部的批量操作条：保留 / 裁剪 / 填写原因 / 移到阶段。
  *
  * 用的是列表页那条公共操作条（用例、阶段评审同款），只是动作换成裁剪表自己的三个。
  * 「填写原因」只对选中的裁剪项生效，全是保留项时按钮灰掉。
@@ -18,6 +18,7 @@ export const ItemsBulkBar = ({
   onKeep,
   onCut,
   onReason,
+  onMove,
 }: {
   count: number;
   /** 当前筛选下一共几行：全选完就不必再显示「选择全部」 */
@@ -29,6 +30,8 @@ export const ItemsBulkBar = ({
   onKeep: () => void;
   onCut: () => void;
   onReason: () => void;
+  /** 选中的行里有评审活动才给 */
+  onMove?: () => void;
 }) => {
   const { t } = useTranslation();
   return (
@@ -61,6 +64,11 @@ export const ItemsBulkBar = ({
       >
         {t("review_tailoring.items.bulk_reason")}
       </Button>
+      {onMove && (
+        <Button variant="ghost" size="lg" prependIcon={<ArrowLeftRight />} onClick={onMove}>
+          {t("review_tailoring.move_stage.bulk")}
+        </Button>
+      )}
     </BulkOperationsBar>
   );
 };

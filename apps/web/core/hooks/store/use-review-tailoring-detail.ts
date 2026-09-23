@@ -5,6 +5,7 @@ import type {
   TReviewTailoringCellPayload,
   TReviewTailoringDetail,
   TReviewTailoringItem,
+  TReviewTailoringModeStage,
   TSubmitReviewTailoringPayload,
   TUpdateReviewTailoringHeaderPayload,
 } from "@plane/types";
@@ -94,6 +95,33 @@ export const useReviewTailoringDetail = (
     setIsDirty(true);
   }, []);
 
+  /**
+   * 把一批评审活动格子挪到另一个模式阶段。本地立刻挪（矩阵换行、原处留「已移至」），保存时
+   * 随勾选一起发 `stage_id`。`origin_stage` 记纵轴上本来那一格：第一次挪走时记下，再挪不变，
+   * 挪回原处清空 —— 与后端 `_move_cells` 同一口径。
+   */
+  const moveCells = useCallback((itemIds: string[], stage: TReviewTailoringModeStage) => {
+    if (itemIds.length === 0) return;
+    const targets = new Set(itemIds);
+    setItems((current) =>
+      current.map((item) => {
+        if (!targets.has(item.id) || item.stage_id === stage.id) return item;
+        const homeId = item.origin_stage_id ?? item.stage_id;
+        const homeLabel = item.origin_stage_label ?? item.stage_label;
+        const backHome = stage.id === homeId;
+        return {
+          ...item,
+          stage_id: stage.id,
+          stage_label: stage.name,
+          stage_sort_order: stage.sort_order,
+          origin_stage_id: backHome ? null : homeId,
+          origin_stage_label: backHome ? null : homeLabel,
+        };
+      })
+    );
+    setIsDirty(true);
+  }, []);
+
   /** 给一批格子统一填裁剪原因（明细表的「批量填写原因」） */
   const setReasonForMany = useCallback((itemIds: string[], reason: string) => {
     const targets = new Set(itemIds);
@@ -124,19 +152,29 @@ export const useReviewTailoringDetail = (
     const ids = new Set<string>();
     for (const item of items) {
       const before = original.get(item.id);
-      if (!before || before.selected !== item.selected || before.reason !== item.reason) ids.add(item.id);
+      if (
+        !before ||
+        before.selected !== item.selected ||
+        before.reason !== item.reason ||
+        before.stage_id !== item.stage_id
+      )
+        ids.add(item.id);
     }
     return ids;
   }, [detail, items]);
 
-  /** 只发真正变过的格子，别把几百个没动过的一起推上去 */
-  const buildDirtyCells = useCallback(
-    (): TReviewTailoringCellPayload[] =>
-      items
-        .filter((item) => dirtyIds.has(item.id))
-        .map((item) => ({ id: item.id, selected: item.selected, reason: item.reason })),
-    [items, dirtyIds]
-  );
+  /** 只发真正变过的格子，别把几百个没动过的一起推上去；阶段只在挪过时才带 */
+  const buildDirtyCells = useCallback((): TReviewTailoringCellPayload[] => {
+    const original = new Map((detail?.items ?? []).map((item) => [item.id, item]));
+    return items
+      .filter((item) => dirtyIds.has(item.id))
+      .map((item) => ({
+        id: item.id,
+        selected: item.selected,
+        reason: item.reason,
+        ...(original.get(item.id)?.stage_id !== item.stage_id ? { stage_id: item.stage_id } : {}),
+      }));
+  }, [detail, items, dirtyIds]);
 
   const saveCells = useCallback(async () => {
     if (!workspaceSlug || !projectId || !tailoringId) return undefined;
@@ -247,6 +285,7 @@ export const useReviewTailoringDetail = (
     fetchDetail,
     setCell,
     setCells,
+    moveCells,
     setReasonForMany,
     resetCells,
     saveCells,

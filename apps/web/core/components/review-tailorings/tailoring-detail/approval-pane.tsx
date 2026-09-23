@@ -15,6 +15,7 @@ import { useUser } from "@/hooks/store/user";
 import { formatUpdatedAt } from "../list/tailoring-row";
 import { useReviewTailoringPermissions } from "../permissions";
 import { ReviewTailoringStatusBadge } from "../status-badge";
+import { ApprovalChanges } from "./approval-changes";
 import { getTailoringStats } from "./tailoring-matrix-model";
 
 const I18N = "review_tailoring.approval";
@@ -161,6 +162,9 @@ export const ReviewTailoringApprovalPane = observer(function ReviewTailoringAppr
   const [decision, setDecision] = useState<TReviewTailoringApprovalAction | null>(null);
   const [comment, setComment] = useState("");
   const stats = useMemo(() => getTailoringStats(items), [items]);
+  const changes = detail?.pending_changes ?? [];
+  const moves = changes.filter((change) => change.type === "move");
+  const skipping = moves.filter((change) => change.will_skip).length;
 
   useEffect(() => {
     setDecision(null);
@@ -207,7 +211,16 @@ export const ReviewTailoringApprovalPane = observer(function ReviewTailoringAppr
           : next?.status === EReviewTailoringStatus.APPROVED
             ? "approved"
             : "approval_recorded";
-      setToast({ type: TOAST_TYPE.SUCCESS, title: t(`review_tailoring.toast.${toastKey}`) });
+      const skipped = next?.apply_result?.skipped.length ?? 0;
+      // 部分成功：已评审的活动没挪，当场告诉签批人（详情页横幅也会列出来）
+      setToast(
+        skipped > 0
+          ? {
+              type: TOAST_TYPE.WARNING,
+              title: t("review_tailoring.toast.approved_with_skipped", { count: skipped }),
+            }
+          : { type: TOAST_TYPE.SUCCESS, title: t(`review_tailoring.toast.${toastKey}`) }
+      );
       onDone?.(decision);
     } catch (requestError) {
       setToast({ type: TOAST_TYPE.ERROR, title: t("review_tailoring.toast.failed"), message: translateError(requestError) });
@@ -322,7 +335,12 @@ export const ReviewTailoringApprovalPane = observer(function ReviewTailoringAppr
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5">
         <section>
           <SectionLabel>{t(`${I18N}.impact_title`)}</SectionLabel>
-          <div className="grid grid-cols-3 divide-x divide-subtle overflow-hidden rounded-xl border border-subtle">
+          <div
+            className={cn(
+              "grid divide-x divide-subtle overflow-hidden rounded-xl border border-subtle",
+              moves.length > 0 ? "grid-cols-4" : "grid-cols-3"
+            )}
+          >
             <ImpactTile
               label={t(`${I18N}.impact_kept`)}
               value={stats.selected}
@@ -338,6 +356,18 @@ export const ReviewTailoringApprovalPane = observer(function ReviewTailoringAppr
               }
               hintClassName={stats.missing > 0 ? "text-warning-primary" : undefined}
             />
+            {moves.length > 0 && (
+              <ImpactTile
+                label={t(`${I18N}.impact_moved`)}
+                value={<span className="text-accent-primary">{moves.length}</span>}
+                hint={
+                  skipping > 0
+                    ? t(`${I18N}.impact_moved_skip`, { count: skipping })
+                    : t(`${I18N}.impact_moved_hint`)
+                }
+                hintClassName={skipping > 0 ? "text-warning-primary" : undefined}
+              />
+            )}
             <ImpactTile
               label={t(`${I18N}.impact_after`)}
               value={
@@ -359,6 +389,13 @@ export const ReviewTailoringApprovalPane = observer(function ReviewTailoringAppr
             </p>
           )}
         </section>
+
+        {changes.length > 0 && (
+          <section>
+            <SectionLabel>{t(`${I18N}.changes_title`)}</SectionLabel>
+            <ApprovalChanges changes={changes} products={detail.products} />
+          </section>
+        )}
 
         <section>
           <SectionLabel right={t(`${I18N}.progress`, { approved: approvedCount, total: detail.approvals.length })}>

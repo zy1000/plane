@@ -45,7 +45,7 @@ from plane.db.models import (
     WorkspaceMemberRole,
     WorkspaceRole,
 )
-from plane.db.models.stage_review import O_STAGE_KINDS
+from plane.db.models.stage_review import ACTIVITY_KINDS, O_STAGE_KINDS
 
 
 class StageReviewError(Exception):
@@ -571,8 +571,20 @@ def update_review(review, *, actor, validated_data):
     """详情页里改字段。状态与结论不在这里改 —— 那两列只能由动作推进。
 
     每个改动的字段写一条轨迹，**旧值与新值都记**：时间线要写成「把负责人从 A 改为 B」。
+
+    ``stage``（视图已解析成项目模式里的 ``DevModeStage``）只有手工评审能改，走
+    ``move_review_stage``；裁剪表生成的评审，阶段由裁剪表决定，要挪请走裁剪表修订。
     """
     assert_not_locked(review)
+    validated_data = dict(validated_data)
+    stage = validated_data.pop("stage", None)
+    if stage is not None and stage.id != review.stage_id:
+        if review.template_id is not None:
+            raise StageReviewError(
+                "阶段由裁剪表决定，请到裁剪表发起修订",
+                code="STAGE_REVIEW_STAGE_BY_TAILORING",
+            )
+        move_review_stage(review, stage=stage, actor=actor)
     changed = []
     for field, value in validated_data.items():
         old = getattr(review, field)
@@ -596,6 +608,45 @@ def update_review(review, *, actor, validated_data):
             old_identifier=_activity_identifier(field, old),
             new_identifier=_activity_identifier(field, new),
         )
+    return review
+
+
+def move_review_stage(review, *, stage, actor, extra=None):
+    """把一条评审活动挪到本项目模式的另一个阶段（批次 5）。
+
+    挪过去就**脱离父评审**，直接挂在目标阶段下；评审 id、轨迹、评论、附件都不变。两个入口
+    共用这里：手工评审在抽屉里改阶段（``update_review``）、裁剪表修订签批生效
+    （``review_tailoring._apply_effective``）。调用方负责确认 ``stage`` 属于项目模式。
+
+    - 只有评审活动能挪，汇总评审挪了会把它下面的活动留在原阶段，父子口径就乱了。
+    - 已评审即定稿，不能挪。
+    - 不跑「O 类只能在 O 阶段」那条校验：目标阶段不限类型。
+
+    **必须先置空 parent 再改 stage**：``StageReview.save()`` 有父时会把阶段抄回父评审的。
+    """
+    if review.kind not in ACTIVITY_KINDS:
+        raise StageReviewError(
+            "只有评审活动能移动阶段", code="STAGE_REVIEW_ONLY_ACTIVITY_CAN_MOVE"
+        )
+    assert_not_locked(review)
+    old_stage = review.stage
+    if old_stage is not None and old_stage.id == stage.id:
+        return review
+    review.parent = None
+    review.stage = stage
+    review.updated_by = actor
+    review.save(update_fields=["parent", "stage", "updated_at", "updated_by"])
+    write_activity(
+        review,
+        actor=actor,
+        verb="updated",
+        field="stage",
+        old_value=old_stage.name if old_stage is not None else None,
+        new_value=stage.name,
+        old_identifier=old_stage.id if old_stage is not None else None,
+        new_identifier=stage.id,
+        extra=extra,
+    )
     return review
 
 

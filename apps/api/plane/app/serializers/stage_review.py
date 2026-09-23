@@ -237,11 +237,16 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
 
     **``status`` 与 ``result`` 不在其中** —— 状态只能由动作按顺序推进，结论只能在
     「提交审核」那一刻写入，开个 PATCH 口子等于把状态机架空。
+
+    ``stage_id`` 只给手工评审挪阶段用（视图解析成模式阶段后交给 ``update_review``）。
     """
+
+    stage_id = serializers.UUIDField(required=False, write_only=True)
 
     class Meta:
         model = StageReview
         fields = [
+            "stage_id",
             "title",
             "description_html",
             "work_instruction",

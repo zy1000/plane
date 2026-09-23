@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
+import type { EStageReviewKind, TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
+import { STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
 import { Checkbox, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { CellReasonModal } from "./cell-reason-modal";
 import { MatrixCell } from "./matrix-cell";
+import { MovedFromBadge } from "./moved-from-badge";
 import { StageFilterChip } from "./stage-filter-chip";
 import type { TCellCounts, TMatrixGroup, TMatrixRow } from "./tailoring-matrix-model";
-import { collectGroupCells, countCells, countChildren, splitChildTitle } from "./tailoring-matrix-model";
+import {
+  collectGroupCells,
+  countCells,
+  countChildren,
+  getMoveBlockReason,
+  splitChildTitle,
+} from "./tailoring-matrix-model";
 import type { TCellSelection } from "./use-cell-selection";
 
 /** 纵轴的两列：阶段 + 评审 / 评审活动。两列都钉在左侧，横向滚动时一起留下 */
@@ -28,10 +36,12 @@ type TAxisMenuItem = {
   label: string;
   icon: ReactNode;
   danger?: boolean;
+  /** 置灰时写在右侧的原因（「已评审，不能移动」） */
+  disabledHint?: string;
   onClick: () => void;
 };
 
-/** 行 / 列的「⋯」菜单，只放「移除」 */
+/** 行 / 列的「⋯」菜单：移到阶段（只有评审活动行有）、移除 */
 const AxisMenu = ({ items, portalElement }: { items: TAxisMenuItem[]; portalElement?: HTMLElement | null }) => {
   const { t } = useTranslation();
   return (
@@ -53,10 +63,16 @@ const AxisMenu = ({ items, portalElement }: { items: TAxisMenuItem[]; portalElem
         <CustomMenu.MenuItem
           key={item.key}
           onClick={item.onClick}
-          className={cn("flex items-center gap-2", item.danger && "text-danger-primary")}
+          disabled={Boolean(item.disabledHint)}
+          className={cn(
+            "flex items-center gap-2",
+            item.danger && "text-danger-primary",
+            item.disabledHint && "cursor-not-allowed text-placeholder"
+          )}
         >
           {item.icon}
           {item.label}
+          {item.disabledHint && <span className="ml-auto pl-3 text-11 text-placeholder">{item.disabledHint}</span>}
         </CustomMenu.MenuItem>
       ))}
     </CustomMenu>
@@ -129,6 +145,7 @@ export const TailoringMatrix = ({
   selection,
   onReasonChange,
   onRemoveReview,
+  onMoveCells,
   onRemoveProduct,
   onAddAxes,
 }: {
@@ -152,6 +169,8 @@ export const TailoringMatrix = ({
   selection: TCellSelection;
   onReasonChange: (itemId: string, reason: string) => void;
   onRemoveReview: (row: TMatrixRow) => void;
+  /** 评审活动行「⋯」里的「移到阶段…」：把这一行能挪的格子交给页面开弹窗 */
+  onMoveCells: (cells: TReviewTailoringItem[]) => void;
   onRemoveProduct: (product: TReviewTailoringProduct) => void;
   onAddAxes: () => void;
 }) => {
@@ -332,6 +351,13 @@ export const TailoringMatrix = ({
               // 段与段之间那道深线；第一段上面已经是表头，不用再画
               const divider = index === 0 && groupIndex > 0 && STAGE_DIVIDER;
               const headBg = isRowSelected ? "bg-accent-subtle" : "bg-surface-1 group-hover:bg-layer-1-hover";
+              // 只有评审活动行能挪；整行都已评审时菜单项置灰并写明原因
+              const canMoveRow = cells.length > 0 && cells.some((cell) => getMoveBlockReason(cell) !== "move_not_activity");
+              const movableCells = cells.filter((cell) => !getMoveBlockReason(cell));
+              // 字号按类型分：挪出来的活动脱离了父评审成了顶层行，也还是活动的字号
+              const isActivityRow = row.isChild || STAGE_REVIEW_ACTIVITY_KINDS.includes(row.kind as EStageReviewKind);
+              // 格子全挪走了的原处：标题压淡，只剩「已移至」的空位
+              const isVacated = cells.length === 0 && row.movedOut.size > 0;
               return (
                 <tr key={row.rowKey} className="group">
                   <td className={cn(STAGE_COL, "z-[1] h-11.5 border-b border-subtle p-0", headBg, divider)}>
@@ -362,13 +388,16 @@ export const TailoringMatrix = ({
                       {/* 活动只写自己的名字：父评审名由 splitChildTitle 剥掉，不在行里重复一遍 */}
                       <span
                         className={cn(
-                          "min-w-0 flex-1 truncate text-primary",
-                          row.isChild ? "text-13" : "text-14 font-semibold"
+                          "min-w-0 flex-1 truncate",
+                          isVacated ? "text-tertiary" : "text-primary",
+                          isActivityRow ? "text-13" : "text-14 font-semibold"
                         )}
                         title={row.title}
                       >
                         {rest}
                       </span>
+                      {/* 从别的阶段挪进来的行：原阶段写在徽章上，悬停看全句 */}
+                      {row.originStageLabel && <MovedFromBadge stage={row.originStageLabel} />}
                       {!row.isChild && children > 0 ? (
                         <span className="shrink-0 text-12 text-placeholder tabular-nums">
                           {t("review_tailoring.actions.add_reviews_activity_count", { count: children })}
@@ -385,6 +414,22 @@ export const TailoringMatrix = ({
                           <AxisMenu
                             portalElement={menuPortalEl}
                             items={[
+                              ...(canMoveRow
+                                ? [
+                                    {
+                                      key: "move",
+                                      label: t("review_tailoring.move_stage.menu"),
+                                      icon: <ArrowLeftRight className="size-3.5" />,
+                                      disabledHint:
+                                        movableCells.length === 0
+                                          ? t("review_tailoring.move_stage.blocked_completed")
+                                          : undefined,
+                                      onClick: () => {
+                                        if (movableCells.length > 0) onMoveCells(movableCells);
+                                      },
+                                    },
+                                  ]
+                                : []),
                               {
                                 key: "remove",
                                 label: t("review_tailoring.matrix.remove_row"),
@@ -402,11 +447,21 @@ export const TailoringMatrix = ({
                   {products.map((product) => {
                     const cell = row.cells.get(product.id);
                     if (!cell) {
+                      // 这一格的活动挪去了别的阶段：原处留空位，写清去了哪
+                      const movedTo = row.movedOut.get(product.id);
                       return (
                         <td
                           key={product.id}
-                          className={cn(PRODUCT_COL, "h-11.5 border-b border-l border-subtle bg-layer-1", divider)}
-                        />
+                          className={cn(PRODUCT_COL, "h-11.5 border-b border-l border-subtle bg-layer-1 px-3.5", divider)}
+                        >
+                          {movedTo && (
+                            <span className="inline-flex items-center gap-1.5 text-12 whitespace-nowrap text-placeholder">
+                              <ArrowRight className="size-3.5" />
+                              {t("review_tailoring.move_stage.moved_to_prefix")}
+                              <span className="font-medium text-tertiary">{movedTo.stage_label}</span>
+                            </span>
+                          )}
+                        </td>
                       );
                     }
                     return (

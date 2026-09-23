@@ -1,4 +1,10 @@
-import type { TReviewTailoringItem, TReviewTailoringProduct, TReviewTailoringRow } from "@plane/types";
+import type {
+  EStageReviewKind,
+  TReviewTailoringItem,
+  TReviewTailoringProduct,
+  TReviewTailoringRow,
+} from "@plane/types";
+import { STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
 
 /**
  * 矩阵的纯派生逻辑。全部是纯函数，方便在不挂载组件的情况下推演联动与锁定规则。
@@ -22,6 +28,13 @@ export type TMatrixRow = {
   sortOrder: number;
   /** product_id → 格子。只加了纵轴还没加产品时是空的 */
   cells: Map<string, TReviewTailoringItem>;
+  /**
+   * 「挪进来才有的行」：这一行的格子都是评审活动从别的阶段挪来的，值是原阶段名（画「自 X」）。
+   * 纵轴本来就有的行为 null
+   */
+  originStageLabel: string | null;
+  /** product_id → 从这一行挪走的格子。原处留空位，写「已移至 X」 */
+  movedOut: Map<string, TReviewTailoringItem>;
 };
 
 /** 行键：阶段 + 节点。父子查找仍按 templateId，因为那是在同一段（同一阶段）内部做的 */
@@ -35,7 +48,11 @@ export const rowKeyOf = (stageId: string, templateId: string) => `${stageId}:${t
  * 正下方（后端按 sort_order 全局排序，父子在同一个序列里未必相邻）。没有父的活动（有些
  * 阶段没有汇总评审）留在顶层，与评审平级。
  */
-const buildRows = (rows: TReviewTailoringRow[], cellsByRowKey: Map<string, TReviewTailoringItem[]>): TMatrixRow[] => {
+const buildRows = (
+  rows: TReviewTailoringRow[],
+  cellsByRowKey: Map<string, TReviewTailoringItem[]>,
+  movedOutByRowKey: Map<string, TReviewTailoringItem[]>
+): TMatrixRow[] => {
   const present = new Set(rows.map((row) => row.template_id));
 
   const toRow = (row: TReviewTailoringRow, isChild: boolean): TMatrixRow => ({
@@ -49,6 +66,10 @@ const buildRows = (rows: TReviewTailoringRow[], cellsByRowKey: Map<string, TRevi
     cells: new Map(
       (cellsByRowKey.get(rowKeyOf(row.stage_id, row.template_id)) ?? []).map((cell) => [cell.product_id, cell])
     ),
+    originStageLabel: row.origin_stage_label,
+    movedOut: new Map(
+      (movedOutByRowKey.get(rowKeyOf(row.stage_id, row.template_id)) ?? []).map((cell) => [cell.product_id, cell])
+    ),
   });
 
   const ordered = [...rows].sort((a, b) => a.sort_order - b.sort_order);
@@ -56,8 +77,8 @@ const buildRows = (rows: TReviewTailoringRow[], cellsByRowKey: Map<string, TRevi
   const roots: TMatrixRow[] = [];
   for (const row of ordered) {
     const parentId = row.parent_template_id;
-    // 父不在本表里时按顶层处理，否则这一行会凭空消失
-    if (!parentId || !present.has(parentId)) {
+    // 父不在本表里时按顶层处理，否则这一行会凭空消失；挪进来的活动已经脱离父评审，也按顶层
+    if (!parentId || !present.has(parentId) || row.origin_stage_id) {
       roots.push(toRow(row, false));
       continue;
     }
@@ -78,6 +99,42 @@ export type TMatrixGroup = {
 };
 
 /**
+ * 行清单跟上本地（含未保存）的移动：
+ *
+ * - 格子挪到一个没有这一行的阶段（模式里没勾这个节点）→ 就地补一行，带原阶段名。
+ * - 后端补出来的「挪进来的行」本地已经没有格子了（挪回去了）→ 去掉，不然留一行空壳。
+ */
+const withMovedRows = (
+  rows: TReviewTailoringRow[],
+  items: TReviewTailoringItem[],
+  cellsByRowKey: Map<string, TReviewTailoringItem[]>
+): TReviewTailoringRow[] => {
+  const kept = rows.filter(
+    (row) => !row.origin_stage_id || cellsByRowKey.has(rowKeyOf(row.stage_id, row.template_id))
+  );
+  const known = new Set(kept.map((row) => rowKeyOf(row.stage_id, row.template_id)));
+  const extra: TReviewTailoringRow[] = [];
+  for (const item of items) {
+    const key = rowKeyOf(item.stage_id, item.template_id);
+    if (known.has(key)) continue;
+    known.add(key);
+    extra.push({
+      template_id: item.template_id,
+      parent_template_id: item.parent_template_id,
+      stage_id: item.stage_id,
+      stage_label: item.stage_label,
+      stage_sort_order: item.stage_sort_order,
+      kind: item.kind,
+      title: item.title,
+      sort_order: item.template_sort_order,
+      origin_stage_id: item.origin_stage_id,
+      origin_stage_label: item.origin_stage_label,
+    });
+  }
+  return extra.length > 0 ? [...kept, ...extra] : kept;
+};
+
+/**
  * 把纵轴先按阶段分段，再在每段内部折成树。
  *
  * 纵轴是人一个个加进来的，可能横跨好几个阶段 —— 分段之后每段就是「这个阶段要裁哪些评审」，
@@ -86,15 +143,20 @@ export type TMatrixGroup = {
  */
 export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTailoringItem[]): TMatrixGroup[] => {
   const cellsByRowKey = new Map<string, TReviewTailoringItem[]>();
-  for (const item of items) {
-    const key = rowKeyOf(item.stage_id, item.template_id);
-    const bucket = cellsByRowKey.get(key);
+  const movedOutByRowKey = new Map<string, TReviewTailoringItem[]>();
+  const push = (map: Map<string, TReviewTailoringItem[]>, key: string, item: TReviewTailoringItem) => {
+    const bucket = map.get(key);
     if (bucket) bucket.push(item);
-    else cellsByRowKey.set(key, [item]);
+    else map.set(key, [item]);
+  };
+  for (const item of items) {
+    push(cellsByRowKey, rowKeyOf(item.stage_id, item.template_id), item);
+    if (item.origin_stage_id) push(movedOutByRowKey, rowKeyOf(item.origin_stage_id, item.template_id), item);
   }
 
+  const effectiveRows = withMovedRows(rows, items, cellsByRowKey);
   const bucketByStage = new Map<string, { label: string; sortOrder: number; rows: TReviewTailoringRow[] }>();
-  for (const row of rows) {
+  for (const row of effectiveRows) {
     const bucket = bucketByStage.get(row.stage_id);
     if (bucket) bucket.rows.push(row);
     else
@@ -110,7 +172,7 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
       stageId,
       stageLabel: bucket.label,
       sortOrder: bucket.sortOrder,
-      rows: buildRows(bucket.rows, cellsByRowKey),
+      rows: buildRows(bucket.rows, cellsByRowKey, movedOutByRowKey),
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.stageLabel.localeCompare(b.stageLabel));
 };
@@ -191,9 +253,26 @@ export type TTailoringStats = {
   missing: number;
   toCreate: number;
   toDelete: number;
+  /** 相对生效快照换了阶段的格子（修订中才有，草稿没有快照） */
+  toMove: number;
   /** 要删的里面已评审的条数：签批生效后连同轨迹、评论、附件一起删，提交时要提醒 */
   toDeleteCompleted: number;
   generated: number;
+};
+
+/** 相对生效快照换了阶段（修订里挪过） */
+export const isMovedSinceEffective = (item: TReviewTailoringItem) =>
+  Boolean(item.effective_stage_id) && item.effective_stage_id !== item.stage_id;
+
+/**
+ * 这个格子能不能挪阶段。返回 null 表示能挪，否则是该显示的原因 key：
+ * 汇总评审不能挪、已评审的活动不能挪（已评审即定稿）。
+ */
+export const getMoveBlockReason = (item: TReviewTailoringItem): "move_not_activity" | "move_completed" | null => {
+  // 只有评审活动能挪；汇总评审一挪，它下面的活动就留在原阶段没了归属
+  if (!STAGE_REVIEW_ACTIVITY_KINDS.includes(item.kind as EStageReviewKind)) return "move_not_activity";
+  if (item.stage_review_status === "completed") return "move_completed";
+  return null;
 };
 
 /** 取消勾选了一个已评审的格子：签批生效时这条评审会被删掉 */
@@ -208,12 +287,14 @@ export const getTailoringStats = (items: TReviewTailoringItem[]): TTailoringStat
     missing: 0,
     toCreate: 0,
     toDelete: 0,
+    toMove: 0,
     toDeleteCompleted: 0,
     generated: 0,
   };
   for (const item of items) {
     stats.total += 1;
     if (item.stage_review_id) stats.generated += 1;
+    if (isMovedSinceEffective(item)) stats.toMove += 1;
     if (item.selected) {
       stats.selected += 1;
       if (!item.stage_review_id) stats.toCreate += 1;

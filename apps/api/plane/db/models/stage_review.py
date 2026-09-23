@@ -516,7 +516,9 @@ class StageReview(ProjectBaseModel):
 
     def clean(self):
         validate_node_kind(self)
-        validate_kind_stage(self)
+        # 跨阶段移动不受「O 类只能在 O 阶段」约束（批次 5 拍板），移动入口会置这个标记
+        if not getattr(self, "_moving_stage", False):
+            validate_kind_stage(self)
         if (
             self.result
             in (
@@ -910,6 +912,18 @@ class ReviewTailoringItem(BaseModel):
         on_delete=models.RESTRICT,
         related_name="tailoring_items",
         verbose_name="模式阶段",
+    )
+    # 评审活动被挪过阶段时，记它在纵轴上本来那一格的阶段；没挪过（或挪回了原处）为空。
+    # 三处要靠它：矩阵上「自 X」徽章与原处的「已移至」空位、``sync_items`` 不在原处重建
+    # 格子、生效时挪过的活动不挂回目标阶段的父评审。SET_NULL：原阶段被删了，这一格就当
+    # 原生长在现阶段上。
+    origin_stage = models.ForeignKey(
+        "db.DevModeStage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moved_tailoring_items",
+        verbose_name="移动前的模式阶段",
     )
     # 标题快照，模板改名后历史单仍显示当时的口径
     title = models.CharField(max_length=255, verbose_name="评审标题（快照）")

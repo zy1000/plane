@@ -9,13 +9,15 @@ import { TableSelectCheckbox } from "@/components/common/table-select-checkbox";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import { CellReasonModal } from "./cell-reason-modal";
 import { KeepCutSegment } from "./keep-cut-segment";
+import { MovedFromBadge } from "./moved-from-badge";
 import { getCellLockReason } from "./tailoring-matrix-model";
 import type { TCellSelection } from "./use-cell-selection";
 
 /** 列宽默认值。「裁剪原因」不在表里 —— 它吃掉剩余宽度，所以右边不会留白 */
 const DEFAULT_WIDTHS: Record<string, number> = {
   product: 176,
-  stage: 112,
+  // 挪过阶段的行在阶段后面带「自 X」徽章，留出它的宽度
+  stage: 168,
   kind: 108,
   name: 250,
   tailored: 158,
@@ -183,7 +185,12 @@ export const TailoringItemsTable = ({
                     )}
                     {productById.get(item.product_id)?.name ?? "—"}
                   </TableCell>
-                  <TableCell className={metaClass}>{item.stage_label}</TableCell>
+                  <TableCell className={metaClass}>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate">{item.stage_label}</span>
+                      {item.origin_stage_label && <MovedFromBadge stage={item.origin_stage_label} />}
+                    </span>
+                  </TableCell>
                   <TableCell className={cellClass}>
                     <StageReviewKindBadge
                       kind={item.kind as never}

@@ -160,6 +160,8 @@ class TailoringRow:
 
     stage: DevModeStage
     template: StageReviewTemplate
+    #: 只有「挪进来才有的行」才有值：这一行的格子全是从别的阶段挪过来的（见 ``detail_rows``）
+    origin_stage: DevModeStage | None = None
 
     @property
     def key(self):
@@ -233,6 +235,42 @@ def _expand_rows(project_id, template_ids):
 def axis_rows(tailoring):
     """纵轴当前展开出来的全部行。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
     return _expand_rows(tailoring.project_id, _axis_template_ids(tailoring))
+
+
+def detail_rows(tailoring, items):
+    """详情要画的行 = 纵轴展开的行 + 「格子挪进来才有的行」。
+
+    评审活动挪到一个模式里没勾它的阶段后，(目标阶段, 节点) 不在 ``axis_rows`` 里 —— 不补
+    上这一行，挪过去的格子在矩阵上就没地方落。补出来的行带 ``origin_stage``（取这一行里
+    格子的原阶段），前端据此画「自 X」徽章。行序与纵轴一致：阶段顺序 → 节点顺序。
+    """
+    rows = axis_rows(tailoring)
+    known = {row.key for row in rows}
+    extra = {}
+    for item in items:
+        key = (item.stage_id, item.template_id)
+        if key in known:
+            continue
+        row = extra.get(key)
+        if row is None or (row.origin_stage is None and item.origin_stage_id):
+            extra[key] = TailoringRow(
+                stage=item.stage,
+                template=item.template,
+                origin_stage=item.origin_stage if item.origin_stage_id else None,
+            )
+    if not extra:
+        return rows
+    return sorted(
+        [*rows, *extra.values()],
+        key=lambda row: (
+            row.stage.sort_order,
+            str(row.stage.created_at),
+            str(row.stage.id),
+            row.template.sort_order,
+            str(row.template.created_at),
+            str(row.template.id),
+        ),
+    )
 
 
 def _build_items(tailoring, rows, product_ids, actor):
@@ -600,6 +638,12 @@ def sync_items(*, tailoring, actor):
     )
     product_id_set = set(product_ids)
     present = {(item.product_id, item.stage_id, item.template_id) for item in items}
+    # 挪走的活动在原处留的是空位，不是缺格子 —— 补回去生效时就会多生成一条重复的评审
+    present |= {
+        (item.product_id, item.origin_stage_id, item.template_id)
+        for item in items
+        if item.origin_stage_id
+    }
 
     missing = [
         item
@@ -647,6 +691,9 @@ def save_cells(*, tailoring, cells, actor):
     也不会把评审拉回来。
 
     草稿态允许原因留空 —— 逼着边勾边写会让人没法先把矩阵勾完。缺原因在提交签批时才拦。
+
+    格子带 ``stage_id`` 就是把评审活动挪到另一个模式阶段（``_move_cells``）：改的是同一个
+    格子的阶段，勾选与原因原样保留。已生效的表在修订里挪，实例要等签批生效才跟着挪。
     """
     _require_status(
         tailoring,
@@ -659,7 +706,7 @@ def save_cells(*, tailoring, cells, actor):
         item.id: item
         for item in ReviewTailoringItem.objects.filter(
             tailoring=tailoring
-        ).select_related("template", "stage")
+        ).select_related("template", "stage", "origin_stage", "stage_review")
     }
     unknown = [str(cell["id"]) for cell in cells if cell["id"] not in items]
     if unknown:
@@ -672,6 +719,8 @@ def save_cells(*, tailoring, cells, actor):
     before = {
         item.id: (item.selected, item.reason) for item in items.values()
     }
+
+    moved = _move_cells(tailoring, items, cells, actor)
 
     for cell in cells:
         item = items[cell["id"]]
@@ -732,8 +781,117 @@ def save_cells(*, tailoring, cells, actor):
                         "title": item.title,
                     },
                 )
+    if moved:
+        ReviewTailoringItem.objects.bulk_update(
+            moved, ["stage", "origin_stage", "updated_at"], batch_size=500
+        )
     return list(items.values())
 
+
+def _move_cells(tailoring, items, cells, actor):
+    """处理 ``save_cells`` 里带 ``stage_id`` 的格子：就地改阶段，返回挪了的格子（未落库）。
+
+    规则一次全查完再抛，别让人改一处提一次：
+
+    - 只有评审活动能挪，汇总评审一挪，它下面的活动就留在原阶段没了归属。
+    - 目标阶段必须是本项目研发模式的阶段（不限阶段类型）。
+    - 已评审的活动不能挪 —— 已评审即定稿。签批前才评审完的，生效时跳过（``_apply_effective``）。
+    - 目标阶段已经有同一（产品 × 节点）的格子（o-1、o-2 都勾了它）→ 409。按挪完之后的
+      整张表查，不靠数据库唯一约束报错。
+
+    ``origin_stage`` 记「纵轴上本来那一格」：第一次挪走时记下原阶段，再挪不变，挪回原处清空。
+    """
+    requests = {
+        cell["id"]: cell["stage_id"]
+        for cell in cells
+        if cell.get("stage_id") and cell["stage_id"] != items[cell["id"]].stage_id
+    }
+    if not requests:
+        return []
+
+    stages = {stage.id: stage for stage in project_stages(tailoring.project_id)}
+    not_activity, not_in_mode, completed = [], [], []
+    for item_id, stage_id in requests.items():
+        item = items[item_id]
+        if item.template.kind not in ACTIVITY_KINDS:
+            not_activity.append({"item_id": str(item.id), "title": item.title})
+        elif stage_id not in stages:
+            not_in_mode.append({"item_id": str(item.id), "stage_id": str(stage_id)})
+        elif (
+            item.stage_review_id
+            and item.stage_review.status == StageReviewStatus.COMPLETED
+        ):
+            completed.append({"item_id": str(item.id), "title": item.title})
+    if not_activity:
+        raise ReviewTailoringError(
+            "Only review activities can move to another stage.",
+            code="REVIEW_TAILORING_ONLY_ACTIVITY_CAN_MOVE",
+            detail={"items": not_activity},
+        )
+    if not_in_mode:
+        raise ReviewTailoringError(
+            "The target stage is not in the project's development mode.",
+            code="REVIEW_TAILORING_STAGE_NOT_IN_MODE",
+            detail={"items": not_in_mode},
+        )
+    if completed:
+        raise ReviewTailoringError(
+            "Reviewed activities cannot move to another stage.",
+            code="REVIEW_TAILORING_MOVE_COMPLETED",
+            detail={"items": completed},
+        )
+
+    final_key = {
+        item.id: (
+            item.product_id,
+            requests.get(item.id, item.stage_id),
+            item.template_id,
+        )
+        for item in items.values()
+    }
+    taken = defaultdict(list)
+    for item_id, key in final_key.items():
+        taken[key].append(item_id)
+    conflicts = [
+        {"item_id": str(item_id), "title": items[item_id].title}
+        for item_id in requests
+        if len(taken[final_key[item_id]]) > 1
+    ]
+    if conflicts:
+        raise ReviewTailoringError(
+            "The target stage already has the same activity for this product.",
+            code="REVIEW_TAILORING_MOVE_CONFLICT",
+            detail={"items": conflicts},
+        )
+
+    moved = []
+    for item_id, stage_id in requests.items():
+        item = items[item_id]
+        old_stage = item.stage
+        home_id = item.origin_stage_id or item.stage_id
+        item.stage = stages[stage_id]
+        item.origin_stage = None if stage_id == home_id else stages.get(home_id)
+        # 原阶段已被删（SET_NULL 语义）时 stages.get 取不到，按原处在新阶段处理
+        moved.append(item)
+        _write_activity(
+            tailoring,
+            actor=actor,
+            verb="updated",
+            field="cell_stage",
+            old_value=old_stage.name,
+            new_value=item.stage.name,
+            extra={
+                "item_id": str(item.id),
+                "product_id": str(item.product_id),
+                "stage_id": str(item.stage_id),
+                "stage_label": item.stage.name,
+                "old_stage_id": str(old_stage.id),
+                "old_stage_label": old_stage.name,
+                "template_id": str(item.template_id),
+                "title": item.title,
+            },
+        )
+    return moved
 
 
 def update_header(*, tailoring, title=None, description_html=None, actor):
@@ -816,8 +974,24 @@ def _validate_before_submit(tailoring):
     return items
 
 
+def _snapshot_stage(recorded, item):
+    """格子生效时所在的阶段（字符串 id）。
+
+    批次 5 之前的快照没记阶段：那时还不能挪，生效时的阶段就是格子的「原处」——
+    挪过的取 ``origin_stage``，没挪过的就是现在的阶段。
+    """
+    if "stage_id" in recorded:
+        return recorded["stage_id"]
+    return str(item.origin_stage_id or item.stage_id)
+
+
+def _snapshot_origin(recorded):
+    """格子生效时的 ``origin_stage``（字符串 id 或 None），旧快照一律为 None。"""
+    return recorded.get("origin_stage_id")
+
+
 def _changed_cell_count(snapshot, items):
-    """与生效快照相比改动了几个格子：勾选或原因变了、快照里没有（新补进来）、
+    """与生效快照相比改动了几个格子：勾选、原因或阶段变了、快照里没有（新补进来）、
     快照里有但现在没了（被移除的行列）都各算一格。"""
     changed = 0
     current_ids = set()
@@ -828,9 +1002,93 @@ def _changed_cell_count(snapshot, items):
             recorded is None
             or bool(recorded.get("selected")) != item.selected
             or (recorded.get("reason") or "") != item.reason
+            or _snapshot_stage(recorded, item) != str(item.stage_id)
         ):
             changed += 1
     return changed + sum(1 for key in snapshot if key not in current_ids)
+
+
+def attach_effective_stage(tailoring, items):
+    """给每个格子挂上生效快照里的阶段（``effective_stage_id``），就地写到对象上。
+
+    前端拿它和本地（含未保存）的阶段比，头部「移动 N」、格子改动数才跟得上手上的改动。
+    没有快照（从未生效）或快照里没有这一格（修订期间补进来的）为 None。
+    """
+    snapshot = tailoring.effective_snapshot or {}
+    for item in items:
+        recorded = snapshot.get(str(item.id))
+        item.effective_stage_id = _snapshot_stage(recorded, item) if recorded else None
+    return items
+
+
+def revision_changes(tailoring, items):
+    """修订相对生效快照的逐条改动，签批弹窗的「改动明细」读它。
+
+    三类：``add``（生效后会新建评审）、``cancel``（会删掉评审）、``move``（换了阶段）。
+    同一格既取消又挪了只记取消 —— 评审都要删了，挪不挪没有意义。挪的是已评审的活动时
+    ``will_skip``：签批生效时会被跳过（见 ``_apply_effective``）。没有快照（从未生效）
+    返回空列表：头一次签批的全部格子都是「新增」，列出来没有信息量。
+    """
+    snapshot = tailoring.effective_snapshot or {}
+    if not snapshot or tailoring.status not in (
+        ReviewTailoringStatus.REVISING,
+        ReviewTailoringStatus.PENDING,
+    ):
+        return []
+
+    stage_names = {
+        str(stage.id): stage.name for stage in project_stages(tailoring.project_id)
+    }
+    changes = []
+    for item in items:
+        recorded = snapshot.get(str(item.id))
+        base = {
+            "item_id": str(item.id),
+            "product_id": str(item.product_id),
+            "template_id": str(item.template_id),
+            "title": item.title,
+            "stage_id": str(item.stage_id),
+            "stage_label": item.stage.name,
+        }
+        if recorded is None:
+            if item.selected:
+                changes.append({**base, "type": "add"})
+            continue
+        was_selected = bool(recorded.get("selected"))
+        if item.selected and not was_selected:
+            changes.append({**base, "type": "add"})
+        elif was_selected and not item.selected:
+            changes.append({**base, "type": "cancel"})
+            continue
+        old_stage = _snapshot_stage(recorded, item)
+        if old_stage != str(item.stage_id):
+            changes.append(
+                {
+                    **base,
+                    "type": "move",
+                    "old_stage_id": old_stage,
+                    "old_stage_label": stage_names.get(old_stage, ""),
+                    "will_skip": bool(
+                        item.stage_review_id
+                        and item.stage_review.status == StageReviewStatus.COMPLETED
+                    ),
+                }
+            )
+    return changes
+
+
+def last_skipped_moves(tailoring):
+    """最近一次生效时被跳过的移动（已评审的活动）。详情页横幅读它；非已生效态不给。"""
+    if tailoring.status != ReviewTailoringStatus.APPROVED:
+        return []
+    activity = (
+        ReviewTailoringActivity.objects.filter(
+            tailoring=tailoring, verb="approved", field="status"
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    return (activity.extra or {}).get("skipped", []) if activity else []
 
 
 def _has_changes(tailoring, items):
@@ -1145,12 +1403,14 @@ def _create_stage_reviews(tailoring, items, actor):
         reviews = []
         for item in batch:
             template = item.template
-            # 父子必须落在同一个模式阶段：o-2 的活动只认 o-2 的那条父评审
+            # 父子必须落在同一个模式阶段：o-2 的活动只认 o-2 的那条父评审。
+            # 挪过阶段的活动不挂父评审 —— 挪走就是脱离原父评审，目标阶段碰巧也有同一个
+            # 父节点（o-1 → o-2）也不认
             parent_id = (
                 review_by_key.get(
                     (item.product_id, item.stage_id, template.parent_id)
                 )
-                if template.parent_id
+                if template.parent_id and not item.origin_stage_id
                 else None
             )
             review = StageReview(
@@ -1192,7 +1452,7 @@ def _apply_effective(*, tailoring, actor, comment=""):
     """
     items = list(
         ReviewTailoringItem.objects.filter(tailoring=tailoring).select_related(
-            "template"
+            "template", "stage"
         )
     )
 
@@ -1212,12 +1472,17 @@ def _apply_effective(*, tailoring, actor, comment=""):
             if item.stage_review_id in deleted_ids:
                 item.stage_review_id = None
 
+    moved_ids, skipped = _move_stage_reviews(tailoring, items, actor)
     created_ids = _create_stage_reviews(tailoring, items, actor)
 
     tailoring.effective_snapshot = {
         str(item.id): {
             "selected": item.selected,
             "reason": item.reason,
+            "stage_id": str(item.stage_id),
+            "origin_stage_id": str(item.origin_stage_id)
+            if item.origin_stage_id
+            else None,
             "stage_review_id": str(item.stage_review_id)
             if item.stage_review_id
             else None,
@@ -1251,11 +1516,80 @@ def _apply_effective(*, tailoring, actor, comment=""):
             "revision": tailoring.revision,
             "created_count": len(created_ids),
             "deleted_count": len(deleted_ids),
+            "moved_count": len(moved_ids),
             "created_ids": [str(rid) for rid in created_ids],
             "deleted_ids": [str(rid) for rid in deleted_ids],
+            "moved_ids": [str(rid) for rid in moved_ids],
+            "skipped": skipped,
         },
     )
-    return {"created_ids": created_ids, "deleted_ids": deleted_ids}
+    return {
+        "created_ids": created_ids,
+        "deleted_ids": deleted_ids,
+        "moved_ids": moved_ids,
+        "skipped": skipped,
+    }
+
+
+def _move_stage_reviews(tailoring, items, actor):
+    """把修订里挪过阶段的格子对应的评审实例挪过去。返回 ``(挪了的评审 id, 跳过的明细)``。
+
+    判据是「格子的阶段 ≠ 它的评审实例的阶段」，不看快照 —— 老快照没记阶段也判得准。
+    只处理还保留着的格子（取消勾选的那条已经在前面删掉了）。
+
+    **部分成功**：签批期间评审完了的活动跳过 —— 格子退回实例所在的阶段，实例不动，其余照挪。
+    跳过的明细写进生效活动的 ``extra.skipped``，详情页横幅与变更历史都读那一份。
+    """
+    candidates = [
+        item for item in items if item.selected and item.stage_review_id
+    ]
+    if not candidates:
+        return [], []
+    reviews = {
+        review.id: review
+        for review in StageReview.objects.filter(
+            id__in=[item.stage_review_id for item in candidates]
+        ).select_related("stage")
+    }
+    snapshot = tailoring.effective_snapshot or {}
+
+    from plane.utils.stage_review import move_review_stage
+
+    moved_ids, skipped, reverted = [], [], []
+    for item in candidates:
+        review = reviews.get(item.stage_review_id)
+        if review is None or review.stage_id == item.stage_id:
+            continue
+        if review.status == StageReviewStatus.COMPLETED:
+            skipped.append(
+                {
+                    "item_id": str(item.id),
+                    "product_id": str(item.product_id),
+                    "title": item.title,
+                    "stage_id": str(review.stage_id),
+                    "stage_label": review.stage.name,
+                    "target_stage_id": str(item.stage_id),
+                    "target_stage_label": item.stage.name,
+                    "reason": "completed",
+                }
+            )
+            recorded = snapshot.get(str(item.id)) or {}
+            item.stage_id = review.stage_id
+            item.origin_stage_id = _snapshot_origin(recorded)
+            reverted.append(item)
+            continue
+        move_review_stage(
+            review,
+            stage=item.stage,
+            actor=actor,
+            extra={"tailoring_id": str(tailoring.id), "revision": tailoring.revision + 1},
+        )
+        moved_ids.append(review.id)
+    if reverted:
+        ReviewTailoringItem.objects.bulk_update(
+            reverted, ["stage", "origin_stage", "updated_at"], batch_size=500
+        )
+    return moved_ids, skipped
 
 
 # --- 修订 -----------------------------------------------------------------
@@ -1311,19 +1645,29 @@ def cancel_revision(*, tailoring, actor):
         if recorded is None:
             orphans.append(item.id)
             continue
-        if item.selected != bool(recorded.get("selected")) or item.reason != (
-            recorded.get("reason") or ""
+        stage_id = _snapshot_stage(recorded, item)
+        origin_id = _snapshot_origin(recorded)
+        if (
+            item.selected != bool(recorded.get("selected"))
+            or item.reason != (recorded.get("reason") or "")
+            or str(item.stage_id) != stage_id
+            or (str(item.origin_stage_id) if item.origin_stage_id else None) != origin_id
         ):
             item.selected = bool(recorded.get("selected"))
             item.reason = recorded.get("reason") or ""
+            item.stage_id = stage_id
+            item.origin_stage_id = origin_id
             restored.append(item)
 
-    if restored:
-        ReviewTailoringItem.objects.bulk_update(
-            restored, ["selected", "reason", "updated_at"], batch_size=500
-        )
+    # 先删快照外的格子再还原：挪回原阶段的格子要占的位置，可能正被修订期间补出来的格子占着
     if orphans:
         ReviewTailoringItem.objects.filter(id__in=orphans).delete(soft=False)
+    if restored:
+        ReviewTailoringItem.objects.bulk_update(
+            restored,
+            ["selected", "reason", "stage", "origin_stage", "updated_at"],
+            batch_size=500,
+        )
 
     tailoring.status = ReviewTailoringStatus.APPROVED
     tailoring.updated_by = actor
@@ -1410,7 +1754,7 @@ def attach_list_progress(tailorings, user=None):
     if revising_ids:
         for item in ReviewTailoringItem.objects.filter(
             tailoring_id__in=revising_ids
-        ).only("id", "tailoring_id", "selected", "reason"):
+        ).only("id", "tailoring_id", "selected", "reason", "stage", "origin_stage"):
             revising_items[item.tailoring_id].append(item)
 
     for tailoring in tailorings:

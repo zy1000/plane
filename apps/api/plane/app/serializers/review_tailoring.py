@@ -67,6 +67,13 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     template_sort_order = serializers.FloatField(
         source="template.sort_order", read_only=True
     )
+    # 挪过阶段的评审活动：纵轴上本来那一格的阶段。没挪过为空
+    origin_stage_id = serializers.UUIDField(read_only=True, allow_null=True)
+    origin_stage_label = serializers.CharField(
+        source="origin_stage.name", read_only=True, default=None
+    )
+    # 生效快照里这一格的阶段（视图 ``attach_effective_stage`` 挂上来），从未生效为空
+    effective_stage_id = serializers.CharField(read_only=True, default=None)
     stage_review_id = serializers.UUIDField(read_only=True)
     # 已生成的评审做到哪一步了：修订时「已评审完的不许裁掉」，前端要据此锁住格子
     stage_review_status = serializers.CharField(
@@ -84,6 +91,9 @@ class ReviewTailoringItemSerializer(BaseSerializer):
             "stage_id",
             "stage_label",
             "stage_sort_order",
+            "origin_stage_id",
+            "origin_stage_label",
+            "effective_stage_id",
             "kind",
             "template_is_active",
             "template_sort_order",
@@ -127,6 +137,13 @@ class ReviewTailoringRowSerializer(serializers.Serializer):
     kind = serializers.CharField(source="template.kind", read_only=True)
     title = serializers.CharField(source="template.title", read_only=True)
     sort_order = serializers.FloatField(source="template.sort_order", read_only=True)
+    # 「挪进来才有的行」（``detail_rows``）：格子都是从这个阶段挪来的。纵轴本来的行为空
+    origin_stage_id = serializers.UUIDField(
+        source="origin_stage.id", read_only=True, default=None
+    )
+    origin_stage_label = serializers.CharField(
+        source="origin_stage.name", read_only=True, default=None
+    )
 
 
 class ReviewTailoringListSerializer(BaseSerializer):
@@ -190,6 +207,13 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
     products = serializers.SerializerMethodField()
     rows = serializers.SerializerMethodField()
     approvals = serializers.SerializerMethodField()
+    # 修订相对生效快照的逐条改动（``revision_changes``），签批弹窗「改动明细」用
+    pending_changes = serializers.SerializerMethodField()
+    # 最近一次生效时被跳过的移动（``last_skipped_moves``），详情页横幅用
+    last_skipped_moves = serializers.SerializerMethodField()
+    # 项目研发模式的全部阶段：「移到阶段」弹窗的候选。放在详情里，免得普通成员去读
+    # 工作区级的研发模式接口（那边要模板中心的读权限）
+    mode_stages = serializers.SerializerMethodField()
 
     class Meta(ReviewTailoringListSerializer.Meta):
         fields = ReviewTailoringListSerializer.Meta.fields + [
@@ -198,8 +222,30 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
             "products",
             "rows",
             "approvals",
+            "pending_changes",
+            "last_skipped_moves",
+            "mode_stages",
         ]
         read_only_fields = fields
+
+    def get_pending_changes(self, obj):
+        return self.context.get("pending_changes", [])
+
+    def get_last_skipped_moves(self, obj):
+        return self.context.get("last_skipped_moves", [])
+
+    def get_mode_stages(self, obj):
+        return [
+            {
+                "id": str(stage.id),
+                "name": stage.name,
+                # 编码不落库，恒等于阶段类型的编码（见 DevModeStage 头注）
+                "code": stage.stage_type.code,
+                "sort_order": stage.sort_order,
+                "stage_type_name": stage.stage_type.name,
+            }
+            for stage in self.context.get("mode_stages", [])
+        ]
 
     def get_items(self, obj):
         return ReviewTailoringItemSerializer(
@@ -316,16 +362,20 @@ class ReviewTailoringHeaderSerializer(serializers.Serializer):
 
 
 class ReviewTailoringCellSerializer(serializers.Serializer):
+    """一个格子的改动：勾选、原因、阶段（挪评审活动）三者至少给一个。
+
+    ``reason`` 不给默认值 —— 给了的话只挪阶段 / 只改勾选的请求会被当成「把原因清空」。
+    """
+
     id = serializers.UUIDField()
     selected = serializers.BooleanField(required=False)
-    reason = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True, default=""
-    )
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    stage_id = serializers.UUIDField(required=False)
 
     def validate(self, attrs):
-        if "selected" not in attrs and "reason" not in self.initial_data:
+        if not {"selected", "reason", "stage_id"} & set(attrs):
             raise serializers.ValidationError(
-                "A cell update needs selected or reason."
+                "A cell update needs selected, reason or stage_id."
             )
         return attrs
 

@@ -282,6 +282,8 @@ class StageReviewViewSet(BaseViewSet):
                 {
                     "stage_id": str(stage.id),
                     "label": stage.name,
+                    # 抽屉里改阶段的下拉要显示编码
+                    "code": stage.stage_type.code,
                     **{
                         key: by_stage.get(stage.id, empty)[key]
                         for key in empty
@@ -379,11 +381,24 @@ class StageReviewViewSet(BaseViewSet):
             review, data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        stage_id = data.pop("stage_id", None)
+        if stage_id is not None:
+            # 同新建：只认本项目研发模式的阶段
+            data["stage"] = DevModeStage.objects.filter(
+                id=stage_id, dev_mode_id=review.project.dev_mode_id
+            ).first()
+            if data["stage"] is None:
+                return Response(
+                    {
+                        "error": "目标阶段不在本项目的研发模式里",
+                        "code": "STAGE_REVIEW_STAGE_NOT_IN_MODE",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         try:
             with transaction.atomic():
-                update_review(
-                    review, actor=request.user, validated_data=serializer.validated_data
-                )
+                update_review(review, actor=request.user, validated_data=data)
         except StageReviewError as exc:
             return stage_review_error_response(exc)
         return self._detail_response(pk)

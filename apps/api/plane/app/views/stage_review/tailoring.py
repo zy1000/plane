@@ -48,14 +48,17 @@ from plane.utils.review_tailoring import (
     add_products,
     add_reviews,
     attach_detail_progress,
+    attach_effective_stage,
     attach_list_progress,
-    axis_rows,
     cancel_revision,
     create_tailoring,
     delete_tailoring,
+    detail_rows,
+    last_skipped_moves,
     project_stages,
     remove_product,
     remove_review,
+    revision_changes,
     save_cells,
     stage_template_ids,
     start_revision,
@@ -86,6 +89,8 @@ CONFLICT_CODES = {
     "REVIEW_TAILORING_AXIS_IN_USE",
     "REVIEW_TAILORING_EFFECTIVE_UNDELETABLE",
     "REVIEW_TAILORING_PENDING_UNDELETABLE",
+    "REVIEW_TAILORING_MOVE_CONFLICT",
+    "REVIEW_TAILORING_MOVE_COMPLETED",
 }
 
 
@@ -158,7 +163,9 @@ class ReviewTailoringViewSet(BaseViewSet):
         """一次查完格子 / 产品 / 本轮签批，再喂给序列化器，避免逐条反查。"""
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
-            .select_related("template", "stage", "stage_review", "created_by")
+            .select_related(
+                "template", "stage", "origin_stage", "stage_review", "created_by"
+            )
             .order_by(
                 # 阶段顺序来自研发模式，不是模板节点的阶段类型
                 "stage__sort_order",
@@ -167,8 +174,9 @@ class ReviewTailoringViewSet(BaseViewSet):
                 "id",
             )
         )
-        # 两个轴都单独查：只加了一个轴的表没有任何格子，从格子反推会画出一张空表
-        rows = axis_rows(tailoring)
+        # 两个轴都单独查：只加了一个轴的表没有任何格子，从格子反推会画出一张空表。
+        # 行在纵轴展开的基础上补上「评审活动挪进来才有的行」
+        rows = detail_rows(tailoring, items)
         products = list(
             Product.objects.filter(
                 id__in=ReviewTailoringProduct.objects.filter(
@@ -190,6 +198,7 @@ class ReviewTailoringViewSet(BaseViewSet):
         # 评审与活动各占一行，轴上每个节点都算一行
         tailoring.review_count = len(rows)
         attach_detail_progress(tailoring, items, approvals)
+        attach_effective_stage(tailoring, items)
         serializer = ReviewTailoringDetailSerializer(
             tailoring,
             context={
@@ -197,6 +206,9 @@ class ReviewTailoringViewSet(BaseViewSet):
                 "rows": rows,
                 "products": products,
                 "approvals": approvals,
+                "pending_changes": revision_changes(tailoring, items),
+                "mode_stages": project_stages(tailoring.project_id),
+                "last_skipped_moves": last_skipped_moves(tailoring),
             },
         )
         return Response(serializer.data, status=http_status)
@@ -509,7 +521,7 @@ class ReviewTailoringViewSet(BaseViewSet):
                 tailoring = self._locked(pk)
                 if tailoring is None:
                     return self._not_found()
-                act_on_tailoring(
+                _, result = act_on_tailoring(
                     tailoring=tailoring,
                     approver=request.user,
                     action=serializer.validated_data["action"],
@@ -517,7 +529,19 @@ class ReviewTailoringViewSet(BaseViewSet):
                 )
         except ReviewTailoringError as exc:
             return tailoring_error_response(exc)
-        return self._detail_response(self.get_queryset().filter(pk=pk).first())
+        response = self._detail_response(self.get_queryset().filter(pk=pk).first())
+        # 这一次表态让表生效了才有：签批人当场就能看到哪些移动被跳过
+        response.data["apply_result"] = (
+            {
+                "created_count": len(result["created_ids"]),
+                "deleted_count": len(result["deleted_ids"]),
+                "moved_count": len(result["moved_ids"]),
+                "skipped": result["skipped"],
+            }
+            if result
+            else None
+        )
+        return response
 
     @allow_fine_permission(TAILORING_MANAGE_KEY)
     def revise(self, request, slug, project_id, pk):

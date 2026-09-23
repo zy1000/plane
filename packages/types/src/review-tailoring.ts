@@ -68,6 +68,12 @@ export type TReviewTailoringRow = {
   kind: string;
   title: string;
   sort_order: number;
+  /**
+   * 「挪进来才有的行」：评审活动挪到一个模式里没勾它的阶段后，后端补出这一行，
+   * 这里是格子原来的阶段（画「自 X」徽章）。纵轴本来就有的行为 null
+   */
+  origin_stage_id: string | null;
+  origin_stage_label: string | null;
 };
 
 /** 「添加评审」清单里的一条：模式阶段 × 可选节点。`in_matrix` = 这个节点已经在纵轴上 */
@@ -94,6 +100,11 @@ export type TReviewTailoringItem = {
   stage_id: string;
   stage_label: string;
   stage_sort_order: number;
+  /** 评审活动挪过阶段时，纵轴上本来那一格的阶段；没挪过（或挪回原处）为 null */
+  origin_stage_id: string | null;
+  origin_stage_label: string | null;
+  /** 生效快照里这一格所在的阶段；从未生效、或修订期间才补进来的格子为 null */
+  effective_stage_id: string | null;
   kind: string;
   template_is_active: boolean;
   template_sort_order: number;
@@ -146,6 +157,44 @@ export type TReviewTailoring = {
   approved_at: string | null;
 };
 
+/** 修订相对生效快照的一条改动（签批弹窗「改动明细」）。从未生效过的表没有 */
+export type TReviewTailoringChange = {
+  type: "add" | "cancel" | "move";
+  item_id: string;
+  product_id: string;
+  template_id: string;
+  title: string;
+  stage_id: string;
+  stage_label: string;
+  /** 以下只有 move 有 */
+  old_stage_id?: string;
+  old_stage_label?: string;
+  /** 挪的是已评审的活动：签批生效时会被跳过 */
+  will_skip?: boolean;
+};
+
+export type TReviewTailoringModeStage = {
+  id: string;
+  name: string;
+  /** 阶段类型的编码（M010 …） */
+  code: string;
+  sort_order: number;
+  stage_type_name: string;
+};
+
+/** 生效时被跳过的一条移动（签批时活动已评审） */
+export type TReviewTailoringSkippedMove = {
+  item_id: string;
+  product_id: string;
+  title: string;
+  /** 实例仍在的阶段 */
+  stage_id: string;
+  stage_label: string;
+  target_stage_id: string;
+  target_stage_label: string;
+  reason: "completed";
+};
+
 export type TReviewTailoringDetail = TReviewTailoring & {
   description_html: string | null;
   items: TReviewTailoringItem[];
@@ -153,6 +202,18 @@ export type TReviewTailoringDetail = TReviewTailoring & {
   rows: TReviewTailoringRow[];
   /** 只有本轮的签批行；历史轮次留在变更历史里 */
   approvals: TReviewTailoringApproval[];
+  pending_changes: TReviewTailoringChange[];
+  /** 项目研发模式的全部阶段，按模式顺序。「移到阶段」弹窗的候选 */
+  mode_stages: TReviewTailoringModeStage[];
+  /** 最近一次生效被跳过的移动，只在已生效态给 */
+  last_skipped_moves: TReviewTailoringSkippedMove[];
+  /** 只有「这次签批让表生效」的 act 响应带 */
+  apply_result?: {
+    created_count: number;
+    deleted_count: number;
+    moved_count: number;
+    skipped: TReviewTailoringSkippedMove[];
+  } | null;
 };
 
 export type TReviewTailoringActivity = {
@@ -212,6 +273,8 @@ export type TReviewTailoringCellPayload = {
   id: string;
   selected?: boolean;
   reason?: string;
+  /** 把评审活动挪到本项目模式的另一个阶段 */
+  stage_id?: string;
 };
 
 export type TSubmitReviewTailoringPayload = {

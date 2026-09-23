@@ -1,22 +1,25 @@
-import { Check, Scissors, X } from "lucide-react";
+import { ArrowLeftRight, Check, Scissors, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 
 /** 深色条上的次级按钮底色：跟着文字色走，亮暗主题下都是一层淡淡的当前色 */
 const SUBTLE_ON_INVERSE = { backgroundColor: "color-mix(in srgb, currentColor 14%, transparent)" };
 
 /**
- * 矩阵里勾选了格子之后浮在底部正中的操作条：已选几格 + 全部保留 / 全部裁剪 / 取消选择。
+ * 矩阵里勾选了格子之后浮在底部正中的操作条：已选几格 + 全部保留 / 全部裁剪 / 移到阶段 / 取消选择。
  * 与改动条占同一个位置，有选中时替代改动条；父容器要 `relative`。
  */
 export const SelectionBar = ({
   count,
   onKeep,
   onCut,
+  onMove,
   onClear,
 }: {
   count: number;
   onKeep: () => void;
   onCut: () => void;
+  /** 选区里有评审活动才给：汇总评审与已评审的格子由弹窗排除 */
+  onMove?: () => void;
   onClear: () => void;
 }) => {
   const { t } = useTranslation();
@@ -45,6 +48,17 @@ export const SelectionBar = ({
           <Scissors className="size-3.5" strokeWidth={2.2} />
           {t("review_tailoring.matrix.cut_all")}
         </button>
+        {onMove && (
+          <button
+            type="button"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-3 font-medium whitespace-nowrap hover:opacity-80"
+            style={SUBTLE_ON_INVERSE}
+            onClick={onMove}
+          >
+            <ArrowLeftRight className="size-3.5" strokeWidth={2.2} />
+            {t("review_tailoring.move_stage.bulk")}
+          </button>
+        )}
         <button
           type="button"
           aria-label={t("review_tailoring.matrix.clear_selection")}

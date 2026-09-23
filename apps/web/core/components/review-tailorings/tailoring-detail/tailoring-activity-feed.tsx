@@ -2,7 +2,20 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { format, isValid, parseISO } from "date-fns";
 import type { LucideIcon } from "lucide-react";
-import { Check, ChevronDown, MessageSquareText, PencilLine, Plus, Scissors, Send, Undo2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  MessageSquareText,
+  PencilLine,
+  Plus,
+  Scissors,
+  Send,
+  Undo2,
+  X,
+} from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TReviewTailoringActivity, TReviewTailoringProduct } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
@@ -111,6 +124,8 @@ const MilestoneRow = ({ position }: { position: TRowPosition }) => {
   let sentence = t(`${I18N}.fallback`);
   let badge: EReviewTailoringStatus | undefined = toStatus;
   let note: string | null = null;
+  /** 生效时被跳过的移动（已评审的活动留在原阶段） */
+  let skipped: { title: string; stage: string }[] = [];
 
   if (activity.field === "tailoring") {
     icon = Plus;
@@ -134,6 +149,13 @@ const MilestoneRow = ({ position }: { position: TRowPosition }) => {
         tone = "success";
         sentence = t(`${I18N}.applied`);
         note = t(`${I18N}.applied_counts`, { created: extra.created_count ?? 0, deleted: extra.deleted_count ?? 0 });
+        if (Number(extra.moved_count ?? 0) > 0) note += t(`${I18N}.applied_moved`, { count: extra.moved_count });
+        if (Array.isArray(extra.skipped)) {
+          skipped = extra.skipped.map((entry) => {
+            const move = (entry ?? {}) as Record<string, unknown>;
+            return { title: String(move.title ?? ""), stage: String(move.stage_label ?? "") };
+          });
+        }
         break;
       case "rejected":
         icon = X;
@@ -181,6 +203,15 @@ const MilestoneRow = ({ position }: { position: TRowPosition }) => {
         {note && <span className="text-13 text-tertiary">{note}</span>}
         <ActivityTime value={activity.created_at} />
       </div>
+      {skipped.length > 0 && (
+        <p className="mt-1 flex items-start gap-1.5 text-13 text-warning-primary">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          {t(`${I18N}.applied_skipped`, {
+            count: skipped.length,
+            items: skipped.map((move) => `${move.title}（${move.stage}）`).join("、"),
+          })}
+        </p>
+      )}
       {comment && <Quote text={comment} tone={tone === "neutral" ? "accent" : tone} />}
     </TimelineRailRow>
   );
@@ -238,10 +269,16 @@ const EditRow = ({ position, products }: { position: TRowPosition; products: TRe
 
 /* ---------------- 格子改动 ---------------- */
 
-type TCellAction = "keep" | "cut" | "reason";
+type TCellAction = "keep" | "cut" | "reason" | "move";
 
 const cellAction = (activity: TReviewTailoringActivity): TCellAction =>
-  activity.field === "cell_reason" ? "reason" : isTrue(activity.new_value) ? "keep" : "cut";
+  activity.field === "cell_stage"
+    ? "move"
+    : activity.field === "cell_reason"
+      ? "reason"
+      : isTrue(activity.new_value)
+        ? "keep"
+        : "cut";
 
 /** 这一格要跟一段什么原因：裁掉时记下的原因，或改原因时的新原因 */
 const cellReason = (activity: TReviewTailoringActivity) =>
@@ -252,12 +289,27 @@ const cellTitle = (activity: TReviewTailoringActivity) => String(activity.extra?
 /** 同一个评审在 o-1、o-2 下各有一格，光看名字分不清改的是哪一格。老数据没这一项就不显示 */
 const cellStage = (activity: TReviewTailoringActivity) => String(activity.extra?.stage_label ?? "");
 
-const ACTION_ICON: Record<TCellAction, LucideIcon> = { keep: Check, cut: Scissors, reason: MessageSquareText };
+const ACTION_ICON: Record<TCellAction, LucideIcon> = {
+  keep: Check,
+  cut: Scissors,
+  reason: MessageSquareText,
+  move: ArrowLeftRight,
+};
 const ACTION_TONE: Record<TCellAction, string> = {
   keep: "text-success-primary",
   cut: "text-tertiary",
   reason: "text-tertiary",
+  move: "text-accent-primary",
 };
+
+/** 挪阶段的去向「O-F1 → D阶段」 */
+const MovePath = ({ activity }: { activity: TReviewTailoringActivity }) => (
+  <span className="inline-flex shrink-0 items-center gap-1.5 text-12 font-normal whitespace-nowrap">
+    <span className="text-tertiary">{activity.old_value}</span>
+    <ArrowRight className="size-3 text-placeholder" />
+    <span className="font-semibold text-primary">{activity.new_value}</span>
+  </span>
+);
 
 /** 展开后的一格：动作 | 评审名，下面挂原因 */
 const CellItem = ({ activity }: { activity: TReviewTailoringActivity }) => {
@@ -272,10 +324,19 @@ const CellItem = ({ activity }: { activity: TReviewTailoringActivity }) => {
         {t(`${I18N}.action_${action}`)}
       </span>
       <div className="min-w-0">
-        <span className="block truncate leading-5 font-medium text-primary" title={cellTitle(activity)}>
-          {cellStage(activity) && <span className="font-normal text-placeholder">{cellStage(activity)} · </span>}
-          {cellTitle(activity)}
-        </span>
+        {action === "move" ? (
+          <span className="flex min-w-0 items-center gap-2 leading-5">
+            <span className="truncate font-medium text-primary" title={cellTitle(activity)}>
+              {cellTitle(activity)}
+            </span>
+            <MovePath activity={activity} />
+          </span>
+        ) : (
+          <span className="block truncate leading-5 font-medium text-primary" title={cellTitle(activity)}>
+            {cellStage(activity) && <span className="font-normal text-placeholder">{cellStage(activity)} · </span>}
+            {cellTitle(activity)}
+          </span>
+        )}
         {reason && <Quote text={reason} tone="neutral" />}
         {action === "reason" && !reason && <span className="text-12 text-placeholder">{t(`${I18N}.reason_cleared`)}</span>}
       </div>
@@ -300,6 +361,7 @@ const CellsRow = ({ position }: { position: TRowPosition }) => {
           <Actor activity={first} />
           <span>{t(`${I18N}.cell_${action}`)}</span>
           <Value>{cellTitle(first)}</Value>
+          {action === "move" && <MovePath activity={first} />}
           <ActivityTime value={first.created_at} />
         </EditLine>
         {reason && <div className="mb-1.5"><Quote text={reason} tone="neutral" /></div>}
@@ -309,7 +371,7 @@ const CellsRow = ({ position }: { position: TRowPosition }) => {
 
   const counts = activities.reduce(
     (acc, activity) => ({ ...acc, [cellAction(activity)]: acc[cellAction(activity)] + 1 }),
-    { keep: 0, cut: 0, reason: 0 } as Record<TCellAction, number>
+    { keep: 0, cut: 0, reason: 0, move: 0 } as Record<TCellAction, number>
   );
 
   return (
@@ -333,6 +395,13 @@ const CellsRow = ({ position }: { position: TRowPosition }) => {
             <span className="inline-flex items-center gap-1.5">
               <span className="size-1.5 rounded-[2px] bg-(--text-color-placeholder)" />
               {t(`${I18N}.count_cut`, { count: counts.cut })}
+            </span>
+          )}
+          {counts.move > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              {/* 保留已经用了蓝色小方块，移动换成箭头免得两者看混 */}
+              <ArrowLeftRight className="size-3 text-accent-primary" />
+              {t(`${I18N}.count_move`, { count: counts.move })}
             </span>
           )}
           {counts.reason > 0 && <span>{t(`${I18N}.count_reason`, { count: counts.reason })}</span>}

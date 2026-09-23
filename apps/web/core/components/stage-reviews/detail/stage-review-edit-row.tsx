@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CalendarDays,
   ChevronRight,
+  Flag,
   ListOrdered,
   Package,
   Paperclip,
@@ -32,6 +33,8 @@ const ACTIVITY_FIELD_I18N: Record<string, string> = {
 };
 
 const FIELD_ICON: Record<string, LucideIcon> = {
+  // 评审活动挪阶段（手工改或裁剪表修订生效），与侧栏「阶段」同一个图标
+  stage: Flag,
   title: Type,
   description_html: AlignLeft,
   work_instruction: ListOrdered,

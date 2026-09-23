@@ -128,6 +128,8 @@ export type TStageReviewStageSummary = {
    */
   stage_id: string;
   label: string;
+  /** 阶段类型编码，只有项目级汇总给 */
+  code?: string;
   total: number;
   /** 只有产品级汇总有：这一组属于哪个项目，阶段名后面淡色缀项目名 */
   project_id?: string;
@@ -226,6 +228,8 @@ export type TCreateStageReviewPayload = {
 
 /** 详情里能改的字段。**status 与 result 不在其中** —— 那两列只能由动作推进 */
 export type TUpdateStageReviewPayload = Partial<{
+  /** 只有手工评审的评审活动能改：挪到本项目模式的另一个阶段，脱离父评审 */
+  stage_id: string;
   title: string;
   description_html: string;
   work_instruction: string;

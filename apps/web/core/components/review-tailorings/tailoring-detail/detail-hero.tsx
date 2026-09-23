@@ -161,6 +161,15 @@ export const DetailHero = ({
                   +{stats.toCreate}
                 </span>
                 <span className="text-18 leading-none font-semibold text-tertiary tabular-nums">−{stats.toDelete}</span>
+                {/* 修订里挪过阶段的活动：生效时实例跟着挪，id 不变 */}
+                {stats.toMove > 0 && (
+                  <>
+                    <span className="ml-1.5">{t(`${I18N}.move_stage.stat_moved`)}</span>
+                    <span className="text-18 leading-none font-semibold text-accent-primary tabular-nums">
+                      {stats.toMove}
+                    </span>
+                  </>
+                )}
               </span>
             )}
             {status === EReviewTailoringStatus.APPROVED && (

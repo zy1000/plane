@@ -20,7 +20,8 @@ export type TTimelineEntry = {
   phaseAfter: EReviewTailoringStatus;
 };
 
-const CELL_FIELDS = ["cell_selected", "cell_reason"];
+/** 格子级改动：保留 / 裁剪、改原因、挪阶段（评审活动跨阶段移动） */
+const CELL_FIELDS = ["cell_selected", "cell_reason", "cell_stage"];
 /** 一次保存的记录在同一个事务里连续写入，相邻两条间隔超过这个数就当作另一次保存 */
 const SAVE_GAP_MS = 60 * 1000;
 

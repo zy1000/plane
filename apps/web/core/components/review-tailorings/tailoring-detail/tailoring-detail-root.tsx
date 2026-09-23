@@ -35,16 +35,24 @@ import {
   useHeaderSlot,
 } from "./header-slots";
 import { ItemsBulkBar } from "./items-bulk-bar";
+import { MoveStageModal } from "./move-stage-modal";
 import { ProductPager } from "./product-pager";
 import { SaveBar } from "./save-bar";
 import { SelectionBar } from "./selection-bar";
+import { SkippedMovesBanner } from "./skipped-moves-banner";
 import { SubmitApprovalModal } from "./submit-approval-modal";
 import { TailoringActivityFeed } from "./tailoring-activity-feed";
 import { TailoringComments } from "./tailoring-comments";
 import { buildItemRows, TailoringItemsTable } from "./tailoring-items-table";
 import { TailoringMatrix } from "./tailoring-matrix";
 import type { TMatrixFilter } from "./tailoring-matrix-model";
-import { buildMatrixGroups, filterMatrixGroups, getCellLockReason, getTailoringStats } from "./tailoring-matrix-model";
+import {
+  buildMatrixGroups,
+  filterMatrixGroups,
+  getCellLockReason,
+  getMoveBlockReason,
+  getTailoringStats,
+} from "./tailoring-matrix-model";
 import type { TTimelineFilter } from "./tailoring-timeline-model";
 import { countTimeline } from "./tailoring-timeline-model";
 import { useCellSelection } from "./use-cell-selection";
@@ -131,6 +139,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [timelineFilter, setTimelineFilter] = useState<TTimelineFilter>("all");
   /** 矩阵只看某个阶段的行。null = 全部阶段；纵轴平铺后靠它顶替原来的折叠 */
   const [stageFilter, setStageFilter] = useState<string | null>(null);
+  /** 「移到阶段」弹窗要挪的格子，以及选区里被排除（汇总评审 / 已评审）的格数 */
+  const [moveTarget, setMoveTarget] = useState<{ cells: TReviewTailoringItem[]; excluded: number } | null>(null);
 
   const { detail, items, isLoading, isMutating, isEditable, dirtyIds } = store;
   const stats = useMemo(() => getTailoringStats(items), [items]);
@@ -213,6 +223,25 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     );
     selection.clear();
   };
+
+  /** 打开「移到阶段」：汇总评审与已评审的格子先排除，一格都挪不了就直接提示 */
+  const openMove = (cells: TReviewTailoringItem[]) => {
+    const movable = cells.filter((cell) => !getMoveBlockReason(cell));
+    if (movable.length === 0) {
+      setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.move_stage.nothing_movable`) });
+      return;
+    }
+    setMoveTarget({ cells: movable, excluded: cells.length - movable.length });
+  };
+  /** 只挪一种活动、且它还挂在父评审下时，弹窗写「挪过去后脱离 X」 */
+  const moveParentTitle = (() => {
+    const templates = new Set(moveTarget?.cells.map((cell) => cell.template_id));
+    const first = moveTarget?.cells[0];
+    if (templates.size !== 1 || !first?.parent_template_id || first.origin_stage_id) return undefined;
+    return detail.rows.find((row) => row.template_id === first.parent_template_id)?.title;
+  })();
+  /** 选区里有评审活动才出「移到阶段」 */
+  const canMoveSelection = selectedCells.some((cell) => getMoveBlockReason(cell) !== "move_not_activity");
 
   const changeFilter = (next: TMatrixFilter) => {
     setFilter(next);
@@ -358,6 +387,12 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           onTitleSave={(title) => void run(() => store.updateHeader({ title }), "updated")}
           onDescriptionSave={(description_html) => void run(() => store.updateHeader({ description_html }), "updated")}
         />
+        <SkippedMovesBanner
+          tailoringId={detail.id}
+          revision={detail.revision}
+          skipped={detail.last_skipped_moves ?? []}
+          products={detail.products}
+        />
       </div>
 
       <DetailTabBar tabs={tabs} active={tab} onChange={changeTab} tools={matrixTools || itemsTools || activityTools || undefined} />
@@ -414,6 +449,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 onToggle={handleToggle}
                 selection={selection}
                 onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
+                onMoveCells={openMove}
                 onRemoveReview={(row) =>
                   requestRemove(
                     { kind: "review", id: row.templateId, name: row.title },
@@ -481,12 +517,14 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
               onKeep={() => handleSetCells(selectedCells, true)}
               onCut={() => handleSetCells(selectedCells, false)}
               onReason={() => setIsBulkReasonOpen(true)}
+              onMove={canMoveSelection ? () => openMove(selectedCells) : undefined}
             />
           ) : (
             <SelectionBar
               count={selectedCells.length}
               onKeep={() => handleSetCells(selectedCells, true)}
               onCut={() => handleSetCells(selectedCells, false)}
+              onMove={canMoveSelection ? () => openMove(selectedCells) : undefined}
               onClear={selection.clear}
             />
           )
@@ -531,6 +569,24 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           setIsApprovalOpen(false);
           // 每个签批动作都会写一条活动，历史那一栏要跟着刷
           void feed.fetchFeed().catch(() => undefined);
+        }}
+      />
+
+      <MoveStageModal
+        isOpen={Boolean(moveTarget)}
+        cells={moveTarget?.cells ?? []}
+        excludedCount={moveTarget?.excluded ?? 0}
+        items={items}
+        stages={detail.mode_stages}
+        products={detail.products}
+        parentTitle={moveParentTitle}
+        onClose={() => setMoveTarget(null)}
+        onConfirm={(stage) => {
+          store.moveCells(
+            (moveTarget?.cells ?? []).map((cell) => cell.id),
+            stage
+          );
+          selection.clear();
         }}
       />
 
