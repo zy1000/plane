@@ -4385,6 +4385,7 @@ export default {
       legacy_incomplete: "该项目缺少必填信息：{fields}。请补齐后再保存。",
       dictionary_empty: "字典「{name}」还没有可选值，请先到数据字典中添加。",
       manage_dictionaries: "管理数据字典",
+      dev_mode_required: "请选择研发模式。",
       dev_mode_immutable: "研发模式创建后不可更改。",
       feature_not_allowed_by_dev_mode: "当前研发模式不支持该组件，无法开启。",
     },

@@ -66,7 +66,7 @@ type TProjectDevModeFieldProps = TProjectFieldProps & {
  */
 export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
   const { control, variant, disabled = false, tabIndex, devModes, isLoading, className } = props;
-  const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
+  const { t, styles, label } = useFieldHelpers(variant);
 
   const options = useMemo(
     () =>
@@ -95,7 +95,7 @@ export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
     <Controller
       control={control}
       name="dev_mode"
-      rules={{ validate: (value) => Boolean(value) || requiredMessage("dev_mode") }}
+      rules={{ validate: (value) => Boolean(value) || t("workspace_projects.validation.dev_mode_required") }}
       render={({ field: { value, onChange }, fieldState: { error } }) => {
         const selected = devModes.find((devMode) => devMode.id === value);
         return (

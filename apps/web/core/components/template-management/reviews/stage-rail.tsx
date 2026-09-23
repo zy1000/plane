@@ -11,8 +11,9 @@ type Props = {
 const I18N = "workspace_templates.reviews";
 
 /**
- * 阶段列表。**顺序与内容完全等于数据字典 product_stage** —— 管理员在数据字典里怎么排、
- * 有几个值，这里就怎么显示，不做任何分组或推断（阶段之间的层级关系数据里并不存在）。
+ * 阶段列表。**顺序与内容完全等于工作区设置里的「阶段类型」**（`useStageTypes`）—— 管理员
+ * 在那里怎么排、有几个类型，这里就怎么显示，不做任何分组或推断（阶段之间的层级关系数据里
+ * 并不存在）。与数据字典 product_stage 无关，那是产品的阶段字段。
  * 右侧计数是「评审数 · 评审活动数」。
  */
 export function StageRail(props: Props) {

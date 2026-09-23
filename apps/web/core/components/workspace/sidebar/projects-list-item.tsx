@@ -14,7 +14,7 @@ import { observer } from "mobx-react";
 import { createRoot } from "react-dom/client";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
 import { Settings, Share2, LogOut, MoreHorizontal } from "lucide-react";
-import { Disclosure, Transition } from "@headlessui/react";
+import { Disclosure } from "@headlessui/react";
 // plane imports
 import {
   EUserPermissions,
@@ -26,8 +26,7 @@ import {
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-import { LinkIcon, ArchiveIcon, ChevronRightIcon } from "@plane/propel/icons";
-import { IconButton } from "@plane/propel/icon-button";
+import { LinkIcon, ArchiveIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import { CustomMenu, DropIndicator, DragHandle, ControlLink } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -42,11 +41,9 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web imports
 import { useNavigationItems } from "@/plane-web/components/navigations";
-import { ProjectNavigationRoot } from "@/plane-web/components/sidebar";
 // local imports
 import { HIGHLIGHT_CLASS, highlightIssueOnDrop } from "../../issues/issue-layouts/utils";
 
@@ -90,7 +87,6 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const { isMobile } = usePlatformOS();
   const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getIsProjectListOpen, toggleProjectListOpen } = useCommandPalette();
-  const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleAnySidebarDropdown } = useAppTheme();
 
   // states
@@ -156,8 +152,6 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     (project?.permission_keys ?? []).some(
       (key) => key === PROJECT_PUBLISH_VIEW_PERMISSION_KEY || key === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
     );
-  const isAccordionMode = projectPreferences.navigationMode === "ACCORDION";
-
   const handleLeaveProject = () => {
     setLeaveProjectModalMounted(true);
     setLeaveProjectModal(true);
@@ -279,8 +273,6 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
           }
         }, 200);
       }
-    } else if (isAccordionMode) {
-      setIsProjectListOpen(false);
     }
 
     return () => {
@@ -288,23 +280,22 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
         clearTimeout(timeoutId);
       }
     };
-  }, [URLProjectId, project?.id, isAccordionMode, setIsProjectListOpen]);
+  }, [URLProjectId, project?.id, setIsProjectListOpen]);
 
   if (!project) return null;
 
+  // 项目子菜单只有水平 tab 一种模式（`TProjectNavigationMode` 里的 "accordion" 从未被赋值），
+  // 原先按手风琴展开旧侧栏 `project-navigation.tsx` 的分支是死代码，已删；真正渲染的是
+  // `use-navigation-items.ts`。
   const handleItemClick = () => {
-    if (projectPreferences.navigationMode === "ACCORDION") {
-      setIsProjectListOpen(!isProjectListOpen);
-    } else {
-      navigateTo(defaultTabUrl);
-    }
+    navigateTo(defaultTabUrl);
     // close the extended sidebar if it is open
-    if (isExtendedProjectSidebarOpened && !isAccordionMode) {
+    if (isExtendedProjectSidebarOpened) {
       toggleExtendedProjectSidebar(false);
     }
   };
 
-  const shouldHighlightProject = URLProjectId === project?.id && projectPreferences.navigationMode !== "ACCORDION";
+  const shouldHighlightProject = URLProjectId === project?.id;
 
   return (
     <>
@@ -358,30 +349,12 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
             )}
             <>
               <ControlLink href={defaultTabUrl} className="flex flex-grow truncate" onClick={handleItemClick}>
-                {isAccordionMode ? (
-                  <Disclosure.Button
-                    as="button"
-                    type="button"
-                    className={cn("flex w-full flex-grow items-center gap-1.5 text-left select-none", {})}
-                    aria-label={
-                      isProjectListOpen
-                        ? t("aria_labels.projects_sidebar.close_project_menu")
-                        : t("aria_labels.projects_sidebar.open_project_menu")
-                    }
-                  >
-                    <div className="grid size-4 flex-shrink-0 place-items-center">
-                      <Logo logo={project.logo_props} size={16} />
-                    </div>
-                    <p className="truncate text-13 font-medium text-secondary">{project.name}</p>
-                  </Disclosure.Button>
-                ) : (
-                  <div className="flex w-full flex-grow items-center gap-1.5 text-left select-none">
-                    <div className="grid size-4 flex-shrink-0 place-items-center">
-                      <Logo logo={project.logo_props} size={16} />
-                    </div>
-                    <p className="truncate text-13 font-medium text-secondary">{project.name}</p>
+                <div className="flex w-full flex-grow items-center gap-1.5 text-left select-none">
+                  <div className="grid size-4 flex-shrink-0 place-items-center">
+                    <Logo logo={project.logo_props} size={16} />
                   </div>
-                )}
+                  <p className="truncate text-13 font-medium text-secondary">{project.name}</p>
+                </div>
               </ControlLink>
               <div className="flex items-center gap-1">
                 <CustomMenu
@@ -487,46 +460,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                     </CustomMenu.MenuItem>
                   )}
                 </CustomMenu>
-                {isAccordionMode && (
-                  <IconButton
-                    variant="ghost"
-                    size="sm"
-                    icon={ChevronRightIcon}
-                    onClick={() => setIsProjectListOpen(!isProjectListOpen)}
-                    className={cn("hidden text-placeholder group-hover/project-item:inline-flex", {
-                      "inline-flex": isMenuActive,
-                    })}
-                    iconClassName={cn("transition-transform", {
-                      "rotate-90": isProjectListOpen,
-                    })}
-                    aria-label={t(
-                      isProjectListOpen
-                        ? "aria_labels.projects_sidebar.close_project_menu"
-                        : "aria_labels.projects_sidebar.open_project_menu"
-                    )}
-                  />
-                )}
               </div>
             </>
           </div>
-          {isAccordionMode && (
-            <Transition
-              show={isProjectListOpen}
-              enter="transition duration-100 ease-out"
-              enterFrom="transform scale-95 opacity-0"
-              enterTo="transform scale-100 opacity-100"
-              leave="transition duration-75 ease-out"
-              leaveFrom="transform scale-100 opacity-100"
-              leaveTo="transform scale-95 opacity-0"
-            >
-              {isProjectListOpen && (
-                <Disclosure.Panel as="div" className="relative mt-1 mb-1.5 flex flex-col gap-0.5 pl-6">
-                  <div className="absolute top-0 bottom-1 left-[15px] w-[1px] bg-layer-3" />
-                  <ProjectNavigationRoot workspaceSlug={workspaceSlug.toString()} projectId={projectId.toString()} />
-                </Disclosure.Panel>
-              )}
-            </Transition>
-          )}
           {isLastChild && <DropIndicator isVisible={instruction === "DRAG_BELOW"} />}
         </div>
       </Disclosure>

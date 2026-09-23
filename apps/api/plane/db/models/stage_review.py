@@ -516,8 +516,10 @@ class StageReview(ProjectBaseModel):
 
     def clean(self):
         validate_node_kind(self)
-        # 跨阶段移动不受「O 类只能在 O 阶段」约束（批次 5 拍板），移动入口会置这个标记
-        if not getattr(self, "_moving_stage", False):
+        # 「O 类只能在 O 阶段」只约束汇总评审和挂在父评审下的活动。无父的评审活动可以被
+        # 跨阶段移动到任意类型的阶段（批次 5 拍板：目标阶段不限类型），移动后再改别的字段
+        # 也会走到这里，所以按「有没有父」判，而不是靠移动入口临时置标记。
+        if self.kind not in ACTIVITY_KINDS or self.parent_id:
             validate_kind_stage(self)
         if (
             self.result

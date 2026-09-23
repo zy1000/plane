@@ -4210,6 +4210,7 @@ export default {
       legacy_incomplete: "This project is missing required fields: {fields}. Fill them in before saving.",
       dictionary_empty: "Dictionary \u201c{name}\u201d has no values yet. Add some in Data dictionaries first.",
       manage_dictionaries: "Manage data dictionaries",
+      dev_mode_required: "Select a dev mode.",
       dev_mode_immutable: "The dev mode cannot be changed after the project is created.",
       feature_not_allowed_by_dev_mode: "The current dev mode does not allow this component.",
     },
