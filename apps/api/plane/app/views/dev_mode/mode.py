@@ -132,15 +132,23 @@ class DevModeViewSet(BaseViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # 被项目引用的模式不可删。批次 3 给 Project 加外键后这个检查才真正拦得住东西，
-        # 在那之前 count_projects_using 恒为 0。
-        if count_projects_using(dev_mode):
+        # 被项目引用的模式不可删。按 include_inactive 算：外键是 RESTRICT，
+        # 软删的项目和模板项目也占着引用，漏掉它们真删时会炸 RestrictedError。
+        if count_projects_using(dev_mode, include_inactive=True):
+            # 活跃项目为 0 但仍被引用 = 只剩软删 / 模板项目占着，错误码分开给，
+            # 否则用户在列表里一个项目都看不到却删不掉，只会以为是 bug
+            if count_projects_using(dev_mode):
+                error, code = (
+                    "This dev mode is still used by projects.",
+                    "DEV_MODE_IN_USE",
+                )
+            else:
+                error, code = (
+                    "This dev mode is still referenced by deleted or template projects.",
+                    "DEV_MODE_IN_USE_BY_INACTIVE_PROJECTS",
+                )
             return Response(
-                {
-                    "error": "This dev mode is still used by projects.",
-                    "code": "DEV_MODE_IN_USE",
-                },
-                status=status.HTTP_409_CONFLICT,
+                {"error": error, "code": code}, status=status.HTTP_409_CONFLICT
             )
         # 硬删（模型 delete 已强制 soft=False），阶段与勾选按 CASCADE 一起走
         dev_mode.delete()

@@ -31,6 +31,7 @@ import type { TProject } from "@/plane-web/types/projects";
 import { ProjectService } from "@/services/project";
 // local imports
 import {
+  ProjectDevModeReadOnlyField,
   ProjectLogoField,
   ProjectNetworkField,
   ProjectSharedFields,
@@ -259,6 +260,12 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               </Tooltip>
             </div>
           </FormFieldShell>
+          {/* 研发模式：创建时选定，之后只读（项目不允许切换模式） */}
+          <ProjectDevModeReadOnlyField
+            variant="settings"
+            devMode={project?.dev_mode_detail}
+            workspaceSlug={workspaceSlug}
+          />
           <ProjectSharedFields {...sectionProps} dictionaries={dictionaries} project={project} projectId={projectId} />
           <FormFieldShell
             className="md:col-span-2"

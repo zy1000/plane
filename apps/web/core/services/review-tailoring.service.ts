@@ -4,6 +4,7 @@ import type {
   TCreateReviewTailoringPayload,
   TReviewTailoring,
   TReviewTailoringActivity,
+  TReviewTailoringAxisOption,
   TReviewTailoringCellPayload,
   TReviewTailoringComment,
   TReviewTailoringDetail,
@@ -92,7 +93,24 @@ export class ReviewTailoringService extends APIService {
       });
   }
 
-  /** 一次加纵轴与横轴。评审只收顶层 id，它下面的评审活动由后端整块带进矩阵 */
+  /**
+   * 「添加评审」弹窗左栏的候选：**本项目研发模式勾选过的节点**，按「阶段 × 节点」铺平。
+   *
+   * 不能拿整棵评审树当候选 —— 模式的勾选是硬边界，树上有、模式里没勾的节点加不进去。
+   */
+  async listAxisOptions(
+    workspaceSlug: string,
+    projectId: string,
+    tailoringId: string
+  ): Promise<TReviewTailoringAxisOption[]> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/${tailoringId}/axes/`)
+      .then((response) => response?.data?.rows ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 一次加纵轴与横轴。传的是模板节点 id，服务端按项目模式展开成各阶段的行 */
   async addAxes(
     workspaceSlug: string,
     projectId: string,

@@ -21,10 +21,52 @@ from plane.db.models import (
     StageType,
 )
 from plane.db.models.dev_mode import MAX_WORKLOAD_RATIO_TOTAL, SORT_ORDER_STEP
-from plane.db.seed_data.dev_modes import DEV_MODE_SPECS, normalize_features
+from plane.db.seed_data.dev_modes import (
+    DEFAULT_DEV_MODE_NAME,
+    DEV_MODE_SPECS,
+    normalize_features,
+)
 from plane.utils.stage_review_template import ensure_stage_review_templates
 
 logger = logging.getLogger("plane.api")
+
+
+def default_dev_mode(workspace_id):
+    """工作区的默认模式：预置的「混合模式」，它等价于加模式之前的现状（组件全开）。
+
+    存量项目的回填、创建项目弹窗的默认选中、ORM 直建项目的兜底，三处都认这一个。
+    用户把它删了（预置模式本来不让删，但 all_objects 里可能有历史残留）就退回该工作区
+    任意一个模式，实在没有才返回 None。
+    """
+    return (
+        DevMode.objects.filter(
+            workspace_id=workspace_id, is_system=True, name=DEFAULT_DEV_MODE_NAME
+        ).first()
+        or DevMode.objects.filter(workspace_id=workspace_id).order_by("created_at", "id").first()
+    )
+
+
+def resolve_default_dev_mode_id(workspace_id):
+    """同 ``default_dev_mode``，但工作区一个模式都没有时先补预置再取。
+
+    给 ``Project.save()`` 兜底用：ORM 直建项目的路径（workspace_seed / dummy_data_task /
+    模板 / 测试）不传 dev_mode，而这一列是 NOT NULL。工作区没模式只会发生在
+    ``ensure_dev_modes`` 还没跑过的时候，补一次即可，之后都走上面的快路径。
+    """
+    if workspace_id is None:
+        return None
+    dev_mode = default_dev_mode(workspace_id)
+    if dev_mode is not None:
+        return dev_mode.id
+
+    from plane.db.models import Workspace
+
+    workspace = Workspace.objects.filter(id=workspace_id).first()
+    if workspace is None:
+        return None
+    ensure_dev_modes(workspace)
+    dev_mode = default_dev_mode(workspace_id)
+    return dev_mode.id if dev_mode is not None else None
 
 
 def ensure_dev_modes(workspace, actor=None):

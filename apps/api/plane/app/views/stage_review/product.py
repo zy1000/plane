@@ -98,7 +98,7 @@ class ProductStageReviewViewSet(BaseViewSet):
             .select_related(
                 "product",
                 "stage",
-                "stage__dictionary",
+                "stage__stage_type",
                 "leader",
                 "leader__avatar_asset",
                 "auditor",
@@ -129,7 +129,15 @@ class ProductStageReviewViewSet(BaseViewSet):
         )
 
     def stages(self, request, slug, product_id):
-        """左栏的阶段列表：只列有评审的阶段，四个状态计数 + 涉及的项目数。
+        """左栏的阶段列表：只列有评审的阶段，四个状态计数 + 所属项目。
+
+        **一个阶段一个项目一组，不按名字合并**。阶段现在是「项目研发模式里的一行」，
+        两个项目哪怕用同一个模式（存量全是混合模式，阶段 id 就是同一批），在产品这个
+        跨项目视角下也该分开看 —— 「电表平台走到 O 阶段」和「通信模组走到 O 阶段」是
+        两件事。所以分组键是 ``{project_id}:{stage_id}`` 合成出来的，``label`` 仍只是
+        阶段名，项目名单独给一列让前端淡色缀在后面。
+
+        顺序按项目名 → 阶段在模式里的顺序，同一个项目的阶段连在一起。
 
         从不带 annotate 的 queryset 出发，理由同项目侧 ``_scoped_queryset``。
         """
@@ -142,24 +150,32 @@ class ProductStageReviewViewSet(BaseViewSet):
 
         rows = (
             self._base_queryset(slug, product, project_ids)
-            .values("stage_id", "stage__label", "stage__sort_order")
+            .values(
+                "stage_id",
+                "stage__name",
+                "stage__sort_order",
+                "project_id",
+                "project__name",
+            )
             .annotate(
                 total=Count("id", distinct=True),
-                project_count=Count("project_id", distinct=True),
                 not_started=by_status(StageReviewStatus.NOT_STARTED),
                 in_review=by_status(StageReviewStatus.IN_REVIEW),
                 in_approval=by_status(StageReviewStatus.IN_APPROVAL),
                 completed=by_status(StageReviewStatus.COMPLETED),
             )
-            .order_by("stage__sort_order", "stage__label")
+            .order_by("project__name", "stage__sort_order", "stage__name")
         )
         return Response(
             [
                 {
-                    "stage_id": str(row["stage_id"]),
-                    "label": row["stage__label"],
+                    "stage_id": f"{row['project_id']}:{row['stage_id']}",
+                    "label": row["stage__name"],
+                    "project_id": str(row["project_id"]),
+                    "project_name": row["project__name"],
+                    # 一组恒属于一个项目，字段保留是为了和项目侧的形状对齐
+                    "project_count": 1,
                     "total": row["total"],
-                    "project_count": row["project_count"],
                     "not_started": row["not_started"],
                     "in_review": row["in_review"],
                     "in_approval": row["in_approval"],

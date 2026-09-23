@@ -74,6 +74,15 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/modules/`,
   },
+  features_releases: {
+    key: "features_releases",
+    i18n_label: "project_settings.features.releases.short_title",
+    href: `/features/releases`,
+    access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/releases/`,
+  },
   features_views: {
     key: "features_views",
     i18n_label: "project_settings.features.views.short_title",
@@ -100,6 +109,15 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     permissionKeys: ["project.settings.view"],
     editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/intake/`,
+  },
+  features_reviews: {
+    key: "features_reviews",
+    i18n_label: "project_settings.features.reviews.short_title",
+    href: `/features/reviews`,
+    access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/reviews/`,
   },
   states: {
     key: "states",
@@ -174,9 +192,12 @@ export const GROUPED_PROJECT_SETTINGS: Record<PROJECT_SETTINGS_CATEGORY, TProjec
   [PROJECT_SETTINGS_CATEGORY.FEATURES]: [
     PROJECT_SETTINGS["features_cycles"],
     PROJECT_SETTINGS["features_modules"],
+    // 顺序照侧栏：发布紧跟模块，评审在最后
+    PROJECT_SETTINGS["features_releases"],
     PROJECT_SETTINGS["features_views"],
     PROJECT_SETTINGS["features_pages"],
     PROJECT_SETTINGS["features_intake"],
+    PROJECT_SETTINGS["features_reviews"],
   ],
   [PROJECT_SETTINGS_CATEGORY.WORK_STRUCTURE]: [
     PROJECT_SETTINGS["states"],

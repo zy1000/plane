@@ -80,7 +80,7 @@ export const StageReviewGroupSidebar = ({
                     isCollapsed ? "items-center rounded-md p-1.5" : "gap-1.5 rounded-md px-2.5 py-1.5 text-left",
                     rowClassName
                   )}
-                  aria-label={`${group.name}，${group.count} 项`}
+                  aria-label={`${group.name}${group.projectName ? ` · ${group.projectName}` : ""}，${group.count} 项`}
                   aria-current={isActive ? "true" : undefined}
                   onClick={() => onSelectGroup(group.id)}
                 >
@@ -89,7 +89,16 @@ export const StageReviewGroupSidebar = ({
                     {!isCollapsed && (
                       <>
                         <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                          <span className="truncate text-sm font-medium">{group.name}</span>
+                          {/* 阶段名先占住：项目名再长也不能把它挤成一个字，让项目名去 truncate */}
+                          <span className={cn("truncate text-sm font-medium", group.projectName && "max-w-[58%] shrink-0")}>
+                            {group.name}
+                          </span>
+                          {/* 产品页：两个项目可能有同名阶段，淡色缀项目名区分 */}
+                          {group.projectName && (
+                            <span className="min-w-0 flex-1 truncate text-12 text-placeholder" title={group.projectName}>
+                              · {group.projectName}
+                            </span>
+                          )}
                           {group.isCurrent && (
                             <span className="shrink-0 rounded bg-accent-subtle px-1 text-11 leading-4 font-semibold text-accent-primary">
                               {t(`${I18N}.list.current`)}

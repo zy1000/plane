@@ -37,6 +37,7 @@ export type TProjectFormFieldKey =
   | "pms_project_name"
   | "timezone"
   | "product_type"
+  | "dev_mode"
   | TProjectDictionaryFieldKey
   | TProjectMemberFieldKey
   | TProjectDateFieldKey;
@@ -45,6 +46,7 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
   "name",
   "identifier",
   "code",
+  "dev_mode",
   "network",
   "business_unit",
   "description",
@@ -63,6 +65,9 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
 /**
  * API 创建必填、但 DB 可空的字段（0348 之前的存量项目为 null）。
  * 设置页用它算「缺哪些必填」的横幅。
+ *
+ * 研发模式（`dev_mode`）虽然也是创建必填，但它 DB 上是 NOT NULL、存量项目由 0387 全部
+ * 回填过，永远不会缺；而且设置页只读改不了，进了这个列表只会挂出一条补不了的横幅。
  */
 export const PROJECT_REQUIRED_FIELDS = [
   "code",
@@ -99,4 +104,7 @@ export const PROJECT_SERVER_ERROR_I18N: Record<string, string> = {
   PROJECT_DICTIONARY_ITEM_INVALID: "workspace_projects.validation.invalid_option",
   PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER: "workspace_projects.validation.invalid_option",
   PROJECT_END_DATE_BEFORE_START_DATE: "workspace_projects.validation.end_before_start",
+  PROJECT_DEV_MODE_INVALID: "workspace_projects.validation.invalid_option",
+  PROJECT_DEV_MODE_IMMUTABLE: "workspace_projects.validation.dev_mode_immutable",
+  PROJECT_FEATURE_NOT_ALLOWED_BY_DEV_MODE: "workspace_projects.validation.feature_not_allowed_by_dev_mode",
 };

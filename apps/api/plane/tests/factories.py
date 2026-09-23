@@ -140,11 +140,14 @@ def project_required_payload(workspace, lead):
     不含 code（代号工作区内唯一，由调用方给）与 business_unit（选填）。
     """
     from plane.utils.data_dictionary import PROJECT_DICTIONARY_FIELD_KEYS
+    from plane.utils.dev_mode import resolve_default_dev_mode_id
 
     payload = {
         "product_manager": str(lead.id),
         "start_date": "2026-01-01",
         "end_date": "2026-12-31",
+        # 0387：研发模式创建必填。取该工作区的混合模式（没有就顺手预置一份）
+        "dev_mode": str(resolve_default_dev_mode_id(workspace.id)),
     }
     payload.update(
         _dictionary_payload(workspace, PROJECT_DICTIONARY_FIELD_KEYS, skip=("business_unit",))

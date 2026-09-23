@@ -18,7 +18,7 @@ import { useProductsContext } from "../context";
  * 产品详情页的「阶段评审」tab：关联项目里这个产品的全部阶段评审。
  *
  * 整页复用项目侧的阶段评审列表（分组栏 / 摘要 / 表格 / 筛选行 / 显示 / 抽屉），只是作用域换成
- * 产品：「产品」列与分组维换成「项目」，左栏标出产品档案里的当前阶段。页头只留两个挂点，数量
+ * 产品：「产品」列与分组维换成「项目」，左栏按名字标出产品档案里的当前阶段。页头只留两个挂点，数量
  * 徽章与搜索 / 筛选 / 显示由列表 portal 进来，口径同项目侧 header.tsx。
  *
  * 不额外做前端权限拦截：看不见的产品后端 404（外层 ProductDetailsLayout 已处理），列表接口只回
@@ -66,7 +66,7 @@ export const ProductStageReviewsPage = observer(function ProductStageReviewsPage
         {slug && id && (
           <StageReviewList
             workspaceSlug={slug}
-            scope={{ kind: "product", productId: id, currentStageId: product?.stage ?? null }}
+            scope={{ kind: "product", productId: id, currentStageName: product?.stage_detail?.label ?? null }}
           />
         )}
       </ContentWrapper>

@@ -6,9 +6,9 @@
    评审恒在顶层，评审活动既可以挂在某个评审下，也可以直接挂在阶段下（有些阶段没有
    汇总评审）。没有单独的「模板头」表，*阶段 + 这棵树* 就是模板。
 2. **裁剪**（``ReviewTailoring`` + ``ReviewTailoringItem``）—— 项目级的二维勾选表：
-   横轴产品、纵轴该阶段模板树的**全部节点**（评审与评审活动树形展开、逐个勾）。
-   签批通过后生效，勾上的格子生成评审实例；改动走**原地修订**，同一张表在
-   已生效与修订中之间往返，不复制新表。
+   横轴产品、纵轴「**本项目研发模式的阶段 × 该阶段勾选的模板节点**」（评审与评审活动
+   各占一行、逐个勾）。签批通过后生效，勾上的格子生成评审实例；改动走**原地修订**，
+   同一张表在已生效与修订中之间往返，不复制新表。
 3. **评审**（``StageReview``）—— 真正执行的那条记录，绑定项目 + 产品，有负责人、
    起止日期、状态与评审结论。评审活动同样落在这张表里（``kind`` 取 activity /
    o_stage_activity，配 ``parent``）。
@@ -18,11 +18,12 @@ QA 的用例评审 ``CaseReview``），这套是研发流程的阶段评审，�
 
 两个和别处不一样的取舍：
 
-- **模板的阶段指向 ``StageType``**（工作区级的阶段类型表），评审实例的 ``stage`` 暂时
-  还指向 ``product_stage`` 字典值 —— 批次 1 只换了模板那一头，批次 4 再换实例。
-  期间两者靠名字桥接（见 ``utils/review_tailoring.py`` 的 ``resolve_stage_item``）。
-  分家的原因：``product_stage`` 字典是产品的「当前阶段」属性，阶段类型是研发流程的
-  骨架，后续的研发模式也挂在它上面，同一张表承担两种语义会互相绑架。
+- **两处「阶段」指向两张表**：模板的 ``stage`` 是 ``StageType``（工作区级的阶段类型，
+  决定「有哪些评审可选」），裁剪格子与评审实例的 ``stage`` 是 ``DevModeStage``（项目
+  研发模式里的一行，决定「这个项目按什么顺序走哪些阶段」）。一个模式允许两个阶段指向
+  同一个类型（o-1、o-2 都是 O阶段类型），所以同一个模板节点会在两个阶段下各出一行、
+  各自勾选、各自生成实例。``product_stage`` 字典退回去只管产品档案的「当前阶段」属性，
+  与这两者都无关。
 - **「评审类型」是四值枚举**：评审 / 评审活动 / O阶段评审 / O阶段评审活动，与原始表一致。
   它同时编码了两件事 —— 层级（根 or 活动）与是否 O 阶段，所以判定层级一律走
   ``ROOT_KINDS`` / ``ACTIVITY_KINDS``，判定 O 阶段一律走 ``O_STAGE_KINDS``，
@@ -95,27 +96,32 @@ def is_o_stage_label(label):
     return bool(label) and str(label).strip().upper().startswith(O_STAGE_LABEL_PREFIX)
 
 
-def stage_display_name(stage):
-    """阶段的显示名。
+def stage_type_name(stage):
+    """用来判定 O 阶段的那个名字 —— 一律取**阶段类型**的名字。
 
-    模板的 ``stage`` 是 ``StageType``（``name``），评审实例的还是 ``DataDictionaryItem``
-    （``label``）—— 批次 1 只换了模板那一头，批次 4 换完实例后这个兼容取值可以去掉。
+    模板的 ``stage`` 就是 ``StageType``；评审实例的是 ``DevModeStage``，它的名字是用户
+    在模式里自己起的（``o-2``、「第二轮复核」都合法），不能拿来卡前缀规则，要穿透到它
+    指向的阶段类型上。
     """
     if stage is None:
         return ""
-    return getattr(stage, "name", None) or getattr(stage, "label", "") or ""
+    stage_type = getattr(stage, "stage_type", None)
+    if stage_type is not None:
+        return getattr(stage_type, "name", "") or ""
+    return getattr(stage, "name", "") or ""
 
 
 def validate_kind_stage(node):
     """O 阶段类型不能挂到非 O 系列阶段上。
 
-    模板与评审实例两张表同一口径。bulk_create / 迁移不走 clean()，预置数据不受影响
-    （规格里只有「O阶段」用 O 阶段类型，本来就满足）。
+    模板与评审实例两张表同一口径，判的都是**阶段类型**的名字（见 ``stage_type_name``）。
+    bulk_create / 迁移不走 clean()，预置数据不受影响（规格里只有「O阶段」用 O 阶段类型，
+    本来就满足）。
     """
     if node.kind not in O_STAGE_KINDS:
         return
     stage = getattr(node, "stage", None)
-    label = stage_display_name(stage)
+    label = stage_type_name(stage)
     if stage is None or is_o_stage_label(label):
         return
     raise ValidationError(
@@ -355,8 +361,11 @@ class StageReview(ProjectBaseModel):
         related_name="stage_reviews",
         verbose_name="所属产品",
     )
+    # 指向**项目研发模式的阶段**（DevModeStage），不是模板节点的阶段类型：同一类型可以在
+    # 一个模式里实例化出两个阶段（o-1、o-2），实例落在哪一个由裁剪格子决定。
+    # RESTRICT：还有评审挂着的模式阶段不许删（views/dev_mode/stage.py 会提前挡出 409）。
     stage = models.ForeignKey(
-        "db.DataDictionaryItem",
+        "db.DevModeStage",
         on_delete=models.RESTRICT,
         related_name="stage_reviews",
         verbose_name="评审阶段",
@@ -856,13 +865,18 @@ class ReviewTailoringTemplate(BaseModel):
 
 
 class ReviewTailoringItem(BaseModel):
-    """裁剪矩阵里的一个格子：(产品 × 模板节点) 是否需要做。
+    """裁剪矩阵里的一个格子：(产品 × 模式阶段 × 模板节点) 是否需要做。
 
-    格子是两个轴（``ReviewTailoringProduct`` × ``ReviewTailoringTemplate`` 展开后的
-    节点）的交叉积，**没进轴就没有格子，也就不必为它写裁剪原因** —— 与本项目无关的评审
-    压根不该出现在表里。模板节点自带 ``stage``，格子不另存一份，阶段分组由前端按
-    ``template.stage`` 折出来。评审与它下面的评审活动各占一行，都能单独勾。「勾了父不勾子」/「勾了子
-    不勾父」分别生成什么，是生效编排要定的产品语义，本模型不做限制。
+    格子是横轴（``ReviewTailoringProduct``）与纵轴的交叉积，**没进轴就没有格子，也就不必
+    为它写裁剪原因** —— 与本项目无关的评审压根不该出现在表里。
+
+    纵轴是二元的：``ReviewTailoringTemplate`` 只记「这张表要裁哪些模板节点」，真正的行由
+    ``sync_items`` 按**项目研发模式的阶段**展开 —— 一个节点在模式里被两个同类型阶段都勾上
+    （o-1、o-2），就在表上占两行，各自独立勾选、各自生成实例。所以阶段要在格子上单独存一
+    列，不能再从 ``template.stage`` 折出来。
+
+    评审与它下面的评审活动各占一行，都能单独勾。「勾了父不勾子」/「勾了子不勾父」分别生成
+    什么，是生效编排要定的产品语义，本模型不做限制。
 
     ``stage_review`` 记的是这个格子当前对应的评审实例：生效时勾上且指针为空就新建一条
     并回填，取消勾选就软删那条评审并把指针置空。**修订是原地改**，所以一个格子在任一
@@ -890,6 +904,13 @@ class ReviewTailoringItem(BaseModel):
         related_name="tailoring_items",
         verbose_name="模板评审",
     )
+    # 纵轴的另一半：这一行落在项目模式的哪个阶段上。RESTRICT：被格子引用的模式阶段不许删。
+    stage = models.ForeignKey(
+        "db.DevModeStage",
+        on_delete=models.RESTRICT,
+        related_name="tailoring_items",
+        verbose_name="模式阶段",
+    )
     # 标题快照，模板改名后历史单仍显示当时的口径
     title = models.CharField(max_length=255, verbose_name="评审标题（快照）")
     selected = models.BooleanField(default=False, verbose_name="是否需要")
@@ -906,15 +927,18 @@ class ReviewTailoringItem(BaseModel):
 
     class Meta:
         db_table = "review_tailoring_items"
-        ordering = ("template__sort_order", "product__name", "id")
+        ordering = ("stage__sort_order", "template__sort_order", "product__name", "id")
         verbose_name = "Review Tailoring Item"
         verbose_name_plural = "Review Tailoring Items"
         indexes = [
-            models.Index(fields=["tailoring", "product"], name="rti_tailoring_product"),
+            models.Index(
+                fields=["tailoring", "product", "stage"], name="rti_tailoring_product"
+            ),
         ]
         constraints = [
+            # 阶段进唯一键：同一个模板节点在两个同类型的模式阶段下各一行，不算重复
             models.UniqueConstraint(
-                fields=["tailoring", "product", "template"],
+                fields=["tailoring", "product", "stage", "template"],
                 condition=Q(deleted_at__isnull=True),
                 name="rti_unique_tailoring_product_template_active",
             ),

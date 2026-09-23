@@ -14,6 +14,7 @@ from plane.app.serializers.user import UserLiteSerializer, UserAdminLiteSerializ
 from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.db.models import (
     DataDictionaryItem,
+    DevMode,
     IssueType,
     Permission,
     Project,
@@ -32,6 +33,7 @@ from plane.utils.data_dictionary import (
     is_project_code_in_dictionary,
 )
 from .data_dictionary import DataDictionaryItemLiteSerializer
+from .dev_mode import DevModeLiteSerializer
 from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
     ISSUE_TYPE_PERMISSION_KEY_PREFIX,
@@ -94,6 +96,23 @@ def get_project_member_role_sources(obj, context):
     ]
 
 
+#: 研发模式组件开关 -> Project 功能位。
+#: 九个 key 同名同义（模式那边的 ``intake_view`` 对的就是 Project 的 ``intake_view``，
+#: 前端读到的 ``inbox_view`` 只是 serializer 的只读别名），但还是写出来：
+#: 这是「模式是上限」这条规则的唯一映射表，以后两边字段名分家时改这里一处。
+DEV_MODE_FEATURE_TO_PROJECT_FIELD = {
+    "cycle_view": "cycle_view",
+    "module_view": "module_view",
+    "release_view": "release_view",
+    "issue_views_view": "issue_views_view",
+    "page_view": "page_view",
+    "intake_view": "intake_view",
+    "is_time_tracking_enabled": "is_time_tracking_enabled",
+    "is_issue_type_enabled": "is_issue_type_enabled",
+    "review_view": "review_view",
+}
+
+
 def _dictionary_item_field(required=True):
     # 必须显式声明：模型列 null=True，ModelSerializer 会自动生成 required=False / allow_null=True。
     # 必填字段要的是「创建必填、PATCH 可省略、显式 null 拒绝」—— required=True + allow_null=False 正好。
@@ -115,6 +134,9 @@ class ProjectExtendedDetailMixin(serializers.Serializer):
     status_detail = DataDictionaryItemLiteSerializer(source="status", read_only=True)
     project_type_detail = DataDictionaryItemLiteSerializer(source="project_type", read_only=True)
     product_manager_detail = UserLiteSerializer(source="product_manager", read_only=True)
+    # 侧栏与功能页都要按「模式位 AND 项目位」渲染，列表页和详情页都得带上，
+    # 否则前端得为每个项目再拉一次模式
+    dev_mode_detail = DevModeLiteSerializer(source="dev_mode", read_only=True)
 
 
 class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
@@ -128,6 +150,9 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
     product_manager = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=True)
     start_date = serializers.DateField(required=True)
     end_date = serializers.DateField(required=True)
+    # 创建必填、创建后不可改（需求 4.2）。模型列 NOT NULL，DRF 本来也会生成 required=True，
+    # 写出来是为了让「必填 + 不可改」这条规则在一处看得见。
+    dev_mode = serializers.PrimaryKeyRelatedField(queryset=DevMode.objects.all(), required=True)
 
     class Meta:
         model = Project
@@ -165,6 +190,14 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
         ).exists():
             raise serializers.ValidationError("PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER")
         return user
+
+    def validate_dev_mode(self, dev_mode):
+        # 项目不允许切换研发模式：模式的阶段是评审实例与裁剪表的纵轴，换模式等于换掉整张表
+        if self.instance is not None and self.instance.dev_mode_id != dev_mode.id:
+            raise serializers.ValidationError("PROJECT_DEV_MODE_IMMUTABLE")
+        if str(dev_mode.workspace_id) != str(self.context["workspace_id"]):
+            raise serializers.ValidationError("PROJECT_DEV_MODE_INVALID")
+        return dev_mode
 
     def validate_name(self, name):
         project_id = self.instance.id if self.instance else None
@@ -242,7 +275,48 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
         if start_date and end_date and end_date < start_date:
             raise serializers.ValidationError({"end_date": ["PROJECT_END_DATE_BEFORE_START_DATE"]})
 
+        self._apply_dev_mode_feature_ceiling(data)
+
         return data
+
+    def _apply_dev_mode_feature_ceiling(self, data):
+        """模式是组件开关的上限，不是初始值（需求 3.4）。
+
+        创建：模式没开的组件一律落 False，请求里显式要开就 400。
+        编辑：只拦「把模式没开的组件从关改成开」，**不回写**没提到的位。
+
+        编辑之所以不强制写 False，是因为模式事后关掉某个组件时并不动项目位（需求 3.4：
+        只隐藏、不删数据），项目自己那一位得原样留着，模式再打开时按它恢复。要是每次
+        PATCH 都顺手抹成 False，改个项目名就把用户原来的开关状态吃掉了。
+        隐藏与否本来也不看库里这一位单独的值，侧栏与功能页算的是「模式位 AND 项目位」。
+        """
+        dev_mode = data.get("dev_mode") or getattr(self.instance, "dev_mode", None)
+        if dev_mode is None:
+            return
+
+        is_creating = self.instance is None
+        features = dev_mode.features if isinstance(dev_mode.features, dict) else {}
+        errors = {}
+        for feature_key, project_field in DEV_MODE_FEATURE_TO_PROJECT_FIELD.items():
+            # 缺 key 当开（同 normalize_features 的「没说关就是开」）
+            if features.get(feature_key, True):
+                continue
+            if is_creating:
+                if data.get(project_field):
+                    errors[project_field] = ["PROJECT_FEATURE_NOT_ALLOWED_BY_DEV_MODE"]
+                else:
+                    data[project_field] = False
+                continue
+            # 值没变就放行：partial_update 会把 intake_view 的当前值无条件塞进 data，
+            # 存量项目在模式关掉该组件后那一位可能本来就是 True，不该因此改不了别的字段
+            if (
+                project_field in data
+                and data[project_field]
+                and not getattr(self.instance, project_field, False)
+            ):
+                errors[project_field] = ["PROJECT_FEATURE_NOT_ALLOWED_BY_DEV_MODE"]
+        if errors:
+            raise serializers.ValidationError(errors)
 
     def create(self, validated_data):
         workspace_id = self.context["workspace_id"]

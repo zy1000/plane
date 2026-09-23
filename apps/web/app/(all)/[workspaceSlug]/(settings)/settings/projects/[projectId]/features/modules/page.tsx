@@ -61,6 +61,7 @@ function FeaturesModulesSettingsPage({ params }: Route.ComponentProps) {
             description={t("project_settings.features.modules.toggle_description")}
             disabled={!canEdit}
             featureProperty="module_view"
+            devModeFeatureKey="module_view"
             projectId={projectId}
             value={!!currentProjectDetails?.module_view}
             workspaceSlug={workspaceSlug}

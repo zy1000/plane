@@ -6,7 +6,7 @@
 
 import type { ComponentProps } from "react";
 import type { LucideIcon } from "lucide-react";
-import { CloudCog, GitPullRequest, ShieldCheck, Users, UsersRound, Zap } from "lucide-react";
+import { ClipboardList, CloudCog, GitPullRequest, Rocket, ShieldCheck, Users, UsersRound, Zap } from "lucide-react";
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import {
@@ -35,9 +35,12 @@ export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | R
   roles: ShieldCheck,
   features_cycles: CycleIcon,
   features_modules: ModuleIcon,
+  // 与侧栏 tab 用同一个图标：发布 Rocket、评审 ClipboardList
+  features_releases: Rocket,
   features_views: ViewsIcon,
   features_pages: PageIcon,
   features_intake: IntakeIcon,
+  features_reviews: ClipboardList,
   states: StatePropertyIcon,
   issue_types: LayersIcon,
   labels: LabelPropertyIcon,

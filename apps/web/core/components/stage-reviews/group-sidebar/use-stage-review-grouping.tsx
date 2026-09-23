@@ -28,6 +28,8 @@ export type TStageReviewSidebarGroup = {
   icon: ReactNode;
   /** 只有按研发阶段分组时有：阶段的整体完成度，画分段进度条用，不受筛选影响 */
   stage?: TStageReviewStageSummary;
+  /** 产品页按研发阶段分组时：这一组属于哪个项目，淡色缀在阶段名后面 */
+  projectName?: string | null;
   /** 产品页按研发阶段分组时：这一组就是产品档案里的当前阶段 */
   isCurrent?: boolean;
 };
@@ -76,21 +78,28 @@ export const useStageReviewGrouping = ({
   stages,
   isHit,
   settings,
-  currentStageId = null,
+  currentStageName = null,
+  crossProject = false,
 }: {
   reviews: TStageReview[];
   stages: TStageReviewStageSummary[];
   isHit: (review: TStageReview) => boolean;
   settings: TStageReviewDisplaySettings;
-  /** 产品页传产品档案里的「产品阶段」，对应那一组标「当前」；项目页不传 */
-  currentStageId?: string | null;
+  /**
+   * 产品页传产品档案里「产品阶段」的**名字**，同名的那一组标「当前」；项目页不传。
+   *
+   * 按名字而不是 id：产品阶段是数据字典值，评审阶段是研发模式里的一行，两套 id 对不上。
+   */
+  currentStageName?: string | null;
+  /** 产品页：研发阶段分组的键带上项目，两个项目的同一个模式阶段不合并 */
+  crossProject?: boolean;
 }) => {
   const { t } = useTranslation();
   const { groupBy, orderBy, showActivities, showEmptyGroups } = settings;
 
   const rowsByGroup = useMemo(
-    () => buildStageReviewRowsByGroup({ reviews, isHit, orderBy, groupBy, showActivities }),
-    [reviews, isHit, orderBy, groupBy, showActivities]
+    () => buildStageReviewRowsByGroup({ reviews, isHit, orderBy, groupBy, showActivities, crossProject }),
+    [reviews, isHit, orderBy, groupBy, showActivities, crossProject]
   );
   const allRows = useMemo(
     () =>
@@ -105,7 +114,7 @@ export const useStageReviewGrouping = ({
 
     const sampleByKey = new Map<string, TStageReview>();
     for (const review of reviews) {
-      const key = stageReviewGroupKey(groupBy, review);
+      const key = stageReviewGroupKey(groupBy, review, crossProject);
       if (!sampleByKey.has(key)) sampleByKey.set(key, review);
     }
     const byName = (name: (review: TStageReview) => string) =>
@@ -146,15 +155,19 @@ export const useStageReviewGrouping = ({
         keys = byName((review) => review.auditor_detail?.display_name ?? "");
     }
 
-    const describe = (key: string): Pick<TStageReviewSidebarGroup, "name" | "icon" | "stage" | "isCurrent"> => {
+    const describe = (
+      key: string
+    ): Pick<TStageReviewSidebarGroup, "name" | "icon" | "stage" | "isCurrent" | "projectName"> => {
       const sample = sampleByKey.get(key);
       switch (groupBy) {
         case "stage": {
           const stage = stageById.get(key);
           return {
             name: stage?.label ?? "—",
+            // 产品页：同名阶段在不同项目里各成一组，组名后面淡色缀项目名才分得清
+            projectName: crossProject ? (stage?.project_name ?? sample?.project_detail?.name ?? null) : null,
             stage,
-            isCurrent: Boolean(currentStageId) && key === currentStageId,
+            isCurrent: Boolean(currentStageName) && stage?.label === currentStageName,
             icon: <span className={cn("size-2.5 shrink-0 rounded-full border-2", stageNodeClassName(stage))} />,
           };
         }
@@ -222,7 +235,7 @@ export const useStageReviewGrouping = ({
     ];
     // t 每次渲染都是新引用，放进依赖会让分组栏每帧重建；语言切换极少，忽略它
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy, reviews, stages, rowsByGroup, allRows, showEmptyGroups, currentStageId]);
+  }, [groupBy, reviews, stages, rowsByGroup, allRows, showEmptyGroups, currentStageName, crossProject]);
 
   const rowsOf = (groupId: string | null): TStageReviewRow[] =>
     groupBy === "none" || groupId === STAGE_REVIEW_GROUP_ALL ? allRows : (rowsByGroup.get(groupId ?? "") ?? []);

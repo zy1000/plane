@@ -661,6 +661,10 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/features/modules/page.tsx"
             ),
             route(
+              ":workspaceSlug/settings/projects/:projectId/features/releases",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/features/releases/page.tsx"
+            ),
+            route(
               ":workspaceSlug/settings/projects/:projectId/features/views",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/features/views/page.tsx"
             ),
@@ -671,6 +675,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             route(
               ":workspaceSlug/settings/projects/:projectId/features/intake",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/features/intake/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/settings/projects/:projectId/features/reviews",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/features/reviews/page.tsx"
             ),
             // Project States
             route(

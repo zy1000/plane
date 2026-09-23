@@ -11,17 +11,17 @@ import { useTranslation } from "@plane/i18n";
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
-import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
-import { SettingsHeading } from "@/components/settings/heading";
 import { ProjectSettingsFeatureControlItem } from "@/components/settings/project/content/feature-control-item";
+import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import type { Route } from "./+types/page";
-import { FeaturesIntakeProjectSettingsHeader } from "./header";
+import { FeaturesReviewsProjectSettingsHeader } from "./header";
+import { SettingsHeading } from "@/components/settings/heading";
 
-function FeaturesIntakeSettingsPage({ params }: Route.ComponentProps) {
+function FeaturesReviewsSettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   // store hooks
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
@@ -30,15 +30,15 @@ function FeaturesIntakeSettingsPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // derived values
   const pageTitle = currentProjectDetails?.name
-    ? `${currentProjectDetails?.name} settings - ${t("project_settings.features.intake.short_title")}`
+    ? `${currentProjectDetails?.name} settings - ${t("project_settings.features.reviews.short_title")}`
     : undefined;
   const canView = allowProjectPermissionKeys(
-    PROJECT_SETTINGS.features_intake.permissionKeys ?? [],
+    PROJECT_SETTINGS.features_reviews.permissionKeys ?? [],
     workspaceSlug,
     projectId
   );
   const canEdit = allowProjectPermissionKeys(
-    PROJECT_SETTINGS.features_intake.editPermissionKeys ?? [],
+    PROJECT_SETTINGS.features_reviews.editPermissionKeys ?? [],
     workspaceSlug,
     projectId
   );
@@ -48,22 +48,22 @@ function FeaturesIntakeSettingsPage({ params }: Route.ComponentProps) {
   }
 
   return (
-    <SettingsContentWrapper header={<FeaturesIntakeProjectSettingsHeader />}>
+    <SettingsContentWrapper header={<FeaturesReviewsProjectSettingsHeader />}>
       <PageHead title={pageTitle} />
       <section className="w-full">
         <SettingsHeading
-          title={t("project_settings.features.intake.title")}
-          description={t("project_settings.features.intake.description")}
+          title={t("project_settings.features.reviews.title")}
+          description={t("project_settings.features.reviews.description")}
         />
         <div className="mt-7">
           <ProjectSettingsFeatureControlItem
-            title={t("project_settings.features.intake.toggle_title")}
-            description={t("project_settings.features.intake.toggle_description")}
+            title={t("project_settings.features.reviews.toggle_title")}
+            description={t("project_settings.features.reviews.toggle_description")}
             disabled={!canEdit}
-            featureProperty="inbox_view"
-            devModeFeatureKey="intake_view"
+            featureProperty="review_view"
+            devModeFeatureKey="review_view"
             projectId={projectId}
-            value={!!currentProjectDetails?.inbox_view}
+            value={!!currentProjectDetails?.review_view}
             workspaceSlug={workspaceSlug}
           />
         </div>
@@ -72,4 +72,4 @@ function FeaturesIntakeSettingsPage({ params }: Route.ComponentProps) {
   );
 }
 
-export default observer(FeaturesIntakeSettingsPage);
+export default observer(FeaturesReviewsSettingsPage);

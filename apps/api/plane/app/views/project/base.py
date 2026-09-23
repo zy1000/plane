@@ -140,6 +140,8 @@ class ProjectViewSet(BaseViewSet):
                 "project_type__dictionary",
                 # product_manager_detail 要出头像 URL，一并把 avatar_asset 拉上，否则每行一条查询
                 "product_manager__avatar_asset",
+                # dev_mode_detail 要出 features（侧栏与功能页按「模式位 AND 项目位」渲染）
+                "dev_mode",
             )
             .annotate(
                 is_favorite=Exists(
@@ -494,9 +496,27 @@ class ProjectViewSet(BaseViewSet):
                 )
             )
             .annotate(inbox_view=F("intake_view"))
+            # 侧栏在这份轻量数据到手时就渲染了，所以「模式位 AND 项目位」要用到的东西
+            # 一个都不能少。values() 出不了嵌套对象，先平铺注解，下面 project_rows
+            # 循环里再拼成 dev_mode_detail，与 /projects/details/ 的形状对齐。
+            .annotate(
+                dev_mode_name=F("dev_mode__name"),
+                dev_mode_icon_props=F("dev_mode__icon_props"),
+                dev_mode_features=F("dev_mode__features"),
+                dev_mode_is_system=F("dev_mode__is_system"),
+            )
             .annotate(sort_order=Subquery(sort_order))
             .distinct()
         ).values(
+            "dev_mode",
+            "dev_mode_name",
+            "dev_mode_icon_props",
+            "dev_mode_features",
+            "dev_mode_is_system",
+            "release_view",
+            "review_view",
+            "is_time_tracking_enabled",
+            "is_issue_type_enabled",
             "id",
             "name",
             "identifier",
@@ -545,6 +565,13 @@ class ProjectViewSet(BaseViewSet):
                 & PROJECT_LIST_PERMISSION_KEYS
             )
             row["products"] = products_by_project.get(str(row["id"]), [])
+            row["dev_mode_detail"] = {
+                "id": row["dev_mode"],
+                "name": row.pop("dev_mode_name"),
+                "icon_props": row.pop("dev_mode_icon_props"),
+                "features": row.pop("dev_mode_features"),
+                "is_system": row.pop("dev_mode_is_system"),
+            }
         return Response(project_rows, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
@@ -682,6 +709,7 @@ class ProjectViewSet(BaseViewSet):
             "project_type",
             "project_type__dictionary",
             "product_manager__avatar_asset",
+            "dev_mode",
         ).get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(

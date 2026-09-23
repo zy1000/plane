@@ -9,7 +9,8 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { setPromiseToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { IProject } from "@plane/types";
+import type { IProject, TDevModeFeatureKey } from "@plane/types";
+import { isDevModeFeatureAllowed } from "@plane/utils";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon } from "@plane/propel/icons";
 // components
 import { SettingsBoxedControlItem } from "@/components/settings/boxed-control-item";
@@ -27,10 +28,15 @@ type Props = {
   isAdmin: boolean;
 };
 
+/**
+ * `devModeFeatureKey`：这一项在研发模式里对应的开关。模式关掉的组件在这里也要灰显，
+ * 否则用户能从这个列表把一个模式不允许的组件打开（后端会 400）。
+ */
 const PROJECT_FEATURES_LIST = {
   cycles: {
     key: "cycles",
     property: "cycle_view",
+    devModeFeatureKey: "cycle_view",
     title: "Cycles",
     description: "Timebox work as you see fit per project and change frequency from one period to the next.",
     icon: <CycleIcon className="h-5 w-5 flex-shrink-0 rotate-180 text-tertiary" />,
@@ -40,6 +46,7 @@ const PROJECT_FEATURES_LIST = {
   modules: {
     key: "modules",
     property: "module_view",
+    devModeFeatureKey: "module_view",
     title: "Modules",
     description: "Group work into sub-project-like set-ups with their own leads and assignees.",
     icon: <ModuleIcon width={20} height={20} className="flex-shrink-0 text-tertiary" />,
@@ -49,6 +56,7 @@ const PROJECT_FEATURES_LIST = {
   views: {
     key: "views",
     property: "issue_views_view",
+    devModeFeatureKey: "issue_views_view",
     title: "Views",
     description: "Save sorts, filters, and display options for later or share them.",
     icon: <ViewsIcon className="h-5 w-5 flex-shrink-0 text-tertiary" />,
@@ -58,6 +66,7 @@ const PROJECT_FEATURES_LIST = {
   pages: {
     key: "pages",
     property: "page_view",
+    devModeFeatureKey: "page_view",
     title: "Pages",
     description: "Write anything like you write anything.",
     icon: <PageIcon className="h-5 w-5 flex-shrink-0 text-tertiary" />,
@@ -67,6 +76,7 @@ const PROJECT_FEATURES_LIST = {
   inbox: {
     key: "intake",
     property: "inbox_view",
+    devModeFeatureKey: "intake_view",
     title: "Intake",
     description: "Consider and discuss work items before you add them to your project.",
     icon: <IntakeIcon className="h-5 w-5 flex-shrink-0 text-tertiary" />,
@@ -113,36 +123,45 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
       <div>
         <SettingsHeading title={t("projects_and_issues")} description={t("projects_and_issues_description")} />
         <div className="mt-6 flex flex-col gap-y-4">
-          {Object.entries(PROJECT_FEATURES_LIST).map(([featureItemKey, featureItem]) => (
-            <div key={featureItemKey}>
-              <SettingsBoxedControlItem
-                title={
-                  <span className="flex items-center gap-2">
-                    {t(featureItem.key)}
-                    {featureItem.isPro && (
-                      <Tooltip tooltipContent="Pro feature" position="top">
-                        <UpgradeBadge className="rounded-sm" />
-                      </Tooltip>
-                    )}
-                  </span>
-                }
-                description={t(`${featureItem.key}_description`)}
-                control={
-                  <ProjectFeatureToggle
-                    workspaceSlug={workspaceSlug}
-                    projectId={projectId}
-                    featureItem={featureItem}
-                    value={Boolean(currentProjectDetails?.[featureItem.property as keyof IProject])}
-                    handleSubmit={handleSubmit}
-                    disabled={!isAdmin}
-                  />
-                }
-              />
-              {/* {currentProjectDetails?.[featureItem.property as keyof IProject] && (
+          {Object.entries(PROJECT_FEATURES_LIST).map(([featureItemKey, featureItem]) => {
+            // 模式关掉的组件：显示为关且不能点，放开要去模板中心改模式
+            const isAllowedByDevMode = isDevModeFeatureAllowed(
+              currentProjectDetails,
+              featureItem.devModeFeatureKey as TDevModeFeatureKey
+            );
+            return (
+              <div key={featureItemKey}>
+                <SettingsBoxedControlItem
+                  title={
+                    <span className="flex items-center gap-2">
+                      {t(featureItem.key)}
+                      {featureItem.isPro && (
+                        <Tooltip tooltipContent="Pro feature" position="top">
+                          <UpgradeBadge className="rounded-sm" />
+                        </Tooltip>
+                      )}
+                    </span>
+                  }
+                  description={t(`${featureItem.key}_description`)}
+                  control={
+                    <ProjectFeatureToggle
+                      workspaceSlug={workspaceSlug}
+                      projectId={projectId}
+                      featureItem={featureItem}
+                      value={
+                        isAllowedByDevMode && Boolean(currentProjectDetails?.[featureItem.property as keyof IProject])
+                      }
+                      handleSubmit={handleSubmit}
+                      disabled={!isAdmin || !isAllowedByDevMode}
+                    />
+                  }
+                />
+                {/* {currentProjectDetails?.[featureItem.property as keyof IProject] && (
                 <div className="pl-14">{featureItem.renderChildren?.(currentProjectDetails, workspaceSlug)}</div>
               )} */}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </>

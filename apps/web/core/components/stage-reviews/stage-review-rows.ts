@@ -20,11 +20,21 @@ export const STAGE_REVIEW_GROUP_NONE = "__none__";
 /** 分组方式为「无」时唯一的那一组 */
 export const STAGE_REVIEW_GROUP_ALL = "__all__";
 
-/** 一条评审落在哪个分组里。按研发阶段 / 产品 / 项目分时父子一定同组，其它方式可能拆开 */
-export const stageReviewGroupKey = (groupBy: TStageReviewGroupBy, review: TStageReview): string => {
+/**
+ * 一条评审落在哪个分组里。按研发阶段 / 产品 / 项目分时父子一定同组，其它方式可能拆开。
+ *
+ * ``crossProject``（产品页）时研发阶段这一维要带上项目：阶段是研发模式里的一行，两个项目
+ * 用同一个模式就是同一个阶段 id，跨项目视角下合并成一组会把「电表平台走到 O 阶段」和
+ * 「通信模组走到 O 阶段」混为一谈。键的形状与后端产品级汇总接口一致。
+ */
+export const stageReviewGroupKey = (
+  groupBy: TStageReviewGroupBy,
+  review: TStageReview,
+  crossProject = false
+): string => {
   switch (groupBy) {
     case "stage":
-      return review.stage_id;
+      return crossProject ? `${review.project_id}:${review.stage_id}` : review.stage_id;
     case "product":
       return review.product_id;
     case "project":
@@ -90,12 +100,15 @@ export const buildStageReviewRowsByGroup = ({
   orderBy,
   groupBy,
   showActivities,
+  crossProject = false,
 }: {
   reviews: TStageReview[];
   isHit: (review: TStageReview) => boolean;
   orderBy: TStageReviewOrderBy;
   groupBy: TStageReviewGroupBy;
   showActivities: boolean;
+  /** 产品页：研发阶段分组的键要带上项目，见 stageReviewGroupKey */
+  crossProject?: boolean;
 }): Map<string, TStageReviewRow[]> => {
   const byId = new Map(reviews.map((review) => [review.id, review]));
   const index = new Map(reviews.map((review, position) => [review.id, position]));
@@ -123,7 +136,7 @@ export const buildStageReviewRowsByGroup = ({
       .filter((review) => !parentOf(review) && (hits.has(review.id) || carried.has(review.id)))
       .sort(compare);
     for (const root of roots) {
-      push(rowsByKey, stageReviewGroupKey(groupBy, root), [
+      push(rowsByKey, stageReviewGroupKey(groupBy, root, crossProject), [
         { review: root, depth: 0, carried: carried.has(root.id), title: root.title, parentTitle: null },
         ...(childrenOf.get(root.id) ?? []).sort(compare).map((child) => ({
           review: child,
@@ -139,7 +152,7 @@ export const buildStageReviewRowsByGroup = ({
 
   for (const review of reviews.filter((item) => hits.has(item.id)).sort(compare)) {
     const parent = parentOf(review);
-    push(rowsByKey, stageReviewGroupKey(groupBy, review), [
+    push(rowsByKey, stageReviewGroupKey(groupBy, review, crossProject), [
       {
         review,
         depth: 0,

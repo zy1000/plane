@@ -10,6 +10,7 @@ import { Controller, useFormContext, useWatch } from "react-hook-form";
 // plane imports
 import { ETabIndices } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import type { TDevMode } from "@plane/types";
 import { TextArea } from "@plane/ui";
 import { getDate, getTabIndex } from "@plane/utils";
 // components
@@ -17,6 +18,7 @@ import { FORM_VARIANT_STYLES, getFormGridClassName } from "@/components/common/f
 import {
   ProjectCodeField,
   ProjectDateField,
+  ProjectDevModeField,
   ProjectDictionaryField,
   ProjectMemberField,
   ProjectProductTypeField,
@@ -30,6 +32,8 @@ import { ProjectCreateFieldGroup } from "./field-group";
 type Props = {
   isMobile: boolean;
   dictionaries: TProjectDictionaries;
+  devModes: TDevMode[];
+  isDevModesLoading: boolean;
   handleFormOnChange?: () => void;
 };
 
@@ -41,7 +45,7 @@ const VARIANT = "grouped-modal" as const;
  * 名称 / 项目 ID / logo / 可见性在顶部身份区（header.tsx）。
  */
 function ProjectCommonAttributes(props: Props) {
-  const { isMobile, dictionaries, handleFormOnChange } = props;
+  const { isMobile, dictionaries, devModes, isDevModesLoading, handleFormOnChange } = props;
   const {
     control,
     formState: { errors },
@@ -62,6 +66,14 @@ function ProjectCommonAttributes(props: Props) {
     <div>
       <ProjectCreateFieldGroup title={t("workspace_projects.create.groups.basic")}>
         <div className={grid}>
+          {/* 研发模式排在最前且占满整行：它决定项目能用哪些组件，下面还要挂一行开放组件摘要 */}
+          <ProjectDevModeField
+            {...base}
+            devModes={devModes}
+            isLoading={isDevModesLoading}
+            tabIndex={getIndex("dev_mode")}
+            className="md:col-span-2"
+          />
           <ProjectCodeField {...base} dictionaries={dictionaries} tabIndex={getIndex("code")} />
           <ProjectDictionaryField
             {...base}

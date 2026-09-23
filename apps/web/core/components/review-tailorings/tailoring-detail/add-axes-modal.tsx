@@ -6,16 +6,15 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
   TAddReviewTailoringAxesPayload,
+  TReviewTailoringAxisOption,
   TReviewTailoringProduct,
   TReviewTailoringRow,
-  TStageReviewTemplate,
 } from "@plane/types";
-import { STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
+import { type EStageReviewKind, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
-import { useStageReviewTemplates } from "@/hooks/store/use-stage-review-templates";
-import { useStageTypes } from "@/hooks/store/use-stage-types";
+import { useTailoringAxisOptions } from "@/hooks/store/use-tailoring-axis-options";
 import { ModalSearch, TailoringModalHeader } from "./modal-header";
 import { StageFilterChip } from "./stage-filter-chip";
 import { splitChildTitle } from "./tailoring-matrix-model";
@@ -27,12 +26,17 @@ const REVIEW_COLS = "grid grid-cols-[1rem_4.75rem_1fr_auto] items-center gap-x-2
 /** 右栏行：复选框 / 图标 / 名称 / 锁定标签 */
 const PRODUCT_COLS = "grid grid-cols-[1rem_1.5rem_1fr_auto] items-center gap-x-3 px-4";
 
-type TBlocked = "in_matrix" | "inactive" | null;
+type TBlocked = "in_matrix" | null;
 
-/** 平铺后的一行：评审和评审活动平级，各自独立勾选 */
+/**
+ * 平铺后的一行：模式阶段 × 节点，评审和评审活动平级。
+ *
+ * **勾选的单位是节点（``templateId``）而不是这一行**：纵轴按节点存，加一个节点等于在模式
+ * 勾过它的每个阶段下都加一行。所以同一个节点的几行会一起亮起来，行上标了它横跨几个阶段。
+ */
 type TFlatRow = {
-  node: TStageReviewTemplate;
-  /** 已在矩阵里 / 模板已停用：列出来但不能勾 */
+  templateId: string;
+  /** 已在矩阵里：列出来但不能勾。停用节点服务端已经滤掉了 */
   blocked: TBlocked;
   stageId: string;
   stageLabel: string;
@@ -140,6 +144,7 @@ export const AddAxesModal = observer(function AddAxesModal({
   isSubmitting,
   workspaceSlug,
   projectId,
+  tailoringId,
   existingRows,
   existingProducts,
   onClose,
@@ -149,6 +154,7 @@ export const AddAxesModal = observer(function AddAxesModal({
   isSubmitting: boolean;
   workspaceSlug: string;
   projectId: string;
+  tailoringId: string;
   existingRows: TReviewTailoringRow[];
   existingProducts: TReviewTailoringProduct[];
   onClose: () => void;
@@ -156,8 +162,12 @@ export const AddAxesModal = observer(function AddAxesModal({
 }) {
   const { t } = useTranslation();
 
-  const { stageOptions: stages } = useStageTypes(workspaceSlug);
-  const { groups, isLoading: isLoadingReviews } = useStageReviewTemplates(workspaceSlug, stages);
+  const { options, isLoading: isLoadingReviews } = useTailoringAxisOptions(
+    workspaceSlug,
+    projectId,
+    tailoringId,
+    isOpen
+  );
   const { links, isLoading: isLoadingProducts } = useProjectProducts({ workspaceSlug, projectId });
 
   /** 勾中的模板节点 id：评审与活动平等，提交时原样发出去 */
@@ -177,36 +187,33 @@ export const AddAxesModal = observer(function AddAxesModal({
     setStageFilter(null);
   }, [isOpen]);
 
-  // ---- 评审候选：把「阶段 → 评审 → 活动」的树拍平成一张清单 ----
+  // ---- 评审候选：服务端已经按「模式阶段 × 节点」铺平，这里只补父评审标题 ----
   const rows = useMemo<TFlatRow[]>(() => {
-    const taken = new Set(existingRows.map((row) => row.template_id));
-    const blockedOf = (node: TStageReviewTemplate): TBlocked =>
-      taken.has(node.id) ? "in_matrix" : !node.is_active ? "inactive" : null;
-    return groups.flatMap((group) => {
-      const stage = {
-        stageId: group.stageId,
-        stageLabel: group.stageLabel,
+    // 父评审标题按 (阶段, 节点) 找：同一个活动在两个阶段下的父是各自那个阶段的评审
+    const titleByKey = new Map<string, string>();
+    for (const option of options) titleByKey.set(`${option.stage_id}:${option.template_id}`, option.title);
+    return options.map((option: TReviewTailoringAxisOption) => {
+      const parentTitle = option.parent_template_id
+        ? (titleByKey.get(`${option.stage_id}:${option.parent_template_id}`) ?? null)
+        : null;
+      return {
+        templateId: option.template_id,
+        blocked: option.in_matrix ? "in_matrix" : null,
+        stageId: option.stage_id,
+        stageLabel: option.stage_label,
+        isReview: STAGE_REVIEW_ROOT_KINDS.includes(option.kind as EStageReviewKind),
+        parentTitle,
+        title: parentTitle ? splitChildTitle(parentTitle, option.title).rest : option.title,
       };
-      return group.nodes.flatMap(({ node, children }) => [
-        {
-          ...stage,
-          node,
-          blocked: blockedOf(node),
-          isReview: STAGE_REVIEW_ROOT_KINDS.includes(node.kind),
-          parentTitle: null,
-          title: node.title,
-        },
-        ...children.map((child) => ({
-          ...stage,
-          node: child,
-          blocked: blockedOf(child),
-          isReview: false,
-          parentTitle: node.title,
-          title: splitChildTitle(node.title, child.title).rest,
-        })),
-      ]);
     });
-  }, [groups, existingRows]);
+  }, [options]);
+
+  /** 每个节点横跨几个模式阶段 —— 勾一下会加几行，底部算账与行上的标记都要用 */
+  const stagesPerTemplate = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of rows) counts.set(row.templateId, (counts.get(row.templateId) ?? 0) + 1);
+    return counts;
+  }, [rows]);
 
   /** 筛选下拉的阶段清单与各自可加条数；不跟搜索词走，免得计数一边打字一边跳 */
   const stageChoices = useMemo<TStageChoice[]>(() => {
@@ -239,7 +246,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         if (!reviewKeyword) return true;
         // 搜父评审名也带出它下面的活动，跟分组时代「搜到评审 = 看到整组」的手感一致
         return (
-          row.node.title.toLowerCase().includes(reviewKeyword) ||
+          row.title.toLowerCase().includes(reviewKeyword) ||
           (row.parentTitle ?? "").toLowerCase().includes(reviewKeyword)
         );
       }),
@@ -269,7 +276,7 @@ export const AddAxesModal = observer(function AddAxesModal({
 
   // ---- 全选 / 取消全选：只作用于当前可见且可勾的行 ----
   const selectableReviewIds = useMemo(
-    () => visibleRows.filter((row) => !row.blocked).map((row) => row.node.id),
+    () => visibleRows.filter((row) => !row.blocked).map((row) => row.templateId),
     [visibleRows]
   );
   const pickedVisibleReviews = selectableReviewIds.filter((id) => reviewIds.has(id)).length;
@@ -291,9 +298,18 @@ export const AddAxesModal = observer(function AddAxesModal({
     setProductIds((current) => current.filter((id) => !selectableProductIds.includes(id)));
 
   // ---- 底部算账 ----
-  const reviews = rows.filter((row) => row.isReview && reviewIds.has(row.node.id)).length;
-  const activities = reviewIds.size - reviews;
-  const rowCount = reviewIds.size;
+  // 勾选以节点为单位，但加进表里的是**行** —— 一个节点在模式里被两个阶段勾过就是两行
+  const pickedTemplates = useMemo(() => {
+    const seen = new Map<string, boolean>();
+    for (const row of rows) if (reviewIds.has(row.templateId)) seen.set(row.templateId, row.isReview);
+    return seen;
+  }, [rows, reviewIds]);
+  const reviews = [...pickedTemplates.values()].filter(Boolean).length;
+  const activities = pickedTemplates.size - reviews;
+  const rowCount = [...pickedTemplates.keys()].reduce(
+    (total, templateId) => total + (stagesPerTemplate.get(templateId) ?? 1),
+    0
+  );
   const products = productIds.length;
   // 新行 × 全部列（旧列 + 新列）+ 旧行 × 新列
   const cells = rowCount * (existingProducts.length + products) + existingRows.length * products;
@@ -314,8 +330,7 @@ export const AddAxesModal = observer(function AddAxesModal({
           ? t(`${I18N}.add_axes_apply_reviews`, { rows: rowCount })
           : t("review_tailoring.detail.add_axes");
 
-  const blockedLabel = (blocked: Exclude<TBlocked, null>) =>
-    t(blocked === "in_matrix" ? `${I18N}.add_reviews_in_matrix` : `${I18N}.add_reviews_inactive`);
+  const blockedLabel = (_blocked: Exclude<TBlocked, null>) => t(`${I18N}.add_reviews_in_matrix`);
 
   const stageOptions = stageChoices.map((choice) => ({
     id: choice.id,
@@ -330,11 +345,13 @@ export const AddAxesModal = observer(function AddAxesModal({
   }));
 
   const renderRow = (row: TFlatRow) => {
-    const { node, blocked, parentTitle } = row;
-    const isPicked = reviewIds.has(node.id);
+    const { templateId, blocked, parentTitle } = row;
+    const isPicked = reviewIds.has(templateId);
+    // 同一个节点横跨几个阶段时，勾一下几行一起进表 —— 在行上说清楚，别让人以为只加这一行
+    const spanned = stagesPerTemplate.get(templateId) ?? 1;
     return (
       <label
-        key={node.id}
+        key={`${row.stageId}:${templateId}`}
         className={cn(
           REVIEW_COLS,
           "h-10 border-b border-subtle text-13",
@@ -345,7 +362,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         <Checkbox
           checked={isPicked || blocked === "in_matrix"}
           disabled={Boolean(blocked)}
-          onChange={() => toggleReview(node.id)}
+          onChange={() => toggleReview(templateId)}
         />
         <span
           className={cn("flex min-w-0 items-center gap-1.5 text-12.5", blocked ? "text-placeholder" : "text-secondary")}
@@ -353,11 +370,16 @@ export const AddAxesModal = observer(function AddAxesModal({
         >
           <span className="truncate">{row.stageLabel}</span>
         </span>
-        <span className="flex min-w-0 items-center gap-2" title={node.title}>
+        <span className="flex min-w-0 items-center gap-2" title={row.title}>
           {row.isReview && <ClipboardCheck className="size-3.5 shrink-0 text-tertiary" />}
           {/* 前缀不截断：截一半就认不出是哪个评审了，让活动名去 truncate（悬停看全名） */}
           {parentTitle && <span className="shrink-0 text-placeholder">{parentTitle} ›</span>}
           <span className={cn("min-w-0 truncate", row.isReview && "font-medium")}>{row.title}</span>
+          {spanned > 1 && (
+            <span className="shrink-0 rounded bg-layer-3 px-1.5 text-11 leading-4 text-tertiary">
+              {t(`${I18N}.add_axes_multi_stage`, { stages: spanned })}
+            </span>
+          )}
         </span>
         {blocked && <LockedTag label={blockedLabel(blocked)} />}
       </label>

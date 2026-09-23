@@ -39,6 +39,8 @@ from plane.db.models import (
     ReviewTailoringComment,
     ReviewTailoringItem,
     ReviewTailoringProduct,
+    ReviewTailoringTemplate,
+    StageReviewTemplate,
 )
 from plane.utils.review_tailoring import (
     ReviewTailoringError,
@@ -47,13 +49,15 @@ from plane.utils.review_tailoring import (
     add_reviews,
     attach_detail_progress,
     attach_list_progress,
-    axis_templates,
+    axis_rows,
     cancel_revision,
     create_tailoring,
     delete_tailoring,
+    project_stages,
     remove_product,
     remove_review,
     save_cells,
+    stage_template_ids,
     start_revision,
     submit_for_approval,
     update_header,
@@ -134,6 +138,9 @@ class ReviewTailoringViewSet(BaseViewSet):
                     filter=Q(axis_products__deleted_at__isnull=True),
                     distinct=True,
                 ),
+                # 数的是纵轴上的模板节点数。详情页的 review_count 是**展开后的行数**，
+                # 一个节点被模式里两个同类型阶段都勾上时会比这里多 —— 列表只要个体量感，
+                # 为它把每张表的行都展开一遍不划算。
                 review_count=Count(
                     "axis_templates",
                     filter=Q(axis_templates__deleted_at__isnull=True),
@@ -151,16 +158,17 @@ class ReviewTailoringViewSet(BaseViewSet):
         """一次查完格子 / 产品 / 本轮签批，再喂给序列化器，避免逐条反查。"""
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
-            .select_related("template", "template__stage", "stage_review", "created_by")
+            .select_related("template", "stage", "stage_review", "created_by")
             .order_by(
-                "template__stage__sort_order",
+                # 阶段顺序来自研发模式，不是模板节点的阶段类型
+                "stage__sort_order",
                 "template__sort_order",
                 "template__created_at",
                 "id",
             )
         )
         # 两个轴都单独查：只加了一个轴的表没有任何格子，从格子反推会画出一张空表
-        rows = axis_templates(tailoring)
+        rows = axis_rows(tailoring)
         products = list(
             Product.objects.filter(
                 id__in=ReviewTailoringProduct.objects.filter(
@@ -351,6 +359,63 @@ class ReviewTailoringViewSet(BaseViewSet):
         except ReviewTailoringError as exc:
             return tailoring_error_response(exc)
         return self._detail_response(self.get_queryset().filter(pk=pk).first())
+
+    @allow_fine_permission(*TAILORING_READ_KEYS)
+    def axis_options(self, request, slug, project_id, pk):
+        """「添加评审与产品」弹窗左栏的候选清单。
+
+        候选不是整棵评审树，而是**本项目研发模式勾选过的节点**：模式的勾选是硬边界，
+        树上有、模式里没勾的节点不该出现在弹窗里（POST 上去也会被 ``add_reviews`` 拒）。
+
+        返回形状按「阶段 → 节点」铺平，同一个节点在两个同类型阶段下各出一条，前端照着
+        画那张平铺清单；``in_matrix`` 告诉它哪几条已经在表上了。
+        """
+        tailoring = self.get_queryset().filter(pk=pk).first()
+        if tailoring is None:
+            return self._not_found()
+
+        stages = project_stages(project_id)
+        selected_by_stage = stage_template_ids(stages)
+        picked_ids = {tid for picked in selected_by_stage.values() for tid in picked}
+        templates = {
+            template.id: template
+            for template in StageReviewTemplate.objects.filter(
+                id__in=picked_ids, is_active=True
+            )
+        }
+        in_matrix = set(
+            ReviewTailoringTemplate.objects.filter(tailoring=tailoring).values_list(
+                "template_id", flat=True
+            )
+        )
+
+        options = []
+        for stage in stages:
+            nodes = [
+                templates[tid]
+                for tid in selected_by_stage.get(stage.id, ())
+                if tid in templates
+            ]
+            nodes.sort(key=lambda t: (t.sort_order, t.created_at, str(t.id)))
+            for template in nodes:
+                options.append(
+                    {
+                        "stage_id": str(stage.id),
+                        "stage_label": stage.name,
+                        "stage_sort_order": stage.sort_order,
+                        "template_id": str(template.id),
+                        "parent_template_id": (
+                            str(template.parent_id) if template.parent_id else None
+                        ),
+                        "kind": template.kind,
+                        "title": template.title,
+                        "sort_order": template.sort_order,
+                        # 纵轴是按节点加的，所以「已在表中」也是按节点判定 —— 一个节点
+                        # 进表就意味着它在模式的每个阶段下都有了行
+                        "in_matrix": template.id in in_matrix,
+                    }
+                )
+        return Response({"rows": options})
 
     @allow_fine_permission(TAILORING_MANAGE_KEY)
     def axes(self, request, slug, project_id, pk):

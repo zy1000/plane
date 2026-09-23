@@ -79,7 +79,15 @@ const AxisEmptyState = ({
 );
 
 /** 待确认移除的行或列，连带它会带走多少格、多少条原因 */
-type TRemoveTarget = { kind: "review" | "product"; id: string; name: string; cells: number; reasons: number };
+type TRemoveTarget = {
+  kind: "review" | "product";
+  id: string;
+  name: string;
+  cells: number;
+  reasons: number;
+  /** 这个评审节点横跨几个模式阶段。>1 时要额外说明「几个阶段的行都会移除」 */
+  stages: number;
+};
 
 /**
  * 裁剪表详情：顶栏（面包屑 + 主按钮）→ 标题区 →（签批中）签批面板 → Tab → 内容 →（有改动）浮动改动条。
@@ -223,7 +231,10 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   };
 
   /** 移除前先数清楚会带走什么；生成过评审的行列服务端会拦，这里提前说 */
-  const requestRemove = (target: Omit<TRemoveTarget, "cells" | "reasons">, predicate: (item: TReviewTailoringItem) => boolean) => {
+  const requestRemove = (
+    target: Omit<TRemoveTarget, "cells" | "reasons" | "stages">,
+    predicate: (item: TReviewTailoringItem) => boolean
+  ) => {
     const cells = items.filter(predicate);
     if (cells.some((cell) => cell.stage_review_id)) {
       setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.actions.remove_axis_in_use`, { name: target.name }) });
@@ -233,6 +244,8 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
       ...target,
       cells: cells.length,
       reasons: cells.filter((cell) => !cell.selected && cell.reason.trim()).length,
+      // 纵轴是按节点加的，移除也按节点走：这个评审在几个阶段有行，就一起走几行
+      stages: new Set((detail?.rows ?? []).filter((row) => row.template_id === target.id).map((row) => row.stage_id)).size,
     });
   };
 
@@ -541,6 +554,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         isSubmitting={isMutating}
         workspaceSlug={workspaceSlug}
         projectId={projectId}
+        tailoringId={detail.id}
         existingRows={detail.rows}
         existingProducts={detail.products}
         onClose={() => setIsAddAxesOpen(false)}
@@ -566,10 +580,18 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
           toRemove?.kind === "product" ? `${I18N}.actions.remove_column_title` : `${I18N}.actions.remove_row_title`,
           { name: toRemove?.name ?? "" }
         )}
-        content={t(`${I18N}.actions.remove_axis_detail`, {
-          cells: toRemove?.cells ?? 0,
-          reasons: toRemove?.reasons ?? 0,
-        })}
+        content={[
+          t(`${I18N}.actions.remove_axis_detail`, {
+            cells: toRemove?.cells ?? 0,
+            reasons: toRemove?.reasons ?? 0,
+          }),
+          // 同一个评审在 o-1、o-2 下各有一行时，别让人以为只移除点中的那一行
+          toRemove?.kind === "review" && (toRemove?.stages ?? 0) > 1
+            ? t(`${I18N}.actions.remove_row_multi_stage`, { stages: toRemove?.stages ?? 0 })
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         primaryButtonText={{ loading: t("removing"), default: t("remove") }}
         secondaryButtonText={t("cancel")}
       />

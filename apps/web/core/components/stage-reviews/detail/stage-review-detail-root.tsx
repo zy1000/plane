@@ -410,9 +410,9 @@ const DetailBody = (props: DetailBodyProps) => {
         <div className="flex items-end gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex items-center gap-2 text-12 text-tertiary">
-              {detail.stage_detail?.label && (
+              {detail.stage_detail?.name && (
                 <span className="inline-flex h-5.5 items-center rounded-md bg-layer-2 px-2 text-12 font-medium whitespace-nowrap text-secondary">
-                  {detail.stage_detail.label}
+                  {detail.stage_detail.name}
                 </span>
               )}
               <StageReviewKindBadge kind={detail.kind} className="rounded-md px-2 text-12" />

@@ -4,8 +4,15 @@ import type { TReviewTailoringItem, TReviewTailoringProduct, TReviewTailoringRow
  * 矩阵的纯派生逻辑。全部是纯函数，方便在不挂载组件的情况下推演联动与锁定规则。
  */
 
-/** 矩阵的一行 = 纵轴上的一个模板节点，横向铺开每个产品的格子 */
+/** 矩阵的一行 = 模式阶段 × 模板节点，横向铺开每个产品的格子 */
 export type TMatrixRow = {
+  /**
+   * 行的身份是 `${stageId}:${templateId}`，不是单独的 templateId。
+   *
+   * 同一个模板节点在项目模式的两个同类型阶段下（o-1、o-2）各占一行，各自独立勾选，
+   * 光靠 templateId 认不出是哪一行 —— React key、格子索引、批量选中都要用这个键。
+   */
+  rowKey: string;
   templateId: string;
   stageId: string;
   title: string;
@@ -17,6 +24,9 @@ export type TMatrixRow = {
   cells: Map<string, TReviewTailoringItem>;
 };
 
+/** 行键：阶段 + 节点。父子查找仍按 templateId，因为那是在同一段（同一阶段）内部做的 */
+export const rowKeyOf = (stageId: string, templateId: string) => `${stageId}:${templateId}`;
+
 /**
  * 把纵轴的一段折成树，并把格子挂到对应的行上。
  *
@@ -25,17 +35,20 @@ export type TMatrixRow = {
  * 正下方（后端按 sort_order 全局排序，父子在同一个序列里未必相邻）。没有父的活动（有些
  * 阶段没有汇总评审）留在顶层，与评审平级。
  */
-const buildRows = (rows: TReviewTailoringRow[], cellsByTemplate: Map<string, TReviewTailoringItem[]>): TMatrixRow[] => {
+const buildRows = (rows: TReviewTailoringRow[], cellsByRowKey: Map<string, TReviewTailoringItem[]>): TMatrixRow[] => {
   const present = new Set(rows.map((row) => row.template_id));
 
   const toRow = (row: TReviewTailoringRow, isChild: boolean): TMatrixRow => ({
+    rowKey: rowKeyOf(row.stage_id, row.template_id),
     templateId: row.template_id,
     stageId: row.stage_id,
     title: row.title,
     kind: row.kind,
     isChild,
     sortOrder: row.sort_order,
-    cells: new Map((cellsByTemplate.get(row.template_id) ?? []).map((cell) => [cell.product_id, cell])),
+    cells: new Map(
+      (cellsByRowKey.get(rowKeyOf(row.stage_id, row.template_id)) ?? []).map((cell) => [cell.product_id, cell])
+    ),
   });
 
   const ordered = [...rows].sort((a, b) => a.sort_order - b.sort_order);
@@ -68,14 +81,16 @@ export type TMatrixGroup = {
  * 把纵轴先按阶段分段，再在每段内部折成树。
  *
  * 纵轴是人一个个加进来的，可能横跨好几个阶段 —— 分段之后每段就是「这个阶段要裁哪些评审」，
- * 读起来和模板库、阶段评审左栏是同一个顺序（按阶段字典值的 sort_order，同序再按标签）。
+ * 读起来和阶段评审左栏是同一个顺序（按项目研发模式里阶段的 sort_order，同序再按名字）。
+ * 同一类型的两个阶段（o-1、o-2）各自成段，段内可以出现同一个模板节点。
  */
 export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTailoringItem[]): TMatrixGroup[] => {
-  const cellsByTemplate = new Map<string, TReviewTailoringItem[]>();
+  const cellsByRowKey = new Map<string, TReviewTailoringItem[]>();
   for (const item of items) {
-    const bucket = cellsByTemplate.get(item.template_id);
+    const key = rowKeyOf(item.stage_id, item.template_id);
+    const bucket = cellsByRowKey.get(key);
     if (bucket) bucket.push(item);
-    else cellsByTemplate.set(item.template_id, [item]);
+    else cellsByRowKey.set(key, [item]);
   }
 
   const bucketByStage = new Map<string, { label: string; sortOrder: number; rows: TReviewTailoringRow[] }>();
@@ -95,7 +110,7 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
       stageId,
       stageLabel: bucket.label,
       sortOrder: bucket.sortOrder,
-      rows: buildRows(bucket.rows, cellsByTemplate),
+      rows: buildRows(bucket.rows, cellsByRowKey),
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.stageLabel.localeCompare(b.stageLabel));
 };

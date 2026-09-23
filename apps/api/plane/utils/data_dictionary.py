@@ -1,9 +1,10 @@
 """数据字典：系统字典规格、幂等预置、值的归一化 / 批量写入、产品 / 项目引用检查与计数。
 
 迁移里有 SYSTEM_DICTIONARIES 的副本（迁移不能 import 运行时代码）：产品六项在 0346，项目三项在 0348，
-项目代号在 0355，改这里要同步改那边。product_stage 的**值**是个例外 —— 它们同时是阶段评审的阶段
-词表，规格收在零 import 的 plane/db/seed_data/stage_review_templates.py，运行时与迁移 0362 共用
-同一份，不用两处同步。
+项目代号在 0355，改这里要同步改那边。product_stage 的**值**规格收在零 import 的
+plane/db/seed_data/stage_review_templates.py，运行时与迁移 0362 共用同一份，不用两处同步；
+它现在只服务产品档案的「当前阶段」属性 —— 阶段评审的阶段词表在批次 1 搬去了 StageType，
+评审实例与裁剪格子的阶段在批次 4 又换成了研发模式的 DevModeStage，都与这本字典无关了。
 """
 
 from django.db import IntegrityError, transaction

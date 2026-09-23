@@ -22,14 +22,15 @@ from plane.utils.dev_mode import selectable_template_ids
 
 
 def stage_in_use(stage):
-    """这个阶段有没有被项目的评审实例或裁剪表引用。
+    """这个阶段有没有被项目的评审实例或裁剪格子引用。
 
-    两个反向关系要到批次 4（``StageReview.stage`` / ``ReviewTailoringItem.stage`` 切到
-    ``DevModeStage``）才出现。检查点本批就写好，关系到位后自动生效。
+    **只算活跃行**：两张表都是软删模型，软删过的行对外键 RESTRICT 仍然算引用，但让用户
+    因为一条已经删掉的评审而删不了阶段说不通。代价是检查通过、真删时仍可能撞
+    ``RestrictedError`` —— 那属于「库里有软删残留」，比误拦住正常操作好。
     """
     for relation in ("stage_reviews", "tailoring_items"):
         related = getattr(stage, relation, None)
-        if related is not None and related.exists():
+        if related is not None and related.filter(deleted_at__isnull=True).exists():
             return True
     return False
 

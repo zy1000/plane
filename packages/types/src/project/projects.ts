@@ -6,6 +6,7 @@
 
 import type { TLogoProps } from "../common";
 import type { TDataDictionaryItemLite } from "../data-dictionary";
+import type { TDevModeLite } from "../dev-mode";
 import type { TUserPermissions } from "../enums";
 import type { TStateGroups } from "../state";
 import type { IUser, IUserLite } from "../users";
@@ -65,6 +66,11 @@ export interface IPartialProject {
   module_view: boolean;
   page_view: boolean;
   inbox_view: boolean;
+  release_view: boolean;
+  review_view: boolean;
+  /** 工时与工作项类型：项目设置里还没有开关入口，只有研发模式在管上限 */
+  is_time_tracking_enabled?: boolean;
+  is_issue_type_enabled?: boolean;
   guest_view_all_features?: boolean;
   project_lead?: IUserLite | string | null;
   network?: number;
@@ -109,6 +115,11 @@ export interface IPartialProject {
   start_date?: string | null;
   /** YYYY-MM-DD */
   end_date?: string | null;
+  // ---- 0387 研发模式：创建时必选，创建后不可改 ----
+  /** 研发模式 id */
+  dev_mode?: string | null;
+  /** 模式的组件开关是项目功能位的上限，侧栏与功能页都要读它 */
+  dev_mode_detail?: TDevModeLite | null;
 }
 
 export interface IProject extends IPartialProject {

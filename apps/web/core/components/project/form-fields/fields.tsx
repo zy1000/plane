@@ -43,7 +43,7 @@ export type TProjectFieldProps = {
   tabIndex?: number;
 };
 
-const useFieldHelpers = (variant: TFormVariant) => {
+export const useFieldHelpers = (variant: TFormVariant) => {
   const { t } = useTranslation();
   const styles = FORM_VARIANT_STYLES[variant];
   const label = (key: TProjectFormFieldKey) => t(getProjectFieldLabelKey(key));

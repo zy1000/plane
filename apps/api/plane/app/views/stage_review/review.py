@@ -36,7 +36,7 @@ from plane.app.serializers.user import UserLiteSerializer
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import (
-    DataDictionaryItem,
+    DevModeStage,
     FileAsset,
     Product,
     ProductProject,
@@ -50,6 +50,7 @@ from plane.db.models import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
+from plane.utils.review_tailoring import project_stages
 from plane.utils.stage_review import (
     StageReviewError,
     advance as advance_review,
@@ -159,7 +160,7 @@ class StageReviewViewSet(BaseViewSet):
             .select_related(
                 "product",
                 "stage",
-                "stage__dictionary",
+                "stage__stage_type",
                 "leader",
                 # 负责人 / 审核者的头像走 User.avatar_url → avatar_asset，不跟着 join
                 # 的话列表每行都要单查一次 file_assets
@@ -235,14 +236,15 @@ class StageReviewViewSet(BaseViewSet):
 
     @allow_fine_permission(*STAGE_REVIEW_READ_KEYS)
     def stages(self, request, slug, project_id):
-        """左栏的阶段列表：只列出真的有评审的阶段，带四个状态各自的条数。
+        """左栏的阶段列表：**项目研发模式的全部阶段**，带四个状态各自的条数。
 
-        阶段本身来自 ``product_stage`` 数据字典，但这里不查字典全表 —— 没有评审的
-        阶段出现在左栏只会让人点进去看空列表。四个状态计数给左栏的分段进度条用。
+        阶段来自 ``project.dev_mode`` 而不是评审实例自己 —— 一条评审都还没生成的阶段
+        也要列出来，否则裁剪表刚生效前左栏是空的，用户看不出这个项目要走哪几步。顺序就是
+        模式里的拖拽顺序。四个状态计数给左栏的分段进度条用。
         """
-        rows = (
+        counted = (
             self._scoped_queryset()
-            .values("stage_id", "stage__label", "stage__sort_order")
+            .values("stage_id")
             .annotate(
                 total=Count("id", distinct=True),
                 not_started=Count(
@@ -266,20 +268,26 @@ class StageReviewViewSet(BaseViewSet):
                     distinct=True,
                 ),
             )
-            .order_by("stage__sort_order", "stage__label")
         )
+        by_stage = {row["stage_id"]: row for row in counted}
+        empty = {
+            "total": 0,
+            "not_started": 0,
+            "in_review": 0,
+            "in_approval": 0,
+            "completed": 0,
+        }
         return Response(
             [
                 {
-                    "stage_id": str(row["stage_id"]),
-                    "label": row["stage__label"],
-                    "total": row["total"],
-                    "not_started": row["not_started"],
-                    "in_review": row["in_review"],
-                    "in_approval": row["in_approval"],
-                    "completed": row["completed"],
+                    "stage_id": str(stage.id),
+                    "label": stage.name,
+                    **{
+                        key: by_stage.get(stage.id, empty)[key]
+                        for key in empty
+                    },
                 }
-                for row in rows
+                for stage in project_stages(project_id)
             ],
             status=status.HTTP_200_OK,
         )
@@ -337,10 +345,11 @@ class StageReviewViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         product = Product.objects.filter(id=data["product_id"]).first()
-        # TODO(批次 4)：StageReview.stage 换成 StageType 之后这里改查 StageType。
-        # 目前仍收字典值 id —— 前端没有手工新建评审的入口，只有脚本 / 接口直调会走到。
-        stage = DataDictionaryItem.objects.filter(
-            id=data["stage_id"], workspace_id=project.workspace_id
+        # 阶段必须是**本项目研发模式**的阶段：别的模式（甚至别的工作区）的阶段 id 传上来
+        # 会让这条评审落在一个项目里根本看不到的分组里。前端目前没有手工新建入口，
+        # 只有脚本 / 接口直调会走到这里，更要在入口挡住。
+        stage = DevModeStage.objects.filter(
+            id=data["stage_id"], dev_mode_id=project.dev_mode_id
         ).first()
         if product is None or stage is None:
             return Response(

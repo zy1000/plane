@@ -77,7 +77,10 @@ export const DevModeList = observer(function DevModeList({ workspaceSlug }: { wo
         message:
           payload?.code === "DEV_MODE_IN_USE"
             ? t(`${DEV_MODE_I18N}.errors.dev_mode_in_use`)
-            : (payload?.error ?? t(`${DEV_MODE_I18N}.errors.generic`)),
+            : // 卡片上「在用项目数」为 0 却删不掉：只剩软删 / 模板项目还引用着
+              payload?.code === "DEV_MODE_IN_USE_BY_INACTIVE_PROJECTS"
+              ? t(`${DEV_MODE_I18N}.errors.dev_mode_in_use_by_inactive_projects`)
+              : (payload?.error ?? t(`${DEV_MODE_I18N}.errors.generic`)),
       });
     } finally {
       setIsDeleting(false);

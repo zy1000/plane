@@ -61,6 +61,7 @@ function FeaturesCyclesSettingsPage({ params }: Route.ComponentProps) {
             description={t("project_settings.features.cycles.toggle_description")}
             disabled={!canEdit}
             featureProperty="cycle_view"
+            devModeFeatureKey="cycle_view"
             projectId={projectId}
             value={!!currentProjectDetails?.cycle_view}
             workspaceSlug={workspaceSlug}

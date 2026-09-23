@@ -43,8 +43,11 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     """矩阵里的一个格子。
 
     ``parent_template_id`` 是给前端建树用的（纵轴要把评审活动缩进到它所属的评审下），
-    ``stage_*`` 三件套是给前端分组用的（纵轴按阶段折成一段一段），都直接从模板节点上
-    取，省得前端再去模板库查一遍。
+    ``stage_*`` 三件套是给前端分组用的。
+
+    **``stage_id`` 是格子自己那一列（``DevModeStage``），不是模板节点的阶段类型。**
+    格子的身份是 (产品 × 模式阶段 × 节点)，同一个节点在 o-1、o-2 下各有一个格子，前端
+    的行键也要靠这一列才分得开。字段名与前端契约保持不变，只换了取值来源。
     """
 
     product_id = serializers.UUIDField(read_only=True)
@@ -52,11 +55,10 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     parent_template_id = serializers.UUIDField(
         source="template.parent_id", read_only=True
     )
-    stage_id = serializers.UUIDField(source="template.stage_id", read_only=True)
-    # 字段名沿用 stage_label（前端契约不变），值取阶段类型的 name
-    stage_label = serializers.CharField(source="template.stage.name", read_only=True)
+    stage_id = serializers.UUIDField(read_only=True)
+    stage_label = serializers.CharField(source="stage.name", read_only=True)
     stage_sort_order = serializers.FloatField(
-        source="template.stage.sort_order", read_only=True
+        source="stage.sort_order", read_only=True
     )
     kind = serializers.CharField(source="template.kind", read_only=True)
     template_is_active = serializers.BooleanField(
@@ -106,21 +108,25 @@ class ReviewTailoringProductSerializer(serializers.Serializer):
 
 
 class ReviewTailoringRowSerializer(serializers.Serializer):
-    """矩阵纵轴的一行 = 纵轴展开后的一个模板节点。
+    """矩阵纵轴的一行 = **模式阶段 × 模板节点**（``utils.review_tailoring.TailoringRow``）。
 
     **不从格子反推**：一张刚加完评审、还没加产品的表没有任何格子，但它的行必须画得出来。
     前端按这份行清单建阶段分组与父子缩进，格子只负责填每一格的勾选与原因。
+
+    输入对象不是 ``StageReviewTemplate`` 而是 ``TailoringRow`` —— 同一个节点在两个同类型
+    阶段下是两行，光靠模板节点表达不了。字段名保持前端契约不变。
     """
 
-    template_id = serializers.UUIDField(source="id", read_only=True)
-    parent_template_id = serializers.UUIDField(source="parent_id", read_only=True)
-    stage_id = serializers.UUIDField(read_only=True)
-    # 同上：字段名不变，值取阶段类型的 name
+    template_id = serializers.UUIDField(source="template.id", read_only=True)
+    parent_template_id = serializers.UUIDField(
+        source="template.parent_id", read_only=True
+    )
+    stage_id = serializers.UUIDField(source="stage.id", read_only=True)
     stage_label = serializers.CharField(source="stage.name", read_only=True)
     stage_sort_order = serializers.FloatField(source="stage.sort_order", read_only=True)
-    kind = serializers.CharField(read_only=True)
-    title = serializers.CharField(read_only=True)
-    sort_order = serializers.FloatField(read_only=True)
+    kind = serializers.CharField(source="template.kind", read_only=True)
+    title = serializers.CharField(source="template.title", read_only=True)
+    sort_order = serializers.FloatField(source="template.sort_order", read_only=True)
 
 
 class ReviewTailoringListSerializer(BaseSerializer):

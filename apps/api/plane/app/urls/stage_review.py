@@ -73,7 +73,7 @@ urlpatterns = [
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/axes/",
-        ReviewTailoringViewSet.as_view({"post": "axes"}),
+        ReviewTailoringViewSet.as_view({"get": "axis_options", "post": "axes"}),
         name="review-tailoring-axes",
     ),
     path(

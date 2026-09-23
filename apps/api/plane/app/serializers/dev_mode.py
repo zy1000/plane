@@ -3,7 +3,13 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from plane.app.serializers.stage_type import StageTypeLiteSerializer
-from plane.db.models import DevMode, DevModeStage, StageReviewTemplate, StageType
+from plane.db.models import (
+    DevMode,
+    DevModeStage,
+    Project,
+    StageReviewTemplate,
+    StageType,
+)
 from plane.db.models.dev_mode import MAX_WORKLOAD_RATIO_TOTAL
 from plane.db.seed_data.dev_modes import normalize_features
 from plane.utils.dev_mode import check_workload_ratio
@@ -11,15 +17,47 @@ from plane.utils.dev_mode import check_workload_ratio
 from .base import BaseSerializer
 
 
-def count_projects_using(dev_mode):
+def count_projects_using(dev_mode, include_inactive=False):
     """引用这个模式的项目数。
 
-    批次 3 才会给 ``Project`` 加 ``dev_mode`` 外键，在那之前这个反向关系不存在。
-    检查点本批就写好（计划「删除规则的检查点本批写好，引用方后面才出现」），关系到位
-    后自动生效，不必回头改调用点。
+    默认只算活跃项目（未软删、非模板），这是卡片上「N 个项目在用」要给人看的数。
+
+    ``include_inactive=True`` 用在删除保护上：外键是 RESTRICT，软删的项目和模板项目
+    照样在库里占着引用，漏掉它们就会「检查通过 → 真删时 RestrictedError」。
     """
-    related = getattr(dev_mode, "projects", None)
-    return related.count() if related is not None else 0
+    queryset = Project.all_objects.filter(dev_mode_id=dev_mode.id)
+    if not include_inactive:
+        queryset = queryset.filter(deleted_at__isnull=True, is_template=False)
+    return queryset.count()
+
+
+class DevModeLiteSerializer(BaseSerializer):
+    """挂在项目上的只读模式信息。
+
+    ``features`` 是前端判「这个组件项目能不能开」的唯一依据（项目设置的功能页灰显、
+    侧栏 tab 渲染都读它），所以必须带上；阶段与勾选是模板中心的事，这里不带。
+    """
+
+    class Meta:
+        model = DevMode
+        fields = ["id", "name", "icon_props", "features", "is_system"]
+        read_only_fields = fields
+
+
+class DevModeStageLiteSerializer(BaseSerializer):
+    """挂在评审实例上的只读阶段信息（``StageReview.stage_detail``）。
+
+    ``label`` 是 ``name`` 的别名：这个字段原先指向 ``product_stage`` 字典值，前端读的是
+    ``label``。批次 4 换成模式阶段后两个名字都给，省得所有消费方同一次全改。
+    """
+
+    code = serializers.CharField(source="stage_type.code", read_only=True)
+    label = serializers.CharField(source="name", read_only=True)
+
+    class Meta:
+        model = DevModeStage
+        fields = ["id", "name", "label", "code", "sort_order"]
+        read_only_fields = fields
 
 
 class DevModeSerializer(BaseSerializer):

@@ -142,8 +142,22 @@ class Project(BaseModel):
     issue_views_view = models.BooleanField(default=True)
     page_view = models.BooleanField(default=True)
     intake_view = models.BooleanField(default=True)
+    # 0387 新增。发布 tab 此前跟着 module_view 走，评审 tab 恒显示；有了研发模式的
+    # 组件开关，这两个组件必须各有自己的项目位，否则模式开了项目也关不掉。
+    release_view = models.BooleanField(default=True)
+    review_view = models.BooleanField(default=True)
     is_time_tracking_enabled = models.BooleanField(default=False)
     is_issue_type_enabled = models.BooleanField(default=False)
+    # 研发模式：必选、创建后不可改（ProjectSerializer.validate 拦 PATCH）。
+    # RESTRICT 同上面的字典 FK：直接删被引用的模式会报错，真正的保护在
+    # DevModeViewSet.destroy 的引用检查（count_projects_using）。
+    # related_name="projects" 是那个检查点约定的名字，别改。
+    dev_mode = models.ForeignKey(
+        "db.DevMode",
+        on_delete=models.RESTRICT,
+        related_name="projects",
+        verbose_name="研发模式",
+    )
     guest_view_all_features = models.BooleanField(default=False)
     cover_image = models.TextField(blank=True, null=True)
     cover_image_asset = models.ForeignKey(
@@ -288,6 +302,7 @@ class Project(BaseModel):
 
     def save(self, *args, **kwargs):
         from plane.db.models import Workspace
+        from plane.utils.dev_mode import resolve_default_dev_mode_id
 
         self.identifier = self.identifier.strip().upper()
         # ORM 直建（workspace_seed_task / dummy_data_task / 模板 / 外部 API / 测试）的兜底，
@@ -296,6 +311,12 @@ class Project(BaseModel):
         # 先 strip 再判空："   " 也算空，别让它撞 project_code_not_blank
         self.code = (self.code or "").strip() or (self.name or "").strip() or self.identifier
         is_creating = self._state.adding
+
+        # dev_mode 是 NOT NULL，但 ORM 直建的路径（workspace_seed / dummy_data_task /
+        # 模板 / 测试）不会传它。口径与上面的 code 一样：API 层必填（ProjectSerializer），
+        # 这里只是给非 API 路径兜一个默认值，别让它撞 NOT NULL。
+        if self.dev_mode_id is None:
+            self.dev_mode_id = resolve_default_dev_mode_id(self.workspace_id)
 
         if is_creating and not self.is_timezone_provided:
             workspace = Workspace.objects.get(id=self.workspace_id)

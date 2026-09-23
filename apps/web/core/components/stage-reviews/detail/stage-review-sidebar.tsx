@@ -146,7 +146,7 @@ export const StageReviewSidebar = ({
           <span className="block truncate">{detail.product_detail?.name ?? "—"}</span>
         </Row>
         <Row icon={Flag} label={t(`${I18N}.fields.stage`)}>
-          <span className="block truncate">{detail.stage_detail?.label ?? "—"}</span>
+          <span className="block truncate">{detail.stage_detail?.name ?? "—"}</span>
         </Row>
         <Row icon={UserRound} label={t(`${I18N}.fields.leader`)}>
           <RoleMemberSelect

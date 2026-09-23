@@ -249,6 +249,9 @@ const cellReason = (activity: TReviewTailoringActivity) =>
 
 const cellTitle = (activity: TReviewTailoringActivity) => String(activity.extra?.title ?? "");
 
+/** 同一个评审在 o-1、o-2 下各有一格，光看名字分不清改的是哪一格。老数据没这一项就不显示 */
+const cellStage = (activity: TReviewTailoringActivity) => String(activity.extra?.stage_label ?? "");
+
 const ACTION_ICON: Record<TCellAction, LucideIcon> = { keep: Check, cut: Scissors, reason: MessageSquareText };
 const ACTION_TONE: Record<TCellAction, string> = {
   keep: "text-success-primary",
@@ -270,6 +273,7 @@ const CellItem = ({ activity }: { activity: TReviewTailoringActivity }) => {
       </span>
       <div className="min-w-0">
         <span className="block truncate leading-5 font-medium text-primary" title={cellTitle(activity)}>
+          {cellStage(activity) && <span className="font-normal text-placeholder">{cellStage(activity)} · </span>}
           {cellTitle(activity)}
         </span>
         {reason && <Quote text={reason} tone="neutral" />}

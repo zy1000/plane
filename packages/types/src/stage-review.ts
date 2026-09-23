@@ -1,5 +1,5 @@
 import type { TLogoProps } from "./common";
-import type { TDataDictionaryItemLite } from "./data-dictionary";
+import type { TDevModeStageLite } from "./dev-mode";
 import type { EStageReviewKind } from "./stage-review-template";
 import type { IUserLite } from "./users";
 
@@ -94,7 +94,8 @@ export type TStageReview = {
 };
 
 export type TStageReviewDetail = TStageReview & {
-  stage_detail: TDataDictionaryItemLite | null;
+  /** 项目研发模式里的阶段。``label`` 是 ``name`` 的别名，后端两个都给 */
+  stage_detail: TDevModeStageLite | null;
   /** 评审活动才有：所属评审的标题，只用来画面包屑 */
   parent_title: string | null;
   description_html: string | null;
@@ -121,9 +122,16 @@ export type TStageReviewDetail = TStageReview & {
 
 /** 左栏的一个阶段：只列出真的有评审的阶段，四个状态各自的条数给分段进度条用 */
 export type TStageReviewStageSummary = {
+  /**
+   * 项目侧就是模式阶段 id；**产品侧是 `${project_id}:${stage_id}` 合成键** ——
+   * 两个项目可能用同一个研发模式（阶段 id 相同），跨项目视角下要各成一组。
+   */
   stage_id: string;
   label: string;
   total: number;
+  /** 只有产品级汇总有：这一组属于哪个项目，阶段名后面淡色缀项目名 */
+  project_id?: string;
+  project_name?: string;
   /** 只有产品级汇总有：这个阶段的评审分布在几个项目里 */
   project_count?: number;
   not_started: number;

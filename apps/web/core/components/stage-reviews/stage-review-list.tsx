@@ -73,7 +73,10 @@ export const StageReviewList = observer(function StageReviewList({
   const scopeKind = scope.kind;
   const scopeId = getStageReviewScopeId(scope);
   const storageScope = getStageReviewStorageScope(scope);
-  const currentStageId = scope.kind === "product" ? scope.currentStageId : null;
+  // 产品页按**名字**标「当前阶段」：产品档案的阶段是字典值，评审的阶段是模式阶段，两套 id
+  const currentStageName = scope.kind === "product" ? scope.currentStageName : null;
+  // 产品页跨项目：同名（甚至同 id）的模式阶段在不同项目里各成一组
+  const crossProject = scope.kind === "product";
 
   const { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews } = useStageReviews(
     workspaceSlug,
@@ -133,7 +136,8 @@ export const StageReviewList = observer(function StageReviewList({
     stages,
     isHit,
     settings,
-    currentStageId,
+    currentStageName,
+    crossProject,
   });
 
   // `?review=<id>`：只在第一次拿到数据时生效，之后用户自己点的不被它顶掉

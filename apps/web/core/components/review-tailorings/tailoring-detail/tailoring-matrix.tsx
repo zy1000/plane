@@ -168,7 +168,8 @@ export const TailoringMatrix = ({
     for (const group of allGroups) {
       total += group.rows.length;
       group.rows.forEach((row, index) => {
-        if (!row.isChild) counts.set(row.templateId, countChildren(group.rows, index));
+        // 按行键计数：同一个评审在 o-1、o-2 下各是一行，用 templateId 会互相覆盖
+        if (!row.isChild) counts.set(row.rowKey, countChildren(group.rows, index));
       });
     }
     return { childCount: counts, rowCount: total };
@@ -315,7 +316,7 @@ export const TailoringMatrix = ({
           {groups.flatMap((group, groupIndex) =>
             group.rows.map((row, index) => {
               const cells = [...row.cells.values()];
-              const children = childCount.get(row.templateId) ?? 0;
+              const children = childCount.get(row.rowKey) ?? 0;
               const cutCount = cells.filter((cell) => !cell.selected).length;
               let parentTitle: string | undefined;
               if (row.isChild) {
@@ -332,7 +333,7 @@ export const TailoringMatrix = ({
               const divider = index === 0 && groupIndex > 0 && STAGE_DIVIDER;
               const headBg = isRowSelected ? "bg-accent-subtle" : "bg-surface-1 group-hover:bg-layer-1-hover";
               return (
-                <tr key={row.templateId} className="group">
+                <tr key={row.rowKey} className="group">
                   <td className={cn(STAGE_COL, "z-[1] h-11.5 border-b border-subtle p-0", headBg, divider)}>
                     <div className="flex h-11.5 items-center gap-2.5 pr-2 pl-6">
                       {editable && (

@@ -38,6 +38,7 @@ import {
   WorkItemsIcon,
 } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
+import { isProjectFeatureEnabled } from "@plane/utils";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
 import { ArchiveIcon, Bug, ClipboardList, Folder, Milestone, Package, Rocket, Rss } from "lucide-react";
 
@@ -129,7 +130,7 @@ export const useNavigationItems = ({
         icon: CycleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_SPRINTS_VIEW_PERMISSION_KEY],
-        shouldRender: !!project?.cycle_view,
+        shouldRender: isProjectFeatureEnabled(project, "cycle_view"),
         sortOrder: 3,
       },
       {
@@ -140,7 +141,7 @@ export const useNavigationItems = ({
         icon: ModuleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
-        shouldRender: !!project?.module_view,
+        shouldRender: isProjectFeatureEnabled(project, "module_view"),
         sortOrder: 2,
       },
       {
@@ -151,7 +152,8 @@ export const useNavigationItems = ({
         icon: Rocket,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
-        shouldRender: !!project?.module_view,
+        // 0387 起发布有了自己的功能位，不再跟着模块走
+        shouldRender: isProjectFeatureEnabled(project, "release_view"),
         sortOrder: 3.5,
       },
       {
@@ -170,7 +172,8 @@ export const useNavigationItems = ({
           ...PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
           ...PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS,
         ],
-        shouldRender: true,
+        // 评审受研发模式的评审开关控制：Scrum 这类不走阶段评审的模式直接没有这个标签
+        shouldRender: isProjectFeatureEnabled(project, "review_view"),
         sortOrder: 3.7,
       },
       {
@@ -203,7 +206,8 @@ export const useNavigationItems = ({
         icon: ViewsIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
-        shouldRender: true,
+        // 此前恒显示，功能页那个「视图」开关其实关不掉它；接模式后统一按「模式位 AND 项目位」
+        shouldRender: isProjectFeatureEnabled(project, "issue_views_view"),
         sortOrder: 6,
       },
       {
@@ -214,7 +218,7 @@ export const useNavigationItems = ({
         icon: PageIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_NOTES_VIEW_PERMISSION_KEY],
-        shouldRender: !!project?.page_view,
+        shouldRender: isProjectFeatureEnabled(project, "page_view"),
         sortOrder: 7,
       },
       {
@@ -225,7 +229,7 @@ export const useNavigationItems = ({
         icon: IntakeIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_INTAKE_VIEW_PERMISSION_KEY],
-        shouldRender: !!project?.inbox_view,
+        shouldRender: isProjectFeatureEnabled(project, "intake_view"),
         sortOrder: 8,
       },
       {

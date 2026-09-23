@@ -11,7 +11,7 @@
 
 from rest_framework import serializers
 
-from plane.app.serializers.data_dictionary import DataDictionaryItemLiteSerializer
+from plane.app.serializers.dev_mode import DevModeStageLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
     ProjectMember,
@@ -120,7 +120,8 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
     生产方式与出货评估两种 O 阶段类型都有。前端按 ``kind`` 决定渲不渲这两块。
     """
 
-    stage_detail = DataDictionaryItemLiteSerializer(source="stage", read_only=True)
+    # 阶段是项目研发模式里的一行（DevModeStage），不再是 product_stage 字典值
+    stage_detail = DevModeStageLiteSerializer(source="stage", read_only=True)
     # 评审活动的面包屑要带一级「所属评审」，只要标题，不展开整个父对象
     parent_title = serializers.CharField(
         source="parent.title", read_only=True, allow_null=True, default=None

@@ -2359,6 +2359,7 @@ export default {
       remove_row_title: "移除「{name}」这一行？",
       remove_column_title: "移除「{name}」这一列？",
       remove_axis_detail: "它在矩阵里的 {cells} 格会一起移除，已写的 {reasons} 条裁剪原因也会丢。",
+      remove_row_multi_stage: "这个评审在 {stages} 个阶段各有一行，都会移除。",
       remove_axis_in_use: "「{name}」已经生成过评审，不能移除。要下线请走修订、取消勾选。",
       cancel_revision_confirm: "放弃修订",
       add_products_empty: "没有可添加的产品了",
@@ -2373,6 +2374,7 @@ export default {
       add_axes_stage_in_matrix: "已在表中",
       add_axes_stage_none: "没有可加的",
       add_axes_stage_filter: "阶段",
+      add_axes_multi_stage: "{stages} 个阶段",
       add_axes_stage_all: "全部",
       add_axes_col_stage: "阶段",
       add_axes_col_review: "评审 / 评审活动",
@@ -2815,6 +2817,9 @@ export default {
     },
     dev_modes: {
       title: "研发模式",
+      field: {
+        enabled_features: "开放组件",
+      },
       create: "新建研发模式",
       search_placeholder: "搜索模式名称",
       error_title: "研发模式加载失败",
@@ -2975,6 +2980,7 @@ export default {
         templates_load_failed: "评审节点加载失败",
         ratio_over_limit: "现有阶段已分配 {allocated}%，最多还能填 {remaining}%。",
         dev_mode_in_use: "已有项目在使用这个模式，先把那些项目改到别的模式。",
+        dev_mode_in_use_by_inactive_projects: "已删除或模板项目还引用着这个模式，先彻底清掉那些项目。",
         dev_mode_stage_in_use: "阶段 {names} 已被项目的裁剪表或评审实例引用，先在项目里处理。",
         dev_mode_name_required: "请填写模式名称",
         dev_mode_name_already_exists: "这个名称已被占用",
@@ -4278,7 +4284,7 @@ export default {
       name_placeholder: "给项目起个名字",
       identifier_placeholder: "例如 PROJ",
       description_placeholder: "这个项目要解决什么问题？交付什么？",
-      footer_hint: "ID 与可见性创建后仍可在项目设置中修改",
+      footer_hint: "研发模式创建后不可更改；ID 与可见性仍可在项目设置中修改",
       duration_days: "共 {count} 天",
       groups: {
         basic: "基本信息",
@@ -4297,6 +4303,9 @@ export default {
       identifier: "项目 ID",
       code: "项目代号",
       code_hint: "从数据字典中选择，工作区内唯一",
+      dev_mode: "研发模式",
+      dev_mode_readonly_hint: "创建时选定，不可更改。",
+      dev_mode_view: "查看模式配置",
       network: "可见性",
       business_unit: "所属BU",
       description: "项目描述",
@@ -4324,6 +4333,8 @@ export default {
       legacy_incomplete: "该项目缺少必填信息：{fields}。请补齐后再保存。",
       dictionary_empty: "字典「{name}」还没有可选值，请先到数据字典中添加。",
       manage_dictionaries: "管理数据字典",
+      dev_mode_immutable: "研发模式创建后不可更改。",
+      feature_not_allowed_by_dev_mode: "当前研发模式不支持该组件，无法开启。",
     },
     network: {
       private: {
@@ -5528,6 +5539,13 @@ export default {
         toggle_title: "启用模块",
         toggle_description: "项目成员将能够创建和编辑模块。",
       },
+      releases: {
+        title: "发布",
+        short_title: "发布",
+        description: "规划一次发布带上哪些内容，并跟踪到发布日期。",
+        toggle_title: "启用发布",
+        toggle_description: "项目成员将能够创建发布并规划发布内容。",
+      },
       views: {
         title: "视图",
         short_title: "视图",
@@ -5549,6 +5567,15 @@ export default {
         toggle_title: "启用接收",
         toggle_description: "允许项目成员在应用中创建接收请求。",
       },
+      reviews: {
+        title: "评审",
+        short_title: "评审",
+        description: "按研发阶段维护裁剪表，并执行阶段评审。",
+        toggle_title: "启用评审",
+        toggle_description: "项目成员将能够维护裁剪表和执行阶段评审。",
+      },
+      not_supported_by_dev_mode: "当前研发模式不支持",
+      view_dev_mode: "去模板中心查看",
     },
   },
   project_cycles: {

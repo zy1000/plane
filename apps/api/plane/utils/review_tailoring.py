@@ -1,13 +1,18 @@
 """评审裁剪的领域编排：建表 → 勾选 → 签批 → 生效 → 修订。
 
-一句话讲清这套东西在做什么：**裁剪表是「产品 × 评审模板节点」的勾选矩阵，签批通过
-的那一刻，把勾选状态同步成一批真实的评审实例（``StageReview``）。**
+一句话讲清这套东西在做什么：**裁剪表是「产品 × 模式阶段 × 评审模板节点」的勾选矩阵，
+签批通过的那一刻，把勾选状态同步成一批真实的评审实例（``StageReview``）。**
 
 **两个轴都是人挑出来的**：横轴 ``ReviewTailoringProduct``、纵轴 ``ReviewTailoringTemplate``
 （评审与评审活动各占一行、各自独立挑选，可以只挑某个活动而不挑它所属的评审），格子是
 两者的交叉积。没进轴的评审压根不出现
 在表里，也就不必为它写裁剪原因 —— 全量铺开时「凡是没勾的都要写理由」才是真正劝退人的
 地方。所以建表只要一个标题，建出来是一张零行零列的空表。
+
+**纵轴是二元的**：``ReviewTailoringTemplate`` 只记「要裁哪些模板节点」，真正的行由
+``axis_rows()`` 按**本项目研发模式的阶段**展开 —— 节点在哪几个阶段下被勾选，就在表上占
+几行（``TailoringRow`` = 模式阶段 × 模板节点）。同一模式里两个阶段指向同一个阶段类型
+（o-1、o-2）时，同一个节点各占一行、各自勾选、各自生成实例，互不影响。
 
 三条贯穿全文的约定：
 
@@ -25,13 +30,14 @@
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from plane.db.models import (
-    DataDictionary,
-    DataDictionaryItem,
+    DevModeStage,
+    DevModeStageTemplate,
     FileAsset,
     ProductProject,
     ReviewTailoring,
@@ -48,10 +54,8 @@ from plane.db.models import (
     StageReviewComment,
     StageReviewStatus,
     StageReviewTemplate,
-    StageType,
 )
 from plane.db.models.stage_review import ACTIVITY_KINDS
-from plane.db.seed_data.stage_review_templates import PRODUCT_STAGE_DICTIONARY_KEY
 from plane.utils.requirement import get_requirement_eligible_user_ids
 
 
@@ -147,32 +151,92 @@ def _axis_template_ids(tailoring):
     )
 
 
-def _expand_templates(template_ids):
-    """把纵轴上的模板 id 取成真正要铺的节点：只取**当前启用**的，不再自动带出子活动。
+@dataclass(frozen=True)
+class TailoringRow:
+    """纵轴展开后的一行：**模式阶段 × 模板节点**。
+
+    序列化器直接吃这个对象（``ReviewTailoringRowSerializer``），所以属性名就是前端契约。
+    """
+
+    stage: DevModeStage
+    template: StageReviewTemplate
+
+    @property
+    def key(self):
+        return (self.stage_id, self.template_id)
+
+    @property
+    def stage_id(self):
+        return self.stage.id
+
+    @property
+    def template_id(self):
+        return self.template.id
+
+
+def project_stages(project_id):
+    """项目研发模式的阶段，按模式里的拖拽顺序。这就是裁剪表与评审列表的阶段顺序。"""
+    return list(
+        DevModeStage.objects.filter(dev_mode__projects__id=project_id)
+        .select_related("stage_type")
+        .order_by("sort_order", "created_at", "id")
+    )
+
+
+def stage_template_ids(stages):
+    """{阶段 id: 该阶段勾选的模板节点 id 集合}。模式里没勾的节点不进裁剪表。"""
+    selected = defaultdict(set)
+    if not stages:
+        return selected
+    for stage_id, template_id in DevModeStageTemplate.objects.filter(
+        dev_mode_stage_id__in=[stage.id for stage in stages]
+    ).values_list("dev_mode_stage_id", "template_id"):
+        selected[stage_id].add(template_id)
+    return selected
+
+
+def _expand_rows(project_id, template_ids):
+    """把纵轴上的模板 id 展开成真正要铺的行：**模式阶段 × 该阶段勾选的启用节点**。
 
     评审与活动各自独立挑选 —— 只挑了活动就只有活动那一行，挑了评审也不会连带它的活动。
+    一个节点在模式里被两个同类型阶段都勾上，就展开成两行。
 
-    排序口径与模板库列表一致（``views/stage_review/template.py:48``）：阶段之间按字典值
-    的 ``sort_order``，阶段内按节点的 ``sort_order``。``select_related("stage")`` 是给
-    序列化器用的 —— 行要透出阶段标签。
+    行序 = 阶段的 ``sort_order`` → 节点的 ``sort_order``。阶段这一层的顺序由模式决定，
+    不再看阶段类型的顺序：同类型的 o-1、o-2 靠模式里的拖拽分先后。
     """
     template_ids = list(template_ids)
     if not template_ids:
         return []
-    return list(
-        StageReviewTemplate.objects.filter(id__in=template_ids, is_active=True)
-        .select_related("stage")
-        .order_by("stage__sort_order", "sort_order", "created_at", "id")
-    )
+    templates = {
+        template.id: template
+        for template in StageReviewTemplate.objects.filter(
+            id__in=template_ids, is_active=True
+        ).select_related("stage")
+    }
+    if not templates:
+        return []
+    stages = project_stages(project_id)
+    selected_by_stage = stage_template_ids(stages)
+
+    rows = []
+    for stage in stages:
+        picked = [
+            template
+            for tid, template in templates.items()
+            if tid in selected_by_stage.get(stage.id, ())
+        ]
+        picked.sort(key=lambda t: (t.sort_order, t.created_at, str(t.id)))
+        rows.extend(TailoringRow(stage=stage, template=template) for template in picked)
+    return rows
 
 
-def axis_templates(tailoring):
-    """纵轴上当前启用的全部节点。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
-    return _expand_templates(_axis_template_ids(tailoring))
+def axis_rows(tailoring):
+    """纵轴当前展开出来的全部行。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
+    return _expand_rows(tailoring.project_id, _axis_template_ids(tailoring))
 
 
-def _build_items(tailoring, templates, product_ids, actor):
-    """按 (产品 × 模板节点) 铺格子。新格子默认「保留」—— 挑进表里的评审默认是要做的，
+def _build_items(tailoring, rows, product_ids, actor):
+    """按 (产品 × 行) 铺格子。新格子默认「保留」—— 挑进表里的评审默认是要做的，
     裁掉才需要人去点、去写原因。
 
     ``bulk_create`` 绕过 ``save()``，所以 ``title`` 快照与 ``created_by`` 都要显式给
@@ -182,15 +246,16 @@ def _build_items(tailoring, templates, product_ids, actor):
         ReviewTailoringItem(
             tailoring=tailoring,
             product_id=product_id,
-            template=template,
-            title=template.title,
+            stage=row.stage,
+            template=row.template,
+            title=row.template.title,
             selected=True,
             reason="",
             created_by=actor,
             updated_by=actor,
         )
         for product_id in product_ids
-        for template in templates
+        for row in rows
     ]
 
 
@@ -200,10 +265,20 @@ def _build_items(tailoring, templates, product_ids, actor):
 def create_tailoring(*, project, title, description_html, actor):
     """新建一张裁剪表。**只建表头，一个格子都不铺。**
 
-    矩阵是「产品 × 全阶段模板节点」，而产品这一维在建表这一刻还不知道 —— 由人在详情页
-    逐列添加（``add_products``）。所以新表是一张零列的空表，纵轴要等第一列产品进来才
-    显形。
+    矩阵是「产品 × 模式阶段 × 模板节点」，而产品这一维在建表这一刻还不知道 —— 由人在
+    详情页逐列添加（``add_products``）。所以新表是一张零列的空表，纵轴要等第一列产品
+    进来才显形。
+
+    项目的研发模式一个阶段都没有（Scrum 就是这样）时直接拒绝：纵轴永远展不开，建出来
+    也只是一张永远空着的表。这类模式本来也关掉了评审组件，走到这里说明是自定义模式开了
+    评审却没配阶段。
     """
+    if not project_stages(project.id):
+        raise ReviewTailoringError(
+            "The project's development mode has no stages.",
+            code="REVIEW_TAILORING_MODE_HAS_NO_STAGE",
+            detail={"dev_mode_id": str(project.dev_mode_id)},
+        )
     tailoring = ReviewTailoring.objects.create(
         workspace_id=project.workspace_id,
         project=project,
@@ -262,10 +337,10 @@ def add_products(*, tailoring, product_ids, actor):
             for product_id in fresh
         ]
     )
-    templates = axis_templates(tailoring)
-    if templates:
+    rows = axis_rows(tailoring)
+    if rows:
         ReviewTailoringItem.objects.bulk_create(
-            _build_items(tailoring, templates, fresh, actor), batch_size=500
+            _build_items(tailoring, rows, fresh, actor), batch_size=500
         )
     _write_activity(
         tailoring,
@@ -279,10 +354,13 @@ def add_products(*, tailoring, product_ids, actor):
 
 
 def add_reviews(*, tailoring, template_ids, actor):
-    """给纵轴加几行（评审或评审活动都行，各自独立），并按当前横轴把这几行的格子铺满。
+    """给纵轴加几个模板节点，并按当前横轴把展开出来的行铺满格子。
 
     挑了评审不会连带它的活动，只挑某个活动也不必挑它所属的评审 —— 跟本项目无关的节点
     根本不进表，也就不用为它编裁剪理由。
+
+    **传的是模板节点 id，不是行**：一个节点在项目模式里被几个阶段勾选，服务端就展开成
+    几行。一个阶段都没勾它的节点直接拒绝 —— 模式的勾选是硬边界，不能靠接口绕过去。
     """
     _require_status(
         tailoring,
@@ -305,6 +383,22 @@ def add_reviews(*, tailoring, template_ids, actor):
             detail={"template_ids": invalid},
         )
 
+    # 模式的勾选是硬边界：项目模式里没有任何阶段勾过的节点不许进表
+    stages = project_stages(tailoring.project_id)
+    selectable = set()
+    for picked in stage_template_ids(stages).values():
+        selectable |= picked
+    unselected = [tid for tid in template_ids if tid not in selectable]
+    if unselected:
+        raise ReviewTailoringError(
+            "Some reviews are not enabled by the project's development mode.",
+            code="REVIEW_TAILORING_TEMPLATE_NOT_IN_MODE",
+            detail={
+                "template_ids": [str(tid) for tid in unselected],
+                "titles": [candidates[tid].title for tid in unselected],
+            },
+        )
+
     existing = set(_axis_template_ids(tailoring))
     fresh = [tid for tid in template_ids if tid not in existing]
     if not fresh:
@@ -324,7 +418,12 @@ def add_reviews(*, tailoring, template_ids, actor):
     product_ids = _axis_product_ids(tailoring)
     if product_ids:
         ReviewTailoringItem.objects.bulk_create(
-            _build_items(tailoring, _expand_templates(fresh), product_ids, actor),
+            _build_items(
+                tailoring,
+                _expand_rows(tailoring.project_id, fresh),
+                product_ids,
+                actor,
+            ),
             batch_size=500,
         )
     _write_activity(
@@ -433,15 +532,21 @@ def remove_review(*, tailoring, template_id, actor):
 
 
 def sync_items(*, tailoring, actor):
-    """把格子对齐「当前横轴 × 当前纵轴上启用的节点」。
+    """把格子对齐「当前横轴 × 当前纵轴展开出来的行」。
 
-    开始修订时跑一次：这期间模板库可能停用了表上的某个评审或活动。
+    开始修订时跑一次：这期间模板库可能停用了表上的某个评审或活动，模式里也可能加了阶段。
 
     顺带收一下轴自己的烂摊子：产品被解除了与本项目的关联、评审节点被停用或删除，那一
     行 / 那一列就不该继续留在表上。
 
-    删的分寸：只删还没生成过评审的格子 —— 已经生成的评审是既成事实，产品被解除关联不该
-    让它凭空消失，那属于评审自己的生命周期。
+    删的分寸有两条：
+
+    1. 只删还没生成过评审的格子 —— 已经生成的评审是既成事实，产品被解除关联不该让它凭空
+       消失，那属于评审自己的生命周期。
+    2. **模式里取消勾选某个节点，不删已有的格子**，只是新建的裁剪表看不到它。和「评审树
+       停用节点」的现有处理一致：已经在表上的行留着，免得一次模式调整把在办的裁剪表改得
+       面目全非。所以 stale 只认「模板节点被停用 / 被移出纵轴」和「产品掉出横轴」，不认
+       「(阶段, 节点) 组合不在当前行集合里」。
     """
     _require_status(
         tailoring,
@@ -487,27 +592,34 @@ def sync_items(*, tailoring, actor):
 
     # 2. 再按收拾干净的两个轴对齐格子
     product_ids = _axis_product_ids(tailoring)
-    templates = axis_templates(tailoring)
-    template_ids = {template.id for template in templates}
+    rows = axis_rows(tailoring)
+    live_axis_template_ids = set(
+        StageReviewTemplate.objects.filter(
+            id__in=_axis_template_ids(tailoring), is_active=True
+        ).values_list("id", flat=True)
+    )
     product_id_set = set(product_ids)
-    present = {(item.product_id, item.template_id) for item in items}
+    present = {(item.product_id, item.stage_id, item.template_id) for item in items}
 
     missing = [
         item
-        for item in _build_items(tailoring, templates, product_ids, actor)
-        if (item.product_id, item.template_id) not in present
+        for item in _build_items(tailoring, rows, product_ids, actor)
+        if (item.product_id, item.stage_id, item.template_id) not in present
     ]
     if missing:
         ReviewTailoringItem.objects.bulk_create(missing, batch_size=500)
 
     # 掉出两个轴、且从没生成过评审的格子 → 硬删干净。硬删是因为它从未生效过，留着只会
     # 让矩阵多出一行 / 一列读不懂的东西。
+    # 判据只看「产品还在不在横轴」「模板节点还在不在纵轴且启用」，不看阶段 —— 模式里取消
+    # 勾选造成的「行不在当前行集合里」要保留（见 docstring 第 2 条）。
     stale = [
         item
         for item in items
         if item.stage_review_id is None
         and (
-            item.product_id not in product_id_set or item.template_id not in template_ids
+            item.product_id not in product_id_set
+            or item.template_id not in live_axis_template_ids
         )
     ]
     if stale:
@@ -547,7 +659,7 @@ def save_cells(*, tailoring, cells, actor):
         item.id: item
         for item in ReviewTailoringItem.objects.filter(
             tailoring=tailoring
-        ).select_related("template")
+        ).select_related("template", "stage")
     }
     unknown = [str(cell["id"]) for cell in cells if cell["id"] not in items]
     if unknown:
@@ -595,6 +707,8 @@ def save_cells(*, tailoring, cells, actor):
                     extra={
                         "item_id": str(item.id),
                         "product_id": str(item.product_id),
+                        "stage_id": str(item.stage_id),
+                        "stage_label": item.stage.name,
                         "template_id": str(item.template_id),
                         "title": item.title,
                         # 裁掉时原因往往同一次保存里写，这条记录不会再单独记原因
@@ -612,6 +726,8 @@ def save_cells(*, tailoring, cells, actor):
                     extra={
                         "item_id": str(item.id),
                         "product_id": str(item.product_id),
+                        "stage_id": str(item.stage_id),
+                        "stage_label": item.stage.name,
                         "template_id": str(item.template_id),
                         "title": item.title,
                     },
@@ -995,47 +1111,6 @@ def _delete_stage_reviews(review_ids, keep_ids=()):
     return all_ids
 
 
-def _resolve_stage_items(workspace_id, stage_types):
-    """阶段类型 → product_stage 字典值，返回 {stage_type_id: dictionary_item_id}。
-
-    **批次 1 ~ 4 之间的临时桥接**：模板的 ``stage`` 已经换成 ``StageType``，评审实例的
-    还指向字典值，两者靠名字对上。名字对不上（哪边改过名）就在字典里补一个同名值 ——
-    这里硬拦会让整张裁剪表签批通过的那一刻失败，代价远大于字典里多一个值。
-    批次 4 把 ``StageReview.stage`` 换成 ``StageType`` 之后，整个函数连同调用点一起删。
-    """
-    if not stage_types:
-        return {}
-    dictionary = DataDictionary.objects.filter(
-        workspace_id=workspace_id, key=PRODUCT_STAGE_DICTIONARY_KEY
-    ).first()
-    if dictionary is None:
-        dictionary = DataDictionary.objects.create(
-            workspace_id=workspace_id,
-            key=PRODUCT_STAGE_DICTIONARY_KEY,
-            name="产品阶段",
-            is_system=True,
-        )
-    item_by_label = {
-        label: item_id
-        for item_id, label in DataDictionaryItem.objects.filter(
-            dictionary=dictionary
-        ).values_list("id", "label")
-    }
-    resolved = {}
-    for stage_type in stage_types:
-        item_id = item_by_label.get(stage_type.name)
-        if item_id is None:
-            item = DataDictionaryItem.objects.create(
-                dictionary=dictionary,
-                workspace_id=workspace_id,
-                label=stage_type.name,
-            )
-            item_id = item.id
-            item_by_label[stage_type.name] = item_id
-        resolved[stage_type.id] = item_id
-    return resolved
-
-
 def _create_stage_reviews(tailoring, items, actor):
     """把勾上但还没生成的格子变成评审实例。
 
@@ -1043,6 +1118,10 @@ def _create_stage_reviews(tailoring, items, actor):
     （从 parent 抄 project/product/stage）在这里本来就要显式给，逐条存只是多几百次
     round trip。代价是 ``clean()`` 不跑 —— 层级与同族由模板树保证，DB 的
     ``sr_kind_parent_consistent`` 还在兜底。
+
+    **实例的阶段取格子的 ``stage``，不是模板节点的阶段类型**：同一个节点在 o-1、o-2 下
+    各有一个格子，生成的是两条落在不同阶段的评审。父子指针也因此要按 (产品, 阶段, 节点)
+    三元组找 —— 只按 (产品, 节点) 会让 o-2 的活动认到 o-1 的父评审上去。
     """
     pending = [item for item in items if item.selected and item.stage_review_id is None]
     if not pending:
@@ -1050,7 +1129,7 @@ def _create_stage_reviews(tailoring, items, actor):
 
     # 父指针来源有两处：本次新建的，和上一版就已经生成的
     review_by_key = {
-        (item.product_id, item.template_id): item.stage_review_id
+        (item.product_id, item.stage_id, item.template_id): item.stage_review_id
         for item in items
         if item.stage_review_id
     }
@@ -1059,15 +1138,6 @@ def _create_stage_reviews(tailoring, items, actor):
     for item in pending:
         (children if item.template.kind in ACTIVITY_KINDS and item.template.parent_id else roots).append(item)
 
-    # 评审实例的阶段还是字典值，按名字从模板的阶段类型换算（批次 4 后删）。
-    # 走 stage_id 再批量查，别在循环里点 template.stage（queryset 只 select_related 了 template）
-    stage_item_by_type = _resolve_stage_items(
-        tailoring.workspace_id,
-        StageType.objects.filter(
-            id__in={item.template.stage_id for item in pending}
-        ),
-    )
-
     created_ids = []
     for batch in (roots, children):
         if not batch:
@@ -1075,8 +1145,11 @@ def _create_stage_reviews(tailoring, items, actor):
         reviews = []
         for item in batch:
             template = item.template
+            # 父子必须落在同一个模式阶段：o-2 的活动只认 o-2 的那条父评审
             parent_id = (
-                review_by_key.get((item.product_id, template.parent_id))
+                review_by_key.get(
+                    (item.product_id, item.stage_id, template.parent_id)
+                )
                 if template.parent_id
                 else None
             )
@@ -1084,8 +1157,8 @@ def _create_stage_reviews(tailoring, items, actor):
                 workspace_id=tailoring.workspace_id,
                 project_id=tailoring.project_id,
                 product_id=item.product_id,
-                # 阶段跟着模板节点走 —— 一张表跨全部阶段，表头上没有阶段可抄
-                stage_id=stage_item_by_type[template.stage_id],
+                # 阶段跟着格子走，不是跟着模板节点的阶段类型
+                stage_id=item.stage_id,
                 kind=template.kind,
                 parent_id=parent_id,
                 template=template,
@@ -1101,7 +1174,7 @@ def _create_stage_reviews(tailoring, items, actor):
             )
             reviews.append(review)
             item.stage_review_id = review.id
-            review_by_key[(item.product_id, template.id)] = review.id
+            review_by_key[(item.product_id, item.stage_id, template.id)] = review.id
             created_ids.append(review.id)
         StageReview.objects.bulk_create(reviews, batch_size=500)
 
