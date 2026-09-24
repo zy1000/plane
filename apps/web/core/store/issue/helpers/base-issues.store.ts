@@ -128,6 +128,8 @@ export const ISSUE_GROUP_BY_KEY: Record<TIssueDisplayFilterOptions, keyof TIssue
   cycle: "cycle_id",
   module: "module_ids",
   release: "release_ids",
+  product: "product_id",
+  product_module: "product_module_id",
   team_project: "project_id",
 };
 
@@ -136,6 +138,8 @@ export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof
   cycle: "cycle_id",
   module: "module_ids",
   release: "release_ids",
+  product: "product_id",
+  product_module: "product_module_id",
   state: "state_id",
   "state_detail.group": "state__group", // state_detail.group is only being used for state_group display,
   priority: "priority",
@@ -167,6 +171,10 @@ const ISSUE_ORDERBY_KEY: Record<TIssueOrderByOptions, keyof TIssue> = {
   "-issue_cycle__cycle__name": "cycle_id",
   issue_release__release__name: "release_ids",
   "-issue_release__release__name": "release_ids",
+  product__name: "product_id",
+  "-product__name": "product_id",
+  product_module__name: "product_module_id",
+  "-product_module__name": "product_module_id",
   target_date: "target_date",
   "-target_date": "target_date",
   estimate_point__key: "estimate_point",

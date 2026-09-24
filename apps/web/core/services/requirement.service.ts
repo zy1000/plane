@@ -554,6 +554,21 @@ export class RequirementService extends APIService {
       });
   }
 
+  /** 工作项「产品模块」选择器：项目关联产品的全量模块树（走项目权限，不要求产品成员） */
+  async listProjectProductRequirementModules(
+    workspaceSlug: string,
+    projectId: string,
+    productId: string
+  ): Promise<TRequirementModuleTreeResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/products/${productId}/requirement-modules/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /** 项目需求页左侧的只读模块树（按产品分组，只含已关联需求涉及的模块） */
   async listProjectRequirementModules(
     workspaceSlug: string,

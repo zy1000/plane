@@ -96,6 +96,7 @@ from plane.utils.grouper import (
 )
 from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
+from plane.utils.issue_product import module_path_label
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.timezone_converter import user_timezone_converter
@@ -272,6 +273,8 @@ class IssueListEndpoint(BaseAPIView):
                 "cycle_id",
                 "module_ids",
                 "release_ids",
+                "product_id",
+                "product_module_id",
                 "label_ids",
                 "assignee_ids",
                 "sub_issues_count",
@@ -595,6 +598,8 @@ class IssueViewSet(BaseViewSet):
                     "cycle_id",
                     "module_ids",
                     "release_ids",
+                    "product_id",
+                    "product_module_id",
                     "label_ids",
                     "assignee_ids",
                     "sub_issues_count",
@@ -1151,6 +1156,8 @@ EXPORT_ALL_FIELDS = [
     "labels",
     "cycles",
     "modules",
+    "product",
+    "product_module",
     "parent_key",
     "parent_name",
     "project",
@@ -1182,6 +1189,8 @@ EXPORT_FIELD_LABELS = {
     "labels": "标签",
     "cycles": "迭代",
     "modules": "模块",
+    "product": "产品",
+    "product_module": "产品模块",
     "parent_key": "父工作项标识",
     "parent_name": "父工作项标题",
     "project": "项目",
@@ -1301,6 +1310,10 @@ def _build_issue_export_row(issue, fields, tz=None):
         "labels": lambda: labels,
         "cycles": lambda: cycles,
         "modules": lambda: modules,
+        "product": lambda: issue.product.name if issue.product else None,
+        "product_module": lambda: (
+            module_path_label(issue.product_module_id) if issue.product_module_id else None
+        ),
         "parent_key": lambda: parent_key,
         "parent_name": lambda: parent.name if parent else None,
         "project": lambda: project.name if project else None,
@@ -1414,6 +1427,8 @@ class BulkExportIssuesEndpoint(BaseAPIView):
                 "parent__project",
                 "created_by",
                 "updated_by",
+                "product",
+                "product_module",
             )
             .prefetch_related(
                 Prefetch(
@@ -1633,6 +1648,8 @@ class IssuePaginatedViewSet(BaseViewSet):
             "archived_at",
             "module_ids",
             "release_ids",
+            "product_id",
+            "product_module_id",
             "label_ids",
             "assignee_ids",
             "link_count",

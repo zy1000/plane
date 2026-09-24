@@ -39,6 +39,7 @@ from plane.db.models import (
     RequirementItemStatus,
     RequirementProject,
 )
+from plane.utils.issue_product import autofill_issue_product_from_requirements
 
 
 class RequirementIssueViewSet(BaseViewSet):
@@ -171,6 +172,13 @@ class RequirementIssueViewSet(BaseViewSet):
             batch_size=100,
             ignore_conflicts=True,
         )
+        # 首次关联：产品为空的工作项带出需求的产品 / 模块（之后可手改，不回写）
+        autofill_issue_product_from_requirements(
+            project_id=project_id,
+            pairs=[(issue_id, requirement_id) for issue_id in requested],
+            actor_id=request.user.id,
+            workspace_id=link.workspace_id,
+        )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
@@ -203,3 +211,12 @@ class IssueRequirementViewSet(BaseRequirementContainerViewSet):
     container_model = Issue
     link_model = RequirementIssue
     container_attr = "issue"
+
+    def _after_link(self, container, requirement_ids):
+        # 首次关联：产品为空的工作项带出需求的产品 / 模块（之后可手改，不回写）
+        autofill_issue_product_from_requirements(
+            project_id=container.project_id,
+            pairs=[(container.id, requirement_id) for requirement_id in requirement_ids],
+            actor_id=self.request.user.id,
+            workspace_id=container.workspace_id,
+        )

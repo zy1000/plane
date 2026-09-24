@@ -4,6 +4,7 @@ from plane.app.views.requirement import (
     CycleRequirementViewSet,
     IssueRequirementViewSet,
     ProjectRequirementModuleTreeAPIView,
+    ProjectProductRequirementModuleTreeAPIView,
     ProjectRequirementViewSet,
     ReleaseRequirementViewSet,
     RequirementApprovalInboxAPIView,
@@ -255,6 +256,12 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/requirement-modules/",
         ProjectRequirementModuleTreeAPIView.as_view(),
         name="project-requirement-modules",
+    ),
+    # 工作项「产品模块」选择器：项目关联产品的全量模块树
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/products/<uuid:product_id>/requirement-modules/",
+        ProjectProductRequirementModuleTreeAPIView.as_view(),
+        name="project-product-requirement-modules",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/<uuid:requirement_id>/",

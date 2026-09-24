@@ -179,6 +179,27 @@ class Issue(ProjectBaseModel):
         null=True,
         blank=True,
     )
+    # 产品 / 产品模块（RequirementModule）单选挂靠。产品必须在项目关联产品池
+    # （ProductProject）内，模块必须属于所选产品 —— 规则只写在
+    # utils/issue_product.py::resolve_issue_product_fields，序列化 / 批量 / 导入 /
+    # 需求关联自动带出四条路径共用。两个目标都会被硬删（产品软删走 deletion_task
+    # 置空，模块 CASCADE 子树），所以都是 SET_NULL。
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.SET_NULL,
+        related_name="issues",
+        null=True,
+        blank=True,
+        verbose_name="所属产品",
+    )
+    product_module = models.ForeignKey(
+        "db.RequirementModule",
+        on_delete=models.SET_NULL,
+        related_name="issues",
+        null=True,
+        blank=True,
+        verbose_name="所属产品模块",
+    )
 
     issue_objects = IssueManager()
 

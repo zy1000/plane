@@ -521,6 +521,8 @@ export class IssueService extends APIService {
         cycle_id?: string | null;
         module_ids?: string[];
         release_ids?: string[];
+        product_id?: string | null;
+        product_module_id?: string | null;
         approval_reason?: string;
       };
     }

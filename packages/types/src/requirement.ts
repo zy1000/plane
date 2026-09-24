@@ -513,6 +513,24 @@ export type TProfileRequirementsResponse = Omit<TPaginatedResponse<TProjectRequi
 };
 
 /** 产品 ↔ 项目关联行。项目靠它确定自己能引用哪些产品的需求 */
+/** 工作项「产品」下拉的候选项：由项目关联产品池（TProductProject）映射 */
+export type TProductOption = {
+  id: string;
+  name: string;
+  identifier: string;
+  code: string;
+  logo_props: TLogoProps | null;
+};
+
+/** 拍平的产品模块树节点，path 形如「A / B」，工作项「产品模块」下拉与分组列共用 */
+export type TFlatProductModule = {
+  id: string;
+  name: string;
+  path: string;
+  depth: number;
+  product_id: string;
+};
+
 export type TProductProject = {
   id: string;
   product: string;

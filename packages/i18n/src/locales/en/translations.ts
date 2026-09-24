@@ -906,6 +906,8 @@ export default {
         sub_issue: "Sub-work item",
         work_item_count: "Work item count",
         release: "Release",
+        product: "Product",
+        product_module: "Product module",
       },
       extra: {
         show_sub_issues: "Show sub-work items",
@@ -6179,6 +6181,17 @@ export default {
     label: "{count, plural, one {Release} other {Releases}}",
     no_release: "No release",
     select_release: "Select release",
+  },
+  product_field: {
+    label: "Product",
+    no_product: "No product",
+    select_product: "Select product",
+  },
+  product_module_field: {
+    label: "Product module",
+    no_module: "No product module",
+    select_module: "Select product module",
+    select_product_first: "Select a product first",
   },
   description_versions: {
     last_edited_by: "Last edited by",

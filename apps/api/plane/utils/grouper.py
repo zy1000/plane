@@ -23,8 +23,25 @@ from plane.db.models import (
     ModuleIssue,
     IssueLabel,
     ReleaseIssue,
+    Product,
+    ProductProject,
+    RequirementModule,
 )
 from typing import Optional, Dict, Tuple, Any, Union, List
+
+
+def _grouping_product_ids(slug: str, project_id: Optional[str]):
+    """按产品 / 产品模块分组时的产品候选：项目内取关联产品池，工作区级取全部产品。
+    只当子查询用，显式 order_by() 清掉默认排序。"""
+    if project_id:
+        return (
+            ProductProject.objects.filter(
+                project_id=project_id, product__deleted_at__isnull=True
+            )
+            .order_by()
+            .values_list("product_id", flat=True)
+        )
+    return Product.objects.filter(workspace__slug=slug).order_by().values_list("id", flat=True)
 
 
 def issue_queryset_grouper(
@@ -146,6 +163,10 @@ def issue_on_results(
         "state__group",
         "type_id",
         "type_name",
+        "product_id",
+        "product_name",
+        "product_module_id",
+        "product_module_name",
     ]
 
     if group_by in FIELD_MAPPER:
@@ -157,7 +178,14 @@ def issue_on_results(
         original_list.append(sub_group_by)
 
     required_fields.extend(original_list)
-    return list(issues.annotate(type_name=F("type__name")).values(*required_fields))
+    return list(
+        issues.annotate(
+            type_name=F("type__name"),
+            # 产品 / 产品模块名随行带出：列表回显不必先拉产品池
+            product_name=F("product__name"),
+            product_module_name=F("product_module__name"),
+        ).values(*required_fields)
+    )
 
 
 def issue_group_values(
@@ -211,6 +239,17 @@ def issue_group_values(
     if field == "project_id":
         queryset = Project.objects.filter(workspace__slug=slug).values_list("id", flat=True)
         return list(queryset)
+
+    # 产品 / 产品模块：项目内按关联产品池，工作区级按全部产品；都带「无」组
+    if field == "product_id":
+        return list(_grouping_product_ids(slug, project_id)) + ["None"]
+
+    if field == "product_module_id":
+        return list(
+            RequirementModule.objects.filter(
+                product_id__in=_grouping_product_ids(slug, project_id)
+            ).values_list("id", flat=True)
+        ) + ["None"]
 
     if field == "priority":
         return ["low", "medium", "high", "urgent", "none"]

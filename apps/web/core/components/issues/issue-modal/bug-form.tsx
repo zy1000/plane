@@ -447,6 +447,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   isDraft={isDraft}
                   handleFormChange={handleFormChange}
                   setSelectedParentIssue={setSelectedParentIssue}
+                  setValue={setValue}
                 />
               </div>
               {showActionButtons && (

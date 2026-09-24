@@ -29,7 +29,7 @@ from plane.app.views.requirement.mixins import (
     can_write_requirements,
     get_scoped_product,
 )
-from plane.db.models import Product, Requirement, RequirementModule
+from plane.db.models import Product, ProductProject, Requirement, RequirementModule
 from plane.utils.requirement_module import build_module_tree_payload
 from plane.utils.requirement_project import linked_requirement_ids
 
@@ -187,6 +187,38 @@ class RequirementModuleDetailAPIView(_RequirementModuleScopeMixin, BaseAPIView):
         # Requirement.module 的 SET_NULL 回到「全部」，不会被带走。
         module.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectProductRequirementModuleTreeAPIView(BaseAPIView):
+    """项目作用域下某个关联产品的**全量**模块树，给工作项的「产品模块」选择器供数。
+
+    与上面的剪枝树不同：工作项可以挂到还没有任何需求的模块上，所以要整棵树。
+    走项目权限而不是 can_view_product —— 项目成员未必是产品成员。权限键与
+    ProjectProductViewSet.list 一致，避免「能选产品拉不到模块」的裂缝。
+    """
+
+    @allow_fine_permission(
+        PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW,
+        PermissionKey.PROJECT_PRODUCT_LINK_MANAGE,
+    )
+    def get(self, request, slug, project_id, product_id):
+        if not (
+            ProductProject.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                product_id=product_id,
+                product__deleted_at__isnull=True,
+            ).exists()
+        ):
+            return Response(
+                {"error": "Product is not linked to this project."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        payload = build_module_tree_payload(
+            scope_filter={"product_id": product_id},
+            total_queryset=Requirement.objects.filter(product_id=product_id),
+        )
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class ProjectRequirementModuleTreeAPIView(BaseAPIView):

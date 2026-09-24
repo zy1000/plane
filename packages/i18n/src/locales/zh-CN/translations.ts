@@ -1070,6 +1070,8 @@ export default {
         sub_issue: "子工作项",
         work_item_count: "工作项数量",
         release: "发布",
+        product: "产品",
+        product_module: "产品模块",
       },
       extra: {
         show_sub_issues: "显示子工作项",
@@ -6333,6 +6335,17 @@ export default {
     label: "{count, plural, one {发布} other {发布}}",
     no_release: "无发布",
     select_release: "选择发布",
+  },
+  product_field: {
+    label: "产品",
+    no_product: "无产品",
+    select_product: "选择产品",
+  },
+  product_module_field: {
+    label: "产品模块",
+    no_module: "无产品模块",
+    select_module: "选择产品模块",
+    select_product_first: "请先选择产品",
   },
   description_versions: {
     last_edited_by: "最后编辑者",

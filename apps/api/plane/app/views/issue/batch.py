@@ -17,6 +17,7 @@ from plane.db.models import (
     UserRecentVisit,
 )
 from plane.utils.host import base_host
+from plane.utils.issue_product import linked_product_id_set
 from plane.utils.workflow.transition import (
     cancel_issue_pending_transitions,
     capture_issue_content_snapshot,
@@ -48,6 +49,10 @@ class IssueBatchUpdate(BaseAPIView):
         blocked = []
         updated_issue_ids = []
         to_state = None
+        # 产品池一个请求只查一次，逐 issue 校验时复用
+        serializer_context = {}
+        if "product_id" in properties or "product_module_id" in properties:
+            serializer_context["linked_products"] = linked_product_id_set(project_id)
 
         if state_id:
             try:
@@ -109,7 +114,9 @@ class IssueBatchUpdate(BaseAPIView):
                     )
                     continue
 
-            serializer = IssueBatchUpdateSerializer(instance=query, data=properties, partial=True)
+            serializer = IssueBatchUpdateSerializer(
+                instance=query, data=properties, partial=True, context=serializer_context
+            )
             if not serializer.is_valid():
                 blocked.append(
                     {

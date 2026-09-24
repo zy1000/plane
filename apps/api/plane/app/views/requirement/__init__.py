@@ -26,6 +26,7 @@ from .library_item import (
 )
 from .module import (
     ProjectRequirementModuleTreeAPIView,
+    ProjectProductRequirementModuleTreeAPIView,
     RequirementModuleAPIView,
     RequirementModuleDetailAPIView,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "CycleRequirementViewSet",
     "IssueRequirementViewSet",
     "ProjectRequirementModuleTreeAPIView",
+    "ProjectProductRequirementModuleTreeAPIView",
     "ProjectRequirementViewSet",
     "ReleaseRequirementViewSet",
     "RequirementApprovalInboxAPIView",

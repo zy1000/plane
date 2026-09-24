@@ -164,6 +164,12 @@ class IssueFilterSet(BaseFilterSet):
     type_id = filters.UUIDFilter(field_name="type_id")
     type_id__in = UUIDInFilter(field_name="type_id", lookup_expr="in")
 
+    # 产品 / 产品模块：Issue 上的两个单选外键列，模块按精确 id 不展开子树
+    product_id = filters.UUIDFilter(field_name="product_id")
+    product_id__in = UUIDInFilter(field_name="product_id", lookup_expr="in")
+    product_module_id = filters.UUIDFilter(field_name="product_module_id")
+    product_module_id__in = UUIDInFilter(field_name="product_module_id", lookup_expr="in")
+
     type__name = filters.CharFilter(field_name="type__name")
     type__name__in = CharInFilter(field_name="type__name", lookup_expr="in")
     type__category__name = filters.CharFilter(field_name="type__category__name")

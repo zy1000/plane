@@ -25,6 +25,7 @@ export * from "./archived-at";
 export * from "./inbox";
 export * from "./label-activity-chip";
 export * from "./workflow-approval";
+export * from "./product";
 
 // helpers
 export * from "./helpers/activity-block";

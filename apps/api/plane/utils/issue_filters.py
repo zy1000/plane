@@ -334,6 +334,29 @@ def filter_type_id(params, issue_filter, method, prefix=""):
     return issue_filter
 
 
+def _filter_plain_fk(key, params, issue_filter, method, prefix=""):
+    """Issue 上的单选外键列通用过滤（同 filter_type_id）：GET 逗号分隔，"None" 取空。"""
+    if method == "GET":
+        ids = [item for item in params.get(key).split(",") if item != "null"]
+        if "None" in ids:
+            issue_filter[f"{prefix}{key}__isnull"] = True
+        ids = filter_valid_uuids(ids)
+        if len(ids) and "" not in ids:
+            issue_filter[f"{prefix}{key}__in"] = ids
+    else:
+        if params.get(key, None) and len(params.get(key)) and params.get(key) != "null":
+            issue_filter[f"{prefix}{key}__in"] = params.get(key)
+    return issue_filter
+
+
+def filter_product_id(params, issue_filter, method, prefix=""):
+    return _filter_plain_fk("product_id", params, issue_filter, method, prefix)
+
+
+def filter_product_module_id(params, issue_filter, method, prefix=""):
+    return _filter_plain_fk("product_module_id", params, issue_filter, method, prefix)
+
+
 def filter_type_name(params, issue_filter, method, prefix=""):
     type_names = [item for item in params.get("type__name").split(",")]
     issue_filter['type__name__in'] = type_names
@@ -496,6 +519,9 @@ def issue_filters(query_params, method, prefix=""):
         # 新增：按 Issue.type 外键过滤
         "type_id": filter_type_id,
         "type__name": filter_type_name,
+        # 产品 / 产品模块（Issue 单选外键）
+        "product_id": filter_product_id,
+        "product_module_id": filter_product_module_id,
         # 按 IssueTypeCategory.name 过滤（如：缺陷）
         "type_category": filter_type_category,
         "project": filter_project,

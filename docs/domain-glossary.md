@@ -361,6 +361,9 @@ Project (原生)
   ├── ReviewTailoring ──Item──▶ (Product × DevModeStage × StageReviewTemplate)
   │        └─生效时生成─▶ StageReview ──FK── Product / DevModeStage(阶段)
   ├─FK(SET_NULL)── User (product_manager，不进 ProjectMember)
+  ├── Issue ──FK(SET_NULL)── Product / RequirementModule（2026-09-23：product / product_module 单选挂靠，
+  │        规则集中在 utils/issue_product.py；产品须在 ProductProject 池内、模块须属于该产品、换产品清模块；
+  │        首次挂需求时自动带出需求的产品 / 模块；候选池端点 projects/<pid>/products/<product_id>/requirement-modules/）
   ├── Release ──ReleaseIssue── Issue
   ├── Milestone ──M2M── Issue                     （完全孤立，不连 Release/Cycle/baseline）
   ├── TimeSheet ──FK── Issue | TestCase           （二选一，由 category 决定）

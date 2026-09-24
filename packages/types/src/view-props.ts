@@ -22,6 +22,8 @@ export type TIssueGroupByOptions =
   | "cycle"
   | "module"
   | "release"
+  | "product"
+  | "product_module"
   | "target_date"
   | "team_project"
   | null;
@@ -46,6 +48,10 @@ export type TIssueOrderByOptions =
   | "-issue_cycle__cycle__name"
   | "issue_release__release__name"
   | "-issue_release__release__name"
+  | "product__name"
+  | "-product__name"
+  | "product_module__name"
+  | "-product_module__name"
   | "target_date"
   | "-target_date"
   | "estimate_point__key"
@@ -75,6 +81,8 @@ export type TIssueParams =
   | "cycle"
   | "module"
   | "release"
+  | "product_id"
+  | "product_module_id"
   | "start_date"
   | "target_date"
   | "project"
@@ -115,6 +123,8 @@ export const WORK_ITEM_FILTER_PROPERTY_KEYS = [
   "cycle_id",
   "module_id",
   "release_id",
+  "product_id",
+  "product_module_id",
   "project_id",
   "type_id",
   "created_at",
@@ -156,6 +166,8 @@ export interface IIssueFilterOptions {
   subscriber?: string[] | null;
   target_date?: string[] | null;
   issue_type?: string[] | null;
+  product?: string[] | null;
+  product_module?: string[] | null;
 }
 
 export interface IIssueDisplayFilterOptions {
@@ -187,6 +199,8 @@ export interface IIssueDisplayProperties {
   modules?: boolean;
   cycle?: boolean;
   release?: boolean;
+  product?: boolean;
+  product_module?: boolean;
   issue_type?: boolean;
 }
 

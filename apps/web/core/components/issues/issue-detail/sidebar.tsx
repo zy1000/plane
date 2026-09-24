@@ -48,9 +48,11 @@ import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import { IssueReleaseSelect } from "./release-select";
+import { IssueProductSelect } from "./product-select";
+import { IssueProductModuleSelect } from "./product-module-select";
 import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "./root";
-import { Rocket, Type } from "lucide-react";
+import { Boxes, Package, Rocket, Type } from "lucide-react";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 type Props = {
@@ -316,6 +318,36 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 <span>发布</span>
               </div>
               <IssueReleaseSelect
+                className="w-2/3 flex-grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={!isEditable}
+              />
+            </div>
+
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
+                <Package className="h-4 w-4 flex-shrink-0" />
+                <span>{t("product_field.label")}</span>
+              </div>
+              <IssueProductSelect
+                className="w-2/3 flex-grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={!isEditable}
+              />
+            </div>
+
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
+                <Boxes className="h-4 w-4 flex-shrink-0" />
+                <span>{t("product_module_field.label")}</span>
+              </div>
+              <IssueProductModuleSelect
                 className="w-2/3 flex-grow"
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

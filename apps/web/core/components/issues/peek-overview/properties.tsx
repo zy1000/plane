@@ -6,7 +6,7 @@
 
 import { type ComponentType, type ReactNode, useState } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, CalendarPlus, Rocket, UserRound } from "lucide-react";
+import { Boxes, CalendarClock, CalendarPlus, Package, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
@@ -28,6 +28,8 @@ import { IssueExtraFieldsSection } from "../issue-detail/extra-fields-section";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
+import { IssueProductSelect } from "../issue-detail/product-select";
+import { IssueProductModuleSelect } from "../issue-detail/product-module-select";
 
 interface IPeekOverviewProperties {
   workspaceSlug: string;
@@ -205,6 +207,30 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             <StructureFieldLabel icon={Rocket} label="发布" />
             <StructureFieldValue>
               <IssueReleaseSelect
+                className="h-7.5 w-full grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={disabled}
+              />
+            </StructureFieldValue>
+
+            <StructureFieldLabel icon={Package} label={t("product_field.label")} />
+            <StructureFieldValue>
+              <IssueProductSelect
+                className="h-7.5 w-full grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={disabled}
+              />
+            </StructureFieldValue>
+
+            <StructureFieldLabel icon={Boxes} label={t("product_module_field.label")} />
+            <StructureFieldValue>
+              <IssueProductModuleSelect
                 className="h-7.5 w-full grow"
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

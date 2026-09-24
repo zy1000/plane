@@ -33,7 +33,10 @@ export type TMatrixRow = {
    * 纵轴本来就有的行为 null
    */
   originStageLabel: string | null;
-  /** product_id → 从这一行挪走的格子。原处留空位，写「已移至 X」 */
+  /**
+   * product_id → 从这一行挪走、且移动**尚未生效**的格子（本地未保存 / 修订待签批）。
+   * 原处留空位写「已移至 X」当改动预览；签批生效后矩阵只画最终结果，不再进这张表
+   */
   movedOut: Map<string, TReviewTailoringItem>;
 };
 
@@ -149,9 +152,14 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
     if (bucket) bucket.push(item);
     else map.set(key, [item]);
   };
+  // 已生效的移动只留最终位置；原处整行都被挪空时把这一行藏掉（settledVacated）
+  const settledVacatedRowKeys = new Set<string>();
   for (const item of items) {
     push(cellsByRowKey, rowKeyOf(item.stage_id, item.template_id), item);
-    if (item.origin_stage_id) push(movedOutByRowKey, rowKeyOf(item.origin_stage_id, item.template_id), item);
+    if (!item.origin_stage_id) continue;
+    const originKey = rowKeyOf(item.origin_stage_id, item.template_id);
+    if (isMovePending(item)) push(movedOutByRowKey, originKey, item);
+    else settledVacatedRowKeys.add(originKey);
   }
 
   const effectiveRows = withMovedRows(rows, items, cellsByRowKey);
@@ -172,8 +180,12 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
       stageId,
       stageLabel: bucket.label,
       sortOrder: bucket.sortOrder,
-      rows: buildRows(bucket.rows, cellsByRowKey, movedOutByRowKey),
+      rows: buildRows(bucket.rows, cellsByRowKey, movedOutByRowKey).filter(
+        // 格子全被挪走且移动已生效的原处行：矩阵是最终结果，不再画空壳
+        (row) => row.cells.size > 0 || row.movedOut.size > 0 || !settledVacatedRowKeys.has(row.rowKey)
+      ),
     }))
+    .filter((group) => group.rows.length > 0)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.stageLabel.localeCompare(b.stageLabel));
 };
 
@@ -259,6 +271,14 @@ export type TTailoringStats = {
   toDeleteCompleted: number;
   generated: number;
 };
+
+/**
+ * 移动还没生效：本地刚挪完没保存、或修订单还在待签批。只有这时原处才画「已移至」占位；
+ * 签批通过后 effective_stage_id 追上 stage_id，矩阵只剩最终结果。从未生效的草稿格子
+ * （effective 为 null）挪过就算待生效
+ */
+export const isMovePending = (item: TReviewTailoringItem) =>
+  Boolean(item.origin_stage_id) && item.effective_stage_id !== item.stage_id;
 
 /** 相对生效快照换了阶段（修订里挪过） */
 export const isMovedSinceEffective = (item: TReviewTailoringItem) =>

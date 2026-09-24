@@ -14,6 +14,8 @@ export type ImportFieldKey =
   | "module"
   | "cycle"
   | "release"
+  | "product"
+  | "product_module"
   | "start_date"
   | "target_date"
   | "parent"

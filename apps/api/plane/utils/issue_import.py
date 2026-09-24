@@ -35,12 +35,14 @@ from plane.db.models import (
     Label,
     Module,
     ModuleIssue,
+    ProductProject,
     ProjectMember,
     Release,
     ReleaseIssue,
     State,
 )
 from plane.db.models.state import StateGroup
+from plane.utils.requirement_module import module_path_index
 from plane.utils.import_export import (
     REQUIREMENT_FORMAT,
     TABLE_FORMAT,
@@ -61,6 +63,8 @@ FIELD_LABELS = "labels"
 FIELD_MODULE = "module"
 FIELD_CYCLE = "cycle"
 FIELD_RELEASE = "release"
+FIELD_PRODUCT = "product"
+FIELD_PRODUCT_MODULE = "product_module"
 FIELD_START_DATE = "start_date"
 FIELD_TARGET_DATE = "target_date"
 FIELD_PARENT = "parent"
@@ -78,6 +82,8 @@ IMPORT_FIELD_DEFINITIONS: list[dict[str, Any]] = [
     {"key": FIELD_MODULE, "label": "模块", "required": False},
     {"key": FIELD_CYCLE, "label": "迭代", "required": False},
     {"key": FIELD_RELEASE, "label": "发布", "required": False},
+    {"key": FIELD_PRODUCT, "label": "产品", "required": False},
+    {"key": FIELD_PRODUCT_MODULE, "label": "产品模块", "required": False},
     {"key": FIELD_START_DATE, "label": "开始日期", "required": False},
     {"key": FIELD_TARGET_DATE, "label": "截止日期", "required": False},
     {"key": FIELD_PARENT, "label": "父工作项", "required": False},
@@ -355,6 +361,21 @@ class _RowResolver:
                 project_id=self.project_id, deleted_at__isnull=True
             )
         }
+        # 缓存：项目关联产品池（按开发编号 / 名称 / 代号都能匹配，统一小写）；
+        # 模块路径索引按产品懒加载（module_path_index 一次载入整棵树）。
+        self.product_by_key: dict[str, Any] = {}
+        for link in (
+            ProductProject.objects.filter(
+                project_id=self.project_id, product__deleted_at__isnull=True
+            )
+            .select_related("product")
+            .order_by("product__identifier")
+        ):
+            product = link.product
+            for key in (product.identifier, product.name, product.code):
+                if key:
+                    self.product_by_key.setdefault(key.strip().lower(), product)
+        self._module_index_by_product: dict[Any, tuple[dict, dict]] = {}
         self.cycle_by_name: dict[str, list[Cycle]] = {}
         for c in Cycle.objects.filter(
             project_id=self.project_id, deleted_at__isnull=True
@@ -416,6 +437,22 @@ class _RowResolver:
             self.existing_by_parent_name.setdefault(
                 (issue.parent_id, normalized_name), issue.id
             )
+
+    def _resolve_product_module_id(self, product, value: str):
+        """按名称路径（`A / B`）或唯一叶子名解析该产品下的模块 id；解析不到返回 None。"""
+        if product.id not in self._module_index_by_product:
+            self._module_index_by_product[product.id] = module_path_index(
+                {"product_id": product.id}
+            )
+        path_by_id, id_by_path = self._module_index_by_product[product.id]
+        path = tuple(part.strip() for part in value.split("/") if part.strip())
+        if path in id_by_path:
+            return id_by_path[path]
+        if len(path) == 1:
+            matches = [key for key, names in path_by_id.items() if names and names[-1] == path[0]]
+            if len(matches) == 1:
+                return matches[0]
+        return None
 
     # ---- 字段解析 ---------------------------------------------------------
 
@@ -576,6 +613,32 @@ class _RowResolver:
                 result.errors.append(f"模块「{module_value}」在项目中不存在")
             else:
                 result.resolved[FIELD_MODULE] = module
+
+        # product / product module ------------------------------------------
+        product_column = inv.get(FIELD_PRODUCT)
+        product_value = _clean_text(raw_row.get(product_column)) if product_column else ""
+        product = None
+        if product_value:
+            product = self.product_by_key.get(product_value.lower())
+            if product is None:
+                result.errors.append(f"产品「{product_value}」未关联到本项目")
+            else:
+                result.resolved[FIELD_PRODUCT] = product
+        product_module_column = inv.get(FIELD_PRODUCT_MODULE)
+        product_module_value = (
+            _clean_text(raw_row.get(product_module_column)) if product_module_column else ""
+        )
+        if product_module_value:
+            if not product_value:
+                result.errors.append("产品模块需要先指定产品")
+            elif product is not None:
+                module_id = self._resolve_product_module_id(product, product_module_value)
+                if module_id is None:
+                    result.errors.append(
+                        f"产品模块「{product_module_value}」不属于产品「{product_value}」"
+                    )
+                else:
+                    result.resolved[FIELD_PRODUCT_MODULE] = module_id
 
         # cycle -------------------------------------------------------------
         cycle_column = inv.get(FIELD_CYCLE)
@@ -1029,6 +1092,8 @@ def _create_issue(
         priority=resolved.get(FIELD_PRIORITY) or "none",
         start_date=resolved.get(FIELD_START_DATE),
         target_date=resolved.get(FIELD_TARGET_DATE),
+        product=resolved.get(FIELD_PRODUCT),
+        product_module_id=resolved.get(FIELD_PRODUCT_MODULE),
         created_by=user,
         updated_by=user,
         is_draft=False,

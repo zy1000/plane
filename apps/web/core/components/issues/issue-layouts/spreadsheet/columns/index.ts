@@ -19,3 +19,5 @@ export * from "./updated-on-column";
 export * from "./module-column";
 export * from "./cycle-column";
 export * from "./release-column";
+export * from "./product-column";
+export * from "./product-module-column";

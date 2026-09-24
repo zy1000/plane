@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { AtSign, Briefcase, Rocket } from "lucide-react";
+import { AtSign, Boxes, Briefcase, Package, Rocket } from "lucide-react";
 // plane imports
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import {
@@ -34,6 +34,8 @@ import type {
   IModule,
   IProject,
   IRelease,
+  TFlatProductModule,
+  TProductOption,
   TWorkItemFilterProperty,
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
@@ -51,6 +53,8 @@ import {
   getPriorityFilterConfig,
   getProjectFilterConfig,
   getReleaseFilterConfig,
+  getProductFilterConfig,
+  getProductModuleFilterConfig,
   getStartDateFilterConfig,
   getStateFilterConfig,
   getStateGroupFilterConfig,
@@ -70,6 +74,7 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectTypeExtraFields } from "@/hooks/store/use-project-type-extra-fields";
 import { useRelease } from "@/hooks/store/use-release";
+import { useProjectProduct } from "@/hooks/store/use-project-product";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
 // utils
@@ -121,6 +126,8 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const { getModuleById } = useModule();
   const { getStateById } = useProjectState();
   const { getReleaseById } = useRelease();
+  const { getProjectProductIds, getProductById, getProjectProductModuleIds, getProductModuleById } =
+    useProjectProduct();
   const { getUserDetails } = useMember();
   const { issueTypes: workItemTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   const { fields: projectExtraFields } = useProjectTypeExtraFields(workspaceSlug, projectId);
@@ -174,6 +181,25 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         ? (releaseIds.map((releaseId) => getReleaseById(releaseId)).filter((release) => release) as IRelease[])
         : undefined,
     [releaseIds, getReleaseById]
+  );
+  // 产品 / 产品模块候选来自 projectProduct store（project-wrapper 预热；未拉到前视为未就绪）
+  const productIds = projectId ? getProjectProductIds(projectId) : null;
+  const products: TProductOption[] | undefined = useMemo(
+    () =>
+      productIds
+        ? (productIds.map((productId) => getProductById(productId)).filter((product) => product) as TProductOption[])
+        : undefined,
+    [productIds, getProductById]
+  );
+  const productModuleIds = projectId ? getProjectProductModuleIds(projectId) : [];
+  const productModules: TFlatProductModule[] | undefined = useMemo(
+    () =>
+      productIds
+        ? (productModuleIds
+            .map((moduleId) => getProductModuleById(moduleId))
+            .filter((module) => module) as TFlatProductModule[])
+        : undefined,
+    [productIds, productModuleIds, getProductModuleById]
   );
   // projectExtraFields === null means still loading (no cached data); [] means loaded and empty
   const areAllConfigsInitialized = useMemo(
@@ -276,6 +302,30 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         ...operatorConfigs,
       }),
     [isFilterEnabled, releases, operatorConfigs]
+  );
+
+  // product filter config（候选 = 项目关联产品池）
+  const productFilterConfig = useMemo(
+    () =>
+      getProductFilterConfig<TWorkItemFilterProperty>("product_id")({
+        isEnabled: isFilterEnabled("product_id") && products !== undefined,
+        filterIcon: Package,
+        products: products ?? [],
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, products, operatorConfigs]
+  );
+
+  // product module filter config（候选 = 项目所有关联产品的模块，按路径显示）
+  const productModuleFilterConfig = useMemo(
+    () =>
+      getProductModuleFilterConfig<TWorkItemFilterProperty>("product_module_id")({
+        isEnabled: isFilterEnabled("product_module_id") && productModules !== undefined,
+        filterIcon: Boxes,
+        modules: productModules ?? [],
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, productModules, operatorConfigs]
   );
 
   // assignee filter config
@@ -496,6 +546,8 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       cycleFilterConfig,
       moduleFilterConfig,
       releaseFilterConfig,
+      productFilterConfig,
+      productModuleFilterConfig,
       issueTypeFilterConfig,
       startDateFilterConfig,
       targetDateFilterConfig,
@@ -514,6 +566,8 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       cycle_id: cycleFilterConfig,
       module_id: moduleFilterConfig,
       release_id: releaseFilterConfig,
+      product_id: productFilterConfig,
+      product_module_id: productModuleFilterConfig,
       assignee_id: assigneeFilterConfig,
       mention_id: mentionFilterConfig,
       created_by_id: createdByFilterConfig,

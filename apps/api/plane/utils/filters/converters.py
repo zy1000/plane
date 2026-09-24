@@ -26,6 +26,8 @@ class LegacyToRichFiltersConverter:
         "project": "project_id",
         "start_date": "start_date",
         "target_date": "target_date",
+        "product": "product_id",
+        "product_module": "product_module_id",
     }
 
     # Default fields that expect UUID values
@@ -35,6 +37,8 @@ class LegacyToRichFiltersConverter:
         "cycle_id",
         "module_id",
         "release_id",
+        "product_id",
+        "product_module_id",
         "assignee_id",
         "mention_id",
         "created_by_id",

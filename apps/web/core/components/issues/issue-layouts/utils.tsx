@@ -6,7 +6,7 @@
 
 import type { CSSProperties, FC } from "react";
 import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
-import { Rocket } from "lucide-react";
+import { Boxes, Package, Rocket } from "lucide-react";
 import { clone, isNil, pull, uniq, concat } from "lodash-es";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
 // plane types
@@ -119,6 +119,8 @@ export const getGroupByColumns = ({
     cycle: getCycleColumns,
     module: getModuleColumns,
     release: getReleaseColumns,
+    product: getProductColumns,
+    product_module: getProductModuleColumns,
     state: getStateColumns,
     "state_detail.group": getStateGroupColumns,
     priority: getPriorityColumns,
@@ -233,6 +235,59 @@ const getReleaseColumns = (): IGroupByColumn[] | undefined => {
     payload: {},
   });
   return releases;
+};
+
+// 产品 / 产品模块分组：候选来自 projectProduct store（由 project-wrapper 预热）；
+// 「无」组的 payload 显式带 null，拖进去等于清空。模块组同时带 product_id，
+// 避免拖拽只改模块被服务端按「模块不属于产品」拒掉。
+const getProductColumns = (): IGroupByColumn[] | undefined => {
+  const { currentProjectDetails } = store.projectRoot.project;
+  if (!currentProjectDetails?.id) return;
+  const { getProjectProductIds, getProductById } = store.projectProduct;
+  const productIds = getProjectProductIds(currentProjectDetails.id) ?? [];
+  const products: IGroupByColumn[] = [];
+  productIds.forEach((productId) => {
+    const product = getProductById(productId);
+    if (!product) return;
+    products.push({
+      id: product.id,
+      name: product.name,
+      icon: <Package className="h-3.5 w-3.5" />,
+      payload: { product_id: product.id },
+    });
+  });
+  products.push({
+    id: "None",
+    name: "None",
+    icon: <Package className="h-3.5 w-3.5" />,
+    payload: { product_id: null },
+  });
+  return products;
+};
+
+const getProductModuleColumns = (): IGroupByColumn[] | undefined => {
+  const { currentProjectDetails } = store.projectRoot.project;
+  if (!currentProjectDetails?.id) return;
+  const { getProjectProductModuleIds, getProductModuleById } = store.projectProduct;
+  const moduleIds = getProjectProductModuleIds(currentProjectDetails.id);
+  const modules: IGroupByColumn[] = [];
+  moduleIds.forEach((moduleId) => {
+    const module = getProductModuleById(moduleId);
+    if (!module) return;
+    modules.push({
+      id: module.id,
+      name: module.path,
+      icon: <Boxes className="h-3.5 w-3.5" />,
+      payload: { product_id: module.product_id, product_module_id: module.id },
+    });
+  });
+  modules.push({
+    id: "None",
+    name: "None",
+    icon: <Boxes className="h-3.5 w-3.5" />,
+    payload: { product_module_id: null },
+  });
+  return modules;
 };
 
 const getStateColumns = ({ projectId, issueTypeIds }: TGetColumns): IGroupByColumn[] | undefined => {

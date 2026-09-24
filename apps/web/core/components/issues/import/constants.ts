@@ -14,6 +14,8 @@ export const IMPORT_FIELD_DEFINITIONS: ImportFieldDefinition[] = [
   { key: "module", label: "模块", required: false },
   { key: "cycle", label: "迭代", required: false },
   { key: "release", label: "发布", required: false },
+  { key: "product", label: "产品", required: false },
+  { key: "product_module", label: "产品模块", required: false },
   { key: "start_date", label: "开始日期", required: false },
   { key: "target_date", label: "截止日期", required: false },
   { key: "parent", label: "父工作项", required: false },

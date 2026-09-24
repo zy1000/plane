@@ -21,6 +21,8 @@ export const DEFAULT_WORK_ITEM_FORM_VALUES: Partial<TIssue> = {
   cycle_id: null,
   module_ids: null,
   release_ids: null,
+  product_id: null,
+  product_module_id: null,
   start_date: null,
   target_date: null,
   extra_field_values: [],

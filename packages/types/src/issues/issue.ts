@@ -89,6 +89,11 @@ export type TBaseIssue = {
   release_ids: string[] | null;
   type_id: string | null;
   type_name?: string | null;
+  /** 产品 / 产品模块（需求模块）单选挂靠；*_name 由列表接口随行带出，只读 */
+  product_id: string | null;
+  product_name?: string | null;
+  product_module_id: string | null;
+  product_module_name?: string | null;
 
   created_at: string;
   updated_at: string;

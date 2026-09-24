@@ -35,6 +35,8 @@ import {
   IssueInboxActivity,
   IssueWorkflowApprovalRequestActivity,
   IssueWorkflowApprovalActionActivity,
+  IssueProductActivity,
+  IssueProductModuleActivity,
 } from "./actions";
 
 type TIssueActivityItem = {
@@ -103,6 +105,10 @@ export const IssueActivityItem = observer(function IssueActivityItem(props: TIss
       return <IssueWorkflowApprovalRequestActivity {...componentDefaultProps} />;
     case "workflow_approval_action":
       return <IssueWorkflowApprovalActionActivity {...componentDefaultProps} />;
+    case "product":
+      return <IssueProductActivity {...componentDefaultProps} showIssue={false} />;
+    case "product_module":
+      return <IssueProductModuleActivity {...componentDefaultProps} showIssue={false} />;
     default:
       return <AdditionalActivityRoot {...componentDefaultProps} field={activityField} />;
   }

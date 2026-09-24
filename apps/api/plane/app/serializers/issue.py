@@ -44,6 +44,12 @@ from plane.db.models import (
     IssueDescriptionVersion,
     ProjectMember,
     EstimatePoint, IssueType,
+    Product,
+)
+from plane.utils.issue_product import (
+    apply_resolved_product_fields,
+    product_module_queryset,
+    resolve_issue_product_fields,
 )
 from plane.utils.content_validator import (
     validate_html_content,
@@ -128,6 +134,15 @@ class IssueCreateSerializer(BaseSerializer):
     )
     type_id = serializers.PrimaryKeyRelatedField(
         source="type", queryset=IssueType.objects.all(), required=False, allow_null=True
+    )
+    product_id = serializers.PrimaryKeyRelatedField(
+        source="product", queryset=Product.objects.all(), required=False, allow_null=True
+    )
+    product_module_id = serializers.PrimaryKeyRelatedField(
+        source="product_module",
+        queryset=product_module_queryset(),
+        required=False,
+        allow_null=True,
     )
     label_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.all()),
@@ -291,6 +306,26 @@ class IssueCreateSerializer(BaseSerializer):
             if errors:
                 raise serializers.ValidationError({"extra_field_values": errors})
             attrs["extra_field_values"] = items
+
+        # 产品 / 产品模块：规则在 utils/issue_product.py，这里只是接线
+        if "product" in attrs or "product_module" in attrs:
+            product_project_id = self.context.get("project_id") or (
+                self.instance.project_id if self.instance else None
+            )
+            current_product_id = self.instance.product_id if self.instance else None
+            current_module_id = self.instance.product_module_id if self.instance else None
+            resolved = resolve_issue_product_fields(
+                project_id=product_project_id,
+                current_product_id=current_product_id,
+                current_module_id=current_module_id,
+                attrs=attrs,
+            )
+            apply_resolved_product_fields(
+                attrs,
+                resolved,
+                current_product_id=current_product_id,
+                current_module_id=current_module_id,
+            )
 
         return attrs
 
@@ -921,6 +956,8 @@ class IssueSerializer(DynamicBaseSerializer):
             "archived_at",
             "type_id",
             "type_name",
+            "product_id",
+            "product_module_id",
         ]
         read_only_fields = fields
 
@@ -981,6 +1018,8 @@ class IssueListDetailSerializer(serializers.Serializer):
             "cycle_id": instance.cycle_id,
             "type_id": instance.type_id,
             "type_name": instance.type.name if instance.type else None,
+            "product_id": instance.product_id,
+            "product_module_id": instance.product_module_id,
             "module_ids": self.get_module_ids(instance),
             "release_ids": self.get_release_ids(instance),
             "label_ids": self.get_label_ids(instance),
@@ -1231,6 +1270,15 @@ class IssueBatchUpdateSerializer(BaseSerializer):
         write_only=True,
         required=False,
     )
+    product_id = serializers.PrimaryKeyRelatedField(
+        source="product", queryset=Product.objects.all(), required=False, allow_null=True
+    )
+    product_module_id = serializers.PrimaryKeyRelatedField(
+        source="product_module",
+        queryset=product_module_queryset(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Issue
@@ -1245,9 +1293,27 @@ class IssueBatchUpdateSerializer(BaseSerializer):
             "cycle_id",
             "module_ids",
             "release_ids",
+            "product_id",
+            "product_module_id",
         ]
 
     def validate(self, attrs):
+        if ("product" in attrs or "product_module" in attrs) and self.instance is not None:
+            resolved = resolve_issue_product_fields(
+                project_id=self.instance.project_id,
+                current_product_id=self.instance.product_id,
+                current_module_id=self.instance.product_module_id,
+                attrs=attrs,
+                # 批量端点一个请求逐个 issue 校验，池由视图按项目缓存一次
+                linked_products=self.context.get("linked_products"),
+            )
+            apply_resolved_product_fields(
+                attrs,
+                resolved,
+                current_product_id=self.instance.product_id,
+                current_module_id=self.instance.product_module_id,
+            )
+
         state = attrs.get("state")
         if state is not None and self.instance is not None:
             if str(state.project_id) != str(self.instance.project_id):

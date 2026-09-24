@@ -6,8 +6,8 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import type { Control } from "react-hook-form";
-import { Controller, useFormState } from "react-hook-form";
+import type { Control, UseFormSetValue } from "react-hook-form";
+import { Controller, useFormState, useWatch } from "react-hook-form";
 import {
   ETabIndices,
   EUserPermissions,
@@ -30,6 +30,8 @@ import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
+import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
+import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
@@ -56,6 +58,8 @@ type TIssueDefaultPropertiesProps = {
   isDraft: boolean;
   handleFormChange: () => void;
   setSelectedParentIssue: (issue: ISearchIssueResponse) => void;
+  /** 换产品时清空产品模块用；不传则只改产品字段本身 */
+  setValue?: UseFormSetValue<TIssue>;
 };
 
 export const IssueDefaultProperties = observer(function IssueDefaultProperties(props: TIssueDefaultPropertiesProps) {
@@ -72,9 +76,11 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     isDraft,
     handleFormChange,
     setSelectedParentIssue,
+    setValue,
   } = props;
   // states
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
+  const watchedProductId = useWatch({ control, name: "product_id" });
   // store hooks
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
@@ -321,6 +327,51 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 />
               </div>
             </Tooltip>
+          )}
+        />
+      )}
+      {projectId && workspaceSlug && (
+        <Controller
+          control={control}
+          name="product_id"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <ProductDropdown
+                projectId={projectId}
+                value={value ?? null}
+                onChange={(productId) => {
+                  onChange(productId);
+                  // 模块跟着产品走：换产品先清空，避免提交时被服务端拒
+                  setValue?.("product_module_id", null, { shouldDirty: true });
+                  handleFormChange();
+                }}
+                placeholder={t("product_field.label")}
+                buttonVariant="border-with-text"
+                tabIndex={getIndex("product_id")}
+              />
+            </div>
+          )}
+        />
+      )}
+      {projectId && workspaceSlug && (
+        <Controller
+          control={control}
+          name="product_module_id"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <ProductModuleDropdown
+                projectId={projectId}
+                productId={watchedProductId ?? null}
+                value={value ?? null}
+                onChange={(moduleId) => {
+                  onChange(moduleId);
+                  handleFormChange();
+                }}
+                placeholder={t("product_module_field.label")}
+                buttonVariant="border-with-text"
+                tabIndex={getIndex("product_module_id")}
+              />
+            </div>
           )}
         />
       )}

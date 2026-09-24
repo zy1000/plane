@@ -121,6 +121,8 @@ export type GroupByColumnTypes =
   | "cycle"
   | "module"
   | "release"
+  | "product"
+  | "product_module"
   | "state"
   | "state_detail.group"
   | "priority"

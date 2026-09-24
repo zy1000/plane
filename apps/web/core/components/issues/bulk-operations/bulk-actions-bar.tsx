@@ -16,6 +16,8 @@ import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { CycleDropdown } from "@/components/dropdowns/cycle";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
+import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
+import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
 import { IssuePropertyLabels } from "@/components/issues/issue-layouts/properties/labels";
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
@@ -50,6 +52,8 @@ type TBatchUpdateProperties = {
   cycle_id?: string | null;
   module_ids?: string[];
   release_ids?: string[];
+  product_id?: string | null;
+  product_module_id?: string | null;
 };
 
 type TOptimisticIssuePatchStore = {
@@ -90,6 +94,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
   const [selectedReleaseIds, setSelectedReleaseIds] = useState<string[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedProductModuleId, setSelectedProductModuleId] = useState<string | null>(null);
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [selectedStartDate, setSelectedStartDate] = useState<Date | null>(null);
   const [selectedDueDate, setSelectedDueDate] = useState<Date | null>(null);
@@ -134,7 +140,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     selectedLabelIds.length > 0 ||
     !!selectedCycleId ||
     selectedModuleIds.length > 0 ||
-    selectedReleaseIds.length > 0;
+    selectedReleaseIds.length > 0 ||
+    !!selectedProductId;
 
   const canApplyUpdate =
     workspaceSlug &&
@@ -156,6 +163,11 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     if (selectedCycleId) properties.cycle_id = selectedCycleId;
     if (selectedModuleIds.length > 0) properties.module_ids = selectedModuleIds;
     if (selectedReleaseIds.length > 0) properties.release_ids = selectedReleaseIds;
+    // 产品与模块同发：服务端按「模块必须属于产品」校验，只发模块会被拒
+    if (selectedProductId) {
+      properties.product_id = selectedProductId;
+      properties.product_module_id = selectedProductModuleId;
+    }
 
     const updatePayloads: { issueIds: string[]; properties: TBatchUpdateProperties }[] = [];
 
@@ -295,6 +307,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
       setSelectedCycleId(null);
       setSelectedModuleIds([]);
       setSelectedReleaseIds([]);
+      setSelectedProductId(null);
+      setSelectedProductModuleId(null);
       
     } finally {
       setIsUpdating(false);
@@ -463,6 +477,32 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             buttonClassName={actionPillClassName}
             multiple
             showCount
+            showTooltip
+          />
+          <ProductDropdown
+            projectId={projectId ? projectId.toString() : undefined}
+            value={selectedProductId}
+            onChange={(productId) => {
+              setSelectedProductId(productId);
+              setSelectedProductModuleId(null);
+            }}
+            disabled={false}
+            placeholder="选择产品"
+            buttonVariant="transparent-with-text"
+            buttonContainerClassName={actionPillContainerClassName}
+            buttonClassName={actionPillClassName}
+            showTooltip
+          />
+          <ProductModuleDropdown
+            projectId={projectId ? projectId.toString() : undefined}
+            productId={selectedProductId}
+            value={selectedProductModuleId}
+            onChange={(moduleId) => setSelectedProductModuleId(moduleId)}
+            disabled={false}
+            placeholder="选择产品模块"
+            buttonVariant="transparent-with-text"
+            buttonContainerClassName={actionPillContainerClassName}
+            buttonClassName={cn(actionPillClassName, !selectedProductId && "opacity-50 cursor-not-allowed")}
             showTooltip
           />
 

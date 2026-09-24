@@ -534,6 +534,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   isDraft={isDraft}
                   handleFormChange={handleFormChange}
                   setSelectedParentIssue={setSelectedParentIssue}
+                  setValue={setValue}
                 />
               </div>
               {showActionButtons && (

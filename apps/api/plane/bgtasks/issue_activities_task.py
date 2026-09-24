@@ -28,13 +28,16 @@ from plane.db.models import (
     IssueSubscriber,
     Label,
     Module,
+    Product,
     Project,
     Release,
+    RequirementModule,
     State,
     TypeExtraField,
     User,
 )
 from plane.settings.redis import redis_instance
+from plane.utils.issue_product import module_path_label
 from plane.utils.exception_logger import log_exception
 from plane.utils.issue_relation_mapper import get_inverse_relation
 from plane.utils.uuid import is_valid_uuid
@@ -281,6 +284,111 @@ def track_priority(
                 epoch=epoch,
             )
         )
+
+
+# Track changes in product of the issue
+def track_product(
+    requested_data,
+    current_instance,
+    issue_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    issue_activities,
+    epoch,
+):
+    current_product_id = current_instance.get("product_id")
+    requested_product_id = requested_data.get("product_id")
+
+    if current_product_id is not None and not is_valid_uuid(current_product_id):
+        current_product_id = None
+    if requested_product_id is not None and not is_valid_uuid(requested_product_id):
+        requested_product_id = None
+
+    if str(current_product_id) == str(requested_product_id):
+        return
+
+    old_product = Product.objects.filter(pk=current_product_id).first() if current_product_id else None
+    new_product = Product.objects.filter(pk=requested_product_id).first() if requested_product_id else None
+
+    issue_activities.append(
+        IssueActivity(
+            issue_id=issue_id,
+            actor_id=actor_id,
+            verb="removed" if new_product is None else "updated",
+            old_value=old_product.name if old_product else "",
+            new_value=new_product.name if new_product else "",
+            field="product",
+            project_id=project_id,
+            workspace_id=workspace_id,
+            comment="updated the product to",
+            old_identifier=old_product.id if old_product else None,
+            new_identifier=new_product.id if new_product else None,
+            epoch=epoch,
+        )
+    )
+
+    # 换产品时服务端会把不属于新产品的旧模块清空；载荷没显式带模块的话这里补记
+    current_module_id = current_instance.get("product_module_id")
+    if "product_module_id" not in requested_data and current_module_id:
+        old_module = RequirementModule.objects.filter(pk=current_module_id).first()
+        if old_module is None or str(old_module.product_id) != str(requested_product_id):
+            issue_activities.append(
+                IssueActivity(
+                    issue_id=issue_id,
+                    actor_id=actor_id,
+                    verb="removed",
+                    old_value=module_path_label(current_module_id),
+                    new_value="",
+                    field="product_module",
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    comment="updated the product module to",
+                    old_identifier=current_module_id,
+                    new_identifier=None,
+                    epoch=epoch,
+                )
+            )
+
+
+# Track changes in product module of the issue
+def track_product_module(
+    requested_data,
+    current_instance,
+    issue_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    issue_activities,
+    epoch,
+):
+    current_module_id = current_instance.get("product_module_id")
+    requested_module_id = requested_data.get("product_module_id")
+
+    if current_module_id is not None and not is_valid_uuid(current_module_id):
+        current_module_id = None
+    if requested_module_id is not None and not is_valid_uuid(requested_module_id):
+        requested_module_id = None
+
+    if str(current_module_id) == str(requested_module_id):
+        return
+
+    issue_activities.append(
+        IssueActivity(
+            issue_id=issue_id,
+            actor_id=actor_id,
+            verb="removed" if requested_module_id is None else "updated",
+            old_value=module_path_label(current_module_id) if current_module_id else "",
+            new_value=module_path_label(requested_module_id) if requested_module_id else "",
+            field="product_module",
+            project_id=project_id,
+            workspace_id=workspace_id,
+            comment="updated the product module to",
+            old_identifier=current_module_id,
+            new_identifier=requested_module_id,
+            epoch=epoch,
+        )
+    )
 
 
 # Track changes in state of the issue
@@ -818,6 +926,8 @@ def update_issue_activity(
         "estimate_point": track_estimate_points,
         "archived_at": track_archive_at,
         "closed_to": track_closed_to,
+        "product_id": track_product,
+        "product_module_id": track_product_module,
         # External endpoint keys
         "parent": track_parent,
         "state": track_state,

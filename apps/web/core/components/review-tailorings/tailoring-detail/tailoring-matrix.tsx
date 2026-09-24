@@ -356,7 +356,7 @@ export const TailoringMatrix = ({
               const movableCells = cells.filter((cell) => !getMoveBlockReason(cell));
               // 字号按类型分：挪出来的活动脱离了父评审成了顶层行，也还是活动的字号
               const isActivityRow = row.isChild || STAGE_REVIEW_ACTIVITY_KINDS.includes(row.kind as EStageReviewKind);
-              // 格子全挪走了的原处：标题压淡，只剩「已移至」的空位
+              // 格子全挪走、移动还没生效的原处：标题压淡，只剩「已移至」的空位（生效后这行由模型层藏掉）
               const isVacated = cells.length === 0 && row.movedOut.size > 0;
               return (
                 <tr key={row.rowKey} className="group">

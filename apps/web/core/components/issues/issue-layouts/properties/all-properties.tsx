@@ -39,6 +39,8 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
+import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
+import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -285,6 +287,31 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     [issue, workspaceSlug, storeContext, showIssueUpdateErrorToast]
   );
 
+  // 产品 / 产品模块是工作项上的单值字段，直接走 PATCH；换产品同发清空模块
+  const handleProduct = useCallback(
+    async (productId: string | null) => {
+      if (!updateIssue || !issue || (issue.product_id ?? null) === productId) return;
+      try {
+        await updateIssue(issue.project_id, issue.id, { product_id: productId, product_module_id: null });
+      } catch (error) {
+        showIssueUpdateErrorToast(error);
+      }
+    },
+    [issue, updateIssue, showIssueUpdateErrorToast]
+  );
+
+  const handleProductModule = useCallback(
+    async (moduleId: string | null) => {
+      if (!updateIssue || !issue || (issue.product_module_id ?? null) === moduleId) return;
+      try {
+        await updateIssue(issue.project_id, issue.id, { product_module_id: moduleId });
+      } catch (error) {
+        showIssueUpdateErrorToast(error);
+      }
+    },
+    [issue, updateIssue, showIssueUpdateErrorToast]
+  );
+
   const handleStartDate = async (date: Date | null) => {
     if (updateIssue)
       await updateIssue(issue.project_id, issue.id, { start_date: date ? renderFormattedPayloadDate(date) : null });
@@ -529,6 +556,43 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
           </>
         )}
       </>
+
+      {/* product */}
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="product">
+        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+          <ProductDropdown
+            buttonContainerClassName="truncate max-w-40"
+            projectId={issue?.project_id ?? undefined}
+            value={issue?.product_id ?? null}
+            valueName={issue?.product_name ?? null}
+            onChange={handleProduct}
+            disabled={isReadOnly}
+            renderByDefault={isMobile}
+            placeholder={t("product_field.label")}
+            buttonVariant="border-with-text"
+            showTooltip
+          />
+        </div>
+      </WithDisplayPropertiesHOC>
+
+      {/* product module */}
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="product_module">
+        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+          <ProductModuleDropdown
+            buttonContainerClassName="truncate max-w-40"
+            projectId={issue?.project_id ?? undefined}
+            productId={issue?.product_id ?? null}
+            value={issue?.product_module_id ?? null}
+            valueName={issue?.product_module_name ?? null}
+            onChange={handleProductModule}
+            disabled={isReadOnly}
+            renderByDefault={isMobile}
+            placeholder={t("product_module_field.label")}
+            buttonVariant="border-with-text"
+            showTooltip
+          />
+        </div>
+      </WithDisplayPropertiesHOC>
 
       {/* estimates */}
       {projectId && areEstimateEnabledByProjectId(projectId?.toString()) && (
