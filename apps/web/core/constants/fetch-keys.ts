@@ -205,5 +205,3 @@ export const EPICS_PROPERTIES_AND_OPTIONS = (projectId: string, projectRole: EUs
 export const WORK_ITEM_TYPES_PROPERTIES_AND_OPTIONS = (projectId: string, projectRole: EUserPermissions | undefined) =>
   `WORK_ITEM_TYPES_PROPERTIES_AND_OPTIONS_${projectId.toString().toUpperCase()}_${projectRole}`;
 
-export const PROJECT_MILESTONES = (projectId: string, projectRole: EUserPermissions | undefined) =>
-  `PROJECT_MILESTONES_${projectId.toString().toUpperCase()}_${projectRole}`;

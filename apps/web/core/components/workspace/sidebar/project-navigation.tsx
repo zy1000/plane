@@ -14,7 +14,7 @@ import {
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_DEFECTS_VIEW_PERMISSION_KEY,
   PROJECT_INTAKE_VIEW_PERMISSION_KEY,
-  PROJECT_MILESTONE_VIEW_PERMISSION_KEY,
+  PROJECT_STAGE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
   PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
@@ -48,7 +48,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { Rss, Milestone, Folder, Package, Rocket } from "lucide-react";
+import { Rss, Layers, Folder, Package, Rocket } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -245,13 +245,13 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         sortOrder: 7,
       },
       {
-        i18n_key: "sidebar.milestones",
-        key: "milestones",
-        name: "里程碑",
-        href: `/${workspaceSlug}/projects/${projectId}/milestones`,
-        icon: Milestone,
+        i18n_key: "sidebar.stages",
+        key: "stages",
+        name: "阶段",
+        href: `/${workspaceSlug}/projects/${projectId}/stages`,
+        icon: Layers,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-        permissionKeys: [PROJECT_MILESTONE_VIEW_PERMISSION_KEY],
+        permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 8,
       },

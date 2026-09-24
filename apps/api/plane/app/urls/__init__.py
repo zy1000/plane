@@ -33,7 +33,7 @@ from .exporter import urlpatterns as exporter_urls
 from .custom import urlpatterns as custom_urls
 from .issue_type import urlpatterns as issue_type_urls
 from .qa import urlpatterns as qa_urls
-from .milestone import urlpatterns as milestone_urls
+from .project_stage import urlpatterns as project_stage_urls
 from .filestore import urlpatterns as filestore_urls
 from .changelog import urlpatterns as changelog_urls
 from .workflow import urlpatterns as workflow_urls
@@ -72,7 +72,7 @@ urlpatterns = [
     *issue_type_urls,
     *exporter_urls,
     *qa_urls,
-    *milestone_urls,
+    *project_stage_urls,
     *filestore_urls,
     *changelog_urls,
     *workflow_urls,

@@ -44,22 +44,6 @@ class DevModeLiteSerializer(BaseSerializer):
         read_only_fields = fields
 
 
-class DevModeStageLiteSerializer(BaseSerializer):
-    """挂在评审实例上的只读阶段信息（``StageReview.stage_detail``）。
-
-    ``label`` 是 ``name`` 的别名：这个字段原先指向 ``product_stage`` 字典值，前端读的是
-    ``label``。批次 4 换成模式阶段后两个名字都给，省得所有消费方同一次全改。
-    """
-
-    code = serializers.CharField(source="stage_type.code", read_only=True)
-    label = serializers.CharField(source="name", read_only=True)
-
-    class Meta:
-        model = DevModeStage
-        fields = ["id", "name", "label", "code", "sort_order"]
-        read_only_fields = fields
-
-
 class DevModeSerializer(BaseSerializer):
     """研发模式列表 / 创建 / 编辑。
 

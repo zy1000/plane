@@ -522,7 +522,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
     def get(self, request, slug, project_id):
         from plane.db.models.page import ProjectPage
         from plane.db.models.view import IssueView
-        from plane.db.models.milestone import Milestone
+        from plane.db.models.project_stage import ProjectStage, ProjectStageStatus
         from plane.db.models.qa import (
             CaseReview,
             CaseReviewRecord,
@@ -600,12 +600,16 @@ class ProjectStatisticsEndpoint(BaseAPIView):
         cycles = Cycle.objects.filter(project_id=project_id, archived_at__isnull=True, deleted_at__isnull=True)
         active_cycles = cycles.filter(start_date__lte=now, end_date__gte=now).count()
 
-        milestone_state_distribution = (
-            Milestone.objects.filter(project_id=project_id, deleted_at__isnull=True)
-            .values("state")
-            .annotate(count=Count("id"))
-            .order_by("-count")
+        # 项目阶段按状态分布；「已延期」不落库，按 计划结束 < 今天 且未完成 单独数一条
+        project_stages = ProjectStage.objects.filter(project_id=project_id, deleted_at__isnull=True)
+        stage_status_distribution = list(
+            project_stages.values("status").annotate(count=Count("id")).order_by("-count")
         )
+        delayed_stage_count = project_stages.filter(
+            end_date__lt=now.date()
+        ).exclude(status=ProjectStageStatus.COMPLETED).count()
+        if delayed_stage_count:
+            stage_status_distribution.append({"status": "delayed", "count": delayed_stage_count})
 
         cycles_for_release_timeline = list(
             cycles.filter(end_date__isnull=False)
@@ -904,12 +908,8 @@ class ProjectStatisticsEndpoint(BaseAPIView):
         timeline_end_candidates = []
         cycle_min_start = cycles.aggregate(min_start=models.Min("start_date")).get("min_start")
         cycle_max_end = cycles.aggregate(max_end=models.Max("end_date")).get("max_end")
-        milestone_min_start = Milestone.objects.filter(project_id=project_id, deleted_at__isnull=True).aggregate(
-            min_start=models.Min("start_date")
-        ).get("min_start")
-        milestone_max_end = Milestone.objects.filter(project_id=project_id, deleted_at__isnull=True).aggregate(
-            max_end=models.Max("end_date")
-        ).get("max_end")
+        stage_min_start = project_stages.aggregate(min_start=models.Min("start_date")).get("min_start")
+        stage_max_end = project_stages.aggregate(max_end=models.Max("end_date")).get("max_end")
         issue_min_start = issues.aggregate(min_start=models.Min("start_date")).get("min_start")
         issue_max_target = issues.aggregate(max_target=models.Max("target_date")).get("max_target")
 
@@ -917,15 +917,15 @@ class ProjectStatisticsEndpoint(BaseAPIView):
             timeline_start_candidates.append(project.created_at.date())
         if cycle_min_start:
             timeline_start_candidates.append(cycle_min_start.date())
-        if milestone_min_start:
-            timeline_start_candidates.append(milestone_min_start)
+        if stage_min_start:
+            timeline_start_candidates.append(stage_min_start)
         if issue_min_start:
             timeline_start_candidates.append(issue_min_start)
 
         if cycle_max_end:
             timeline_end_candidates.append(cycle_max_end.date())
-        if milestone_max_end:
-            timeline_end_candidates.append(milestone_max_end)
+        if stage_max_end:
+            timeline_end_candidates.append(stage_max_end)
         if issue_max_target:
             timeline_end_candidates.append(issue_max_target)
 
@@ -1005,7 +1005,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
                 "active_cycles": active_cycles,
                 "total_cycles": cycles.count(),
                 "total_modules": Module.objects.filter(project_id=project_id, archived_at__isnull=True, deleted_at__isnull=True).count(),
-                "total_milestones": Milestone.objects.filter(project_id=project_id, deleted_at__isnull=True).count(),
+                "total_stages": project_stages.count(),
                 "total_members": total_members,
                 "total_pages": total_pages,
                 "total_views": total_views,
@@ -1052,7 +1052,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
                 "priorities": list(priority_distribution),
                 "issue_types": list(type_distribution),
                 "module_status": list(module_status_distribution),
-                "milestone_state": list(milestone_state_distribution),
+                "stage_status": stage_status_distribution,
                 "test_case_type": list(test_case_type_distribution),
                 "test_case_test_type": list(test_case_test_type_distribution),
                 "test_case_priority": list(test_case_priority_distribution),

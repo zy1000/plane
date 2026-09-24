@@ -18,7 +18,7 @@ import { ProjectService, ProjectStateService, ProjectArchiveService } from "@/se
 // store
 import type { CoreRootStore } from "../root.store";
 
-type ProjectOverviewCollapsible = "links" | "attachments" | "milestones";
+type ProjectOverviewCollapsible = "links" | "attachments" | "stages";
 
 export interface IProjectStore {
   // observables
@@ -85,7 +85,7 @@ export class ProjectStore implements IProjectStore {
   fetchStatus: TFetchStatus = undefined;
   projectMap: Record<string, TProject> = {};
   projectAnalyticsCountMap: Record<string, TProjectAnalyticsCount> = {};
-  openCollapsibleSection: ProjectOverviewCollapsible[] = ["milestones"];
+  openCollapsibleSection: ProjectOverviewCollapsible[] = ["stages"];
   lastCollapsibleAction: ProjectOverviewCollapsible | null = null;
 
   // root store

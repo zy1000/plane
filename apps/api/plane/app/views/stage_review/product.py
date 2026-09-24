@@ -18,6 +18,7 @@ from plane.app.serializers.stage_review import StageReviewListSerializer
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.mixins import get_scoped_product
 from plane.db.models import Project, ProductProject, StageReview, StageReviewStatus
+from plane.utils.review_tailoring import project_stages
 
 from .review import _attachment_count_annotation, _tailoring_annotations
 
@@ -137,7 +138,7 @@ class ProductStageReviewViewSet(BaseViewSet):
         两件事。所以分组键是 ``{project_id}:{stage_id}`` 合成出来的，``label`` 仍只是
         阶段名，项目名单独给一列让前端淡色缀在后面。
 
-        顺序按项目名 → 阶段在模式里的顺序，同一个项目的阶段连在一起。
+        顺序按项目名 → 该项目阶段的树先序，同一个项目的阶段连在一起。
 
         从不带 annotate 的 queryset 出发，理由同项目侧 ``_scoped_queryset``。
         """
@@ -148,12 +149,12 @@ class ProductStageReviewViewSet(BaseViewSet):
         def by_status(value):
             return Count("id", filter=Q(status=value), distinct=True)
 
-        rows = (
+        rows = list(
             self._base_queryset(slug, product, project_ids)
             .values(
                 "stage_id",
                 "stage__name",
-                "stage__sort_order",
+                "stage__parent_id",
                 "project_id",
                 "project__name",
             )
@@ -164,13 +165,31 @@ class ProductStageReviewViewSet(BaseViewSet):
                 in_approval=by_status(StageReviewStatus.IN_APPROVAL),
                 completed=by_status(StageReviewStatus.COMPLETED),
             )
-            .order_by("project__name", "stage__sort_order", "stage__name")
+        )
+        # 阶段顺序是各项目阶段的树先序（父子阶段的 sort_order 跨层不可比），按项目取一次树再排
+        order = {}
+        for project_id in {row["project_id"] for row in rows}:
+            for stage in project_stages(project_id):
+                order[stage.id] = (stage.rank, stage.depth)
+        rows.sort(
+            key=lambda row: (
+                row["project__name"],
+                order.get(row["stage_id"], (len(order), 0))[0],
+                row["stage__name"],
+            )
         )
         return Response(
             [
                 {
                     "stage_id": f"{row['project_id']}:{row['stage_id']}",
                     "label": row["stage__name"],
+                    "parent_id": (
+                        f"{row['project_id']}:{row['stage__parent_id']}"
+                        if row["stage__parent_id"]
+                        else None
+                    ),
+                    "depth": order.get(row["stage_id"], (0, 0))[1],
+                    "sort_order": order.get(row["stage_id"], (len(order), 0))[0],
                     "project_id": str(row["project_id"]),
                     "project_name": row["project__name"],
                     # 一组恒属于一个项目，字段保留是为了和项目侧的形状对齐

@@ -10,12 +10,12 @@ import { STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
  * 矩阵的纯派生逻辑。全部是纯函数，方便在不挂载组件的情况下推演联动与锁定规则。
  */
 
-/** 矩阵的一行 = 模式阶段 × 模板节点，横向铺开每个产品的格子 */
+/** 矩阵的一行 = 项目阶段 × 模板节点，横向铺开每个产品的格子 */
 export type TMatrixRow = {
   /**
    * 行的身份是 `${stageId}:${templateId}`，不是单独的 templateId。
    *
-   * 同一个模板节点在项目模式的两个同类型阶段下（o-1、o-2）各占一行，各自独立勾选，
+   * 同一个模板节点在父子 / 同类型阶段下各占一行，各自独立勾选，
    * 光靠 templateId 认不出是哪一行 —— React key、格子索引、批量选中都要用这个键。
    */
   rowKey: string;
@@ -97,7 +97,9 @@ const buildRows = (
 export type TMatrixGroup = {
   stageId: string;
   stageLabel: string;
+  /** 树先序的秩；阶段分段头按 stageDepth 缩进 */
   sortOrder: number;
+  stageDepth: number;
   rows: TMatrixRow[];
 };
 
@@ -127,6 +129,8 @@ const withMovedRows = (
       stage_id: item.stage_id,
       stage_label: item.stage_label,
       stage_sort_order: item.stage_sort_order,
+      stage_parent_id: item.stage_parent_id,
+      stage_depth: item.stage_depth,
       kind: item.kind,
       title: item.title,
       sort_order: item.template_sort_order,
@@ -163,7 +167,10 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
   }
 
   const effectiveRows = withMovedRows(rows, items, cellsByRowKey);
-  const bucketByStage = new Map<string, { label: string; sortOrder: number; rows: TReviewTailoringRow[] }>();
+  const bucketByStage = new Map<
+    string,
+    { label: string; sortOrder: number; depth: number; rows: TReviewTailoringRow[] }
+  >();
   for (const row of effectiveRows) {
     const bucket = bucketByStage.get(row.stage_id);
     if (bucket) bucket.rows.push(row);
@@ -171,6 +178,7 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
       bucketByStage.set(row.stage_id, {
         label: row.stage_label,
         sortOrder: row.stage_sort_order,
+        depth: row.stage_depth ?? 0,
         rows: [row],
       });
   }
@@ -180,6 +188,7 @@ export const buildMatrixGroups = (rows: TReviewTailoringRow[], items: TReviewTai
       stageId,
       stageLabel: bucket.label,
       sortOrder: bucket.sortOrder,
+      stageDepth: bucket.depth,
       rows: buildRows(bucket.rows, cellsByRowKey, movedOutByRowKey).filter(
         // 格子全被挪走且移动已生效的原处行：矩阵是最终结果，不再画空壳
         (row) => row.cells.size > 0 || row.movedOut.size > 0 || !settledVacatedRowKeys.has(row.rowKey)

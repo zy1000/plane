@@ -60,19 +60,22 @@ export type TReviewTailoringProduct = {
  * 行**不从格子反推**：刚加完评审还没加产品的表一个格子都没有，但行必须画得出来。
  */
 /**
- * 矩阵纵轴的一行 = **项目研发模式的阶段 × 模板节点**。
+ * 矩阵纵轴的一行 = **项目阶段 × 模板节点**。
  *
- * 同一个模板节点在模式的两个同类型阶段下（o-1、o-2）各占一行，所以行的身份是
+ * 同一个模板节点在父子 / 同类型阶段下各占一行，所以行的身份是
  * `${stage_id}:${template_id}`，单独的 `template_id` 认不出是哪一行。
  */
 export type TReviewTailoringRow = {
   template_id: string;
   /** 评审活动指向它所属的评审；顶层节点为 null */
   parent_template_id: string | null;
-  /** 项目研发模式里的阶段（DevModeStage），不是评审树上的阶段类型 */
+  /** 项目阶段（ProjectStage），不是评审树上的阶段类型 */
   stage_id: string;
   stage_label: string;
+  /** 树先序的秩（后端算好），按它排就是父在前、子紧跟 */
   stage_sort_order: number;
+  stage_parent_id: string | null;
+  stage_depth: number;
   kind: string;
   title: string;
   sort_order: number;
@@ -84,11 +87,13 @@ export type TReviewTailoringRow = {
   origin_stage_label: string | null;
 };
 
-/** 「添加评审」清单里的一条：模式阶段 × 可选节点。`in_matrix` = 这个节点已经在纵轴上 */
+/** 「添加评审」清单里的一条：项目阶段 × 可选节点。`in_matrix` = 这个节点已经在纵轴上 */
 export type TReviewTailoringAxisOption = {
   stage_id: string;
   stage_label: string;
   stage_sort_order: number;
+  stage_parent_id: string | null;
+  stage_depth: number;
   template_id: string;
   parent_template_id: string | null;
   kind: string;
@@ -97,17 +102,19 @@ export type TReviewTailoringAxisOption = {
   in_matrix: boolean;
 };
 
-/** 矩阵里的一个格子 = (产品, 模式阶段, 模板节点) */
+/** 矩阵里的一个格子 = (产品, 项目阶段, 模板节点) */
 export type TReviewTailoringItem = {
   id: string;
   product_id: string;
   template_id: string;
   /** 评审活动指向它所属的评审；顶层节点为 null。前端靠它把纵轴折成树 */
   parent_template_id: string | null;
-  /** 格子落在项目研发模式的哪个阶段。纵轴跨全部阶段，前端靠这三个字段折成分组 */
+  /** 格子落在项目的哪个阶段。纵轴跨全部阶段（父子皆有），前端靠这几个字段折成分组 */
   stage_id: string;
   stage_label: string;
   stage_sort_order: number;
+  stage_parent_id: string | null;
+  stage_depth: number;
   /** 评审活动挪过阶段时，纵轴上本来那一格的阶段；没挪过（或挪回原处）为 null */
   origin_stage_id: string | null;
   origin_stage_label: string | null;
@@ -182,13 +189,17 @@ export type TReviewTailoringChange = {
   will_skip?: boolean;
 };
 
+/** 「移到阶段」候选：本项目的全部阶段（父子皆有，树先序）。键名沿用 mode_stages */
 export type TReviewTailoringModeStage = {
   id: string;
   name: string;
   /** 阶段类型的编码（M010 …） */
   code: string;
+  /** 树先序的秩 */
   sort_order: number;
   stage_type_name: string;
+  parent_id: string | null;
+  depth: number;
 };
 
 /** 生效时被跳过的一条移动（签批时活动已评审） */

@@ -128,10 +128,7 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t(`${DEV_MODE_I18N}.toast.stage_delete_failed`),
-        message:
-          payload?.code === "DEV_MODE_STAGE_IN_USE"
-            ? t(`${DEV_MODE_I18N}.errors.dev_mode_stage_in_use`, { names: (payload.stages ?? []).join("、") })
-            : (payload?.error ?? t(`${DEV_MODE_I18N}.errors.generic`)),
+        message: payload?.error ?? t(`${DEV_MODE_I18N}.errors.generic`),
       });
     } finally {
       setIsDeleting(false);

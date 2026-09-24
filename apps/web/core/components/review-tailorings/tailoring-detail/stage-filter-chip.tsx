@@ -8,6 +8,8 @@ export type TStageFilterOption = {
   label: string;
   hint?: string;
   dim?: boolean;
+  /** 子阶段缩进一级 */
+  depth?: number;
 };
 
 /**
@@ -101,7 +103,9 @@ export const StageFilterChip = ({
               option.id === value && "font-medium text-accent-primary",
               option.dim && "text-tertiary"
             )}
+            style={option.depth ? { paddingLeft: option.depth * 12 } : undefined}
           >
+            {option.depth ? <span className="mr-1 text-placeholder">└</span> : null}
             {option.label}
           </span>
           {option.hint && <span className="shrink-0 text-11 text-tertiary tabular-nums">{option.hint}</span>}

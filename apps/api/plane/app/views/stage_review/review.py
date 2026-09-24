@@ -36,7 +36,7 @@ from plane.app.serializers.user import UserLiteSerializer
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import (
-    DevModeStage,
+    ProjectStage,
     FileAsset,
     Product,
     ProductProject,
@@ -236,11 +236,11 @@ class StageReviewViewSet(BaseViewSet):
 
     @allow_fine_permission(*STAGE_REVIEW_READ_KEYS)
     def stages(self, request, slug, project_id):
-        """左栏的阶段列表：**项目研发模式的全部阶段**，带四个状态各自的条数。
+        """左栏的阶段列表：**本项目的全部阶段（父子皆有）**，带四个状态各自的条数。
 
-        阶段来自 ``project.dev_mode`` 而不是评审实例自己 —— 一条评审都还没生成的阶段
-        也要列出来，否则裁剪表刚生效前左栏是空的，用户看不出这个项目要走哪几步。顺序就是
-        模式里的拖拽顺序。四个状态计数给左栏的分段进度条用。
+        阶段来自项目阶段表而不是评审实例自己 —— 一条评审都还没生成的阶段也要列出来，
+        否则裁剪表刚生效前左栏是空的。顺序是树先序（``sort_order`` 吐的是 rank），
+        ``parent_id`` / ``depth`` 给左栏缩进。四个状态计数给分段进度条用。
         """
         counted = (
             self._scoped_queryset()
@@ -284,6 +284,9 @@ class StageReviewViewSet(BaseViewSet):
                     "label": stage.name,
                     # 抽屉里改阶段的下拉要显示编码
                     "code": stage.stage_type.code,
+                    "parent_id": str(stage.parent_id) if stage.parent_id else None,
+                    "depth": stage.depth,
+                    "sort_order": stage.rank,
                     **{
                         key: by_stage.get(stage.id, empty)[key]
                         for key in empty
@@ -347,11 +350,11 @@ class StageReviewViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         product = Product.objects.filter(id=data["product_id"]).first()
-        # 阶段必须是**本项目研发模式**的阶段：别的模式（甚至别的工作区）的阶段 id 传上来
-        # 会让这条评审落在一个项目里根本看不到的分组里。前端目前没有手工新建入口，
-        # 只有脚本 / 接口直调会走到这里，更要在入口挡住。
-        stage = DevModeStage.objects.filter(
-            id=data["stage_id"], dev_mode_id=project.dev_mode_id
+        # 阶段必须是**本项目**的阶段（父子皆可）：别的项目的阶段 id 传上来会让这条评审落在
+        # 一个项目里根本看不到的分组里。前端目前没有手工新建入口，只有脚本 / 接口直调会
+        # 走到这里，更要在入口挡住。
+        stage = ProjectStage.objects.filter(
+            id=data["stage_id"], project_id=project.id
         ).first()
         if product is None or stage is None:
             return Response(
@@ -384,15 +387,15 @@ class StageReviewViewSet(BaseViewSet):
         data = dict(serializer.validated_data)
         stage_id = data.pop("stage_id", None)
         if stage_id is not None:
-            # 同新建：只认本项目研发模式的阶段
-            data["stage"] = DevModeStage.objects.filter(
-                id=stage_id, dev_mode_id=review.project.dev_mode_id
+            # 同新建：只认本项目的阶段
+            data["stage"] = ProjectStage.objects.filter(
+                id=stage_id, project_id=review.project_id
             ).first()
             if data["stage"] is None:
                 return Response(
                     {
-                        "error": "目标阶段不在本项目的研发模式里",
-                        "code": "STAGE_REVIEW_STAGE_NOT_IN_MODE",
+                        "error": "目标阶段不属于本项目",
+                        "code": "STAGE_REVIEW_STAGE_NOT_IN_PROJECT",
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )

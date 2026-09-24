@@ -36,8 +36,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from plane.db.models import (
-    DevModeStage,
-    DevModeStageTemplate,
+    ProjectStage,
     FileAsset,
     ProductProject,
     ReviewTailoring,
@@ -57,6 +56,10 @@ from plane.db.models import (
 )
 from plane.db.models.stage_review import ACTIVITY_KINDS, template_kind_allowed
 from plane.utils.requirement import get_requirement_eligible_user_ids
+from plane.utils.project_stage import selectable_template_ids_by_stage, tree_order
+
+#: 已生效裁剪表修订时，项目新加的阶段补出来的格子默认不勾、原因自动填这句
+NEW_STAGE_DEFAULT_REASON = "阶段新增，默认未纳入"
 
 
 class ReviewTailoringError(Exception):
@@ -153,15 +156,15 @@ def _axis_template_ids(tailoring):
 
 @dataclass(frozen=True)
 class TailoringRow:
-    """纵轴展开后的一行：**模式阶段 × 模板节点**。
+    """纵轴展开后的一行：**项目阶段 × 模板节点**。
 
     序列化器直接吃这个对象（``ReviewTailoringRowSerializer``），所以属性名就是前端契约。
     """
 
-    stage: DevModeStage
+    stage: ProjectStage
     template: StageReviewTemplate
     #: 只有「挪进来才有的行」才有值：这一行的格子全是从别的阶段挪过来的（见 ``detail_rows``）
-    origin_stage: DevModeStage | None = None
+    origin_stage: ProjectStage | None = None
 
     @property
     def key(self):
@@ -177,34 +180,30 @@ class TailoringRow:
 
 
 def project_stages(project_id):
-    """项目研发模式的阶段，按模式里的拖拽顺序。这就是裁剪表与评审列表的阶段顺序。"""
-    return list(
-        DevModeStage.objects.filter(dev_mode__projects__id=project_id)
-        .select_related("stage_type")
-        .order_by("sort_order", "created_at", "id")
-    )
+    """项目的全部阶段（父子皆有），按树先序；每个对象带 ``depth`` / ``rank``。
+
+    这就是裁剪表行、评审列表左栏、移到阶段候选的阶段顺序（``utils/project_stage.py::tree_order``）。
+    """
+    return tree_order(project_id)
+
+
+def stage_rank(stages):
+    """{阶段 id: rank}，给从格子 select_related 出来的、没挂 rank 的阶段对象排序用。"""
+    return {stage.id: stage.rank for stage in stages}
 
 
 def stage_template_ids(stages):
-    """{阶段 id: 该阶段勾选的模板节点 id 集合}。模式里没勾的节点不进裁剪表。"""
-    selected = defaultdict(set)
-    if not stages:
-        return selected
-    for stage_id, template_id in DevModeStageTemplate.objects.filter(
-        dev_mode_stage_id__in=[stage.id for stage in stages]
-    ).values_list("dev_mode_stage_id", "template_id"):
-        selected[stage_id].add(template_id)
-    return selected
+    """{项目阶段 id: 该阶段可选的模板节点 id 集合}（``selectable_template_ids_by_stage``）。"""
+    return selectable_template_ids_by_stage(stages)
 
 
 def _expand_rows(project_id, template_ids):
-    """把纵轴上的模板 id 展开成真正要铺的行：**模式阶段 × 该阶段勾选的启用节点**。
+    """把纵轴上的模板 id 展开成真正要铺的行：**项目阶段（父子皆有）× 该阶段可选的启用节点**。
 
     评审与活动各自独立挑选 —— 只挑了活动就只有活动那一行，挑了评审也不会连带它的活动。
-    一个节点在模式里被两个同类型阶段都勾上，就展开成两行。
+    父阶段与子阶段同类型时各出一行、各自生成实例（与同模式两个同类型阶段各出一行同理）。
 
-    行序 = 阶段的 ``sort_order`` → 节点的 ``sort_order``。阶段这一层的顺序由模式决定，
-    不再看阶段类型的顺序：同类型的 o-1、o-2 靠模式里的拖拽分先后。
+    行序 = 阶段的树先序 → 节点的 ``sort_order``。
     """
     template_ids = list(template_ids)
     if not template_ids:
@@ -260,11 +259,12 @@ def detail_rows(tailoring, items):
             )
     if not extra:
         return rows
+    # 补出来的行的 stage 对象来自格子的 select_related，没挂 rank，按项目阶段树序补一份
+    rank = stage_rank(project_stages(tailoring.project_id))
     return sorted(
         [*rows, *extra.values()],
         key=lambda row: (
-            row.stage.sort_order,
-            str(row.stage.created_at),
+            rank.get(row.stage_id, len(rank)),
             str(row.stage.id),
             row.template.sort_order,
             str(row.template.created_at),
@@ -309,15 +309,13 @@ def create_tailoring(*, project, title, tailoring_kind, description_html, actor)
     详情页逐列添加（``add_products``）。所以新表是一张零列的空表，纵轴要等第一列产品
     进来才显形。
 
-    项目的研发模式一个阶段都没有（Scrum 就是这样）时直接拒绝：纵轴永远展不开，建出来
-    也只是一张永远空着的表。这类模式本来也关掉了评审组件，走到这里说明是自定义模式开了
-    评审却没配阶段。
+    项目一个阶段都没有（模式零阶段且没手建）时直接拒绝：纵轴永远展不开，建出来也只是
+    一张永远空着的表。去「阶段」页从研发模式带出或新建一个再来。
     """
-    if not project_stages(project.id):
+    if not ProjectStage.objects.filter(project_id=project.id).exists():
         raise ReviewTailoringError(
-            "The project's development mode has no stages.",
-            code="REVIEW_TAILORING_MODE_HAS_NO_STAGE",
-            detail={"dev_mode_id": str(project.dev_mode_id)},
+            "The project has no stages.",
+            code="REVIEW_TAILORING_PROJECT_HAS_NO_STAGE",
         )
     tailoring = ReviewTailoring.objects.create(
         workspace_id=project.workspace_id,
@@ -425,7 +423,8 @@ def add_reviews(*, tailoring, template_ids, actor):
             detail={"template_ids": invalid},
         )
 
-    # 模式的勾选是硬边界：项目模式里没有任何阶段勾过的节点不许进表
+    # 硬边界：本项目没有任何一个阶段能选到的节点不许进表（有来源的阶段看模式勾选，
+    # 自建阶段看类型全集）
     stages = project_stages(tailoring.project_id)
     selectable = set()
     for picked in stage_template_ids(stages).values():
@@ -433,8 +432,8 @@ def add_reviews(*, tailoring, template_ids, actor):
     unselected = [tid for tid in template_ids if tid not in selectable]
     if unselected:
         raise ReviewTailoringError(
-            "Some reviews are not enabled by the project's development mode.",
-            code="REVIEW_TAILORING_TEMPLATE_NOT_IN_MODE",
+            "No stage of this project can select some of these reviews.",
+            code="REVIEW_TAILORING_TEMPLATE_NOT_SELECTABLE",
             detail={
                 "template_ids": [str(tid) for tid in unselected],
                 "titles": [candidates[tid].title for tid in unselected],
@@ -672,6 +671,20 @@ def sync_items(*, tailoring, actor):
         for item in _build_items(tailoring, rows, product_ids, actor)
         if (item.product_id, item.stage_id, item.template_id) not in present
     ]
+    # 已生效过的表：项目里新加的阶段（比如刚建的子阶段）补出来的整块格子默认**不勾**，
+    # 原因自动填。否则随手加个子阶段，签批生效就成批生成重复评审。草稿态不受影响。
+    snapshot = tailoring.effective_snapshot or {}
+    if snapshot and missing:
+        known_stage_ids = set()
+        for record in snapshot.values():
+            if isinstance(record, dict):
+                for key in ("stage_id", "origin_stage_id"):
+                    if record.get(key):
+                        known_stage_ids.add(str(record[key]))
+        for item in missing:
+            if str(item.stage_id) not in known_stage_ids:
+                item.selected = False
+                item.reason = NEW_STAGE_DEFAULT_REASON
     if missing:
         ReviewTailoringItem.objects.bulk_create(missing, batch_size=500)
 
@@ -853,8 +866,8 @@ def _move_cells(tailoring, items, cells, actor):
         )
     if not_in_mode:
         raise ReviewTailoringError(
-            "The target stage is not in the project's development mode.",
-            code="REVIEW_TAILORING_STAGE_NOT_IN_MODE",
+            "The target stage does not belong to this project.",
+            code="REVIEW_TAILORING_STAGE_NOT_IN_PROJECT",
             detail={"items": not_in_mode},
         )
     if completed:

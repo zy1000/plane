@@ -32,6 +32,8 @@ export type TStageReviewSidebarGroup = {
   projectName?: string | null;
   /** 产品页按研发阶段分组时：这一组就是产品档案里的当前阶段 */
   isCurrent?: boolean;
+  /** 按阶段分组时：子阶段缩进一级 */
+  depth?: number;
 };
 
 const RESULT_ORDER: string[] = [
@@ -157,7 +159,7 @@ export const useStageReviewGrouping = ({
 
     const describe = (
       key: string
-    ): Pick<TStageReviewSidebarGroup, "name" | "icon" | "stage" | "isCurrent" | "projectName"> => {
+    ): Pick<TStageReviewSidebarGroup, "name" | "icon" | "stage" | "isCurrent" | "projectName" | "depth"> => {
       const sample = sampleByKey.get(key);
       switch (groupBy) {
         case "stage": {
@@ -167,6 +169,7 @@ export const useStageReviewGrouping = ({
             // 产品页：同名阶段在不同项目里各成一组，组名后面淡色缀项目名才分得清
             projectName: crossProject ? (stage?.project_name ?? sample?.project_detail?.name ?? null) : null,
             stage,
+            depth: stage?.depth ?? 0,
             isCurrent: Boolean(currentStageName) && stage?.label === currentStageName,
             icon: <span className={cn("size-2.5 shrink-0 rounded-full border-2", stageNodeClassName(stage))} />,
           };

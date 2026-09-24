@@ -572,7 +572,7 @@ def update_review(review, *, actor, validated_data):
 
     每个改动的字段写一条轨迹，**旧值与新值都记**：时间线要写成「把负责人从 A 改为 B」。
 
-    ``stage``（视图已解析成项目模式里的 ``DevModeStage``）只有手工评审能改，走
+    ``stage``（视图已解析成本项目的 ``ProjectStage``，父子皆可）只有手工评审能改，走
     ``move_review_stage``；裁剪表生成的评审，阶段由裁剪表决定，要挪请走裁剪表修订。
     """
     assert_not_locked(review)

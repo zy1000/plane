@@ -413,18 +413,11 @@ export const coreRoutes: RouteConfigEntry[] = [
             ]
           ),
 
-          // Milestones List
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(list)/layout.tsx", [
+          // Project stages（PMS-101，原 milestones）
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stages/(list)/layout.tsx", [
             route(
-              ":workspaceSlug/projects/:projectId/milestones",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(list)/page.tsx"
-            ),
-          ]),
-          // Milestone - Work item relation
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(detail)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/milestones/:milestoneId",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(detail)/[milestoneId]/page.tsx"
+              ":workspaceSlug/projects/:projectId/stages",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stages/(list)/page.tsx"
             ),
           ]),
 

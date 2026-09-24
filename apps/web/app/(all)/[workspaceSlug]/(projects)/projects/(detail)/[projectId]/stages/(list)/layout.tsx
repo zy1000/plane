@@ -1,13 +1,12 @@
 import { Outlet } from "react-router";
-// components
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { MilestonesListHeader } from "./header";
+import { ProjectStagesHeader } from "./header";
 
-export default function ProjectMilestonesListLayout() {
+export default function ProjectStagesLayout() {
   return (
     <>
-      <AppHeader header={<MilestonesListHeader />} />
+      <AppHeader header={<ProjectStagesHeader />} />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>

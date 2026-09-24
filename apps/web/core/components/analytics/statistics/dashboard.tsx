@@ -696,7 +696,7 @@ function Dashboard() {
               </div>
 
               <div className="mt-1 flex flex-wrap items-center justify-between gap-2 rounded border border-subtle bg-layer-1 px-3 py-2 text-xs text-placeholder">
-                <div>数据来源：工作项（Issue）/ 迭代（Cycle）/ 里程碑（Milestone）/ QA（Plan & Review）。</div>
+                <div>数据来源：工作项（Issue）/ 迭代（Cycle）/ 阶段（ProjectStage）/ QA（Plan & Review）。</div>
                 <Button size="small" onClick={() => refresh()} disabled={exporting}>
                   刷新数据
                 </Button>

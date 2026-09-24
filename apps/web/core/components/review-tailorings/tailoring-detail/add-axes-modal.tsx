@@ -29,10 +29,10 @@ const PRODUCT_COLS = "grid grid-cols-[1rem_1.5rem_1fr_auto] items-center gap-x-3
 type TBlocked = "in_matrix" | null;
 
 /**
- * 平铺后的一行：模式阶段 × 节点，评审和评审活动平级。
+ * 平铺后的一行：项目阶段 × 节点，评审和评审活动平级。
  *
- * **勾选的单位是节点（``templateId``）而不是这一行**：纵轴按节点存，加一个节点等于在模式
- * 勾过它的每个阶段下都加一行。所以同一个节点的几行会一起亮起来，行上标了它横跨几个阶段。
+ * **勾选的单位是节点（``templateId``）而不是这一行**：纵轴按节点存，加一个节点等于在本项目
+ * 每个能选它的阶段（父子皆有）下都加一行。所以同一个节点的几行会一起亮起来，行上标了它横跨几个阶段。
  */
 type TFlatRow = {
   templateId: string;
@@ -40,6 +40,7 @@ type TFlatRow = {
   blocked: TBlocked;
   stageId: string;
   stageLabel: string;
+  stageDepth: number;
   isReview: boolean;
   /** 活动行所属评审的标题；评审行为 null */
   parentTitle: string | null;
@@ -47,7 +48,7 @@ type TFlatRow = {
   title: string;
 };
 
-type TStageChoice = { id: string; label: string; available: number; allInMatrix: boolean };
+type TStageChoice = { id: string; label: string; depth: number; available: number; allInMatrix: boolean };
 
 /** 栏头：图标 + 「评审」/「产品」 + 已选几个 */
 const PaneHeader = ({ icon, label, count }: { icon: ReactNode; label: string; count: number }) => {
@@ -204,6 +205,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         blocked: option.in_matrix ? "in_matrix" : null,
         stageId: option.stage_id,
         stageLabel: option.stage_label,
+        stageDepth: option.stage_depth ?? 0,
         isReview: STAGE_REVIEW_ROOT_KINDS.includes(option.kind as EStageReviewKind),
         parentTitle,
         title: parentTitle ? splitChildTitle(parentTitle, option.title).rest : option.title,
@@ -235,6 +237,7 @@ export const AddAxesModal = observer(function AddAxesModal({
       return {
         id: stageId,
         label: bucket[0].stageLabel,
+        depth: bucket[0].stageDepth,
         available: bucket.filter((row) => !row.blocked).length,
         allInMatrix: bucket.every((row) => row.blocked === "in_matrix"),
       };
@@ -338,6 +341,7 @@ export const AddAxesModal = observer(function AddAxesModal({
   const stageOptions = stageChoices.map((choice) => ({
     id: choice.id,
     label: choice.label,
+    depth: choice.depth,
     dim: choice.available === 0,
     hint:
       choice.available > 0
@@ -370,7 +374,9 @@ export const AddAxesModal = observer(function AddAxesModal({
         <span
           className={cn("flex min-w-0 items-center gap-1.5 text-12.5", blocked ? "text-placeholder" : "text-secondary")}
           title={row.stageLabel}
+          style={row.stageDepth ? { paddingLeft: row.stageDepth * 12 } : undefined}
         >
+          {row.stageDepth > 0 && <span className="shrink-0 text-placeholder">└</span>}
           <span className="truncate">{row.stageLabel}</span>
         </span>
         <span className="flex min-w-0 items-center gap-2" title={row.title}>

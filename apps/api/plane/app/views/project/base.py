@@ -86,6 +86,7 @@ from plane.db.models.issue_type import (
 )
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
+from plane.utils.project_stage import copy_stages_from_dev_mode
 from plane.utils.requirement_project import linked_products_by_project
 from plane.utils.project.defaults import (
     bulk_create_issue_state,
@@ -655,6 +656,11 @@ class ProjectViewSet(BaseViewSet):
                 project=serializer.instance,
                 created_by=request.user,
             )
+
+            # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
+            # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在
+            # 阶段页「从研发模式带出」补回来。
+            copy_stages_from_dev_mode(serializer.instance, actor=request.user)
 
             project = self.get_queryset().filter(pk=serializer.data["id"]).first()
 

@@ -40,6 +40,7 @@ from plane.db.models import (
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
 from .base import BaseAPIView
 from plane.utils.host import base_host
+from plane.utils.project_stage import copy_stages_from_dev_mode
 from plane.api.serializers import (
     ProjectSerializer,
     ProjectCreateSerializer,
@@ -252,6 +253,9 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
                         for state in DEFAULT_STATES
                     ]
                 )
+
+                # 项目阶段从研发模式带出，口径同 app 侧的 ProjectViewSet.create
+                copy_stages_from_dev_mode(serializer.instance, actor=request.user)
 
                 project = self.get_queryset().filter(pk=serializer.instance.id).first()
 

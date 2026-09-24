@@ -380,11 +380,11 @@ class StageReview(ProjectBaseModel):
         related_name="stage_reviews",
         verbose_name="所属产品",
     )
-    # 指向**项目研发模式的阶段**（DevModeStage），不是模板节点的阶段类型：同一类型可以在
-    # 一个模式里实例化出两个阶段（o-1、o-2），实例落在哪一个由裁剪格子决定。
-    # RESTRICT：还有评审挂着的模式阶段不许删（views/dev_mode/stage.py 会提前挡出 409）。
+    # 指向**项目阶段**（ProjectStage，PMS-101 第二期），不是模板节点的阶段类型：父阶段、
+    # 子阶段都能挂；同一类型可以在项目里出现多个阶段，实例落在哪一个由裁剪格子决定。
+    # RESTRICT：还有评审挂着的项目阶段不许删（utils/project_stage.py::delete_stage 提前挡出 409）。
     stage = models.ForeignKey(
-        "db.DevModeStage",
+        "db.ProjectStage",
         on_delete=models.RESTRICT,
         related_name="stage_reviews",
         verbose_name="评审阶段",
@@ -935,24 +935,25 @@ class ReviewTailoringItem(BaseModel):
         related_name="tailoring_items",
         verbose_name="模板评审",
     )
-    # 纵轴的另一半：这一行落在项目模式的哪个阶段上。RESTRICT：被格子引用的模式阶段不许删。
+    # 纵轴的另一半：这一行落在项目的哪个阶段上（ProjectStage，父子皆可，各自成行）。
+    # RESTRICT：被格子引用的项目阶段不许删。
     stage = models.ForeignKey(
-        "db.DevModeStage",
+        "db.ProjectStage",
         on_delete=models.RESTRICT,
         related_name="tailoring_items",
-        verbose_name="模式阶段",
+        verbose_name="项目阶段",
     )
     # 评审活动被挪过阶段时，记它在纵轴上本来那一格的阶段；没挪过（或挪回了原处）为空。
     # 三处要靠它：矩阵上「自 X」徽章与原处的「已移至」空位、``sync_items`` 不在原处重建
     # 格子、生效时挪过的活动不挂回目标阶段的父评审。SET_NULL：原阶段被删了，这一格就当
     # 原生长在现阶段上。
     origin_stage = models.ForeignKey(
-        "db.DevModeStage",
+        "db.ProjectStage",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="moved_tailoring_items",
-        verbose_name="移动前的模式阶段",
+        verbose_name="移动前的项目阶段",
     )
     # 标题快照，模板改名后历史单仍显示当时的口径
     title = models.CharField(max_length=255, verbose_name="评审标题（快照）")

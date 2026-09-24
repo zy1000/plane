@@ -38,7 +38,7 @@ type ProjectStatisticsResponse = {
     active_cycles: number;
     total_cycles: number;
     total_modules: number;
-    total_milestones: number;
+    total_stages: number;
     total_members: number;
     total_pages: number;
     total_views: number;
@@ -54,7 +54,7 @@ type ProjectStatisticsResponse = {
     priorities: TDistributionRow[];
     issue_types: TDistributionRow[];
     module_status: TDistributionRow[];
-    milestone_state: TDistributionRow[];
+    stage_status: TDistributionRow[];
     test_case_type: TDistributionRow[];
     test_case_test_type: TDistributionRow[];
     test_case_priority: TDistributionRow[];
@@ -81,11 +81,20 @@ const moduleStatusLabel: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const milestoneStateColor: Record<string, string> = {
-  未开始: "#a3a3a3",
-  进行中: "#3f76ff",
-  延期: "#f59e0b",
-  已完成: "#16a34a",
+const stageStatusLabel: Record<string, string> = {
+  not_started: "未开始",
+  in_progress: "进行中",
+  paused: "已暂停",
+  completed: "已完成",
+  delayed: "已延期",
+};
+
+const stageStatusColor: Record<string, string> = {
+  not_started: "#a3a3a3",
+  in_progress: "#3f76ff",
+  paused: "#f59e0b",
+  completed: "#16a34a",
+  delayed: "#dc2626",
 };
 
 const testTypeLabel: Record<string, string> = {
@@ -210,13 +219,13 @@ function StatisticsRoot() {
     });
   }, [data]);
 
-  const milestoneStateData = useMemo(() => {
-    const rows = data?.distributions?.milestone_state ?? [];
+  const stageStatusData = useMemo(() => {
+    const rows = data?.distributions?.stage_status ?? [];
     return rows.map((row) => {
-      const key = (row["state"] ?? "未开始") as string;
+      const key = (row["status"] ?? "not_started") as string;
       return {
         key,
-        name: key,
+        name: stageStatusLabel[key] ?? key,
         count: row.count ?? 0,
       };
     });
@@ -576,18 +585,18 @@ function StatisticsRoot() {
                   </Card>
                 </AnalyticsSectionWrapper>
 
-                <AnalyticsSectionWrapper title="里程碑状态" className="col-span-1">
+                <AnalyticsSectionWrapper title="阶段状态" className="col-span-1">
                   <Card>
                     <BarChart
                       className="w-full h-[320px]"
                       margin={{ top: 20, right: 30, bottom: 5, left: 0 }}
-                      data={milestoneStateData}
+                      data={stageStatusData}
                       bars={[
                         {
                           key: "count",
                           label: "Count",
                           stackId: "bar-one",
-                          fill: (payload: any) => milestoneStateColor[payload.key as keyof typeof milestoneStateColor] ?? "#a3a3a3",
+                          fill: (payload: any) => stageStatusColor[payload.key as keyof typeof stageStatusColor] ?? "#a3a3a3",
                           textClassName: "",
                           showPercentage: false,
                           showTopBorderRadius: () => true,

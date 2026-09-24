@@ -85,20 +85,6 @@ export type TDevModeStage = {
   updated_at: string;
 };
 
-/**
- * 挂在评审实例上的只读阶段信息（``StageReview.stage_detail``）。
- *
- * ``label`` 是 ``name`` 的别名：这个字段原先指向 ``product_stage`` 字典值，前端读的是
- * ``label``，切到模式阶段后两个名字都给，消费方不必同一次全改。
- */
-export type TDevModeStageLite = {
-  id: string;
-  name: string;
-  label: string;
-  code: string;
-  sort_order: number;
-};
-
 /** 模式详情：列表字段 + 阶段 */
 export type TDevModeDetail = TDevMode & {
   stages: TDevModeStage[];
@@ -160,8 +146,7 @@ export type TDevModeErrorCode =
   | "DEV_MODE_STAGE_TYPE_WORKSPACE_MISMATCH"
   | "DEV_MODE_STAGE_TYPE_IMMUTABLE"
   | "DEV_MODE_STAGE_RATIO_OUT_OF_RANGE"
-  | "DEV_MODE_STAGE_TEMPLATE_MISMATCH"
-  | "DEV_MODE_STAGE_IN_USE";
+  | "DEV_MODE_STAGE_TEMPLATE_MISMATCH";
 
 /** 一个模式内所有阶段的工作量占比累计上限（与后端 MAX_WORKLOAD_RATIO_TOTAL 一致） */
 export const DEV_MODE_MAX_WORKLOAD_RATIO = 100;

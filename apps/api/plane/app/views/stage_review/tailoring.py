@@ -57,6 +57,7 @@ from plane.utils.review_tailoring import (
     detail_rows,
     last_skipped_moves,
     project_stages,
+    stage_rank,
     remove_product,
     remove_review,
     revision_changes,
@@ -162,19 +163,17 @@ class ReviewTailoringViewSet(BaseViewSet):
 
     def _detail_response(self, tailoring, http_status=status.HTTP_200_OK):
         """一次查完格子 / 产品 / 本轮签批，再喂给序列化器，避免逐条反查。"""
+        stages = project_stages(tailoring.project_id)
+        rank = stage_rank(stages)
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
             .select_related(
                 "template", "stage", "origin_stage", "stage_review", "created_by"
             )
-            .order_by(
-                # 阶段顺序来自研发模式，不是模板节点的阶段类型
-                "stage__sort_order",
-                "template__sort_order",
-                "template__created_at",
-                "id",
-            )
+            .order_by("template__sort_order", "template__created_at", "id")
         )
+        # 阶段顺序是项目阶段的树先序（父子阶段的 sort_order 跨层不可比），DB 排不了，取出后再排
+        items.sort(key=lambda item: rank.get(item.stage_id, len(rank)))
         # 两个轴都单独查：只加了一个轴的表没有任何格子，从格子反推会画出一张空表。
         # 行在纵轴展开的基础上补上「评审活动挪进来才有的行」
         rows = detail_rows(tailoring, items)
@@ -208,7 +207,10 @@ class ReviewTailoringViewSet(BaseViewSet):
                 "products": products,
                 "approvals": approvals,
                 "pending_changes": revision_changes(tailoring, items),
-                "mode_stages": project_stages(tailoring.project_id),
+                "mode_stages": stages,
+                "stage_rank": rank,
+                "stage_depth": {stage.id: stage.depth for stage in stages},
+                "stage_parent": {stage.id: stage.parent_id for stage in stages},
                 "last_skipped_moves": last_skipped_moves(tailoring),
             },
         )
@@ -378,11 +380,11 @@ class ReviewTailoringViewSet(BaseViewSet):
     def axis_options(self, request, slug, project_id, pk):
         """「添加评审与产品」弹窗左栏的候选清单。
 
-        候选不是整棵评审树，而是**本项目研发模式勾选过的节点**：模式的勾选是硬边界，
-        树上有、模式里没勾的节点不该出现在弹窗里（POST 上去也会被 ``add_reviews`` 拒）。
+        候选不是整棵评审树，而是**本项目各阶段可选的节点**：有来源的阶段按研发模式的勾选
+        （硬边界），自建阶段按阶段类型取全部节点（POST 上去也照此被 ``add_reviews`` 校验）。
 
-        返回形状按「阶段 → 节点」铺平，同一个节点在两个同类型阶段下各出一条，前端照着
-        画那张平铺清单；``in_matrix`` 告诉它哪几条已经在表上了。
+        返回形状按「阶段（树先序，父子皆有）→ 节点」铺平，同一个节点在父子 / 同类型阶段下
+        各出一条，前端照着画那张平铺清单；``in_matrix`` 告诉它哪几条已经在表上了。
 
         再按表的 ``tailoring_kind`` 挑族：O 表只出 O 系列节点，过程表只出其余。口径与
         ``add_reviews`` 一致，存量混合表里已在轴上的异族节点在这里看不到，矩阵行不受影响。
@@ -420,7 +422,9 @@ class ReviewTailoringViewSet(BaseViewSet):
                     {
                         "stage_id": str(stage.id),
                         "stage_label": stage.name,
-                        "stage_sort_order": stage.sort_order,
+                        "stage_sort_order": stage.rank,
+                        "stage_parent_id": str(stage.parent_id) if stage.parent_id else None,
+                        "stage_depth": stage.depth,
                         "template_id": str(template.id),
                         "parent_template_id": (
                             str(template.parent_id) if template.parent_id else None

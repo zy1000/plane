@@ -46,9 +46,10 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     ``parent_template_id`` 是给前端建树用的（纵轴要把评审活动缩进到它所属的评审下），
     ``stage_*`` 三件套是给前端分组用的。
 
-    **``stage_id`` 是格子自己那一列（``DevModeStage``），不是模板节点的阶段类型。**
-    格子的身份是 (产品 × 模式阶段 × 节点)，同一个节点在 o-1、o-2 下各有一个格子，前端
-    的行键也要靠这一列才分得开。字段名与前端契约保持不变，只换了取值来源。
+    **``stage_id`` 是格子自己那一列（``ProjectStage``），不是模板节点的阶段类型。**
+    格子的身份是 (产品 × 项目阶段 × 节点)，同一个节点在父子 / 同类型阶段下各有一个格子，
+    前端的行键也要靠这一列才分得开。``stage_sort_order`` 吐的是项目阶段树先序的 rank
+    （``context["stage_rank"]``），父子阶段的 ``sort_order`` 跨层不可比。
     """
 
     product_id = serializers.UUIDField(read_only=True)
@@ -58,9 +59,9 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     )
     stage_id = serializers.UUIDField(read_only=True)
     stage_label = serializers.CharField(source="stage.name", read_only=True)
-    stage_sort_order = serializers.FloatField(
-        source="stage.sort_order", read_only=True
-    )
+    stage_sort_order = serializers.SerializerMethodField()
+    stage_parent_id = serializers.UUIDField(source="stage.parent_id", read_only=True, allow_null=True)
+    stage_depth = serializers.SerializerMethodField()
     kind = serializers.CharField(source="template.kind", read_only=True)
     template_is_active = serializers.BooleanField(
         source="template.is_active", read_only=True
@@ -82,6 +83,16 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     )
     created_by_detail = UserLiteSerializer(source="created_by", read_only=True)
 
+    def get_stage_sort_order(self, obj):
+        rank = self.context.get("stage_rank")
+        if rank is not None and obj.stage_id in rank:
+            return rank[obj.stage_id]
+        return obj.stage.sort_order
+
+    def get_stage_depth(self, obj):
+        depth = self.context.get("stage_depth")
+        return depth.get(obj.stage_id, 0) if depth else 0
+
     class Meta:
         model = ReviewTailoringItem
         fields = [
@@ -92,6 +103,8 @@ class ReviewTailoringItemSerializer(BaseSerializer):
             "stage_id",
             "stage_label",
             "stage_sort_order",
+            "stage_parent_id",
+            "stage_depth",
             "origin_stage_id",
             "origin_stage_label",
             "effective_stage_id",
@@ -119,7 +132,7 @@ class ReviewTailoringProductSerializer(serializers.Serializer):
 
 
 class ReviewTailoringRowSerializer(serializers.Serializer):
-    """矩阵纵轴的一行 = **模式阶段 × 模板节点**（``utils.review_tailoring.TailoringRow``）。
+    """矩阵纵轴的一行 = **项目阶段 × 模板节点**（``utils.review_tailoring.TailoringRow``）。
 
     **不从格子反推**：一张刚加完评审、还没加产品的表没有任何格子，但它的行必须画得出来。
     前端按这份行清单建阶段分组与父子缩进，格子只负责填每一格的勾选与原因。
@@ -134,7 +147,9 @@ class ReviewTailoringRowSerializer(serializers.Serializer):
     )
     stage_id = serializers.UUIDField(source="stage.id", read_only=True)
     stage_label = serializers.CharField(source="stage.name", read_only=True)
-    stage_sort_order = serializers.FloatField(source="stage.sort_order", read_only=True)
+    stage_sort_order = serializers.SerializerMethodField()
+    stage_parent_id = serializers.UUIDField(source="stage.parent_id", read_only=True, allow_null=True)
+    stage_depth = serializers.SerializerMethodField()
     kind = serializers.CharField(source="template.kind", read_only=True)
     title = serializers.CharField(source="template.title", read_only=True)
     sort_order = serializers.FloatField(source="template.sort_order", read_only=True)
@@ -145,6 +160,18 @@ class ReviewTailoringRowSerializer(serializers.Serializer):
     origin_stage_label = serializers.CharField(
         source="origin_stage.name", read_only=True, default=None
     )
+
+    def get_stage_sort_order(self, obj):
+        rank = self.context.get("stage_rank")
+        if rank is not None and obj.stage_id in rank:
+            return rank[obj.stage_id]
+        return getattr(obj.stage, "rank", obj.stage.sort_order)
+
+    def get_stage_depth(self, obj):
+        depth = self.context.get("stage_depth")
+        if depth is not None and obj.stage_id in depth:
+            return depth[obj.stage_id]
+        return getattr(obj.stage, "depth", 0)
 
 
 class ReviewTailoringListSerializer(BaseSerializer):
@@ -213,8 +240,8 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
     pending_changes = serializers.SerializerMethodField()
     # 最近一次生效时被跳过的移动（``last_skipped_moves``），详情页横幅用
     last_skipped_moves = serializers.SerializerMethodField()
-    # 项目研发模式的全部阶段：「移到阶段」弹窗的候选。放在详情里，免得普通成员去读
-    # 工作区级的研发模式接口（那边要模板中心的读权限）
+    # 本项目的全部阶段（父子皆有，树先序）：「移到阶段」弹窗的候选。键名沿用 mode_stages，
+    # 免得前端契约跟着改；``sort_order`` 吐的是树先序 rank
     mode_stages = serializers.SerializerMethodField()
 
     class Meta(ReviewTailoringListSerializer.Meta):
@@ -241,10 +268,12 @@ class ReviewTailoringDetailSerializer(ReviewTailoringListSerializer):
             {
                 "id": str(stage.id),
                 "name": stage.name,
-                # 编码不落库，恒等于阶段类型的编码（见 DevModeStage 头注）
+                # 编码来自阶段类型
                 "code": stage.stage_type.code,
-                "sort_order": stage.sort_order,
+                "sort_order": stage.rank,
                 "stage_type_name": stage.stage_type.name,
+                "parent_id": str(stage.parent_id) if stage.parent_id else None,
+                "depth": stage.depth,
             }
             for stage in self.context.get("mode_stages", [])
         ]

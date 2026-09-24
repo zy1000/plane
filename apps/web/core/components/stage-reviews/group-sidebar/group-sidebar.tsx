@@ -72,11 +72,13 @@ export const StageReviewGroupSidebar = ({
                 ? "bg-layer-transparent-active text-primary"
                 : "text-secondary hover:bg-layer-transparent-hover hover:text-primary active:bg-layer-transparent-active";
 
+              const depth = isCollapsed ? 0 : (group.depth ?? 0);
               const rowButton = (
                 <button
                   type="button"
+                  style={depth > 0 ? { marginLeft: depth * 16, width: `calc(100% - ${depth * 16}px)` } : undefined}
                   className={cn(
-                    "group flex w-full cursor-pointer flex-col outline-none transition-all duration-150",
+                    "group relative flex w-full cursor-pointer flex-col outline-none transition-all duration-150",
                     isCollapsed ? "items-center rounded-md p-1.5" : "gap-1.5 rounded-md px-2.5 py-1.5 text-left",
                     rowClassName
                   )}
@@ -85,6 +87,13 @@ export const StageReviewGroupSidebar = ({
                   onClick={() => onSelectGroup(group.id)}
                 >
                   <span className="flex w-full items-center gap-2">
+                    {/* 子阶段：左侧一段树线，与项目阶段页同一画法 */}
+                    {depth > 0 && (
+                      <span
+                        className="absolute top-0 -left-2.5 h-1/2 w-2 rounded-bl-md border-b border-l border-strong"
+                        aria-hidden
+                      />
+                    )}
                     <span className="grid size-4 flex-shrink-0 place-items-center">{group.icon}</span>
                     {!isCollapsed && (
                       <>

@@ -13,7 +13,7 @@ import {
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_DEFECTS_VIEW_PERMISSION_KEY,
   PROJECT_INTAKE_VIEW_PERMISSION_KEY,
-  PROJECT_MILESTONE_VIEW_PERMISSION_KEY,
+  PROJECT_STAGE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
   PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
@@ -40,7 +40,7 @@ import {
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import { isProjectFeatureEnabled } from "@plane/utils";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, Bug, ClipboardList, Folder, Milestone, Package, Rocket, Rss } from "lucide-react";
+import { ArchiveIcon, Bug, ClipboardList, Folder, Layers, Package, Rocket, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -177,13 +177,14 @@ export const useNavigationItems = ({
         sortOrder: 3.7,
       },
       {
-        i18n_key: "sidebar.milestones",
-        key: "milestones",
-        name: "里程碑",
-        href: `/${workspaceSlug}/projects/${projectId}/milestones`,
-        icon: Milestone,
+        // 阶段（PMS-101，原「里程碑」）：项目自己的阶段列表，从研发模式带出
+        i18n_key: "sidebar.stages",
+        key: "stages",
+        name: "阶段",
+        href: `/${workspaceSlug}/projects/${projectId}/stages`,
+        icon: Layers,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-        permissionKeys: [PROJECT_MILESTONE_VIEW_PERMISSION_KEY],
+        permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 4,
       },

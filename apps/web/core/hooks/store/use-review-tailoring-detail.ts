@@ -96,7 +96,7 @@ export const useReviewTailoringDetail = (
   }, []);
 
   /**
-   * 把一批评审活动格子挪到另一个模式阶段。本地立刻挪（矩阵换行、原处留「已移至」预览，签批生效后不再显示），保存时
+   * 把一批评审活动格子挪到本项目的另一个阶段（父子皆可）。本地立刻挪（矩阵换行、原处留「已移至」预览，签批生效后不再显示），保存时
    * 随勾选一起发 `stage_id`。`origin_stage` 记纵轴上本来那一格：第一次挪走时记下，再挪不变，
    * 挪回原处清空 —— 与后端 `_move_cells` 同一口径。
    */
@@ -114,6 +114,8 @@ export const useReviewTailoringDetail = (
           stage_id: stage.id,
           stage_label: stage.name,
           stage_sort_order: stage.sort_order,
+          stage_parent_id: stage.parent_id,
+          stage_depth: stage.depth,
           origin_stage_id: backHome ? null : homeId,
           origin_stage_label: backHome ? null : homeLabel,
         };

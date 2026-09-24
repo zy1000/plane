@@ -86,6 +86,10 @@ class PermissionKey(str, Enum):
     # 执行评审的是另一拨人，能勾裁剪表不代表该替人推进评审状态。
     PROJECT_STAGE_REVIEW_VIEW = "project.stage_review.view"
     PROJECT_STAGE_REVIEW_MANAGE = "project.stage_review.manage"
+    # 项目阶段（ProjectStage，PMS-101 替代原里程碑模块）。迁移 0396 把原 milestone.*
+    # 的角色分配折算到这两个 key 上：有 view 的给 view，有 create / edit 的给 manage。
+    PROJECT_STAGE_VIEW = "project.stage.view"
+    PROJECT_STAGE_MANAGE = "project.stage.manage"
     # 工作项 CRUD/归档权限按 IssueType 动态衍生为 project.issue_type.<id_hex>.<action>，
     # 见 plane.db.models.issue_type.build_issue_type_permission_key。
     ISSUE_COMMENT_CREATE = "issue.comment.create"
@@ -152,13 +156,6 @@ class PermissionKey(str, Enum):
     ESTIMATE_CREATE = "estimate.create"
     ESTIMATE_EDIT = "estimate.edit"
     ESTIMATE_DELETE = "estimate.delete"
-    MILESTONE_VIEW = "milestone.view"
-    MILESTONE_CREATE = "milestone.create"
-    MILESTONE_EDIT = "milestone.edit"
-    MILESTONE_DELETE = "milestone.delete"
-    MILESTONE_ISSUE_VIEW = "milestone.issue.view"
-    MILESTONE_ISSUE_ADD = "milestone.issue.add"
-    MILESTONE_ISSUE_REMOVE = "milestone.issue.remove"
     INTAKE_VIEW = "intake.view"
     INTAKE_CREATE = "intake.create"
     INTAKE_EDIT = "intake.edit"

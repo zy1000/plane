@@ -204,13 +204,21 @@
 - 同一成员同一天**时间段不可重叠**；只允许填报本月和上月。
 - ⚠️ `ISSUE_TYPE_NAME_TO_CATEGORY_KEY` 按 `IssueType.name` 的**中文名**（史诗/特性/用户故事/任务/缺陷）路由到子类别。这是硬编码的中文字符串耦合 —— **重命名 issue type 会让工时归类静默回落到通用 ISSUE**。
 
-## milestone（里程碑）
+## project_stage（项目阶段，原 milestone）
 
-`db/models/milestone.py`（仅 77 行，1 个 model）。project 级，M2M 到 Issue，不碰 Cycle/Module/State。
+`db/models/project_stage.py`（PMS-101，2026-09-24 第一期，迁移 `0395`–`0397`）。project 级，一个项目自己的一份阶段列表。**原 `Milestone` 模型、表、7 个 `milestone.*` 权限 key 已整体删除**，存量数据没有迁移。「里程碑」降级为阶段上的 `is_milestone` 标记（照禅道）。
 
-- `state` 用**中文字符串作为枚举 value 直接落库**（`未开始/进行中/延期/已完成`），且 `TextChoices` 的 label 位被挪用来存颜色名（`'未开始', 'gray'`）。
-- `update_state()` 按 start_date / end_date 自动推算状态，「已完成」**不可逆**。
-- 前端**没有 components 目录**（`components/milestone/` 是空的），页面和弹窗全部内联在 `app/.../[projectId]/milestones/` 下。
+- 字段：`stage_type`（FK `StageType`，RESTRICT）、`name`、`description`、`is_milestone`、`parent`（自引用 RESTRICT，**创建后不可改**）、`workload_ratio`（Decimal 5,2）、`owner`、`start_date / end_date`、`actual_start / actual_end`、`status`（`not_started / in_progress / paused / completed`，英文 snake 值）、`sort_order`、`source_stage`（FK `DevModeStage` SET_NULL，记来处）。
+- **从研发模式带出**：项目创建时（app 与外部 API 两条路径）`utils/project_stage.py::copy_stages_from_dev_mode` 拷一份模式阶段，`0395` 给存量项目回填；`stages/sync-from-dev-mode/` 补模式里还没带出的（按 `source_stage` 认，同类型同名也算已带出）。拷贝语义：模式里改名 / 调顺序**不传播**到项目。
+- **占比只算叶子**：有子的阶段不能填占比（400 `PROJECT_STAGE_RATIO_ON_PARENT`），它的占比 = 子之和（`computed_workload_ratio`，算出来不存）；全项目叶子累计 ≤ 100；父第一次挂子时父的占比下移给这个子。
+- **子阶段日期必须落在父范围内**，两边都校验（`PROJECT_STAGE_DATE_OUT_OF_PARENT` / `PROJECT_STAGE_CHILD_OUT_OF_RANGE`）。
+- **状态下拉直接改**，无 action 端点。副作用（`apply_status`）：→ 进行中补实际开始；→ 已完成补实际开始 / 完成；→ 未开始清两个实际日期；已完成 → 进行中 / 已暂停清实际完成；同一次 PATCH 显式传了 `actual_*` 以显式值为准。「已延期」`is_delayed` 是派生字段不落库。
+- 带 `source_stage` 的阶段不能改 `stage_type`（第二期评审换挂靠它对应）。
+- **只硬删**（理由同 `DevModeStage`）；有子不能删（409 `PROJECT_STAGE_HAS_CHILDREN`）。`parent` 用 RESTRICT 不用 PROTECT：项目硬删任务级联收阶段时 PROTECT 会炸。
+- 批量改属性 `stages/bulk-update/`（负责人 / 计划日期，逐条保存点部分成功，父先子后）。
+- 权限 `project.stage.view / manage`（`0396` 把原 `milestone.view` → view、`milestone.create|edit` → manage 折算到角色上）。**`PermissionKey` 枚举与迁移必须同提交删旧 key**：`permission_bootstrap.ensure_static_permissions` 是 additive 的，post_migrate 会按枚举把删掉的行补回来。
+- **第二期（2026-09-24）已换挂**：`StageReview.stage`、`ReviewTailoringItem.stage / origin_stage` 指向本表（迁移 `0398`–`0400`，按 `source_stage` → 同类型同名 → 自动补建三级映射，快照里的 id 一并改写，不支持反向）。被活跃评审 / 格子引用的阶段不能删（409 `PROJECT_STAGE_IN_USE`）、不能改类型（400 `PROJECT_STAGE_TYPE_IN_USE`），`utils/project_stage.py::stage_in_use` 只算活跃行。**阶段顺序对外一律是树先序 rank**（`tree_order`）：`sort_order` 是项目全局单调，跨层不可比，评审线的 `sort_order / stage_sort_order` 字段吐的都是 rank，另带 `parent_id / depth`。
+- 前端：`packages/types/src/project-stage.ts`、`core/services/project-stage.service.ts`、`core/hooks/store/use-project-stages.ts`（局部 state）、`core/components/project-stages/`、路由 `projects/(detail)/[projectId]/stages/`；tab key `stages`（旧 `milestones` 键在 `tab-navigation-utils.ts` 里仍映射到同一 URL）。
 
 ## stage_review（阶段评审 / 评审裁剪）
 
@@ -222,7 +230,7 @@
 2. **裁剪 `ReviewTailoring` + 两个轴 + `ReviewTailoringItem`** —— 项目级二维矩阵。**两个轴都是人挑出来的**：横轴 `ReviewTailoringProduct`（候选来自 `ProductProject`）、纵轴 `ReviewTailoringTemplate`（只存顶层评审，它的评审活动跟着整块进来）。`ReviewTailoringItem` 是两者的交叉积。勾上 = 要做，不勾 = 裁剪掉且**必须填 `reason`**（提交签批时校验）。
 3. **评审实例 `StageReview`** —— 裁剪签批生效时按勾选生成，绑定项目 + 产品。评审活动同样落这张表（`kind ∈ ACTIVITY_KINDS` + `parent`），不是独立表。
 
-**阶段有两层，都不是 `product_stage` 字典**（2026-09-22 起，迁移 `0382`–`0390`）：模板节点的 `stage` 指向工作区级的**阶段类型** `StageType`；格子（`ReviewTailoringItem.stage`）和评审实例（`StageReview.stage`）指向**模式阶段** `DevModeStage`，即项目所选研发模式里的一行。产品的阶段字段继续用 `product_stage` 字典，两边只是初始词表同源，互不相关。详见下面的 `## dev_mode` 节。
+**阶段有两层，都不是 `product_stage` 字典**：模板节点的 `stage` 指向工作区级的**阶段类型** `StageType`；格子（`ReviewTailoringItem.stage`）和评审实例（`StageReview.stage`）指向**项目阶段** `ProjectStage`（PMS-101 第二期，迁移 `0398`–`0400`；之前是模式阶段 `DevModeStage`）。**父阶段、子阶段都能挂评审**，父子各自成行、各自生成实例；父子实例不跨阶段认父（汇总评审在父、活动在子时活动不挂父下的评审）。产品的阶段字段继续用 `product_stage` 字典，互不相关。详见 `## project_stage` 与 `## dev_mode`。
 
 `kind` 四值编码了**两件事**（层级 × 是否 O 阶段），所以判定层级走 `ROOT_KINDS` / `ACTIVITY_KINDS`、判定 O 阶段走 `O_STAGE_KINDS`，别在业务代码里写 `kind == "review"`。
 
@@ -241,9 +249,9 @@
 - 加减轴：`add_products` / `remove_product` / `add_reviews` / `remove_review`（`utils/review_tailoring.py`），对应 `POST|DELETE .../products/` 与 `.../reviews/`。纵轴**只收顶层节点**（`parent_id is None`），展开成「它自己 + 当前启用的子活动」放在读的时候做（`axis_templates()`），这样模板库后来加的新活动才进得来。
 - 移除的分寸：行 / 列下只要有格子生成过评审实例就拦（`REVIEW_TAILORING_AXIS_IN_USE`）—— 那条评审是既成事实，要下线请走修订取消勾选。没生成过的一律硬删，留着软删行会让唯一约束挡住下次重新加回来。
 - 详情接口另给一段 `rows`（纵轴展开后的节点），**不从格子反推** —— 只加了一个轴的表一个格子都没有，反推会画出一张空表。
-- 纵轴展开成行时按项目模式做：行集合 = 模式的阶段 × 该阶段勾选的、且在纵轴里的节点（`sync_items`）。同一节点在两个同类型阶段下各出一行、各自生成实例。
-- 生成评审实例时阶段取自 `item.stage_id`（模式阶段），不再取模板节点的阶段；父子实例必须在同一模式阶段。
-- **跨阶段移动（批次 5）**：只有评审活动能挪到本项目模式的任一阶段（不限类型），挪后 `parent` 置空、`origin_stage` 记来处；草稿态直接改格子的 `stage_id`，已生效走修订签批（`_apply_effective` 的「移动」分支改实例的 `stage` 而不删建，终态实例跳过、部分成功），无模板的手工评审在详情抽屉直接改。
+- 纵轴展开成行时按项目阶段做：行集合 = 项目的全部阶段（父子皆有，树先序）× 该阶段可选的、且在纵轴里的节点（`sync_items`）。「可选」= 有 `source_stage` 的按模式阶段的勾选（硬边界），自建阶段按 `stage_type` 取全部活跃节点（`utils/project_stage.py::selectable_template_ids_by_stage`）。同一节点在父子 / 同类型阶段下各出一行、各自生成实例。**已生效表发起修订时，项目新加的阶段补出来的格子默认不勾、原因自动填「阶段新增，默认未纳入」**（`NEW_STAGE_DEFAULT_REASON`），免得随手加个子阶段签批就成批生成评审。
+- 生成评审实例时阶段取自 `item.stage_id`（项目阶段）；父子实例必须在同一项目阶段。
+- **跨阶段移动（批次 5）**：只有评审活动能挪到本项目的任一阶段（父子皆可，不限类型，错误码 `REVIEW_TAILORING_STAGE_NOT_IN_PROJECT`），挪后 `parent` 置空、`origin_stage` 记来处；草稿态直接改格子的 `stage_id`，已生效走修订签批（`_apply_effective` 的「移动」分支改实例的 `stage` 而不删建，终态实例跳过、部分成功），无模板的手工评审在详情抽屉直接改。
 - 连带看：`ReviewTailoringItem` 已经没有 `clean()`，裁剪通知的摘要只剩标题，列表的 `product_count` / `review_count` 从轴表 annotate 而不是数格子。
 - 四个进度数（本轮签批人数 / 已通过、已生成评审格数、修订中改动格数）：列表由 `attach_list_progress()` 在 `list()` 里分组查完挂到对象上；详情由 `attach_detail_progress()` 拿 `_detail_response` 已经查好的格子与本轮签批直接数，不再发查询（2026-09-11）。详情页头部「本次改了 N 格未提交」读 `pending_change_count`；「生效后 +N −M」与提交弹窗的摘要则由前端按本地格子算（含未保存的改动），口径同 `_apply_effective`。
 
@@ -282,7 +290,7 @@
 | Serializers | `app/serializers/stage_review_template.py` / `review_tailoring.py` / `stage_review.py` |
 | URLs | `app/urls/stage_review.py`（模板 / 裁剪 / 评审实例三套路由都在这个文件里） |
 | 预置数据 | `db/seed_data/stage_review_templates.py`（10 阶段 / 7 根评审 / 59 活动，零 import 的纯常量模块，迁移与运行时共用） |
-| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限）`0367`（评审活动表）`0368`（评审实例权限）`0382`–`0384`（模板挂到阶段类型）`0388`–`0390`（格子与实例挂到模式阶段）`0391`（格子 `origin_stage`） |
+| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限）`0367`（评审活动表）`0368`（评审实例权限）`0382`–`0384`（模板挂到阶段类型）`0388`–`0390`（格子与实例挂到模式阶段）`0391`（格子 `origin_stage`）`0398`–`0400`（格子与实例换挂项目阶段） |
 | 前端类型 | `packages/types/src/stage-review-template.ts`、`review-tailoring.ts`、`stage-review.ts` |
 | 前端 service | `core/services/stage-review-template.service.ts`、`review-tailoring.service.ts`、`stage-review.service.ts` |
 | 前端 hook | `core/hooks/store/use-stage-review-templates.ts`、`use-review-tailorings.ts`、`use-review-tailoring-detail.ts`、`use-review-tailoring-feed.ts`、`use-stage-reviews.ts`、`use-stage-review-detail.ts`（**都走局部 state，不进 MobX root store**） |
@@ -295,7 +303,7 @@
 
 - **阶段类型 `StageType`**（`db/models/stage_type.py`，工作区级）—— 阶段词表：`code`（如 `M010`）、`name`、`description`、`sort_order`、`is_system`，`(workspace, code)` 与 `(workspace, name)` 条件唯一。标准评审树 `StageReviewTemplate.stage` 挂在它上面（RESTRICT）。预置 10 个（编码 `M010`–`M100` 步进 10，与原字典值同名），预置的不可改编码 / 名称、不可删（400 `STAGE_TYPE_SYSTEM_PROTECTED`）；被评审树或任一模式阶段引用的不可删（409 `STAGE_TYPE_IN_USE`）。工作区设置「阶段类型」页维护，权限只校验活跃工作区成员，同数据字典。
 - **研发模式 `DevMode`**（`db/models/dev_mode.py`，工作区级）—— 开发方式定义：`name`（工作区内唯一）、`icon_props`、`features`（九个布尔 key：`cycle_view / module_view / release_view / issue_views_view / page_view / intake_view / is_time_tracking_enabled / is_issue_type_enabled / review_view`，`normalize_features` 保证形状）、`is_system`。预置 IDOV（迭代关）/ Scrum（评审关、无阶段）/ 混合模式（全开，现状等价物，存量项目回填到它，`DEFAULT_DEV_MODE_NAME`）。预置的不可删、不可改名，组件开关和阶段可改。**模式是上限不是初始值**：`Project` 上原有功能位语义变成「上限内的自选值」，serializer 用 `DEV_MODE_FEATURE_TO_PROJECT_FIELD` 做上限校验（模式关的位强制 False、硬开回 400 `PROJECT_FEATURE_NOT_ALLOWED_BY_DEV_MODE`），侧栏按「模式位 AND 项目位」渲染。项目创建必选（`Project.dev_mode` RESTRICT），创建后不可切换（400 `PROJECT_DEV_MODE_IMMUTABLE`）。被项目引用的不可删（409 `DEV_MODE_IN_USE`；只剩软删 / 模板项目占引用时 `DEV_MODE_IN_USE_BY_INACTIVE_PROJECTS`）。模板中心第四个页签维护，权限 `workspace.dev_mode.view/manage`。
-- **模式阶段 `DevModeStage`** —— 模式里的一行：`stage_type`（RESTRICT）、`name`（模式内唯一，默认取类型名，可改）、`workload_ratio`（模式内累计 ≤ 100，本期只存不算）、`standard_days`、`sort_order`（就是项目里评审按阶段分组的顺序）。**同一模式允许两个阶段指向同一类型**（o-1 / o-2 都是 O阶段类型）。`code` 不落库，serializer 从 `stage_type.code` 带出。每个阶段通过 `DevModeStageTemplate` 勾选该类型下的评审节点（只存引用不复制树；勾选是硬边界，项目裁剪时看不到没勾的节点；新建阶段默认全勾；删模板节点时同步硬删这些引用）。**项目没有自己的阶段副本**：格子 `ReviewTailoringItem.stage` 与评审实例 `StageReview.stage` 直接挂在模式阶段行上，所以模式里改阶段名、调顺序直接影响项目，而被格子或实例引用的阶段不可删（409 `DEV_MODE_STAGE_IN_USE`）。里程碑挂阶段、项目级阶段快照是后续规划（需求第 10 节）。
+- **模式阶段 `DevModeStage`** —— 模式里的一行：`stage_type`（RESTRICT）、`name`（模式内唯一，默认取类型名，可改）、`workload_ratio`（模式内累计 ≤ 100，本期只存不算）、`standard_days`、`sort_order`（就是项目里评审按阶段分组的顺序）。**同一模式允许两个阶段指向同一类型**（o-1 / o-2 都是 O阶段类型）。`code` 不落库，serializer 从 `stage_type.code` 带出。每个阶段通过 `DevModeStageTemplate` 勾选该类型下的评审节点（只存引用不复制树；勾选是硬边界，项目裁剪时看不到没勾的节点；新建阶段默认全勾；删模板节点时同步硬删这些引用）。**项目有自己的阶段副本 `ProjectStage`（PMS-101）**：格子与评审实例挂在项目阶段上（第二期），模式阶段只剩 `ProjectStage.source_stage`（SET_NULL）与 `DevModeStageTemplate` 两处引用。模式里改名、调顺序、删阶段都不再影响项目：删了只是项目副本的来源变空，该阶段的可选评审节点退化为按类型全集；`DEV_MODE_STAGE_IN_USE` 已退役。
 
 **删除语义**：`StageType` / `DevMode` / `DevModeStage` / `DevModeStageTemplate` 四个模型的 `delete()` 都强制硬删（理由同数据字典：异步软删级联把 RESTRICT 当 CASCADE），引用检查在 view 里按活跃行预检、DB 的 RESTRICT 兜并发与软删残留（撞上时收成 409）。queryset 级批量删除**不会**走模型的 `delete()`，默认 `soft=True` 只是 UPDATE，要真删必须显式 `delete(soft=False)`。
 
@@ -358,14 +366,14 @@ DevMode (工作区级研发模式，预置 IDOV / Scrum / 混合模式)
 Project (原生)
   ├─FK×3(RESTRICT)── DataDictionaryItem                （所属BU/项目状态/项目类型，0348）
   ├─FK(RESTRICT)── DevMode                             （0387）
-  ├── ReviewTailoring ──Item──▶ (Product × DevModeStage × StageReviewTemplate)
-  │        └─生效时生成─▶ StageReview ──FK── Product / DevModeStage(阶段)
+  ├── ReviewTailoring ──Item──▶ (Product × ProjectStage × StageReviewTemplate)
+  │        └─生效时生成─▶ StageReview ──FK── Product / ProjectStage(阶段，父子皆可)
   ├─FK(SET_NULL)── User (product_manager，不进 ProjectMember)
   ├── Issue ──FK(SET_NULL)── Product / RequirementModule（2026-09-23：product / product_module 单选挂靠，
   │        规则集中在 utils/issue_product.py；产品须在 ProductProject 池内、模块须属于该产品、换产品清模块；
   │        首次挂需求时自动带出需求的产品 / 模块；候选池端点 projects/<pid>/products/<product_id>/requirement-modules/）
   ├── Release ──ReleaseIssue── Issue
-  ├── Milestone ──M2M── Issue                     （完全孤立，不连 Release/Cycle/baseline）
+  ├── ProjectStage ──FK── StageType / DevModeStage(source_stage)   （项目阶段，自引用 parent；本期不挂工作项）
   ├── TimeSheet ──FK── Issue | TestCase           （二选一，由 category 决定）
   ├── TestPlan ──FK── Cycle
   │      ├──M2M── Module (原生)
@@ -379,7 +387,7 @@ Project (原生)
 **已知的断链（不要以为有关联而去找）：**
 - 需求 ↔ Cycle / Release / Issue 已由 `RequirementCycle` / `RequirementRelease` / `RequirementIssue` 关联表打通，但它们只圈定范围、供计数，不派生需求状态（见 requirement 节轴 A）。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表仍无外键关系，只能人工对应。
 - **product 和 project 之间没有直接外键**，关系走 `ProductProject` 关联表（见上）。
-- milestone 与除 Issue / Project 外的一切无关联。
+- project_stage 不关联工作项 / 需求；评审 / 裁剪格子挂在它上面（第二期）。
 - 数据字典被 Product（6 个 FK）与 Project（3 个 FK）引用，与 requirement / issue 无关联；**评审这条线（模板 / 格子 / 实例）不再引用 `product_stage` 字典**，阶段走 StageType / DevModeStage。
 - changelog 与所有模块零关联。
 

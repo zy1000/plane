@@ -107,6 +107,12 @@ class StageTypeViewSet(BaseViewSet):
                 "This stage type is still used by dev mode stages.",
                 "STAGE_TYPE_IN_USE",
             )
+        # 项目阶段同样 RESTRICT（ProjectStage.stage_type）
+        if stage_type.project_stages.exists():
+            return _conflict(
+                "This stage type is still used by project stages.",
+                "STAGE_TYPE_IN_USE",
+            )
         try:
             # 硬删（模型 delete 已强制 soft=False），评审模板 FK 的 RESTRICT 兜底
             stage_type.delete()

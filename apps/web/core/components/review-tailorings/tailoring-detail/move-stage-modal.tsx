@@ -16,9 +16,9 @@ const MAX_PRODUCT_CHIPS = 4;
 type TBlock = "current" | "conflict" | null;
 
 /**
- * 「移到阶段」弹窗：把一批评审活动格子挪到本项目研发模式的另一个阶段。
+ * 「移到阶段」弹窗：把一批评审活动格子挪到本项目的另一个阶段。
  *
- * 候选是模式的全部阶段，不限阶段类型。两种阶段不能选：
+ * 候选是本项目的全部阶段（父子皆有，树先序缩进），不限阶段类型。两种阶段不能选：
  * - 当前阶段（这批格子都已经在那里）；
  * - 已有同一活动的阶段（同一产品 × 节点在那里已经有格子，o-1、o-2 都勾了它的情形）——
  *   服务端会整批拒绝，这里提前置灰。
@@ -163,11 +163,13 @@ export const MoveStageModal = ({
                 </span>
                 <span
                   className={cn(
-                    "truncate font-medium",
+                    "flex min-w-0 items-center gap-1.5 font-medium",
                     block ? "text-placeholder" : active ? "text-accent-primary" : "text-primary"
                   )}
+                  style={stage.depth ? { paddingLeft: stage.depth * 14 } : undefined}
                 >
-                  {stage.name}
+                  {stage.depth > 0 && <span className="shrink-0 font-normal text-placeholder">└</span>}
+                  <span className="truncate">{stage.name}</span>
                 </span>
                 <span className="min-w-0">
                   <span

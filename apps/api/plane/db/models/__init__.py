@@ -128,7 +128,6 @@ from .description import Description, DescriptionVersion
 from .issue_type import IssueType, TypeExtraField, TypeExtraFieldValue
 from .qa import *
 from .ldap import LdapConfig
-from .milestone import *
 from .workflow import (
     ApprovalType,
     ApprovalAction,
@@ -204,3 +203,4 @@ from .stage_review import (
 )
 from .stage_type import StageType
 from .dev_mode import DevMode, DevModeStage, DevModeStageTemplate
+from .project_stage import ProjectStage, ProjectStageStatus

@@ -198,6 +198,7 @@ export const TailoringMatrix = ({
   const stageOptions = allGroups.map((group) => ({
     id: group.stageId,
     label: group.stageLabel,
+    depth: group.stageDepth,
     hint: t("review_tailoring.matrix.rows_count", { count: group.rows.length }),
   }));
 
@@ -361,12 +362,23 @@ export const TailoringMatrix = ({
               return (
                 <tr key={row.rowKey} className="group">
                   <td className={cn(STAGE_COL, "z-[1] h-11.5 border-b border-subtle p-0", headBg, divider)}>
-                    <div className="flex h-11.5 items-center gap-2.5 pr-2 pl-6">
+                    <div
+                      className="relative flex h-11.5 items-center gap-2.5 pr-2 pl-6"
+                      style={{ paddingLeft: 24 + group.stageDepth * 16 }}
+                    >
                       {editable && (
                         <ScopeCheckbox
                           cells={cells}
                           selection={selection}
                           label={t("review_tailoring.matrix.select_row")}
+                        />
+                      )}
+                      {/* 子阶段：缩进一级并画一段树线，与项目阶段页同一画法 */}
+                      {group.stageDepth > 0 && (
+                        <span
+                          className="absolute top-0 h-1/2 w-2.5 rounded-bl-md border-b border-l border-strong"
+                          style={{ left: 12 + group.stageDepth * 16 }}
+                          aria-hidden
                         />
                       )}
                       <span className="min-w-0 truncate text-13 text-secondary" title={group.stageLabel}>

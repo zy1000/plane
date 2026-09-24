@@ -76,7 +76,9 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
     defects: `${baseUrl}/defects`,
     cycles: `${baseUrl}/cycles`,
     modules: `${baseUrl}/modules`,
-    milestones: `${baseUrl}/milestones`,
+    stages: `${baseUrl}/stages`,
+    // 里程碑已改成「阶段」（PMS-101）。存量 tab 偏好里还留着旧 key，指到新页面而不是掉进 /issues 兜底
+    milestones: `${baseUrl}/stages`,
     reviews: `${baseUrl}/reviews`,
     // 裁剪表与阶段评审已合并成「评审」标签。存量 tab 偏好里还留着这两个旧 key，
     // 保留映射让它们指到各自的子页，而不是掉进下面的 /issues 兜底。

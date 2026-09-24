@@ -327,12 +327,16 @@ export const PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS = [
   PROJECT_STAGE_REVIEW_MANAGE_PERMISSION_KEY,
 ];
 
-/** 项目里程碑页权限常量，与后端 PermissionKey.MILESTONE_VIEW 一致 */
-export const PROJECT_MILESTONE_VIEW_PERMISSION_KEY = "milestone.view" as const;
-export const PROJECT_MILESTONE_CREATE_PERMISSION_KEY = "milestone.create" as const;
-export const PROJECT_MILESTONE_ISSUE_VIEW_PERMISSION_KEY = "milestone.issue.view" as const;
-export const PROJECT_MILESTONE_ISSUE_ADD_PERMISSION_KEY = "milestone.issue.add" as const;
-export const PROJECT_MILESTONE_ISSUE_REMOVE_PERMISSION_KEY = "milestone.issue.remove" as const;
+/**
+ * 项目阶段页权限常量，与后端 PermissionKey.PROJECT_STAGE_* 一致（PMS-101 替代原 milestone.*）。
+ */
+export const PROJECT_STAGE_VIEW_PERMISSION_KEY = "project.stage.view" as const;
+export const PROJECT_STAGE_MANAGE_PERMISSION_KEY = "project.stage.manage" as const;
+/** 读接受任一：只配了维护的角色不该被读挡住，口径同后端 PROJECT_STAGE_READ_KEYS */
+export const PROJECT_STAGE_READ_PERMISSION_KEYS = [
+  PROJECT_STAGE_VIEW_PERMISSION_KEY,
+  PROJECT_STAGE_MANAGE_PERMISSION_KEY,
+];
 
 /** 测试管理查看权限常量，与后端 PermissionKey.QA_*_VIEW 一致 */
 export const PROJECT_QA_CASE_VIEW_PERMISSION_KEY = "qa.case.view" as const;
