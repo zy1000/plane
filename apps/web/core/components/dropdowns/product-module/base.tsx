@@ -102,10 +102,11 @@ export const ProductModuleDropdownBase = observer(function ProductModuleDropdown
           ref={setReferenceElement}
           type="button"
           className={cn(
-            "clickable block h-full max-w-full outline-none hover:bg-layer-1",
+            "clickable block h-full max-w-full outline-none",
             {
-              "cursor-not-allowed text-secondary": disabled,
-              "cursor-pointer": !disabled,
+              // 禁用（多半是还没选产品）：压淡、去悬停高亮，让人一眼看出点不了
+              "cursor-not-allowed text-secondary opacity-50 [&_*]:pointer-events-none": disabled,
+              "cursor-pointer hover:bg-layer-1": !disabled,
             },
             buttonContainerClassName
           )}
@@ -114,11 +115,11 @@ export const ProductModuleDropdownBase = observer(function ProductModuleDropdown
           tabIndex={tabIndex}
         >
           <DropdownButton
-            className={buttonClassName}
+            className={cn(buttonClassName, disabled && "hover:bg-transparent")}
             isActive={isOpen}
             tooltipHeading="产品模块"
             tooltipContent={selected?.path ?? selectedName ?? ""}
-            showTooltip={showTooltip}
+            showTooltip={showTooltip && !disabled}
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}
           >
