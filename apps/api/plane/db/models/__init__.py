@@ -196,6 +196,8 @@ from .stage_review import (
     StageReview,
     StageReviewActivity,
     StageReviewComment,
+    StageReviewComponentVersion,
+    StageReviewFinishedGood,
     StageReviewKind,
     StageReviewResult,
     StageReviewStatus,

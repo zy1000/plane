@@ -38,9 +38,11 @@ export const isMilestoneActivity = (activity: TStageReviewActivity) =>
 /**
  * 轨迹里哪些记录进时间线：评论本身已经以气泡出现，「发表了评论」那条不再重复画；
  * 「创建」由前端按 detail.created_at 补一条（裁剪表生成的评审后端没写创建记录），
- * 后端手工新建的那条跳过，免得出现两条。
+ * 后端手工新建的那条（verb=created 且没有 field）跳过，免得出现两条。带 field 的 created
+ * 是「上传了附件」「在成品表里加了一行」，照常进时间线。
  */
-const isTrailRecord = (activity: TStageReviewActivity) => activity.field !== "comment" && activity.verb !== "created";
+const isTrailRecord = (activity: TStageReviewActivity) =>
+  activity.field !== "comment" && !(activity.verb === "created" && !activity.field);
 
 type TRawItem =
   | { kind: "created"; key: string; at: string }

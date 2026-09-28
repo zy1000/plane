@@ -49,7 +49,15 @@ const FIELD_ICON: Record<string, LucideIcon> = {
   baseline_archive_code: Package,
   components: Package,
   component_version: Package,
+  finished_goods: Package,
+  component_versions: Package,
+  cv_component: Package,
+  cv_version: Package,
 };
+
+/** 成品 / 组件版本两张表「添加 / 删除一行」的记录：field 就是表名 */
+const ROW_TABLES = ["finished_goods", "component_versions"];
+const isRowRecord = (activity: TStageReviewActivity) => ROW_TABLES.includes(activity.field ?? "");
 
 /** 只记「改了」的长文本字段：不存值，只写「更新了」 */
 const TEXT_ONLY_FIELDS = ["description_html", "work_instruction"];
@@ -63,6 +71,25 @@ const useFieldLabel = () => {
     return field === "attachment"
       ? t(`${I18N}.detail.attachments_title`)
       : t(`${I18N}.fields.${key}`, { defaultValue: key });
+  };
+};
+
+/**
+ * 句子里的字段名。表格里某一格的改动要指明是哪一行：「AKF2609-0133 的生产数量」；
+ * 那一行还没填称呼（AKF 编号 / 组件名）时退成表名：「成品的生产数量」。
+ */
+const useActivityLabel = () => {
+  const { t } = useTranslation();
+  const fieldLabel = useFieldLabel();
+  return (activity: TStageReviewActivity) => {
+    const label = fieldLabel(activity.field ?? "");
+    const table = activity.extra?.table;
+    if (typeof table !== "string" || isRowRecord(activity)) return label;
+    const row = activity.extra?.row_label;
+    return t(`${I18N}.activity.row_field`, {
+      row: typeof row === "string" && row ? row : fieldLabel(table),
+      field: label,
+    });
   };
 };
 
@@ -95,8 +122,21 @@ const Arrow = () => <ArrowRight className="size-3 shrink-0 text-placeholder" ari
 /** 一条修改写成一句话（单条时用）：「把结束日期从 A → B」「上传了附件 X」「更新了描述」 */
 const EditSentence = ({ activity }: { activity: TStageReviewActivity }) => {
   const { t } = useTranslation();
-  const fieldLabel = useFieldLabel();
+  const activityLabel = useActivityLabel();
   const field = activity.field ?? "";
+
+  if (isRowRecord(activity)) {
+    const isDeleted = activity.verb === "deleted";
+    const name = (isDeleted ? activity.old_value : activity.new_value) ?? "";
+    const table = t(`${I18N}.fields.${field}`);
+    if (!name) return <span>{t(`${I18N}.activity.${isDeleted ? "row_deleted_plain" : "row_created_plain"}`, { table })}</span>;
+    return (
+      <>
+        <span>{t(`${I18N}.activity.${isDeleted ? "row_deleted" : "row_created"}`, { table })}</span>
+        <Value old={isDeleted}>{name}</Value>
+      </>
+    );
+  }
 
   if (field === "attachment") {
     const isDeleted = activity.verb === "deleted";
@@ -109,7 +149,7 @@ const EditSentence = ({ activity }: { activity: TStageReviewActivity }) => {
     );
   }
 
-  const label = fieldLabel(field);
+  const label = activityLabel(activity);
   const { old_value: oldValue, new_value: newValue } = activity;
   if (isValueHidden(activity) || (!oldValue && !newValue)) {
     return <span>{t(`${I18N}.activity.updated_plain`, { field: label })}</span>;
@@ -143,13 +183,18 @@ const EditSentence = ({ activity }: { activity: TStageReviewActivity }) => {
 /** 展开后的一项：图标 + 字段名 | 旧值划线 → 新值 */
 const EditDetailItem = ({ activity }: { activity: TStageReviewActivity }) => {
   const { t } = useTranslation();
-  const fieldLabel = useFieldLabel();
+  const activityLabel = useActivityLabel();
   const field = activity.field ?? "";
   const Icon = FIELD_ICON[field] ?? PencilLine;
   const { old_value: oldValue, new_value: newValue } = activity;
+  const label = activityLabel(activity);
 
   let value: ReactNode;
-  if (field === "attachment") {
+  if (isRowRecord(activity)) {
+    const isDeleted = activity.verb === "deleted";
+    const name = (isDeleted ? oldValue : newValue) || t(`${I18N}.activity.one_row`);
+    value = isDeleted ? <Value old>{name}</Value> : <Value>{`+ ${name}`}</Value>;
+  } else if (field === "attachment") {
     value =
       activity.verb === "deleted" ? (
         <Value old>{oldValue ?? ""}</Value>
@@ -172,7 +217,9 @@ const EditDetailItem = ({ activity }: { activity: TStageReviewActivity }) => {
     <li className="grid min-h-6.5 grid-cols-[96px_minmax(0,1fr)] items-center gap-x-2 text-13 text-tertiary">
       <span className="flex min-w-0 items-center gap-1.5">
         <Icon className="size-3.5 shrink-0 text-placeholder" />
-        <span className="truncate">{fieldLabel(field)}</span>
+        <span className="truncate" title={label}>
+          {label}
+        </span>
       </span>
       <span className="flex min-w-0 flex-wrap items-center gap-1.5">{value}</span>
     </li>

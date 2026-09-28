@@ -28,6 +28,7 @@ export const StageReviewDrawer = ({
   showProjectCrumb = false,
   onClose,
   onUpdated,
+  onOpenReview,
 }: {
   workspaceSlug: string;
   workspaceId: string;
@@ -39,6 +40,8 @@ export const StageReviewDrawer = ({
   showProjectCrumb?: boolean;
   onClose: () => void;
   onUpdated: (review: TStageReview) => void;
+  /** 父评审点一项评审活动、评审活动点回父评审：换抽屉里打开的那一条 */
+  onOpenReview: (reviewId: string) => void;
 }) => {
   const [peekMode, setPeekMode] = useState<TStageReviewPeekMode>("side-peek");
   const isOpen = Boolean(reviewId);
@@ -90,6 +93,7 @@ export const StageReviewDrawer = ({
               onPeekModeChange={setPeekMode}
               onClose={onClose}
               onUpdated={onUpdated}
+              onOpenReview={onOpenReview}
             />
           </div>
         </Transition.Child>

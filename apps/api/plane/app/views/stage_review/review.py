@@ -14,7 +14,7 @@
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -28,6 +28,8 @@ from plane.app.serializers.stage_review import (
     StageReviewListSerializer,
     StageReviewApproveSerializer,
     StageReviewBulkUpdateSerializer,
+    StageReviewComponentVersionSerializer,
+    StageReviewFinishedGoodSerializer,
     StageReviewRollbackSerializer,
     StageReviewSubmitSerializer,
     StageReviewUpdateSerializer,
@@ -52,15 +54,19 @@ from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.review_tailoring import project_stages
 from plane.utils.stage_review import (
+    ROW_TABLES,
     StageReviewError,
+    add_row,
     advance as advance_review,
     assert_not_locked,
     bulk_update_reviews,
     create_manual_review,
     delete_review,
+    delete_row,
     resolve_role_candidates,
     rollback as rollback_review,
     update_review,
+    update_row,
     write_activity,
 )
 
@@ -73,9 +79,16 @@ STAGE_REVIEW_MANAGE_KEY = PermissionKey.PROJECT_STAGE_REVIEW_MANAGE
 
 STAGE_REVIEW_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.STAGE_REVIEW_FILE
 
+#: 成品 / 组件版本两张表各自的行序列化器，表名由 URL 固定传入（见 urls）
+ROW_SERIALIZERS = {
+    "finished_goods": StageReviewFinishedGoodSerializer,
+    "component_versions": StageReviewComponentVersionSerializer,
+}
+
 #: 这些是「当前状态不允许」而不是「请求写错了」，回 409 让前端能区分对待
 CONFLICT_CODES = {
     "STAGE_REVIEW_LOCKED",
+    "STAGE_REVIEW_ROWS_ONLY_O_STAGE",
     "STAGE_REVIEW_ALREADY_COMPLETED",
     "STAGE_REVIEW_NO_PREVIOUS_STATUS",
     "STAGE_REVIEW_FROM_TAILORING_UNDELETABLE",
@@ -200,7 +213,22 @@ class StageReviewViewSet(BaseViewSet):
         )
 
     def _detail_response(self, pk, http_status=status.HTTP_200_OK):
-        review = self.get_queryset().filter(pk=pk).first()
+        review = (
+            self.get_queryset()
+            .filter(pk=pk)
+            .prefetch_related(
+                "finished_goods",
+                "component_versions",
+                # 父评审详情里的「评审活动」区块，顺序同列表
+                Prefetch(
+                    "children",
+                    queryset=StageReview.objects.select_related(
+                        "leader", "leader__avatar_asset"
+                    ).order_by("sort_order", "created_at", "id"),
+                ),
+            )
+            .first()
+        )
         if review is None:
             return self._not_found()
         return Response(StageReviewDetailSerializer(review).data, status=http_status)
@@ -402,6 +430,69 @@ class StageReviewViewSet(BaseViewSet):
         try:
             with transaction.atomic():
                 update_review(review, actor=request.user, validated_data=data)
+        except StageReviewError as exc:
+            return stage_review_error_response(exc)
+        return self._detail_response(pk)
+
+    # --- 成品 / 组件版本的表格行 --------------------------------------------
+    # 三个动作的响应都是完整详情，与 partial_update 同口径：前端整块替换。
+
+    @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
+    def create_row(self, request, slug, project_id, pk, table):
+        serializer = ROW_SERIALIZERS[table](data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                review = self._locked(pk)
+                if review is None:
+                    return self._not_found()
+                add_row(
+                    review,
+                    actor=request.user,
+                    table=table,
+                    data=serializer.validated_data,
+                )
+        except StageReviewError as exc:
+            return stage_review_error_response(exc)
+        return self._detail_response(pk, status.HTTP_201_CREATED)
+
+    def _row(self, review, table, row_id):
+        return ROW_TABLES[table][0].objects.filter(
+            id=row_id, stage_review_id=review.id
+        ).first()
+
+    @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
+    def update_row(self, request, slug, project_id, pk, table, row_id):
+        try:
+            with transaction.atomic():
+                review = self._locked(pk)
+                row = review and self._row(review, table, row_id)
+                if row is None:
+                    return self._not_found()
+                serializer = ROW_SERIALIZERS[table](
+                    row, data=request.data, partial=True
+                )
+                serializer.is_valid(raise_exception=True)
+                update_row(
+                    review,
+                    row,
+                    actor=request.user,
+                    table=table,
+                    data=serializer.validated_data,
+                )
+        except StageReviewError as exc:
+            return stage_review_error_response(exc)
+        return self._detail_response(pk)
+
+    @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
+    def destroy_row(self, request, slug, project_id, pk, table, row_id):
+        try:
+            with transaction.atomic():
+                review = self._locked(pk)
+                row = review and self._row(review, table, row_id)
+                if row is None:
+                    return self._not_found()
+                delete_row(review, row, actor=request.user, table=table)
         except StageReviewError as exc:
             return stage_review_error_response(exc)
         return self._detail_response(pk)

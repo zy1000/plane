@@ -51,6 +51,8 @@ from plane.db.models import (
     StageReview,
     StageReviewActivity,
     StageReviewComment,
+    StageReviewComponentVersion,
+    StageReviewFinishedGood,
     StageReviewStatus,
     StageReviewTemplate,
 )
@@ -1397,6 +1399,8 @@ def _delete_stage_reviews(review_ids, keep_ids=()):
     )
     StageReviewActivity.objects.filter(stage_review_id__in=all_ids).delete()
     StageReviewComment.objects.filter(stage_review_id__in=all_ids).delete()
+    StageReviewFinishedGood.objects.filter(stage_review_id__in=all_ids).delete()
+    StageReviewComponentVersion.objects.filter(stage_review_id__in=all_ids).delete()
     FileAsset.objects.filter(
         Q(stage_review_id__in=all_ids)
         | Q(stage_review_comment__stage_review_id__in=all_ids)

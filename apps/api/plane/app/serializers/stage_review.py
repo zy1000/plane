@@ -18,16 +18,13 @@ from plane.db.models import (
     StageReview,
     StageReviewActivity,
     StageReviewComment,
+    StageReviewComponentVersion,
+    StageReviewFinishedGood,
     StageReviewKind,
     StageReviewResult,
     User,
 )
-from plane.db.models.stage_review import (
-    COMPONENT_VERSION_FIELDS,
-    FINISHED_GOODS_FIELDS,
-    ProductionMode,
-    ShipmentAssessment,
-)
+from plane.db.models.stage_review import ProductionMode, ShipmentAssessment
 
 from .base import BaseSerializer
 
@@ -113,10 +110,56 @@ class StageReviewListSerializer(BaseSerializer):
         return obj.template_id is None
 
 
+class StageReviewFinishedGoodSerializer(BaseSerializer):
+    """成品表的一行。读写共用：新建 / 改格子时只校验形状，归属由 utils 负责。"""
+
+    class Meta:
+        model = StageReviewFinishedGood
+        fields = [
+            "id",
+            "akf_code",
+            "production_quantity",
+            "product_config",
+            "baseline_archive_code",
+            "sort_order",
+        ]
+        read_only_fields = ["id", "sort_order"]
+
+
+class StageReviewComponentVersionSerializer(BaseSerializer):
+    """组件版本表的一行。"""
+
+    class Meta:
+        model = StageReviewComponentVersion
+        fields = ["id", "component", "version", "sort_order"]
+        read_only_fields = ["id", "sort_order"]
+
+
+class StageReviewChildSerializer(BaseSerializer):
+    """父评审详情里「评审活动」区块的一行：只读，只带这一行要画的字段。"""
+
+    leader_detail = UserLiteSerializer(source="leader", read_only=True)
+
+    class Meta:
+        model = StageReview
+        fields = [
+            "id",
+            "kind",
+            "title",
+            "status",
+            "result",
+            "leader_id",
+            "leader_detail",
+            "end_date",
+            "sort_order",
+        ]
+        read_only_fields = fields
+
+
 class StageReviewDetailSerializer(StageReviewListSerializer):
     """抽屉里要的全部字段。
 
-    成品与组件版本按分组吐 json（模型上的两个 property），只有「O阶段评审」有值；
+    成品与组件版本是两张子表，按行吐出来，只有「O阶段评审」有值；
     生产方式与出货评估两种 O 阶段类型都有。前端按 ``kind`` 决定渲不渲这两块。
     """
 
@@ -126,8 +169,12 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
     parent_title = serializers.CharField(
         source="parent.title", read_only=True, allow_null=True, default=None
     )
-    finished_goods = serializers.DictField(read_only=True)
-    component_versions = serializers.DictField(read_only=True)
+    finished_goods = StageReviewFinishedGoodSerializer(many=True, read_only=True)
+    component_versions = StageReviewComponentVersionSerializer(
+        many=True, read_only=True
+    )
+    # 挂在这条评审下的评审活动；评审活动自己没有下一层，恒为空。顺序由 view 的 prefetch 定
+    children = StageReviewChildSerializer(many=True, read_only=True)
 
     class Meta(StageReviewListSerializer.Meta):
         fields = StageReviewListSerializer.Meta.fields + [
@@ -143,6 +190,7 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
             "shipment_assessment",
             "finished_goods",
             "component_versions",
+            "children",
             "created_by",
         ]
         read_only_fields = fields
@@ -254,15 +302,13 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
             "auditor",
             "start_date",
             "end_date",
-            *FINISHED_GOODS_FIELDS,
-            *COMPONENT_VERSION_FIELDS,
         ]
 
 
 #: 批量改属性一次最多改多少条。列表一次取全，一个项目一两百条，留足余量
 STAGE_REVIEW_BULK_LIMIT = 500
 
-#: 批量能改的属性。只放「一批评审能共用同一个值」的字段 —— 标题、描述、O 阶段成品信息
+#: 批量能改的属性。只放「一批评审能共用同一个值」的字段 —— 标题、描述、O 阶段的成品表
 #: 各条不同，状态与结论只能由本人推进（见 ``StageReviewUpdateSerializer``）
 STAGE_REVIEW_BULK_FIELDS = ("leader", "auditor", "start_date", "end_date")
 

@@ -164,6 +164,33 @@ urlpatterns = [
         StageReviewViewSet.as_view({"get": "candidates"}),
         name="stage-review-candidates",
     ),
+    # 成品 / 组件版本：O阶段评审下的两张表，按行增删改，响应都是完整详情
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/finished-goods/",
+        StageReviewViewSet.as_view({"post": "create_row"}),
+        {"table": "finished_goods"},
+        name="stage-review-finished-goods",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/"
+        "finished-goods/<uuid:row_id>/",
+        StageReviewViewSet.as_view({"patch": "update_row", "delete": "destroy_row"}),
+        {"table": "finished_goods"},
+        name="stage-review-finished-goods-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/component-versions/",
+        StageReviewViewSet.as_view({"post": "create_row"}),
+        {"table": "component_versions"},
+        name="stage-review-component-versions",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/<uuid:pk>/"
+        "component-versions/<uuid:row_id>/",
+        StageReviewViewSet.as_view({"patch": "update_row", "delete": "destroy_row"}),
+        {"table": "component_versions"},
+        name="stage-review-component-versions-detail",
+    ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/stage-reviews/"
         "<uuid:stage_review_id>/comments/",

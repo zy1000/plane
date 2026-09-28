@@ -6,6 +6,8 @@ import type {
   TStageReviewAttachment,
   TStageReviewComment,
   TStageReviewDetail,
+  TStageReviewRowPayload,
+  TStageReviewRowTable,
   TSubmitStageReviewPayload,
   TUpdateStageReviewPayload,
 } from "@plane/types";
@@ -173,6 +175,38 @@ export const useStageReviewDetail = (
     [workspaceSlug, projectId, reviewId, runSave, applyDetail, refreshActivities]
   );
 
+  /** 成品 / 组件版本表格行的增删改：与字段保存同一条通道（顶栏保存状态，不弹 toast） */
+  const saveRow = useCallback(
+    async (request: (slug: string, project: string, review: string) => Promise<TStageReviewDetail>) => {
+      if (!workspaceSlug || !projectId || !reviewId) return undefined;
+      return runSave(async () => {
+        const next = await request(workspaceSlug, projectId, reviewId);
+        applyDetail(next);
+        refreshActivities();
+        return next;
+      });
+    },
+    [workspaceSlug, projectId, reviewId, runSave, applyDetail, refreshActivities]
+  );
+
+  const createRow = useCallback(
+    <T extends TStageReviewRowTable>(table: T, payload: TStageReviewRowPayload[T] = {}) =>
+      saveRow((slug, project, review) => service.createRow(slug, project, review, table, payload)),
+    [saveRow]
+  );
+
+  const updateRow = useCallback(
+    <T extends TStageReviewRowTable>(table: T, rowId: string, payload: TStageReviewRowPayload[T]) =>
+      saveRow((slug, project, review) => service.updateRow(slug, project, review, table, rowId, payload)),
+    [saveRow]
+  );
+
+  const deleteRow = useCallback(
+    (table: TStageReviewRowTable, rowId: string) =>
+      saveRow((slug, project, review) => service.deleteRow(slug, project, review, table, rowId)),
+    [saveRow]
+  );
+
   /** 推进一步。评审中 → 审核中 这一跳要带结论，审核中 → 已评审 可带审核意见，开始 payload 留空 */
   const advance = useCallback(
     async (payload?: TSubmitStageReviewPayload | TApproveStageReviewPayload) => {
@@ -287,6 +321,9 @@ export const useStageReviewDetail = (
     saveState,
     retryLastSave,
     updateReview,
+    createRow,
+    updateRow,
+    deleteRow,
     advance,
     rollback,
     uploadAttachment,

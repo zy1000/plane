@@ -12,6 +12,8 @@ import type {
   TStageReviewCandidates,
   TStageReviewComment,
   TStageReviewDetail,
+  TStageReviewRowPayload,
+  TStageReviewRowTable,
   TStageReviewStageSummary,
   TSubmitStageReviewPayload,
   TUpdateStageReviewPayload,
@@ -90,6 +92,54 @@ export class StageReviewService extends APIService {
     payload: TCreateStageReviewPayload
   ): Promise<TStageReviewDetail> {
     return this.post(`${this.base(workspaceSlug, projectId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 成品 / 组件版本的表格行。三个动作的响应都是完整详情，整块替换 */
+  private rowBase(workspaceSlug: string, projectId: string, reviewId: string, table: TStageReviewRowTable) {
+    return `${this.base(workspaceSlug, projectId)}/${reviewId}/${table.replace("_", "-")}/`;
+  }
+
+  async createRow<T extends TStageReviewRowTable>(
+    workspaceSlug: string,
+    projectId: string,
+    reviewId: string,
+    table: T,
+    payload: TStageReviewRowPayload[T]
+  ): Promise<TStageReviewDetail> {
+    return this.post(this.rowBase(workspaceSlug, projectId, reviewId, table), payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateRow<T extends TStageReviewRowTable>(
+    workspaceSlug: string,
+    projectId: string,
+    reviewId: string,
+    table: T,
+    rowId: string,
+    payload: TStageReviewRowPayload[T]
+  ): Promise<TStageReviewDetail> {
+    return this.patch(`${this.rowBase(workspaceSlug, projectId, reviewId, table)}${rowId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteRow(
+    workspaceSlug: string,
+    projectId: string,
+    reviewId: string,
+    table: TStageReviewRowTable,
+    rowId: string
+  ): Promise<TStageReviewDetail> {
+    return this.delete(`${this.rowBase(workspaceSlug, projectId, reviewId, table)}${rowId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

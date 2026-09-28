@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Box, CalendarDays, ClipboardCheck, Flag, Layers, Package, UserRound, UserRoundCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
@@ -13,7 +12,7 @@ import { StageSelect } from "./stage-select";
 
 const I18N = "stage_review";
 
-/** 成品与组件版本只挂在「O阶段评审」上；生产方式与出货评估两种 O 阶段类型都有 */
+/** 生产方式与出货评估两种 O 阶段类型都有（成品与组件版本是正文里的两张表） */
 const O_STAGE_KINDS: EStageReviewKind[] = [EStageReviewKind.O_STAGE_REVIEW, EStageReviewKind.O_STAGE_ACTIVITY];
 
 const Group = ({ title, children }: { title?: string; children: React.ReactNode }) => (
@@ -33,43 +32,6 @@ const Row = ({ icon: Icon, label, children }: { icon: LucideIcon; label: string;
     <div className="min-w-0 text-14 text-primary">{children}</div>
   </div>
 );
-
-/** 就地编辑的一格：失焦提交，值没变不发请求 */
-const InlineText = ({
-  value,
-  mono,
-  placeholder,
-  editable,
-  onCommit,
-}: {
-  value: string;
-  mono?: boolean;
-  placeholder: string;
-  editable: boolean;
-  onCommit: (next: string) => void;
-}) => {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-
-  if (!editable) {
-    return <span className={cn(mono && "tabular-nums", !value && "text-placeholder")}>{value || "—"}</span>;
-  }
-  return (
-    <input
-      value={draft}
-      placeholder={placeholder}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft);
-      }}
-      className={cn(
-        INLINE_FIELD_CLASS,
-        "text-primary placeholder:text-placeholder focus:border-accent-strong focus:bg-surface-1 focus:outline-none",
-        mono && "tabular-nums"
-      )}
-    />
-  );
-};
 
 /** 计划日期的一格：能改就是日期下拉，空值显示灰字「设置日期」；不能改就是纯文本 */
 const PlanDate = ({
@@ -108,7 +70,7 @@ const PlanDate = ({
 };
 
 /**
- * 抽屉右栏：「要查的东西」——属性、结论、O 阶段的成品与组件版本，底下两行小字是来源。
+ * 抽屉右栏：「要查的东西」——属性与结论，底下两行小字是来源。
  *
  * 和正文分开的理由很简单：产品、阶段、负责人、日期这些是**查**的，描述与工作指引是
  * **读**的。空值是灰字动词（指定负责人 / 设置日期），悬停才出底色，不画成空输入框。
@@ -131,8 +93,6 @@ export const StageReviewSidebar = ({
 }) => {
   const { t } = useTranslation();
   const isOStage = O_STAGE_KINDS.includes(detail.kind);
-  const hasFinishedGoods = detail.kind === EStageReviewKind.O_STAGE_REVIEW;
-  const goods = detail.finished_goods;
 
   return (
     <aside
@@ -240,104 +200,6 @@ export const StageReviewSidebar = ({
           </Row>
         )}
       </Group>
-
-      {hasFinishedGoods && (
-        <>
-          <Group title={t(`${I18N}.detail.finished_goods`)}>
-            <Row icon={Package} label={t(`${I18N}.fields.akf_code`)}>
-              <InlineText
-                value={goods.akf_code}
-                mono
-                editable={editable}
-                placeholder="AKF…"
-                onCommit={(next) => onUpdate({ akf_code: next })}
-              />
-            </Row>
-            <Row icon={Package} label={t(`${I18N}.fields.production_quantity`)}>
-              <InlineText
-                value={goods.production_quantity === null ? "" : String(goods.production_quantity)}
-                mono
-                editable={editable}
-                placeholder="0"
-                onCommit={(next) => {
-                  const parsed = Number(next.replace(/[,\s]/g, ""));
-                  // 填了非数字就当没改：那一列是 PositiveInteger，送过去只会拿到 400
-                  if (next.trim() === "") onUpdate({ production_quantity: null });
-                  else if (Number.isFinite(parsed) && parsed >= 0) onUpdate({ production_quantity: parsed });
-                }}
-              />
-            </Row>
-            <Row icon={Package} label={t(`${I18N}.fields.product_config`)}>
-              <InlineText
-                value={goods.product_config}
-                mono
-                editable={editable}
-                placeholder="KF…"
-                onCommit={(next) => onUpdate({ product_config: next })}
-              />
-            </Row>
-            <Row icon={Package} label={t(`${I18N}.fields.baseline_archive_code`)}>
-              <InlineText
-                value={goods.baseline_archive_code}
-                mono
-                editable={editable}
-                placeholder="PDL-…"
-                onCommit={(next) => onUpdate({ baseline_archive_code: next })}
-              />
-            </Row>
-            <Row icon={Layers} label={t(`${I18N}.fields.components`)}>
-              {editable ? (
-                <InlineText
-                  // 四个固定值的场景，做成标签编辑器不划算，用顿号分隔
-                  value={goods.components.join("、")}
-                  editable
-                  placeholder={t(`${I18N}.detail.components_placeholder`)}
-                  onCommit={(next) =>
-                    onUpdate({
-                      components: next
-                        .split(/[、,，]/)
-                        .map((item) => item.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              ) : goods.components.length === 0 ? (
-                <span className="text-placeholder">—</span>
-              ) : (
-                <span className="flex flex-wrap gap-1.5">
-                  {goods.components.map((component) => (
-                    <span key={component} className="rounded-md border border-subtle px-1.5 py-0.5 text-12 text-secondary">
-                      {component}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </Row>
-          </Group>
-
-          <Group title={t(`${I18N}.detail.component_versions`)}>
-            {editable ? (
-              <textarea
-                defaultValue={detail.component_versions.version}
-                placeholder={t(`${I18N}.detail.component_version_placeholder`)}
-                onBlur={(event) => {
-                  if (event.target.value !== detail.component_versions.version) {
-                    onUpdate({ component_version: event.target.value });
-                  }
-                }}
-                className={cn(
-                  "-mx-2 min-h-16 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-1.5 text-14 leading-relaxed",
-                  "text-primary placeholder:text-placeholder hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none"
-                )}
-              />
-            ) : (
-              <p className="text-14 leading-relaxed whitespace-pre-line text-secondary">
-                {detail.component_versions.version || "—"}
-              </p>
-            )}
-          </Group>
-        </>
-      )}
 
       {/* 来源、模板角色、创建时间：查证用的，压成底部两行小字 */}
       <p className="mt-auto pt-2 text-12 leading-relaxed text-placeholder">

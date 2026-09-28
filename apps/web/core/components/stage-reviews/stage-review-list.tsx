@@ -368,6 +368,7 @@ export const StageReviewList = observer(function StageReviewList({
         showProjectCrumb={scopeKind === "product"}
         onClose={() => setOpenReviewId(null)}
         onUpdated={applyReview}
+        onOpenReview={setOpenReviewId}
       />
 
       {actionsHost &&

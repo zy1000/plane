@@ -93,6 +93,38 @@ export type TStageReview = {
   updated_at: string;
 };
 
+/** 成品表的一行：一次 O 阶段评审过的一款成品 */
+export type TStageReviewFinishedGood = {
+  id: string;
+  akf_code: string;
+  production_quantity: number | null;
+  product_config: string;
+  baseline_archive_code: string;
+  sort_order: number;
+};
+
+/** 组件版本表的一行，形如 主板 / 板内V2.2，板边V2.4 */
+export type TStageReviewComponentVersion = {
+  id: string;
+  component: string;
+  version: string;
+  sort_order: number;
+};
+
+/** 两张表的名字，同时是详情里的 key 与轨迹「添加 / 删除一行」的 field */
+export type TStageReviewRowTable = "finished_goods" | "component_versions";
+
+export type TStageReviewRowPayload = {
+  finished_goods: Partial<Omit<TStageReviewFinishedGood, "id" | "sort_order">>;
+  component_versions: Partial<Omit<TStageReviewComponentVersion, "id" | "sort_order">>;
+};
+
+/** 父评审详情里「评审活动」区块的一行：只读，只带这一行要画的字段 */
+export type TStageReviewChild = Pick<
+  TStageReview,
+  "id" | "kind" | "title" | "status" | "result" | "leader_id" | "leader_detail" | "end_date" | "sort_order"
+>;
+
 export type TStageReviewDetail = TStageReview & {
   /** 项目阶段（父子皆可）。``label`` 是 ``name`` 的别名，后端两个都给 */
   stage_detail: TProjectStageLite | null;
@@ -107,16 +139,12 @@ export type TStageReviewDetail = TStageReview & {
   auditor_role: string;
   production_mode: TProductionMode | "";
   shipment_assessment: TShipmentAssessment | "";
-  /** 成品：只有「O阶段评审」有值 */
-  finished_goods: {
-    akf_code: string;
-    production_quantity: number | null;
-    product_config: string;
-    baseline_archive_code: string;
-    components: string[];
-  };
-  /** 组件版本：同样只有「O阶段评审」有值，这一组只有「版本」一个子属性 */
-  component_versions: { version: string };
+  /** 成品表：只有「O阶段评审」有行 */
+  finished_goods: TStageReviewFinishedGood[];
+  /** 组件版本表：同样只有「O阶段评审」有行 */
+  component_versions: TStageReviewComponentVersion[];
+  /** 挂在这条评审下的评审活动，顺序同列表；评审活动自己没有下一层，恒为空 */
+  children: TStageReviewChild[];
   created_by: string | null;
 };
 
@@ -239,12 +267,6 @@ export type TUpdateStageReviewPayload = Partial<{
   auditor: string | null;
   start_date: string | null;
   end_date: string | null;
-  akf_code: string;
-  production_quantity: number | null;
-  product_config: string;
-  baseline_archive_code: string;
-  components: string[];
-  component_version: string;
 }>;
 
 /** 列表批量改属性能改的字段：出现即修改，不出现保持不变；成员传 null 表示清空 */

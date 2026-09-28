@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ExternalLink, MoveDiagonal, MoveRight, Play, Send, Undo2 } from "lucide-react";
 import { Link } from "react-router";
@@ -13,10 +13,12 @@ import type {
   TStageReviewAttachment,
   TStageReviewComment,
   TStageReviewDetail,
+  TStageReviewRowPayload,
+  TStageReviewRowTable,
   TSubmitStageReviewPayload,
   TUpdateStageReviewPayload,
 } from "@plane/types";
-import { EStageReviewResult, EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
+import { EStageReviewKind, EStageReviewResult, EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
 import { Breadcrumbs, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { stageReviewDetailPath, stageReviewsPath } from "@/components/reviews/routes";
@@ -37,10 +39,12 @@ import { SubmitStageReviewModal } from "../submit-review-modal";
 import type { TStageReviewActionGuard } from "./stage-review-action-guard";
 import { getStageReviewActionGuard } from "./stage-review-action-guard";
 import { StageReviewAttachments } from "./stage-review-attachments";
+import { StageReviewChildren } from "./stage-review-children";
 import { StageReviewContent } from "./stage-review-content";
 import type { TStageReviewPeekMode } from "./stage-review-peek-mode";
 import { StageReviewPeekModeSelect } from "./stage-review-peek-mode";
 import { StageReviewSaveStatus } from "./stage-review-save-status";
+import { StageReviewRowTables } from "./stage-review-row-tables";
 import { StageReviewSidebar } from "./stage-review-sidebar";
 import { StageReviewStepper, useStepHints } from "./stage-review-stepper";
 import { StageReviewTimeline } from "./stage-review-timeline";
@@ -111,6 +115,8 @@ export type TStageReviewDetailRootProps = TStageReviewDetailVariant & {
   showProjectCrumb?: boolean;
   /** 写入成功后同步给列表；独立页没有列表可同步 */
   onUpdated?: (review: TStageReview) => void;
+  /** 在父评审与评审活动之间走动：抽屉里换抽屉内容；不传（独立页）就跳那一条的独立页 */
+  onOpenReview?: (reviewId: string) => void;
 };
 
 /**
@@ -143,6 +149,9 @@ export const StageReviewDetailRoot = (props: TStageReviewDetailRootProps) => {
     saveState,
     retryLastSave,
     updateReview,
+    createRow,
+    updateRow,
+    deleteRow,
     advance,
     rollback,
     uploadAttachment,
@@ -201,6 +210,12 @@ export const StageReviewDetailRoot = (props: TStageReviewDetailRootProps) => {
       if (next) onUpdated?.(next);
     });
 
+  /** 表格行的增删改：同样是随手改。行不在列表里，不用回灌列表 */
+  const handleCreateRow = (table: TStageReviewRowTable) => runSave(() => createRow(table));
+  const handleUpdateRow = <T extends TStageReviewRowTable>(table: T, rowId: string, payload: TStageReviewRowPayload[T]) =>
+    void runSave(() => updateRow(table, rowId, payload));
+  const handleDeleteRow = (table: TStageReviewRowTable, rowId: string) => void runSave(() => deleteRow(table, rowId));
+
   const handleSubmitResult = async (payload: TSubmitStageReviewPayload) => {
     // 不通过没有「提交」出去，状态留在评审中，提示要跟着换
     const toastKey = payload.result === EStageReviewResult.REJECTED ? "rejected" : "submitted";
@@ -253,6 +268,9 @@ export const StageReviewDetailRoot = (props: TStageReviewDetailRootProps) => {
         setTitleDraft={setTitleDraft}
         onRetrySave={() => void runSave(retryLastSave)}
         onUpdate={handleUpdate}
+        onCreateRow={handleCreateRow}
+        onUpdateRow={handleUpdateRow}
+        onDeleteRow={handleDeleteRow}
         onStart={() => void runAction(advance, "started")}
         onOpenSubmit={() => setIsSubmitOpen(true)}
         onApprove={() => setIsApproveOpen(true)}
@@ -300,6 +318,9 @@ type DetailBodyProps = TStageReviewDetailRootProps & {
   setTitleDraft: (next: string) => void;
   onRetrySave: () => void;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
+  onCreateRow: (table: TStageReviewRowTable) => Promise<TStageReviewDetail | undefined>;
+  onUpdateRow: <T extends TStageReviewRowTable>(table: T, rowId: string, payload: TStageReviewRowPayload[T]) => void;
+  onDeleteRow: (table: TStageReviewRowTable, rowId: string) => void;
   onStart: () => void;
   onOpenSubmit: () => void;
   onApprove: () => void;
@@ -325,12 +346,16 @@ const DetailBody = (props: DetailBodyProps) => {
     canManage,
     currentUserId,
     showProjectCrumb = false,
+    onOpenReview,
     isMutating,
     saveState,
     titleDraft,
     setTitleDraft,
     onRetrySave,
     onUpdate,
+    onCreateRow,
+    onUpdateRow,
+    onDeleteRow,
     onStart,
     onOpenSubmit,
     onApprove,
@@ -355,12 +380,15 @@ const DetailBody = (props: DetailBodyProps) => {
   // 已评审即定稿：字段与附件都改不了也退不回，要重做去裁剪表取消勾选后重新生成
   const editable = canManage && !isCompleted;
   const hasActions = canManage && !isCompleted;
-  const source = detail.parent_title
-    ? t(`${I18N}.detail.belongs_to`, { title: detail.parent_title })
-    : detail.is_manual
-      ? t(`${I18N}.detail.source_manual`)
-      : t(`${I18N}.detail.source_tailoring`);
-  const detailPath = getStageReviewDetailPath(workspaceSlug, detail.project_id, detail.id);
+  const source = detail.is_manual ? t(`${I18N}.detail.source_manual`) : t(`${I18N}.detail.source_tailoring`);
+  const getReviewPath = (reviewId: string) => getStageReviewDetailPath(workspaceSlug, detail.project_id, reviewId);
+  const detailPath = getReviewPath(detail.id);
+  /** 抽屉里就地换内容；带修饰键的点击留给浏览器开新标签 */
+  const handleOpenParent = (event: MouseEvent) => {
+    if (!onOpenReview || !detail.parent_id || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    onOpenReview(detail.parent_id);
+  };
 
   return (
     <>
@@ -416,7 +444,21 @@ const DetailBody = (props: DetailBodyProps) => {
                 </span>
               )}
               <StageReviewKindBadge kind={detail.kind} className="rounded-md px-2 text-12" />
-              <span className="truncate">· {source}</span>
+              {detail.parent_id && detail.parent_title ? (
+                /* 评审活动：所属评审可以点，回到父评审 */
+                <Tooltip tooltipContent={t(`${I18N}.detail.back_to_parent`)}>
+                  <Link
+                    to={getReviewPath(detail.parent_id)}
+                    onClick={handleOpenParent}
+                    className="inline-flex h-5.5 min-w-0 items-center gap-1 rounded-md bg-accent-subtle px-2 text-12 font-medium text-accent-primary transition hover:opacity-80"
+                  >
+                    <Undo2 className="size-3 shrink-0" />
+                    <span className="truncate">{t(`${I18N}.detail.belongs_to`, { title: detail.parent_title })}</span>
+                  </Link>
+                </Tooltip>
+              ) : (
+                <span className="truncate">· {source}</span>
+              )}
             </div>
             {editable ? (
               <input
@@ -513,6 +555,17 @@ const DetailBody = (props: DetailBodyProps) => {
             onUpdate={onUpdate}
           />
 
+          {/* 成品与组件版本只挂在「O阶段评审」上 */}
+          {detail.kind === EStageReviewKind.O_STAGE_REVIEW && (
+            <StageReviewRowTables
+              detail={detail}
+              editable={editable}
+              onCreateRow={onCreateRow}
+              onUpdateRow={onUpdateRow}
+              onDeleteRow={onDeleteRow}
+            />
+          )}
+
           <StageReviewAttachments
             workspaceSlug={workspaceSlug}
             projectId={projectId}
@@ -524,6 +577,8 @@ const DetailBody = (props: DetailBodyProps) => {
             onDelete={onDeleteAttachment}
             getFileURL={getAttachmentUrl}
           />
+
+          <StageReviewChildren detail={detail} getPath={getReviewPath} onOpenReview={onOpenReview} />
 
           <StageReviewTimeline
             detail={detail}

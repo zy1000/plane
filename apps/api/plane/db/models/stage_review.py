@@ -72,17 +72,6 @@ ACTIVITY_KIND_BY_ROOT = {
 }
 # O 阶段专有字段的判定集合
 O_STAGE_KINDS = (StageReviewKind.O_STAGE_REVIEW, StageReviewKind.O_STAGE_ACTIVITY)
-# 「成品」分组的子属性，只在「O阶段评审」上有值（活动上没有）
-FINISHED_GOODS_FIELDS = (
-    "akf_code",
-    "production_quantity",
-    "product_config",
-    "baseline_archive_code",
-    "components",
-)
-# 「组件版本」分组的子属性，同样只在「O阶段评审」上有值。
-# 落库列名 → 分组 json 里的 key（原始表里这一组的子属性就叫「版本」）
-COMPONENT_VERSION_FIELDS = {"component_version": "version"}
 # 生产方式 / 出货评估「O阶段评审」和「O阶段评审活动」都有
 O_STAGE_ONLY_FIELDS = ("production_mode", "shipment_assessment")
 
@@ -469,28 +458,9 @@ class StageReview(ProjectBaseModel):
     end_date = models.DateField(null=True, blank=True, verbose_name="结束日期")
     work_instruction = models.TextField(blank=True, default="", verbose_name="工作指引")
 
-    # ↓ O 阶段专有（成品 / 组件版本只在 kind=o_stage_review 上，生产方式与出货评估两个
-    #   O 阶段类型都有，见 clean()）。原始表里这是两个分组：成品（5 个子属性）和
-    #   组件版本（1 个子属性「版本」），列平铺落库便于查询与筛选，对外由
-    #   ``finished_goods`` / ``component_versions`` 两个 property 拼成分组 json。
-    akf_code = models.CharField(
-        max_length=255, blank=True, default="", verbose_name="AKF 编号"
-    )
-    production_quantity = models.PositiveIntegerField(
-        null=True, blank=True, verbose_name="生产数量"
-    )
-    product_config = models.CharField(
-        max_length=255, blank=True, default="", verbose_name="产品配置"
-    )
-    baseline_archive_code = models.CharField(
-        max_length=255, blank=True, default="", verbose_name="数据基线归档编号"
-    )
-    # 成品含哪些模块，默认带出 基表硬件 / 基表软件 / 模块硬件 / 模块软件
-    components = models.JSONField(default=list, blank=True, verbose_name="组件")
-    # 「组件版本」分组下的唯一子属性，形如 "主板：板内V2.2，板边V2.4\n电源板：板内V2.2，板边V2.5"
-    component_version = models.TextField(
-        blank=True, default="", verbose_name="组件版本 - 版本"
-    )
+    # ↓ O 阶段专有：生产方式与出货评估两个 O 阶段类型都有，见 clean()。
+    #   成品与组件版本是两张子表（``StageReviewFinishedGood`` /
+    #   ``StageReviewComponentVersion``），一条「O阶段评审」可以有多行。
     production_mode = models.CharField(
         max_length=20,
         choices=ProductionMode.choices,
@@ -555,14 +525,6 @@ class StageReview(ProjectBaseModel):
         if self.start_date and self.end_date and self.start_date > self.end_date:
             raise ValidationError({"end_date": "结束日期不能早于开始日期"})
         # O 阶段字段只能出现在对应类型上，否则数据一乱就分不清是历史遗留还是填错了
-        if self.kind != StageReviewKind.O_STAGE_REVIEW:
-            filled = [
-                f
-                for f in (*FINISHED_GOODS_FIELDS, *COMPONENT_VERSION_FIELDS)
-                if getattr(self, f)
-            ]
-            if filled:
-                raise ValidationError({filled[0]: "成品与组件版本只属于「O阶段评审」"})
         if self.kind not in O_STAGE_KINDS:
             filled = [f for f in O_STAGE_ONLY_FIELDS if getattr(self, f)]
             if filled:
@@ -578,26 +540,96 @@ class StageReview(ProjectBaseModel):
             self.stage_id = self.parent.stage_id
         return super().save(*args, **kwargs)
 
-    # ------------------------------------------------------------------ 分组 json
-    #
-    # 成品与组件版本在原始表里是两个分组，落库拆成列（可查询、可筛选、可建索引），
-    # 对外按分组吐 json。两个 property 都可读可写，serializer 直接挂上去即可，
-    # 写入口不用逐列拆装。
-
-    @property
-    def finished_goods(self) -> dict:
-        """成品：AKF 编号 / 生产数量 / 产品配置 / 数据基线归档编号 / 组件。"""
-        return {field: getattr(self, field) for field in FINISHED_GOODS_FIELDS}
-
-    @property
-    def component_versions(self) -> dict:
-        """组件版本。这一组在原始表里只有「版本」一个子属性。"""
-        return {
-            key: getattr(self, field) for field, key in COMPONENT_VERSION_FIELDS.items()
-        }
-
     def __str__(self):
         return f"{self.title} [{self.status}]"
+
+
+class StageReviewRowBase(ProjectBaseModel):
+    """「O阶段评审」下的表格行：成品与组件版本共用的骨架。
+
+    只挂在 ``kind=o_stage_review`` 上（活动上没有）。项目跟随所属评审。
+    """
+
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        super().clean()
+        if self.stage_review.kind != StageReviewKind.O_STAGE_REVIEW:
+            raise ValidationError(
+                {"stage_review": "成品与组件版本只属于「O阶段评审」"}
+            )
+
+    def save(self, *args, **kwargs):
+        if not self.project_id and self.stage_review_id:
+            self.project_id = self.stage_review.project_id
+        return super().save(*args, **kwargs)
+
+
+class StageReviewFinishedGood(StageReviewRowBase):
+    """成品表的一行：一次 O 阶段评审过的一款成品。"""
+
+    stage_review = models.ForeignKey(
+        StageReview,
+        on_delete=models.CASCADE,
+        related_name="finished_goods",
+        verbose_name="所属评审",
+    )
+    akf_code = models.CharField(
+        max_length=255, blank=True, default="", verbose_name="AKF 编号"
+    )
+    production_quantity = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="生产数量"
+    )
+    product_config = models.CharField(
+        max_length=255, blank=True, default="", verbose_name="产品配置"
+    )
+    baseline_archive_code = models.CharField(
+        max_length=255, blank=True, default="", verbose_name="数据基线归档编号"
+    )
+
+    class Meta:
+        db_table = "stage_review_finished_goods"
+        ordering = ("sort_order", "created_at")
+        verbose_name = "Stage Review Finished Good"
+        verbose_name_plural = "Stage Review Finished Goods"
+        indexes = [
+            models.Index(fields=["stage_review", "sort_order"], name="srfg_review_sort"),
+        ]
+
+    def __str__(self):
+        return f"{self.stage_review_id} {self.akf_code}"
+
+
+class StageReviewComponentVersion(StageReviewRowBase):
+    """组件版本表的一行，形如 主板 / 板内V2.2，板边V2.4。"""
+
+    stage_review = models.ForeignKey(
+        StageReview,
+        on_delete=models.CASCADE,
+        related_name="component_versions",
+        verbose_name="所属评审",
+    )
+    component = models.CharField(
+        max_length=255, blank=True, default="", verbose_name="组件"
+    )
+    version = models.CharField(
+        max_length=255, blank=True, default="", verbose_name="版本"
+    )
+
+    class Meta:
+        db_table = "stage_review_component_versions"
+        ordering = ("sort_order", "created_at")
+        verbose_name = "Stage Review Component Version"
+        verbose_name_plural = "Stage Review Component Versions"
+        indexes = [
+            models.Index(fields=["stage_review", "sort_order"], name="srcv_review_sort"),
+        ]
+
+    def __str__(self):
+        return f"{self.stage_review_id} {self.component}"
 
 
 class StageReviewComment(ProjectBaseModel):

@@ -37,6 +37,9 @@ from plane.db.models import (
     StageReview,
     StageReviewActivity,
     StageReviewComment,
+    StageReviewComponentVersion,
+    StageReviewFinishedGood,
+    StageReviewKind,
     StageReviewResult,
     StageReviewStatus,
     User,
@@ -45,7 +48,11 @@ from plane.db.models import (
     WorkspaceMemberRole,
     WorkspaceRole,
 )
-from plane.db.models.stage_review import ACTIVITY_KINDS, O_STAGE_KINDS
+from plane.db.models.stage_review import (
+    ACTIVITY_KINDS,
+    O_STAGE_KINDS,
+    SORT_ORDER_STEP,
+)
 
 
 class StageReviewError(Exception):
@@ -650,6 +657,119 @@ def move_review_stage(review, *, stage, actor, extra=None):
     return review
 
 
+# --- 成品 / 组件版本：表格行 ------------------------------------------------
+
+#: 表名 → (行模型, 行在轨迹里怎么称呼自己的那一列)。表名同时是详情 json 的 key 与
+#: 轨迹「添加 / 删除一行」的 field
+ROW_TABLES = {
+    "finished_goods": (StageReviewFinishedGood, "akf_code"),
+    "component_versions": (StageReviewComponentVersion, "component"),
+}
+#: 组件版本两列的轨迹字段名加前缀：「组件」「版本」单独拿出来太泛
+_ROW_ACTIVITY_FIELD = {
+    "component_versions": {"component": "cv_component", "version": "cv_version"},
+}
+
+
+def _assert_row_host(review):
+    assert_not_locked(review)
+    if review.kind != StageReviewKind.O_STAGE_REVIEW:
+        raise StageReviewError(
+            "成品与组件版本只属于「O阶段评审」", code="STAGE_REVIEW_ROWS_ONLY_O_STAGE"
+        )
+
+
+def _touch(review, actor):
+    """行的增删改都算评审被改了一次：前端按 updated_at 判断回灌的详情新不新。"""
+    review.updated_by = actor
+    review.save(update_fields=["updated_at", "updated_by"])
+
+
+def _row_extra(table, row):
+    return {
+        "table": table,
+        "row_id": str(row.id),
+        "row_label": getattr(row, ROW_TABLES[table][1]) or "",
+    }
+
+
+def add_row(review, *, actor, table, data):
+    """加一行，排在最后。"""
+    _assert_row_host(review)
+    model, _ = ROW_TABLES[table]
+    last = (
+        model.objects.filter(stage_review=review)
+        .order_by("-sort_order")
+        .values_list("sort_order", flat=True)
+        .first()
+    )
+    row = model.objects.create(
+        stage_review=review,
+        project_id=review.project_id,
+        sort_order=(last or 0) + SORT_ORDER_STEP,
+        created_by=actor,
+        updated_by=actor,
+        **data,
+    )
+    _touch(review, actor)
+    extra = _row_extra(table, row)
+    write_activity(
+        review,
+        actor=actor,
+        verb="created",
+        field=table,
+        new_value=extra["row_label"] or None,
+        extra=extra,
+    )
+    return row
+
+
+def update_row(review, row, *, actor, table, data):
+    """改一行里的格子。每个改动的格子一条轨迹，``extra.row_label`` 指明是哪一行
+    （取改动**之前**的称呼：把 AKF 编号从 A 改成 B 时，这一行还叫 A）。"""
+    _assert_row_host(review)
+    extra = _row_extra(table, row)
+    changed = []
+    for field, value in data.items():
+        old = getattr(row, field)
+        if old != value:
+            setattr(row, field, value)
+            changed.append((field, old, value))
+    if not changed:
+        return row
+    row.updated_by = actor
+    row.save(update_fields=[*(field for field, _, _ in changed), "updated_at", "updated_by"])
+    _touch(review, actor)
+    names = _ROW_ACTIVITY_FIELD.get(table, {})
+    for field, old, new in changed:
+        write_activity(
+            review,
+            actor=actor,
+            verb="updated",
+            field=names.get(field, field),
+            old_value=_activity_value(field, old) or None,
+            new_value=_activity_value(field, new) or None,
+            extra=extra,
+        )
+    return row
+
+
+def delete_row(review, row, *, actor, table):
+    _assert_row_host(review)
+    extra = _row_extra(table, row)
+    # queryset 删除：行下面没有东西要级联，不必走 instance.delete() 投递 Celery
+    type(row).objects.filter(id=row.id).delete()
+    _touch(review, actor)
+    write_activity(
+        review,
+        actor=actor,
+        verb="deleted",
+        field=table,
+        old_value=extra["row_label"] or None,
+        extra=extra,
+    )
+
+
 def bulk_update_reviews(reviews, *, actor, changes):
     """列表勾选后批量改属性：逐条走 ``update_review``，规则与活动记录和单条完全一致。
 
@@ -701,6 +821,8 @@ def delete_review(review):
     )
     StageReviewActivity.objects.filter(stage_review_id__in=all_ids).delete()
     StageReviewComment.objects.filter(stage_review_id__in=all_ids).delete()
+    StageReviewFinishedGood.objects.filter(stage_review_id__in=all_ids).delete()
+    StageReviewComponentVersion.objects.filter(stage_review_id__in=all_ids).delete()
     FileAsset.objects.filter(
         Q(stage_review_id__in=all_ids)
         | Q(stage_review_comment__stage_review_id__in=all_ids)
