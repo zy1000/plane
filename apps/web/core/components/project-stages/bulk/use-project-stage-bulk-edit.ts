@@ -12,10 +12,11 @@ const FLASH_MS = 1600;
 
 export type TProjectStageFlashedCells = { ids: Set<string>; columns: Set<TProjectStageColumn> };
 
-const FIELD_COLUMN: Record<keyof TProjectStageBulkChanges, TProjectStageColumn> = {
-  owner: "owner",
-  start_date: "start_date",
-  end_date: "end_date",
+// 改开始会顺延结束，改结束会重算周期：连带改动的格子一起亮
+const FIELD_COLUMNS: Record<keyof TProjectStageBulkChanges, TProjectStageColumn[]> = {
+  owner: ["owner"],
+  start_date: ["start_date", "end_date"],
+  end_date: ["end_date", "duration_days"],
 };
 
 type TParams = {
@@ -66,7 +67,7 @@ export const useProjectStageBulkEdit = ({ workspaceSlug, projectId, selectedIds,
       if (failedIds.length === 0) setIsPanelOpen(false);
 
       const columns = new Set(
-        (Object.keys(changes) as (keyof TProjectStageBulkChanges)[]).map((field) => FIELD_COLUMN[field])
+        (Object.keys(changes) as (keyof TProjectStageBulkChanges)[]).flatMap((field) => FIELD_COLUMNS[field])
       );
       setFlashedCells({ ids: new Set(result.stages.map((stage) => stage.id)), columns });
     } catch (error) {

@@ -104,7 +104,7 @@ class DevModeStage(BaseModel):
         verbose_name="所属工作区",
     )
     name = models.CharField(max_length=255, verbose_name="阶段名称")
-    # 本期只存不算，没有消费方；后续里程碑 / 项目进度才用
+    # 模式里只存不算；带出到项目阶段时拷成占比 / 周期的默认值（``utils/project_stage.py``）
     workload_ratio = models.DecimalField(
         max_digits=5,
         decimal_places=2,

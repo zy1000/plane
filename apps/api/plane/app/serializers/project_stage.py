@@ -9,6 +9,7 @@ from rest_framework import serializers
 from plane.app.serializers.stage_type import StageTypeLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import ProjectMember, ProjectStage, ProjectStageStatus, StageType, User
+from plane.utils.project_stage import MAX_DURATION_DAYS
 
 from .base import BaseSerializer
 
@@ -41,6 +42,8 @@ class ProjectStageSerializer(BaseSerializer):
     - ``stage_type_id`` 对从模式带出的阶段（``source_stage`` 非空）不可改，第二期评审换挂
       靠它对应模式阶段。
     - ``computed_workload_ratio``：父 = 子之和，叶 = 自身；由视图算好放在 ``context["ratios"]``。
+    - ``start_date`` 新建必填，之后只要请求里带了它就不能为空；``end_date`` 与
+      ``duration_days`` 的互相推导在 ``utils/project_stage.py::resolve_schedule``。
     """
 
     project_id = serializers.UUIDField(read_only=True)
@@ -64,6 +67,7 @@ class ProjectStageSerializer(BaseSerializer):
         max_digits=5, decimal_places=2, required=False, allow_null=True
     )
     computed_workload_ratio = serializers.SerializerMethodField()
+    duration_days = serializers.IntegerField(required=False, allow_null=True)
     status = serializers.ChoiceField(choices=ProjectStageStatus.choices, required=False)
     source_stage_id = serializers.UUIDField(read_only=True)
     is_delayed = serializers.BooleanField(read_only=True)
@@ -88,6 +92,7 @@ class ProjectStageSerializer(BaseSerializer):
             "computed_workload_ratio",
             "start_date",
             "end_date",
+            "duration_days",
             "actual_start",
             "actual_end",
             "status",
@@ -184,10 +189,17 @@ class ProjectStageSerializer(BaseSerializer):
             raise serializers.ValidationError("PROJECT_STAGE_RATIO_OUT_OF_RANGE")
         return value
 
+    def validate_duration_days(self, value):
+        if value is not None and (value < 1 or value > MAX_DURATION_DAYS):
+            raise serializers.ValidationError("PROJECT_STAGE_DURATION_OUT_OF_RANGE")
+        return value
+
     def validate(self, attrs):
         instance = self.instance
         if instance is not None and "parent" in attrs and attrs["parent"] is None and instance.parent_id:
             raise serializers.ValidationError({"parent_id": "PROJECT_STAGE_PARENT_IMMUTABLE"})
+        if attrs.get("start_date") is None and (instance is None or "start_date" in attrs):
+            raise serializers.ValidationError({"start_date": "PROJECT_STAGE_START_DATE_REQUIRED"})
         # 名称：创建时没给就取阶段类型名（「默认等于类型名，可改」）
         name = attrs.get("name")
         if name is not None:
@@ -207,7 +219,7 @@ class ProjectStageSerializer(BaseSerializer):
 
 
 class ProjectStageBulkUpdateSerializer(serializers.Serializer):
-    """列表勾选后批量改属性。字段「出现即修改」，``owner`` 传 null 表示清空。"""
+    """列表勾选后批量改属性。字段「出现即修改」，``owner`` / ``end_date`` 传 null 表示清空。"""
 
     stage_ids = serializers.ListField(
         child=serializers.UUIDField(), allow_empty=False, max_length=PROJECT_STAGE_BULK_LIMIT
@@ -215,7 +227,8 @@ class ProjectStageBulkUpdateSerializer(serializers.Serializer):
     owner = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.filter(is_active=True), required=False, allow_null=True
     )
-    start_date = serializers.DateField(required=False, allow_null=True)
+    # 计划开始不可清空；结束清空时周期一起清
+    start_date = serializers.DateField(required=False)
     end_date = serializers.DateField(required=False, allow_null=True)
 
     def validate_owner(self, value):

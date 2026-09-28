@@ -4,13 +4,14 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { ChevronDownIcon, CloseIcon } from "@plane/propel/icons";
 import type { TCreateProjectStagePayload, TProjectStage, TStageType, TUpdateProjectStagePayload } from "@plane/types";
-import { PROJECT_STAGE_MAX_WORKLOAD_RATIO } from "@plane/types";
+import { PROJECT_STAGE_MAX_DURATION_DAYS, PROJECT_STAGE_MAX_WORKLOAD_RATIO } from "@plane/types";
 import { CustomSelect, EModalPosition, EModalWidth, ModalCore, TextArea, ToggleSwitch } from "@plane/ui";
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
 import { FORM_VARIANT_STYLES, FormFieldGroup, FormFieldShell, getFormGridClassName } from "@/components/common/form-section";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { getProjectStageError } from "@/hooks/store/use-project-stages";
+import { parseDurationDays, withDurationDays, withEndDate, withStartDate } from "./project-stage-schedule";
 
 const I18N = "project_stage.form";
 const styles = FORM_VARIANT_STYLES["grouped-modal"];
@@ -30,6 +31,7 @@ type TFormValue = {
   workloadRatio: string;
   startDate: string | null;
   endDate: string | null;
+  durationDays: string;
 };
 
 const EMPTY: TFormValue = {
@@ -42,6 +44,7 @@ const EMPTY: TFormValue = {
   workloadRatio: "",
   startDate: null,
   endDate: null,
+  durationDays: "",
 };
 
 const SelectButton = ({ label, placeholder, disabled }: { label?: string; placeholder: string; disabled?: boolean }) => (
@@ -56,6 +59,8 @@ const SelectButton = ({ label, placeholder, disabled }: { label?: string; placeh
  *
  * - 父阶段创建后不可改（编辑态锁死）；带来源的阶段类型不可改。
  * - 排期的 min / max 直接取父阶段范围，越界在选日期时就选不到。
+ * - 计划开始必填。结束和周期互相推导、改开始时结束顺延（`project-stage-schedule.ts`）；
+ *   周期推出来的结束日期选择器拦不住，越出父阶段范围时红字并禁用提交。
  * - 占比即时校验：叶子累计 + 本次 > 100 时红字并禁用提交；有子阶段的阶段占比等于子之和，不给填。
  *   新建子阶段且父是带占比的叶子时，父的占比会下移给这个子（后端做），这里提示一句。
  */
@@ -106,6 +111,7 @@ export const ProjectStageFormModal = ({
         workloadRatio: stage.workload_ratio === null ? "" : Number(stage.workload_ratio).toString(),
         startDate: stage.start_date,
         endDate: stage.end_date,
+        durationDays: stage.duration_days === null ? "" : String(stage.duration_days),
       });
     } else {
       const parent = form.mode === "create-child" ? form.parent : null;
@@ -137,6 +143,15 @@ export const ProjectStageFormModal = ({
     ratioNumber !== null &&
     (Number.isNaN(ratioNumber) || ratioNumber < 0 || Math.round(ratioNumber * 100) > Math.round(remaining * 100));
 
+  const durationDays = parseDurationDays(value.durationDays);
+  const isDurationInvalid = durationDays === undefined;
+  const isEndOutOfParent = Boolean(value.endDate && parent?.end_date && value.endDate > parent.end_date);
+  const scheduleError = isDurationInvalid
+    ? t(`${I18N}.duration_invalid`, { max: PROJECT_STAGE_MAX_DURATION_DAYS })
+    : isEndOutOfParent
+      ? t(`${I18N}.schedule_out_of_parent`)
+      : undefined;
+
   const parentCandidates = useMemo(
     () => stages.filter((stage) => stage.id !== editing?.id).sort((a, b) => a.sort_order - b.sort_order),
     [stages, editing?.id]
@@ -145,7 +160,9 @@ export const ProjectStageFormModal = ({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!value.stageTypeId) return setError(t(`${I18N}.stage_type_required`));
-    if (isRatioInvalid) return;
+    const startDate = value.startDate;
+    if (!startDate) return setError(t(`${I18N}.start_date_required`));
+    if (isRatioInvalid || scheduleError) return;
     setError(null);
     const name = value.name.trim() || (selectedType?.name ?? "");
     const ratio = value.workloadRatio.trim() === "" ? null : value.workloadRatio.trim();
@@ -156,8 +173,9 @@ export const ProjectStageFormModal = ({
           description: value.description,
           is_milestone: value.isMilestone,
           owner_id: value.ownerId,
-          start_date: value.startDate,
+          start_date: startDate,
           end_date: value.endDate,
+          duration_days: durationDays ?? null,
         };
         if (!typeLocked) payload.stage_type_id = value.stageTypeId;
         if (!hasChildren) payload.workload_ratio = ratio;
@@ -171,8 +189,9 @@ export const ProjectStageFormModal = ({
           parent_id: value.parentId,
           owner_id: value.ownerId,
           workload_ratio: ratio,
-          start_date: value.startDate,
+          start_date: startDate,
           end_date: value.endDate,
+          duration_days: durationDays ?? null,
         });
       }
       onClose();
@@ -310,15 +329,17 @@ export const ProjectStageFormModal = ({
             </div>
           </FormFieldGroup>
 
-          <FormFieldGroup title={t(`${I18N}.group_schedule`)} optional>
+          <FormFieldGroup title={t(`${I18N}.group_schedule`)}>
             <div className="flex items-center gap-3">
-              <FormFieldShell label={t(`${I18N}.start_date`)} labelHidden required={false} editable styles={styles} className="flex-1">
+              <FormFieldShell label={t(`${I18N}.start_date`)} labelHidden required editable styles={styles} className="flex-1">
                 <div className={styles.control}>
                   <DateDropdown
                     value={value.startDate}
-                    onChange={(next) =>
-                      setValue((current) => ({ ...current, startDate: next ? renderFormattedPayloadDate(next) : null }))
-                    }
+                    onChange={(next) => {
+                      // 必填：点 × 或再点一次已选日期都不清空
+                      const startDate = next ? renderFormattedPayloadDate(next) : undefined;
+                      if (startDate) setValue((current) => ({ ...current, ...withStartDate(current, startDate) }));
+                    }}
                     placeholder={t(`${I18N}.start_date`)}
                     buttonVariant="border-with-text"
                     className="h-full w-full"
@@ -327,8 +348,10 @@ export const ProjectStageFormModal = ({
                     labelClassName={styles.dropdownLabel}
                     optionsClassName="z-[50]"
                     minDate={getDate(parent?.start_date ?? undefined)}
-                    maxDate={getDate(value.endDate ?? parent?.end_date ?? undefined)}
+                    // 有周期时结束会跟着顺延，开始不必受当前结束限制
+                    maxDate={getDate((durationDays ? null : value.endDate) ?? parent?.end_date ?? undefined)}
                     formatToken="yyyy-MM-dd"
+                    isClearable={false}
                   />
                 </div>
               </FormFieldShell>
@@ -338,7 +361,10 @@ export const ProjectStageFormModal = ({
                   <DateDropdown
                     value={value.endDate}
                     onChange={(next) =>
-                      setValue((current) => ({ ...current, endDate: next ? renderFormattedPayloadDate(next) : null }))
+                      setValue((current) => ({
+                        ...current,
+                        ...withEndDate(current, (next && renderFormattedPayloadDate(next)) || null),
+                      }))
                     }
                     placeholder={t(`${I18N}.end_date`)}
                     buttonVariant="border-with-text"
@@ -353,7 +379,38 @@ export const ProjectStageFormModal = ({
                   />
                 </div>
               </FormFieldShell>
+              <FormFieldShell
+                label={t(`${I18N}.duration_days`)}
+                labelHidden
+                required={false}
+                editable
+                styles={styles}
+                className="w-28 shrink-0"
+              >
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={PROJECT_STAGE_MAX_DURATION_DAYS}
+                    step="1"
+                    value={value.durationDays}
+                    placeholder={t(`${I18N}.duration_days`)}
+                    onChange={(event) =>
+                      setValue((current) => ({ ...current, ...withDurationDays(current, event.target.value) }))
+                    }
+                    className={cn(
+                      styles.input,
+                      "bg-surface-1 px-3 pr-9 outline-none focus:border-accent-strong",
+                      isDurationInvalid && "!border-danger-strong"
+                    )}
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-13 text-tertiary">
+                    {t(`${I18N}.duration_unit`)}
+                  </span>
+                </div>
+              </FormFieldShell>
             </div>
+            {scheduleError && <p className={styles.error}>{scheduleError}</p>}
             {parent && (parent.start_date || parent.end_date) && (
               <p className={styles.hint}>
                 {t(`${I18N}.schedule_hint`, { start: parent.start_date ?? "…", end: parent.end_date ?? "…" })}
@@ -435,7 +492,7 @@ export const ProjectStageFormModal = ({
           <Button variant="secondary" size="lg" type="button" onClick={onClose} disabled={isSubmitting}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" size="lg" type="submit" loading={isSubmitting} disabled={isRatioInvalid}>
+          <Button variant="primary" size="lg" type="submit" loading={isSubmitting} disabled={isRatioInvalid || Boolean(scheduleError)}>
             {t(editing ? `${I18N}.save` : `${I18N}.create`)}
           </Button>
         </div>

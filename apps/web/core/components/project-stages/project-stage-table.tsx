@@ -18,6 +18,7 @@ export type TProjectStageColumn =
   | "ratio"
   | "start_date"
   | "end_date"
+  | "duration_days"
   | "actual_start"
   | "actual_end"
   | "status";
@@ -28,6 +29,7 @@ export const PROJECT_STAGE_COLUMNS: TProjectStageColumn[] = [
   "ratio",
   "start_date",
   "end_date",
+  "duration_days",
   "actual_start",
   "actual_end",
   "status",
@@ -39,6 +41,7 @@ const COLUMN_WIDTH: Record<TProjectStageColumn, string> = {
   ratio: "72px",
   start_date: "96px",
   end_date: "96px",
+  duration_days: "64px",
   actual_start: "80px",
   actual_end: "80px",
   status: "104px",
@@ -192,6 +195,14 @@ export const ProjectStageTable = ({
         return stage.end_date ? (
           <span className={cn("text-13 tabular-nums", stage.is_delayed ? "text-danger-primary" : "text-secondary")}>
             {stage.end_date}
+          </span>
+        ) : (
+          <Empty />
+        );
+      case "duration_days":
+        return stage.duration_days !== null ? (
+          <span className="text-13 tabular-nums text-secondary">
+            {t(`${I18N}.table.days`, { count: stage.duration_days })}
           </span>
         ) : (
           <Empty />

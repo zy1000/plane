@@ -8,6 +8,8 @@ import type { IUserLite } from "./users";
  * - 占比只算叶子：有子阶段的阶段 `workload_ratio` 恒为 null，`computed_workload_ratio` 是子之和。
  * - 状态四态下拉直接改；「已延期」`is_delayed` 由后端按「计划结束早于今天且未完成」算出。
  * - `parent_id` 创建后不可改；带 `source_stage_id` 的阶段不能改类型。
+ * - 周期 `duration_days` 按自然日、首尾都算（开始 = 结束是 1 天），与计划结束互相推导；
+ *   计划开始新建必填、之后不可清空。从模式带出的阶段可以只有周期、没有起止。
  */
 
 export enum EProjectStageStatus {
@@ -25,6 +27,8 @@ export const PROJECT_STAGE_STATUSES: EProjectStageStatus[] = [
 ];
 
 export const PROJECT_STAGE_MAX_WORKLOAD_RATIO = 100;
+
+export const PROJECT_STAGE_MAX_DURATION_DAYS = 9999;
 
 export type TProjectStage = {
   id: string;
@@ -45,6 +49,7 @@ export type TProjectStage = {
   computed_workload_ratio: string | null;
   start_date: string | null;
   end_date: string | null;
+  duration_days: number | null;
   actual_start: string | null;
   actual_end: string | null;
   status: EProjectStageStatus;
@@ -77,8 +82,9 @@ export type TCreateProjectStagePayload = {
   parent_id?: string | null;
   owner_id?: string | null;
   workload_ratio?: string | null;
-  start_date?: string | null;
+  start_date: string;
   end_date?: string | null;
+  duration_days?: number | null;
   status?: EProjectStageStatus;
 };
 
@@ -87,10 +93,10 @@ export type TUpdateProjectStagePayload = Partial<Omit<TCreateProjectStagePayload
   actual_end?: string | null;
 };
 
-/** 批量改属性：undefined = 保持不变，null = 清空 */
+/** 批量改属性：undefined = 保持不变，null = 清空（计划开始不可清空） */
 export type TProjectStageBulkChanges = {
   owner?: string | null;
-  start_date?: string | null;
+  start_date?: string;
   end_date?: string | null;
 };
 

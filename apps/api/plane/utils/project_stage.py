@@ -9,9 +9,12 @@
 - 父第一次挂子时，父原有的占比下移给这个子（子自己没传占比时）；父置空成汇总节点。
 - 批量改属性按树深度升序处理（父先子后），每条在自己的保存点里对 DB 当前状态校验：
   父子同时选中、一起改成同一个新范围时，子看到的是已经更新过的父。
+- 排期三个字段（开始 / 结束 / 周期）先经 ``resolve_schedule`` 补成一致的一组，再做父子范围
+  校验 —— 范围校验看到的是推导后的结束。
 """
 
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -27,6 +30,9 @@ from plane.db.models import (
     StageReviewTemplate,
 )
 from plane.db.models.dev_mode import MAX_WORKLOAD_RATIO_TOTAL, SORT_ORDER_STEP
+
+#: 周期上限（天）。只为挡住离谱输入
+MAX_DURATION_DAYS = 9999
 
 
 class ProjectStageError(Exception):
@@ -210,6 +216,12 @@ def _build_from_mode_stage(project, mode_stage, *, actor, sort_order, workload_r
         stage_type_id=mode_stage.stage_type_id,
         name=mode_stage.name,
         workload_ratio=workload_ratio,
+        # 标准周期带成周期的默认值；0 天和超上限的不是合法周期，留空
+        duration_days=(
+            mode_stage.standard_days
+            if mode_stage.standard_days and mode_stage.standard_days <= MAX_DURATION_DAYS
+            else None
+        ),
         sort_order=sort_order,
         source_stage_id=mode_stage.id,
         created_by=actor,
@@ -361,6 +373,62 @@ def validate_dates(tree, *, parent_id, stage_id, start, end):
             )
 
 
+_SCHEDULE_FIELDS = ("start_date", "end_date", "duration_days")
+
+
+def resolve_schedule(data, *, stage=None):
+    """把请求里的排期字段补成互相一致的一组，结果写回 ``data``。
+
+    周期按自然日、首尾都算。结束和周期谁给了就由谁推另一个，两个都给了必须对得上，给的是
+    null 就两个一起清空；只改开始时周期不变、结束顺延（没有周期就按现有结束重算周期）。
+    请求没碰排期字段就不动 —— 行内改状态、批量改负责人不该被没填开始的存量阶段拦住。
+    """
+    touched = [field for field in _SCHEDULE_FIELDS if field in data]
+    if not touched:
+        return
+    # 清空一个本来就空的字段等于没动：批量「清空结束」不该顺手抹掉带出阶段的标准周期
+    if stage is not None and touched in (["end_date"], ["duration_days"]):
+        if data[touched[0]] is None and getattr(stage, touched[0]) is None:
+            return
+    start = data.get("start_date", stage.start_date if stage else None)
+    end = data.get("end_date")
+    duration = data.get("duration_days")
+    if end is None and duration is None:
+        if "end_date" in data or "duration_days" in data:
+            data["end_date"] = data["duration_days"] = None
+            return
+        if stage is None:
+            return
+        if stage.duration_days is not None:
+            duration = stage.duration_days
+        else:
+            end = stage.end_date
+        if end is None and duration is None:
+            return
+    if start is None:
+        raise ProjectStageError(
+            "请先填写计划开始。", code="PROJECT_STAGE_START_DATE_REQUIRED"
+        )
+    if end is None:
+        end = start + timedelta(days=duration - 1)
+    elif end < start:
+        raise ProjectStageError(
+            "计划结束不能早于计划开始。", code="PROJECT_STAGE_DATE_ORDER"
+        )
+    elif duration is None:
+        duration = (end - start).days + 1
+        if duration > MAX_DURATION_DAYS:
+            raise ProjectStageError(
+                f"周期不能超过 {MAX_DURATION_DAYS} 天。",
+                code="PROJECT_STAGE_DURATION_OUT_OF_RANGE",
+            )
+    elif (end - start).days + 1 != duration:
+        raise ProjectStageError(
+            "周期与计划起止日期对不上。", code="PROJECT_STAGE_DURATION_MISMATCH"
+        )
+    data["end_date"], data["duration_days"] = end, duration
+
+
 def _validated(stage):
     """跑模型校验，把 Django 的 ValidationError 翻成带错误码的领域异常。"""
     try:
@@ -430,6 +498,7 @@ def create_stage(project, *, actor, validated_data):
     parent = data.get("parent")
     status = data.pop("status", None)
     tree = load_tree(project.id)
+    resolve_schedule(data)
 
     stage = ProjectStage(
         project_id=project.id,
@@ -472,6 +541,7 @@ def update_stage(stage, *, actor, validated_data):
     explicit = {field: data.pop(field) for field in _ACTUAL_FIELDS if field in data}
     tree = load_tree(stage.project_id)
 
+    resolve_schedule(data, stage=stage)
     if any(field in data for field in _DATE_FIELDS):
         validate_dates(
             tree,

@@ -11,6 +11,9 @@
 - **占比只算叶子。** 有子阶段的阶段自己不能填占比，它的占比 = 子之和（算出来不存）；
   全项目叶子累计 ≤ 100。父第一次挂子时，父原有的占比下移给这个子。
 - **子阶段日期必须落在父阶段范围内**，两边都校验（改父日期时子越界要报错）。
+- **周期按自然日、首尾都算**：``end_date = start_date + (duration_days - 1)``，开始 = 结束是
+  1 天。结束和周期互相推导，只改开始时周期不变、结束顺延（``resolve_schedule``）。从模式带出
+  的阶段只有周期（模式阶段的标准周期）、没有起止，补上开始后结束才推得出来。
 - **状态四态直接改**（``ProjectStageStatus``），不做 advance / rollback 动作；切到进行中补
   实际开始、切到已完成补实际完成、退回未开始清实际日期。「已延期」不落库，是
   ``end_date < 今天 且 status != completed`` 的派生显示。
@@ -74,6 +77,7 @@ class ProjectStage(ProjectBaseModel):
     )
     start_date = models.DateField(null=True, blank=True, verbose_name="计划开始")
     end_date = models.DateField(null=True, blank=True, verbose_name="计划结束")
+    duration_days = models.PositiveIntegerField(null=True, blank=True, verbose_name="周期（天）")
     actual_start = models.DateField(null=True, blank=True, verbose_name="实际开始")
     actual_end = models.DateField(null=True, blank=True, verbose_name="实际完成")
     status = models.CharField(
@@ -126,6 +130,15 @@ class ProjectStage(ProjectBaseModel):
                 errors["parent"] = "父阶段必须属于同一个项目。"
         if self.start_date and self.end_date and self.end_date < self.start_date:
             errors["end_date"] = "计划结束不能早于计划开始。"
+        if self.duration_days is not None:
+            if self.duration_days < 1:
+                errors["duration_days"] = "周期至少为 1 天。"
+            elif (
+                self.start_date
+                and self.end_date
+                and (self.end_date - self.start_date).days + 1 != self.duration_days
+            ):
+                errors["duration_days"] = "周期与计划起止日期对不上。"
         if self.actual_start and self.actual_end and self.actual_end < self.actual_start:
             errors["actual_end"] = "实际完成不能早于实际开始。"
         if self.workload_ratio is not None and (

@@ -29,7 +29,8 @@ const ClearedValue = ({ children }: { children: ReactNode }) => (
 
 /**
  * 勾选后的「修改属性」浮层：负责人 / 计划开始 / 计划结束。口径同阶段评审的批量面板：
- * 每项默认「保持不变」，改过的换强调色边框并带 × 改回；成员可「设为无」，日期可「清空」。
+ * 每项默认「保持不变」，改过的换强调色边框并带 × 改回；成员可「设为无」，计划结束可「清空」
+ * （周期跟着清）。计划开始不可清空；只改开始时各阶段周期不变、结束顺延。
  */
 export const ProjectStageBulkEditPanel = ({
   projectId,
@@ -57,7 +58,7 @@ export const ProjectStageBulkEditPanel = ({
     if (changedCount === 0) return;
     const changes: TProjectStageBulkChanges = {};
     if (owner !== undefined) changes.owner = owner;
-    if (startDate !== undefined) changes.start_date = startDate;
+    if (startDate) changes.start_date = startDate;
     if (endDate !== undefined) changes.end_date = endDate;
     onApply(changes);
   };
@@ -65,7 +66,8 @@ export const ProjectStageBulkEditPanel = ({
   const renderDate = (
     value: TFieldValue,
     onChange: (value: TFieldValue) => void,
-    bounds: { minDate?: TFieldValue; maxDate?: TFieldValue }
+    bounds: { minDate?: TFieldValue; maxDate?: TFieldValue },
+    clearable = true
   ) => (
     <BulkEditFieldShell isSet={value !== undefined} onReset={() => onChange(undefined)} resetLabel={resetLabel}>
       {value === null ? (
@@ -90,7 +92,9 @@ export const ProjectStageBulkEditPanel = ({
           isClearable={false}
         />
       )}
-      {value === undefined && <ClearButton label={t(`${I18N}.bulk.clear_date`)} onClick={() => onChange(null)} />}
+      {clearable && value === undefined && (
+        <ClearButton label={t(`${I18N}.bulk.clear_date`)} onClick={() => onChange(null)} />
+      )}
     </BulkEditFieldShell>
   );
 
@@ -136,7 +140,7 @@ export const ProjectStageBulkEditPanel = ({
           </BulkEditFieldShell>
         </BulkEditFieldRow>
         <BulkEditFieldRow label={t(`${I18N}.table.start_date`)}>
-          {renderDate(startDate, setStartDate, { maxDate: endDate })}
+          {renderDate(startDate, setStartDate, { maxDate: endDate }, false)}
         </BulkEditFieldRow>
         <BulkEditFieldRow label={t(`${I18N}.table.end_date`)}>
           {renderDate(endDate, setEndDate, { minDate: startDate })}
