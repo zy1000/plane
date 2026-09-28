@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { observer } from "mobx-react";
-import { Download, Layers, Plus, SearchX } from "lucide-react";
+import { Layers, Plus, SearchX } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -12,7 +12,6 @@ import { AlertModalCore, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { PageSearchInput } from "@/components/pages/list/search-input";
 import { getProjectStageError, useProjectStages } from "@/hooks/store/use-project-stages";
-import { useProject } from "@/hooks/store/use-project";
 import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { ProjectStageBulkBar } from "./bulk/project-stage-bulk-bar";
 import { ProjectStageBulkEditPanel } from "./bulk/project-stage-bulk-edit-panel";
@@ -24,7 +23,6 @@ import type { TProjectStageFormMode } from "./project-stage-form-modal";
 import { ProjectStageFormModal } from "./project-stage-form-modal";
 import { buildProjectStageRows } from "./project-stage-rows";
 import { PROJECT_STAGE_STATUS_STYLE } from "./project-stage-status-cell";
-import { ProjectStageSyncModal } from "./project-stage-sync-modal";
 import { ProjectStageTable } from "./project-stage-table";
 
 const I18N = "project_stage";
@@ -32,7 +30,7 @@ const I18N = "project_stage";
 type TPendingDelete = { stage: TProjectStage } | { bulk: string[] } | null;
 
 /**
- * 项目阶段页：页头挂点里放搜索 / 从研发模式带出 / 新建；下面一行状态计数；树形阶段表；
+ * 项目阶段页：页头挂点里放搜索 / 新建；下面一行状态计数；树形阶段表；
  * 底栏占比合计；勾选后浮动批量条（修改属性 / 删除）。
  *
  * 增删改都走 hook 重拉整棵树（父占比、层级、下移都由后端算）；批量改属性回的是改到的行，就地替换。
@@ -45,7 +43,6 @@ export const ProjectStageList = observer(function ProjectStageList({
   projectId: string;
 }) {
   const { t } = useTranslation();
-  const { currentProjectDetails } = useProject();
   const { canManage } = useProjectStagePermissions(workspaceSlug, projectId);
   const { stageTypes } = useStageTypes(workspaceSlug);
   const {
@@ -56,7 +53,6 @@ export const ProjectStageList = observer(function ProjectStageList({
     createStage,
     updateStage,
     deleteStage,
-    syncFromDevMode,
     applyStages,
     workloadTotal,
     workloadRemaining,
@@ -65,7 +61,6 @@ export const ProjectStageList = observer(function ProjectStageList({
   const [search, setSearch] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [form, setForm] = useState<TProjectStageFormMode | null>(null);
-  const [isSyncOpen, setIsSyncOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<TPendingDelete>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
@@ -169,36 +164,16 @@ export const ProjectStageList = observer(function ProjectStageList({
     }
   };
 
-  const handleSync = async (modeStageIds: string[]) => {
-    const result = await syncFromDevMode(modeStageIds);
-    if (!result) return;
-    setToast({
-      type: TOAST_TYPE.SUCCESS,
-      title: t(`${I18N}.sync.toast_success`, { count: result.created.length }),
-      message:
-        result.ratio_dropped.length > 0
-          ? t(`${I18N}.sync.toast_ratio_dropped`, { names: result.ratio_dropped.join("、") })
-          : undefined,
-    });
-  };
-
   const ratioPercent = Math.min(100, Math.max(0, (workloadTotal / PROJECT_STAGE_MAX_WORKLOAD_RATIO) * 100));
-  const devMode = currentProjectDetails?.dev_mode_detail;
 
   const headerActions = (
     <>
       <PageSearchInput searchQuery={search} updateSearchQuery={setSearch} placeholder={t(`${I18N}.header.search`)} />
       {canManage && (
-        <>
-          <Button variant="secondary" size="lg" onClick={() => setIsSyncOpen(true)} disabled={!devMode}>
-            <Download className="size-3.5" />
-            {t(`${I18N}.header.sync`)}
-          </Button>
-          <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
-            <Plus className="size-3.5" />
-            {t(`${I18N}.header.create`)}
-          </Button>
-        </>
+        <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
+          <Plus className="size-3.5" />
+          {t(`${I18N}.header.create`)}
+        </Button>
       )}
     </>
   );
@@ -256,9 +231,6 @@ export const ProjectStageList = observer(function ProjectStageList({
               <p className="max-w-xs text-13 text-tertiary">{t(`${I18N}.empty.description`)}</p>
               {canManage && (
                 <div className="mt-1 flex items-center gap-2">
-                  <Button variant="secondary" size="lg" onClick={() => setIsSyncOpen(true)} disabled={!devMode}>
-                    {t(`${I18N}.header.sync`)}
-                  </Button>
                   <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
                     {t(`${I18N}.header.create`)}
                   </Button>
@@ -353,18 +325,6 @@ export const ProjectStageList = observer(function ProjectStageList({
           await updateStage(stageId, payload);
           setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.updated`) });
         }}
-      />
-
-      <ProjectStageSyncModal
-        isOpen={isSyncOpen}
-        workspaceSlug={workspaceSlug}
-        devModeId={currentProjectDetails?.dev_mode ?? devMode?.id}
-        devModeName={devMode?.name ?? ""}
-        stages={stages}
-        workloadTotal={workloadTotal}
-        isSubmitting={isMutating}
-        onClose={() => setIsSyncOpen(false)}
-        onSubmit={handleSync}
       />
 
       <AlertModalCore

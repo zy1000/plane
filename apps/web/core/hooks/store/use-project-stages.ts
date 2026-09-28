@@ -87,11 +87,6 @@ export const useProjectStages = (workspaceSlug: string | undefined, projectId: s
     [mutate, workspaceSlug, projectId]
   );
 
-  const syncFromDevMode = useCallback(
-    (stageIds?: string[]) => mutate(() => service.syncFromDevMode(workspaceSlug!, projectId!, stageIds)),
-    [mutate, workspaceSlug, projectId]
-  );
-
   /** 批量改完后后端回的是改到的行，就地替换即可（占比 / 层级没变） */
   const applyStages = useCallback((next: TProjectStage[]) => {
     if (next.length === 0) return;
@@ -120,7 +115,6 @@ export const useProjectStages = (workspaceSlug: string | undefined, projectId: s
     createStage,
     updateStage,
     deleteStage,
-    syncFromDevMode,
     applyStages,
     workloadTotal,
     workloadRemaining,

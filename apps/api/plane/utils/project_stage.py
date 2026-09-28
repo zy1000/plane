@@ -252,62 +252,6 @@ def copy_stages_from_dev_mode(project, *, actor=None):
         return ProjectStage.objects.bulk_create(rows)
 
 
-def sync_from_dev_mode(project, *, actor=None, only_ids=None):
-    """把模式里还没带出的阶段补进项目。
-
-    已带出的按 ``source_stage`` 认；模式里删了再建同名阶段会换 id，所以「同类型且同名」的
-    既有阶段也算已带出（``matched_by_name``）。补入的占比若让叶子合计超 100 就置空
-    （``ratio_dropped``），让用户手动分。``only_ids`` 给了就只补这些模式阶段（弹窗里勾选）。
-    """
-    existing = list(ProjectStage.objects.filter(project_id=project.id))
-    by_source = {stage.source_stage_id for stage in existing if stage.source_stage_id}
-    by_type_name = {}
-    for stage in existing:
-        by_type_name.setdefault((stage.stage_type_id, stage.name), stage)
-    tree = StageTree(existing)
-    total = tree.leaf_total()
-    last_sort = max((stage.sort_order for stage in existing), default=0)
-
-    created, skipped, matched_by_name, ratio_dropped = [], [], [], []
-    rows = []
-    wanted = {str(item) for item in only_ids} if only_ids is not None else None
-    for mode_stage in _mode_stages(project):
-        if wanted is not None and str(mode_stage.id) not in wanted:
-            continue
-        if mode_stage.id in by_source:
-            skipped.append(str(mode_stage.id))
-            continue
-        matched = by_type_name.get((mode_stage.stage_type_id, mode_stage.name))
-        if matched is not None:
-            matched_by_name.append(str(mode_stage.id))
-            # 同名认亲的顺手补上来源，否则它的可选评审节点永远走「类型全集」而不是模式勾选
-            if matched.source_stage_id is None:
-                ProjectStage.objects.filter(pk=matched.pk).update(source_stage_id=mode_stage.id)
-            continue
-        ratio = mode_stage.workload_ratio
-        if ratio is not None:
-            if total + ratio > MAX_WORKLOAD_RATIO_TOTAL:
-                ratio_dropped.append(mode_stage.name)
-                ratio = None
-            else:
-                total += ratio
-        last_sort += SORT_ORDER_STEP
-        rows.append(
-            _build_from_mode_stage(
-                project, mode_stage, actor=actor, sort_order=last_sort, workload_ratio=ratio
-            )
-        )
-    if rows:
-        with transaction.atomic():
-            created = ProjectStage.objects.bulk_create(rows)
-    return {
-        "created": created,
-        "skipped": skipped,
-        "matched_by_name": matched_by_name,
-        "ratio_dropped": ratio_dropped,
-    }
-
-
 # --- 校验 -------------------------------------------------------------------
 
 

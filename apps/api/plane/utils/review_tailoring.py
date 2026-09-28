@@ -362,7 +362,7 @@ def create_tailoring(
     进来才显形。
 
     项目一个阶段都没有（模式零阶段且没手建）时直接拒绝：纵轴永远展不开，建出来也只是
-    一张永远空着的表。去「阶段」页从研发模式带出或新建一个再来。
+    一张永远空着的表。去「阶段」页新建一个再来。
     """
     if not ProjectStage.objects.filter(project_id=project.id).exists():
         raise ReviewTailoringError(

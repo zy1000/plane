@@ -3,7 +3,6 @@ import type {
   TBulkUpdateProjectStageResponse,
   TCreateProjectStagePayload,
   TProjectStage,
-  TSyncProjectStagesResponse,
   TUpdateProjectStagePayload,
 } from "@plane/types";
 import { API_BASE_URL } from "@plane/constants";
@@ -65,19 +64,6 @@ export class ProjectStageService extends APIService {
     payload: TBulkUpdateProjectStagePayload
   ): Promise<TBulkUpdateProjectStageResponse> {
     return this.post(`${this.base(workspaceSlug, projectId)}/bulk-update/`, payload)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /** 把项目研发模式里还没带出的阶段补进来；`stageIds` 是勾选的模式阶段 id，不传就全补 */
-  async syncFromDevMode(
-    workspaceSlug: string,
-    projectId: string,
-    stageIds?: string[]
-  ): Promise<TSyncProjectStagesResponse> {
-    return this.post(`${this.base(workspaceSlug, projectId)}/sync-from-dev-mode/`, stageIds ? { stage_ids: stageIds } : {})
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

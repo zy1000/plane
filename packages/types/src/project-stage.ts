@@ -107,13 +107,3 @@ export type TBulkUpdateProjectStageResponse = {
   failed: { id: string; name: string; code: string; error: string }[];
   stages: TProjectStage[];
 };
-
-export type TSyncProjectStagesResponse = {
-  created: TProjectStage[];
-  /** 已按 source_stage 带出过的模式阶段 id */
-  skipped: string[];
-  /** 同类型同名、视为已带出的模式阶段 id */
-  matched_by_name: string[];
-  /** 因占比会超 100 而被置空占比的阶段名 */
-  ratio_dropped: string[];
-};

@@ -2538,7 +2538,7 @@ export default {
       REVIEW_TAILORING_MOVE_CONFLICT: "目标阶段已经有同一个活动，不能再挪过去",
       REVIEW_TAILORING_TEMPLATE_KIND_MISMATCH: "有评审不属于这张裁剪表的裁剪类型",
       REVIEW_TAILORING_TEMPLATE_NOT_SELECTABLE: "有评审在本项目的任何阶段都不可选",
-      REVIEW_TAILORING_PROJECT_HAS_NO_STAGE: "本项目还没有阶段，先到「阶段」页从研发模式带出或新建一个",
+      REVIEW_TAILORING_PROJECT_HAS_NO_STAGE: "本项目还没有阶段，先到「阶段」页新建一个",
       REVIEW_TAILORING_STAGE_REQUIRED: "O阶段评审裁剪必须选择一个阶段",
       REVIEW_TAILORING_STAGE_NOT_ALLOWED: "只有 O阶段评审裁剪才能选择阶段",
       REVIEW_TAILORING_STAGE_NOT_O_STAGE: "只能选择阶段类型为 O阶段 的阶段",
@@ -2551,7 +2551,6 @@ export default {
     delayed: "已延期 {days} 天",
     header: {
       search: "搜索阶段",
-      sync: "从研发模式带出",
       create: "新建阶段",
     },
     summary: {
@@ -2599,7 +2598,7 @@ export default {
     },
     empty: {
       title: "还没有阶段",
-      description: "从研发模式把标准阶段带出来，或者直接新建一个阶段。",
+      description: "新建一个阶段开始安排项目进度。",
       no_match: "没有匹配的阶段",
     },
     form: {
@@ -2639,17 +2638,6 @@ export default {
       description_placeholder: "这个阶段要交付什么",
       create: "创建",
       save: "保存",
-    },
-    sync: {
-      title: "从研发模式带出",
-      hint: "模式里有 {total} 个阶段，{existing} 个已在本项目，还有 {pending} 个可以带出",
-      already: "已带出",
-      new: "新增",
-      empty: "研发模式里还没有阶段",
-      ratio_warning: "带出后占比合计会超过 100%，超出部分的阶段占比会留空，需要手动分配",
-      confirm: "带出 {count} 个阶段",
-      toast_success: "已带出 {count} 个阶段",
-      toast_ratio_dropped: "{names} 的占比因超出 100% 被留空",
     },
     delete_modal: {
       title: "删除阶段「{name}」？",

@@ -22,7 +22,6 @@ from plane.utils.project_stage import (
     create_stage,
     delete_stage,
     load_tree,
-    sync_from_dev_mode,
     update_stage,
 )
 
@@ -206,29 +205,6 @@ class ProjectStageViewSet(BaseViewSet):
                 "updated": len(updated_ids),
                 "failed": failed,
                 "stages": ProjectStageSerializer(rows, many=True, context=self._context()).data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    @allow_fine_permission(PROJECT_STAGE_MANAGE_KEY)
-    def sync_from_dev_mode(self, request, slug, project_id):
-        """把项目研发模式里还没带出的阶段补进来。body 可带 ``stage_ids``（模式阶段 id）只补勾选的。"""
-        project = self._project()
-        if project is None:
-            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
-        only_ids = request.data.get("stage_ids")
-        if only_ids is not None and not isinstance(only_ids, list):
-            return Response({"error": "stage_ids must be a list."}, status=status.HTTP_400_BAD_REQUEST)
-        with transaction.atomic():
-            result = sync_from_dev_mode(project, actor=request.user, only_ids=only_ids)
-        created_ids = [stage.id for stage in result["created"]]
-        rows = self.get_queryset().filter(id__in=created_ids) if created_ids else []
-        return Response(
-            {
-                "created": ProjectStageSerializer(rows, many=True, context=self._context()).data,
-                "skipped": result["skipped"],
-                "matched_by_name": result["matched_by_name"],
-                "ratio_dropped": result["ratio_dropped"],
             },
             status=status.HTTP_200_OK,
         )

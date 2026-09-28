@@ -659,7 +659,7 @@ class ProjectViewSet(BaseViewSet):
 
             # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
             # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在
-            # 阶段页「从研发模式带出」补回来。
+            # 阶段页手工新建。
             copy_stages_from_dev_mode(serializer.instance, actor=request.user)
 
             project = self.get_queryset().filter(pk=serializer.data["id"]).first()

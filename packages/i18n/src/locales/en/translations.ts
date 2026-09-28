@@ -1943,7 +1943,6 @@ export default {
     delayed: "{days}d overdue",
     header: {
       search: "Search stages",
-      sync: "Import from dev mode",
       create: "New stage",
     },
     summary: {
@@ -1991,7 +1990,7 @@ export default {
     },
     empty: {
       title: "No stages yet",
-      description: "Import the standard stages from the dev mode, or create one.",
+      description: "Create a stage to start planning the project schedule.",
       no_match: "No matching stages",
     },
     form: {
@@ -2031,17 +2030,6 @@ export default {
       description_placeholder: "What this stage delivers",
       create: "Create",
       save: "Save",
-    },
-    sync: {
-      title: "Import from dev mode",
-      hint: "{total} stages in the mode, {existing} already here, {pending} can be imported",
-      already: "Imported",
-      new: "New",
-      empty: "The dev mode has no stages",
-      ratio_warning: "Importing would push the total weight over 100%; the exceeding stages will be imported without weight",
-      confirm: "Import {count} stages",
-      toast_success: "Imported {count} stages",
-      toast_ratio_dropped: "Weight left empty for {names} (would exceed 100%)",
     },
     delete_modal: {
       title: "Delete stage \"{name}\"?",
@@ -2880,7 +2868,7 @@ export default {
       REVIEW_TAILORING_MOVE_CONFLICT: "The target stage already has the same activity",
       REVIEW_TAILORING_TEMPLATE_KIND_MISMATCH: "Some reviews do not belong to this tailoring's type",
       REVIEW_TAILORING_TEMPLATE_NOT_SELECTABLE: "No stage of this project can select some of these reviews",
-      REVIEW_TAILORING_PROJECT_HAS_NO_STAGE: "This project has no stages yet. Import them from the dev mode or create one on the Stages page first",
+      REVIEW_TAILORING_PROJECT_HAS_NO_STAGE: "This project has no stages yet. Create one on the Stages page first",
       REVIEW_TAILORING_STAGE_REQUIRED: "An O-stage tailoring must have a stage",
       REVIEW_TAILORING_STAGE_NOT_ALLOWED: "Only an O-stage tailoring can have a stage",
       REVIEW_TAILORING_STAGE_NOT_O_STAGE: "Only stages of the O stage type can be selected",
