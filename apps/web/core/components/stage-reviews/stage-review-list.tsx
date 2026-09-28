@@ -37,7 +37,7 @@ import { useStageReviewPermissions } from "./permissions";
 import { ProductStageReviewsEmptyState } from "./product-empty-state";
 import type { TStageReviewScope } from "./scope";
 import { getStageReviewScopeId, getStageReviewStorageScope } from "./scope";
-import { STAGE_REVIEW_GROUP_ALL, stageReviewGroupKey } from "./stage-review-rows";
+import { STAGE_REVIEW_GROUP_ALL, stageReviewGroupKeys } from "./stage-review-rows";
 import type { TStageReviewTableSelection } from "./stage-review-table";
 import { StageReviewTable } from "./stage-review-table";
 import { StageReviewSummary } from "./stage-summary";
@@ -148,9 +148,11 @@ export const StageReviewList = observer(function StageReviewList({
     deepLinkHandled.current = true;
     const target = reviews.find((review) => review.id === deepLinkReviewId);
     if (!target) return;
-    setSelectedGroupId(stageReviewGroupKey(settings.groupBy, target));
+    // 按负责人 / 审核者分组时一条评审在好几个组里：自己在名单里就落到自己那组，否则第一组
+    const keys = stageReviewGroupKeys(settings.groupBy, target, crossProject);
+    setSelectedGroupId(keys.find((key) => key === currentUser?.id) ?? keys[0]);
     setOpenReviewId(target.id);
-  }, [deepLinkReviewId, reviews, settings.groupBy]);
+  }, [deepLinkReviewId, reviews, settings.groupBy, crossProject, currentUser?.id]);
 
   // 选中的组不在当前分组栏里（切了分组方式、被筛没了）就落到第一组（「全部评审」），同工作项
   const isGrouped = settings.groupBy !== "none";
@@ -166,14 +168,17 @@ export const StageReviewList = observer(function StageReviewList({
   const summaryMeta = scopeKind === "project" ? "products" : effectiveGroupBy === "project" ? "stages" : "projects";
 
   // 列 = 这个作用域下开着的显示属性；产品页按项目分组时「项目」列换成「研发阶段」列。
-  // 右侧只列选中那一组，当前分组维度那一列整列都是同一个值，藏掉（按产品分组时不出「产品」列）
+  // 右侧只列选中那一组，当前分组维度那一列整列都是同一个值，藏掉（按产品分组时不出「产品」列）。
+  // 负责人 / 审核者例外：名单不止一个人，这一列并不是整列同值，藏了就看不到还有谁
   const columns = useMemo<TStageReviewColumn[]>(() => {
     const visible = getStageReviewDisplayProperties(scopeKind).filter((property) => settings.properties[property]);
     const swapped =
       scopeKind === "product" && effectiveGroupBy === "project"
         ? visible.map((property): TStageReviewColumn => (property === "project" ? "stage" : property))
         : visible;
-    return swapped.filter((column) => column !== effectiveGroupBy);
+    return swapped.filter(
+      (column) => column !== effectiveGroupBy || column === "leader" || column === "auditor"
+    );
   }, [scopeKind, settings.properties, effectiveGroupBy]);
   // 批量改属性只在项目页、有维护权限时开：批量接口是项目级的，产品页的评审横跨多个项目。
   // 已评审是终态不能勾；「能勾的行」随分组 / 筛选 / 搜索变化，勾选跟着收窄

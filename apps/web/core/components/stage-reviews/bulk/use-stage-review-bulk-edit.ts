@@ -14,8 +14,8 @@ export type TStageReviewFlashedCells = { ids: Set<string>; columns: Set<TStageRe
 
 /** 改了哪个字段就闪哪一列：两个日期同在「计划日期」一列 */
 const FIELD_COLUMN: Record<keyof TStageReviewBulkChanges, TStageReviewColumn> = {
-  leader: "leader",
-  auditor: "auditor",
+  leader_ids: "leader",
+  auditor_ids: "auditor",
   start_date: "dates",
   end_date: "dates",
 };

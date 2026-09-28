@@ -20,7 +20,11 @@ from plane.app.views.requirement.mixins import get_scoped_product
 from plane.db.models import Project, ProductProject, StageReview, StageReviewStatus
 from plane.utils.review_tailoring import project_stages
 
-from .review import _attachment_count_annotation, _tailoring_annotations
+from .review import (
+    _attachment_count_annotation,
+    _tailoring_annotations,
+    owner_prefetches,
+)
 
 #: 与项目侧 STAGE_REVIEW_READ_KEYS 同一口径：查看或维护任一即可
 READ_KEYS = {
@@ -100,12 +104,9 @@ class ProductStageReviewViewSet(BaseViewSet):
                 "product",
                 "stage",
                 "stage__stage_type",
-                "leader",
-                "leader__avatar_asset",
-                "auditor",
-                "auditor__avatar_asset",
                 "project",
             )
+            .prefetch_related(*owner_prefetches())
             .annotate(
                 attachment_count=_attachment_count_annotation(),
                 comment_count=Count(

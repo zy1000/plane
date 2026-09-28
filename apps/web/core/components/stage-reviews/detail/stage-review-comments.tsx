@@ -116,8 +116,8 @@ export const StageReviewCommentCard = ({
   workspaceSlug,
   workspaceId,
   projectId,
-  leaderId,
-  auditorId,
+  leaderIds,
+  auditorIds,
   currentUserId,
   onDelete,
 }: {
@@ -126,16 +126,16 @@ export const StageReviewCommentCard = ({
   workspaceSlug: string;
   workspaceId: string;
   projectId: string;
-  leaderId: string | null;
-  auditorId: string | null;
+  leaderIds: string[];
+  auditorIds: string[];
   currentUserId: string | undefined;
   onDelete: (commentId: string) => void;
 }) => {
   const { t } = useTranslation();
   const roleKey =
-    comment.actor && comment.actor === leaderId
+    comment.actor && leaderIds.includes(comment.actor)
       ? "role_chip_leader"
-      : comment.actor && comment.actor === auditorId
+      : comment.actor && auditorIds.includes(comment.actor)
         ? "role_chip_auditor"
         : null;
 

@@ -10,6 +10,7 @@ import {
 } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { joinPeopleNames } from "./people";
 
 const I18N = "stage_review";
 
@@ -119,9 +120,10 @@ export const SubmitStageReviewModal = ({
   const effect = (() => {
     if (!result) return t(`${I18N}.submit.description`);
     if (result === EStageReviewResult.REJECTED) return t(`${I18N}.submit.effect_rejected`);
-    return detail.auditor_detail
-      ? t(`${I18N}.submit.effect_approval`, { auditor: detail.auditor_detail.display_name })
-      : t(`${I18N}.submit.effect_approval_no_auditor`);
+    if (detail.auditor_details.length === 0) return t(`${I18N}.submit.effect_approval_no_auditor`);
+    return t(`${I18N}.submit.${detail.auditor_details.length > 1 ? "effect_approval_any" : "effect_approval"}`, {
+      auditor: joinPeopleNames(detail.auditor_details),
+    });
   })();
 
   const confirmLabel =

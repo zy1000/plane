@@ -9,7 +9,7 @@
 推进状态的动作一律在 ``transaction.atomic()`` 里对评审行
 ``select_for_update(of=("self",))``：两个人同时点「提交审核」时，后一个必须看到前一个
 写完的状态，否则会写出两条同样的活动记录。``of=("self",)`` 是必须的 —— queryset 上带
-了 nullable FK 的 ``select_related`` 时 Postgres 不允许对外连接的可空侧加锁。
+了 ``select_related`` 与成员可见性的跨表过滤，不限定的话会连带锁住项目 / 产品 / 成员的行。
 """
 
 from django.conf import settings
@@ -48,6 +48,7 @@ from plane.db.models import (
     StageReviewActivity,
     StageReviewComment,
     StageReviewStatus,
+    User,
     Workspace,
 )
 from plane.settings.storage import S3Storage
@@ -99,6 +100,15 @@ FORBIDDEN_CODES = {
     "STAGE_REVIEW_NOT_LEADER",
     "STAGE_REVIEW_NOT_AUDITOR",
 }
+
+
+def owner_prefetches():
+    """负责人 / 审核者名单的预取，列表、详情、产品页共用。
+
+    头像走 User.avatar_url → avatar_asset，不跟着 join 的话每个人都要单查一次 file_assets。
+    """
+    users = User.objects.select_related("avatar_asset").order_by("display_name")
+    return [Prefetch("leaders", queryset=users), Prefetch("auditors", queryset=users)]
 
 
 def stage_review_error_response(exc):
@@ -174,14 +184,9 @@ class StageReviewViewSet(BaseViewSet):
                 "product",
                 "stage",
                 "stage__stage_type",
-                "leader",
-                # 负责人 / 审核者的头像走 User.avatar_url → avatar_asset，不跟着 join
-                # 的话列表每行都要单查一次 file_assets
-                "leader__avatar_asset",
-                "auditor",
-                "auditor__avatar_asset",
                 "project",
             )
+            .prefetch_related(*owner_prefetches())
         )
 
     def get_queryset(self):
@@ -222,8 +227,8 @@ class StageReviewViewSet(BaseViewSet):
                 # 父评审详情里的「评审活动」区块，顺序同列表
                 Prefetch(
                     "children",
-                    queryset=StageReview.objects.select_related(
-                        "leader", "leader__avatar_asset"
+                    queryset=StageReview.objects.prefetch_related(
+                        owner_prefetches()[0]
                     ).order_by("sort_order", "created_at", "id"),
                 ),
             )

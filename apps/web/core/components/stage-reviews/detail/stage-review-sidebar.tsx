@@ -126,10 +126,10 @@ export const StageReviewSidebar = ({
             projectId={projectId}
             reviewId={detail.id}
             role="leader"
-            value={detail.leader_id}
-            valueDetail={detail.leader_detail}
+            value={detail.leader_ids}
+            valueDetail={detail.leader_details}
             disabled={!editable}
-            onChange={(userId) => onUpdate({ leader: userId })}
+            onChange={(userIds) => onUpdate({ leader_ids: userIds })}
           />
         </Row>
         <Row icon={UserRoundCheck} label={t(`${I18N}.fields.auditor`)}>
@@ -138,10 +138,10 @@ export const StageReviewSidebar = ({
             projectId={projectId}
             reviewId={detail.id}
             role="auditor"
-            value={detail.auditor_id}
-            valueDetail={detail.auditor_detail}
+            value={detail.auditor_ids}
+            valueDetail={detail.auditor_details}
             disabled={!editable}
-            onChange={(userId) => onUpdate({ auditor: userId })}
+            onChange={(userIds) => onUpdate({ auditor_ids: userIds })}
           />
         </Row>
         {/* 开始 / 结束各占一行；开始不能晚于结束，反过来同理 —— 后端 clean() 也会拦，这里先挡住 */}

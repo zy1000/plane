@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 import { format } from "date-fns";
 import { useTranslation } from "@plane/i18n";
-import type { TStageReviewActivity, TStageReviewDetail } from "@plane/types";
+import type { IUserLite, TStageReviewActivity, TStageReviewDetail } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
 import { cn } from "@plane/utils";
 
@@ -37,6 +37,11 @@ export const useStepHints = (detail: TStageReviewDetail, activities: TStageRevie
     keepLatest(leftAt, activity.old_value, activity.created_at);
   }
   const shortDate = (iso: string | undefined) => (iso ? format(new Date(iso), "MM-dd") : undefined);
+  // 这一格很窄，名单不止一个人时只写「张三 等 3 人」
+  const who = (users: IUserLite[]) =>
+    users.length > 1
+      ? t(`${I18N}.detail.people_more`, { name: users[0].display_name, count: users.length })
+      : users[0].display_name;
 
   const currentHint = (() => {
     switch (detail.status) {
@@ -44,12 +49,12 @@ export const useStepHints = (detail: TStageReviewDetail, activities: TStageRevie
         return t(`${I18N}.detail.step_waiting_start`);
       case EStageReviewStatus.IN_REVIEW:
         if (detail.result === EStageReviewResult.REJECTED) return t(`${I18N}.detail.step_rejected`);
-        return detail.leader_detail
-          ? t(`${I18N}.detail.step_driven_by`, { name: detail.leader_detail.display_name })
+        return detail.leader_details.length > 0
+          ? t(`${I18N}.detail.step_driven_by`, { name: who(detail.leader_details) })
           : t(`${I18N}.detail.step_waiting_leader`);
       case EStageReviewStatus.IN_APPROVAL:
-        return detail.auditor_detail
-          ? t(`${I18N}.detail.step_waiting_auditor`, { name: detail.auditor_detail.display_name })
+        return detail.auditor_details.length > 0
+          ? t(`${I18N}.detail.step_waiting_auditor`, { name: who(detail.auditor_details) })
           : t(`${I18N}.detail.step_waiting_audit`);
       default:
         return shortDate(enteredAt.get(EStageReviewStatus.COMPLETED));

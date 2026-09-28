@@ -139,8 +139,8 @@ export const StageReviewTimeline = ({
                 workspaceSlug={workspaceSlug}
                 workspaceId={workspaceId}
                 projectId={projectId}
-                leaderId={detail.leader_id}
-                auditorId={detail.auditor_id}
+                leaderIds={detail.leader_ids}
+                auditorIds={detail.auditor_ids}
                 currentUserId={currentUser?.id}
                 onDelete={(commentId) => void onDeleteComment(commentId)}
               />

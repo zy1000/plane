@@ -10,7 +10,8 @@
    内容字段与附件也不能再改（评论仍开放）；点错了只能去裁剪表取消勾选、签批生效删掉
    后重新生成。这样「谁在什么时候把它推到哪一步」在 ``StageReviewActivity`` 里是一条
    连续的线。**每一步由这一步的主人推进和退回**（``_assert_step_owner``）：未评审 / 评审中
-   归负责人，审核中归审核者；主人没指定就不能动，也不允许任何人代推 —— 管理权限只决定
+   归负责人，审核中归审核者（两者都可多人，名单里任意一人即可）；主人没指定就不能动，
+   也不允许名单之外的人代推 —— 管理权限只决定
    能不能改字段（包括指定负责人 / 审核者），不决定能不能替人签字。提交审核前还必须已经
    指定审核者，否则会停在一个没人能推的审核中。「开始评审」与「审核通过」会顺手把
    空着的开始日期 / 结束日期补成当天（已填的不动），见 ``_auto_fill_date``。
@@ -157,19 +158,21 @@ _OWNER_MESSAGES = {
 
 
 def _assert_owner(review, actor, field):
-    """``field`` 上的人必须已指定，且就是 ``actor`` 本人。口径同裁剪表签批：只认身份，不认权限。"""
+    """``field`` 上的名单不能为空，且 ``actor`` 是其中之一。口径同裁剪表签批：只认身份，不认权限。"""
     required_code, not_owner_code = _OWNER_ERRORS[field]
-    owner_id = getattr(review, f"{field}_id")
-    if owner_id is None:
+    owners = list(getattr(review, f"{field}s").all())
+    if not owners:
         raise StageReviewError(
             _OWNER_MESSAGES[required_code], code=required_code, detail={"field": field}
         )
-    if owner_id != actor.id:
-        owner = getattr(review, field)
+    if actor.id not in {owner.id for owner in owners}:
         raise StageReviewError(
             _OWNER_MESSAGES[not_owner_code],
             code=not_owner_code,
-            detail={"field": field, "owner": owner.display_name if owner else ""},
+            detail={
+                "field": field,
+                "owners": [owner.display_name for owner in owners],
+            },
         )
 
 
@@ -285,7 +288,7 @@ def advance(review, *, actor, payload=None):
         )
 
     _assert_step_owner(review, actor)
-    if review.status == StageReviewStatus.IN_REVIEW and review.auditor_id is None:
+    if review.status == StageReviewStatus.IN_REVIEW and not review.auditors.exists():
         # 不区分结论统一要求：否则通过后会停在一个没人能推的审核中
         raise StageReviewError(
             _OWNER_MESSAGES["STAGE_REVIEW_AUDITOR_REQUIRED"],
@@ -537,8 +540,6 @@ def create_manual_review(*, project, product, stage, actor, data):
         title=data["title"],
         description_html=data.get("description_html") or "",
         work_instruction=data.get("work_instruction") or "",
-        leader_id=data.get("leader_id"),
-        auditor_id=data.get("auditor_id"),
         start_date=data.get("start_date"),
         end_date=data.get("end_date"),
         status=StageReviewStatus.NOT_STARTED,
@@ -547,12 +548,17 @@ def create_manual_review(*, project, product, stage, actor, data):
     )
     _validated(review)
     review.save()
+    # 多对多要等评审有了主键才能写
+    for relation in _MEMBER_FIELDS:
+        if data.get(relation):
+            getattr(review, relation).set(data[relation])
     write_activity(review, actor=actor, verb="created", comment="手工新建评审")
     return review
 
 
-#: 成员字段：轨迹里值存显示名、identifier 存用户 id，前端据此出「从 A 改为 B」
-_MEMBER_FIELDS = ("leader", "auditor")
+#: 成员字段（多人）：模型上的多对多 → 轨迹里的字段名。轨迹**逐人一条**：添加的人进新值、
+#: 移除的人进旧值，值存显示名、identifier 存用户 id，前端据此出「添加了 / 移除了负责人 X」
+_MEMBER_FIELDS = {"leaders": "leader", "auditors": "auditor"}
 #: 长文本字段只记「改了」，不把整段 HTML / 原文塞进轨迹 —— 时间线也只写「更新了描述」
 _TEXT_ONLY_FIELDS = ("description_html", "work_instruction")
 
@@ -561,8 +567,6 @@ def _activity_value(field, value):
     """把字段值翻成轨迹里给人读的那一份。"""
     if value is None or field in _TEXT_ONLY_FIELDS:
         return None
-    if field in _MEMBER_FIELDS:
-        return value.display_name
     if field in ("start_date", "end_date"):
         return value.isoformat()
     if isinstance(value, (list, tuple)):
@@ -570,14 +574,22 @@ def _activity_value(field, value):
     return str(value)
 
 
-def _activity_identifier(field, value):
-    return value.id if field in _MEMBER_FIELDS and value is not None else None
+def _member_changes(review, relation, users):
+    """名单的增减：``(要写入的名单, 添加的人, 移除的人)``，没变化返回 ``None``。"""
+    current = {user.id: user for user in getattr(review, relation).all()}
+    target = {user.id: user for user in users}
+    if current.keys() == target.keys():
+        return None
+    added = [user for user_id, user in target.items() if user_id not in current]
+    removed = [user for user_id, user in current.items() if user_id not in target]
+    return list(target.values()), added, removed
 
 
 def update_review(review, *, actor, validated_data):
     """详情页里改字段。状态与结论不在这里改 —— 那两列只能由动作推进。
 
-    每个改动的字段写一条轨迹，**旧值与新值都记**：时间线要写成「把负责人从 A 改为 B」。
+    每个改动的字段写一条轨迹，**旧值与新值都记**：时间线要写成「把结束日期从 A 改为 B」。
+    负责人 / 审核者是名单，整份替换、逐人记轨迹（见 ``_MEMBER_FIELDS``）。
 
     ``stage``（视图已解析成本项目的 ``ProjectStage``，父子皆可）只有手工评审能改，走
     ``move_review_stage``；裁剪表生成的评审，阶段由裁剪表决定，要挪请走裁剪表修订。
@@ -592,18 +604,28 @@ def update_review(review, *, actor, validated_data):
                 code="STAGE_REVIEW_STAGE_BY_TAILORING",
             )
         move_review_stage(review, stage=stage, actor=actor)
+    member_changes = {}
+    for relation in _MEMBER_FIELDS:
+        if relation in validated_data:
+            changes = _member_changes(review, relation, validated_data.pop(relation))
+            if changes:
+                member_changes[relation] = changes
     changed = []
     for field, value in validated_data.items():
         old = getattr(review, field)
         if old != value:
             setattr(review, field, value)
             changed.append((field, old, value))
-    if not changed:
+    if not changed and not member_changes:
         return review
 
-    review.updated_by = actor
-    _validated(review)
-    review.save(update_fields=[*(field for field, _, _ in changed), "updated_by"])
+    if changed:
+        review.updated_by = actor
+        _validated(review)
+        review.save(update_fields=[*(field for field, _, _ in changed), "updated_by"])
+    else:
+        # 只动了名单：不跑模型校验 —— 存量的日期问题不该挡住指派负责人
+        _touch(review, actor)
     for field, old, new in changed:
         write_activity(
             review,
@@ -612,9 +634,28 @@ def update_review(review, *, actor, validated_data):
             field=field,
             old_value=_activity_value(field, old),
             new_value=_activity_value(field, new),
-            old_identifier=_activity_identifier(field, old),
-            new_identifier=_activity_identifier(field, new),
         )
+    for relation, (users, added, removed) in member_changes.items():
+        getattr(review, relation).set(users)
+        field = _MEMBER_FIELDS[relation]
+        for user in removed:
+            write_activity(
+                review,
+                actor=actor,
+                verb="updated",
+                field=field,
+                old_value=user.display_name,
+                old_identifier=user.id,
+            )
+        for user in added:
+            write_activity(
+                review,
+                actor=actor,
+                verb="updated",
+                field=field,
+                new_value=user.display_name,
+                new_identifier=user.id,
+            )
     return review
 
 

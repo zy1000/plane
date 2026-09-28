@@ -12,6 +12,8 @@ const I18N = "stage_review";
 
 /** undefined = 保持不变；null = 清空 */
 type TFieldValue = string | null | undefined;
+/** 成员是整份名单（替换，不是追加）：undefined = 保持不变；null = 设为无 */
+type TMemberValue = string[] | null | undefined;
 
 /** 字段里「清空 / 设为无」那个小按钮，只在保持不变时出现 */
 const ClearButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
@@ -34,6 +36,9 @@ const ClearedValue = ({ children }: { children: ReactNode }) => (
  * 口径同用例的批量面板：每项默认「保持不变」，改过的换强调色边框并带 × 改回；成员可「设为无」，
  * 日期可「清空」。暂存后一次「应用到 N 条」。候选人是本项目成员 —— 一批评审的角色名各不相同，
  * 没法像抽屉那样按产品角色筛。
+ *
+ * 负责人 / 审核人可多选，选中的就是勾中评审的**整份新名单**（替换原来的人）。在下拉里把人
+ * 取消光等于没选，回到「保持不变」—— 要清空得点「设为无」，免得手滑清掉一批。
  */
 export const StageReviewBulkEditPanel = ({
   projectId,
@@ -49,8 +54,8 @@ export const StageReviewBulkEditPanel = ({
   onApply: (changes: TStageReviewBulkChanges) => void;
 }) => {
   const { t } = useTranslation();
-  const [leader, setLeader] = useState<TFieldValue>(undefined);
-  const [auditor, setAuditor] = useState<TFieldValue>(undefined);
+  const [leader, setLeader] = useState<TMemberValue>(undefined);
+  const [auditor, setAuditor] = useState<TMemberValue>(undefined);
   const [startDate, setStartDate] = useState<TFieldValue>(undefined);
   const [endDate, setEndDate] = useState<TFieldValue>(undefined);
 
@@ -61,23 +66,23 @@ export const StageReviewBulkEditPanel = ({
   const handleApply = () => {
     if (changedCount === 0) return;
     const changes: TStageReviewBulkChanges = {};
-    if (leader !== undefined) changes.leader = leader;
-    if (auditor !== undefined) changes.auditor = auditor;
+    if (leader !== undefined) changes.leader_ids = leader ?? [];
+    if (auditor !== undefined) changes.auditor_ids = auditor ?? [];
     if (startDate !== undefined) changes.start_date = startDate;
     if (endDate !== undefined) changes.end_date = endDate;
     onApply(changes);
   };
 
-  const renderMember = (value: TFieldValue, onChange: (value: TFieldValue) => void) => (
+  const renderMember = (value: TMemberValue, onChange: (value: TMemberValue) => void) => (
     <BulkEditFieldShell isSet={value !== undefined} onReset={() => onChange(undefined)} resetLabel={resetLabel}>
       {value === null ? (
         <ClearedValue>{t(`${I18N}.list.unassigned`)}</ClearedValue>
       ) : (
         <MemberDropdown
-          multiple={false}
+          multiple
           projectId={projectId}
-          value={value ?? null}
-          onChange={(next) => onChange(next ?? undefined)}
+          value={value ?? []}
+          onChange={(next) => onChange(next.length > 0 ? next : undefined)}
           placeholder={keepText}
           className="h-full min-w-0 flex-1"
           buttonContainerClassName="h-full w-full text-left"

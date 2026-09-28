@@ -25,6 +25,9 @@ const asStrings = (value: unknown): string[] => {
     .filter((item) => item.length > 0);
 };
 
+const isNegated = (operator: TSupportedOperators) =>
+  operator === EXTENDED_EQUALITY_OPERATOR.NOT_EXACT || operator === EXTENDED_COLLECTION_OPERATOR.NOT_IN;
+
 const matchOption = (candidate: string, operator: TSupportedOperators, selected: string[]) => {
   const selectedSet = new Set(selected);
   switch (operator) {
@@ -56,12 +59,15 @@ const matchCondition = (review: TStageReview, condition: TStageReviewCondition, 
   // 刚加上、还没选值的条件不参与筛选
   if (selected.length === 0) return true;
 
-  const person = (id: string | null) =>
-    matchOption(
-      id ?? STAGE_REVIEW_FILTER_NONE,
-      condition.operator,
+  // 负责人 / 审核者是名单：「是其中之一」= 名单里有任意一个所选的人，「不是」= 一个都没有；
+  // 名单为空按「未指定」算
+  const people = (ids: string[]) => {
+    const wanted = new Set(
       selected.map((value) => (value === STAGE_REVIEW_FILTER_ME ? (currentUserId ?? value) : value))
     );
+    const hasAny = (ids.length > 0 ? ids : [STAGE_REVIEW_FILTER_NONE]).some((id) => wanted.has(id));
+    return isNegated(condition.operator) ? !hasAny : hasAny;
+  };
 
   switch (condition.property) {
     case "title":
@@ -71,9 +77,9 @@ const matchCondition = (review: TStageReview, condition: TStageReviewCondition, 
     case "result":
       return matchOption(review.result || STAGE_REVIEW_FILTER_NONE, condition.operator, selected);
     case "leader_id":
-      return person(review.leader_id);
+      return people(review.leader_ids);
     case "auditor_id":
-      return person(review.auditor_id);
+      return people(review.auditor_ids);
     case "product_id":
       return matchOption(review.product_id, condition.operator, selected);
     case "project_id":

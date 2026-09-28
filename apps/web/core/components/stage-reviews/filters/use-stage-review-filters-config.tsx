@@ -95,12 +95,13 @@ export const useStageReviewFiltersConfig = ({
     const isLabel = t(`${I18N}.filters.operator_is`);
     const dateLabels = { is: isLabel, between: t(`${I18N}.filters.operator_between`) };
 
-    const people = (pick: (review: TStageReview) => IUserLite | null): TOption[] => {
+    const people = (pick: (review: TStageReview) => IUserLite[]): TOption[] => {
       const map = new Map<string, TOption>();
       for (const review of reviews) {
-        const user = pick(review);
-        if (user && !map.has(user.id)) {
-          map.set(user.id, { id: user.id, value: user.id, label: user.display_name, icon: avatar(user) });
+        for (const user of pick(review)) {
+          if (!map.has(user.id)) {
+            map.set(user.id, { id: user.id, value: user.id, label: user.display_name, icon: avatar(user) });
+          }
         }
       }
       return [
@@ -189,14 +190,14 @@ export const useStageReviewFiltersConfig = ({
         label: t(`${I18N}.filters.leader`),
         icon: MembersPropertyIcon,
         isEnabled: true,
-        supportedOperatorConfigsMap: multiSelect(people((review) => review.leader_detail), params, isLabel),
+        supportedOperatorConfigsMap: multiSelect(people((review) => review.leader_details), params, isLabel),
       }),
       createFilterConfig<TStageReviewFilterProperty>({
         id: "auditor_id",
         label: t(`${I18N}.filters.auditor`),
         icon: UserCheck,
         isEnabled: true,
-        supportedOperatorConfigsMap: multiSelect(people((review) => review.auditor_detail), params, isLabel),
+        supportedOperatorConfigsMap: multiSelect(people((review) => review.auditor_details), params, isLabel),
       }),
       createFilterConfig<TStageReviewFilterProperty>({
         id: "product_id",

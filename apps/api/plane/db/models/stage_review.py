@@ -428,21 +428,20 @@ class StageReview(ProjectBaseModel):
     auditor_role = models.CharField(
         max_length=255, blank=True, default="", verbose_name="审核者角色"
     )
-    # 角色解析出来的实际人。leader 就是原始表里的「负责人」（按产品的角色配置筛选人员）。
-    leader = models.ForeignKey(
+    # 角色解析出来的实际人。leaders 就是原始表里的「负责人」（按产品的角色配置筛选人员）。
+    # 两者都可多人：每一步由名单里任意一人推进即可（见 utils/stage_review.py）。
+    leaders = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name="led_stage_reviews",
+        db_table="stage_review_leaders",
         verbose_name="主导者",
     )
-    auditor = models.ForeignKey(
+    auditors = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name="audited_stage_reviews",
+        db_table="stage_review_auditors",
         verbose_name="审核者",
     )
 

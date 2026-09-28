@@ -3,14 +3,15 @@ import { MessageSquare, Paperclip } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-import type { IUserLite, TStageReview } from "@plane/types";
+import type { TStageReview } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
-import { Avatar, Checkbox } from "@plane/ui";
-import { cn, getFileURL } from "@plane/utils";
+import { Checkbox } from "@plane/ui";
+import { cn } from "@plane/utils";
 import { stageReviewsPath } from "@/components/reviews/routes";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import type { TStageReviewFlashedCells } from "./bulk/use-stage-review-bulk-edit";
 import type { TStageReviewColumn } from "./display/display-settings";
+import { StageReviewPeople } from "./people";
 import type { TStageReviewRow } from "./stage-review-rows";
 import { StageReviewStatusIcon } from "./status-icon";
 
@@ -22,8 +23,8 @@ const COLUMN_WIDTH: Record<TStageReviewColumn, string> = {
   stage: "minmax(88px, 120px)",
   status: "96px",
   result: "84px",
-  leader: "124px",
-  auditor: "124px",
+  leader: "148px",
+  auditor: "148px",
   dates: "120px",
   attachment_count: "56px",
   comment_count: "56px",
@@ -43,19 +44,6 @@ const RESULT_TEXT: Record<EStageReviewResult, string> = {
 const Empty = () => <span className="text-13 text-placeholder">—</span>;
 
 const shortDate = (value: string) => value.slice(5, 10);
-
-const Person = ({ user, unassigned }: { user: IUserLite | null; unassigned: string }) =>
-  user ? (
-    <span className="flex min-w-0 items-center gap-2">
-      <Avatar size="sm" name={user.display_name} src={getFileURL(user.avatar_url ?? "")} showTooltip={false} />
-      <span className="truncate text-13 text-secondary">{user.display_name}</span>
-    </span>
-  ) : (
-    <span className="flex min-w-0 items-center gap-2">
-      <span className="size-5 shrink-0 rounded-full border border-dashed border-strong" />
-      <span className="truncate text-13 text-placeholder">{unassigned}</span>
-    </span>
-  );
 
 /** 行左侧留白里的勾选框：平时藏着，悬停该行或已经有勾选时才出来，不占列宽 */
 const RowCheckbox = ({
@@ -198,9 +186,9 @@ export const StageReviewTable = ({
       case "result":
         return review.result ? <span className={RESULT_TEXT[review.result]}>{t(`${I18N}.result.${review.result}`)}</span> : <Empty />;
       case "leader":
-        return <Person user={review.leader_detail} unassigned={unassigned} />;
+        return <StageReviewPeople users={review.leader_details} unassigned={unassigned} />;
       case "auditor":
-        return <Person user={review.auditor_detail} unassigned={unassigned} />;
+        return <StageReviewPeople users={review.auditor_details} unassigned={unassigned} />;
       case "dates": {
         if (!review.start_date && !review.end_date) return <Empty />;
         const isLate =

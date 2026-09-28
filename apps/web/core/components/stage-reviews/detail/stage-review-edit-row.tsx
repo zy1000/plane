@@ -104,6 +104,17 @@ const isValueHidden = (activity: TStageReviewActivity) =>
     !activity.new_identifier &&
     !!activity.new_value);
 
+/**
+ * 负责人 / 审核者是名单，轨迹逐人记：只有新值 = 添加了这个人，只有旧值 = 移除了这个人。
+ * 两头都有值的是改成多人之前的老记录（从 A 改为 B），不算在内。
+ */
+const memberAction = (activity: TStageReviewActivity): "added" | "removed" | null => {
+  if (!MEMBER_FIELDS.includes(activity.field ?? "") || isValueHidden(activity)) return null;
+  if (activity.new_value && !activity.old_value) return "added";
+  if (activity.old_value && !activity.new_value) return "removed";
+  return null;
+};
+
 /** 句子里的值：新值加深，旧值划线；太长截断，悬停看全 */
 const Value = ({ children, old = false }: { children: string; old?: boolean }) => (
   <span
@@ -164,17 +175,18 @@ const EditSentence = ({ activity }: { activity: TStageReviewActivity }) => {
       </>
     );
   }
+  const isMember = memberAction(activity) !== null;
   if (newValue) {
     return (
       <>
-        <span>{t(`${I18N}.activity.set_to`, { field: label })}</span>
+        <span>{t(`${I18N}.activity.${isMember ? "member_added" : "set_to"}`, { field: label })}</span>
         <Value>{display(field, newValue)}</Value>
       </>
     );
   }
   return (
     <>
-      <span>{t(`${I18N}.activity.cleared`, { field: label })}</span>
+      <span>{t(`${I18N}.activity.${isMember ? "member_removed" : "cleared"}`, { field: label })}</span>
       <Value old>{display(field, oldValue ?? "")}</Value>
     </>
   );
@@ -203,6 +215,9 @@ const EditDetailItem = ({ activity }: { activity: TStageReviewActivity }) => {
       );
   } else if (isValueHidden(activity) || (!oldValue && !newValue)) {
     value = <span className="text-tertiary">{t(`${I18N}.activity.content_updated`)}</span>;
+  } else if (memberAction(activity)) {
+    value =
+      memberAction(activity) === "removed" ? <Value old>{oldValue ?? ""}</Value> : <Value>{`+ ${newValue ?? ""}`}</Value>;
   } else {
     value = (
       <>
@@ -249,7 +264,12 @@ export const StageReviewEditRow = ({
 
   const isSameAttachmentAction =
     activities.length > 1 && activities.every((item) => item.field === "attachment" && item.verb === first.verb);
-  const isGroup = activities.length > 1 && !isSameAttachmentAction;
+  // 一次往名单里加了（或拿掉了）几个人：合成一句「添加了负责人 张三 李四」
+  const isSameMemberAction =
+    activities.length > 1 &&
+    memberAction(first) !== null &&
+    activities.every((item) => item.field === first.field && memberAction(item) === memberAction(first));
+  const isGroup = activities.length > 1 && !isSameAttachmentAction && !isSameMemberAction;
   const fieldLabels = Array.from(new Set(activities.map((item) => fieldLabel(item.field ?? ""))));
 
   let sentence: ReactNode;
@@ -266,6 +286,22 @@ export const StageReviewEditRow = ({
             </Value>
           ) : null;
         })}
+      </>
+    );
+  } else if (isSameMemberAction) {
+    const isRemoved = memberAction(first) === "removed";
+    sentence = (
+      <>
+        <span>
+          {t(`${I18N}.activity.${isRemoved ? "member_removed" : "member_added"}`, {
+            field: fieldLabel(first.field ?? ""),
+          })}
+        </span>
+        {activities.map((item) => (
+          <Value key={item.id} old={isRemoved}>
+            {(isRemoved ? item.old_value : item.new_value) ?? ""}
+          </Value>
+        ))}
       </>
     );
   } else if (isGroup) {

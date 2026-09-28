@@ -67,8 +67,11 @@ class StageReviewListSerializer(BaseSerializer):
     # 反向关系，由 view annotate 出来，不在这里逐行反查；手工新建的评审为空。
     tailoring_id = serializers.UUIDField(read_only=True, default=None)
     tailoring_title = serializers.CharField(read_only=True, default=None)
-    leader_detail = UserLiteSerializer(source="leader", read_only=True)
-    auditor_detail = UserLiteSerializer(source="auditor", read_only=True)
+    # 负责人 / 审核者都是名单；view 的 queryset 已预取（带头像），这里不再逐行查库
+    leader_ids = serializers.SerializerMethodField()
+    leader_details = UserLiteSerializer(source="leaders", many=True, read_only=True)
+    auditor_ids = serializers.SerializerMethodField()
+    auditor_details = UserLiteSerializer(source="auditors", many=True, read_only=True)
     attachment_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
     is_manual = serializers.SerializerMethodField()
@@ -91,10 +94,10 @@ class StageReviewListSerializer(BaseSerializer):
             "title",
             "status",
             "result",
-            "leader_id",
-            "leader_detail",
-            "auditor_id",
-            "auditor_detail",
+            "leader_ids",
+            "leader_details",
+            "auditor_ids",
+            "auditor_details",
             "start_date",
             "end_date",
             "attachment_count",
@@ -108,6 +111,12 @@ class StageReviewListSerializer(BaseSerializer):
 
     def get_is_manual(self, obj) -> bool:
         return obj.template_id is None
+
+    def get_leader_ids(self, obj):
+        return [user.id for user in obj.leaders.all()]
+
+    def get_auditor_ids(self, obj):
+        return [user.id for user in obj.auditors.all()]
 
 
 class StageReviewFinishedGoodSerializer(BaseSerializer):
@@ -138,7 +147,8 @@ class StageReviewComponentVersionSerializer(BaseSerializer):
 class StageReviewChildSerializer(BaseSerializer):
     """父评审详情里「评审活动」区块的一行：只读，只带这一行要画的字段。"""
 
-    leader_detail = UserLiteSerializer(source="leader", read_only=True)
+    leader_ids = serializers.SerializerMethodField()
+    leader_details = UserLiteSerializer(source="leaders", many=True, read_only=True)
 
     class Meta:
         model = StageReview
@@ -148,12 +158,15 @@ class StageReviewChildSerializer(BaseSerializer):
             "title",
             "status",
             "result",
-            "leader_id",
-            "leader_detail",
+            "leader_ids",
+            "leader_details",
             "end_date",
             "sort_order",
         ]
         read_only_fields = fields
+
+    def get_leader_ids(self, obj):
+        return [user.id for user in obj.leaders.all()]
 
 
 class StageReviewDetailSerializer(StageReviewListSerializer):
@@ -260,6 +273,23 @@ class StageReviewCommentSerializer(BaseSerializer):
 # --- 输入 -----------------------------------------------------------------
 
 
+def _member_ids_field(source, queryset=None):
+    """负责人 / 审核者名单的输入：一组用户 id，整份替换。
+
+    默认不筛 ``is_active``：名单整份回传，里面已有的人后来被停用时不该让整次保存失败。
+    """
+    return serializers.PrimaryKeyRelatedField(
+        source=source,
+        many=True,
+        required=False,
+        queryset=User.objects.all() if queryset is None else queryset,
+    )
+
+
+def _unique_members(users):
+    return list({user.id: user for user in users}.values())
+
+
 class StageReviewCreateSerializer(serializers.Serializer):
     """手工新建。``template`` 恒为空，由 utils 负责，这里只校验形状。"""
 
@@ -274,10 +304,16 @@ class StageReviewCreateSerializer(serializers.Serializer):
     work_instruction = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=""
     )
-    leader_id = serializers.UUIDField(required=False, allow_null=True)
-    auditor_id = serializers.UUIDField(required=False, allow_null=True)
+    leader_ids = _member_ids_field("leaders")
+    auditor_ids = _member_ids_field("auditors")
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
+
+    def validate_leader_ids(self, users):
+        return _unique_members(users)
+
+    def validate_auditor_ids(self, users):
+        return _unique_members(users)
 
 
 class StageReviewUpdateSerializer(serializers.ModelSerializer):
@@ -287,9 +323,14 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
     「提交审核」那一刻写入，开个 PATCH 口子等于把状态机架空。
 
     ``stage_id`` 只给手工评审挪阶段用（视图解析成模式阶段后交给 ``update_review``）。
+
+    ``leader_ids`` / ``auditor_ids`` 是整份名单，传空数组表示清空。这里**不校验项目成员**：
+    候选人按产品角色 → 工作区角色 → 项目成员三级回退，前两档的人不一定在项目里。
     """
 
     stage_id = serializers.UUIDField(required=False, write_only=True)
+    leader_ids = _member_ids_field("leaders")
+    auditor_ids = _member_ids_field("auditors")
 
     class Meta:
         model = StageReview
@@ -298,25 +339,33 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
             "title",
             "description_html",
             "work_instruction",
-            "leader",
-            "auditor",
+            "leader_ids",
+            "auditor_ids",
             "start_date",
             "end_date",
         ]
+
+    def validate_leader_ids(self, users):
+        return _unique_members(users)
+
+    def validate_auditor_ids(self, users):
+        return _unique_members(users)
 
 
 #: 批量改属性一次最多改多少条。列表一次取全，一个项目一两百条，留足余量
 STAGE_REVIEW_BULK_LIMIT = 500
 
 #: 批量能改的属性。只放「一批评审能共用同一个值」的字段 —— 标题、描述、O 阶段的成品表
-#: 各条不同，状态与结论只能由本人推进（见 ``StageReviewUpdateSerializer``）
-STAGE_REVIEW_BULK_FIELDS = ("leader", "auditor", "start_date", "end_date")
+#: 各条不同，状态与结论只能由本人推进（见 ``StageReviewUpdateSerializer``）。
+#: 这里是校验后的键（source 名），不是请求里的字段名
+STAGE_REVIEW_BULK_FIELDS = ("leaders", "auditors", "start_date", "end_date")
 
 
 class StageReviewBulkUpdateSerializer(serializers.Serializer):
     """列表勾选后批量改属性。
 
-    属性字段「出现即修改」，不出现就保持不变；``leader`` / ``auditor`` 传 null 表示清空。
+    属性字段「出现即修改」，不出现就保持不变；``leader_ids`` / ``auditor_ids`` 是整份名单
+    （替换而不是追加），传空数组表示清空。
     负责人 / 审核者必须是本项目的活跃成员（``context["project_id"]``）—— 单条抽屉里按产品
     角色筛候选，但一批评审的角色名各不相同，批量只能退到项目成员这一层。
     """
@@ -326,31 +375,34 @@ class StageReviewBulkUpdateSerializer(serializers.Serializer):
         allow_empty=False,
         max_length=STAGE_REVIEW_BULK_LIMIT,
     )
-    leader = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(is_active=True), required=False, allow_null=True
-    )
-    auditor = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(is_active=True), required=False, allow_null=True
-    )
+    leader_ids = _member_ids_field("leaders", User.objects.filter(is_active=True))
+    auditor_ids = _member_ids_field("auditors", User.objects.filter(is_active=True))
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
 
-    def _validate_member(self, user):
-        if user is None:
-            return user
-        if not ProjectMember.objects.filter(
-            project_id=self.context.get("project_id"),
-            member_id=user.id,
-            is_active=True,
-        ).exists():
-            raise serializers.ValidationError("该成员不在本项目中")
-        return user
+    def _validate_members(self, users):
+        users = _unique_members(users)
+        if not users:
+            return users
+        member_ids = set(
+            ProjectMember.objects.filter(
+                project_id=self.context.get("project_id"),
+                member_id__in=[user.id for user in users],
+                is_active=True,
+            ).values_list("member_id", flat=True)
+        )
+        outsiders = [user.display_name for user in users if user.id not in member_ids]
+        if outsiders:
+            raise serializers.ValidationError(
+                f"{'、'.join(outsiders)} 不在本项目中"
+            )
+        return users
 
-    def validate_leader(self, value):
-        return self._validate_member(value)
+    def validate_leader_ids(self, value):
+        return self._validate_members(value)
 
-    def validate_auditor(self, value):
-        return self._validate_member(value)
+    def validate_auditor_ids(self, value):
+        return self._validate_members(value)
 
     def validate(self, attrs):
         if not any(field in attrs for field in STAGE_REVIEW_BULK_FIELDS):

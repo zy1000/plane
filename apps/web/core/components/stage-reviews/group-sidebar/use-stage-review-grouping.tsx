@@ -14,7 +14,7 @@ import {
   STAGE_REVIEW_GROUP_ALL,
   STAGE_REVIEW_GROUP_NONE,
   buildStageReviewRowsByGroup,
-  stageReviewGroupKey,
+  stageReviewGroupKeys,
 } from "../stage-review-rows";
 import { StageReviewStatusIcon } from "../status-icon";
 
@@ -72,6 +72,7 @@ const userIcon = (user: IUserLite | null | undefined) =>
  *
  * - 分组栏列出**当前分组方式下的所有组**，数字是筛选后的命中数；关着「显示空组」时命中 0 的组不列。
  * - 组的顺序：研发阶段按阶段排序；状态 / 结论 / 类型按流程顺序；产品与人按名字，空值沉底。
+ * - 负责人 / 审核者是名单：一条评审在名单里每个人的组里各算一次，各组之和会大于「全部评审」。
  * - 右侧只看选中那一组；摘要按这一组**未筛选**的评审算，图例点了才不会把别的状态清零。
  * - 分组栏最上面固定一行「全部评审」（id 为 `STAGE_REVIEW_GROUP_ALL`），选它右侧按不分组的口径列全部。
  */
@@ -115,9 +116,17 @@ export const useStageReviewGrouping = ({
     if (groupBy === "none") return [];
 
     const sampleByKey = new Map<string, TStageReview>();
+    // 人的组名与头像按 id 找：名单里不止一个人，样本评审代表不了这一组是谁
+    const userById = new Map<string, IUserLite>();
     for (const review of reviews) {
-      const key = stageReviewGroupKey(groupBy, review, crossProject);
-      if (!sampleByKey.has(key)) sampleByKey.set(key, review);
+      for (const key of stageReviewGroupKeys(groupBy, review, crossProject)) {
+        if (!sampleByKey.has(key)) sampleByKey.set(key, review);
+      }
+      if (groupBy === "leader" || groupBy === "auditor") {
+        for (const user of groupBy === "leader" ? review.leader_details : review.auditor_details) {
+          if (!userById.has(user.id)) userById.set(user.id, user);
+        }
+      }
     }
     const byName = (name: (review: TStageReview) => string) =>
       [...sampleByKey.keys()].sort((a, b) => {
@@ -150,11 +159,13 @@ export const useStageReviewGrouping = ({
       case "project":
         keys = byName((review) => review.project_detail?.name ?? "");
         break;
-      case "leader":
-        keys = byName((review) => review.leader_detail?.display_name ?? "");
-        break;
       default:
-        keys = byName((review) => review.auditor_detail?.display_name ?? "");
+        // 负责人 / 审核者：按人名排，「未指定」沉底
+        keys = [...sampleByKey.keys()].sort((a, b) => {
+          if (a === STAGE_REVIEW_GROUP_NONE) return 1;
+          if (b === STAGE_REVIEW_GROUP_NONE) return -1;
+          return (userById.get(a)?.display_name ?? "").localeCompare(userById.get(b)?.display_name ?? "");
+        });
     }
 
     const describe = (
@@ -195,10 +206,10 @@ export const useStageReviewGrouping = ({
           };
         case "leader":
         case "auditor": {
-          const user = groupBy === "leader" ? sample?.leader_detail : sample?.auditor_detail;
+          const user = userById.get(key);
           return {
-            name: key === STAGE_REVIEW_GROUP_NONE || !user ? t(`${I18N}.list.unassigned`) : user.display_name,
-            icon: userIcon(key === STAGE_REVIEW_GROUP_NONE ? null : user),
+            name: user ? user.display_name : t(`${I18N}.list.unassigned`),
+            icon: userIcon(user),
           };
         }
         case "result":
@@ -246,7 +257,7 @@ export const useStageReviewGrouping = ({
   const reviewsOf = (groupId: string | null): TStageReview[] =>
     groupBy === "none" || groupId === STAGE_REVIEW_GROUP_ALL
       ? reviews
-      : reviews.filter((review) => stageReviewGroupKey(groupBy, review) === groupId);
+      : reviews.filter((review) => stageReviewGroupKeys(groupBy, review, crossProject).includes(groupId ?? ""));
 
   return { sidebarGroups, rowsOf, reviewsOf };
 };

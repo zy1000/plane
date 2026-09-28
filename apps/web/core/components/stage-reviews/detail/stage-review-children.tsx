@@ -5,9 +5,9 @@ import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import type { TStageReviewChild, TStageReviewDetail } from "@plane/types";
 import { EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
-import { Avatar } from "@plane/ui";
-import { cn, getFileURL, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
+import { cn, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
 import { StageReviewResultBadge, StageReviewStatusBadge } from "../badges";
+import { StageReviewPeople } from "../people";
 import { STAGE_REVIEW_STATUS_FILL, StageReviewStatusIcon } from "../status-icon";
 import { Block } from "./stage-review-content";
 
@@ -160,19 +160,11 @@ export const StageReviewChildren = ({
                   >
                     {displayTitle(child.title)}
                   </span>
-                  {child.leader_detail ? (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <Avatar
-                        size="sm"
-                        name={child.leader_detail.display_name}
-                        src={getFileURL(child.leader_detail.avatar_url ?? "")}
-                        showTooltip={false}
-                      />
-                      <span className="truncate text-13 text-secondary">{child.leader_detail.display_name}</span>
-                    </span>
-                  ) : (
-                    <span className="text-13 text-placeholder">{t(`${I18N}.detail.unassigned`)}</span>
-                  )}
+                  <StageReviewPeople
+                    users={child.leader_details}
+                    unassigned={t(`${I18N}.detail.unassigned`)}
+                    showEmptyIcon={false}
+                  />
                   {child.end_date ? (
                     <span
                       className={cn(

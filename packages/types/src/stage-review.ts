@@ -79,10 +79,11 @@ export type TStageReview = {
   status: EStageReviewStatus;
   /** 空串 = 还没有结论 */
   result: EStageReviewResult | "";
-  leader_id: string | null;
-  leader_detail: IUserLite | null;
-  auditor_id: string | null;
-  auditor_detail: IUserLite | null;
+  /** 负责人 / 审核者都是名单：每一步由名单里任意一人推进即可。ids 与 details 同序 */
+  leader_ids: string[];
+  leader_details: IUserLite[];
+  auditor_ids: string[];
+  auditor_details: IUserLite[];
   start_date: string | null;
   end_date: string | null;
   attachment_count: number;
@@ -122,7 +123,7 @@ export type TStageReviewRowPayload = {
 /** 父评审详情里「评审活动」区块的一行：只读，只带这一行要画的字段 */
 export type TStageReviewChild = Pick<
   TStageReview,
-  "id" | "kind" | "title" | "status" | "result" | "leader_id" | "leader_detail" | "end_date" | "sort_order"
+  "id" | "kind" | "title" | "status" | "result" | "leader_ids" | "leader_details" | "end_date" | "sort_order"
 >;
 
 export type TStageReviewDetail = TStageReview & {
@@ -209,7 +210,10 @@ export type TStageReviewActivity = {
   field: string | null;
   old_value: string | null;
   new_value: string | null;
-  /** 负责人 / 审核者这类成员字段：值是显示名，identifier 是用户 id；老记录为空 */
+  /**
+   * 负责人 / 审核者这类成员字段：值是显示名，identifier 是用户 id；老记录为空。
+   * 名单逐人记：只有新值 = 添加了这个人，只有旧值 = 移除了这个人
+   */
   old_identifier: string | null;
   new_identifier: string | null;
   comment: string;
@@ -250,8 +254,8 @@ export type TCreateStageReviewPayload = {
   title: string;
   description_html?: string;
   work_instruction?: string;
-  leader_id?: string | null;
-  auditor_id?: string | null;
+  leader_ids?: string[];
+  auditor_ids?: string[];
   start_date?: string | null;
   end_date?: string | null;
 };
@@ -263,16 +267,17 @@ export type TUpdateStageReviewPayload = Partial<{
   title: string;
   description_html: string;
   work_instruction: string;
-  leader: string | null;
-  auditor: string | null;
+  /** 整份名单，空数组 = 清空 */
+  leader_ids: string[];
+  auditor_ids: string[];
   start_date: string | null;
   end_date: string | null;
 }>;
 
-/** 列表批量改属性能改的字段：出现即修改，不出现保持不变；成员传 null 表示清空 */
+/** 列表批量改属性能改的字段：出现即修改，不出现保持不变；成员是整份名单（替换），空数组表示清空 */
 export type TStageReviewBulkChanges = Partial<{
-  leader: string | null;
-  auditor: string | null;
+  leader_ids: string[];
+  auditor_ids: string[];
   start_date: string | null;
   end_date: string | null;
 }>;

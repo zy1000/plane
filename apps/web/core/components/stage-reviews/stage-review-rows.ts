@@ -21,36 +21,38 @@ export const STAGE_REVIEW_GROUP_NONE = "__none__";
 export const STAGE_REVIEW_GROUP_ALL = "__all__";
 
 /**
- * 一条评审落在哪个分组里。按研发阶段 / 产品 / 项目分时父子一定同组，其它方式可能拆开。
+ * 一条评审落在哪些分组里。按研发阶段 / 产品 / 项目分时父子一定同组，其它方式可能拆开。
+ * 只有负责人 / 审核者会落进多个组：两者是名单，名单里有几个人就进几个组（同工作项按
+ * 负责人分组），名单为空进「未指定」。
  *
  * ``crossProject``（产品页）时研发阶段这一维要带上项目：阶段是研发模式里的一行，两个项目
  * 用同一个模式就是同一个阶段 id，跨项目视角下合并成一组会把「电表平台走到 O 阶段」和
  * 「通信模组走到 O 阶段」混为一谈。键的形状与后端产品级汇总接口一致。
  */
-export const stageReviewGroupKey = (
+export const stageReviewGroupKeys = (
   groupBy: TStageReviewGroupBy,
   review: TStageReview,
   crossProject = false
-): string => {
+): string[] => {
   switch (groupBy) {
     case "stage":
-      return crossProject ? `${review.project_id}:${review.stage_id}` : review.stage_id;
+      return [crossProject ? `${review.project_id}:${review.stage_id}` : review.stage_id];
     case "product":
-      return review.product_id;
+      return [review.product_id];
     case "project":
-      return review.project_id;
+      return [review.project_id];
     case "status":
-      return review.status;
+      return [review.status];
     case "leader":
-      return review.leader_id ?? STAGE_REVIEW_GROUP_NONE;
+      return review.leader_ids.length > 0 ? review.leader_ids : [STAGE_REVIEW_GROUP_NONE];
     case "auditor":
-      return review.auditor_id ?? STAGE_REVIEW_GROUP_NONE;
+      return review.auditor_ids.length > 0 ? review.auditor_ids : [STAGE_REVIEW_GROUP_NONE];
     case "result":
-      return review.result || STAGE_REVIEW_GROUP_NONE;
+      return [review.result || STAGE_REVIEW_GROUP_NONE];
     case "kind":
-      return review.kind;
+      return [review.kind];
     default:
-      return STAGE_REVIEW_GROUP_ALL;
+      return [STAGE_REVIEW_GROUP_ALL];
   }
 };
 
@@ -91,6 +93,7 @@ const compareBy = (orderBy: TStageReviewOrderBy, indexOf: (review: TStageReview)
  * - **按研发阶段 / 产品分组或不分组**：父子一定同组，保留「评审 → 评审活动」两层。命中子
  *   活动时它所属的评审跟着出来（`carried`），否则一条活动孤零零地顶着。
  * - **按其它属性分组**：父子可能落在不同组，一律铺平，子活动前面带「所属评审 ›」。
+ *   按负责人 / 审核者分组时，一条评审在名单里每个人的组里各出现一次。
  * - 评审活动允许没有父，或父不在列表里 —— 那种按顶层行处理。
  * - 排序作用在评审这一层；活动在所属评审下按同一口径排。关掉「显示评审活动」只剩顶层行。
  */
@@ -107,15 +110,15 @@ export const buildStageReviewRowsByGroup = ({
   orderBy: TStageReviewOrderBy;
   groupBy: TStageReviewGroupBy;
   showActivities: boolean;
-  /** 产品页：研发阶段分组的键要带上项目，见 stageReviewGroupKey */
+  /** 产品页：研发阶段分组的键要带上项目，见 stageReviewGroupKeys */
   crossProject?: boolean;
 }): Map<string, TStageReviewRow[]> => {
   const byId = new Map(reviews.map((review) => [review.id, review]));
   const index = new Map(reviews.map((review, position) => [review.id, position]));
   const compare = compareBy(orderBy, (review) => index.get(review.id) ?? 0);
   const parentOf = (review: TStageReview) => (review.parent_id ? (byId.get(review.parent_id) ?? null) : null);
-  const push = (rowsByKey: Map<string, TStageReviewRow[]>, key: string, rows: TStageReviewRow[]) =>
-    rowsByKey.set(key, [...(rowsByKey.get(key) ?? []), ...rows]);
+  const push = (rowsByKey: Map<string, TStageReviewRow[]>, keys: string[], rows: TStageReviewRow[]) =>
+    keys.forEach((key) => rowsByKey.set(key, [...(rowsByKey.get(key) ?? []), ...rows]));
 
   const hits = new Set(
     reviews.filter((review) => (showActivities || !parentOf(review)) && isHit(review)).map((review) => review.id)
@@ -136,7 +139,7 @@ export const buildStageReviewRowsByGroup = ({
       .filter((review) => !parentOf(review) && (hits.has(review.id) || carried.has(review.id)))
       .sort(compare);
     for (const root of roots) {
-      push(rowsByKey, stageReviewGroupKey(groupBy, root, crossProject), [
+      push(rowsByKey, stageReviewGroupKeys(groupBy, root, crossProject), [
         { review: root, depth: 0, carried: carried.has(root.id), title: root.title, parentTitle: null },
         ...(childrenOf.get(root.id) ?? []).sort(compare).map((child) => ({
           review: child,
@@ -152,7 +155,7 @@ export const buildStageReviewRowsByGroup = ({
 
   for (const review of reviews.filter((item) => hits.has(item.id)).sort(compare)) {
     const parent = parentOf(review);
-    push(rowsByKey, stageReviewGroupKey(groupBy, review, crossProject), [
+    push(rowsByKey, stageReviewGroupKeys(groupBy, review, crossProject), [
       {
         review,
         depth: 0,
