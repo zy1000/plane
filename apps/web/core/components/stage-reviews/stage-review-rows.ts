@@ -1,5 +1,4 @@
 import type { TStageReview } from "@plane/types";
-import { EStageReviewStatus } from "@plane/types";
 import type { TStageReviewGroupBy, TStageReviewOrderBy } from "./display/display-settings";
 
 /** 表格里的一行：评审或评审活动 */
@@ -166,16 +165,4 @@ export const buildStageReviewRowsByGroup = ({
     ]);
   }
   return rowsByKey;
-};
-
-/** 摘要里的四个数：按当前分组的全部评审算，不受筛选影响 */
-export const countByStatus = (reviews: TStageReview[]): Record<EStageReviewStatus, number> => {
-  const counts = {
-    [EStageReviewStatus.NOT_STARTED]: 0,
-    [EStageReviewStatus.IN_REVIEW]: 0,
-    [EStageReviewStatus.IN_APPROVAL]: 0,
-    [EStageReviewStatus.COMPLETED]: 0,
-  };
-  for (const review of reviews) counts[review.status] += 1;
-  return counts;
 };

@@ -1,3 +1,4 @@
+import { Tooltip } from "@plane/propel/tooltip";
 import type { IUserLite } from "@plane/types";
 import { Avatar, AvatarGroup } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
@@ -61,5 +62,46 @@ export const StageReviewPeople = ({
       </span>
       <span className={NAME_CLASS[size]}>{names}</span>
     </span>
+  );
+};
+
+/**
+ * 列表格子里的名单：没人是「—」（和其它空列一个写法），一个人是头像 + 名字，多个人只露第一个
+ * 再跟灰色「+N」，悬停出完整名单。抽屉里仍用上面的 `StageReviewPeople`。
+ */
+export const StageReviewPeopleCell = ({ users, hint }: { users: IUserLite[]; hint: string }) => {
+  if (users.length === 0) return <span className="text-13 text-placeholder">—</span>;
+
+  const [first, ...rest] = users;
+  const firstLabel = (
+    <span className="flex min-w-0 items-center gap-2">
+      <Avatar size="sm" name={first.display_name} src={getFileURL(first.avatar_url ?? "")} showTooltip={false} />
+      <span className="truncate text-13 text-primary">{first.display_name}</span>
+    </span>
+  );
+  if (rest.length === 0) return firstLabel;
+
+  return (
+    <Tooltip
+      position="bottom-start"
+      tooltipHeading={hint}
+      tooltipContent={
+        <span className="flex flex-col gap-1.5 py-1">
+          {users.map((user) => (
+            <span key={user.id} className="flex items-center gap-2 text-13 text-primary">
+              <Avatar size="sm" name={user.display_name} src={getFileURL(user.avatar_url ?? "")} showTooltip={false} />
+              {user.display_name}
+            </span>
+          ))}
+        </span>
+      }
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        {firstLabel}
+        <span className="shrink-0 rounded bg-layer-3 px-1.5 text-12 leading-5 font-semibold tabular-nums text-secondary group-hover/row:bg-accent-subtle group-hover/row:text-accent-primary">
+          +{rest.length}
+        </span>
+      </span>
+    </Tooltip>
   );
 };

@@ -254,10 +254,5 @@ export const useStageReviewGrouping = ({
   const rowsOf = (groupId: string | null): TStageReviewRow[] =>
     groupBy === "none" || groupId === STAGE_REVIEW_GROUP_ALL ? allRows : (rowsByGroup.get(groupId ?? "") ?? []);
 
-  const reviewsOf = (groupId: string | null): TStageReview[] =>
-    groupBy === "none" || groupId === STAGE_REVIEW_GROUP_ALL
-      ? reviews
-      : reviews.filter((review) => stageReviewGroupKeys(groupBy, review, crossProject).includes(groupId ?? ""));
-
-  return { sidebarGroups, rowsOf, reviewsOf };
+  return { sidebarGroups, rowsOf };
 };

@@ -11,7 +11,7 @@ import { stageReviewsPath } from "@/components/reviews/routes";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import type { TStageReviewFlashedCells } from "./bulk/use-stage-review-bulk-edit";
 import type { TStageReviewColumn } from "./display/display-settings";
-import { StageReviewPeople } from "./people";
+import { StageReviewPeopleCell } from "./people";
 import type { TStageReviewRow } from "./stage-review-rows";
 import { StageReviewStatusIcon } from "./status-icon";
 
@@ -66,9 +66,6 @@ const RowCheckbox = ({
   <span
     className="absolute inset-y-0 left-1.5 z-[1] grid w-3.5 place-items-center"
     title={title}
-    onClick={(event) => event.stopPropagation()}
-    onKeyDown={(event) => event.stopPropagation()}
-    role="presentation"
   >
     <Checkbox
       className="size-3.5 !outline-none"
@@ -140,19 +137,16 @@ export const StageReviewTable = ({
 }) => {
   const { t } = useTranslation();
   const gridTemplateColumns = ["minmax(240px, 1fr)", ...columns.map((column) => COLUMN_WIDTH[column])].join(" ");
-  const unassigned = t(`${I18N}.list.unassigned`);
   const openInProject = t(`${I18N}.detail.open_in_project`);
   const hasSelection = Boolean(selection && selection.selectedSet.size > 0);
 
   const renderCell = (column: TStageReviewColumn, review: TStageReview) => {
     switch (column) {
       case "project":
-        // 点项目名去那个项目的阶段评审页并自动打开这一条；不触发行点击
+        // 点项目名去那个项目的阶段评审页并自动打开这一条
         return review.project_detail ? (
           <Link
             to={`${stageReviewsPath(workspaceSlug, review.project_id)}?review=${review.id}`}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
             title={`${review.project_detail.name} · ${openInProject}`}
             className="flex min-w-0 items-center gap-1.5 text-13 text-secondary hover:text-accent-primary hover:underline"
           >
@@ -186,9 +180,19 @@ export const StageReviewTable = ({
       case "result":
         return review.result ? <span className={RESULT_TEXT[review.result]}>{t(`${I18N}.result.${review.result}`)}</span> : <Empty />;
       case "leader":
-        return <StageReviewPeople users={review.leader_details} unassigned={unassigned} />;
+        return (
+          <StageReviewPeopleCell
+            users={review.leader_details}
+            hint={t(`${I18N}.list.people_hint_leader`, { count: review.leader_details.length })}
+          />
+        );
       case "auditor":
-        return <StageReviewPeople users={review.auditor_details} unassigned={unassigned} />;
+        return (
+          <StageReviewPeopleCell
+            users={review.auditor_details}
+            hint={t(`${I18N}.list.people_hint_auditor`, { count: review.auditor_details.length })}
+          />
+        );
       case "dates": {
         if (!review.start_date && !review.end_date) return <Empty />;
         const isLate =
@@ -253,14 +257,8 @@ export const StageReviewTable = ({
         return (
           <div
             key={review.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onOpen(review.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onOpen(review.id);
-            }}
             className={cn(
-              "group/row relative grid h-11 cursor-pointer items-center gap-x-3 border-b border-subtle px-6 transition-colors",
+              "group/row relative grid h-11 items-center gap-x-3 border-b border-subtle px-6 transition-colors",
               review.id === activeReviewId || selection?.selectedSet.has(review.id) ? "bg-accent-subtle" : "hover:bg-layer-1",
               carried && "opacity-60"
             )}
@@ -286,12 +284,20 @@ export const StageReviewTable = ({
               {parentTitle && (
                 <span className="max-w-[40%] shrink-0 truncate text-13 text-placeholder">{parentTitle} ›</span>
               )}
-              <span
-                className={depth === 0 && !parentTitle ? "truncate text-13 font-medium text-primary" : "truncate text-13 text-primary"}
+              {/* 只有点标题才开抽屉，行上其它地方点了不动 */}
+              <button
+                type="button"
+                onClick={() => onOpen(review.id)}
+                // 字号与文字色写成整串：过 cn() 会被当成同一组互相吞掉
+                className={
+                  depth === 0 && !parentTitle
+                    ? "min-w-0 cursor-pointer truncate text-left text-13 font-medium text-primary hover:text-accent-primary hover:underline"
+                    : "min-w-0 cursor-pointer truncate text-left text-13 text-primary hover:text-accent-primary hover:underline"
+                }
                 title={review.title}
               >
                 {title}
-              </span>
+              </button>
             </span>
             {columns.map((column) => (
               <span

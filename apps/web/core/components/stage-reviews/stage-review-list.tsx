@@ -8,9 +8,8 @@ import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IUserLite, TStageReview } from "@plane/types";
-import { COLLECTION_OPERATOR, EStageReviewStatus, LOGICAL_OPERATOR } from "@plane/types";
+import { EStageReviewStatus } from "@plane/types";
 import { Loader } from "@plane/ui";
-import { toFilterArray } from "@plane/utils";
 import { CountChip } from "@/components/common/count-chip";
 import { PageSearchInput } from "@/components/pages/list/search-input";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
@@ -40,20 +39,19 @@ import { getStageReviewScopeId, getStageReviewStorageScope } from "./scope";
 import { STAGE_REVIEW_GROUP_ALL, stageReviewGroupKeys } from "./stage-review-rows";
 import type { TStageReviewTableSelection } from "./stage-review-table";
 import { StageReviewTable } from "./stage-review-table";
-import { StageReviewSummary } from "./stage-summary";
 
 const I18N = "stage_review";
 
 /**
  * 阶段评审列表，布局照工作项：左侧分组栏（「显示 → 分组方式」决定按什么分，默认研发阶段；
- * 选「无」不出分组栏），右侧是选中那一组的摘要 + 按属性列出的评审表；点一行开右侧抽屉。
+ * 选「无」不出分组栏），右侧是选中那一组按属性列出的评审表；点评审标题开右侧抽屉。
  *
  * 页头的搜索 / 筛选 / 显示照工作项：筛选是页头下方的筛选行，显示是「显示属性 / 分组方式 /
  * 排序方式 / 显示评审活动 / 显示空组」。**评审只由裁剪表生成**，这里没有新建与删除；被裁剪
  * 掉的评审也不会出现，它们在裁剪表里带着原因存档。
  *
  * 两个作用域共用这一个组件（见 `scope.ts`）：项目页「产品」是列与分组维；产品页换成「项目」，
- * 按项目分组时「项目」列换成「研发阶段」列，左栏与摘要标出产品的当前阶段。
+ * 按项目分组时「项目」列换成「研发阶段」列，左栏标出产品的当前阶段。
  *
  * URL 带 `?review=<id>` 时，数据到手后自动选中它所在的组并打开抽屉（产品页「在项目中打开」用）。
  */
@@ -131,7 +129,7 @@ export const StageReviewList = observer(function StageReviewList({
     [search, conditions, currentUser?.id]
   );
 
-  const { sidebarGroups, rowsOf, reviewsOf } = useStageReviewGrouping({
+  const { sidebarGroups, rowsOf } = useStageReviewGrouping({
     reviews,
     stages,
     isHit,
@@ -162,14 +160,12 @@ export const StageReviewList = observer(function StageReviewList({
   // 选「全部评审」时右侧按不分组的口径列、列也按不分组出
   const effectiveGroupBy = isGrouped && activeGroup?.id !== STAGE_REVIEW_GROUP_ALL ? settings.groupBy : "none";
   const rows = isGrouped ? rowsOf(activeGroup?.id ?? null) : rowsOf(null);
-  const summaryReviews = isGrouped ? (activeGroup ? reviewsOf(activeGroup.id) : []) : reviews;
-  const summaryLabel = isGrouped ? (activeGroup?.name ?? "") : t(`${I18N}.list.all_reviews`);
-  // 标题下那行数什么：项目页数产品；产品页数项目，按项目分组时一组只有一个项目，改数阶段
-  const summaryMeta = scopeKind === "project" ? "products" : effectiveGroupBy === "project" ? "stages" : "projects";
 
   // 列 = 这个作用域下开着的显示属性；产品页按项目分组时「项目」列换成「研发阶段」列。
   // 右侧只列选中那一组，当前分组维度那一列整列都是同一个值，藏掉（按产品分组时不出「产品」列）。
-  // 负责人 / 审核者例外：名单不止一个人，这一列并不是整列同值，藏了就看不到还有谁
+  // 负责人 / 审核者例外：名单不止一个人，这一列并不是整列同值，藏了就看不到还有谁。
+  // 项目只关联了一个产品时「产品」列也是整列同值，同样藏掉
+  const hasSingleProduct = useMemo(() => new Set(reviews.map((review) => review.product_id)).size <= 1, [reviews]);
   const columns = useMemo<TStageReviewColumn[]>(() => {
     const visible = getStageReviewDisplayProperties(scopeKind).filter((property) => settings.properties[property]);
     const swapped =
@@ -177,9 +173,11 @@ export const StageReviewList = observer(function StageReviewList({
         ? visible.map((property): TStageReviewColumn => (property === "project" ? "stage" : property))
         : visible;
     return swapped.filter(
-      (column) => column !== effectiveGroupBy || column === "leader" || column === "auditor"
+      (column) =>
+        (column !== effectiveGroupBy || column === "leader" || column === "auditor") &&
+        !(column === "product" && hasSingleProduct)
     );
-  }, [scopeKind, settings.properties, effectiveGroupBy]);
+  }, [scopeKind, settings.properties, effectiveGroupBy, hasSingleProduct]);
   // 批量改属性只在项目页、有维护权限时开：批量接口是项目级的，产品页的评审横跨多个项目。
   // 已评审是终态不能勾；「能勾的行」随分组 / 筛选 / 搜索变化，勾选跟着收窄
   const canBulkEdit = scope.kind === "project" && canManage;
@@ -212,27 +210,6 @@ export const StageReviewList = observer(function StageReviewList({
   const stageLabelById = useMemo(() => new Map(stages.map((stage) => [stage.stage_id, stage.label])), [stages]);
   const stageLabelOf = useCallback((stageId: string) => stageLabelById.get(stageId), [stageLabelById]);
 
-  // 摘要图例与筛选行里的「状态」是同一个条件
-  const statusCondition = conditions.find((condition) => condition.property === "status");
-  const activeStatuses = (toFilterArray(statusCondition?.value as never) ?? []).map(String) as EStageReviewStatus[];
-
-  const handleToggleStatus = (status: EStageReviewStatus) => {
-    if (!statusCondition) {
-      filter.addCondition(
-        LOGICAL_OPERATOR.AND,
-        { property: "status", operator: COLLECTION_OPERATOR.IN, value: [status] },
-        false
-      );
-      filter.toggleVisibility(true);
-      return;
-    }
-    const next = activeStatuses.includes(status)
-      ? activeStatuses.filter((value) => value !== status)
-      : [...activeStatuses, status];
-    if (next.length === 0) filter.removeCondition(statusCondition.id);
-    else filter.updateConditionValue(statusCondition.id, next);
-  };
-
   const handleClearAll = () => {
     setSearch("");
     void filter.clearFilters();
@@ -243,7 +220,6 @@ export const StageReviewList = observer(function StageReviewList({
       <Loader className="flex h-full gap-4 p-4">
         <Loader.Item height="100%" width="240px" />
         <div className="flex flex-1 flex-col gap-3">
-          <Loader.Item height="96px" />
           <Loader.Item height="320px" />
         </div>
       </Loader>
@@ -330,16 +306,6 @@ export const StageReviewList = observer(function StageReviewList({
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {(!isGrouped || activeGroup) && reviews.length > 0 && (
-            <StageReviewSummary
-              label={summaryLabel}
-              reviews={summaryReviews}
-              meta={summaryMeta}
-              isCurrentStage={Boolean(activeGroup?.isCurrent)}
-              activeStatuses={activeStatuses}
-              onToggleStatus={handleToggleStatus}
-            />
-          )}
           <div className="min-h-0 flex-1 overflow-auto">{renderBody()}</div>
           {canBulkEdit && scope.kind === "project" && (
             <div className="relative">
