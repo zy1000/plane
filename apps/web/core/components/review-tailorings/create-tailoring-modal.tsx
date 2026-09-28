@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
+import Link from "next/link";
 import { AlertCircle, Scissors, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { EReviewTailoringKind, TCreateReviewTailoringPayload } from "@plane/types";
+import type { TCreateReviewTailoringPayload } from "@plane/types";
+import { EReviewTailoringKind } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { useReviewTailoringStageOptions } from "@/hooks/store/use-review-tailoring-stage-options";
+import { CreateTailoringStageSelect } from "./create-stage-select";
 import { toDescriptionHtml } from "./description-text";
 import { TAILORING_KIND_ORDER } from "./list/filters";
 import { TailoringNextSteps } from "./list/next-steps";
@@ -15,16 +19,21 @@ const I18N = "review_tailoring.form";
 /**
  * 新建裁剪表：标题、裁剪类型必填，描述选填，下面亮出建好之后的三步。
  *
- * 阶段不是表的属性 —— 纵轴一次铺开全部阶段的模板树；评审与产品也不在这里选，
- * 进详情页逐个加。建表这一步问得越少越好。裁剪类型建完不可改，所以在这里必须选。
+ * 过程评审裁剪不绑阶段 —— 纵轴一次铺开全部阶段的模板树。O阶段评审裁剪要再选一个阶段
+ * （只能是阶段类型为 O阶段 的项目阶段，单选），纵轴只在这个阶段下展开。评审与产品不在
+ * 这里选，进详情页逐个加。裁剪类型与阶段建完不可改，所以在这里必须选。
  */
 export const CreateTailoringModal = observer(function CreateTailoringModal({
   isOpen,
+  workspaceSlug,
+  projectId,
   isSubmitting,
   onClose,
   onSubmit,
 }: {
   isOpen: boolean;
+  workspaceSlug: string;
+  projectId: string;
   isSubmitting: boolean;
   onClose: () => void;
   onSubmit: (payload: TCreateReviewTailoringPayload) => void;
@@ -33,27 +42,40 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
 
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<EReviewTailoringKind | null>(null);
+  const [stageId, setStageId] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [touched, setTouched] = useState(false);
+
+  const needsStage = kind === EReviewTailoringKind.O_STAGE;
+  const stageOptions = useReviewTailoringStageOptions(workspaceSlug, projectId, isOpen && needsStage);
 
   useEffect(() => {
     if (!isOpen) return;
     setTitle("");
     setKind(null);
+    setStageId(null);
     setDescription("");
     setTouched(false);
   }, [isOpen]);
 
+  // 只有一个可选阶段时替用户选上
+  useEffect(() => {
+    if (needsStage && stageOptions?.length === 1) setStageId(stageOptions[0].id);
+  }, [needsStage, stageOptions]);
+
   const titleError = touched && !title.trim();
   const kindError = touched && !kind;
+  const stageError = touched && needsStage && !stageId;
+  const noStageOptions = needsStage && stageOptions?.length === 0;
 
   const handleSubmit = () => {
     setTouched(true);
-    if (!title.trim() || !kind) return;
+    if (!title.trim() || !kind || (needsStage && !stageId)) return;
     const text = description.trim();
     onSubmit({
       title: title.trim(),
       tailoring_kind: kind,
+      ...(needsStage && stageId ? { stage_id: stageId } : {}),
       ...(text ? { description_html: toDescriptionHtml(text) } : {}),
     });
   };
@@ -120,7 +142,10 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  onClick={() => setKind(option)}
+                  onClick={() => {
+                    setKind(option);
+                    setStageId(null);
+                  }}
                   className={cn(
                     "flex flex-col items-start gap-1 rounded-lg border px-3.5 py-3 text-left transition-colors",
                     selected
@@ -144,9 +169,44 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
               {t(`${I18N}.kind_required`)}
             </span>
           ) : (
-            <span className="text-12 text-placeholder">{t(`${I18N}.kind_locked`)}</span>
+            !needsStage && <span className="text-12 text-placeholder">{t(`${I18N}.kind_locked`)}</span>
           )}
         </div>
+
+        {needsStage && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-13 font-medium text-secondary">
+              {t(`${I18N}.stage_label`)}
+              <span className="ml-1 text-danger-primary">*</span>
+            </span>
+            {noStageOptions ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-strong px-3.5 py-2.5 text-13 text-secondary">
+                {t(`${I18N}.stage_empty`)}
+                <Link
+                  href={`/${workspaceSlug}/projects/${projectId}/stages`}
+                  className="font-medium text-accent-primary hover:underline"
+                >
+                  {t(`${I18N}.stage_empty_action`)}
+                </Link>
+              </div>
+            ) : (
+              <CreateTailoringStageSelect
+                options={stageOptions ?? []}
+                value={stageId}
+                hasError={stageError}
+                onChange={setStageId}
+              />
+            )}
+            {stageError && !noStageOptions ? (
+              <span className="flex items-center gap-1 text-12 text-danger-primary">
+                <AlertCircle className="size-3.5" />
+                {t(`${I18N}.stage_required`)}
+              </span>
+            ) : (
+              <span className="text-12 text-placeholder">{t(`${I18N}.kind_stage_locked`)}</span>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="create-tailoring-description" className="text-13 font-medium text-secondary">
@@ -177,7 +237,13 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
         <Button variant="secondary" size="xl" onClick={onClose}>
           {t("cancel")}
         </Button>
-        <Button variant="primary" size="xl" loading={isSubmitting} disabled={isSubmitting} onClick={handleSubmit}>
+        <Button
+          variant="primary"
+          size="xl"
+          loading={isSubmitting}
+          disabled={isSubmitting || noStageOptions}
+          onClick={handleSubmit}
+        >
           {t(`${I18N}.submit`)}
         </Button>
       </div>

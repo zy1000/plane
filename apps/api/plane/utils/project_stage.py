@@ -180,12 +180,16 @@ def selectable_template_ids_by_stage(stages):
 
 
 def stage_in_use(stage):
-    """这个阶段有没有被活跃的评审实例 / 裁剪格子引用（``origin_stage`` 是 SET_NULL，不算）。
+    """这个阶段有没有被活跃的评审实例 / 裁剪格子 / O 裁剪表引用（``origin_stage`` 是 SET_NULL，不算）。
 
     只算活跃行：软删过的行对 RESTRICT 仍算引用，但不该因为一条已删的评审拦住用户；真删时
     撞 ``RestrictedError`` 由调用方收成 409。
     """
-    return stage.stage_reviews.exists() or stage.tailoring_items.exists()
+    return (
+        stage.stage_reviews.exists()
+        or stage.tailoring_items.exists()
+        or stage.review_tailorings.exists()
+    )
 
 
 # --- 从研发模式带出 ---------------------------------------------------------

@@ -13,9 +13,12 @@ const KIND_PILL: Record<EReviewTailoringKind, string> = {
 
 export const ReviewTailoringKindBadge = ({
   kind,
+  stageLabel,
   className,
 }: {
   kind: EReviewTailoringKind;
+  /** O 表绑定的阶段名，接在类型后面 */
+  stageLabel?: string | null;
   className?: string;
 }) => {
   const { t } = useTranslation();
@@ -28,6 +31,9 @@ export const ReviewTailoringKindBadge = ({
       )}
     >
       {t(`review_tailoring.kind.${kind}`)}
+      {stageLabel && (
+        <span className="ml-2 max-w-40 truncate border-l border-current/30 pl-2 font-semibold">{stageLabel}</span>
+      )}
     </span>
   );
 };

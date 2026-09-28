@@ -8,6 +8,7 @@ import type {
   TReviewTailoringCellPayload,
   TReviewTailoringComment,
   TReviewTailoringDetail,
+  TReviewTailoringStageOption,
   TSubmitReviewTailoringPayload,
   TUpdateReviewTailoringHeaderPayload,
 } from "@plane/types";
@@ -32,6 +33,15 @@ export class ReviewTailoringService extends APIService {
   /** 列表不带格子：一张表可能有几百个格子 */
   async list(workspaceSlug: string, projectId: string): Promise<TReviewTailoring[]> {
     return this.get(`${this.base(workspaceSlug, projectId)}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 新建 O阶段评审裁剪时可绑定的阶段 */
+  async stageOptions(workspaceSlug: string, projectId: string): Promise<TReviewTailoringStageOption[]> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/stage-options/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

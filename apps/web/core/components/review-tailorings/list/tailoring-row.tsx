@@ -131,7 +131,7 @@ export const TailoringRow = observer(function TailoringRow({
           <span className="min-w-0">
             <span className="flex min-w-0 items-center gap-2">
               <span className="truncate text-14 font-medium text-primary">{item.title}</span>
-              <ReviewTailoringKindBadge kind={item.tailoring_kind} className="shrink-0" />
+              <ReviewTailoringKindBadge kind={item.tailoring_kind} stageLabel={item.stage_label} className="shrink-0" />
             </span>
             <span className="mt-0.5 block truncate text-12 text-tertiary">
               {hasAxis

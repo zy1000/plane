@@ -142,6 +142,9 @@ export type TReviewTailoring = {
   title: string;
   status: EReviewTailoringStatus;
   tailoring_kind: EReviewTailoringKind;
+  /** O 表绑定的阶段，建表时选定、之后只读；过程表与这条之前建的 O 表为 null */
+  stage_id: string | null;
+  stage_label: string | null;
   /** 生效次数，0 = 从未生效 */
   revision: number;
   /** 签批轮次，每提交一次 +1 */
@@ -276,7 +279,20 @@ export type TReviewTailoringComment = {
 export type TCreateReviewTailoringPayload = {
   title: string;
   tailoring_kind: EReviewTailoringKind;
+  /** 只有 O阶段评审裁剪要给，且必给 */
+  stage_id?: string;
   description_html?: string | null;
+};
+
+/** 新建 O阶段评审裁剪时可绑定的阶段：本项目里阶段类型为「O阶段」的阶段，树先序 */
+export type TReviewTailoringStageOption = {
+  id: string;
+  name: string;
+  /** 父也是候选时才有值，只用来画缩进 */
+  parent_id: string | null;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
 };
 
 export type TUpdateReviewTailoringHeaderPayload = {

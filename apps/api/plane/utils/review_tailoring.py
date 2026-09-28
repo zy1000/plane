@@ -45,6 +45,7 @@ from plane.db.models import (
     ReviewTailoringApprovalAction,
     ReviewTailoringApprovalType,
     ReviewTailoringItem,
+    ReviewTailoringKind,
     ReviewTailoringProduct,
     ReviewTailoringStatus,
     ReviewTailoringTemplate,
@@ -56,7 +57,11 @@ from plane.db.models import (
     StageReviewStatus,
     StageReviewTemplate,
 )
-from plane.db.models.stage_review import ACTIVITY_KINDS, template_kind_allowed
+from plane.db.models.stage_review import (
+    ACTIVITY_KINDS,
+    is_o_stage_type,
+    template_kind_allowed,
+)
 from plane.utils.requirement import get_requirement_eligible_user_ids
 from plane.utils.project_stage import selectable_template_ids_by_stage, tree_order
 
@@ -189,6 +194,14 @@ def project_stages(project_id):
     return tree_order(project_id)
 
 
+def tailoring_stages(tailoring):
+    """这张表的纵轴能落在哪些阶段上：绑了阶段的 O 表只有那一个，其余是项目全部阶段。"""
+    stages = project_stages(tailoring.project_id)
+    if tailoring.stage_id:
+        return [stage for stage in stages if stage.id == tailoring.stage_id]
+    return stages
+
+
 def stage_rank(stages):
     """{阶段 id: rank}，给从格子 select_related 出来的、没挂 rank 的阶段对象排序用。"""
     return {stage.id: stage.rank for stage in stages}
@@ -199,8 +212,9 @@ def stage_template_ids(stages):
     return selectable_template_ids_by_stage(stages)
 
 
-def _expand_rows(project_id, template_ids):
+def _expand_rows(tailoring, template_ids):
     """把纵轴上的模板 id 展开成真正要铺的行：**项目阶段（父子皆有）× 该阶段可选的启用节点**。
+    绑了阶段的 O 表只在那一个阶段下展开（``tailoring_stages``）。
 
     评审与活动各自独立挑选 —— 只挑了活动就只有活动那一行，挑了评审也不会连带它的活动。
     父阶段与子阶段同类型时各出一行、各自生成实例（与同模式两个同类型阶段各出一行同理）。
@@ -218,7 +232,7 @@ def _expand_rows(project_id, template_ids):
     }
     if not templates:
         return []
-    stages = project_stages(project_id)
+    stages = tailoring_stages(tailoring)
     selected_by_stage = stage_template_ids(stages)
 
     rows = []
@@ -235,7 +249,7 @@ def _expand_rows(project_id, template_ids):
 
 def axis_rows(tailoring):
     """纵轴当前展开出来的全部行。视图组装详情时也用它 —— 零产品的表要靠它画出行。"""
-    return _expand_rows(tailoring.project_id, _axis_template_ids(tailoring))
+    return _expand_rows(tailoring, _axis_template_ids(tailoring))
 
 
 def detail_rows(tailoring, items):
@@ -302,10 +316,46 @@ def _build_items(tailoring, rows, product_ids, actor):
 # --- 建表与格子维护 --------------------------------------------------------
 
 
-def create_tailoring(*, project, title, tailoring_kind, description_html, actor):
+def _resolve_bound_stage(project, tailoring_kind, stage_id):
+    """建表时校验并取出要绑定的阶段：O 表必选、且阶段类型必须是「O阶段」；过程表不许带。"""
+    if tailoring_kind != ReviewTailoringKind.O_STAGE:
+        if stage_id:
+            raise ReviewTailoringError(
+                "Only an O-stage tailoring can be bound to a stage.",
+                code="REVIEW_TAILORING_STAGE_NOT_ALLOWED",
+            )
+        return None
+    if not stage_id:
+        raise ReviewTailoringError(
+            "An O-stage tailoring must be bound to a stage.",
+            code="REVIEW_TAILORING_STAGE_REQUIRED",
+        )
+    stage = (
+        ProjectStage.objects.filter(id=stage_id, project_id=project.id)
+        .select_related("stage_type")
+        .first()
+    )
+    if stage is None:
+        raise ReviewTailoringError(
+            "The stage does not belong to this project.",
+            code="REVIEW_TAILORING_STAGE_NOT_IN_PROJECT",
+        )
+    if not is_o_stage_type(stage.stage_type):
+        raise ReviewTailoringError(
+            "The stage type must be O stage.",
+            code="REVIEW_TAILORING_STAGE_NOT_O_STAGE",
+            detail={"stage_id": str(stage.id), "stage_label": stage.name},
+        )
+    return stage
+
+
+def create_tailoring(
+    *, project, title, tailoring_kind, description_html, actor, stage_id=None
+):
     """新建一张裁剪表。**只建表头，一个格子都不铺。**
 
     ``tailoring_kind`` 建表时定下、之后只读：纵轴加节点时按它挑族（``add_reviews``）。
+    O 表同时定下 ``stage``（``_resolve_bound_stage``），同样只读。
 
     矩阵是「产品 × 模式阶段 × 模板节点」，而产品这一维在建表这一刻还不知道 —— 由人在
     详情页逐列添加（``add_products``）。所以新表是一张零列的空表，纵轴要等第一列产品
@@ -319,11 +369,13 @@ def create_tailoring(*, project, title, tailoring_kind, description_html, actor)
             "The project has no stages.",
             code="REVIEW_TAILORING_PROJECT_HAS_NO_STAGE",
         )
+    stage = _resolve_bound_stage(project, tailoring_kind, stage_id)
     tailoring = ReviewTailoring.objects.create(
         workspace_id=project.workspace_id,
         project=project,
         title=title,
         tailoring_kind=tailoring_kind,
+        stage=stage,
         description_html=description_html or None,
         status=ReviewTailoringStatus.DRAFT,
         created_by=actor,
@@ -335,7 +387,14 @@ def create_tailoring(*, project, title, tailoring_kind, description_html, actor)
         verb="created",
         field="tailoring",
         new_value=title,
-        extra={"tailoring_kind": tailoring_kind},
+        extra={
+            "tailoring_kind": tailoring_kind,
+            **(
+                {"stage_id": str(stage.id), "stage_label": stage.name}
+                if stage
+                else {}
+            ),
+        },
     )
     return tailoring
 
@@ -426,8 +485,8 @@ def add_reviews(*, tailoring, template_ids, actor):
         )
 
     # 硬边界：本项目没有任何一个阶段能选到的节点不许进表（有来源的阶段看模式勾选，
-    # 自建阶段看类型全集）
-    stages = project_stages(tailoring.project_id)
+    # 自建阶段看类型全集）。绑了阶段的 O 表只看那一个阶段
+    stages = tailoring_stages(tailoring)
     selectable = set()
     for picked in stage_template_ids(stages).values():
         selectable |= picked
@@ -481,7 +540,7 @@ def add_reviews(*, tailoring, template_ids, actor):
         ReviewTailoringItem.objects.bulk_create(
             _build_items(
                 tailoring,
-                _expand_rows(tailoring.project_id, fresh),
+                _expand_rows(tailoring, fresh),
                 product_ids,
                 actor,
             ),
@@ -832,7 +891,8 @@ def _move_cells(tailoring, items, cells, actor):
 
     - 只有评审活动能挪，汇总评审一挪，它下面的活动就留在原阶段没了归属。
     - 目标阶段必须是本项目研发模式的阶段（不限阶段类型，也不受 ``tailoring_kind`` 约束：
-      族管的是纵轴上的节点，不是格子落在哪个阶段）。
+      族管的是纵轴上的节点，不是格子落在哪个阶段）。绑了阶段的 O 表只有那一个阶段，
+      等于不能挪。
     - 已评审的活动不能挪 —— 已评审即定稿。签批前才评审完的，生效时跳过（``_apply_effective``）。
     - 目标阶段已经有同一（产品 × 节点）的格子（o-1、o-2 都勾了它）→ 409。按挪完之后的
       整张表查，不靠数据库唯一约束报错。
@@ -847,7 +907,7 @@ def _move_cells(tailoring, items, cells, actor):
     if not requests:
         return []
 
-    stages = {stage.id: stage for stage in project_stages(tailoring.project_id)}
+    stages = {stage.id: stage for stage in tailoring_stages(tailoring)}
     not_activity, not_in_mode, completed = [], [], []
     for item_id, stage_id in requests.items():
         item = items[item_id]

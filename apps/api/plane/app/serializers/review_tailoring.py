@@ -179,6 +179,9 @@ class ReviewTailoringListSerializer(BaseSerializer):
 
     created_by_detail = UserLiteSerializer(source="created_by", read_only=True)
     submitted_by_detail = UserLiteSerializer(source="submitted_by", read_only=True)
+    # 只有绑了阶段的 O 表有值
+    stage_id = serializers.UUIDField(read_only=True, allow_null=True)
+    stage_label = serializers.CharField(source="stage.name", read_only=True, default=None)
     product_count = serializers.IntegerField(read_only=True, default=0)
     review_count = serializers.IntegerField(read_only=True, default=0)
     item_count = serializers.IntegerField(read_only=True, default=0)
@@ -201,6 +204,8 @@ class ReviewTailoringListSerializer(BaseSerializer):
             "title",
             "status",
             "tailoring_kind",
+            "stage_id",
+            "stage_label",
             "revision",
             "round",
             "approval_type",
@@ -364,14 +369,16 @@ class ReviewTailoringCommentSerializer(BaseSerializer):
 
 
 class ReviewTailoringCreateSerializer(serializers.Serializer):
-    """建表只问标题和裁剪类型。
+    """建表只问标题、裁剪类型，O 表再多问一个阶段。
 
-    阶段不再是表的属性（纵轴一次铺全部阶段），产品由详情页逐列添加 —— 建表这一步问得
-    越少越好。裁剪类型必填且建完不可改（``ReviewTailoringHeaderSerializer`` 不收它）。
+    产品由详情页逐列添加 —— 建表这一步问得越少越好。裁剪类型与阶段建完不可改
+    （``ReviewTailoringHeaderSerializer`` 不收它们）。阶段该不该给、给的对不对由
+    ``create_tailoring`` 按项目校验，这里只管形状。
     """
 
     title = serializers.CharField(max_length=255)
     tailoring_kind = serializers.ChoiceField(choices=ReviewTailoringKind.choices)
+    stage_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     description_html = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=""
     )

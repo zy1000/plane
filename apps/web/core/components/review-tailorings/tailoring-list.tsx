@@ -213,6 +213,8 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
 
       <CreateTailoringModal
         isOpen={isCreateOpen}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
         isSubmitting={isMutating}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={handleCreate}

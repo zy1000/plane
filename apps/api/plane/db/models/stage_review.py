@@ -81,6 +81,17 @@ O_STAGE_ONLY_FIELDS = ("production_mode", "shipment_assessment")
 O_STAGE_LABEL_PREFIX = "O"
 
 
+# 「O阶段」这个预置阶段类型的编码（``seed_data`` 的 ``STAGE_TYPE_SPECS``，预置类型编码锁死）。
+# O阶段评审裁剪表绑定的阶段只认它：O-F1 / O-SV1 这些名字以 O 打头的类型**不是** O阶段，
+# 所以这里不能借 ``is_o_stage_label`` 的前缀判定。
+O_STAGE_TYPE_CODE = "M090"
+
+
+def is_o_stage_type(stage_type):
+    """阶段类型是不是「O阶段」本身（不含 O-F1 等）。"""
+    return stage_type is not None and stage_type.code == O_STAGE_TYPE_CODE
+
+
 def is_o_stage_label(label):
     return bool(label) and str(label).strip().upper().startswith(O_STAGE_LABEL_PREFIX)
 
@@ -747,9 +758,13 @@ class StageReviewActivity(ProjectBaseModel):
 class ReviewTailoring(ProjectBaseModel):
     """一张裁剪表：某项目下，「哪些产品要做哪些评审」的二维勾选表。
 
-    **表不绑定阶段**（产品决策 2026-09-11）：纵轴一次铺开工作区里**全部阶段**的模板
+    **过程表不绑定阶段**（产品决策 2026-09-11）：纵轴一次铺开工作区里**全部阶段**的模板
     树，按阶段分组；横轴的产品由人在详情页逐个添加。建表那一步只要一个标题 —— 一个
     项目一张表就能走完 I → D → O → V，不必每个阶段各建一张再重选一遍产品。
+
+    **O 表绑定一个阶段**（产品决策 2026-09-28）：``stage`` 建表时选定、之后只读，只能是
+    阶段类型为「O阶段」的项目阶段；纵轴只在这一个阶段下展开。这条之前建的 O 表 ``stage``
+    为空，仍按全部阶段展开。
 
     **原地修订**：已生效的表点「开始修订」进入 ``revising``，在同一张表上改勾选与
     裁剪原因，再走一轮签批；通过时按差异新增 / 删除评审实例。不复制新表 —— 复制会
@@ -784,6 +799,15 @@ class ReviewTailoring(ProjectBaseModel):
         default=ReviewTailoringKind.PROCESS,
         db_index=True,
         verbose_name="裁剪类型",
+    )
+    # 只有 O 表有值，建表时定下、之后只读。RESTRICT：被表绑着的阶段不许删。
+    stage = models.ForeignKey(
+        "db.ProjectStage",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="review_tailorings",
+        verbose_name="绑定阶段",
     )
     # ↓ 签批：规则挂在表头，只保留**最近一轮**；历史轮次的规则在提交活动的 extra 里。
     # 草稿态还没配规则，所以允许空串（CheckConstraint 的第二支）。
@@ -845,6 +869,12 @@ class ReviewTailoring(ProjectBaseModel):
                 check=Q(approved_at__isnull=True, revision=0)
                 | Q(approved_at__isnull=False, revision__gte=1),
                 name="rt_revision_effective_consistent",
+            ),
+            # 过程表不绑阶段；O 表允许为空（存量）
+            models.CheckConstraint(
+                check=Q(stage__isnull=True)
+                | Q(tailoring_kind=ReviewTailoringKind.O_STAGE),
+                name="rt_stage_only_for_o_stage",
             ),
         ]
 

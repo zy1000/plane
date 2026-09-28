@@ -44,6 +44,11 @@ urlpatterns = [
         name="review-tailorings",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/stage-options/",
+        ReviewTailoringViewSet.as_view({"get": "stage_options"}),
+        name="review-tailoring-stage-options",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/review-tailorings/<uuid:pk>/",
         ReviewTailoringViewSet.as_view(
             {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}

@@ -42,7 +42,7 @@ from plane.db.models import (
     ReviewTailoringTemplate,
     StageReviewTemplate,
 )
-from plane.db.models.stage_review import template_kind_allowed
+from plane.db.models.stage_review import is_o_stage_type, template_kind_allowed
 from plane.utils.review_tailoring import (
     ReviewTailoringError,
     act_on_tailoring,
@@ -65,6 +65,7 @@ from plane.utils.review_tailoring import (
     stage_template_ids,
     start_revision,
     submit_for_approval,
+    tailoring_stages,
     update_header,
     withdraw,
 )
@@ -129,7 +130,7 @@ class ReviewTailoringViewSet(BaseViewSet):
                 project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
             )
-            .select_related("created_by", "submitted_by", "project")
+            .select_related("created_by", "submitted_by", "project", "stage")
             .annotate(
                 item_count=Count(
                     "items", filter=Q(items__deleted_at__isnull=True), distinct=True
@@ -163,7 +164,8 @@ class ReviewTailoringViewSet(BaseViewSet):
 
     def _detail_response(self, tailoring, http_status=status.HTTP_200_OK):
         """一次查完格子 / 产品 / 本轮签批，再喂给序列化器，避免逐条反查。"""
-        stages = project_stages(tailoring.project_id)
+        # 绑了阶段的 O 表只有那一个阶段：「移到阶段」候选、阶段筛选都跟着收窄
+        stages = tailoring_stages(tailoring)
         rank = stage_rank(stages)
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
@@ -243,6 +245,37 @@ class ReviewTailoringViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(*TAILORING_READ_KEYS)
+    def stage_options(self, request, slug, project_id):
+        """新建 O阶段评审裁剪时可绑定的阶段：本项目里阶段类型为「O阶段」的阶段，树先序。
+
+        单独出接口而不让前端拿项目阶段列表自己筛：候选规则只在后端留一份
+        （``is_o_stage_type``，与 ``create_tailoring`` 的校验同源），也不依赖阶段页的权限。
+        """
+        stages = [
+            stage
+            for stage in project_stages(project_id)
+            if is_o_stage_type(stage.stage_type)
+        ]
+        ids = {stage.id for stage in stages}
+        return Response(
+            [
+                {
+                    "id": str(stage.id),
+                    "name": stage.name,
+                    # 父不是候选时按顶层画，缩进只表达候选之间的父子
+                    "parent_id": (
+                        str(stage.parent_id) if stage.parent_id in ids else None
+                    ),
+                    "status": stage.status,
+                    "start_date": stage.start_date,
+                    "end_date": stage.end_date,
+                }
+                for stage in stages
+            ],
+            status=status.HTTP_200_OK,
+        )
+
+    @allow_fine_permission(*TAILORING_READ_KEYS)
     def retrieve(self, request, slug, project_id, pk):
         tailoring = self.get_queryset().filter(pk=pk).first()
         if tailoring is None:
@@ -268,6 +301,7 @@ class ReviewTailoringViewSet(BaseViewSet):
                     project=project,
                     title=serializer.validated_data["title"],
                     tailoring_kind=serializer.validated_data["tailoring_kind"],
+                    stage_id=serializer.validated_data.get("stage_id"),
                     description_html=serializer.validated_data.get("description_html"),
                     actor=request.user,
                 )
@@ -393,7 +427,7 @@ class ReviewTailoringViewSet(BaseViewSet):
         if tailoring is None:
             return self._not_found()
 
-        stages = project_stages(project_id)
+        stages = tailoring_stages(tailoring)
         selected_by_stage = stage_template_ids(stages)
         picked_ids = {tid for picked in selected_by_stage.values() for tid in picked}
         templates = {
