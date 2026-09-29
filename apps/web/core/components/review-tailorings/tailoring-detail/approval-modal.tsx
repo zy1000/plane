@@ -21,8 +21,8 @@ export const ReviewTailoringApprovalModal = observer(function ReviewTailoringApp
   onDone: (result: TReviewTailoringApprovalAction | "withdrawn") => void;
 }) {
   return (
-    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXXL}>
-      <div className="flex max-h-[85vh] flex-col">
+    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.VXL}>
+      <div className="flex h-[min(85vh,680px)]">
         <ReviewTailoringApprovalPane
           workspaceSlug={workspaceSlug}
           projectId={projectId}
