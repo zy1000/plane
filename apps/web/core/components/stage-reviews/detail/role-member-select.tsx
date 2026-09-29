@@ -34,7 +34,8 @@ const MemberLabel = ({ user }: { user: IUserLite }) => (
  * 每点一下就保存的话，连点两个人时第二下拿到的还是旧名单，会把第一个人盖掉。
  *
  * `variant="cell"` 给列表表格用，按钮长得同工作项表格的人员格子（见 `StageReviewPeopleCell`）。
- * 一屏几十行不能每行都预拉候选人，改成鼠标移上去再拉。
+ * 一屏几十行不能每行都预拉候选人，改成鼠标移上去再拉；`idle` 时连下拉都不挂，只画长得一样的静态格子
+ * （列表滚动时新滚进来的行只画这个，鼠标移到行上才换成真下拉）。
  */
 export const RoleMemberSelect = ({
   workspaceSlug,
@@ -47,6 +48,7 @@ export const RoleMemberSelect = ({
   onChange,
   variant = "field",
   placeholder,
+  idle = false,
 }: {
   workspaceSlug: string;
   projectId: string;
@@ -59,6 +61,8 @@ export const RoleMemberSelect = ({
   variant?: "field" | "cell";
   /** cell：没人时灰字显示的列名 */
   placeholder?: string;
+  /** cell：只画静态格子，不挂下拉 */
+  idle?: boolean;
 }) => {
   const { t } = useTranslation();
   const [candidates, setCandidates] = useState<TStageReviewCandidates | null>(null);
@@ -116,6 +120,17 @@ export const RoleMemberSelect = ({
     }
     return (
       <StageReviewPeople users={valueDetail} unassigned={t(`${I18N}.detail.unassigned`)} size="md" showEmptyIcon={false} />
+    );
+  }
+
+  if (isCell && idle) {
+    // 与下面 CustomSearchSelect 的外层 div + customButton 同一套盒子，换成真下拉时不跳
+    return (
+      <span className="flex h-full w-full min-w-0">
+        <span className="-mx-3 flex h-full w-[calc(100%+1.5rem)] min-w-0 items-center justify-start gap-1 px-3">
+          <StageReviewPeopleCell users={valueDetail} placeholder={placeholder ?? ""} />
+        </span>
+      </span>
     );
   }
 

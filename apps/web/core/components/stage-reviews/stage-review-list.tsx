@@ -142,6 +142,8 @@ export const StageReviewList = observer(function StageReviewList({
   // `?review=<id>`：只在第一次拿到数据时生效，之后用户自己点的不被它顶掉
   const deepLinkReviewId = searchParams?.get("review") ?? null;
   const deepLinkHandled = useRef(false);
+  /** 表格的滚动容器，虚拟列表按它算视口 */
+  const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (deepLinkHandled.current || !deepLinkReviewId || reviews.length === 0) return;
     deepLinkHandled.current = true;
@@ -300,6 +302,7 @@ export const StageReviewList = observer(function StageReviewList({
         selection={tableSelection}
         flashedCells={bulkEdit.flashedCells}
         onUpdateReview={canBulkEdit ? handleUpdateReview : undefined}
+        scrollRef={scrollRef}
       />
     );
   };
@@ -319,7 +322,9 @@ export const StageReviewList = observer(function StageReviewList({
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-auto">{renderBody()}</div>
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+            {renderBody()}
+          </div>
           {canBulkEdit && scope.kind === "project" && (
             <div className="relative">
               <StageReviewBulkBar

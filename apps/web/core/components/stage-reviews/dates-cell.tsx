@@ -25,6 +25,7 @@ const TEXT_CLASS = {
  *
  * 选的过程落在本地草稿里，**关上浮层才保存一次**：区间要点两下，每点一下就存的话第一下会把
  * 结束日期先清掉。没有日期时是灰色日历图标 + 列名；只读时只显示文字，没有就什么都不显示。
+ * `idle` 时不挂浮层，只画长得一样的静态格子（列表里鼠标移到行上才换成真的）。
  */
 export const StageReviewDatesCell = observer(function StageReviewDatesCell({
   start,
@@ -32,6 +33,7 @@ export const StageReviewDatesCell = observer(function StageReviewDatesCell({
   isLate,
   placeholder,
   disabled,
+  idle = false,
   onChange,
 }: {
   start: string | null;
@@ -39,6 +41,7 @@ export const StageReviewDatesCell = observer(function StageReviewDatesCell({
   isLate: boolean;
   placeholder: string;
   disabled: boolean;
+  idle?: boolean;
   onChange: (next: { start_date: string | null; end_date: string | null }) => void;
 }) {
   const { t } = useTranslation();
@@ -48,6 +51,16 @@ export const StageReviewDatesCell = observer(function StageReviewDatesCell({
 
   const text = formatPlanDates(start, end);
   if (disabled) return text ? <span className={isLate ? TEXT_CLASS.late : TEXT_CLASS.normal}>{text}</span> : null;
+
+  const content = text ? (
+    <span className={isLate ? TEXT_CLASS.late : TEXT_CLASS.normal}>{text}</span>
+  ) : (
+    <span className="flex min-w-0 items-center gap-1.5 text-placeholder">
+      <CalendarDays className="mx-1 size-3 shrink-0" />
+      <span className="truncate text-13">{placeholder}</span>
+    </span>
+  );
+  if (idle) return <span className="-mx-3 flex h-full w-[calc(100%+1.5rem)] min-w-0 items-center px-3">{content}</span>;
 
   const toPayload = (value: Date | undefined) => (value ? renderFormattedPayloadDate(value) : null);
   const commit = (range: DateRange | undefined) => {
@@ -64,14 +77,7 @@ export const StageReviewDatesCell = observer(function StageReviewDatesCell({
   return (
     <Popover open={isOpen} onOpenChange={handleOpenChange}>
       <Popover.Button className="-mx-3 flex h-full w-[calc(100%+1.5rem)] min-w-0 cursor-pointer items-center px-3 text-left outline-none hover:bg-layer-transparent-hover data-[popup-open]:bg-layer-transparent-hover">
-        {text ? (
-          <span className={isLate ? TEXT_CLASS.late : TEXT_CLASS.normal}>{text}</span>
-        ) : (
-          <span className="flex min-w-0 items-center gap-1.5 text-placeholder">
-            <CalendarDays className="mx-1 size-3 shrink-0" />
-            <span className="truncate text-13">{placeholder}</span>
-          </span>
-        )}
+        {content}
       </Popover.Button>
       <Popover.Panel
         placement="bottom-start"
