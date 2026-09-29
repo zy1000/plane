@@ -151,7 +151,7 @@ class ReviewTailoringRowSerializer(serializers.Serializer):
     stage_parent_id = serializers.UUIDField(source="stage.parent_id", read_only=True, allow_null=True)
     stage_depth = serializers.SerializerMethodField()
     kind = serializers.CharField(source="template.kind", read_only=True)
-    title = serializers.CharField(source="template.title", read_only=True)
+    title = serializers.CharField(read_only=True)
     sort_order = serializers.FloatField(source="template.sort_order", read_only=True)
     # 「挪进来才有的行」（``detail_rows``）：格子都是从这个阶段挪来的。纵轴本来的行为空
     origin_stage_id = serializers.UUIDField(

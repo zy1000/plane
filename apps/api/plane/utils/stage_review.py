@@ -659,7 +659,7 @@ def update_review(review, *, actor, validated_data):
     return review
 
 
-def move_review_stage(review, *, stage, actor, extra=None):
+def move_review_stage(review, *, stage, actor, extra=None, title=None):
     """把一条评审活动挪到本项目模式的另一个阶段（批次 5）。
 
     挪过去就**脱离父评审**，直接挂在目标阶段下；评审 id、轨迹、评论、附件都不变。两个入口
@@ -671,6 +671,8 @@ def move_review_stage(review, *, stage, actor, extra=None):
     - 不跑「O 类只能在 O 阶段」那条校验：目标阶段不限类型。
 
     **必须先置空 parent 再改 stage**：``StageReview.save()`` 有父时会把阶段抄回父评审的。
+
+    ``title`` 只有裁剪表那个入口会给：标题开头的阶段名跟着换成目标阶段的，单独记一条轨迹。
     """
     if review.kind not in ACTIVITY_KINDS:
         raise StageReviewError(
@@ -680,10 +682,14 @@ def move_review_stage(review, *, stage, actor, extra=None):
     old_stage = review.stage
     if old_stage is not None and old_stage.id == stage.id:
         return review
+    old_title = review.title
     review.parent = None
     review.stage = stage
+    review.title = title or old_title
     review.updated_by = actor
-    review.save(update_fields=["parent", "stage", "updated_at", "updated_by"])
+    review.save(
+        update_fields=["parent", "stage", "title", "updated_at", "updated_by"]
+    )
     write_activity(
         review,
         actor=actor,
@@ -695,6 +701,16 @@ def move_review_stage(review, *, stage, actor, extra=None):
         new_identifier=stage.id,
         extra=extra,
     )
+    if review.title != old_title:
+        write_activity(
+            review,
+            actor=actor,
+            verb="updated",
+            field="title",
+            old_value=old_title,
+            new_value=review.title,
+            extra=extra,
+        )
     return review
 
 

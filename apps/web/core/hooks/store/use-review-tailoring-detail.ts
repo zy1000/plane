@@ -98,7 +98,8 @@ export const useReviewTailoringDetail = (
   /**
    * 把一批评审活动格子挪到本项目的另一个阶段（父子皆可）。本地立刻挪（矩阵换行、原处留「已移至」预览，签批生效后不再显示），保存时
    * 随勾选一起发 `stage_id`。`origin_stage` 记纵轴上本来那一格：第一次挪走时记下，再挪不变，
-   * 挪回原处清空 —— 与后端 `_move_cells` 同一口径。
+   * 挪回原处清空 —— 与后端 `_move_cells` 同一口径。标题开头的阶段名跟着换成目标阶段的，
+   * 保存后以服务端回来的为准。
    */
   const moveCells = useCallback((itemIds: string[], stage: TReviewTailoringModeStage) => {
     if (itemIds.length === 0) return;
@@ -116,6 +117,9 @@ export const useReviewTailoringDetail = (
           stage_sort_order: stage.sort_order,
           stage_parent_id: stage.parent_id,
           stage_depth: stage.depth,
+          title: item.title.startsWith(item.stage_label)
+            ? `${stage.name}${item.title.slice(item.stage_label.length)}`
+            : item.title,
           origin_stage_id: backHome ? null : homeId,
           origin_stage_label: backHome ? null : homeLabel,
         };

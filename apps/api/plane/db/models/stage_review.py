@@ -111,6 +111,21 @@ def stage_type_name(stage):
     return getattr(stage, "name", "") or ""
 
 
+def stage_scoped_title(title, stage_name, *old_names):
+    """把评审标题开头的阶段名换成它所在项目阶段的名字。
+
+    模板标题按阶段类型起名（「O阶段评审-结构研发总结」），而项目里同一类型可以有好几个
+    阶段（O-1阶段、O-2阶段）：落在 O-1阶段 的那条要叫「O-1阶段评审-结构研发总结」。
+    ``old_names`` 是标题开头可能带着的旧名字（阶段类型名、挪走之前的阶段名），先中先换；
+    都对不上的（「F1评审」、人工改过开头的）原样返回。
+    """
+    for old in old_names:
+        if old and title.startswith(old):
+            # 标题列只有 255：阶段名比旧名字长出来的部分可能把它顶爆
+            return f"{stage_name}{title[len(old):]}"[:255]
+    return title
+
+
 def validate_kind_stage(node):
     """O 阶段类型不能挂到非 O 系列阶段上。
 
@@ -1051,7 +1066,9 @@ class ReviewTailoringItem(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.title and self.template_id:
-            self.title = self.template.title
+            self.title = stage_scoped_title(
+                self.template.title, self.stage.name, self.template.stage.name
+            )
         return super().save(*args, **kwargs)
 
     def __str__(self):

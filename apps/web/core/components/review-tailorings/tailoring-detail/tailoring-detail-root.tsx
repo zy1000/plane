@@ -245,7 +245,10 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     const templates = new Set(moveTarget?.cells.map((cell) => cell.template_id));
     const first = moveTarget?.cells[0];
     if (templates.size !== 1 || !first?.parent_template_id || first.origin_stage_id) return undefined;
-    return detail.rows.find((row) => row.template_id === first.parent_template_id)?.title;
+    // 行名带着各自阶段的名字，父评审要在同一个阶段里找
+    return detail.rows.find(
+      (row) => row.template_id === first.parent_template_id && row.stage_id === first.stage_id
+    )?.title;
   })();
   /** 选区里有评审活动才出「移到阶段」 */
   const canMoveSelection = selectedCells.some((cell) => getMoveBlockReason(cell) !== "move_not_activity");
@@ -300,7 +303,11 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     if (templateIds.length === 0) return;
     if (templateIds.length === 1) {
       const [templateId] = templateIds;
-      const name = detail.rows.find((row) => row.template_id === templateId)?.title ?? "";
+      const [first] = selectedCells;
+      // 行名带着各自阶段的名字，取勾中的那一行的
+      const name =
+        detail.rows.find((row) => row.template_id === templateId && row.stage_id === first.stage_id)?.title ??
+        first.title;
       requestRemove({ kind: "review", id: templateId, name }, (item) => item.template_id === templateId);
       return;
     }

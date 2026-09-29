@@ -60,6 +60,7 @@ from plane.db.models import (
 from plane.db.models.stage_review import (
     ACTIVITY_KINDS,
     is_o_stage_type,
+    stage_scoped_title,
     template_kind_allowed,
 )
 from plane.utils.requirement import get_requirement_eligible_user_ids
@@ -185,6 +186,13 @@ class TailoringRow:
     def template_id(self):
         return self.template.id
 
+    @property
+    def title(self):
+        """行名 = 这一行生成出来的评审叫什么（``stage_scoped_title``）。"""
+        return stage_scoped_title(
+            self.template.title, self.stage.name, self.template.stage.name
+        )
+
 
 def project_stages(project_id):
     """项目的全部阶段（父子皆有），按树先序；每个对象带 ``depth`` / ``rank``。
@@ -289,6 +297,19 @@ def detail_rows(tailoring, items):
     )
 
 
+def _axis_title(tailoring, template):
+    """纵轴节点在变更历史里的名字。
+
+    绑了阶段的 O 表一个节点只有一行，用行名；其余的表一个节点横跨好几个阶段、各有各的
+    行名，只能用模板标题。
+    """
+    if not tailoring.stage_id:
+        return template.title
+    return stage_scoped_title(
+        template.title, tailoring.stage.name, template.stage.name
+    )
+
+
 def _build_items(tailoring, rows, product_ids, actor):
     """按 (产品 × 行) 铺格子。新格子默认「保留」—— 挑进表里的评审默认是要做的，
     裁掉才需要人去点、去写原因。
@@ -302,7 +323,7 @@ def _build_items(tailoring, rows, product_ids, actor):
             product_id=product_id,
             stage=row.stage,
             template=row.template,
-            title=row.template.title,
+            title=row.title,
             selected=True,
             reason="",
             created_by=actor,
@@ -474,7 +495,7 @@ def add_reviews(*, tailoring, template_ids, actor):
         template.id: template
         for template in StageReviewTemplate.objects.filter(
             id__in=template_ids, workspace_id=tailoring.workspace_id, is_active=True
-        )
+        ).select_related("stage")
     }
     invalid = [str(tid) for tid in template_ids if tid not in candidates]
     if invalid:
@@ -554,7 +575,7 @@ def add_reviews(*, tailoring, template_ids, actor):
         new_value=len(fresh),
         extra={
             "template_ids": [str(tid) for tid in fresh],
-            "titles": [candidates[tid].title for tid in fresh],
+            "titles": [_axis_title(tailoring, candidates[tid]) for tid in fresh],
         },
     )
     return len(fresh)
@@ -624,7 +645,7 @@ def remove_review(*, tailoring, template_id, actor):
     )
     row = ReviewTailoringTemplate.objects.filter(
         tailoring=tailoring, template_id=template_id
-    ).select_related("template").first()
+    ).select_related("template__stage").first()
     if row is None:
         raise ReviewTailoringError(
             "This review is not on the matrix.",
@@ -646,7 +667,10 @@ def remove_review(*, tailoring, template_id, actor):
         verb="updated",
         field="reviews",
         old_value=1,
-        extra={"removed_template_id": str(template_id), "title": row.template.title},
+        extra={
+            "removed_template_id": str(template_id),
+            "title": _axis_title(tailoring, row.template),
+        },
     )
     return len(items)
 
@@ -802,7 +826,9 @@ def save_cells(*, tailoring, cells, actor):
         item.id: item
         for item in ReviewTailoringItem.objects.filter(
             tailoring=tailoring
-        ).select_related("template", "stage", "origin_stage", "stage_review")
+        ).select_related(
+            "template__stage", "stage", "origin_stage", "stage_review"
+        )
     }
     unknown = [str(cell["id"]) for cell in cells if cell["id"] not in items]
     if unknown:
@@ -879,9 +905,19 @@ def save_cells(*, tailoring, cells, actor):
                 )
     if moved:
         ReviewTailoringItem.objects.bulk_update(
-            moved, ["stage", "origin_stage", "updated_at"], batch_size=500
+            moved, ["stage", "origin_stage", "title", "updated_at"], batch_size=500
         )
     return list(items.values())
+
+
+def _restage_title(title, item, old_stage_name, stage_name):
+    """格子（或它的评审实例）从一个阶段换到另一个阶段后该叫什么。
+
+    先认挪走之前的阶段名；对不上再认阶段类型名 —— 这条规则上线前生成的标题还带着它。
+    """
+    return stage_scoped_title(
+        title, stage_name, old_stage_name, item.template.stage.name
+    )
 
 
 def _move_cells(tailoring, items, cells, actor):
@@ -898,6 +934,8 @@ def _move_cells(tailoring, items, cells, actor):
       整张表查，不靠数据库唯一约束报错。
 
     ``origin_stage`` 记「纵轴上本来那一格」：第一次挪走时记下原阶段，再挪不变，挪回原处清空。
+
+    标题开头的阶段名跟着换成目标阶段的（``_restage_title``），跨类型挪也换。
     """
     requests = {
         cell["id"]: cell["stage_id"]
@@ -970,6 +1008,7 @@ def _move_cells(tailoring, items, cells, actor):
         item.stage = stages[stage_id]
         item.origin_stage = None if stage_id == home_id else stages.get(home_id)
         # 原阶段已被删（SET_NULL 语义）时 stages.get 取不到，按原处在新阶段处理
+        item.title = _restage_title(item.title, item, old_stage.name, item.stage.name)
         moved.append(item)
         _write_activity(
             tailoring,
@@ -1554,7 +1593,7 @@ def _apply_effective(*, tailoring, actor, comment=""):
     """
     items = list(
         ReviewTailoringItem.objects.filter(tailoring=tailoring).select_related(
-            "template", "stage"
+            "template__stage", "stage"
         )
     )
 
@@ -1663,6 +1702,10 @@ def _move_stage_reviews(tailoring, items, actor):
         if review is None or review.stage_id == item.stage_id:
             continue
         if review.status == StageReviewStatus.COMPLETED:
+            # 格子退回实例所在的阶段，名字也退回去；跳过明细里记的就是退回之后的名字
+            item.title = _restage_title(
+                item.title, item, item.stage.name, review.stage.name
+            )
             skipped.append(
                 {
                     "item_id": str(item.id),
@@ -1685,11 +1728,14 @@ def _move_stage_reviews(tailoring, items, actor):
             stage=item.stage,
             actor=actor,
             extra={"tailoring_id": str(tailoring.id), "revision": tailoring.revision + 1},
+            title=_restage_title(
+                review.title, item, review.stage.name, item.stage.name
+            ),
         )
         moved_ids.append(review.id)
     if reverted:
         ReviewTailoringItem.objects.bulk_update(
-            reverted, ["stage", "origin_stage", "updated_at"], batch_size=500
+            reverted, ["stage", "origin_stage", "title", "updated_at"], batch_size=500
         )
     return moved_ids, skipped
 
@@ -1740,7 +1786,14 @@ def cancel_revision(*, tailoring, actor):
             code="REVIEW_TAILORING_NO_SNAPSHOT",
         )
 
-    items = list(ReviewTailoringItem.objects.filter(tailoring=tailoring))
+    items = list(
+        ReviewTailoringItem.objects.filter(tailoring=tailoring).select_related(
+            "template__stage", "stage"
+        )
+    )
+    stage_names = {
+        str(stage.id): stage.name for stage in project_stages(tailoring.project_id)
+    }
     restored, orphans = [], []
     for item in items:
         recorded = snapshot.get(str(item.id))
@@ -1757,6 +1810,10 @@ def cancel_revision(*, tailoring, actor):
         ):
             item.selected = bool(recorded.get("selected"))
             item.reason = recorded.get("reason") or ""
+            if str(item.stage_id) != stage_id and stage_id in stage_names:
+                item.title = _restage_title(
+                    item.title, item, item.stage.name, stage_names[stage_id]
+                )
             item.stage_id = stage_id
             item.origin_stage_id = origin_id
             restored.append(item)
@@ -1767,7 +1824,7 @@ def cancel_revision(*, tailoring, actor):
     if restored:
         ReviewTailoringItem.objects.bulk_update(
             restored,
-            ["selected", "reason", "stage", "origin_stage", "updated_at"],
+            ["selected", "reason", "stage", "origin_stage", "title", "updated_at"],
             batch_size=500,
         )
 

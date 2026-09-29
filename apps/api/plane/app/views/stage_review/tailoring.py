@@ -42,7 +42,11 @@ from plane.db.models import (
     ReviewTailoringTemplate,
     StageReviewTemplate,
 )
-from plane.db.models.stage_review import is_o_stage_type, template_kind_allowed
+from plane.db.models.stage_review import (
+    is_o_stage_type,
+    stage_scoped_title,
+    template_kind_allowed,
+)
 from plane.utils.review_tailoring import (
     ReviewTailoringError,
     act_on_tailoring,
@@ -170,7 +174,7 @@ class ReviewTailoringViewSet(BaseViewSet):
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
             .select_related(
-                "template", "stage", "origin_stage", "stage_review", "created_by"
+                "template__stage", "stage", "origin_stage", "stage_review", "created_by"
             )
             .order_by("template__sort_order", "template__created_at", "id")
         )
@@ -434,7 +438,7 @@ class ReviewTailoringViewSet(BaseViewSet):
             template.id: template
             for template in StageReviewTemplate.objects.filter(
                 id__in=picked_ids, is_active=True
-            )
+            ).select_related("stage")
             if template_kind_allowed(tailoring.tailoring_kind, template.kind)
         }
         in_matrix = set(
@@ -464,7 +468,10 @@ class ReviewTailoringViewSet(BaseViewSet):
                             str(template.parent_id) if template.parent_id else None
                         ),
                         "kind": template.kind,
-                        "title": template.title,
+                        # 与进表之后的行名同口径
+                        "title": stage_scoped_title(
+                            template.title, stage.name, template.stage.name
+                        ),
                         "sort_order": template.sort_order,
                         # 纵轴是按节点加的，所以「已在表中」也是按节点判定 —— 一个节点
                         # 进表就意味着它在模式的每个阶段下都有了行
