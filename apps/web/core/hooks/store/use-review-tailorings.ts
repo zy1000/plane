@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import type { TCreateReviewTailoringPayload, TReviewTailoring, TReviewTailoringDetail } from "@plane/types";
+import type {
+  TCreateReviewTailoringPayload,
+  TReviewTailoring,
+  TReviewTailoringDetail,
+  TUpdateReviewTailoringHeaderPayload,
+} from "@plane/types";
 import { ReviewTailoringService } from "@/services/review-tailoring.service";
 
 const service = new ReviewTailoringService();
@@ -64,6 +69,35 @@ export const useReviewTailorings = (workspaceSlug: string | undefined, projectId
     [workspaceSlug, projectId]
   );
 
+  /** 列表行不带描述，编辑弹窗打开时单独取一次详情 */
+  const retrieveTailoring = useCallback(
+    async (tailoringId: string): Promise<TReviewTailoringDetail | undefined> => {
+      if (!workspaceSlug || !projectId) return undefined;
+      return service.retrieve(workspaceSlug, projectId, tailoringId);
+    },
+    [workspaceSlug, projectId]
+  );
+
+  /** 改标题 / 描述。响应是详情，列表只同步它看得见的两项，按请求人算的字段不动 */
+  const updateTailoring = useCallback(
+    async (tailoringId: string, payload: TUpdateReviewTailoringHeaderPayload) => {
+      if (!workspaceSlug || !projectId) return undefined;
+      setIsMutating(true);
+      try {
+        const updated = await service.updateHeader(workspaceSlug, projectId, tailoringId, payload);
+        setTailorings((current) =>
+          current.map((item) =>
+            item.id === tailoringId ? { ...item, title: updated.title, updated_at: updated.updated_at } : item
+          )
+        );
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [workspaceSlug, projectId]
+  );
+
   const deleteTailoring = useCallback(
     async (tailoringId: string) => {
       if (!workspaceSlug || !projectId) return;
@@ -78,7 +112,17 @@ export const useReviewTailorings = (workspaceSlug: string | undefined, projectId
     [workspaceSlug, projectId]
   );
 
-  return { tailorings, isLoading, isMutating, error, fetchTailorings, createTailoring, deleteTailoring };
+  return {
+    tailorings,
+    isLoading,
+    isMutating,
+    error,
+    fetchTailorings,
+    createTailoring,
+    retrieveTailoring,
+    updateTailoring,
+    deleteTailoring,
+  };
 };
 
 export type TReviewTailoringsStore = ReturnType<typeof useReviewTailorings>;

@@ -1240,6 +1240,8 @@ def submit_for_approval(
     approver_ids = list(dict.fromkeys(approver_ids))
     _validate_approvers(tailoring.project_id, tailoring.workspace_id, approver_ids)
 
+    # 草稿与修订中都能提交，轨迹里的旧状态要记提交前真实的那个
+    previous_status = tailoring.status
     next_round = tailoring.round + 1
     ReviewTailoringApproval.objects.bulk_create(
         [
@@ -1282,7 +1284,7 @@ def submit_for_approval(
         actor=actor,
         verb="submitted",
         field="status",
-        old_value=ReviewTailoringStatus.DRAFT,
+        old_value=previous_status,
         new_value=ReviewTailoringStatus.PENDING,
         extra={
             "round": next_round,

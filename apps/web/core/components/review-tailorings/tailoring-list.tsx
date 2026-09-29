@@ -7,7 +7,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IUserLite, TCreateReviewTailoringPayload, TReviewTailoring } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { cn, copyUrlToClipboard } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { CountChip } from "@/components/common/count-chip";
 import { PageSearchInput } from "@/components/pages/list/search-input";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
@@ -18,28 +18,36 @@ import { getTailoringError, useReviewTailorings } from "@/hooks/store/use-review
 import { useUser } from "@/hooks/store/user";
 import { ReviewTailoringApprovalInbox } from "./approval-inbox-modal";
 import { CreateTailoringModal } from "./create-tailoring-modal";
+import type { TEditTailoringTarget } from "./edit-tailoring-modal";
+import { EditTailoringModal } from "./edit-tailoring-modal";
 import { TailoringEmptyState } from "./list/empty-state";
 import { REVIEW_TAILORINGS_HEADER_ACTIONS_ID, REVIEW_TAILORINGS_HEADER_COUNT_ID } from "./list/filters";
 import { tailoringMatchesConditions } from "./list/rich-filters/match-tailoring";
 import { useTailoringFilter } from "./list/rich-filters/use-tailoring-filter";
 import { useTailoringFiltersConfig } from "./list/rich-filters/use-tailoring-filters-config";
 import { TailoringRow } from "./list/tailoring-row";
-import { TailoringCountBadge } from "./pending-approval-badge";
 import { useReviewTailoringPermissions } from "./permissions";
+import { PLAIN_TABLE, PLAIN_TH } from "./plain-table";
 
 const I18N = "review_tailoring";
 
-const COLUMNS = [
-  { key: "tailoring", className: "w-[36%] pl-6" },
-  { key: "status", className: "w-[18%]" },
-  { key: "selected", className: "w-[18%]" },
-  { key: "created_by", className: "w-[14%]" },
-  { key: "updated_at", className: "w-[10%]" },
-] as const;
+/** 标题列不给宽度，吃掉剩余宽度；其余定宽 */
+const COLUMNS: { key: string; width?: number; className?: string }[] = [
+  { key: "tailoring", className: "pl-6" },
+  { key: "kind", width: 150 },
+  { key: "stage", width: 110 },
+  { key: "status", width: 130 },
+  { key: "reviews", width: 72, className: "text-right" },
+  { key: "products", width: 72, className: "text-right" },
+  { key: "selected", width: 112, className: "text-right" },
+  { key: "created_by", width: 120 },
+  { key: "updated_at", width: 152 },
+  { key: "actions", width: 152 },
+];
 
 /**
- * 裁剪表列表。搜索 / 过滤 / 新建 portal 进页头右侧的挂点，状态全留在这里；
- * 行点击进详情，删除只对从未生效过的草稿开放。
+ * 裁剪表列表：一张普通表格，一行一张表。搜索 / 过滤 / 新建 portal 进页头右侧的挂点，
+ * 状态全留在这里；行点击进详情，行尾是编辑 / 删除 / 签批。删除只对从未生效过的草稿开放。
  */
 export const ReviewTailoringList = observer(function ReviewTailoringList({
   workspaceSlug,
@@ -52,14 +60,23 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
   const router = useAppRouter();
   const { data: currentUser } = useUser();
   const { canManage } = useReviewTailoringPermissions(workspaceSlug, projectId);
-  const { tailorings, isLoading, isMutating, error, fetchTailorings, createTailoring, deleteTailoring } = useReviewTailorings(
-    workspaceSlug,
-    projectId
-  );
+  const {
+    tailorings,
+    isLoading,
+    isMutating,
+    error,
+    fetchTailorings,
+    createTailoring,
+    retrieveTailoring,
+    updateTailoring,
+    deleteTailoring,
+  } = useReviewTailorings(workspaceSlug, projectId);
 
   const [search, setSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [toDelete, setToDelete] = useState<TReviewTailoring | null>(null);
+  /** 正在编辑的那张表；描述要等详情回来才有 */
+  const [editing, setEditing] = useState<(TEditTailoringTarget & { id: string }) | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [inbox, setInbox] = useState<{ isOpen: boolean; initialId?: string }>({ isOpen: false });
   const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
@@ -122,10 +139,36 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
     }
   };
 
-  const handleCopyLink = (item: TReviewTailoring) => {
-    void copyUrlToClipboard(detailPath(item.id).slice(1)).then(() =>
-      setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.list.link_copied`) })
-    );
+  /** 先用列表行把弹窗打开，描述随后补上；取不到详情就关掉，免得存出一份空描述 */
+  const handleOpenEdit = (item: TReviewTailoring) => {
+    setEditing({
+      id: item.id,
+      title: item.title,
+      tailoring_kind: item.tailoring_kind,
+      stage_label: item.stage_label,
+      description_html: undefined,
+    });
+    retrieveTailoring(item.id)
+      .then((detail) =>
+        setEditing((current) =>
+          current?.id === item.id ? { ...current, description_html: detail?.description_html ?? null } : current
+        )
+      )
+      .catch((requestError) => {
+        setEditing(null);
+        setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.toast.failed`), message: translateError(requestError) });
+      });
+  };
+
+  const handleEdit = async (payload: Parameters<typeof updateTailoring>[1]) => {
+    if (!editing) return;
+    try {
+      await updateTailoring(editing.id, payload);
+      setEditing(null);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${I18N}.toast.updated`) });
+    } catch (requestError) {
+      setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.toast.failed`), message: translateError(requestError) });
+    }
   };
 
   const headerActions = (
@@ -136,15 +179,17 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
         placeholder={t(`${I18N}.search_placeholder`)}
       />
       <FiltersToggle filter={filter} enableQuickAddFilter={false} />
-      {canManage && (
-        <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
-          {t(`${I18N}.create_action`) === `${I18N}.create_action` ? "新建" : t(`${I18N}.create_action`)}
-        </Button>
-      )}
       {hasMySigning && (
         <Button variant="secondary" size="lg" onClick={() => setInbox({ isOpen: true })}>
-          {t(`${I18N}.approval.inbox_button`) === "待我签批" ? "待签批" : t(`${I18N}.approval.inbox_button`)}
-          <TailoringCountBadge count={pendingMineCount} />
+          {t(`${I18N}.approval.inbox_button`)}
+          {pendingMineCount > 0 && (
+            <span className="font-semibold text-danger-primary tabular-nums">{pendingMineCount}</span>
+          )}
+        </Button>
+      )}
+      {canManage && (
+        <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+          {t(`${I18N}.create`)}
         </Button>
       )}
     </>
@@ -166,21 +211,19 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
       return <p className="py-16 text-center text-13 text-tertiary">{t(`${I18N}.empty.filtered`)}</p>;
     }
     return (
-      <table className="w-full min-w-[880px] border-collapse">
-        <thead className="sticky top-0 z-[2] bg-surface-1">
+      <table className={cn(PLAIN_TABLE, "min-w-[1180px] table-fixed")}>
+        <colgroup>
+          {COLUMNS.map((column) => (
+            <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+          ))}
+        </colgroup>
+        <thead>
           <tr>
             {COLUMNS.map((column) => (
-              <th
-                key={column.key}
-                className={cn(
-                  "border-b border-subtle px-3 py-2 text-left text-12 font-medium whitespace-nowrap text-tertiary",
-                  column.className
-                )}
-              >
+              <th key={column.key} className={cn(PLAIN_TH, "sticky top-0 z-[2]", column.className)}>
                 {t(`${I18N}.list.${column.key}`)}
               </th>
             ))}
-            <th className="w-28 border-b border-subtle" />
           </tr>
         </thead>
         <tbody>
@@ -188,9 +231,10 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
             <TailoringRow
               key={item.id}
               item={item}
+              canEdit={canManage}
               canDelete={canManage && item.status === EReviewTailoringStatus.DRAFT && item.revision === 0}
               onOpen={() => router.push(detailPath(item.id))}
-              onCopyLink={() => handleCopyLink(item)}
+              onEdit={() => handleOpenEdit(item)}
               onDelete={() => setToDelete(item)}
               onSign={item.my_approval_pending ? () => setInbox({ isOpen: true, initialId: item.id }) : undefined}
             />
@@ -218,6 +262,14 @@ export const ReviewTailoringList = observer(function ReviewTailoringList({
         isSubmitting={isMutating}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={handleCreate}
+      />
+
+      <EditTailoringModal
+        isOpen={Boolean(editing)}
+        target={editing}
+        isSubmitting={isMutating}
+        onClose={() => setEditing(null)}
+        onSubmit={(payload) => void handleEdit(payload)}
       />
 
       <ReviewTailoringApprovalInbox

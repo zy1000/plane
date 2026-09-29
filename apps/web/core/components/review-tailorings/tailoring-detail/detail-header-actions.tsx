@@ -1,26 +1,26 @@
-import { Link2, MoreHorizontal, PenLine, Send, Trash2, Undo2 } from "lucide-react";
+import { Link2, MoreHorizontal, Trash2, Undo2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { getIconButtonStyling } from "@plane/propel/icon-button";
 import type { TReviewTailoringDetail } from "@plane/types";
 import { EReviewTailoringStatus } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
-import { cn } from "@plane/utils";
 
 const I18N = "review_tailoring";
 
 /**
- * 顶栏右侧：一个主按钮 + 「⋯」。
+ * 顶栏右侧：「编辑」+「⋯」+ 一个主按钮。
  *
  * 主按钮按状态只出一个 —— 可编辑时是「提交签批」，已生效时是「开始修订」；签批中是签批进度 +
- * 「签批」（本轮在等我签时是主按钮，否则是「签批详情」次按钮，都打开签批弹窗）。低频动作（取消修订、复制链接、删除）收进「⋯」，
- * 不再和「添加评审 / 添加产品 / 保存」挤成一排。
+ * 「签批」（本轮在等我签时是主按钮，否则是「签批详情」次按钮，都打开签批弹窗）。
+ * 「编辑」改标题与描述，任何状态都能改。低频动作（取消修订、复制链接、删除）收进「⋯」。
  */
 export const DetailHeaderActions = ({
   detail,
   canManage,
   isMutating,
   currentUserId,
+  onEdit,
   onSubmit,
   onRevise,
   onOpenApproval,
@@ -32,6 +32,7 @@ export const DetailHeaderActions = ({
   canManage: boolean;
   isMutating: boolean;
   currentUserId?: string;
+  onEdit: () => void;
   onSubmit: () => void;
   onRevise: () => void;
   onOpenApproval: () => void;
@@ -52,24 +53,14 @@ export const DetailHeaderActions = ({
   return (
     <>
       {isPending && detail.approvals.length > 0 && (
-        <span className="mr-1 flex items-center gap-2 text-12 whitespace-nowrap text-tertiary tabular-nums">
-          <span className="flex w-8 gap-0.5">
-            {detail.approvals.map((approval) => (
-              <span
-                key={approval.id}
-                className={cn(
-                  "h-1 flex-1 rounded-full",
-                  approval.action === "approved"
-                    ? "bg-success-primary"
-                    : approval.action === "rejected"
-                      ? "bg-danger-primary"
-                      : "bg-layer-3"
-                )}
-              />
-            ))}
-          </span>
+        <span className="mr-1 text-12 whitespace-nowrap text-tertiary tabular-nums">
           {t(`${I18N}.approval.progress`, { approved: approvedCount, total: detail.approvals.length })}
         </span>
+      )}
+      {canManage && (
+        <Button variant="secondary" size="lg" onClick={onEdit}>
+          {t("edit")}
+        </Button>
       )}
       <CustomMenu
         // CustomMenu 自己包了一层 <button>，这里只画样子
@@ -100,17 +91,17 @@ export const DetailHeaderActions = ({
       </CustomMenu>
 
       {canManage && isEditable && (
-        <Button variant="primary" size="lg" prependIcon={<Send />} disabled={isMutating} onClick={onSubmit}>
+        <Button variant="primary" size="lg" disabled={isMutating} onClick={onSubmit}>
           {t(`${I18N}.approval.submit`)}
         </Button>
       )}
       {canManage && status === EReviewTailoringStatus.APPROVED && (
-        <Button variant="primary" size="lg" prependIcon={<PenLine />} disabled={isMutating} onClick={onRevise}>
+        <Button variant="primary" size="lg" disabled={isMutating} onClick={onRevise}>
           {t(`${I18N}.actions.revise`)}
         </Button>
       )}
       {isPending && (
-        <Button variant={canSign ? "primary" : "secondary"} size="lg" prependIcon={<PenLine />} onClick={onOpenApproval}>
+        <Button variant={canSign ? "primary" : "secondary"} size="lg" onClick={onOpenApproval}>
           {t(canSign ? `${I18N}.approval.sign` : `${I18N}.approval.view`)}
         </Button>
       )}

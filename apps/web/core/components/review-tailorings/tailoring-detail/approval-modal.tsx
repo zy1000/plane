@@ -22,15 +22,13 @@ export const ReviewTailoringApprovalModal = observer(function ReviewTailoringApp
 }) {
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.VXL}>
-      <div className="flex h-[min(85vh,680px)]">
-        <ReviewTailoringApprovalPane
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          store={store}
-          onClose={onClose}
-          onDone={onDone}
-        />
-      </div>
+      <ReviewTailoringApprovalPane
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        store={store}
+        onClose={onClose}
+        onDone={onDone}
+      />
     </ModalCore>
   );
 });

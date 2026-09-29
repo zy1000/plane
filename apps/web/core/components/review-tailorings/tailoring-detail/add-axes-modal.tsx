@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
-import { Boxes, ClipboardCheck, ListChecks, Package, Plus } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
@@ -15,16 +14,20 @@ import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane
 import { cn } from "@plane/utils";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useTailoringAxisOptions } from "@/hooks/store/use-tailoring-axis-options";
-import { ModalSearch, TailoringModalHeader } from "./modal-header";
+import { PLAIN_TD, PLAIN_TH } from "../plain-table";
+import { ModalSearch, TailoringModalFooter, TailoringModalHeader } from "./modal-frame";
 import { StageFilterChip } from "./stage-filter-chip";
 import { splitChildTitle } from "./tailoring-matrix-model";
 
 const I18N = "review_tailoring.actions";
 
-/** 左栏行：评审与活动都是一行，四列对齐 —— 复选框 / 阶段 / 标题 / 锁定标签 */
-const REVIEW_COLS = "grid grid-cols-[1rem_4.75rem_1fr_auto] items-center gap-x-2.5 px-4";
-/** 右栏行：复选框 / 图标 / 名称 / 锁定标签 */
-const PRODUCT_COLS = "grid grid-cols-[1rem_1.5rem_1fr_auto] items-center gap-x-3 px-4";
+/** 左栏：勾选 / 阶段 / 评审或评审活动 / 类型 / 状态 */
+const REVIEW_COLS = "grid grid-cols-[2.75rem_7rem_minmax(0,1fr)_6.5rem_5rem] items-center";
+/** 右栏：勾选 / 产品 / 状态 */
+const PRODUCT_COLS = "grid grid-cols-[2.75rem_minmax(0,1fr)_5rem] items-center";
+
+const HEAD_CELL = cn(PLAIN_TH, "flex h-9.5 items-center border-r-0");
+const BODY_CELL = cn(PLAIN_TD, "flex h-10 min-w-0 items-center border-r-0");
 
 type TBlocked = "in_matrix" | null;
 
@@ -42,6 +45,7 @@ type TFlatRow = {
   stageLabel: string;
   stageDepth: number;
   isReview: boolean;
+  kind: string;
   /** 活动行所属评审的标题；评审行为 null */
   parentTitle: string | null;
   /** 去掉父评审前缀后的标题，前缀由 parentTitle 那段淡色承担 */
@@ -50,92 +54,50 @@ type TFlatRow = {
 
 type TStageChoice = { id: string; label: string; depth: number; available: number; allInMatrix: boolean };
 
-/** 栏头：图标 + 「评审」/「产品」 + 已选几个 */
-const PaneHeader = ({ icon, label, count }: { icon: ReactNode; label: string; count: number }) => {
-  const { t } = useTranslation();
-  return (
-    <div className="flex h-10.5 shrink-0 items-center gap-2 border-b border-subtle px-4 text-13 font-semibold text-primary">
-      <span className="flex text-tertiary">{icon}</span>
-      {label}
-      <span
-        className={cn(
-          "ml-auto rounded-full px-2 text-11 leading-5 font-medium tabular-nums",
-          count > 0 ? "bg-accent-subtle text-accent-primary" : "bg-layer-3 text-placeholder"
-        )}
-      >
-        {t(`${I18N}.add_axes_picked`, { count })}
-      </span>
-    </div>
-  );
-};
-
-const LockedTag = ({ label }: { label: string }) => (
-  <span className="shrink-0 rounded border border-subtle px-1.5 text-11 text-placeholder">{label}</span>
+/** 栏头：「评审」/「产品」+ 右侧的搜索与筛选 */
+const PaneHeader = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="flex h-13 shrink-0 items-center gap-2 pr-4 pl-6">
+    <span className="mr-auto text-14 font-semibold text-primary">{label}</span>
+    {children}
+  </div>
 );
 
 /**
- * 清单列头：三态复选框 + 列名 + 全选 / 取消全选。
- * 三个入口作用范围一致 —— 只动当前筛选、搜索下可勾的行，已在表中和已停用的一概不碰。
+ * 表头第一格的三态复选框：只动当前筛选、搜索下可勾的行，已在表中的一概不碰。
  */
-const ListHeader = ({
-  columns,
-  labels,
+const HeadCheckbox = ({
   pickedCount,
   selectableCount,
+  label,
   onSelectAll,
   onClearAll,
 }: {
-  columns: string;
-  labels: ReactNode;
   pickedCount: number;
   selectableCount: number;
+  label: string;
   onSelectAll: () => void;
   onClearAll: () => void;
 }) => {
-  const { t } = useTranslation();
   const isAll = selectableCount > 0 && pickedCount === selectableCount;
   return (
-    <div
-      className={cn(
-        columns,
-        "h-8.5 shrink-0 border-b border-subtle bg-layer-1 text-12 font-medium text-tertiary"
-      )}
-    >
+    <span className={cn(HEAD_CELL, "justify-center px-0")}>
       <Checkbox
         checked={isAll}
         indeterminate={pickedCount > 0 && !isAll}
         disabled={selectableCount === 0}
+        aria-label={label}
+        title={label}
         onChange={() => (isAll ? onClearAll() : onSelectAll())}
       />
-      {labels}
-      <div className="flex items-center gap-2.5">
-        <button
-          type="button"
-          disabled={isAll || selectableCount === 0}
-          className="text-accent-primary hover:underline disabled:text-placeholder disabled:no-underline"
-          onClick={onSelectAll}
-        >
-          {t(`${I18N}.add_axes_select_all`)}
-        </button>
-        <span className="h-3 w-px bg-(--border-strong)" />
-        <button
-          type="button"
-          disabled={pickedCount === 0}
-          className="text-accent-primary hover:underline disabled:text-placeholder disabled:no-underline"
-          onClick={onClearAll}
-        >
-          {t(`${I18N}.add_axes_clear_all`)}
-        </button>
-      </div>
-    </div>
+    </span>
   );
 };
 
 /**
  * 给裁剪表一次加评审（纵轴）和产品（横轴）。左右两栏各自搜索、各自勾选，只勾一边也能提交。
  *
- * 左栏是一张**平铺清单**：不按阶段折叠，每行一个评审或一个评审活动，阶段单独成列，
- * 活动行前面淡写所属评审，所以不分组也看得出归属。阶段筛选与搜索叠加生效。
+ * 两栏各是一张普通表格。左栏**平铺**：不按阶段折叠，每行一个评审或一个评审活动，阶段、
+ * 类型各占一列，活动行缩进一级并在前面淡写所属评审。阶段筛选与搜索叠加生效。
  * 评审与评审活动**各自独立**：只加评审、只加活动、两者都加都行，勾谁都不会带动另一方。
  * 已在表里的、模板已停用的都列出来但锁住 —— 比直接藏掉更不容易让人以为「库里没有这条」。
  * 底部实时算这次会新增多少行、多少格。
@@ -207,6 +169,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         stageLabel: option.stage_label,
         stageDepth: option.stage_depth ?? 0,
         isReview: STAGE_REVIEW_ROOT_KINDS.includes(option.kind as EStageReviewKind),
+        kind: option.kind,
         parentTitle,
         title: parentTitle ? splitChildTitle(parentTitle, option.title).rest : option.title,
       };
@@ -327,17 +290,6 @@ export const AddAxesModal = observer(function AddAxesModal({
         : products > 0
           ? t(`${I18N}.add_axes_summary_products`, { products, cells })
           : null;
-  const applyLabel =
-    rowCount > 0 && products > 0
-      ? t(`${I18N}.add_axes_apply`, { rows: rowCount, products })
-      : products > 0
-        ? t(`${I18N}.add_axes_apply_products`, { products })
-        : rowCount > 0
-          ? t(`${I18N}.add_axes_apply_reviews`, { rows: rowCount })
-          : t("review_tailoring.detail.add_axes");
-
-  const blockedLabel = (_blocked: Exclude<TBlocked, null>) => t(`${I18N}.add_reviews_in_matrix`);
-
   const stageOptions = stageChoices.map((choice) => ({
     id: choice.id,
     label: choice.label,
@@ -351,46 +303,50 @@ export const AddAxesModal = observer(function AddAxesModal({
           : t(`${I18N}.add_axes_stage_none`),
   }));
 
+  const inMatrixLabel = t(`${I18N}.add_reviews_in_matrix`);
+
   const renderRow = (row: TFlatRow) => {
     const { templateId, blocked, parentTitle } = row;
     const isPicked = reviewIds.has(templateId);
     // 同一个节点横跨几个阶段时，勾一下几行一起进表 —— 在行上说清楚，别让人以为只加这一行
     const spanned = stagesPerTemplate.get(templateId) ?? 1;
+    const cell = cn(BODY_CELL, blocked && "text-placeholder");
     return (
       <label
         key={`${row.stageId}:${templateId}`}
         className={cn(
           REVIEW_COLS,
-          "h-10 border-b border-subtle text-13",
-          blocked ? "text-placeholder" : "cursor-pointer text-primary hover:bg-layer-transparent-hover",
-          isPicked && "bg-accent-subtle/60"
+          blocked ? "cursor-not-allowed" : "cursor-pointer hover:bg-layer-1",
+          isPicked && "bg-accent-subtle"
         )}
       >
-        <Checkbox
-          checked={isPicked || blocked === "in_matrix"}
-          disabled={Boolean(blocked)}
-          onChange={() => toggleReview(templateId)}
-        />
-        <span
-          className={cn("flex min-w-0 items-center gap-1.5 text-12.5", blocked ? "text-placeholder" : "text-secondary")}
-          title={row.stageLabel}
-          style={row.stageDepth ? { paddingLeft: row.stageDepth * 12 } : undefined}
-        >
-          {row.stageDepth > 0 && <span className="shrink-0 text-placeholder">└</span>}
-          <span className="truncate">{row.stageLabel}</span>
+        <span className={cn(cell, "justify-center px-0")}>
+          <Checkbox
+            checked={isPicked || blocked === "in_matrix"}
+            disabled={Boolean(blocked)}
+            onChange={() => toggleReview(templateId)}
+          />
         </span>
-        <span className="flex min-w-0 items-center gap-2" title={row.title}>
-          {row.isReview && <ClipboardCheck className="size-3.5 shrink-0 text-tertiary" />}
+        <span className={cn(cell, !blocked && "text-secondary")} title={row.stageLabel}>
+          <span className="truncate" style={row.stageDepth ? { paddingLeft: row.stageDepth * 12 } : undefined}>
+            {row.stageDepth > 0 && <span className="mr-1 text-placeholder">└</span>}
+            {row.stageLabel}
+          </span>
+        </span>
+        <span className={cn(cell, "gap-2", !row.isReview && "pl-8")} title={row.title}>
           {/* 前缀不截断：截一半就认不出是哪个评审了，让活动名去 truncate（悬停看全名） */}
           {parentTitle && <span className="shrink-0 text-placeholder">{parentTitle} ›</span>}
-          <span className={cn("min-w-0 truncate", row.isReview && "font-medium")}>{row.title}</span>
+          <span className={cn("min-w-0 truncate", row.isReview && "font-semibold")}>{row.title}</span>
           {spanned > 1 && (
-            <span className="shrink-0 rounded bg-layer-3 px-1.5 text-11 leading-4 text-tertiary">
+            <span className="shrink-0 text-12 text-placeholder">
               {t(`${I18N}.add_axes_multi_stage`, { stages: spanned })}
             </span>
           )}
         </span>
-        {blocked && <LockedTag label={blockedLabel(blocked)} />}
+        <span className={cn(cell, !blocked && "text-secondary")}>
+          {t(`workspace_templates.reviews.kind.${row.kind}`)}
+        </span>
+        <span className={cell}>{blocked ? inMatrixLabel : <span className="text-placeholder">—</span>}</span>
       </label>
     );
   };
@@ -404,21 +360,13 @@ export const AddAxesModal = observer(function AddAxesModal({
   );
 
   return (
-    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXXL}>
-      <TailoringModalHeader icon={<Plus className="size-5" />} title={t(`${I18N}.add_axes_title`)} onClose={onClose} />
+    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.VXL}>
+      <TailoringModalHeader title={t(`${I18N}.add_axes_title`)} onClose={onClose} />
 
-      <div className="grid h-[min(32rem,65vh)] grid-cols-2 divide-x divide-subtle border-y border-subtle">
+      <div className="grid h-[min(32rem,65vh)] grid-cols-[minmax(0,1fr)_22rem] divide-x divide-subtle">
         {/* 左：评审 */}
         <section className="flex min-h-0 flex-col">
-          <PaneHeader icon={<ListChecks className="size-4" />} label={t(`${I18N}.add_axes_reviews`)} count={rowCount} />
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-subtle pr-3">
-            <ModalSearch
-              id="review-tailoring-add-axes-reviews-search"
-              value={reviewQuery}
-              placeholder={t(`${I18N}.add_reviews_search`)}
-              onChange={setReviewQuery}
-              className="h-full flex-1 border-b-0"
-            />
+          <PaneHeader label={t(`${I18N}.add_axes_reviews`)}>
             <StageFilterChip
               label={t(`${I18N}.add_axes_stage_filter`)}
               allLabel={t(`${I18N}.add_axes_stage_all`)}
@@ -427,27 +375,33 @@ export const AddAxesModal = observer(function AddAxesModal({
               allHint={String(rows.filter((row) => !row.blocked).length)}
               onChange={setStageFilter}
             />
+            <ModalSearch
+              id="review-tailoring-add-axes-reviews-search"
+              value={reviewQuery}
+              placeholder={t(`${I18N}.add_reviews_search`)}
+              onChange={setReviewQuery}
+            />
+          </PaneHeader>
+          <div className={cn(REVIEW_COLS, "shrink-0 border-t border-subtle")}>
+            <HeadCheckbox
+              pickedCount={pickedVisibleReviews}
+              selectableCount={selectableReviewIds.length}
+              label={t(`${I18N}.add_axes_select_all`)}
+              onSelectAll={selectAllReviews}
+              onClearAll={clearAllReviews}
+            />
+            <span className={HEAD_CELL}>{t(`${I18N}.add_axes_col_stage`)}</span>
+            <span className={HEAD_CELL}>{t(`${I18N}.add_axes_col_review`)}</span>
+            <span className={HEAD_CELL}>{t("review_tailoring.matrix.type_column")}</span>
+            <span className={HEAD_CELL}>{t("review_tailoring.list.status")}</span>
           </div>
-          <ListHeader
-            columns={REVIEW_COLS}
-            labels={
-              <>
-                <span>{t(`${I18N}.add_axes_col_stage`)}</span>
-                <span>{t(`${I18N}.add_axes_col_review`)}</span>
-              </>
-            }
-            pickedCount={pickedVisibleReviews}
-            selectableCount={selectableReviewIds.length}
-            onSelectAll={selectAllReviews}
-            onClearAll={clearAllReviews}
-          />
           <div className="min-h-0 flex-1 overflow-y-auto">
             {isLoadingReviews ? (
               listLoader
             ) : rows.length === 0 ? (
-              <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_empty_${tailoringKind}`)}</p>
+              <p className="px-6 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_empty_${tailoringKind}`)}</p>
             ) : visibleRows.length === 0 ? (
-              <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_no_match`)}</p>
+              <p className="px-6 py-6 text-13 text-tertiary">{t(`${I18N}.add_reviews_no_match`)}</p>
             ) : (
               visibleRows.map(renderRow)
             )}
@@ -456,63 +410,63 @@ export const AddAxesModal = observer(function AddAxesModal({
 
         {/* 右：产品 */}
         <section className="flex min-h-0 flex-col">
-          <PaneHeader icon={<Boxes className="size-4" />} label={t(`${I18N}.add_axes_products`)} count={products} />
-          <ModalSearch
-            id="review-tailoring-add-axes-products-search"
-            value={productQuery}
-            placeholder={t(`${I18N}.add_products_search`)}
-            onChange={setProductQuery}
-            className="h-11"
-          />
-          <ListHeader
-            columns={PRODUCT_COLS}
-            labels={
-              <>
-                <span />
-                <span>{t(`${I18N}.add_axes_col_product`)}</span>
-              </>
-            }
-            pickedCount={pickedVisibleProducts}
-            selectableCount={selectableProductIds.length}
-            onSelectAll={selectAllProducts}
-            onClearAll={clearAllProducts}
-          />
+          <PaneHeader label={t(`${I18N}.add_axes_products`)}>
+            <ModalSearch
+              id="review-tailoring-add-axes-products-search"
+              value={productQuery}
+              placeholder={t(`${I18N}.add_products_search`)}
+              onChange={setProductQuery}
+              className="w-44"
+            />
+          </PaneHeader>
+          <div className={cn(PRODUCT_COLS, "shrink-0 border-t border-subtle")}>
+            <HeadCheckbox
+              pickedCount={pickedVisibleProducts}
+              selectableCount={selectableProductIds.length}
+              label={t(`${I18N}.add_axes_select_all`)}
+              onSelectAll={selectAllProducts}
+              onClearAll={clearAllProducts}
+            />
+            <span className={HEAD_CELL}>{t(`${I18N}.add_axes_col_product`)}</span>
+            <span className={HEAD_CELL}>{t("review_tailoring.list.status")}</span>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {isLoadingProducts ? (
               listLoader
             ) : links.length === 0 ? (
-              <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_products_empty`)}</p>
+              <p className="px-6 py-6 text-13 text-tertiary">{t(`${I18N}.add_products_empty`)}</p>
             ) : visibleLinks.length === 0 ? (
-              <p className="px-4 py-6 text-13 text-tertiary">{t(`${I18N}.add_products_no_match`)}</p>
+              <p className="px-6 py-6 text-13 text-tertiary">{t(`${I18N}.add_products_no_match`)}</p>
             ) : (
               visibleLinks.map((link) => {
                 const inMatrix = takenProducts.has(link.product);
                 const isPicked = productIds.includes(link.product);
+                const cell = cn(BODY_CELL, inMatrix && "text-placeholder");
                 return (
                   <label
                     key={link.product}
                     className={cn(
                       PRODUCT_COLS,
-                      "h-10 border-b border-subtle text-13",
-                      inMatrix ? "text-placeholder" : "cursor-pointer text-primary hover:bg-layer-transparent-hover",
-                      isPicked && "bg-accent-subtle/60"
+                      inMatrix ? "cursor-not-allowed" : "cursor-pointer hover:bg-layer-1",
+                      isPicked && "bg-accent-subtle"
                     )}
                   >
-                    <Checkbox
-                      checked={isPicked || inMatrix}
-                      disabled={inMatrix}
-                      onChange={() => toggleProduct(link.product)}
-                    />
-                    <span className="grid size-6 shrink-0 place-items-center rounded-md bg-layer-3 text-tertiary">
-                      <Package className="size-3.5" />
+                    <span className={cn(cell, "justify-center px-0")}>
+                      <Checkbox
+                        checked={isPicked || inMatrix}
+                        disabled={inMatrix}
+                        onChange={() => toggleProduct(link.product)}
+                      />
                     </span>
-                    <span className="flex min-w-0 items-center gap-2.5">
+                    <span className={cn(cell, "gap-2.5")}>
                       <span className="truncate">{link.product_name}</span>
                       {link.product_code && (
                         <span className="shrink-0 text-12 text-placeholder tabular-nums">{link.product_code}</span>
                       )}
                     </span>
-                    {inMatrix && <LockedTag label={t(`${I18N}.add_products_in_matrix`)} />}
+                    <span className={cell}>
+                      {inMatrix ? t(`${I18N}.add_products_in_matrix`) : <span className="text-placeholder">—</span>}
+                    </span>
                   </label>
                 );
               })
@@ -521,8 +475,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         </section>
       </div>
 
-      <div className="flex items-center justify-end gap-2.5 px-6 pt-4 pb-5">
-        <span className="min-w-0 flex-1 text-13 text-tertiary tabular-nums">{summary}</span>
+      <TailoringModalFooter hint={<span className="tabular-nums">{summary}</span>}>
         <Button variant="secondary" size="xl" onClick={onClose}>
           {t("cancel")}
         </Button>
@@ -533,9 +486,9 @@ export const AddAxesModal = observer(function AddAxesModal({
           disabled={(rowCount === 0 && products === 0) || isSubmitting}
           onClick={() => onSubmit({ template_ids: [...reviewIds], product_ids: productIds })}
         >
-          {applyLabel}
+          {t("add")}
         </Button>
-      </div>
+      </TailoringModalFooter>
     </ModalCore>
   );
 });

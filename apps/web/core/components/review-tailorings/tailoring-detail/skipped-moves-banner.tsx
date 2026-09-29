@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TReviewTailoringProduct, TReviewTailoringSkippedMove } from "@plane/types";
 
@@ -45,20 +44,17 @@ export const SkippedMovesBanner = ({
   const productById = new Map(products.map((product) => [product.id, product]));
 
   return (
-    <div className="mx-6 mb-3 flex gap-3 rounded-xl border border-subtle bg-warning-subtle py-3 pr-3.5 pl-4">
-      <span className="mt-0.5 grid size-5.5 shrink-0 place-items-center rounded-full bg-surface-1 text-warning-primary">
-        <AlertTriangle className="size-3.5" />
-      </span>
+    <div className="flex items-start gap-4 border-b border-subtle bg-layer-1 px-6 py-2.5">
       <div className="min-w-0 flex-1 text-13 text-secondary">
-        <p className="mb-1.5 text-14 font-semibold text-primary">{t(`${I18N}.skipped_title`, { count: skipped.length })}</p>
-        <ul className="flex flex-col gap-1">
+        <p className="font-medium text-warning-primary">{t(`${I18N}.skipped_title`, { count: skipped.length })}</p>
+        <ul className="mt-1 flex flex-col gap-0.5">
           {skipped.map((move) => {
             const product = productById.get(move.product_id);
             return (
-              <li key={move.item_id} className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+              <li key={move.item_id} className="flex flex-wrap items-center gap-x-2.5">
                 <span className="text-primary">{move.title}</span>
-                <span className="text-12 text-tertiary">{product?.identifier || product?.name}</span>
-                <span className="text-12 text-tertiary">
+                <span className="text-tertiary">{product?.identifier || product?.name}</span>
+                <span className="text-tertiary">
                   {t(`${I18N}.skipped_item`, { stage: move.stage_label, target: move.target_stage_label })}
                 </span>
               </li>
@@ -68,7 +64,7 @@ export const SkippedMovesBanner = ({
       </div>
       <button
         type="button"
-        className="h-7 shrink-0 self-start rounded-md border border-subtle bg-surface-1 px-2.5 text-13 whitespace-nowrap text-secondary hover:text-primary"
+        className="shrink-0 text-13 whitespace-nowrap text-accent-primary hover:underline"
         onClick={() => {
           try {
             window.localStorage.setItem(key, "1");

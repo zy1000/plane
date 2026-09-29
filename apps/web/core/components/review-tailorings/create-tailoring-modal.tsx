@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { AlertCircle, Scissors, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TCreateReviewTailoringPayload } from "@plane/types";
@@ -12,12 +11,19 @@ import { useReviewTailoringStageOptions } from "@/hooks/store/use-review-tailori
 import { CreateTailoringStageSelect } from "./create-stage-select";
 import { toDescriptionHtml } from "./description-text";
 import { TAILORING_KIND_ORDER } from "./list/filters";
-import { TailoringNextSteps } from "./list/next-steps";
+import {
+  MODAL_INPUT,
+  MODAL_TEXTAREA,
+  RadioOption,
+  TailoringField,
+  TailoringModalFooter,
+  TailoringModalHeader,
+} from "./tailoring-detail/modal-frame";
 
 const I18N = "review_tailoring.form";
 
 /**
- * 新建裁剪表：标题、裁剪类型必填，描述选填，下面亮出建好之后的三步。
+ * 新建裁剪表：标题、裁剪类型必填，描述选填。
  *
  * 过程评审裁剪不绑阶段 —— 纵轴一次铺开全部阶段的模板树。O阶段评审裁剪要再选一个阶段
  * （只能是阶段类型为 O阶段 的项目阶段，单选），纵轴只在这个阶段下展开。评审与产品不在
@@ -82,27 +88,15 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
 
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
-      <div className="flex items-center gap-3.5 px-6 pt-5.5 pb-4.5">
-        <span className="grid size-10.5 shrink-0 place-items-center rounded-lg bg-accent-subtle text-accent-primary">
-          <Scissors className="size-5" />
-        </span>
-        <h2 className="flex-1 text-18 font-semibold text-primary">{t(`${I18N}.create_title`)}</h2>
-        <button
-          type="button"
-          aria-label={t("cancel")}
-          className="grid size-7 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover"
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </button>
-      </div>
+      <TailoringModalHeader title={t(`${I18N}.create_title`)} onClose={onClose} />
 
-      <div className="flex flex-col gap-4.5 px-6 pb-1.5">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="create-tailoring-title" className="text-13 font-medium text-secondary">
-            {t(`${I18N}.title_label`)}
-            <span className="ml-1 text-danger-primary">*</span>
-          </label>
+      <div className="flex flex-col gap-4.5 px-6 py-5">
+        <TailoringField
+          label={t(`${I18N}.title_label`)}
+          htmlFor="create-tailoring-title"
+          required
+          error={titleError ? t(`${I18N}.title_required`) : undefined}
+        >
           <input
             id="create-tailoring-title"
             autoFocus
@@ -112,83 +106,53 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
               if (event.key === "Enter") handleSubmit();
             }}
             placeholder={t(`${I18N}.title_placeholder`)}
-            className={cn(
-              "h-10 w-full rounded-lg border bg-surface-1 px-3 text-14 text-primary outline-none placeholder:text-placeholder",
-              "transition-shadow focus:ring-3",
-              titleError
-                ? "border-danger-strong focus:ring-danger-primary/10"
-                : "border-subtle focus:border-accent-strong focus:ring-accent-primary/15"
-            )}
+            className={cn(MODAL_INPUT, titleError && "border-danger-strong focus:border-danger-strong")}
           />
-          {titleError && (
-            <span className="flex items-center gap-1 text-12 text-danger-primary">
-              <AlertCircle className="size-3.5" />
-              {t(`${I18N}.title_required`)}
-            </span>
-          )}
-        </div>
+        </TailoringField>
 
         <div className="flex flex-col gap-1.5">
           <span id="create-tailoring-kind-label" className="text-13 font-medium text-secondary">
             {t(`${I18N}.kind_label`)}
             <span className="ml-1 text-danger-primary">*</span>
           </span>
-          <div role="radiogroup" aria-labelledby="create-tailoring-kind-label" className="grid grid-cols-2 gap-2.5">
-            {TAILORING_KIND_ORDER.map((option) => {
-              const selected = kind === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => {
-                    setKind(option);
-                    setStageId(null);
-                  }}
-                  className={cn(
-                    "flex flex-col items-start gap-1 rounded-lg border px-3.5 py-3 text-left transition-colors",
-                    selected
-                      ? "border-accent-strong bg-accent-subtle"
-                      : kindError
-                        ? "border-danger-strong bg-surface-1 hover:bg-layer-1"
-                        : "border-subtle bg-surface-1 hover:bg-layer-1"
-                  )}
-                >
-                  <span className={cn("text-14 font-medium", selected ? "text-accent-primary" : "text-primary")}>
-                    {t(`review_tailoring.kind.${option}`)}
-                  </span>
-                  <span className="text-12 leading-relaxed text-tertiary">{t(`${I18N}.kind_hint_${option}`)}</span>
-                </button>
-              );
-            })}
+          <div role="radiogroup" aria-labelledby="create-tailoring-kind-label" className="flex h-9 items-center gap-8">
+            {TAILORING_KIND_ORDER.map((option) => (
+              <RadioOption
+                key={option}
+                checked={kind === option}
+                onSelect={() => {
+                  setKind(option);
+                  setStageId(null);
+                }}
+              >
+                {t(`review_tailoring.kind.${option}`)}
+              </RadioOption>
+            ))}
           </div>
           {kindError ? (
-            <span className="flex items-center gap-1 text-12 text-danger-primary">
-              <AlertCircle className="size-3.5" />
-              {t(`${I18N}.kind_required`)}
-            </span>
+            <span className="text-12 text-danger-primary">{t(`${I18N}.kind_required`)}</span>
           ) : (
-            !needsStage && <span className="text-12 text-placeholder">{t(`${I18N}.kind_locked`)}</span>
+            !needsStage && <span className="text-12 text-tertiary">{t(`${I18N}.kind_locked`)}</span>
           )}
         </div>
 
         {needsStage && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-13 font-medium text-secondary">
-              {t(`${I18N}.stage_label`)}
-              <span className="ml-1 text-danger-primary">*</span>
-            </span>
+          <TailoringField
+            label={t(`${I18N}.stage_label`)}
+            required
+            error={stageError && !noStageOptions ? t(`${I18N}.stage_required`) : undefined}
+            hint={t(`${I18N}.kind_stage_locked`)}
+          >
             {noStageOptions ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-strong px-3.5 py-2.5 text-13 text-secondary">
+              <p className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-subtle px-3 py-2 text-13 text-secondary">
                 {t(`${I18N}.stage_empty`)}
                 <Link
                   href={`/${workspaceSlug}/projects/${projectId}/stages`}
-                  className="font-medium text-accent-primary hover:underline"
+                  className="text-accent-primary hover:underline"
                 >
                   {t(`${I18N}.stage_empty_action`)}
                 </Link>
-              </div>
+              </p>
             ) : (
               <CreateTailoringStageSelect
                 options={stageOptions ?? []}
@@ -197,43 +161,21 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
                 onChange={setStageId}
               />
             )}
-            {stageError && !noStageOptions ? (
-              <span className="flex items-center gap-1 text-12 text-danger-primary">
-                <AlertCircle className="size-3.5" />
-                {t(`${I18N}.stage_required`)}
-              </span>
-            ) : (
-              <span className="text-12 text-placeholder">{t(`${I18N}.kind_stage_locked`)}</span>
-            )}
-          </div>
+          </TailoringField>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="create-tailoring-description" className="text-13 font-medium text-secondary">
-            {t(`${I18N}.description_label`)}
-            <span className="ml-1.5 text-12 font-normal text-placeholder">{t(`${I18N}.optional`)}</span>
-          </label>
+        <TailoringField label={t(`${I18N}.description_label`)} htmlFor="create-tailoring-description">
           <textarea
             id="create-tailoring-description"
-            rows={3}
+            rows={4}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            className={cn(
-              "w-full resize-none rounded-lg border border-subtle bg-surface-1 px-3 py-2 text-14 leading-relaxed text-primary outline-none",
-              "transition-shadow focus:border-accent-strong focus:ring-3 focus:ring-accent-primary/15"
-            )}
+            className={MODAL_TEXTAREA}
           />
-        </div>
-
-        <div className="flex flex-col gap-2.5 rounded-lg border border-subtle bg-surface-2 px-3.5 py-3">
-          <span className="text-11 font-semibold tracking-wider text-placeholder">
-            {t("review_tailoring.steps.heading")}
-          </span>
-          <TailoringNextSteps highlightFirst />
-        </div>
+        </TailoringField>
       </div>
 
-      <div className="flex items-center justify-end gap-2.5 px-6 pt-4 pb-5">
+      <TailoringModalFooter>
         <Button variant="secondary" size="xl" onClick={onClose}>
           {t("cancel")}
         </Button>
@@ -246,7 +188,7 @@ export const CreateTailoringModal = observer(function CreateTailoringModal({
         >
           {t(`${I18N}.submit`)}
         </Button>
-      </div>
+      </TailoringModalFooter>
     </ModalCore>
   );
 });
