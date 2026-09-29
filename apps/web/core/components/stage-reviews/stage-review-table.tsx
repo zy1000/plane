@@ -1,37 +1,45 @@
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { MessageSquare, Paperclip } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-import type { TStageReview } from "@plane/types";
+import type { TStageReview, TUpdateStageReviewPayload } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
 import { Checkbox } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { useColumnWidths } from "@/components/common/resizable-table-head";
 import { stageReviewsPath } from "@/components/reviews/routes";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import type { TStageReviewFlashedCells } from "./bulk/use-stage-review-bulk-edit";
 import type { TStageReviewColumn } from "./display/display-settings";
-import { StageReviewPeopleCell } from "./people";
+import { StageReviewDatesCell } from "./dates-cell";
+import { RoleMemberSelect } from "./detail/role-member-select";
 import type { TStageReviewRow } from "./stage-review-rows";
 import { StageReviewStatusIcon } from "./status-icon";
 
 const I18N = "stage_review";
 
+/** 宽度含格子左右各 12px 内边距（格子之间画竖线，不再用 gap 隔开） */
 const COLUMN_WIDTH: Record<TStageReviewColumn, string> = {
-  product: "minmax(120px, 180px)",
-  project: "minmax(150px, 200px)",
-  stage: "minmax(88px, 120px)",
-  status: "96px",
-  result: "84px",
-  leader: "148px",
-  auditor: "148px",
-  dates: "120px",
-  attachment_count: "56px",
-  comment_count: "56px",
-  kind: "104px",
-  tailoring: "minmax(120px, 180px)",
-  updated_at: "80px",
+  product: "minmax(132px, 192px)",
+  project: "minmax(162px, 212px)",
+  stage: "minmax(100px, 132px)",
+  status: "108px",
+  result: "96px",
+  leader: "160px",
+  auditor: "160px",
+  dates: "132px",
+  attachment_count: "68px",
+  comment_count: "68px",
+  kind: "116px",
+  tailoring: "minmax(132px, 192px)",
+  updated_at: "92px",
 };
+
+const NO_DEFAULT_WIDTHS: Record<string, number> = {};
+
+/** 同工作项表格：每格左边一道竖线，与行底线一起画出格子 */
+const CELL_CLASS = "flex h-full min-w-0 items-center border-l border-subtle px-3";
 
 /** 结论只上色不加底：一列药丸挤在一起太吵，颜色已经够区分 */
 const RESULT_TEXT: Record<EStageReviewResult, string> = {
@@ -41,7 +49,8 @@ const RESULT_TEXT: Record<EStageReviewResult, string> = {
   [EStageReviewResult.WAIVED]: "text-13 font-medium text-tertiary",
 };
 
-const Empty = () => <span className="text-13 text-placeholder">—</span>;
+/** 没有值的格子留空，不画「—」 */
+const Empty = () => null;
 
 const shortDate = (value: string) => value.slice(5, 10);
 
@@ -96,6 +105,49 @@ export type TStageReviewTableSelection = {
   onToggleAll: () => void;
 };
 
+/** 标题列拖宽时的下限；其它列统一 {@link MIN_COLUMN_WIDTH} */
+const MIN_TITLE_WIDTH = 160;
+const MIN_COLUMN_WIDTH = 64;
+const TITLE_KEY = "title";
+
+/**
+ * 表头格右缘 8px 的拖宽热区，悬停出一道蓝线，交互同工作项表格。宽度量的是所在表头格，
+ * 拖动期间整页禁选，免得把表头文字刷成选中态。
+ */
+const ResizeHandle = ({ minWidth, onResize }: { minWidth: number; onResize: (width: number) => void }) => {
+  const handleMouseDown = (event: ReactMouseEvent<HTMLSpanElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
+    const previousCursor = document.body.style.cursor;
+    const previousSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (moveEvent: MouseEvent) =>
+      onResize(Math.round(Math.max(minWidth, startWidth + moveEvent.clientX - startX)));
+    const handleMouseUp = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousSelect;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  return (
+    <span
+      role="presentation"
+      onMouseDown={handleMouseDown}
+      className="group/resize absolute top-0 -right-1 z-[1] h-full w-2 cursor-col-resize"
+    >
+      <span className="absolute top-0 left-1/2 h-full w-px bg-transparent transition-colors group-hover/resize:bg-accent-primary" />
+    </span>
+  );
+};
+
 const Count = ({ icon, value }: { icon: ReactNode; value: number }) =>
   value > 0 ? (
     <span className="flex items-center gap-1 text-12 tabular-nums text-tertiary">
@@ -120,6 +172,7 @@ export const StageReviewTable = ({
   onOpen,
   selection,
   flashedCells,
+  onUpdateReview,
 }: {
   workspaceSlug: string;
   rows: TStageReviewRow[];
@@ -134,11 +187,22 @@ export const StageReviewTable = ({
   selection?: TStageReviewTableSelection;
   /** 批量改完后闪一下改到的格子 */
   flashedCells?: TStageReviewFlashedCells | null;
+  /** 就地改负责人 / 审核人 / 计划日期；不传则这几格只读（产品页 / 没有维护权限） */
+  onUpdateReview?: (review: TStageReview, payload: TUpdateStageReviewPayload) => void;
 }) => {
   const { t } = useTranslation();
-  const gridTemplateColumns = ["minmax(240px, 1fr)", ...columns.map((column) => COLUMN_WIDTH[column])].join(" ");
+  // 列宽可拖：拖过的列按像素定宽，没拖过的沿用默认；和工作项表格一样只存在组件里，刷新回默认
+  const { widths, setWidth } = useColumnWidths(NO_DEFAULT_WIDTHS);
+  const widthOf = (key: string, fallback: string) => (widths[key] ? `${widths[key]}px` : fallback);
+  const gridTemplateColumns = [
+    widthOf(TITLE_KEY, "minmax(240px, 1fr)"),
+    ...columns.map((column) => widthOf(column, COLUMN_WIDTH[column])),
+  ].join(" ");
   const openInProject = t(`${I18N}.detail.open_in_project`);
   const hasSelection = Boolean(selection && selection.selectedSet.size > 0);
+  // 同工作项表格：人与日期点格子就地改；没有维护权限、或已评审（终态）时只读
+  const isEditable = (review: TStageReview) =>
+    Boolean(onUpdateReview) && review.status !== EStageReviewStatus.COMPLETED;
 
   const renderCell = (column: TStageReviewColumn, review: TStageReview) => {
     switch (column) {
@@ -180,29 +244,38 @@ export const StageReviewTable = ({
       case "result":
         return review.result ? <span className={RESULT_TEXT[review.result]}>{t(`${I18N}.result.${review.result}`)}</span> : <Empty />;
       case "leader":
+      case "auditor": {
+        const isLeader = column === "leader";
         return (
-          <StageReviewPeopleCell
-            users={review.leader_details}
-            hint={t(`${I18N}.list.people_hint_leader`, { count: review.leader_details.length })}
+          <RoleMemberSelect
+            variant="cell"
+            workspaceSlug={workspaceSlug}
+            projectId={review.project_id}
+            reviewId={review.id}
+            role={column}
+            value={isLeader ? review.leader_ids : review.auditor_ids}
+            valueDetail={isLeader ? review.leader_details : review.auditor_details}
+            placeholder={t(`${I18N}.display.property.${column}`)}
+            disabled={!isEditable(review)}
+            onChange={(userIds) =>
+              onUpdateReview?.(review, isLeader ? { leader_ids: userIds } : { auditor_ids: userIds })
+            }
           />
-        );
-      case "auditor":
-        return (
-          <StageReviewPeopleCell
-            users={review.auditor_details}
-            hint={t(`${I18N}.list.people_hint_auditor`, { count: review.auditor_details.length })}
-          />
-        );
-      case "dates": {
-        if (!review.start_date && !review.end_date) return <Empty />;
-        const isLate =
-          Boolean(review.end_date) && review.end_date! < today && review.status !== EStageReviewStatus.COMPLETED;
-        return (
-          <span className={isLate ? "text-13 tabular-nums text-danger-primary" : "text-13 tabular-nums text-secondary"}>
-            {[review.start_date, review.end_date].map((value) => (value ? shortDate(value) : "—")).join(" → ")}
-          </span>
         );
       }
+      case "dates":
+        return (
+          <StageReviewDatesCell
+            start={review.start_date}
+            end={review.end_date}
+            isLate={
+              Boolean(review.end_date) && review.end_date! < today && review.status !== EStageReviewStatus.COMPLETED
+            }
+            placeholder={t(`${I18N}.display.property.dates`)}
+            disabled={!isEditable(review)}
+            onChange={(dates) => onUpdateReview?.(review, dates)}
+          />
+        );
       case "attachment_count":
         return <Count icon={<Paperclip className="size-3.5" />} value={review.attachment_count} />;
       case "comment_count":
@@ -230,7 +303,7 @@ export const StageReviewTable = ({
   return (
     <div className="min-w-fit">
       <div
-        className="group/header sticky top-0 z-[2] grid h-9 items-center gap-x-3 border-b border-subtle bg-layer-1 px-6 text-12 text-tertiary"
+        className="group/header sticky top-0 z-[2] grid h-9 items-center border-b border-subtle bg-layer-1 text-12 text-tertiary"
         style={{ gridTemplateColumns }}
       >
         {selection && (
@@ -243,10 +316,16 @@ export const StageReviewTable = ({
             onToggle={selection.onToggleAll}
           />
         )}
-        <span>{t(`${I18N}.table.title`)}</span>
+        <span className="relative flex h-full min-w-0 items-center pr-3 pl-6">
+          <span className="truncate">{t(`${I18N}.table.title`)}</span>
+          <ResizeHandle minWidth={MIN_TITLE_WIDTH} onResize={(width) => setWidth(TITLE_KEY, width)} />
+        </span>
         {columns.map((column) => (
-          <span key={column} className="truncate">
-            {column === "stage" ? t(`${I18N}.display.group.stage`) : t(`${I18N}.display.property.${column}`)}
+          <span key={column} className={cn(CELL_CLASS, "relative")}>
+            <span className="truncate">
+              {column === "stage" ? t(`${I18N}.display.group.stage`) : t(`${I18N}.display.property.${column}`)}
+            </span>
+            <ResizeHandle minWidth={MIN_COLUMN_WIDTH} onResize={(width) => setWidth(column, width)} />
           </span>
         ))}
       </div>
@@ -258,7 +337,7 @@ export const StageReviewTable = ({
           <div
             key={review.id}
             className={cn(
-              "group/row relative grid h-11 items-center gap-x-3 border-b border-subtle px-6 transition-colors",
+              "group/row relative grid h-11 items-center border-b border-subtle transition-colors",
               review.id === activeReviewId || selection?.selectedSet.has(review.id) ? "bg-accent-subtle" : "hover:bg-layer-1",
               carried && "opacity-60"
             )}
@@ -274,10 +353,12 @@ export const StageReviewTable = ({
                 onToggle={() => selection.onToggle(review.id)}
               />
             )}
-            <span className={cn("relative flex h-full min-w-0 items-center gap-1.5", depth === 1 && "pl-7")}>
+            <span
+              className={cn("relative flex h-full min-w-0 items-center gap-1.5 pr-3", depth === 1 ? "pl-[52px]" : "pl-6")}
+            >
               {depth === 1 && (
                 <span
-                  className="absolute top-0 left-2.5 h-1/2 w-3 rounded-bl-md border-b border-l border-subtle"
+                  className="absolute top-0 left-[34px] h-1/2 w-3 rounded-bl-md border-b border-l border-subtle"
                   aria-hidden
                 />
               )}
@@ -302,10 +383,7 @@ export const StageReviewTable = ({
             {columns.map((column) => (
               <span
                 key={column}
-                className={cn(
-                  "-mx-1.5 flex h-8 min-w-0 items-center rounded px-1.5 transition-colors duration-700",
-                  flashed?.has(column) && "bg-success-subtle"
-                )}
+                className={cn(CELL_CLASS, "transition-colors duration-700", flashed?.has(column) && "bg-success-subtle")}
               >
                 {renderCell(column, review)}
               </span>

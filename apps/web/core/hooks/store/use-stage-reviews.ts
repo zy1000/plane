@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { TStageReview, TStageReviewStageSummary } from "@plane/types";
+import type { TStageReview, TStageReviewStageSummary, TUpdateStageReviewPayload } from "@plane/types";
 import { StageReviewService } from "@/services/stage-review.service";
 
 const service = new StageReviewService();
@@ -106,5 +106,14 @@ export const useStageReviews = (
     setReviews((current) => current.map((item) => (byId.has(item.id) ? { ...item, ...byId.get(item.id) } : item)));
   }, []);
 
-  return { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews, refresh: fetchAll };
+  /** 列表格子里直接改人（负责人 / 审核人）：存完把那一行换掉；状态不变，不用刷阶段汇总 */
+  const updateReview = useCallback(
+    async (projectId: string, reviewId: string, payload: TUpdateStageReviewPayload) => {
+      if (!workspaceSlug) return;
+      applyReviews([await service.update(workspaceSlug, projectId, reviewId, payload)]);
+    },
+    [workspaceSlug, applyReviews]
+  );
+
+  return { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews, updateReview, refresh: fetchAll };
 };

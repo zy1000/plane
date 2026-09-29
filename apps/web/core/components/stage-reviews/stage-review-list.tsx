@@ -7,7 +7,8 @@ import { ClipboardCheck, SearchX } from "lucide-react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { IUserLite, TStageReview } from "@plane/types";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { IUserLite, TStageReview, TUpdateStageReviewPayload } from "@plane/types";
 import { EStageReviewStatus } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { CountChip } from "@/components/common/count-chip";
@@ -15,7 +16,7 @@ import { PageSearchInput } from "@/components/pages/list/search-input";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { PROJECT_ME_INFORMATION } from "@/constants/fetch-keys";
-import { useStageReviews } from "@/hooks/store/use-stage-reviews";
+import { getStageReviewError, useStageReviews } from "@/hooks/store/use-stage-reviews";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { StageReviewBulkBar } from "./bulk/stage-review-bulk-bar";
@@ -76,7 +77,7 @@ export const StageReviewList = observer(function StageReviewList({
   // 产品页跨项目：同名（甚至同 id）的模式阶段在不同项目里各成一组
   const crossProject = scope.kind === "product";
 
-  const { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews } = useStageReviews(
+  const { stages, reviews, linkedProjectIds, isLoading, error, applyReview, applyReviews, updateReview } = useStageReviews(
     workspaceSlug,
     scopeKind,
     scopeId
@@ -210,6 +211,17 @@ export const StageReviewList = observer(function StageReviewList({
   const stageLabelById = useMemo(() => new Map(stages.map((stage) => [stage.stage_id, stage.label])), [stages]);
   const stageLabelOf = useCallback((stageId: string) => stageLabelById.get(stageId), [stageLabelById]);
 
+  // 表格里就地改负责人 / 审核人 / 计划日期：成功不打扰（格子本身就是回执），失败弹 toast
+  const handleUpdateReview = (review: TStageReview, payload: TUpdateStageReviewPayload) =>
+    void updateReview(review.project_id, review.id, payload).catch((err: unknown) => {
+      const { message, code } = getStageReviewError(err);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t(`${I18N}.toast.failed`),
+        message: code ? t(`${I18N}.errors.${code}`, { defaultValue: message }) : message,
+      });
+    });
+
   const handleClearAll = () => {
     setSearch("");
     void filter.clearFilters();
@@ -287,6 +299,7 @@ export const StageReviewList = observer(function StageReviewList({
         onOpen={setOpenReviewId}
         selection={tableSelection}
         flashedCells={bulkEdit.flashedCells}
+        onUpdateReview={canBulkEdit ? handleUpdateReview : undefined}
       />
     );
   };

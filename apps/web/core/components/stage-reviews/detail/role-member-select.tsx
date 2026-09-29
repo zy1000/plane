@@ -4,7 +4,7 @@ import type { IUserLite, TStageReviewCandidates } from "@plane/types";
 import { Avatar, CustomSearchSelect } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { StageReviewService } from "@/services/stage-review.service";
-import { StageReviewPeople } from "../people";
+import { StageReviewPeople, StageReviewPeopleCell } from "../people";
 import { INLINE_FIELD_CLASS } from "./stage-review-content";
 
 const service = new StageReviewService();
@@ -32,6 +32,9 @@ const MemberLabel = ({ user }: { user: IUserLite }) => (
  *
  * 勾选先落在本地草稿里，**关上下拉才保存一次**：下拉算新名单用的是传进去的 value，
  * 每点一下就保存的话，连点两个人时第二下拿到的还是旧名单，会把第一个人盖掉。
+ *
+ * `variant="cell"` 给列表表格用，按钮长得同工作项表格的人员格子（见 `StageReviewPeopleCell`）。
+ * 一屏几十行不能每行都预拉候选人，改成鼠标移上去再拉。
  */
 export const RoleMemberSelect = ({
   workspaceSlug,
@@ -42,6 +45,8 @@ export const RoleMemberSelect = ({
   valueDetail,
   disabled,
   onChange,
+  variant = "field",
+  placeholder,
 }: {
   workspaceSlug: string;
   projectId: string;
@@ -51,6 +56,9 @@ export const RoleMemberSelect = ({
   valueDetail: IUserLite[];
   disabled?: boolean;
   onChange: (userIds: string[]) => void;
+  variant?: "field" | "cell";
+  /** cell：没人时灰字显示的列名 */
+  placeholder?: string;
 }) => {
   const { t } = useTranslation();
   const [candidates, setCandidates] = useState<TStageReviewCandidates | null>(null);
@@ -78,7 +86,7 @@ export const RoleMemberSelect = ({
   // 换一条评审时丢掉上一条的候选人（角色名与产品都变了），并预拉这一条的
   useEffect(() => {
     setCandidates(null);
-    if (disabled) return;
+    if (disabled || variant === "cell") return;
     let cancelled = false;
     void service
       .listCandidates(workspaceSlug, projectId, reviewId, role)
@@ -89,7 +97,7 @@ export const RoleMemberSelect = ({
     return () => {
       cancelled = true;
     };
-  }, [workspaceSlug, projectId, reviewId, role, disabled]);
+  }, [workspaceSlug, projectId, reviewId, role, disabled, variant]);
 
   // 已选的人不一定还在候选里（角色后来换了人）：并进选项，否则取消不掉
   const users = useMemo(() => {
@@ -100,7 +108,12 @@ export const RoleMemberSelect = ({
     return merged;
   }, [candidates, valueDetail]);
 
+  const isCell = variant === "cell";
   if (disabled) {
+    if (isCell) {
+      // 只读格子没有人就留空；可改的格子才用灰字列名提示「点这里指定」
+      return valueDetail.length > 0 ? <StageReviewPeopleCell users={valueDetail} placeholder="" /> : null;
+    }
     return (
       <StageReviewPeople users={valueDetail} unassigned={t(`${I18N}.detail.unassigned`)} size="md" showEmptyIcon={false} />
     );
@@ -113,7 +126,7 @@ export const RoleMemberSelect = ({
   }));
   const draftUsers = draft.flatMap((id) => users.find((user) => user.id === id) ?? []);
 
-  return (
+  const select = (
     <CustomSearchSelect
       multiple
       value={draft}
@@ -133,8 +146,15 @@ export const RoleMemberSelect = ({
       }}
       options={options}
       maxHeight="lg"
-      buttonClassName={cn(INLINE_FIELD_CLASS, "justify-between")}
       noResultsMessage={t(`${I18N}.detail.no_candidates`)}
+      {...(isCell
+        ? {
+            className: "h-full w-full min-w-0",
+            // 格子左右各留了 px-3，按钮反向撑出去，悬停底色铺满整格（同工作项表格）
+            customButtonClassName: "-mx-3 h-full w-[calc(100%+1.5rem)] min-w-0 justify-start rounded-none px-3",
+            customButton: <StageReviewPeopleCell users={draftUsers} placeholder={placeholder ?? ""} />,
+          }
+        : { buttonClassName: cn(INLINE_FIELD_CLASS, "justify-between") })}
       label={
         <StageReviewPeople
           users={draftUsers}
@@ -144,5 +164,12 @@ export const RoleMemberSelect = ({
         />
       }
     />
+  );
+  return isCell ? (
+    <span className="flex h-full w-full min-w-0" onMouseEnter={fetchCandidates}>
+      {select}
+    </span>
+  ) : (
+    select
   );
 };

@@ -2161,8 +2161,6 @@ export default {
       clear_filters: "清除全部",
       me: "我",
       unassigned: "未指定",
-      people_hint_leader: "负责人 · {count} 人，任一人可评审",
-      people_hint_auditor: "审核人 · {count} 人，任一人可审核",
       no_result: "暂无结论",
       empty_filtered_title: "没有符合条件的评审",
       empty_filtered_description: "换个筛选条件，或清除全部筛选。",
