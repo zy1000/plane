@@ -22,16 +22,47 @@ const Group = ({ title, children }: { title?: string; children: React.ReactNode 
   </div>
 );
 
-/** 一行一项：图标 + 标签固定 96px，值靠左成一列，行高 32 —— 标签 13 号灰、值 14 号黑，与正文同一把尺子 */
-const Row = ({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) => (
+/**
+ * 一行一项：图标 + 标签固定 96px，值靠左成一列，行高 32 —— 标签 13 号灰、值 14 号黑，与正文同一把尺子。
+ * `hint` 挂在值下面一行（负责人 / 审核人没指定时的「裁剪表建议」）。
+ */
+const Row = ({
+  icon: Icon,
+  label,
+  hint,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) => (
   <div className="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center">
     <span className="flex items-center gap-2 text-13 text-tertiary">
       <Icon className="size-3.75 shrink-0 text-placeholder" strokeWidth={1.8} />
       {label}
     </span>
     <div className="min-w-0 text-14 text-primary">{children}</div>
+    {hint && <div className="col-start-2 -mt-0.5 mb-1.5 min-w-0">{hint}</div>}
   </div>
 );
+
+/** 中文界面日期写成「2026年9月18日」，其它语言沿用 renderFormattedDate 的默认格式 */
+const fullDateToken = (locale: string) => (locale.toLowerCase().startsWith("zh") ? "yyyy年M月d日" : undefined);
+
+/**
+ * 模板角色快照：负责人 / 审核人还没指定时，告诉用户该去找哪个岗位。只是提示，点不了 ——
+ * 角色不是人，候选人在下拉里（按角色排在前面）。
+ */
+const RoleHint = ({ role }: { role: string }) => {
+  const { t } = useTranslation();
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-12 text-tertiary">
+      <span className="shrink-0">{t(`${I18N}.detail.role_suggested`)}</span>
+      <span className="truncate rounded-sm bg-accent-subtle px-1.5 leading-5 font-medium text-accent-primary">{role}</span>
+    </span>
+  );
+};
 
 /** 计划日期的一格：能改就是日期下拉，空值显示灰字「设置日期」；不能改就是纯文本 */
 const PlanDate = ({
@@ -49,8 +80,14 @@ const PlanDate = ({
   placeholder: string;
   onChange: (next: string | null) => void;
 }) => {
+  const { currentLocale } = useTranslation();
+  const formatToken = fullDateToken(currentLocale);
   if (!editable) {
-    return <span className={cn("tabular-nums", !value && "text-placeholder")}>{value ? renderFormattedDate(value) : "—"}</span>;
+    return (
+      <span className={cn("tabular-nums", !value && "text-placeholder")}>
+        {value ? renderFormattedDate(value, formatToken) : "—"}
+      </span>
+    );
   }
   return (
     <DateDropdown
@@ -59,6 +96,7 @@ const PlanDate = ({
       maxDate={getDate(maxDate)}
       onChange={(next) => onChange(next ? renderFormattedPayloadDate(next) : null)}
       placeholder={placeholder}
+      formatToken={formatToken}
       buttonVariant="transparent-with-text"
       // 外层按钮不给宽度会收缩到比文字还窄，里面的 truncate 就把日期截成一半（工作项侧栏同样要传 w-full）
       buttonContainerClassName="w-full text-left"
@@ -91,7 +129,7 @@ export const StageReviewSidebar = ({
   editable: boolean;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
 }) => {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const isOStage = O_STAGE_KINDS.includes(detail.kind);
 
   return (
@@ -120,7 +158,11 @@ export const StageReviewSidebar = ({
             onChange={(stageId) => onUpdate({ stage_id: stageId })}
           />
         </Row>
-        <Row icon={UserRound} label={t(`${I18N}.fields.leader`)}>
+        <Row
+          icon={UserRound}
+          label={t(`${I18N}.fields.leader`)}
+          hint={detail.leader_ids.length === 0 && detail.leader_role && <RoleHint role={detail.leader_role} />}
+        >
           <RoleMemberSelect
             workspaceSlug={workspaceSlug}
             projectId={projectId}
@@ -132,7 +174,11 @@ export const StageReviewSidebar = ({
             onChange={(userIds) => onUpdate({ leader_ids: userIds })}
           />
         </Row>
-        <Row icon={UserRoundCheck} label={t(`${I18N}.fields.auditor`)}>
+        <Row
+          icon={UserRoundCheck}
+          label={t(`${I18N}.fields.auditor`)}
+          hint={detail.auditor_ids.length === 0 && detail.auditor_role && <RoleHint role={detail.auditor_role} />}
+        >
           <RoleMemberSelect
             workspaceSlug={workspaceSlug}
             projectId={projectId}
@@ -201,18 +247,15 @@ export const StageReviewSidebar = ({
         )}
       </Group>
 
-      {/* 来源、模板角色、创建时间：查证用的，压成底部两行小字 */}
+      {/* 来源与创建时间：查证用的，压成底部一行小字 */}
       <p className="mt-auto pt-2 text-12 leading-relaxed text-placeholder">
-        {[
-          detail.is_manual ? t(`${I18N}.detail.source_manual`) : t(`${I18N}.detail.source_tailoring`),
-          // 角色名是模板快照：负责人没解析出人时，至少知道该去找哪个岗位
-          detail.leader_role && t(`${I18N}.detail.role_leader`, { role: detail.leader_role }),
-          detail.auditor_role && t(`${I18N}.detail.role_auditor`, { role: detail.auditor_role }),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-        <br />
-        <span className="tabular-nums">{t(`${I18N}.detail.created_at`, { date: renderFormattedDate(detail.created_at) })}</span>
+        {detail.is_manual ? t(`${I18N}.detail.source_manual`) : t(`${I18N}.detail.source_tailoring`)}
+        {" · "}
+        <span className="tabular-nums">
+          {t(`${I18N}.detail.created_at`, {
+            date: renderFormattedDate(detail.created_at, fullDateToken(currentLocale)),
+          })}
+        </span>
       </p>
     </aside>
   );

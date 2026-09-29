@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import { ListOrdered, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -16,7 +15,7 @@ const EMPTY_RICH_TEXT = "<p></p>";
 const I18N = "stage_review";
 
 /** 富文本是不是「等于没写」：编辑器清空后留下的是 `<p></p>` 而不是空串 */
-const isBlankRichText = (html: string | null | undefined) => {
+export const isBlankRichText = (html: string | null | undefined) => {
   const text = (html ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
   return text.length === 0 && !/<(img|image-component|video|table)\b/i.test(html ?? "");
 };
@@ -79,39 +78,31 @@ export const BlockAction = ({
 export const INLINE_FIELD_CLASS =
   "-mx-2 h-7 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 text-14 hover:bg-layer-2";
 
-const EMPTY_LINE_CLASS = "-mx-2 flex h-8 w-fit max-w-full items-center gap-2 rounded-md px-2 text-14 text-placeholder";
+/** 空态一行灰字，不画空输入框、不画虚线框 */
+export const EmptyLine = ({ text }: { text: string }) => (
+  <p className="-mx-2 flex h-8 w-fit max-w-full items-center gap-2 rounded-md px-2 text-14 text-placeholder">{text}</p>
+);
 
 /**
- * 空态一律一行灰字：能改时是可点的「图标 + 添加…」，悬停出浅底；只读时是一行「暂未填写」。
- * 不画空输入框、不画虚线框 —— 空着的评审本来就空，框子只会让它显得又空又乱。
+ * 正文里可以「空着不占地」的几项：没内容时不出区块，收进标题区下方那条「补充」按钮条，
+ * 点了才展开成区块（描述 / 工作指引出编辑框，成品 / 组件版本加一行，附件开文件选择）。
  */
-export const EmptyLine = ({
-  icon: Icon,
-  text,
-  disabled,
-  onClick,
-}: {
-  icon?: LucideIcon;
-  text: string;
-  disabled?: boolean;
-  onClick?: () => void;
-}) =>
-  onClick ? (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(EMPTY_LINE_CLASS, "transition hover:bg-layer-2 hover:text-tertiary disabled:opacity-50")}
-    >
-      {Icon && <Icon className="size-3.5 shrink-0" />}
-      <span className="truncate">{text}</span>
-    </button>
-  ) : (
-    <p className={EMPTY_LINE_CLASS}>{text}</p>
-  );
+export type TStageReviewSupplement =
+  | "description"
+  | "work_instruction"
+  | "finished_goods"
+  | "component_versions"
+  | "attachments";
+
+/** 描述 / 工作指引：空着且没从「补充」条点开时整块不渲染 */
+type TSupplementProps = {
+  requested: ReadonlySet<TStageReviewSupplement>;
+  /** 点开后又什么都没写就失焦：收回「补充」条 */
+  onDismiss: (key: TStageReviewSupplement) => void;
+};
 
 /**
- * 抽屉正文里「要读的那两块」：描述与工作指引。
+ * 抽屉正文里「要读的那两块」：描述与工作指引。空着时不出区块，入口在「补充」条。
  *
  * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传）；
  * 工作指引是纯文本，模型上就是 TextField，没有 HTML 列可存。
@@ -123,7 +114,9 @@ export const StageReviewContent = ({
   detail,
   editable,
   onUpdate,
-}: {
+  requested,
+  onDismiss,
+}: TSupplementProps & {
   workspaceSlug: string;
   workspaceId: string;
   projectId: string;
@@ -139,16 +132,26 @@ export const StageReviewContent = ({
       detail={detail}
       editable={editable}
       onUpdate={onUpdate}
+      isRequested={requested.has("description")}
+      onDismiss={() => onDismiss("description")}
     />
-    <WorkInstruction detail={detail} editable={editable} onUpdate={onUpdate} />
+    <WorkInstruction
+      detail={detail}
+      editable={editable}
+      onUpdate={onUpdate}
+      isRequested={requested.has("work_instruction")}
+      onDismiss={() => onDismiss("work_instruction")}
+    />
   </>
 );
+
+type TRequestProps = { isRequested: boolean; onDismiss: () => void };
 
 /**
  * 描述。内联图片走 PROJECT_DESCRIPTION 资产，与迭代描述（CycleRichTextEditor）同一个
  * 取舍：单开一个 entity_type 要连带改 FileAsset 外键、file_path 解析和资产目录树三处。
  *
- * 空着时只是一行「添加描述」，点了才挂编辑器；写完仍是空的，失焦后收回那一行。
+ * 空着时不出区块；从「补充」条点开才挂编辑器，写完仍是空的，失焦后收回「补充」条。
  *
  * 存在**焦点离开整块**时：contenteditable 的 focusout 会冒泡到外层 div，点工具栏按钮
  * 也算 focusout，所以要用 relatedTarget 判断焦点是不是还留在块内。
@@ -160,7 +163,9 @@ const DescriptionEditor = ({
   detail,
   editable,
   onUpdate,
-}: {
+  isRequested,
+  onDismiss,
+}: TRequestProps & {
   workspaceSlug: string;
   workspaceId: string;
   projectId: string;
@@ -173,16 +178,11 @@ const DescriptionEditor = ({
   const isBlank = isBlankRichText(detail.description_html);
   const saved = isBlank ? EMPTY_RICH_TEXT : (detail.description_html as string);
   const [draft, setDraft] = useState(saved);
-  const [isOpen, setIsOpen] = useState(false);
 
   // 换一条评审、或存完之后回灌
   useEffect(() => {
     setDraft(saved);
   }, [detail.id, saved]);
-
-  useEffect(() => {
-    setIsOpen(false);
-  }, [detail.id]);
 
   const handleUploadFile = useCallback(
     async (blockId: string | undefined, file: File) => {
@@ -214,32 +214,22 @@ const DescriptionEditor = ({
 
   const title = t(`${I18N}.fields.description`);
 
+  if (isBlank && !(editable && isRequested)) return null;
+
   if (!editable) {
     return (
       <Block title={title}>
-        {isBlank ? (
-          <EmptyLine text={t(`${I18N}.detail.empty_value`)} />
-        ) : (
-          <RichTextEditor
-            id={`stage_review_description_${detail.id}`}
-            editable={false}
-            initialValue={saved}
-            value={saved}
-            onChange={() => {}}
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            containerClassName={`!p-0 ${FIELD_LINE_CLASS} text-secondary`}
-          />
-        )}
-      </Block>
-    );
-  }
-
-  if (isBlank && !isOpen) {
-    return (
-      <Block title={title}>
-        <EmptyLine icon={Pencil} text={t(`${I18N}.detail.add_description`)} onClick={() => setIsOpen(true)} />
+        <RichTextEditor
+          id={`stage_review_description_${detail.id}`}
+          editable={false}
+          initialValue={saved}
+          value={saved}
+          onChange={() => {}}
+          workspaceSlug={workspaceSlug}
+          workspaceId={workspaceId}
+          projectId={projectId}
+          containerClassName={`!p-0 ${FIELD_LINE_CLASS} text-secondary`}
+        />
       </Block>
     );
   }
@@ -252,8 +242,8 @@ const DescriptionEditor = ({
           // 焦点还在块内（比如点了工具栏按钮）就不算改完
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
           if (draft !== saved) onUpdate({ description_html: draft });
-          // 什么都没写就收回成一行；写了东西则等保存回灌，不先收起免得闪一下空态
-          if (isBlankRichText(draft)) setIsOpen(false);
+          // 什么都没写就收回「补充」条；写了东西则等保存回灌
+          if (isBlankRichText(draft)) onDismiss();
         }}
       >
         <RichTextEditor
@@ -261,7 +251,7 @@ const DescriptionEditor = ({
           key={detail.id}
           id={`stage_review_description_${detail.id}`}
           editable
-          autofocus={isOpen}
+          autofocus={isBlank}
           initialValue={saved}
           value={null}
           onChange={(_json, html) => setDraft(html)}
@@ -288,7 +278,9 @@ const WorkInstruction = ({
   detail,
   editable,
   onUpdate,
-}: {
+  isRequested,
+  onDismiss,
+}: TRequestProps & {
   detail: TStageReviewDetail;
   editable: boolean;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
@@ -305,7 +297,12 @@ const WorkInstruction = ({
   const title = t(`${I18N}.fields.work_instruction`);
   const isBlank = !detail.work_instruction.trim();
 
-  if (editable && isOpen) {
+  // 从「补充」条点开、写完存上了：点开的使命完成，回到展示态
+  useEffect(() => {
+    if (isRequested && !isBlank) onDismiss();
+  }, [isRequested, isBlank, onDismiss]);
+
+  if (editable && (isOpen || (isRequested && isBlank))) {
     return (
       <Block title={title}>
         <div className={FIELD_BOX_CLASS}>
@@ -316,7 +313,10 @@ const WorkInstruction = ({
             onChange={(event) => setDraft(event.target.value)}
             onBlur={() => {
               if (draft !== detail.work_instruction) onUpdate({ work_instruction: draft });
-              else setIsOpen(false);
+              else {
+                setIsOpen(false);
+                onDismiss();
+              }
             }}
             placeholder={t(`${I18N}.detail.add_work_instruction`)}
             className={cn(
@@ -329,17 +329,7 @@ const WorkInstruction = ({
     );
   }
 
-  if (isBlank) {
-    return (
-      <Block title={title}>
-        {editable ? (
-          <EmptyLine icon={ListOrdered} text={t(`${I18N}.detail.add_work_instruction`)} onClick={() => setIsOpen(true)} />
-        ) : (
-          <EmptyLine text={t(`${I18N}.detail.empty_value`)} />
-        )}
-      </Block>
-    );
-  }
+  if (isBlank) return null;
 
   return (
     <Block

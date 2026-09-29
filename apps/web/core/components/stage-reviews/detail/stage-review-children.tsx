@@ -5,10 +5,11 @@ import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import type { TStageReviewChild, TStageReviewDetail } from "@plane/types";
 import { EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
-import { cn, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
+import { cn, renderFormattedPayloadDate } from "@plane/utils";
+import { formatShortDate } from "@/components/review-tailorings/list/tailoring-row";
 import { StageReviewResultBadge, StageReviewStatusBadge } from "../badges";
 import { StageReviewPeople } from "../people";
-import { STAGE_REVIEW_STATUS_FILL, StageReviewStatusIcon } from "../status-icon";
+import { STAGE_REVIEW_STATUS_FILL } from "../status-icon";
 import { Block } from "./stage-review-content";
 
 const I18N = "stage_review";
@@ -16,7 +17,7 @@ const COLLAPSED_STORAGE_KEY = "stage_review_children_collapsed";
 /** 默认最多列几项：区块高度和一张成品表差不多，详情不被十几行评审活动拉长 */
 const DEFAULT_VISIBLE = 5;
 
-const ROW_GRID = "grid grid-cols-[16px_minmax(0,1fr)_112px_96px_78px_84px_14px] items-center gap-x-3 px-3.5";
+const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_112px_96px_78px_84px_14px] items-center gap-x-3 px-3.5";
 
 /** 默认那几项先列谁：正在进行的（评审中 / 审核中）→ 未评审 → 已评审 */
 const ATTENTION_RANK: Record<EStageReviewStatus, number> = {
@@ -58,7 +59,7 @@ export const StageReviewChildren = ({
   getPath: (reviewId: string) => string;
   onOpenReview?: (reviewId: string) => void;
 }) => {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const [isCollapsed, setIsCollapsed] = useState(readCollapsed);
   const [showAll, setShowAll] = useState(false);
   const children = detail.children;
@@ -135,7 +136,6 @@ export const StageReviewChildren = ({
         <div className="overflow-x-auto rounded-lg border border-subtle">
           <div className="min-w-[640px]">
             <div className={cn(ROW_GRID, "h-8 bg-layer-1 text-12 font-medium text-tertiary")}>
-              <span />
               <span>{t(`${I18N}.detail.children_name`)}</span>
               <span>{t(`${I18N}.fields.leader`)}</span>
               <span>{t(`${I18N}.fields.end_date`)}</span>
@@ -153,7 +153,6 @@ export const StageReviewChildren = ({
                   onClick={(event) => handleOpen(event, child.id)}
                   className={cn(ROW_GRID, "group min-h-10 border-t border-subtle text-14 transition hover:bg-layer-1")}
                 >
-                  <StageReviewStatusIcon status={child.status} />
                   <span
                     title={child.title}
                     className={cn("truncate", isDone ? "text-secondary" : "font-medium text-primary")}
@@ -172,7 +171,7 @@ export const StageReviewChildren = ({
                         isLate ? "font-medium text-danger-primary" : "text-secondary"
                       )}
                     >
-                      {renderFormattedDate(child.end_date)}
+                      {formatShortDate(child.end_date, currentLocale)}
                     </span>
                   ) : (
                     <span className="text-13 text-placeholder">—</span>

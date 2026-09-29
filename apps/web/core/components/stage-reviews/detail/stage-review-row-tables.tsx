@@ -4,7 +4,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TStageReviewDetail, TStageReviewRowPayload, TStageReviewRowTable } from "@plane/types";
 import { EStageReviewStatus } from "@plane/types";
 import { cn } from "@plane/utils";
-import { Block, BlockAction, EmptyLine } from "./stage-review-content";
+import { Block, BlockAction } from "./stage-review-content";
 
 const I18N = "stage_review";
 
@@ -73,11 +73,10 @@ type TRow = { id: string } & Record<string, unknown>;
 
 /**
  * 一张可以加行的表：表头 + 行 + 末尾「添加一行」。
- * 没有行时退成一行灰字，和描述、附件的空态一样；删除按钮悬停才出，浮在行尾，不占列。
+ * 没有行时整块不出，入口在「补充」条；删除按钮悬停才出，浮在行尾，不占列。
  */
 const RowTable = ({
   title,
-  emptyText,
   summary,
   columns,
   rows,
@@ -89,7 +88,6 @@ const RowTable = ({
   onDelete,
 }: {
   title: string;
-  emptyText: string;
   summary?: React.ReactNode;
   columns: TColumn[];
   rows: TRow[];
@@ -111,6 +109,8 @@ const RowTable = ({
     if (Number.isInteger(parsed) && parsed >= 0) onUpdate(row.id, { [column.key]: parsed });
   };
 
+  if (rows.length === 0) return null;
+
   return (
     <Block
       title={title}
@@ -118,79 +118,71 @@ const RowTable = ({
       action={
         <>
           {summary}
-          {isLocked && rows.length > 0 && (
+          {isLocked && (
             <span className="flex items-center gap-1 text-12 text-placeholder">
               <Lock className="size-3" />
               {t(`${I18N}.detail.locked_hint`)}
             </span>
           )}
-          {editable && rows.length > 0 && (
+          {editable && (
             <BlockAction icon={Plus} label={t(`${I18N}.detail.add_row`)} onClick={onAdd} />
           )}
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyLine
-          icon={Plus}
-          text={editable ? emptyText : t(`${I18N}.detail.empty_value`)}
-          onClick={editable ? onAdd : undefined}
-        />
-      ) : (
-        <div className={cn("overflow-x-auto rounded-lg border bg-surface-1", LINE)}>
-          <div className="min-w-[560px]">
-            <div className="grid min-h-8 bg-layer-1 text-12 font-medium text-tertiary" style={gridStyle}>
-              {columns.map((column) => (
-                <span key={column.key} className={CELL_CLASS}>
-                  {t(`${I18N}.fields.${column.labelKey}`)}
-                </span>
-              ))}
-            </div>
-            {rows.map((row) => (
-              <div
-                key={row.id}
-                className={cn("group relative grid min-h-10 border-t text-14 text-primary", LINE)}
-                style={gridStyle}
-              >
-                {columns.map((column, index) => (
-                  <div key={column.key} className={CELL_CLASS}>
-                    <TextCell
-                      value={row[column.key] === null || row[column.key] === undefined ? "" : String(row[column.key])}
-                      editable={editable}
-                      autoFocus={index === 0 && row.id === focusRowId}
-                      onCommit={(next) => commit(row, column, next)}
-                    />
-                  </div>
-                ))}
-                {editable && (
-                  <button
-                    type="button"
-                    aria-label={t(`${I18N}.detail.delete_row`)}
-                    title={t(`${I18N}.detail.delete_row`)}
-                    onClick={() => onDelete(row.id)}
-                    className="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md bg-surface-1 text-placeholder opacity-0 transition group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
-              </div>
+      <div className={cn("overflow-x-auto rounded-lg border bg-surface-1", LINE)}>
+        <div className="min-w-[560px]">
+          <div className="grid min-h-8 bg-layer-1 text-12 font-medium text-tertiary" style={gridStyle}>
+            {columns.map((column) => (
+              <span key={column.key} className={CELL_CLASS}>
+                {t(`${I18N}.fields.${column.labelKey}`)}
+              </span>
             ))}
-            {editable && (
-              <button
-                type="button"
-                onClick={onAdd}
-                className={cn(
-                  "flex h-9 w-full items-center gap-1.5 border-t px-3 text-13 text-placeholder transition hover:bg-layer-1 hover:text-secondary",
-                  LINE
-                )}
-              >
-                <Plus className="size-3.5" />
-                {t(`${I18N}.detail.add_row`)}
-              </button>
-            )}
           </div>
+          {rows.map((row) => (
+            <div
+              key={row.id}
+              className={cn("group relative grid min-h-10 border-t text-14 text-primary", LINE)}
+              style={gridStyle}
+            >
+              {columns.map((column, index) => (
+                <div key={column.key} className={CELL_CLASS}>
+                  <TextCell
+                    value={row[column.key] === null || row[column.key] === undefined ? "" : String(row[column.key])}
+                    editable={editable}
+                    autoFocus={index === 0 && row.id === focusRowId}
+                    onCommit={(next) => commit(row, column, next)}
+                  />
+                </div>
+              ))}
+              {editable && (
+                <button
+                  type="button"
+                  aria-label={t(`${I18N}.detail.delete_row`)}
+                  title={t(`${I18N}.detail.delete_row`)}
+                  onClick={() => onDelete(row.id)}
+                  className="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md bg-surface-1 text-placeholder opacity-0 transition group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+          {editable && (
+            <button
+              type="button"
+              onClick={onAdd}
+              className={cn(
+                "flex h-9 w-full items-center gap-1.5 border-t px-3 text-13 text-placeholder transition hover:bg-layer-1 hover:text-secondary",
+                LINE
+              )}
+            >
+              <Plus className="size-3.5" />
+              {t(`${I18N}.detail.add_row`)}
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </Block>
   );
 };
@@ -204,35 +196,29 @@ const RowTable = ({
 export const StageReviewRowTables = ({
   detail,
   editable,
-  onCreateRow,
+  focusRowId,
+  onAddRow,
   onUpdateRow,
   onDeleteRow,
 }: {
   detail: TStageReviewDetail;
   editable: boolean;
-  onCreateRow: (table: TStageReviewRowTable) => Promise<TStageReviewDetail | undefined>;
+  focusRowId: string | null;
+  onAddRow: (table: TStageReviewRowTable) => void;
   onUpdateRow: <T extends TStageReviewRowTable>(table: T, rowId: string, payload: TStageReviewRowPayload[T]) => void;
   onDeleteRow: (table: TStageReviewRowTable, rowId: string) => void;
 }) => {
   const { t } = useTranslation();
-  // 刚加出来的那一行，第一格自动聚焦
-  const [focusRowId, setFocusRowId] = useState<string | null>(null);
   const isLocked = detail.status === EStageReviewStatus.COMPLETED;
   const goods = detail.finished_goods;
   const total = goods.reduce((sum, row) => sum + (row.production_quantity ?? 0), 0);
-
-  const addRow = async (table: TStageReviewRowTable) => {
-    const known = new Set(detail[table].map((row) => row.id));
-    const next = await onCreateRow(table);
-    setFocusRowId(next?.[table].find((row) => !known.has(row.id))?.id ?? null);
-  };
 
   const tableProps = (table: TStageReviewRowTable) => ({
     rows: detail[table] as TRow[],
     editable,
     isLocked,
     focusRowId,
-    onAdd: () => void addRow(table),
+    onAdd: () => onAddRow(table),
     onUpdate: (rowId: string, payload: Record<string, string | number | null>) =>
       onUpdateRow(table, rowId, payload as TStageReviewRowPayload[typeof table]),
     onDelete: (rowId: string) => onDeleteRow(table, rowId),
@@ -242,7 +228,6 @@ export const StageReviewRowTables = ({
     <>
       <RowTable
         title={t(`${I18N}.detail.finished_goods`)}
-        emptyText={t(`${I18N}.detail.add_finished_good`)}
         summary={
           goods.length > 1 && (
             <span className="text-12 text-placeholder tabular-nums">
@@ -255,10 +240,26 @@ export const StageReviewRowTables = ({
       />
       <RowTable
         title={t(`${I18N}.detail.component_versions`)}
-        emptyText={t(`${I18N}.detail.add_component_version`)}
         columns={VERSION_COLUMNS}
         {...tableProps("component_versions")}
       />
     </>
   );
+};
+
+/**
+ * 加一行并让新行第一格自动聚焦。抽出来是因为入口有两处：表格末尾「添加一行」，
+ * 以及表格还没有行时「补充」条上的「成品 / 组件版本」。
+ */
+export const useStageReviewRowAdd = (
+  detail: TStageReviewDetail,
+  onCreateRow: (table: TStageReviewRowTable) => Promise<TStageReviewDetail | undefined>
+) => {
+  const [focusRowId, setFocusRowId] = useState<string | null>(null);
+  const addRow = async (table: TStageReviewRowTable) => {
+    const known = new Set(detail[table].map((row) => row.id));
+    const next = await onCreateRow(table);
+    setFocusRowId(next?.[table].find((row) => !known.has(row.id))?.id ?? null);
+  };
+  return { focusRowId, addRow: (table: TStageReviewRowTable) => void addRow(table) };
 };

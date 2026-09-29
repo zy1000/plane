@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ExternalLink, MoveDiagonal, MoveRight, Play, Send, Undo2 } from "lucide-react";
+import { Check, ExternalLink, Flag, MoveDiagonal, MoveRight, Paperclip, Play, Plus, Send, Undo2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -28,7 +28,6 @@ import { getStageReviewError } from "@/hooks/store/use-stage-reviews";
 import type { TStageReviewSaveState } from "@/hooks/store/use-stage-review-detail";
 import { useStageReviewDetail } from "@/hooks/store/use-stage-review-detail";
 import { ApproveStageReviewModal } from "../approve-review-modal";
-import { StageReviewStatusBadge } from "../badges";
 import {
   STAGE_REVIEW_DETAIL_HEADER_ACTIONS_ID,
   STAGE_REVIEW_DETAIL_HEADER_TITLE_ID,
@@ -38,13 +37,15 @@ import { RollbackStageReviewModal } from "../rollback-review-modal";
 import { SubmitStageReviewModal } from "../submit-review-modal";
 import type { TStageReviewActionGuard } from "./stage-review-action-guard";
 import { getStageReviewActionGuard } from "./stage-review-action-guard";
-import { StageReviewAttachments } from "./stage-review-attachments";
+import type { TStageReviewAttachmentDrop } from "./stage-review-attachments";
+import { StageReviewAttachments, useStageReviewAttachmentDrop } from "./stage-review-attachments";
 import { StageReviewChildren } from "./stage-review-children";
-import { StageReviewContent } from "./stage-review-content";
+import type { TStageReviewSupplement } from "./stage-review-content";
+import { StageReviewContent, isBlankRichText } from "./stage-review-content";
 import type { TStageReviewPeekMode } from "./stage-review-peek-mode";
 import { StageReviewPeekModeSelect } from "./stage-review-peek-mode";
 import { StageReviewSaveStatus } from "./stage-review-save-status";
-import { StageReviewRowTables } from "./stage-review-row-tables";
+import { StageReviewRowTables, useStageReviewRowAdd } from "./stage-review-row-tables";
 import { StageReviewSidebar } from "./stage-review-sidebar";
 import { StageReviewStepper, useStepHints } from "./stage-review-stepper";
 import { StageReviewTimeline } from "./stage-review-timeline";
@@ -69,6 +70,15 @@ const previousStatusOf = (detail: TStageReviewDetail) =>
     ? undefined
     : STAGE_REVIEW_STATUS_ORDER[STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) - 1];
 
+/**
+ * 评审活动的标题多半是「父评审名-活动名」。标题上方已经有「属于 父评审」，标题再带一遍是重复，
+ * 所以抽屉里只显示、只编辑后半截；存的时候把前缀原样拼回去，列表与裁剪表里的全名不变。
+ */
+const titlePrefixOf = (detail: TStageReviewDetail) => {
+  const prefix = detail.parent_title ? `${detail.parent_title}-` : "";
+  return prefix && detail.title.startsWith(prefix) && detail.title.length > prefix.length ? prefix : "";
+};
+
 type TTranslate = ReturnType<typeof useTranslation>["t"];
 
 /** 按钮被拦的原因。推进与退回在「不是本人」时文案不同，「没指定人」共用 */
@@ -88,6 +98,52 @@ const GuardedAction = ({ guard, text, children }: { guard: TStageReviewActionGua
       <span className="inline-flex">{children}</span>
     </Tooltip>
   );
+
+/** 「补充」条上一个按钮：虚线描边，读作「这里还能加东西」，与已有内容的区块区分开 */
+const SUPPLEMENT_BUTTON_CLASS =
+  "inline-flex h-7 items-center gap-1 rounded-md border border-dashed border-strong bg-surface-1 pr-2.5 pl-2 text-13 text-secondary transition hover:border-accent-strong hover:text-accent-primary disabled:opacity-50";
+
+/**
+ * 正文顶部的「补充」条：还空着的描述 / 工作指引 / 成品 / 组件版本 / 附件收成一排按钮，
+ * 点了才展开成区块。还没有附件时，这条也是附件的拖放落点。全都有内容了就不出。
+ */
+const SupplementBar = ({
+  items,
+  drop,
+  disabled,
+}: {
+  items: { key: TStageReviewSupplement; label: string; onClick: () => void }[];
+  /** 还没有附件时才传：整条接住拖进来的文件 */
+  drop?: TStageReviewAttachmentDrop;
+  disabled: boolean;
+}) => {
+  const { t } = useTranslation();
+  if (items.length === 0) return null;
+  return (
+    <div
+      {...drop?.getRootProps()}
+      className={cn(
+        "flex flex-wrap items-center gap-1.5 rounded-lg border border-subtle bg-layer-1 px-3 py-2.5 transition",
+        drop?.isDragActive && "border-dashed border-accent-strong bg-accent-subtle"
+      )}
+    >
+      {drop && <input {...drop.getInputProps()} />}
+      <span className="mr-1 text-12 text-placeholder">{t(`${I18N}.detail.supplement`)}</span>
+      {items.map((item) => (
+        <button key={item.key} type="button" disabled={disabled} onClick={item.onClick} className={SUPPLEMENT_BUTTON_CLASS}>
+          <Plus className="size-3.5 text-placeholder" />
+          {item.label}
+        </button>
+      ))}
+      {drop && (
+        <span className="ml-auto flex items-center gap-1 text-12 text-placeholder">
+          <Paperclip className="size-3.25" />
+          {t(`${I18N}.detail.supplement_drop`)}
+        </span>
+      )}
+    </div>
+  );
+};
 
 /**
  * 抽屉里的一套：头一行有关闭、模式切换、「在新页面中打开」，面包屑放在头一行里。
@@ -125,7 +181,8 @@ export type TStageReviewDetailRootProps = TStageReviewDetailVariant & {
  *
  * 布局分两段：头（名片式标题区 + 动作按钮 / 四段进度）、身（正文 + 右侧属性栏）。
  * 正文放「要读的」（描述、工作指引、附件、活动），右栏放「要查的」（产品、阶段、负责人、日期、
- * 结论、O 阶段那两组）。**动作按钮住在标题行右侧**，紧挨着状态药丸：状态和「下一步」读在一起。
+ * 结论、O 阶段那两组）。**动作按钮住在标题行右侧**；状态只由下面的四段进度表达，不再另出药丸。
+ * 正文里空着的几项不占区块，收进顶部的「补充」条。
  *
  * 写入分两种回执：开始 / 提交 / 审核 / 退回 是动作，成功弹 toast；改字段、传删附件、发评论是
  * 随手改，只在顶栏显示保存状态，失败才弹 toast —— 右下角的 toast 不该每改一个字段就冒一次。
@@ -162,8 +219,10 @@ export const StageReviewDetailRoot = (props: TStageReviewDetailRootProps) => {
     deleteComment,
   } = useStageReviewDetail(workspaceSlug, projectId, reviewId);
 
-  // 换一条评审、或标题存完回灌时跟上
-  useEffect(() => setTitleDraft(detail?.title ?? ""), [detail?.id, detail?.title]);
+  // 换一条评审、或标题存完回灌时跟上。评审活动的「父评审名-」前缀不进输入框（见 titlePrefixOf）
+  useEffect(() => {
+    setTitleDraft(detail ? detail.title.slice(titlePrefixOf(detail).length) : "");
+  }, [detail?.id, detail?.title]);
 
   const isDrawer = props.variant === "drawer";
   const onClose = isDrawer ? props.onClose : undefined;
@@ -380,7 +439,62 @@ const DetailBody = (props: DetailBodyProps) => {
   // 已评审即定稿：字段与附件都改不了也退不回，要重做去裁剪表取消勾选后重新生成
   const editable = canManage && !isCompleted;
   const hasActions = canManage && !isCompleted;
-  const source = detail.is_manual ? t(`${I18N}.detail.source_manual`) : t(`${I18N}.detail.source_tailoring`);
+  const titlePrefix = titlePrefixOf(detail);
+  const shownTitle = detail.title.slice(titlePrefix.length);
+  const isOStageReview = detail.kind === EStageReviewKind.O_STAGE_REVIEW;
+
+  // 从「补充」条点开、还没写东西的几项；换一条评审就清掉
+  const [requested, setRequested] = useState<ReadonlySet<TStageReviewSupplement>>(new Set());
+  useEffect(() => setRequested(new Set()), [detail.id]);
+  const request = (key: TStageReviewSupplement) => setRequested((prev) => new Set(prev).add(key));
+  const dismiss = useCallback(
+    (key: TStageReviewSupplement) =>
+      setRequested((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      }),
+    []
+  );
+  const { focusRowId, addRow } = useStageReviewRowAdd(detail, onCreateRow);
+  const attachmentDrop = useStageReviewAttachmentDrop({ editable, isMutating, onUpload });
+  const hasAttachments = attachments.length > 0 || Boolean(attachmentDrop.upload);
+
+  const supplements = editable
+    ? [
+        {
+          key: "description" as const,
+          label: t(`${I18N}.fields.description`),
+          isEmpty: isBlankRichText(detail.description_html) && !requested.has("description"),
+          onClick: () => request("description"),
+        },
+        {
+          key: "work_instruction" as const,
+          label: t(`${I18N}.fields.work_instruction`),
+          isEmpty: !detail.work_instruction.trim() && !requested.has("work_instruction"),
+          onClick: () => request("work_instruction"),
+        },
+        {
+          key: "finished_goods" as const,
+          label: t(`${I18N}.detail.finished_goods`),
+          isEmpty: isOStageReview && detail.finished_goods.length === 0,
+          onClick: () => addRow("finished_goods"),
+        },
+        {
+          key: "component_versions" as const,
+          label: t(`${I18N}.detail.component_versions`),
+          isEmpty: isOStageReview && detail.component_versions.length === 0,
+          onClick: () => addRow("component_versions"),
+        },
+        {
+          key: "attachments" as const,
+          label: t(`${I18N}.detail.attachments_title`),
+          isEmpty: !hasAttachments,
+          onClick: attachmentDrop.open,
+        },
+      ].filter((item) => item.isEmpty)
+    : [];
   const getReviewPath = (reviewId: string) => getStageReviewDetailPath(workspaceSlug, detail.project_id, reviewId);
   const detailPath = getReviewPath(detail.id);
   /** 抽屉里就地换内容；带修饰键的点击留给浏览器开新标签 */
@@ -433,18 +547,20 @@ const DetailBody = (props: DetailBodyProps) => {
         </>
       )}
 
-      {/* 名片式标题区：阶段 + 类型 + 来源一行，标题一行（右侧状态药丸 + 动作按钮）；下面是四段进度 */}
+      {/* 名片式标题区：阶段 + 类型（+ 所属评审）一行，标题一行（右侧动作按钮）；下面是四段进度 */}
       <div className="flex shrink-0 flex-col gap-4 border-b border-subtle px-7 pt-5 pb-4">
         <div className="flex items-end gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <div className="flex items-center gap-2 text-12 text-tertiary">
+            {/* 三个标签同一种 22px 小方块：阶段（中性）· 类型（按类型着色）· 所属评审（可点，品牌色） */}
+            <div className="flex items-center gap-1.5">
               {detail.stage_detail?.name && (
-                <span className="inline-flex h-5.5 items-center rounded-md bg-layer-2 px-2 text-12 font-medium whitespace-nowrap text-secondary">
+                <span className="inline-flex h-5.5 items-center gap-1 rounded-md bg-layer-3 px-2 text-12 font-medium whitespace-nowrap text-secondary">
+                  <Flag className="size-3 shrink-0 text-placeholder" />
                   {detail.stage_detail.name}
                 </span>
               )}
-              <StageReviewKindBadge kind={detail.kind} className="rounded-md px-2 text-12" />
-              {detail.parent_id && detail.parent_title ? (
+              <StageReviewKindBadge kind={detail.kind} className="rounded-md border-0 px-2 text-12" />
+              {detail.parent_id && detail.parent_title && (
                 /* 评审活动：所属评审可以点，回到父评审 */
                 <Tooltip tooltipContent={t(`${I18N}.detail.back_to_parent`)}>
                   <Link
@@ -456,8 +572,6 @@ const DetailBody = (props: DetailBodyProps) => {
                     <span className="truncate">{t(`${I18N}.detail.belongs_to`, { title: detail.parent_title })}</span>
                   </Link>
                 </Tooltip>
-              ) : (
-                <span className="truncate">· {source}</span>
               )}
             </div>
             {editable ? (
@@ -467,77 +581,73 @@ const DetailBody = (props: DetailBodyProps) => {
                 onBlur={() => {
                   const next = titleDraft.trim();
                   // 标题不允许清空：清了列表里就只剩一行空白
-                  if (!next) setTitleDraft(detail.title);
-                  else if (next !== detail.title) onUpdate({ title: next });
+                  if (!next) setTitleDraft(shownTitle);
+                  else if (next !== shownTitle) onUpdate({ title: titlePrefix + next });
                 }}
                 className={cn(TITLE_CLASS, "hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none")}
               />
             ) : (
-              <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{detail.title}</h2>
+              <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{shownTitle}</h2>
             )}
           </div>
 
-          {/* 状态药丸 · 竖线 · 退回 · 主动作。按钮是 Plane 标准按钮 lg 档（28px） */}
-          <div className="flex h-9 shrink-0 items-center gap-2">
-            <StageReviewStatusBadge status={detail.status} size="md" />
-            {hasActions && (
-              <>
-                <span className="mx-1 h-4.5 border-l border-subtle" aria-hidden />
-                {previousStatus && (
-                  <GuardedAction guard={guard.rollback} text={blockedText(t, "rollback", guard.rollback)}>
-                    <Button
-                      variant="secondary"
-                      size="lg"
-                      prependIcon={<Undo2 />}
-                      disabled={isMutating || !guard.rollback.allowed}
-                      onClick={onRollback}
-                    >
-                      {t(`${I18N}.actions.rollback_plain`)}
-                    </Button>
-                  </GuardedAction>
-                )}
-                {detail.status === EStageReviewStatus.NOT_STARTED && (
-                  <GuardedAction guard={guard.advance} text={advanceBlockedText}>
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      prependIcon={<Play />}
-                      disabled={isMutating || !guard.advance.allowed}
-                      onClick={onStart}
-                    >
-                      {t(`${I18N}.actions.start`)}
-                    </Button>
-                  </GuardedAction>
-                )}
-                {detail.status === EStageReviewStatus.IN_REVIEW && (
-                  <GuardedAction guard={guard.advance} text={advanceBlockedText}>
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      prependIcon={<Send />}
-                      disabled={isMutating || !guard.advance.allowed}
-                      onClick={onOpenSubmit}
-                    >
-                      {t(`${I18N}.actions.submit_for_approval`)}
-                    </Button>
-                  </GuardedAction>
-                )}
-                {detail.status === EStageReviewStatus.IN_APPROVAL && (
-                  <GuardedAction guard={guard.advance} text={advanceBlockedText}>
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      prependIcon={<Check />}
-                      disabled={isMutating || !guard.advance.allowed}
-                      onClick={onApprove}
-                    >
-                      {t(`${I18N}.actions.approve`)}
-                    </Button>
-                  </GuardedAction>
-                )}
-              </>
-            )}
-          </div>
+          {/* 退回 · 主动作。按钮是 Plane 标准按钮 lg 档（28px）；状态看下面的四段进度 */}
+          {hasActions && (
+            <div className="flex h-9 shrink-0 items-center gap-2">
+              {previousStatus && (
+                <GuardedAction guard={guard.rollback} text={blockedText(t, "rollback", guard.rollback)}>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    prependIcon={<Undo2 />}
+                    disabled={isMutating || !guard.rollback.allowed}
+                    onClick={onRollback}
+                  >
+                    {t(`${I18N}.actions.rollback_plain`)}
+                  </Button>
+                </GuardedAction>
+              )}
+              {detail.status === EStageReviewStatus.NOT_STARTED && (
+                <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    prependIcon={<Play />}
+                    disabled={isMutating || !guard.advance.allowed}
+                    onClick={onStart}
+                  >
+                    {t(`${I18N}.actions.start`)}
+                  </Button>
+                </GuardedAction>
+              )}
+              {detail.status === EStageReviewStatus.IN_REVIEW && (
+                <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    prependIcon={<Send />}
+                    disabled={isMutating || !guard.advance.allowed}
+                    onClick={onOpenSubmit}
+                  >
+                    {t(`${I18N}.actions.submit_for_approval`)}
+                  </Button>
+                </GuardedAction>
+              )}
+              {detail.status === EStageReviewStatus.IN_APPROVAL && (
+                <GuardedAction guard={guard.advance} text={advanceBlockedText}>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    prependIcon={<Check />}
+                    disabled={isMutating || !guard.advance.allowed}
+                    onClick={onApprove}
+                  >
+                    {t(`${I18N}.actions.approve`)}
+                  </Button>
+                </GuardedAction>
+              )}
+            </div>
+          )}
         </div>
 
         <StageReviewStepper status={detail.status} result={detail.result} hints={stepHints} />
@@ -546,6 +656,8 @@ const DetailBody = (props: DetailBodyProps) => {
       {/* 身：正文与属性栏各自滚动 */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="stage-review-drawer-body flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-5 pb-8">
+          <SupplementBar items={supplements} drop={hasAttachments ? undefined : attachmentDrop} disabled={isMutating} />
+
           <StageReviewContent
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}
@@ -553,14 +665,17 @@ const DetailBody = (props: DetailBodyProps) => {
             detail={detail}
             editable={editable}
             onUpdate={onUpdate}
+            requested={requested}
+            onDismiss={dismiss}
           />
 
           {/* 成品与组件版本只挂在「O阶段评审」上 */}
-          {detail.kind === EStageReviewKind.O_STAGE_REVIEW && (
+          {isOStageReview && (
             <StageReviewRowTables
               detail={detail}
               editable={editable}
-              onCreateRow={onCreateRow}
+              focusRowId={focusRowId}
+              onAddRow={addRow}
               onUpdateRow={onUpdateRow}
               onDeleteRow={onDeleteRow}
             />
@@ -572,7 +687,7 @@ const DetailBody = (props: DetailBodyProps) => {
             attachments={attachments}
             editable={editable}
             isMutating={isMutating}
-            onUpload={onUpload}
+            drop={attachmentDrop}
             onDownload={onDownload}
             onDelete={onDeleteAttachment}
             getFileURL={getAttachmentUrl}

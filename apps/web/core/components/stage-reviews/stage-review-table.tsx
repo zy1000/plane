@@ -6,7 +6,7 @@ import { Logo } from "@plane/propel/emoji-icon-picker";
 import type { TStageReview, TUpdateStageReviewPayload } from "@plane/types";
 import { EStageReviewResult, EStageReviewStatus } from "@plane/types";
 import { Checkbox } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { cn, renderFormattedDate } from "@plane/utils";
 import { useColumnWidths } from "@/components/common/resizable-table-head";
 import { stageReviewsPath } from "@/components/reviews/routes";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
@@ -33,7 +33,7 @@ const COLUMN_WIDTH: Record<TStageReviewColumn, string> = {
   comment_count: "68px",
   kind: "116px",
   tailoring: "minmax(132px, 192px)",
-  updated_at: "92px",
+  updated_at: "112px",
 };
 
 const NO_DEFAULT_WIDTHS: Record<string, number> = {};
@@ -51,8 +51,6 @@ const RESULT_TEXT: Record<EStageReviewResult, string> = {
 
 /** 没有值的格子留空，不画「—」 */
 const Empty = () => null;
-
-const shortDate = (value: string) => value.slice(5, 10);
 
 /** 行左侧留白里的勾选框：平时藏着，悬停该行或已经有勾选时才出来，不占列宽 */
 const RowCheckbox = ({
@@ -293,7 +291,7 @@ export const StageReviewTable = ({
         );
       case "updated_at":
         return review.updated_at ? (
-          <span className="text-13 tabular-nums text-tertiary">{shortDate(review.updated_at)}</span>
+          <span className="text-13 tabular-nums text-tertiary">{renderFormattedDate(review.updated_at, "yyyy-MM-dd")}</span>
         ) : (
           <Empty />
         );

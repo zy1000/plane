@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
-import { Download, Paperclip, UploadCloud } from "lucide-react";
+import { Download, UploadCloud } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { PlusIcon, TrashIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -13,7 +13,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
-import { Block, BlockAction, EmptyLine } from "./stage-review-content";
+import { Block, BlockAction } from "./stage-review-content";
 import { useStageReviewAttachmentPreview } from "./use-stage-review-attachment-preview";
 
 const I18N = "stage_review";
@@ -89,39 +89,21 @@ const AttachmentRow = ({
 };
 
 /**
- * 评审附件，列表与交互照工作项附件：整行点开预览（Office / PDF / xmind / 图片），「⋯」里下载与删除，
- * 删除要确认，整块可拖入上传并显示进度。走 FileAsset 的预签名两步上传，文件不经过 Django。
- *
- * 标题行保持抽屉其他区块的样式，上传入口是标题右侧的「+」；空态是一行灰字，拖文件进来时整块高亮。
- * 已评审（editable=false）时只能预览与下载。
+ * 附件的拖放上传。抽出来是因为落点有两处：有附件时是附件区块本身，还没有附件时区块不出，
+ * 落点换成正文顶部的「补充」条（点「附件」按钮也是这里的 `open`）。一次只收一个文件。
  */
-export const StageReviewAttachments = ({
-  workspaceSlug,
-  projectId,
-  attachments,
+export const useStageReviewAttachmentDrop = ({
   editable,
   isMutating,
   onUpload,
-  onDownload,
-  onDelete,
-  getFileURL,
 }: {
-  workspaceSlug: string;
-  projectId: string;
-  attachments: TStageReviewAttachment[];
   editable: boolean;
   isMutating: boolean;
   onUpload: (file: File, onProgress: (percentage: number) => void) => Promise<unknown>;
-  onDownload: (assetId: string) => void;
-  onDelete: (assetId: string) => Promise<unknown>;
-  getFileURL: (assetId: string) => Promise<string | undefined>;
 }) => {
   const { t } = useTranslation();
   const { maxFileSize } = useFileSize();
   const [upload, setUpload] = useState<{ name: string; progress: number } | null>(null);
-  const [deleting, setDeleting] = useState<TStageReviewAttachment | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const { requestPreview, previewModals } = useStageReviewAttachmentPreview({ workspaceSlug, projectId, getFileURL });
 
   const onDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
@@ -144,7 +126,7 @@ export const StageReviewAttachments = ({
     [maxFileSize, onUpload, t]
   );
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const dropzone = useDropzone({
     onDrop,
     maxSize: maxFileSize,
     multiple: false,
@@ -152,6 +134,45 @@ export const StageReviewAttachments = ({
     noKeyboard: true,
     disabled: !editable || isMutating || Boolean(upload),
   });
+
+  return { ...dropzone, upload };
+};
+
+export type TStageReviewAttachmentDrop = ReturnType<typeof useStageReviewAttachmentDrop>;
+
+/**
+ * 评审附件，列表与交互照工作项附件：整行点开预览（Office / PDF / xmind / 图片），「⋯」里下载与删除，
+ * 删除要确认，整块可拖入上传并显示进度。走 FileAsset 的预签名两步上传，文件不经过 Django。
+ *
+ * 标题行保持抽屉其他区块的样式，上传入口是标题右侧的「+」；没有附件（也没在上传）时整块不出，
+ * 入口在「补充」条。已评审（editable=false）时只能预览与下载。
+ */
+export const StageReviewAttachments = ({
+  workspaceSlug,
+  projectId,
+  attachments,
+  editable,
+  isMutating,
+  drop,
+  onDownload,
+  onDelete,
+  getFileURL,
+}: {
+  workspaceSlug: string;
+  projectId: string;
+  attachments: TStageReviewAttachment[];
+  editable: boolean;
+  isMutating: boolean;
+  drop: TStageReviewAttachmentDrop;
+  onDownload: (assetId: string) => void;
+  onDelete: (assetId: string) => Promise<unknown>;
+  getFileURL: (assetId: string) => Promise<string | undefined>;
+}) => {
+  const { t } = useTranslation();
+  const [deleting, setDeleting] = useState<TStageReviewAttachment | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { requestPreview, previewModals } = useStageReviewAttachmentPreview({ workspaceSlug, projectId, getFileURL });
+  const { getRootProps, getInputProps, isDragActive, open, upload } = drop;
 
   const handleDelete = () => {
     if (!deleting) return;
@@ -161,6 +182,8 @@ export const StageReviewAttachments = ({
       setDeleting(null);
     });
   };
+
+  if (attachments.length === 0 && !upload) return null;
 
   return (
     <Block
@@ -226,14 +249,6 @@ export const StageReviewAttachments = ({
             onDelete={setDeleting}
           />
         ))}
-
-        {attachments.length === 0 &&
-          !upload &&
-          (editable ? (
-            <EmptyLine icon={Paperclip} text={t(`${I18N}.detail.drop_hint`)} disabled={isMutating} onClick={open} />
-          ) : (
-            <EmptyLine text={t(`${I18N}.detail.no_attachments`)} />
-          ))}
       </div>
     </Block>
   );
