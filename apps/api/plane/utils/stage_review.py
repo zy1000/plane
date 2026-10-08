@@ -52,6 +52,7 @@ from plane.db.models import (
 from plane.db.models.stage_review import (
     ACTIVITY_KINDS,
     O_STAGE_KINDS,
+    O_STAGE_ONLY_FIELDS,
     SORT_ORDER_STEP,
 )
 
@@ -204,9 +205,18 @@ def _validated(review):
 def _validate_result(review, payload):
     """提交审核时的结论校验。返回要写回评审的字段字典。
 
-    O 阶段的生产方式与出货评估在这里**必填** —— 它们是 O 阶段放行与否的实际依据，
-    留空的话审核的人看不到该看的东西。非 O 阶段传了就报错，不做静默丢弃。
+    O 阶段的生产方式与出货评估是右栏常驻字段（走 ``update_review``，不随结论提交），但**提交
+    审核前必须已经填好** —— 它们是 O 阶段放行与否的实际依据（2026-10-08 产品决策）。这里查的
+    是评审上的值，不看 payload。
     """
+    if review.kind in O_STAGE_KINDS:
+        for field, code, message in (
+            ("production_mode", "STAGE_REVIEW_PRODUCTION_MODE_REQUIRED", "提交审核前请先填写生产方式"),
+            ("shipment_assessment", "STAGE_REVIEW_SHIPMENT_ASSESSMENT_REQUIRED", "提交审核前请先填写出货评估"),
+        ):
+            if not getattr(review, field):
+                raise StageReviewError(message, code=code, detail={"field": field})
+
     result = payload.get("result") or ""
     if result not in StageReviewResult.values:
         raise StageReviewError(
@@ -222,31 +232,7 @@ def _validate_result(review, payload):
             detail={"field": "conditional_reason"},
         )
     # 通过也可以带说明，直接存提交上来的内容
-    fields = {"result": result, "conditional_reason": reason}
-
-    production_mode = payload.get("production_mode") or ""
-    shipment_assessment = payload.get("shipment_assessment") or ""
-    if review.kind in O_STAGE_KINDS:
-        if not production_mode:
-            raise StageReviewError(
-                "生产方式必填",
-                code="STAGE_REVIEW_PRODUCTION_MODE_REQUIRED",
-                detail={"field": "production_mode"},
-            )
-        if not shipment_assessment:
-            raise StageReviewError(
-                "出货评估必填",
-                code="STAGE_REVIEW_SHIPMENT_ASSESSMENT_REQUIRED",
-                detail={"field": "shipment_assessment"},
-            )
-        fields["production_mode"] = production_mode
-        fields["shipment_assessment"] = shipment_assessment
-    elif production_mode or shipment_assessment:
-        raise StageReviewError(
-            "生产方式 / 出货评估只属于 O 阶段的评审类型",
-            code="STAGE_REVIEW_O_STAGE_FIELD_NOT_ALLOWED",
-        )
-    return fields
+    return {"result": result, "conditional_reason": reason}
 
 
 # --- 状态推进 -------------------------------------------------------------
@@ -834,6 +820,9 @@ def bulk_update_reviews(reviews, *, actor, changes):
     （比如新开始日期晚于它已有的结束日期）被模型校验挡下时，只回滚这一条（保存点），其余照改。
     调用方负责外层事务。
 
+    生产方式 / 出货评估只作用于 O 阶段的那几条：一批里混着普通评审时，普通评审只改其余
+    属性；剩下没东西可改就当没勾（不计入 updated，也不算失败）。
+
     返回 ``(updated, skipped_locked, failed)``：改到的评审对象、跳过的 id、失败明细。
     """
     updated, skipped_locked, failed = [], [], []
@@ -841,9 +830,15 @@ def bulk_update_reviews(reviews, *, actor, changes):
         if review.status == StageReviewStatus.COMPLETED:
             skipped_locked.append(str(review.id))
             continue
+        review_changes = dict(changes)
+        if review.kind not in O_STAGE_KINDS:
+            for field in O_STAGE_ONLY_FIELDS:
+                review_changes.pop(field, None)
+            if not review_changes:
+                continue
         try:
             with transaction.atomic():
-                update_review(review, actor=actor, validated_data=dict(changes))
+                update_review(review, actor=actor, validated_data=review_changes)
         except StageReviewError as exc:
             failed.append(
                 {

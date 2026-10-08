@@ -161,6 +161,8 @@ class StageReviewChildSerializer(BaseSerializer):
             "leader_ids",
             "leader_details",
             "end_date",
+            "production_mode",
+            "shipment_assessment",
             "sort_order",
         ]
         read_only_fields = fields
@@ -326,11 +328,18 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
 
     ``leader_ids`` / ``auditor_ids`` 是整份名单，传空数组表示清空。这里**不校验项目成员**：
     候选人按产品角色 → 工作区角色 → 项目成员三级回退，前两档的人不一定在项目里。
+
+    ``production_mode`` / ``shipment_assessment`` 只有 O 阶段的两种类型能填，类型不符由模型
+    ``clean()`` 挡下。两者是提交审核的必填项，所以**不收空串**：能改成别的值，不能清空。
     """
 
     stage_id = serializers.UUIDField(required=False, write_only=True)
     leader_ids = _member_ids_field("leaders")
     auditor_ids = _member_ids_field("auditors")
+    production_mode = serializers.ChoiceField(choices=ProductionMode.choices, required=False)
+    shipment_assessment = serializers.ChoiceField(
+        choices=ShipmentAssessment.choices, required=False
+    )
 
     class Meta:
         model = StageReview
@@ -343,6 +352,8 @@ class StageReviewUpdateSerializer(serializers.ModelSerializer):
             "auditor_ids",
             "start_date",
             "end_date",
+            "production_mode",
+            "shipment_assessment",
         ]
 
     def validate_leader_ids(self, users):
@@ -357,8 +368,16 @@ STAGE_REVIEW_BULK_LIMIT = 500
 
 #: 批量能改的属性。只放「一批评审能共用同一个值」的字段 —— 标题、描述、O 阶段的成品表
 #: 各条不同，状态与结论只能由本人推进（见 ``StageReviewUpdateSerializer``）。
+#: 生产方式 / 出货评估只落到其中 O 阶段的那几条（见 ``bulk_update_reviews``）。
 #: 这里是校验后的键（source 名），不是请求里的字段名
-STAGE_REVIEW_BULK_FIELDS = ("leaders", "auditors", "start_date", "end_date")
+STAGE_REVIEW_BULK_FIELDS = (
+    "leaders",
+    "auditors",
+    "start_date",
+    "end_date",
+    "production_mode",
+    "shipment_assessment",
+)
 
 
 class StageReviewBulkUpdateSerializer(serializers.Serializer):
@@ -379,6 +398,11 @@ class StageReviewBulkUpdateSerializer(serializers.Serializer):
     auditor_ids = _member_ids_field("auditors", User.objects.filter(is_active=True))
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
+    # 必填项不收空串，同单条修改
+    production_mode = serializers.ChoiceField(choices=ProductionMode.choices, required=False)
+    shipment_assessment = serializers.ChoiceField(
+        choices=ShipmentAssessment.choices, required=False
+    )
 
     def _validate_members(self, users):
         users = _unique_members(users)
@@ -428,18 +452,9 @@ class StageReviewApproveSerializer(serializers.Serializer):
 
 
 class StageReviewSubmitSerializer(serializers.Serializer):
-    """提交审核时的结论。必填与否按 kind 判，规则在 utils 里。"""
+    """提交审核时的结论。说明必填与否按结论判，规则在 utils 里。"""
 
     result = serializers.ChoiceField(choices=StageReviewResult.choices)
     conditional_reason = serializers.CharField(
         required=False, allow_blank=True, default=""
-    )
-    production_mode = serializers.ChoiceField(
-        choices=ProductionMode.choices, required=False, allow_blank=True, default=""
-    )
-    shipment_assessment = serializers.ChoiceField(
-        choices=ShipmentAssessment.choices,
-        required=False,
-        allow_blank=True,
-        default="",
     )

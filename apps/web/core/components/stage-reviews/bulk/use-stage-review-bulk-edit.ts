@@ -12,8 +12,8 @@ const FLASH_MS = 1600;
 
 export type TStageReviewFlashedCells = { ids: Set<string>; columns: Set<TStageReviewColumn> };
 
-/** 改了哪个字段就闪哪一列：两个日期同在「计划日期」一列 */
-const FIELD_COLUMN: Record<keyof TStageReviewBulkChanges, TStageReviewColumn> = {
+/** 改了哪个字段就闪哪一列：两个日期同在「计划日期」一列；生产方式 / 出货评估列表里没有列 */
+const FIELD_COLUMN: Partial<Record<keyof TStageReviewBulkChanges, TStageReviewColumn>> = {
   leader_ids: "leader",
   auditor_ids: "auditor",
   start_date: "dates",
@@ -90,7 +90,9 @@ export const useStageReviewBulkEdit = ({
       if (failedIds.length === 0) setIsPanelOpen(false);
 
       const columns = new Set(
-        (Object.keys(changes) as (keyof TStageReviewBulkChanges)[]).map((field) => FIELD_COLUMN[field])
+        (Object.keys(changes) as (keyof TStageReviewBulkChanges)[])
+          .map((field) => FIELD_COLUMN[field])
+          .filter((column): column is TStageReviewColumn => Boolean(column))
       );
       setFlashedCells({ ids: new Set(result.reviews.map((review) => review.id)), columns });
     } catch (error) {

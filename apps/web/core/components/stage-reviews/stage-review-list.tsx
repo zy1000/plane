@@ -33,6 +33,7 @@ import { useStageReviewFiltersConfig } from "./filters/use-stage-review-filters-
 import { StageReviewGroupSidebar } from "./group-sidebar/group-sidebar";
 import { useStageReviewGrouping } from "./group-sidebar/use-stage-review-grouping";
 import { STAGE_REVIEWS_HEADER_ACTIONS_ID, STAGE_REVIEWS_HEADER_COUNT_ID } from "./header-slots";
+import { STAGE_REVIEW_O_STAGE_KINDS } from "./o-stage-fields";
 import { useStageReviewPermissions } from "./permissions";
 import { ProductStageReviewsEmptyState } from "./product-empty-state";
 import type { TStageReviewScope } from "./scope";
@@ -199,6 +200,13 @@ export const StageReviewList = observer(function StageReviewList({
     replaceSelection: selection.replace,
     applyReviews,
   });
+  // 批量面板里「生产与出货」那一组只作用于勾选中的 O 阶段评审
+  const oStageSelectedCount = useMemo(
+    () =>
+      reviews.filter((review) => selection.selectedSet.has(review.id) && STAGE_REVIEW_O_STAGE_KINDS.includes(review.kind))
+        .length,
+    [reviews, selection.selectedSet]
+  );
   const tableSelection: TStageReviewTableSelection | undefined = canBulkEdit
     ? {
         selectedSet: selection.selectedSet,
@@ -336,6 +344,7 @@ export const StageReviewList = observer(function StageReviewList({
                   <StageReviewBulkEditPanel
                     projectId={scope.projectId}
                     selectedCount={selection.selectedIds.length}
+                    oStageCount={oStageSelectedCount}
                     submitting={bulkEdit.submitting}
                     onCancel={bulkEdit.closePanel}
                     onApply={(changes) => void bulkEdit.apply(changes)}

@@ -8,6 +8,7 @@ import { EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
 import { cn, renderFormattedPayloadDate } from "@plane/utils";
 import { formatShortDate } from "@/components/review-tailorings/list/tailoring-row";
 import { StageReviewResultBadge, StageReviewStatusBadge } from "../badges";
+import { OStageValue, STAGE_REVIEW_O_STAGE_KINDS } from "../o-stage-fields";
 import { StageReviewPeople } from "../people";
 import { STAGE_REVIEW_STATUS_FILL } from "../status-icon";
 import { Block } from "./stage-review-content";
@@ -18,6 +19,9 @@ const COLLAPSED_STORAGE_KEY = "stage_review_children_collapsed";
 const DEFAULT_VISIBLE = 5;
 
 const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_112px_96px_78px_84px_14px] items-center gap-x-3 px-3.5";
+/** O阶段评审下面多两列：生产方式、出货评估（「出货前刷新结论」最长，给 128） */
+const O_STAGE_ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_104px_84px_96px_128px_72px_80px_14px] items-center gap-x-3 px-3.5";
 
 /** 默认那几项先列谁：正在进行的（评审中 / 审核中）→ 未评审 → 已评审 */
 const ATTENTION_RANK: Record<EStageReviewStatus, number> = {
@@ -101,6 +105,9 @@ export const StageReviewChildren = ({
   };
 
   const toggleLabel = t(`${I18N}.detail.${isCollapsed ? "children_expand" : "children_collapse"}`);
+  const isOStage = STAGE_REVIEW_O_STAGE_KINDS.includes(detail.kind);
+  const rowGrid = isOStage ? O_STAGE_ROW_GRID : ROW_GRID;
+  const emptyCell = <span className="text-13 text-placeholder">—</span>;
 
   return (
     <Block
@@ -134,11 +141,13 @@ export const StageReviewChildren = ({
     >
       {!isCollapsed && (
         <div className="overflow-x-auto rounded-lg border border-subtle">
-          <div className="min-w-[640px]">
-            <div className={cn(ROW_GRID, "h-8 bg-layer-1 text-12 font-medium text-tertiary")}>
+          <div className={isOStage ? "min-w-[820px]" : "min-w-[640px]"}>
+            <div className={cn(rowGrid, "h-8 bg-layer-1 text-12 font-medium text-tertiary")}>
               <span>{t(`${I18N}.detail.children_name`)}</span>
               <span>{t(`${I18N}.fields.leader`)}</span>
               <span>{t(`${I18N}.fields.end_date`)}</span>
+              {isOStage && <span>{t(`${I18N}.fields.production_mode`)}</span>}
+              {isOStage && <span>{t(`${I18N}.fields.shipment_assessment`)}</span>}
               <span>{t(`${I18N}.display.property.result`)}</span>
               <span>{t(`${I18N}.display.property.status`)}</span>
               <span />
@@ -151,7 +160,7 @@ export const StageReviewChildren = ({
                   key={child.id}
                   to={getPath(child.id)}
                   onClick={(event) => handleOpen(event, child.id)}
-                  className={cn(ROW_GRID, "group min-h-10 border-t border-subtle text-14 transition hover:bg-layer-1")}
+                  className={cn(rowGrid, "group min-h-10 border-t border-subtle text-14 transition hover:bg-layer-1")}
                 >
                   <span
                     title={child.title}
@@ -174,8 +183,20 @@ export const StageReviewChildren = ({
                       {formatShortDate(child.end_date, currentLocale)}
                     </span>
                   ) : (
-                    <span className="text-13 text-placeholder">—</span>
+                    emptyCell
                   )}
+                  {isOStage &&
+                    (child.production_mode ? (
+                      <OStageValue field="production_mode" value={child.production_mode} className="text-13" />
+                    ) : (
+                      emptyCell
+                    ))}
+                  {isOStage &&
+                    (child.shipment_assessment ? (
+                      <OStageValue field="shipment_assessment" value={child.shipment_assessment} className="text-13" />
+                    ) : (
+                      emptyCell
+                    ))}
                   <span className="flex min-w-0">
                     <StageReviewResultBadge result={child.result} />
                   </span>

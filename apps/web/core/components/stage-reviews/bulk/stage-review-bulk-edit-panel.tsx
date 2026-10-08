@@ -2,11 +2,13 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TStageReviewBulkChanges } from "@plane/types";
+import type { TProductionMode, TShipmentAssessment, TStageReviewBulkChanges } from "@plane/types";
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
 import { BulkEditFieldRow, BulkEditFieldShell } from "@/components/common/bulk-edit-field";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import type { TOStageField, TOStageFieldValue } from "../o-stage-fields";
+import { OStageFieldSelect } from "../o-stage-fields";
 
 const I18N = "stage_review";
 
@@ -14,6 +16,8 @@ const I18N = "stage_review";
 type TFieldValue = string | null | undefined;
 /** 成员是整份名单（替换，不是追加）：undefined = 保持不变；null = 设为无 */
 type TMemberValue = string[] | null | undefined;
+/** 生产方式 / 出货评估：undefined = 保持不变。提交审核的必填项，不给清空 */
+type TOStageValue = TOStageFieldValue | undefined;
 
 /** 字段里「清空 / 设为无」那个小按钮，只在保持不变时出现 */
 const ClearButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
@@ -31,7 +35,8 @@ const ClearedValue = ({ children }: { children: ReactNode }) => (
 );
 
 /**
- * 阶段评审列表勾选后的「修改属性」浮层：负责人 / 审核人 / 开始日期 / 结束日期。
+ * 阶段评审列表勾选后的「修改属性」浮层：负责人 / 审核人 / 开始日期 / 结束日期，勾选里有
+ * O 阶段评审时再多一组生产方式 / 出货评估（只落到那几条上，后端同口径）。
  *
  * 口径同用例的批量面板：每项默认「保持不变」，改过的换强调色边框并带 × 改回；成员可「设为无」，
  * 日期可「清空」。暂存后一次「应用到 N 条」。候选人是本项目成员 —— 一批评审的角色名各不相同，
@@ -43,12 +48,15 @@ const ClearedValue = ({ children }: { children: ReactNode }) => (
 export const StageReviewBulkEditPanel = ({
   projectId,
   selectedCount,
+  oStageCount,
   submitting,
   onCancel,
   onApply,
 }: {
   projectId: string;
   selectedCount: number;
+  /** 勾选里 O 阶段评审 / 评审活动的条数，0 就不出那一组 */
+  oStageCount: number;
   submitting: boolean;
   onCancel: () => void;
   onApply: (changes: TStageReviewBulkChanges) => void;
@@ -58,10 +66,15 @@ export const StageReviewBulkEditPanel = ({
   const [auditor, setAuditor] = useState<TMemberValue>(undefined);
   const [startDate, setStartDate] = useState<TFieldValue>(undefined);
   const [endDate, setEndDate] = useState<TFieldValue>(undefined);
+  const [productionMode, setProductionMode] = useState<TOStageValue>(undefined);
+  const [shipment, setShipment] = useState<TOStageValue>(undefined);
+  const hasOStage = oStageCount > 0;
 
   const keepText = t(`${I18N}.bulk.keep_unchanged`);
   const resetLabel = t(`${I18N}.bulk.reset`);
-  const changedCount = [leader, auditor, startDate, endDate].filter((value) => value !== undefined).length;
+  const changedCount = [leader, auditor, startDate, endDate, ...(hasOStage ? [productionMode, shipment] : [])].filter(
+    (value) => value !== undefined
+  ).length;
 
   const handleApply = () => {
     if (changedCount === 0) return;
@@ -70,6 +83,8 @@ export const StageReviewBulkEditPanel = ({
     if (auditor !== undefined) changes.auditor_ids = auditor ?? [];
     if (startDate !== undefined) changes.start_date = startDate;
     if (endDate !== undefined) changes.end_date = endDate;
+    if (hasOStage && productionMode !== undefined) changes.production_mode = productionMode as TProductionMode;
+    if (hasOStage && shipment !== undefined) changes.shipment_assessment = shipment as TShipmentAssessment;
     onApply(changes);
   };
 
@@ -133,6 +148,19 @@ export const StageReviewBulkEditPanel = ({
     </BulkEditFieldShell>
   );
 
+  const renderOStage = (field: TOStageField, value: TOStageValue, onChange: (value: TOStageValue) => void) => (
+    <BulkEditFieldShell isSet={value !== undefined} onReset={() => onChange(undefined)} resetLabel={resetLabel}>
+      <OStageFieldSelect
+        field={field}
+        value={value ?? ""}
+        placeholder={keepText}
+        placement="top-start"
+        buttonClassName="h-full flex-1 px-3 text-13 text-primary"
+        onChange={onChange}
+      />
+    </BulkEditFieldShell>
+  );
+
   return (
     <div
       className="w-[400px] max-w-[calc(100vw-2rem)] rounded-lg border border-subtle bg-surface-1 shadow-overlay-200"
@@ -156,6 +184,28 @@ export const StageReviewBulkEditPanel = ({
           {renderDate(endDate, setEndDate, { minDate: startDate })}
         </BulkEditFieldRow>
       </div>
+
+      {hasOStage && (
+        <>
+          <div className="mx-4 mt-3 mb-2 flex items-center gap-2">
+            <span className="shrink-0 text-12 font-semibold text-tertiary">{t(`${I18N}.detail.production_group`)}</span>
+            <span className="h-px flex-1 bg-layer-3" />
+            {oStageCount < selectedCount && (
+              <span className="shrink-0 text-11 text-tertiary">
+                {t(`${I18N}.bulk.o_stage_scope`, { count: oStageCount })}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 px-4 py-1">
+            <BulkEditFieldRow label={t(`${I18N}.fields.production_mode`)}>
+              {renderOStage("production_mode", productionMode, setProductionMode)}
+            </BulkEditFieldRow>
+            <BulkEditFieldRow label={t(`${I18N}.fields.shipment_assessment`)}>
+              {renderOStage("shipment_assessment", shipment, setShipment)}
+            </BulkEditFieldRow>
+          </div>
+        </>
+      )}
 
       <div className="mt-3 flex items-center gap-2 border-t border-subtle px-4 py-3">
         <span className="mr-auto text-11 text-tertiary">

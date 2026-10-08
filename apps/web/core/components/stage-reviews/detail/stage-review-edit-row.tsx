@@ -6,11 +6,13 @@ import {
   ArrowRight,
   CalendarDays,
   ChevronRight,
+  Factory,
   Flag,
   ListOrdered,
   Package,
   Paperclip,
   PencilLine,
+  Truck,
   Type,
   UserRound,
   UserRoundCheck,
@@ -53,6 +55,8 @@ const FIELD_ICON: Record<string, LucideIcon> = {
   component_versions: Package,
   cv_component: Package,
   cv_version: Package,
+  production_mode: Factory,
+  shipment_assessment: Truck,
 };
 
 /** 成品 / 组件版本两张表「添加 / 删除一行」的记录：field 就是表名 */
@@ -63,6 +67,8 @@ const isRowRecord = (activity: TStageReviewActivity) => ROW_TABLES.includes(acti
 const TEXT_ONLY_FIELDS = ["description_html", "work_instruction"];
 const MEMBER_FIELDS = ["leader", "auditor"];
 const DATE_FIELDS = ["start_date", "end_date"];
+/** 轨迹里存的是枚举值（normal / risk…），展示时翻成「正常生产」这类 */
+const ENUM_FIELDS = ["production_mode", "shipment_assessment"];
 
 const useFieldLabel = () => {
   const { t } = useTranslation();
@@ -93,8 +99,14 @@ const useActivityLabel = () => {
   };
 };
 
-const display = (field: string, value: string) =>
-  DATE_FIELDS.includes(field) ? (renderFormattedPayloadDate(value) ?? value) : value;
+const useDisplayValue = () => {
+  const { t } = useTranslation();
+  return (field: string, value: string) => {
+    if (DATE_FIELDS.includes(field)) return renderFormattedPayloadDate(value) ?? value;
+    if (ENUM_FIELDS.includes(field)) return t(`${I18N}.${field}.${value}`, { defaultValue: value });
+    return value;
+  };
+};
 
 /** 老的负责人 / 审核者记录值是「用户名 <邮箱>」且没有 identifier，不露那串值 */
 const isValueHidden = (activity: TStageReviewActivity) =>
@@ -134,6 +146,7 @@ const Arrow = () => <ArrowRight className="size-3 shrink-0 text-placeholder" ari
 const EditSentence = ({ activity }: { activity: TStageReviewActivity }) => {
   const { t } = useTranslation();
   const activityLabel = useActivityLabel();
+  const display = useDisplayValue();
   const field = activity.field ?? "";
 
   if (isRowRecord(activity)) {
@@ -196,6 +209,7 @@ const EditSentence = ({ activity }: { activity: TStageReviewActivity }) => {
 const EditDetailItem = ({ activity }: { activity: TStageReviewActivity }) => {
   const { t } = useTranslation();
   const activityLabel = useActivityLabel();
+  const display = useDisplayValue();
   const field = activity.field ?? "";
   const Icon = FIELD_ICON[field] ?? PencilLine;
   const { old_value: oldValue, new_value: newValue } = activity;

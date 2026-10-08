@@ -73,10 +73,10 @@ export const BlockAction = ({
 
 /**
  * 就地编辑格的统一外观：平时无边框，悬停浅底，聚焦蓝边。输入框、日期、成员选择三种都照这个来，
- * 左右各伸出 8px 让文字与上下行的值对齐。
+ * 左右各伸出 8px 让文字与上下行的值对齐。右栏的格子都放在白卡片上，悬停底色用浅灰。
  */
 export const INLINE_FIELD_CLASS =
-  "-mx-2 h-7 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 text-14 hover:bg-layer-2";
+  "-mx-2 h-7 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 text-14 hover:bg-layer-1";
 
 /** 空态一行灰字，不画空输入框、不画虚线框 */
 export const EmptyLine = ({ text }: { text: string }) => (

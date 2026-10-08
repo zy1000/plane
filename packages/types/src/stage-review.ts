@@ -124,7 +124,10 @@ export type TStageReviewRowPayload = {
 export type TStageReviewChild = Pick<
   TStageReview,
   "id" | "kind" | "title" | "status" | "result" | "leader_ids" | "leader_details" | "end_date" | "sort_order"
->;
+> & {
+  production_mode: TProductionMode | "";
+  shipment_assessment: TShipmentAssessment | "";
+};
 
 export type TStageReviewDetail = TStageReview & {
   /** 项目阶段（父子皆可）。``label`` 是 ``name`` 的别名，后端两个都给 */
@@ -272,14 +275,22 @@ export type TUpdateStageReviewPayload = Partial<{
   auditor_ids: string[];
   start_date: string | null;
   end_date: string | null;
+  /** 只有 O 阶段的两种类型能填；提交审核的必填项，能改不能清空 */
+  production_mode: TProductionMode;
+  shipment_assessment: TShipmentAssessment;
 }>;
 
-/** 列表批量改属性能改的字段：出现即修改，不出现保持不变；成员是整份名单（替换），空数组表示清空 */
+/**
+ * 列表批量改属性能改的字段：出现即修改，不出现保持不变；成员是整份名单（替换），空数组表示清空。
+ * 生产方式 / 出货评估只落到勾选里 O 阶段的那几条，不能清空（提交审核的必填项）。
+ */
 export type TStageReviewBulkChanges = Partial<{
   leader_ids: string[];
   auditor_ids: string[];
   start_date: string | null;
   end_date: string | null;
+  production_mode: TProductionMode;
+  shipment_assessment: TShipmentAssessment;
 }>;
 
 export type TBulkUpdateStageReviewPayload = TStageReviewBulkChanges & {
@@ -297,8 +308,8 @@ export type TBulkUpdateStageReviewResponse = {
 };
 
 /**
- * 提交审核时的结论。除「通过」外都必须带结论说明（conditional_reason），O 阶段必须带
- * 生产方式与出货评估。落点由结论决定：不通过留在评审中，其余进审核中。
+ * 提交审核时的结论。除「通过」外都必须带结论说明（conditional_reason）。
+ * 落点由结论决定：不通过留在评审中，其余进审核中。
  */
 /**
  * 退回上一步的理由，必填。它只进轨迹（`extra.rollback_reason`），不落在评审字段上 ——
@@ -318,6 +329,4 @@ export type TApproveStageReviewPayload = {
 export type TSubmitStageReviewPayload = {
   result: EStageReviewResult;
   conditional_reason?: string;
-  production_mode?: TProductionMode | "";
-  shipment_assessment?: TShipmentAssessment | "";
 };

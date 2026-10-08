@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ExternalLink, Flag, MoveDiagonal, MoveRight, Paperclip, Play, Plus, Send, Undo2 } from "lucide-react";
+import { Check, ExternalLink, MoveDiagonal, MoveRight, Paperclip, Play, Plus, Send, Undo2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -47,7 +47,7 @@ import { StageReviewPeekModeSelect } from "./stage-review-peek-mode";
 import { StageReviewSaveStatus } from "./stage-review-save-status";
 import { StageReviewRowTables, useStageReviewRowAdd } from "./stage-review-row-tables";
 import { StageReviewSidebar } from "./stage-review-sidebar";
-import { StageReviewStepper, useStepHints } from "./stage-review-stepper";
+import { StageReviewStepper, useStepDates } from "./stage-review-stepper";
 import { StageReviewTimeline } from "./stage-review-timeline";
 
 const I18N = "stage_review";
@@ -71,7 +71,7 @@ const previousStatusOf = (detail: TStageReviewDetail) =>
     : STAGE_REVIEW_STATUS_ORDER[STAGE_REVIEW_STATUS_ORDER.indexOf(detail.status) - 1];
 
 /**
- * 评审活动的标题多半是「父评审名-活动名」。标题上方已经有「属于 父评审」，标题再带一遍是重复，
+ * 评审活动的标题多半是「父评审名-活动名」。标题前已经有「父评审 /」，标题再带一遍是重复，
  * 所以抽屉里只显示、只编辑后半截；存的时候把前缀原样拼回去，列表与裁剪表里的全名不变。
  */
 const titlePrefixOf = (detail: TStageReviewDetail) => {
@@ -427,7 +427,7 @@ const DetailBody = (props: DetailBodyProps) => {
     onDeleteComment,
   } = props;
   const { t } = useTranslation();
-  const stepHints = useStepHints(detail, activities);
+  const stepDates = useStepDates(detail, activities);
   const guard = getStageReviewActionGuard(detail, currentUserId);
   const advanceBlockedText = blockedText(t, "advance", guard.advance);
   // 独立页：标题与保存状态挂到路由顶栏；抽屉里这两个挂点不存在，拿到的是 null
@@ -547,51 +547,48 @@ const DetailBody = (props: DetailBodyProps) => {
         </>
       )}
 
-      {/* 名片式标题区：阶段 + 类型（+ 所属评审）一行，标题一行（右侧动作按钮）；下面是四段进度 */}
-      <div className="flex shrink-0 flex-col gap-4 border-b border-subtle px-7 pt-5 pb-4">
-        <div className="flex items-end gap-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            {/* 三个标签同一种 22px 小方块：阶段（中性）· 类型（按类型着色）· 所属评审（可点，品牌色） */}
-            <div className="flex items-center gap-1.5">
-              {detail.stage_detail?.name && (
-                <span className="inline-flex h-5.5 items-center gap-1 rounded-md bg-layer-3 px-2 text-12 font-medium whitespace-nowrap text-secondary">
-                  <Flag className="size-3 shrink-0 text-placeholder" />
-                  {detail.stage_detail.name}
-                </span>
+      {/* 标题行：（所属评审 /）标题 + 类型 ｜ 四步进度 ｜ 退回 · 主动作。抽屉窄时进度与按钮整体换到下一行 */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-subtle px-7 py-4">
+        <div className="flex min-w-[240px] flex-1 items-center gap-2.5">
+          {detail.parent_id && detail.parent_title && (
+            /* 评审活动：所属评审可以点，回到父评审 */
+            <>
+              <Tooltip tooltipContent={t(`${I18N}.detail.back_to_parent`)}>
+                <Link
+                  to={getReviewPath(detail.parent_id)}
+                  onClick={handleOpenParent}
+                  className="max-w-[45%] min-w-0 truncate text-14 text-tertiary transition hover:text-accent-primary"
+                >
+                  {detail.parent_title}
+                </Link>
+              </Tooltip>
+              <span className="shrink-0 text-14 text-placeholder">/</span>
+            </>
+          )}
+          {editable ? (
+            <input
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={() => {
+                const next = titleDraft.trim();
+                // 标题不允许清空：清了列表里就只剩一行空白
+                if (!next) setTitleDraft(shownTitle);
+                else if (next !== shownTitle) onUpdate({ title: titlePrefix + next });
+              }}
+              className={cn(
+                TITLE_CLASS,
+                // 宽度跟着字走，类型标签才能紧贴标题
+                "max-w-full field-sizing-content hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none"
               )}
-              <StageReviewKindBadge kind={detail.kind} className="rounded-md border-0 px-2 text-12" />
-              {detail.parent_id && detail.parent_title && (
-                /* 评审活动：所属评审可以点，回到父评审 */
-                <Tooltip tooltipContent={t(`${I18N}.detail.back_to_parent`)}>
-                  <Link
-                    to={getReviewPath(detail.parent_id)}
-                    onClick={handleOpenParent}
-                    className="inline-flex h-5.5 min-w-0 items-center gap-1 rounded-md bg-accent-subtle px-2 text-12 font-medium text-accent-primary transition hover:opacity-80"
-                  >
-                    <Undo2 className="size-3 shrink-0" />
-                    <span className="truncate">{t(`${I18N}.detail.belongs_to`, { title: detail.parent_title })}</span>
-                  </Link>
-                </Tooltip>
-              )}
-            </div>
-            {editable ? (
-              <input
-                value={titleDraft}
-                onChange={(event) => setTitleDraft(event.target.value)}
-                onBlur={() => {
-                  const next = titleDraft.trim();
-                  // 标题不允许清空：清了列表里就只剩一行空白
-                  if (!next) setTitleDraft(shownTitle);
-                  else if (next !== shownTitle) onUpdate({ title: titlePrefix + next });
-                }}
-                className={cn(TITLE_CLASS, "hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none")}
-              />
-            ) : (
-              <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{shownTitle}</h2>
-            )}
-          </div>
+            />
+          ) : (
+            <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{shownTitle}</h2>
+          )}
+          <StageReviewKindBadge kind={detail.kind} className="shrink-0 rounded-md border-0 px-2 text-12" />
+        </div>
 
-          {/* 退回 · 主动作。按钮是 Plane 标准按钮 lg 档（28px）；状态看下面的四段进度 */}
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <StageReviewStepper detail={detail} dates={stepDates} />
           {hasActions && (
             <div className="flex h-9 shrink-0 items-center gap-2">
               {previousStatus && (
@@ -649,8 +646,6 @@ const DetailBody = (props: DetailBodyProps) => {
             </div>
           )}
         </div>
-
-        <StageReviewStepper status={detail.status} result={detail.result} hints={stepHints} />
       </div>
 
       {/* 身：正文与属性栏各自滚动 */}

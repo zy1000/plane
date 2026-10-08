@@ -49,6 +49,7 @@ export const RoleMemberSelect = ({
   variant = "field",
   placeholder,
   idle = false,
+  hint,
 }: {
   workspaceSlug: string;
   projectId: string;
@@ -63,6 +64,8 @@ export const RoleMemberSelect = ({
   placeholder?: string;
   /** cell：只画静态格子，不挂下拉 */
   idle?: boolean;
+  /** field：跟在名字后面的小提示（没指定人时的「建议 某岗位」），点它同样是打开下拉 */
+  hint?: React.ReactNode;
 }) => {
   const { t } = useTranslation();
   const [candidates, setCandidates] = useState<TStageReviewCandidates | null>(null);
@@ -119,7 +122,12 @@ export const RoleMemberSelect = ({
       return valueDetail.length > 0 ? <StageReviewPeopleCell users={valueDetail} placeholder="" /> : null;
     }
     return (
-      <StageReviewPeople users={valueDetail} unassigned={t(`${I18N}.detail.unassigned`)} size="md" showEmptyIcon={false} />
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={cn("flex min-w-0", hint && "shrink-0")}>
+          <StageReviewPeople users={valueDetail} unassigned={t(`${I18N}.detail.unassigned`)} size="md" showEmptyIcon={false} />
+        </span>
+        {hint}
+      </span>
     );
   }
 
@@ -171,12 +179,18 @@ export const RoleMemberSelect = ({
           }
         : { buttonClassName: cn(INLINE_FIELD_CLASS, "justify-between") })}
       label={
-        <StageReviewPeople
-          users={draftUsers}
-          unassigned={t(`${I18N}.detail.pick_${role}`)}
-          size="md"
-          showEmptyIcon={false}
-        />
+        <span className="flex min-w-0 items-center gap-2">
+          {/* 有提示时「指定负责人」不让缩，窄了只截断提示 */}
+          <span className={cn("flex min-w-0", !isCell && hint && "shrink-0")}>
+            <StageReviewPeople
+              users={draftUsers}
+              unassigned={t(`${I18N}.detail.pick_${role}`)}
+              size="md"
+              showEmptyIcon={false}
+            />
+          </span>
+          {!isCell && hint}
+        </span>
       }
     />
   );

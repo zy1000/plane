@@ -504,7 +504,7 @@ class StageReviewViewSet(BaseViewSet):
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
     def bulk_update(self, request, slug, project_id):
-        """列表勾选后批量改负责人 / 审核者 / 计划日期。
+        """列表勾选后批量改负责人 / 审核者 / 计划日期 / 生产方式 / 出货评估。
 
         id 只在本项目、当前用户可见的范围里找，别处的 id 静默忽略。逐条走 ``update_review``，
         已评审的跳过、校验不过的单条失败，其余照改；回改到的行给前端就地替换。
