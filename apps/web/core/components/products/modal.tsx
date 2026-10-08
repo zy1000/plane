@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
-import { InfoIcon } from "@plane/propel/icons";
+import { CloseIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles } from "@plane/types";
 import type { TLogoProps, TProduct, TProductNetwork } from "@plane/types";
-import { Avatar, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
-import { cn, getFileURL } from "@plane/utils";
+import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { isValidIdentifier } from "@/components/common/identifier-input";
-import { FormFieldShell } from "@/components/common/form-section";
 import { RichTextEditor } from "@/components/editor/rich-text";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
 import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
@@ -22,14 +19,23 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
-import { ProductExtendedFields, getProductFormStyles, useProductExtendedFields } from "./extended-fields";
+import {
+  PRODUCT_FORM_DICTIONARY_KEYS,
+  PRODUCT_REQUIRED_EXTENDED_FIELDS,
+  getMissingRequiredFields,
+  useProductExtendedFields,
+} from "./extended-fields";
 import { hasProductPermission } from "./permissions";
 import { getProductLogoDefaults } from "./logo-header";
-import { ProductModalHeader } from "./modal-header";
+import { ProductModalBasics } from "./modal-basics";
+import { ProductModalFooter } from "./modal-footer";
+import { ProductModalIdentity } from "./modal-identity";
+import { ProductModalProperties } from "./modal-properties";
 
 const workspaceService = new WorkspaceService();
 const EMPTY_DESCRIPTION = "<p></p>";
-const VARIANT = "grouped-modal" as const;
+/** 名称、开发编号、产品负责人不在扩展字段里，单独算进必填数 */
+const IDENTITY_REQUIRED_COUNT = 3;
 
 export const ProductModal = observer(function ProductModal() {
   const { t } = useTranslation();
@@ -62,7 +68,10 @@ export const ProductModal = observer(function ProductModal() {
   const { isOpen, mode, product } = modal;
   const editable = mode !== "view";
   const extended = useProductExtendedFields({ product, mode });
-  const styles = getProductFormStyles(VARIANT);
+  // 一次拉全量字典给 7 个下拉（6 个 FK + 项目代号）共用；查看态不请求
+  const { isLoading: isDictionaryLoading, getDictionaryByKey } = useDataDictionaries(workspaceSlug, {
+    autoFetch: isOpen && editable,
+  });
   const isPrivateProduct = network === 0;
   const editorEntityId = mode === "create" ? draftEntityId.current : (product?.id ?? "product");
   const {
@@ -237,20 +246,27 @@ export const ProductModal = observer(function ProductModal() {
             : String(errorPayload.name[0])
         );
       } else if (!errorPayload.owner?.[0] && !errorPayload.identifier?.[0] && !hasExtendedErrors) {
-        setFormError(t("workspace_products.toast.failed"));
+        setToast({ type: TOAST_TYPE.ERROR, title: t("workspace_products.toast.failed") });
       }
     } finally {
       setIsSaving(false);
     }
   };
 
+  const requiredTotal = PRODUCT_REQUIRED_EXTENDED_FIELDS.length + IDENTITY_REQUIRED_COUNT;
+  const requiredFilled =
+    requiredTotal -
+    getMissingRequiredFields(extended.values).length -
+    [name.trim(), identifier, ownerId].filter((value) => !value).length;
+  const hasErrors = Boolean(formError || identifierError || ownerError || extended.hasErrors);
+
   const descriptionField = !workspaceId ? (
-    <Loader>
-      <Loader.Item height="80px" />
+    <Loader className="flex-1">
+      <Loader.Item height="160px" />
     </Loader>
   ) : (
-    <div className="overflow-hidden rounded-lg border border-subtle-1 bg-surface-1">
-      <div className="vertical-scrollbar scrollbar-sm max-h-40 min-h-24 overflow-y-auto">
+    <div className="flex min-h-40 flex-1 flex-col overflow-hidden rounded-[10px] border border-subtle-1 bg-layer-2">
+      <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto">
         {editable ? (
           <RichTextEditor
             key={`product-editor-${editorEntityId}-${editorVersion}`}
@@ -264,11 +280,12 @@ export const ProductModal = observer(function ProductModal() {
             deferAssetDeletion
             onDeferredAssetDelete={handleDeferredAssetDelete}
             onChange={(_json, html) => setDescriptionHTML(html)}
-            placeholder={t("workspace_products.create.description_placeholder")}
+            // 不要占位文字；不传会落到编辑器默认的 "Press '/' for commands..."
+            placeholder={() => ""}
             searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
             uploadFile={handleUpload}
             duplicateFile={handleDuplicate}
-            containerClassName="min-h-24 pr-3 pt-3 text-14"
+            containerClassName="min-h-full pt-3 pr-3.5 pb-3 text-14"
           />
         ) : (
           <RichTextEditor
@@ -280,59 +297,11 @@ export const ProductModal = observer(function ProductModal() {
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}
             dragDropEnabled={false}
-            containerClassName="min-h-24 pr-3 pt-3 text-14"
+            containerClassName="min-h-full pt-3 pr-3.5 pb-3 text-14"
           />
         )}
       </div>
     </div>
-  );
-
-  const ownerField = (
-    <FormFieldShell
-      label={t("workspace_products.fields.product_owner")}
-      required
-      editable={editable}
-      error={ownerError ?? undefined}
-      hint={
-        willLosePrivateAccess ? (
-          <span className="flex items-start gap-1.5 text-warning-primary">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            {t("workspace_products.visibility.private_access_warning")}
-          </span>
-        ) : undefined
-      }
-      styles={styles}
-    >
-      {editable ? (
-        <div className={styles.control}>
-          <MemberDropdown
-            multiple={false}
-            value={ownerId}
-            memberIds={ownerCandidateIds}
-            onChange={(value) => {
-              setOwnerId(value);
-              setOwnerError(null);
-            }}
-            buttonVariant="border-with-text"
-            className="h-full w-full"
-            buttonContainerClassName="h-full w-full"
-            buttonClassName={cn(styles.dropdownButton, ownerError && "border-danger-strong")}
-            placeholder={t("workspace_products.fields.select_member_placeholder")}
-            showUserDetails
-          />
-        </div>
-      ) : (
-        <div className={cn(styles.text, "gap-1.5")}>
-          <Avatar
-            size="sm"
-            name={product?.owner_detail?.display_name ?? currentUser?.display_name ?? ""}
-            src={getFileURL(product?.owner_detail?.avatar_url ?? currentUser?.avatar_url ?? "")}
-            showTooltip={false}
-          />
-          <span className="truncate">{product?.owner_detail?.display_name ?? currentUser?.display_name ?? "-"}</span>
-        </div>
-      )}
-    </FormFieldShell>
   );
 
   return (
@@ -341,96 +310,130 @@ export const ProductModal = observer(function ProductModal() {
       handleClose={() => void handleClose()}
       position={EModalPosition.TOP}
       width={EModalWidth.XXXXL}
-      className="rounded-2xl sm:max-w-[50rem]"
+      className="rounded-2xl sm:max-w-[72rem]"
       initialFocus={nameInputRef}
     >
-      <div className="flex max-h-[min(88vh,52rem)] min-h-0 flex-col">
-        <ProductModalHeader
-          editable={editable}
-          name={name}
-          onNameChange={(value) => {
-            setName(value);
-            setFormError(null);
-          }}
-          nameError={formError}
-          identifier={identifier}
-          onIdentifierChange={(value) => {
-            setIdentifier(value);
-            setIdentifierError(null);
-          }}
-          identifierError={identifierError}
-          network={network}
-          onNetworkChange={setNetwork}
-          logoProps={logoProps}
-          onLogoChange={setLogoProps}
-          onClose={() => void handleClose()}
-          isMobile={isMobile}
-          nameInputRef={nameInputRef}
-          autoFocusName={mode === "create"}
-        />
-
+      <div className="relative flex h-[min(90vh,52rem)] min-h-0 flex-col">
         {isDetailLoading && product ? (
-          <div className="px-8 pb-6">
-            <Loader>
-              <Loader.Item height="38px" />
-              <Loader.Item height="96px" />
+          <div className="flex-1 px-9 pt-8">
+            <Loader className="space-y-4">
+              <Loader.Item height="64px" width="60%" />
+              <Loader.Item height="42px" />
+              <Loader.Item height="240px" />
             </Loader>
           </div>
         ) : (
-          <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-8">
-            <ProductExtendedFields
+          // 宽屏左右两栏各自滚动；窄屏上下堆叠，整体一起滚
+          <div
+            data-modal-wheel-scroll
+            className="grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[minmax(0,1fr)_28.5rem] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden"
+          >
+            <div
+              data-modal-wheel-scroll
+              className="vertical-scrollbar scrollbar-sm flex min-w-0 flex-col px-7 pt-7.5 pb-7 md:min-h-0 md:overflow-y-auto md:px-9"
+            >
+              <ProductModalIdentity
+                title={t(
+                  mode === "create"
+                    ? "workspace_products.create_product"
+                    : mode === "edit"
+                      ? "workspace_products.edit_product"
+                      : "workspace_products.view_product"
+                )}
+                editable={editable}
+                name={name}
+                onNameChange={(value) => {
+                  setName(value);
+                  setFormError(null);
+                }}
+                nameError={formError}
+                identifier={identifier}
+                onIdentifierChange={(value) => {
+                  setIdentifier(value);
+                  setIdentifierError(null);
+                }}
+                identifierError={identifierError}
+                network={network}
+                onNetworkChange={setNetwork}
+                logoProps={logoProps}
+                onLogoChange={setLogoProps}
+                isMobile={isMobile}
+                nameInputRef={nameInputRef}
+                autoFocusName={mode === "create"}
+              />
+              <div className="my-6 border-t border-subtle" />
+              <ProductModalBasics
+                workspaceSlug={workspaceSlug}
+                editable={editable}
+                values={extended.values}
+                errors={extended.errors}
+                onChange={extended.setValue}
+                codeDictionary={getDictionaryByKey(PRODUCT_FORM_DICTIONARY_KEYS.code)}
+                isDictionaryLoading={isDictionaryLoading}
+                description={descriptionField}
+              />
+              {attachmentWarning && (
+                <div className="mt-4 flex gap-3 rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2.5">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-primary" />
+                  <div>
+                    <p className="text-12 font-medium text-primary">{t("workspace_products.error.attachment_title")}</p>
+                    <p className="mt-0.5 text-11 text-secondary">
+                      {t("workspace_products.error.attachment_description")}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <ProductModalProperties
               workspaceSlug={workspaceSlug}
               editable={editable}
-              variant={VARIANT}
               product={product}
               values={extended.values}
               errors={extended.errors}
               onChange={extended.setValue}
-              missingRequiredFields={mode === "edit" ? extended.missingRequiredFields : undefined}
-              ownerField={ownerField}
-              descriptionField={descriptionField}
+              getDictionaryByKey={getDictionaryByKey}
+              isDictionaryLoading={isDictionaryLoading}
+              owner={{
+                value: ownerId,
+                onChange: (value) => {
+                  setOwnerId(value);
+                  setOwnerError(null);
+                },
+                error: ownerError,
+                memberIds: ownerCandidateIds,
+                warning: willLosePrivateAccess ? t("workspace_products.visibility.private_access_warning") : null,
+              }}
             />
-
-            {attachmentWarning && (
-              <div className="mb-6 flex gap-3 rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2.5">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-primary" />
-                <div>
-                  <p className="text-12 font-medium text-primary">{t("workspace_products.error.attachment_title")}</p>
-                  <p className="mt-0.5 text-11 text-secondary">
-                    {t("workspace_products.error.attachment_description")}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        <div className="flex shrink-0 items-center gap-4 border-t border-subtle px-8 py-4">
-          {editable ? (
-            <p className="flex min-w-0 items-center gap-1.5 text-12 text-tertiary">
-              <InfoIcon className="size-3.5 shrink-0" />
-              <span className="truncate">{t("workspace_products.create.footer_hint")}</span>
-            </p>
-          ) : null}
-          <div className="ml-auto flex shrink-0 gap-2.5">
-            <Button variant="secondary" size="lg" onClick={() => void handleClose()} disabled={isSaving}>
-              {mode === "view" ? t("close") : t("cancel")}
-            </Button>
-            {mode === "view" && product && canManageProduct ? (
-              <Button variant="primary" size="lg" onClick={() => openProductModal("edit", product)}>
-                <Pencil className="size-3.5" /> {t("workspace_products.actions.edit")}
-              </Button>
-            ) : mode !== "view" ? (
-              <Button variant="primary" size="lg" onClick={() => void handleSave()} loading={isSaving}>
-                {persistedProductId && attachmentWarning
-                  ? t("retry")
-                  : mode === "create"
-                    ? t("workspace_products.create_product")
-                    : t("save_changes")}
-              </Button>
-            ) : null}
-          </div>
-        </div>
+        <ProductModalFooter
+          mode={mode}
+          requiredFilled={requiredFilled}
+          requiredTotal={requiredTotal}
+          hasErrors={hasErrors}
+          isSaving={isSaving}
+          primaryLabel={
+            persistedProductId && attachmentWarning
+              ? t("retry")
+              : mode === "create"
+                ? t("workspace_products.create_product")
+                : t("save_changes")
+          }
+          onCancel={() => void handleClose()}
+          onSave={() => void handleSave()}
+          onEdit={mode === "view" && product && canManageProduct ? () => openProductModal("edit", product) : undefined}
+        />
+
+        <button
+          type="button"
+          onClick={() => void handleClose()}
+          aria-label={t("close")}
+          className="absolute top-4 right-4 grid size-8 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-primary"
+        >
+          <CloseIcon className="size-4" />
+        </button>
       </div>
     </ModalCore>
   );

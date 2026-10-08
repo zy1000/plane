@@ -50,7 +50,7 @@ const buildState = (product?: TProduct | null): TProductExtendedFieldsState => (
   reviewers: product?.reviewers ?? [],
 });
 
-const getMissingRequiredFields = (values: TProductExtendedFieldsState): TProductExtendedFieldKey[] =>
+export const getMissingRequiredFields = (values: TProductExtendedFieldsState): TProductExtendedFieldKey[] =>
   PRODUCT_REQUIRED_EXTENDED_FIELDS.filter((key) => {
     const value = values[key];
     return typeof value === "string" ? value.trim() === "" : value === null;

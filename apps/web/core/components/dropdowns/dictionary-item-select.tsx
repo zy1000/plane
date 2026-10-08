@@ -17,6 +17,12 @@ type Props = {
   isLoading?: boolean;
   className?: string;
   buttonClassName?: string;
+  /** 未选值时占位文字的样式（属性行出错时占位要变红） */
+  placeholderClassName?: string;
+  /** 属性行式的幽灵按钮不画下拉箭头 */
+  hideChevron?: boolean;
+  /** 外层触发按钮的样式（如属性行里去掉它自带的悬停底色，由 buttonClassName 自己出悬停） */
+  triggerClassName?: string;
   tabIndex?: number;
 };
 
@@ -32,6 +38,9 @@ export function DictionaryItemSelect(props: Props) {
     isLoading = false,
     className,
     buttonClassName,
+    placeholderClassName,
+    hideChevron = false,
+    triggerClassName,
     tabIndex,
   } = props;
   const items = dictionary?.items;
@@ -66,7 +75,7 @@ export function DictionaryItemSelect(props: Props) {
       options={isLoading ? undefined : (options ?? [])}
       disabled={disabled}
       className={cn("h-full w-full", className)}
-      customButtonClassName="h-full rounded-md"
+      customButtonClassName={cn("h-full rounded-md", triggerClassName)}
       tabIndex={tabIndex}
       optionsClassName="w-[min(20rem,calc(100vw-2rem))]"
       customButton={
@@ -78,7 +87,9 @@ export function DictionaryItemSelect(props: Props) {
             buttonClassName
           )}
         >
-          <span className={cn("flex min-w-0 flex-1 items-center", !selectedItem && "text-placeholder")}>
+          <span
+            className={cn("flex min-w-0 flex-1 items-center", !selectedItem && cn("text-placeholder", placeholderClassName))}
+          >
             {selectedItem ? (
               <DictionaryValueTag
                 label={selectedItem.label}
@@ -88,7 +99,7 @@ export function DictionaryItemSelect(props: Props) {
               <span className="truncate">{placeholder}</span>
             )}
           </span>
-          <ChevronDownIcon className="size-3 shrink-0 text-secondary" aria-hidden="true" />
+          {!hideChevron && <ChevronDownIcon className="size-3 shrink-0 text-secondary" aria-hidden="true" />}
         </div>
       }
     />

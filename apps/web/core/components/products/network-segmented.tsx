@@ -54,14 +54,14 @@ export function ProductNetworkSegmented(props: Props) {
               disabled={disabled}
               onClick={() => onChange(key)}
               className={cn(
-                "inline-flex h-6 items-center gap-1.5 rounded-md border px-2.5 text-12 font-medium transition-colors",
+                "inline-flex h-7 items-center gap-1.5 rounded-md border px-3 text-13 font-medium transition-colors",
                 active
                   ? "border-subtle-1 bg-surface-1 text-primary shadow-raised-200"
                   : "border-transparent text-secondary hover:text-primary",
                 disabled && "cursor-not-allowed opacity-60"
               )}
             >
-              <Icon className="size-3" />
+              <Icon className="size-3.5" />
               {t(labelKey)}
             </button>
           </Tooltip>
