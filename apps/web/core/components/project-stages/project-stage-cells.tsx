@@ -189,8 +189,9 @@ const InlineNumberCell = ({
     if (!cancelledRef.current && text !== initial) onCommit(text);
   };
 
+  // 编辑态整格就是输入框：不另画边框，只保留悬停时那层底色，看起来是同一个格子
   return (
-    <span className="relative flex w-full min-w-0 items-center">
+    <span className="relative -mx-3 flex h-full w-[calc(100%+1.5rem)] min-w-0 items-center bg-layer-transparent-hover">
       <input
         ref={inputRef}
         type="number"
@@ -206,9 +207,9 @@ const InlineNumberCell = ({
             event.currentTarget.blur();
           }
         }}
-        className="h-7 w-full min-w-0 [appearance:textfield] rounded border border-accent-strong bg-surface-1 pr-6 pl-1.5 text-13 tabular-nums text-primary outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-full w-full min-w-0 [appearance:textfield] border-0 bg-transparent pr-8 pl-3 text-13 tabular-nums text-primary outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
-      <span className="pointer-events-none absolute right-1.5 text-12 text-tertiary">{unit}</span>
+      <span className="pointer-events-none absolute right-3 text-12 text-tertiary">{unit}</span>
     </span>
   );
 };
