@@ -133,7 +133,35 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             raise serializers.ValidationError(
                 {"review_required_count": "只有「至少 N 人通过」规则才能填写人数"}
             )
+
+        begin_time = current("begin_time", None)
+        end_time = current("end_time", None)
+        date_errors = {}
+        if self.instance is None or "begin_time" in attrs:
+            if not begin_time:
+                date_errors["begin_time"] = "请填写开始日期"
+        if self.instance is None or "end_time" in attrs:
+            if not end_time:
+                date_errors["end_time"] = "请填写结束日期"
+        if (
+            (self.instance is None or "begin_time" in attrs or "end_time" in attrs)
+            and begin_time
+            and end_time
+            and end_time < begin_time
+        ):
+            date_errors["end_time"] = "结束日期不能早于开始日期"
+        if date_errors:
+            raise serializers.ValidationError(date_errors)
         return attrs
+
+    def create(self, validated_data):
+        # 请求没带复核人时，默认用创建人。显式传空列表表示不指定，不在这里补。
+        if "reviewers" not in validated_data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None) if request is not None else None
+            if user is not None and getattr(user, "is_authenticated", False):
+                validated_data["reviewers"] = [user]
+        return super().create(validated_data)
 
     def update(self, instance, validated_data):
         cases = validated_data.pop("cases", None)
@@ -175,6 +203,18 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             "review_approval_type",
             "review_required_count",
         ]
+        extra_kwargs = {
+            "begin_time": {
+                "required": True,
+                "allow_null": False,
+                "error_messages": {"required": "请填写开始日期", "null": "请填写开始日期"},
+            },
+            "end_time": {
+                "required": True,
+                "allow_null": False,
+                "error_messages": {"required": "请填写结束日期", "null": "请填写结束日期"},
+            },
+        }
 
 
 class PlanListSerializer(ModelSerializer):

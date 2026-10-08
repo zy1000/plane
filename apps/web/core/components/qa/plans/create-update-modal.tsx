@@ -11,6 +11,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { PlanReviewRuleFields } from "./plan-review-rule-fields";
 import { usePlanReviewRule } from "./use-plan-review-rule";
 import type { TPlanReviewApprovalType } from "@/services/qa/plan.service";
+import { useUser } from "@/hooks/store/user";
 import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 // services
 import { PlanService } from "@/services/qa/plan.service";
@@ -91,7 +92,18 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   } = props;
 
   const { t } = useTranslation();
+  const { data: currentUser } = useUser();
+  const creatorId = currentUser?.id ? String(currentUser.id) : undefined;
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const creatorReviewerApplied = useRef(false);
+
+  // 新建时没指定复核人，就默认是创建人；编辑沿用原值
+  const resolveReviewers = (reviewers?: string[] | null) => {
+    const ids = (reviewers ?? []).map(String).filter(Boolean);
+    if (ids.length > 0) return ids;
+    if (mode === "create" && creatorId) return [creatorId];
+    return [];
+  };
 
   // 表单状态
   const [name, setName] = useState<string>(initialData?.name ?? "");
@@ -99,7 +111,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const [moduleId, setModuleId] = useState<string | null>(initialData?.module ?? null);
   const [cycleId, setCycleId] = useState<string | null>(initialData?.cycle ?? null);
   const reviewRule = usePlanReviewRule({
-    reviewers: initialData?.reviewers,
+    reviewers: resolveReviewers(initialData?.reviewers),
     review_approval_type: initialData?.review_approval_type,
     review_required_count: initialData?.review_required_count,
   });
@@ -116,7 +128,8 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errors, setErrors] = useState<{
     name?: string;
-    time?: string;
+    beginTime?: string;
+    endTime?: string;
     module?: string;
     threshold?: string;
   }>({});
@@ -128,7 +141,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     setModuleId(initialData?.module ?? null);
     setCycleId(initialData?.cycle ?? null);
     reviewRule.reset({
-      reviewers: initialData?.reviewers,
+      reviewers: resolveReviewers(initialData?.reviewers),
       review_approval_type: initialData?.review_approval_type,
       review_required_count: initialData?.review_required_count,
     });
@@ -157,7 +170,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     setModuleId(initialData?.module ?? null);
     setCycleId(initialData?.cycle ?? null);
     reviewRule.reset({
-      reviewers: initialData?.reviewers,
+      reviewers: resolveReviewers(initialData?.reviewers),
       review_approval_type: initialData?.review_approval_type,
       review_required_count: initialData?.review_required_count,
     });
@@ -171,6 +184,21 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     setErrors({});
     setSubmitting(false);
   }, [isOpen, mode, planId, initialData]);
+
+  // 当前用户可能比弹窗晚到。只补一次创建人，避免用户清空复核人后又被填回去。
+  const setReviewerIds = reviewRule.setReviewerIds;
+  const reviewerIds = reviewRule.reviewerIds;
+  React.useEffect(() => {
+    if (!isOpen) {
+      creatorReviewerApplied.current = false;
+      return;
+    }
+    if (mode !== "create" || !creatorId || creatorReviewerApplied.current) return;
+    creatorReviewerApplied.current = true;
+    if ((initialData?.reviewers ?? []).some(Boolean)) return;
+    if (reviewerIds.includes(creatorId)) return;
+    setReviewerIds([creatorId]);
+  }, [isOpen, mode, creatorId, initialData, reviewerIds, setReviewerIds]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -217,17 +245,29 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const durationDays =
     beginTime && endTime && endTime >= beginTime ? differenceInCalendarDays(endTime, beginTime) + 1 : null;
 
-  // 简单校验：名称必填、结束时间不早于开始时间
+  // 名称、所属模块、起止日期必填；结束日期不能早于开始日期
   const validate = (): boolean => {
-    const nextErrors: { name?: string; time?: string; module?: string; threshold?: string } = {};
+    const nextErrors: {
+      name?: string;
+      beginTime?: string;
+      endTime?: string;
+      module?: string;
+      threshold?: string;
+    } = {};
     if (!name || !name.trim()) {
       nextErrors.name = "请输入计划名称";
     }
     if (!moduleId) {
       nextErrors.module = "请选择所属模块";
     }
+    if (!beginTime) {
+      nextErrors.beginTime = "请选择开始日期";
+    }
+    if (!endTime) {
+      nextErrors.endTime = "请选择结束日期";
+    }
     if (beginTime && endTime && endTime.getTime() < beginTime.getTime()) {
-      nextErrors.time = "结束时间不能早于开始时间";
+      nextErrors.endTime = "结束时间不能早于开始时间";
     }
 
     if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
@@ -395,40 +435,64 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
             </div>
           </FormFieldGroup>
 
-          <FormFieldGroup title="排期" optional>
+          <FormFieldGroup title="排期">
             <div className="flex items-start gap-2.5">
-              <FormFieldShell label="开始日期" labelHidden required={false} editable styles={styles} className="flex-1">
+              <FormFieldShell
+                label="开始日期"
+                labelHidden
+                required
+                editable
+                styles={styles}
+                className="flex-1"
+                error={errors.beginTime}
+              >
                 <div className={styles.control}>
                   <DateDropdown
                     value={beginTime}
-                    onChange={(val) => setBeginTime(val)}
+                    onChange={(val) => {
+                      setBeginTime(val);
+                      if (errors.beginTime) setErrors((prev) => ({ ...prev, beginTime: undefined }));
+                    }}
                     placeholder="开始日期"
                     buttonVariant="border-with-text"
                     className="h-full w-full"
                     buttonContainerClassName="h-full w-full"
-                    buttonClassName={cn(styles.dropdownButton, errors.time && "border-danger-strong")}
+                    buttonClassName={cn(styles.dropdownButton, errors.beginTime && "border-danger-strong")}
                     labelClassName={styles.dropdownLabel}
                     optionsClassName="z-[50]"
                     maxDate={endTime ?? undefined}
                     formatToken="yyyy-MM-dd"
+                    isClearable={false}
                   />
                 </div>
               </FormFieldShell>
               <ArrowRight className="mt-[11px] size-4 shrink-0 text-tertiary" aria-hidden="true" />
-              <FormFieldShell label="结束日期" labelHidden required={false} editable styles={styles} className="flex-1">
+              <FormFieldShell
+                label="结束日期"
+                labelHidden
+                required
+                editable
+                styles={styles}
+                className="flex-1"
+                error={errors.endTime}
+              >
                 <div className={styles.control}>
                   <DateDropdown
                     value={endTime}
-                    onChange={(val) => setEndTime(val)}
+                    onChange={(val) => {
+                      setEndTime(val);
+                      if (errors.endTime) setErrors((prev) => ({ ...prev, endTime: undefined }));
+                    }}
                     placeholder="结束日期"
                     buttonVariant="border-with-text"
                     className="h-full w-full"
                     buttonContainerClassName="h-full w-full"
-                    buttonClassName={cn(styles.dropdownButton, errors.time && "border-danger-strong")}
+                    buttonClassName={cn(styles.dropdownButton, errors.endTime && "border-danger-strong")}
                     labelClassName={styles.dropdownLabel}
                     optionsClassName="z-[50]"
                     minDate={beginTime ?? undefined}
                     formatToken="yyyy-MM-dd"
+                    isClearable={false}
                   />
                 </div>
               </FormFieldShell>
@@ -438,7 +502,6 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                 </span>
               ) : null}
             </div>
-            {errors.time ? <p className={styles.error}>{errors.time}</p> : null}
           </FormFieldGroup>
 
           <FormFieldGroup title="通过阈值">

@@ -1,10 +1,17 @@
 import type { ReactNode } from "react";
 import { ChevronRight, ClipboardCheck, Flag, GitBranchPlus, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { EProjectStageStatus, IUserLite, TProjectStage } from "@plane/types";
-import { Avatar, Checkbox } from "@plane/ui";
-import { cn, getFileURL } from "@plane/utils";
+import type { TProjectStage, TUpdateProjectStagePayload } from "@plane/types";
+import { Checkbox } from "@plane/ui";
+import { cn } from "@plane/utils";
 import type { TProjectStageFlashedCells } from "./bulk/use-project-stage-bulk-edit";
+import {
+  Empty,
+  ProjectStageDateCell,
+  ProjectStageDurationCell,
+  ProjectStageOwnerCell,
+  ProjectStageRatioCell,
+} from "./project-stage-cells";
 import { ProjectStageDelayedTag } from "./project-stage-delayed-tag";
 import type { TProjectStageRow } from "./project-stage-rows";
 import { delayedDays } from "./project-stage-rows";
@@ -35,34 +42,23 @@ export const PROJECT_STAGE_COLUMNS: TProjectStageColumn[] = [
   "status",
 ];
 
+/** 宽度含格子左右各 12px 内边距（格子之间画竖线，不再用 gap 隔开） */
 const COLUMN_WIDTH: Record<TProjectStageColumn, string> = {
-  code: "72px",
-  owner: "128px",
-  ratio: "72px",
-  start_date: "96px",
-  end_date: "96px",
-  duration_days: "64px",
-  actual_start: "80px",
-  actual_end: "80px",
-  status: "104px",
+  code: "92px",
+  owner: "148px",
+  ratio: "88px",
+  start_date: "116px",
+  end_date: "116px",
+  duration_days: "88px",
+  actual_start: "96px",
+  actual_end: "96px",
+  status: "124px",
 };
 
-const Empty = () => <span className="text-13 text-placeholder">—</span>;
+/** 同阶段评审 / 工作项表格：每格左边一道竖线，与行底线一起画出格子 */
+const CELL_CLASS = "flex h-full min-w-0 items-center border-l border-subtle px-3";
 
 const shortDate = (value: string) => value.slice(5, 10);
-
-const Person = ({ user, unassigned }: { user: IUserLite | null; unassigned: string }) =>
-  user ? (
-    <span className="flex min-w-0 items-center gap-2">
-      <Avatar size="sm" name={user.display_name} src={getFileURL(user.avatar_url ?? "")} showTooltip={false} />
-      <span className="truncate text-13 text-secondary">{user.display_name}</span>
-    </span>
-  ) : (
-    <span className="flex min-w-0 items-center gap-2">
-      <span className="size-5 shrink-0 rounded-full border border-dashed border-strong" />
-      <span className="truncate text-13 text-placeholder">{unassigned}</span>
-    </span>
-  );
 
 /** 行左侧留白里的勾选框：平时藏着，悬停该行或已经有勾选时才出来，不占列宽 */
 const RowCheckbox = ({
@@ -117,7 +113,8 @@ export type TProjectStageRowActions = {
   onEdit: (stage: TProjectStage) => void;
   onAddChild: (stage: TProjectStage) => void;
   onDelete: (stage: TProjectStage) => void;
-  onChangeStatus: (stage: TProjectStage, status: EProjectStageStatus) => void;
+  /** 格子里就地改：负责人 / 占比 / 计划起止 / 周期 / 状态，每次只带改的那个字段 */
+  onUpdate: (stage: TProjectStage, payload: TUpdateProjectStagePayload) => void;
 };
 
 const ActionButton = ({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) => (
@@ -137,11 +134,14 @@ const ActionButton = ({ title, onClick, children }: { title: string; onClick: ()
 
 /**
  * 树形阶段表：名称列带展开箭头 + 里程碑旗标 + 已延期标签，子阶段按深度缩进并画一段树线；
- * 父阶段的占比灰显为子之和；状态列是下拉直接改；行尾悬停出编辑 / 新建子阶段 / 删除。
+ * 有维护权限时负责人 / 占比 / 计划起止 / 周期 / 状态点格子就地改（同工作项表格），父阶段的占比
+ * 是子之和、只读；实际日期跟着状态走、只读；名称与类型走编辑弹窗。行尾悬停出编辑 / 新建子阶段 / 删除。
  */
 export const ProjectStageTable = ({
+  projectId,
   rows,
   today,
+  workloadRemaining,
   canManage,
   expandedIds,
   onToggleExpand,
@@ -149,9 +149,12 @@ export const ProjectStageTable = ({
   actions,
   flashedCells,
 }: {
+  projectId: string;
   rows: TProjectStageRow[];
   /** `YYYY-MM-DD` */
   today: string;
+  /** 叶子占比还可分配多少，占比格子校验用 */
+  workloadRemaining: number;
   canManage: boolean;
   expandedIds: Set<string>;
   onToggleExpand: (stageId: string) => void;
@@ -169,43 +172,62 @@ export const ProjectStageTable = ({
   ].join(" ");
   const unassigned = t(`${I18N}.table.unassigned`);
   const hasSelection = Boolean(selection && selection.selectedSet.size > 0);
+  const onUpdate = canManage ? actions?.onUpdate : undefined;
+  // 行是树先序铺的，看得见的行它的父也一定在行里
+  const stageById = new Map(rows.map(({ stage }) => [stage.id, stage]));
 
   const renderCell = (column: TProjectStageColumn, stage: TProjectStage, hasChildren: boolean) => {
+    const update = onUpdate ? (payload: TUpdateProjectStagePayload) => onUpdate(stage, payload) : undefined;
+    const parent = stage.parent_id ? stageById.get(stage.parent_id) : undefined;
     switch (column) {
       case "code":
         return <span className="font-mono text-12 tabular-nums text-tertiary">{stage.code}</span>;
       case "owner":
-        return <Person user={stage.owner_detail} unassigned={unassigned} />;
-      case "ratio": {
-        const value = stage.computed_workload_ratio;
-        if (value === null) return <Empty />;
         return (
-          <span className={cn("text-13 tabular-nums", hasChildren ? "text-placeholder" : "text-secondary")}>
-            {Number(value)}%
-          </span>
+          <ProjectStageOwnerCell
+            stage={stage}
+            projectId={projectId}
+            unassigned={unassigned}
+            onChange={update && ((ownerId) => update({ owner_id: ownerId }))}
+          />
         );
-      }
+      case "ratio":
+        return (
+          <ProjectStageRatioCell
+            stage={stage}
+            hasChildren={hasChildren}
+            workloadRemaining={workloadRemaining}
+            onChange={update && ((ratio) => update({ workload_ratio: ratio }))}
+          />
+        );
       case "start_date":
-        return stage.start_date ? (
-          <span className="text-13 tabular-nums text-secondary">{stage.start_date}</span>
-        ) : (
-          <Empty />
+        // 必填不可清空；有周期时结束会跟着顺延，开始不受当前结束限制（同编辑弹窗）
+        return (
+          <ProjectStageDateCell
+            value={stage.start_date}
+            minDate={parent?.start_date}
+            maxDate={(stage.duration_days ? null : stage.end_date) ?? parent?.end_date}
+            clearable={false}
+            onChange={update && ((date) => date && update({ start_date: date }))}
+          />
         );
       case "end_date":
-        return stage.end_date ? (
-          <span className={cn("text-13 tabular-nums", stage.is_delayed ? "text-danger-primary" : "text-secondary")}>
-            {stage.end_date}
-          </span>
-        ) : (
-          <Empty />
+        return (
+          <ProjectStageDateCell
+            value={stage.end_date}
+            isLate={stage.is_delayed}
+            minDate={stage.start_date ?? parent?.start_date}
+            maxDate={parent?.end_date}
+            clearable
+            onChange={update && ((date) => update({ end_date: date }))}
+          />
         );
       case "duration_days":
-        return stage.duration_days !== null ? (
-          <span className="text-13 tabular-nums text-secondary">
-            {t(`${I18N}.table.days`, { count: stage.duration_days })}
-          </span>
-        ) : (
-          <Empty />
+        return (
+          <ProjectStageDurationCell
+            stage={stage}
+            onChange={update && ((days) => update({ duration_days: days }))}
+          />
         );
       case "actual_start":
         return stage.actual_start ? (
@@ -223,7 +245,7 @@ export const ProjectStageTable = ({
         return (
           <ProjectStageStatusCell
             status={stage.status}
-            onChange={canManage && actions ? (next) => actions.onChangeStatus(stage, next) : undefined}
+            onChange={update && ((status) => update({ status }))}
           />
         );
     }
@@ -232,7 +254,7 @@ export const ProjectStageTable = ({
   return (
     <div className="min-w-fit">
       <div
-        className="group/header sticky top-0 z-[2] grid h-9 items-center gap-x-3 border-b border-subtle bg-layer-1 px-6 text-12 text-tertiary"
+        className="group/header sticky top-0 z-[2] grid h-9 items-center border-b border-subtle bg-layer-1 text-12 text-tertiary"
         style={{ gridTemplateColumns }}
       >
         {selection && (
@@ -245,13 +267,13 @@ export const ProjectStageTable = ({
             onToggle={selection.onToggleAll}
           />
         )}
-        <span>{t(`${I18N}.table.name`)}</span>
+        <span className="flex h-full min-w-0 items-center pr-3 pl-6">{t(`${I18N}.table.name`)}</span>
         {columns.map((column) => (
-          <span key={column} className="truncate">
-            {t(`${I18N}.table.${column}`)}
+          <span key={column} className={CELL_CLASS}>
+            <span className="truncate">{t(`${I18N}.table.${column}`)}</span>
           </span>
         ))}
-        <span />
+        {actions ? <span className={CELL_CLASS} /> : <span />}
       </div>
 
       {rows.map(({ stage, depth, hasChildren, isExpanded }) => {
@@ -261,7 +283,7 @@ export const ProjectStageTable = ({
           <div
             key={stage.id}
             className={cn(
-              "group/row relative grid h-11 items-center gap-x-3 border-b border-subtle px-6 transition-colors",
+              "group/row relative grid h-11 items-center border-b border-subtle transition-colors",
               selected ? "bg-accent-subtle" : "hover:bg-layer-1"
             )}
             style={{ gridTemplateColumns }}
@@ -276,13 +298,13 @@ export const ProjectStageTable = ({
               />
             )}
             <span
-              className="relative flex h-full min-w-0 items-center gap-1.5"
-              style={{ paddingLeft: depth * 20 }}
+              className="relative flex h-full min-w-0 items-center gap-1.5 pr-3"
+              style={{ paddingLeft: 24 + depth * 20 }}
             >
               {depth > 0 && (
                 <span
                   className="absolute top-0 h-1/2 w-3 rounded-bl-md border-b border-l border-subtle"
-                  style={{ left: depth * 20 - 12 }}
+                  style={{ left: 24 + depth * 20 - 12 }}
                   aria-hidden
                 />
               )}
@@ -335,25 +357,24 @@ export const ProjectStageTable = ({
             {columns.map((column) => (
               <span
                 key={column}
-                className={cn(
-                  "-mx-1.5 flex h-8 min-w-0 items-center rounded px-1.5 transition-colors duration-700",
-                  flashed?.has(column) && "bg-success-subtle"
-                )}
+                className={cn(CELL_CLASS, "transition-colors duration-700", flashed?.has(column) && "bg-success-subtle")}
               >
                 {renderCell(column, stage, hasChildren)}
               </span>
             ))}
             {actions ? (
-              <span className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
-                <ActionButton title={t(`${I18N}.table.edit`)} onClick={() => actions.onEdit(stage)}>
-                  <Pencil className="size-3.5" />
-                </ActionButton>
-                <ActionButton title={t(`${I18N}.table.add_child`)} onClick={() => actions.onAddChild(stage)}>
-                  <GitBranchPlus className="size-3.5" />
-                </ActionButton>
-                <ActionButton title={t(`${I18N}.table.delete`)} onClick={() => actions.onDelete(stage)}>
-                  <Trash2 className="size-3.5" />
-                </ActionButton>
+              <span className="flex h-full items-center justify-end border-l border-subtle px-2">
+                <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
+                  <ActionButton title={t(`${I18N}.table.edit`)} onClick={() => actions.onEdit(stage)}>
+                    <Pencil className="size-3.5" />
+                  </ActionButton>
+                  <ActionButton title={t(`${I18N}.table.add_child`)} onClick={() => actions.onAddChild(stage)}>
+                    <GitBranchPlus className="size-3.5" />
+                  </ActionButton>
+                  <ActionButton title={t(`${I18N}.table.delete`)} onClick={() => actions.onDelete(stage)}>
+                    <Trash2 className="size-3.5" />
+                  </ActionButton>
+                </span>
               </span>
             ) : (
               <span />

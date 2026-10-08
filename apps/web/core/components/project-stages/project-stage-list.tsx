@@ -6,7 +6,7 @@ import { Layers, Plus, SearchX } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectStage } from "@plane/types";
+import type { TProjectStage, TUpdateProjectStagePayload } from "@plane/types";
 import { EProjectStageStatus, PROJECT_STAGE_MAX_WORKLOAD_RATIO } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -126,9 +126,9 @@ export const ProjectStageList = observer(function ProjectStageList({
     });
   };
 
-  const handleChangeStatus = async (stage: TProjectStage, status: EProjectStageStatus) => {
+  const handleUpdate = async (stage: TProjectStage, payload: TUpdateProjectStagePayload) => {
     try {
-      await updateStage(stage.id, { status });
+      await updateStage(stage.id, payload);
     } catch (requestError) {
       toastError(requestError, `${I18N}.toast.update_error`);
     }
@@ -247,8 +247,10 @@ export const ProjectStageList = observer(function ProjectStageList({
           </div>
         ) : (
           <ProjectStageTable
+            projectId={projectId}
             rows={rows}
             today={today}
+            workloadRemaining={workloadRemaining}
             canManage={canManage}
             expandedIds={expandedIds}
             onToggleExpand={toggleExpand}
@@ -269,7 +271,7 @@ export const ProjectStageList = observer(function ProjectStageList({
                     onEdit: (stage) => setForm({ mode: "edit", stage }),
                     onAddChild: (stage) => setForm({ mode: "create-child", parent: stage }),
                     onDelete: (stage) => setPendingDelete({ stage }),
-                    onChangeStatus: handleChangeStatus,
+                    onUpdate: (stage, payload) => void handleUpdate(stage, payload),
                   }
                 : undefined
             }

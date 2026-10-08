@@ -299,7 +299,8 @@ class PlanAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
         serializer = self.serializer_class(
-            data=request.data, context={"workspace_slug": slug}
+            data=request.data,
+            context={"workspace_slug": slug, "request": request},
         )
         serializer.is_valid(raise_exception=True)
         test_plan = serializer.save()
