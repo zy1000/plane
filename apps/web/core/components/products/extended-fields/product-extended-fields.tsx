@@ -60,6 +60,12 @@ const SHORT_LABEL_FIELDS: Partial<Record<TProductExtendedFieldKey, true>> = {
   v_phase_close_date: true,
 };
 
+/** 产品表单必填项多，分组弹窗也挂红星，不能等点了创建才知道哪些必填 */
+export const getProductFormStyles = (variant: TFormVariant) => ({
+  ...FORM_VARIANT_STYLES[variant],
+  requiredMarker: true,
+});
+
 const UserCell = ({ user }: { user: IUserLite | null | undefined }) =>
   user ? (
     <span className="flex min-w-0 items-center gap-1.5">
@@ -87,7 +93,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
   const { t } = useTranslation();
   // 一次拉全量字典给 7 个下拉（6 个 FK + 项目代号）共用；查看态不请求
   const { isLoading, getDictionaryByKey } = useDataDictionaries(workspaceSlug, { autoFetch: editable });
-  const styles = FORM_VARIANT_STYLES[variant];
+  const styles = getProductFormStyles(variant);
   const reviewers = product?.reviewer_details ?? [];
   const showOptional = false;
   const divided = variant === "settings";

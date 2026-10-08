@@ -184,14 +184,13 @@ class TestProductApp:
         assert wrong_dictionary_response.status_code == status.HTTP_400_BAD_REQUEST
         assert wrong_dictionary_response.data["stage"] == ["PRODUCT_DICTIONARY_ITEM_INVALID"]
 
-        # 代号工作区内唯一
+        # 代号允许重复
         duplicate_code_response = api_client.post(
             self.list_url,
             self.product_payload(name="Same code", identifier="SAMECODE", code="Launchpad"),
             format="json",
         )
-        assert duplicate_code_response.status_code == status.HTTP_400_BAD_REQUEST
-        assert duplicate_code_response.data["code"] == ["PRODUCT_CODE_ALREADY_EXISTS"]
+        assert duplicate_code_response.status_code == status.HTTP_201_CREATED
 
     def test_private_product_visibility(self, api_client):
         admin = self.add_member(role=20)

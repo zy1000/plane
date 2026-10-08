@@ -108,6 +108,7 @@ export function ProductModalHeader(props: Props) {
             >
               <span className="flex h-full items-center border-r border-subtle-1 px-2 text-11 font-semibold text-tertiary">
                 {t("workspace_products.fields.identifier")}
+                {editable ? <span className="ml-0.5 text-danger-primary">*</span> : null}
               </span>
               {editable ? (
                 <input

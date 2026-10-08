@@ -129,9 +129,7 @@ export const useProductExtendedFields = ({ product, mode }: TUseProductExtendedF
         const raw = payload[key];
         const message = Array.isArray(raw) ? raw[0] : raw;
         if (typeof message !== "string" || !message) return;
-        if (message === "PRODUCT_CODE_ALREADY_EXISTS") {
-          nextErrors[key] = t("workspace_products.validation.code_already_exists");
-        } else if (SERVER_REQUIRED_PATTERN.test(message)) {
+        if (SERVER_REQUIRED_PATTERN.test(message)) {
           nextErrors[key] = requiredMessage(key);
         } else {
           nextErrors[key] = message;
@@ -141,7 +139,7 @@ export const useProductExtendedFields = ({ product, mode }: TUseProductExtendedF
       setErrors(nextErrors);
       return true;
     },
-    [requiredMessage, t]
+    [requiredMessage]
   );
 
   return {

@@ -12,7 +12,7 @@ import type { TLogoProps, TProduct, TProductNetwork } from "@plane/types";
 import { Avatar, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { isValidIdentifier } from "@/components/common/identifier-input";
-import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-section";
+import { FormFieldShell } from "@/components/common/form-section";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
@@ -22,7 +22,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
-import { ProductExtendedFields, useProductExtendedFields } from "./extended-fields";
+import { ProductExtendedFields, getProductFormStyles, useProductExtendedFields } from "./extended-fields";
 import { hasProductPermission } from "./permissions";
 import { getProductLogoDefaults } from "./logo-header";
 import { ProductModalHeader } from "./modal-header";
@@ -62,7 +62,7 @@ export const ProductModal = observer(function ProductModal() {
   const { isOpen, mode, product } = modal;
   const editable = mode !== "view";
   const extended = useProductExtendedFields({ product, mode });
-  const styles = FORM_VARIANT_STYLES[VARIANT];
+  const styles = getProductFormStyles(VARIANT);
   const isPrivateProduct = network === 0;
   const editorEntityId = mode === "create" ? draftEntityId.current : (product?.id ?? "product");
   const {
@@ -139,24 +139,23 @@ export const ProductModal = observer(function ProductModal() {
 
   const handleSave = async () => {
     const trimmedName = name.trim();
-    if (!trimmedName) {
-      setFormError(t("workspace_products.validation.required", { field: t("workspace_products.fields.name") }));
-      return;
-    }
-    if (!isValidIdentifier(identifier)) {
-      setIdentifierError(t("common.identifier.invalid"));
-      return;
-    }
-    if (!ownerId) {
-      setOwnerError(t("workspace_products.validation.owner_required"));
-      return;
-    }
-    if (!extended.validate()) return;
+    // 所有字段一起校验、一起报错，不能报完一个就 return
+    const nextNameError = trimmedName
+      ? null
+      : t("workspace_products.validation.required", { field: t("workspace_products.fields.name") });
+    const nextIdentifierError = !identifier
+      ? t("workspace_products.validation.required", { field: t("workspace_products.fields.identifier") })
+      : isValidIdentifier(identifier)
+        ? null
+        : t("common.identifier.invalid");
+    const nextOwnerError = ownerId ? null : t("workspace_products.validation.owner_required");
+    const isExtendedValid = extended.validate();
+    setFormError(nextNameError);
+    setIdentifierError(nextIdentifierError);
+    setOwnerError(nextOwnerError);
+    if (nextNameError || nextIdentifierError || nextOwnerError || !isExtendedValid) return;
 
     setIsSaving(true);
-    setFormError(null);
-    setIdentifierError(null);
-    setOwnerError(null);
     extended.clearErrors();
     setAttachmentWarning(false);
     const payload = {
@@ -214,23 +213,31 @@ export const ProductModal = observer(function ProductModal() {
         error && typeof error === "object"
           ? (error as { name?: string[]; identifier?: string[]; owner?: string[] })
           : {};
+      // DRF 一次返回所有字段的错误，逐个落到对应字段上，不要只挑第一个
       if (errorPayload.owner?.[0]) {
         setOwnerError(
           errorPayload.owner[0] === "PRODUCT_OWNER_NOT_MEMBER"
             ? t("workspace_products.validation.owner_not_member")
             : String(errorPayload.owner[0])
         );
-      } else if (errorPayload.identifier?.[0]) {
+      }
+      if (errorPayload.identifier?.[0]) {
         // 后端返回 PRODUCT_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
         setIdentifierError(
           errorPayload.identifier[0] === "PRODUCT_IDENTIFIER_ALREADY_EXISTS"
-            ? t("common.identifier.already_exists")
+            ? t("workspace_products.validation.identifier_already_exists")
             : t("common.identifier.invalid")
         );
-      } else if (extended.applyServerErrors(error)) {
-        // 字段级错误已在扩展字段区行内展示
-      } else {
-        setFormError(String(errorPayload.name?.[0] ?? t("workspace_products.toast.failed")));
+      }
+      const hasExtendedErrors = extended.applyServerErrors(error);
+      if (errorPayload.name?.[0]) {
+        setFormError(
+          errorPayload.name[0] === "PRODUCT_NAME_ALREADY_EXISTS"
+            ? t("workspace_products.validation.name_already_exists")
+            : String(errorPayload.name[0])
+        );
+      } else if (!errorPayload.owner?.[0] && !errorPayload.identifier?.[0] && !hasExtendedErrors) {
+        setFormError(t("workspace_products.toast.failed"));
       }
     } finally {
       setIsSaving(false);

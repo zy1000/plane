@@ -15,7 +15,7 @@ class Product(BaseModel):
     identifier = models.CharField(
         max_length=12, db_index=True, verbose_name="产品标识（需求编号前缀）"
     )
-    # 产品代号（Cedar28B-032501-水）。工作区内条件唯一 + 非空 check，见 Meta.constraints。
+    # 产品代号（Cedar28B-032501-水）。允许重复，只有非空 check，见 Meta.constraints。
     code = models.CharField(max_length=255, verbose_name="产品代号")
     # 六个字典 FK：DB 允许空（迁移前的存量产品为空，前端编辑时强制补齐），API 层必填。
     # RESTRICT 而非 PROTECT：直接删被引用的字典值同样报错，但整个工作区硬删时
@@ -158,11 +158,7 @@ class Product(BaseModel):
                 check=~models.Q(identifier=""),
                 name="product_identifier_not_blank",
             ),
-            models.UniqueConstraint(
-                fields=["code", "workspace"],
-                condition=models.Q(deleted_at__isnull=True),
-                name="product_unique_code_workspace_active",
-            ),
+            # 代号不唯一：多个产品可以挂同一个项目代号（取自 project_code 字典）
             models.CheckConstraint(
                 check=~models.Q(code=""),
                 name="product_code_not_blank",

@@ -160,14 +160,6 @@ class ProductSerializer(BaseSerializer):
         code = (value or "").strip()
         if not code:
             raise serializers.ValidationError("Product code cannot be empty.")
-        workspace = self.context.get("workspace")
-        if workspace is None:
-            raise serializers.ValidationError("Workspace is required.")
-        queryset = Product.objects.filter(workspace=workspace, code=code)
-        if self.instance is not None:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        if queryset.exists():
-            raise serializers.ValidationError("PRODUCT_CODE_ALREADY_EXISTS")
         return code
 
     def validate(self, attrs):

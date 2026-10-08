@@ -182,8 +182,11 @@ export function FormFieldShell(props: TFormFieldShellProps) {
   return (
     <div className={cn("min-w-0", className)}>
       <span className={cn(styles.label, labelHidden && "sr-only")}>
-        {label}
-        {editable && required && styles.requiredMarker ? <span className="ml-0.5 text-danger-primary">*</span> : null}
+        {/* 红星和字段名包在一起，flex 标签（grouped-modal）的 gap 才不会把它推开 */}
+        <span>
+          {label}
+          {editable && required && styles.requiredMarker ? <span className="ml-0.5 text-danger-primary">*</span> : null}
+        </span>
         {editable && !required && styles.optionalBadge ? (
           <span className={styles.optionalBadge}>{optionalText || t("optional")}</span>
         ) : null}
