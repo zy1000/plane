@@ -47,14 +47,14 @@ export function ProjectNetworkSegmented(props: Props) {
                   tabIndex={tabIndex}
                   onClick={() => onChange(network.key)}
                   className={cn(
-                    "inline-flex h-6 items-center gap-1.5 rounded-md border px-2.5 text-12 font-medium transition-colors",
+                    "inline-flex h-7 items-center gap-1.5 rounded-md border px-3 text-13 font-medium transition-colors",
                     active
                       ? "border-subtle-1 bg-surface-1 text-primary shadow-raised-200"
                       : "border-transparent text-secondary hover:text-primary",
                     disabled && "cursor-not-allowed opacity-60"
                   )}
                 >
-                  <ProjectNetworkIcon iconKey={network.iconKey} className="size-3" />
+                  <ProjectNetworkIcon iconKey={network.iconKey} className="size-3.5" />
                   {t(network.i18n_label)}
                 </button>
               </Tooltip>

@@ -17,11 +17,13 @@ import { CustomSearchSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { TypeIcon } from "@/components/common/type-icon-picker";
+import { MODAL_FIELD_CLASS, ModalFieldError, ModalFieldLabel } from "@/components/common/form-modal";
 import { FormFieldShell } from "@/components/common/form-section";
 import { devModeDetailPath } from "@/components/template-management/dev-modes/routes";
 // local imports
 import type { TProjectFieldProps } from "./fields";
 import { useFieldHelpers } from "./fields";
+import { requiredValueRules } from "./rules";
 
 /** 与模板中心卡片共用的 i18n 前缀，模式名与组件名都从那边取，别再抄一份 */
 const DEV_MODE_I18N = "workspace_templates.dev_modes";
@@ -51,22 +53,21 @@ function DevModeFeatureSummary({ features }: { features: TDevModeLite["features"
   );
 }
 
-// ---- 创建弹窗：可选的下拉 ----
-type TProjectDevModeFieldProps = TProjectFieldProps & {
+// ---- 创建弹窗：左栏的下拉 ----
+type TProjectDevModeFieldProps = Pick<TProjectFieldProps, "control" | "disabled" | "tabIndex"> & {
   devModes: TDevMode[];
   isLoading: boolean;
-  className?: string;
 };
 
 /**
- * 创建项目弹窗里的「研发模式」。必填，默认选中混合模式（默认值在表单那边设）。
+ * 创建项目弹窗左栏的「研发模式」。必填，默认选中混合模式（默认值在表单那边设）；创建后不可更改，字段名旁挂一把小锁。
  *
  * 模式决定项目能用哪些组件，所以选完立刻在下面把开放的组件列出来 —— 创建弹窗里
  * 已经没有功能开关那一步了，这行摘要是用户唯一能看到的后果。
  */
 export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
-  const { control, variant, disabled = false, tabIndex, devModes, isLoading, className } = props;
-  const { t, styles, label } = useFieldHelpers(variant);
+  const { control, disabled = false, tabIndex, devModes, isLoading } = props;
+  const { t } = useTranslation();
 
   const options = useMemo(
     () =>
@@ -95,19 +96,24 @@ export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
     <Controller
       control={control}
       name="dev_mode"
-      rules={{ validate: (value) => Boolean(value) || t("workspace_projects.validation.dev_mode_required") }}
+      rules={requiredValueRules(t("workspace_projects.validation.dev_mode_required"))}
       render={({ field: { value, onChange }, fieldState: { error } }) => {
         const selected = devModes.find((devMode) => devMode.id === value);
         return (
-          <FormFieldShell
-            label={label("dev_mode")}
-            required
-            editable={!disabled}
-            error={error?.message}
-            styles={styles}
-            className={className}
-          >
-            <div className={styles.control}>
+          <div>
+            <ModalFieldLabel
+              required
+              note={
+                <>
+                  <Lock className="size-2.75" aria-hidden="true" />
+                  {t("workspace_projects.create.dev_mode_locked")}
+                </>
+              }
+            >
+              {t("workspace_projects.fields.dev_mode")}
+            </ModalFieldLabel>
+            {/* 下拉外层是 h-full，不给定高会被撑成整块的高度 */}
+            <div className="h-10.5">
               <CustomSearchSelect
                 options={isLoading ? undefined : options}
                 value={value ?? null}
@@ -115,31 +121,29 @@ export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
                 disabled={disabled}
                 className="h-full w-full"
                 optionsClassName="w-[min(28rem,calc(100vw-2rem))]"
-                customButtonClassName="h-full rounded-md"
+                customButtonClassName="h-full rounded-[10px] hover:bg-transparent"
                 customButton={
                   <div
                     className={cn(
-                      "flex h-full w-full items-center justify-between gap-1.5 rounded-md border-[0.5px] border-strong px-2 text-left",
-                      error && "border-danger-strong",
-                      styles.dropdownButton
+                      MODAL_FIELD_CLASS,
+                      "flex items-center justify-between gap-2 border-subtle-1 bg-layer-2 text-left",
+                      error && "border-danger-strong"
                     )}
                   >
-                    <span className={cn("flex min-w-0 flex-1 items-center gap-2", !selected && "text-placeholder")}>
+                    <span className="flex min-w-0 flex-1 items-center gap-2.5">
                       {selected ? (
                         <>
                           <TypeIcon
                             iconProps={selected.icon_props?.icon}
-                            className="size-[22px] rounded-md"
+                            className="size-6.5 rounded-md"
                             iconClassName="size-3.5"
                           />
-                          <span className="truncate">{selected.name}</span>
+                          <span className="truncate font-medium">{selected.name}</span>
                           {selected.is_system ? (
                             <span className={PRESET_BADGE}>{t(`${DEV_MODE_I18N}.card.preset`)}</span>
                           ) : null}
                         </>
-                      ) : (
-                        <span className="truncate">{t("workspace_projects.fields.select_placeholder")}</span>
-                      )}
+                      ) : null}
                     </span>
                     <ChevronDownIcon className="size-3 shrink-0 text-secondary" aria-hidden="true" />
                   </div>
@@ -147,8 +151,9 @@ export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
                 tabIndex={tabIndex}
               />
             </div>
+            {error?.message ? <ModalFieldError message={error.message} /> : null}
             {selected ? <DevModeFeatureSummary features={selected.features} /> : null}
-          </FormFieldShell>
+          </div>
         );
       }}
     />

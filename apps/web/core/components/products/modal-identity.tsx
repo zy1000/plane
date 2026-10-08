@@ -5,11 +5,11 @@
  */
 
 import type { MutableRefObject } from "react";
-import { AlertCircle } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TLogoProps, TProductNetwork } from "@plane/types";
 import { cn } from "@plane/utils";
+import { ModalInlineError } from "@/components/common/form-modal";
 import { IDENTIFIER_MAX_LENGTH, sanitizeIdentifier } from "@/components/common/identifier-input";
 import { ProductLogoHeader } from "./logo-header";
 import { ProductNetworkSegmented } from "./network-segmented";
@@ -33,13 +33,6 @@ type Props = {
   nameInputRef?: MutableRefObject<HTMLInputElement | null>;
   autoFocusName?: boolean;
 };
-
-const ErrorLine = ({ message }: { message: string }) => (
-  <p className="mt-1.5 flex items-center gap-1 text-12 text-danger-primary">
-    <AlertCircle className="size-3.5 shrink-0" />
-    {message}
-  </p>
-);
 
 /**
  * 产品弹窗左栏顶部的身份区：logo 大块 + 大字产品名 + 开发编号芯片 + 可见性开关。
@@ -102,7 +95,7 @@ export function ProductModalIdentity(props: Props) {
               {name || "—"}
             </p>
           )}
-          {nameError ? <ErrorLine message={nameError} /> : null}
+          {nameError ? <ModalInlineError message={nameError} /> : null}
           <div className="mt-2.5 flex flex-wrap items-center gap-3">
             <Tooltip
               isMobile={isMobile}
@@ -157,7 +150,7 @@ export function ProductModalIdentity(props: Props) {
               />
             ) : null}
           </div>
-          {identifierError ? <ErrorLine message={identifierError} /> : null}
+          {identifierError ? <ModalInlineError message={identifierError} /> : null}
         </div>
       </div>
     </div>

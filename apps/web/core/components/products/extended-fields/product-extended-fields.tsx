@@ -18,10 +18,10 @@ import {
 import type { TFormVariant } from "@/components/common/form-section";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
+import { DictionaryLabelSelect } from "@/components/dropdowns/dictionary-label-select";
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { PRODUCT_DICTIONARY_FIELDS, PRODUCT_FORM_DICTIONARY_KEYS, PRODUCT_REQUIRED_EXTENDED_FIELDS } from "./constants";
 import type { TProductDictionaryFieldKey, TProductFormDictionaryKey } from "./constants";
-import { ProductCodeSelect } from "./product-code-select";
 import type { TProductExtendedFieldErrors, TProductExtendedFieldsState } from "./use-product-extended-fields";
 
 type Props = {
@@ -152,7 +152,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
     <FormFieldShell {...wrapperProps("code")} error={codeEmpty ? undefined : errors.code} className="md:col-span-2">
       {editable ? (
         <div className={styles.control}>
-          <ProductCodeSelect
+          <DictionaryLabelSelect
             dictionary={codeDictionary}
             value={values.code}
             onChange={(label) => onChange("code", label)}

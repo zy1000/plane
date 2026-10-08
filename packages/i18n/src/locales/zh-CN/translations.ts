@@ -3662,16 +3662,19 @@ export default {
       hours_total: "累计 {hours}h",
     },
   },
+  /** 创建 / 编辑弹窗共用：页脚必填进度 */
+  modal_form: {
+    required_label: "必填",
+    required_done: "必填项已全部填写",
+    required_missing: "还有 {count} 项必填未填写",
+    fix_errors: "请修正标红的内容",
+  },
   workspace_products: {
     identifier_copied: "开发编号已复制",
     /** 创建/编辑弹窗（身份区 + 分组表单）专用文案 */
     create: {
       name_placeholder: "给产品起个名字",
       identifier_placeholder: "例如 KF01A008",
-      required_label: "必填",
-      required_done: "必填项已全部填写",
-      required_missing: "还有 {count} 项必填未填写",
-      fix_errors: "请修正标红的内容",
     },
     title: "产品管理",
     search_placeholder: "按名称、项目代号或开发编号搜索",
@@ -4525,14 +4528,12 @@ export default {
       label: "添加项目",
       name_placeholder: "给项目起个名字",
       identifier_placeholder: "例如 PROJ",
-      description_placeholder: "这个项目要解决什么问题？交付什么？",
-      footer_hint: "研发模式创建后不可更改；ID 与可见性仍可在项目设置中修改",
+      dev_mode_locked: "创建后不可更改",
       duration_days: "共 {count} 天",
       groups: {
-        basic: "基本信息",
-        team: "团队",
+        classification: "分类",
         schedule: "排期",
-        description: "描述",
+        team: "团队",
       },
     },
     nav: {
@@ -4560,10 +4561,12 @@ export default {
       product_manager: "研发产品经理",
       start_date: "开始日期",
       end_date: "完成日期",
+      duration: "工期",
       not_set: "未设置",
       select_placeholder: "请选择",
       select_member_placeholder: "选择成员",
       date_placeholder: "选择日期",
+      optional: "选填",
     },
     validation: {
       required: "请填写{field}",
@@ -4574,6 +4577,7 @@ export default {
       end_before_start: "完成日期不能早于开始日期",
       legacy_incomplete: "该项目缺少必填信息：{fields}。请补齐后再保存。",
       dictionary_empty: "字典「{name}」还没有可选值，请先到数据字典中添加。",
+      dictionary_empty_short: "暂无可选值",
       manage_dictionaries: "管理数据字典",
       dev_mode_required: "请选择研发模式。",
       dev_mode_immutable: "研发模式创建后不可更改。",

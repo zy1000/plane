@@ -11,7 +11,8 @@ import { useTranslation } from "@plane/i18n";
 import type { TDataDictionary, TProductExtendedFieldKey } from "@plane/types";
 import { Input } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { ProductCodeSelect } from "./extended-fields";
+import { MODAL_FIELD_CLASS, ModalFieldError, ModalFieldLabel } from "@/components/common/form-modal";
+import { DictionaryLabelSelect } from "@/components/dropdowns/dictionary-label-select";
 import type { TProductExtendedFieldErrors, TProductExtendedFieldsState } from "./extended-fields";
 
 type Props = {
@@ -26,18 +27,6 @@ type Props = {
   description: ReactNode;
 };
 
-const FIELD_CLASS = "h-10.5 w-full rounded-[10px] border px-3.5 text-14";
-
-const FieldLabel = ({ htmlFor, required, children }: { htmlFor?: string; required?: boolean; children: ReactNode }) => (
-  <label htmlFor={htmlFor} className="mb-2 flex items-center text-13 font-medium text-secondary">
-    {children}
-    {required && <span className="ml-0.5 text-danger-primary">*</span>}
-  </label>
-);
-
-const FieldError = ({ message }: { message?: string }) =>
-  message ? <p className="mt-1.5 text-12 text-danger-primary">{message}</p> : null;
-
 /** 产品弹窗左栏的正文部分：项目代号、两个型号、描述（占满剩余高度） */
 export function ProductModalBasics(props: Props) {
   const { workspaceSlug, editable, values, errors, onChange, codeDictionary, isDictionaryLoading, description } =
@@ -47,7 +36,7 @@ export function ProductModalBasics(props: Props) {
 
   const textField = (key: "model_number" | "external_model") => (
     <div className="min-w-0">
-      <FieldLabel htmlFor={`product-${key}`}>{t(`workspace_products.fields.${key}`)}</FieldLabel>
+      <ModalFieldLabel htmlFor={`product-${key}`}>{t(`workspace_products.fields.${key}`)}</ModalFieldLabel>
       {editable ? (
         <Input
           id={`product-${key}`}
@@ -58,30 +47,30 @@ export function ProductModalBasics(props: Props) {
           maxLength={255}
           hasError={Boolean(errors[key])}
           placeholder={t("workspace_products.fields.optional")}
-          className={cn(FIELD_CLASS, "py-0 focus:border-accent-strong")}
+          className={cn(MODAL_FIELD_CLASS, "py-0 focus:border-accent-strong")}
         />
       ) : (
         <p className="truncate text-14 text-primary">{values[key] || "—"}</p>
       )}
-      <FieldError message={errors[key]} />
+      <ModalFieldError message={errors[key]} />
     </div>
   );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div>
-        <FieldLabel required={editable}>{t("workspace_products.fields.code")}</FieldLabel>
+        <ModalFieldLabel required={editable}>{t("workspace_products.fields.code")}</ModalFieldLabel>
         {editable ? (
           // 下拉外层是 h-full，不给定高会被撑成整块的高度
           <div className="h-10.5">
-            <ProductCodeSelect
+            <DictionaryLabelSelect
               dictionary={codeDictionary}
               value={values.code}
               onChange={(label) => onChange("code", label)}
               disabled={codeEmpty}
               hasError={Boolean(errors.code)}
               isLoading={isDictionaryLoading}
-              buttonClassName={cn(FIELD_CLASS, "border-subtle-1 bg-layer-2", errors.code && "border-danger-strong")}
+              buttonClassName={cn(MODAL_FIELD_CLASS, "border-subtle-1 bg-layer-2", errors.code && "border-danger-strong")}
               triggerClassName="hover:bg-transparent"
             />
           </div>
@@ -99,7 +88,7 @@ export function ProductModalBasics(props: Props) {
             </Link>
           </p>
         ) : (
-          <FieldError message={errors.code} />
+          <ModalFieldError message={errors.code} />
         )}
       </div>
 
@@ -109,7 +98,7 @@ export function ProductModalBasics(props: Props) {
       </div>
 
       <div className="mt-5 flex min-h-0 flex-1 flex-col">
-        <FieldLabel>{t("workspace_products.fields.description")}</FieldLabel>
+        <ModalFieldLabel>{t("workspace_products.fields.description")}</ModalFieldLabel>
         {description}
       </div>
     </div>

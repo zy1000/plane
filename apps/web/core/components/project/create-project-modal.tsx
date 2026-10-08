@@ -48,8 +48,8 @@ export function CreateProjectModal(props: Props) {
       isOpen={isOpen}
       position={EModalPosition.TOP}
       width={EModalWidth.XXXXL}
-      // 设计稿 800px、16px 圆角；EModalWidth 没有 50rem 档，用 className 覆盖
-      className="rounded-2xl sm:max-w-[50rem]"
+      // 与产品弹窗同宽（1152px）、16px 圆角；EModalWidth 没有这一档，用 className 覆盖
+      className="rounded-2xl sm:max-w-[72rem]"
       initialFocus={initialFocusRef}
     >
       {isOpen && (

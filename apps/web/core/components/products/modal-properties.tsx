@@ -4,9 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { ReactNode } from "react";
 import { observer } from "mobx-react";
-import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   AlertTriangle,
@@ -24,15 +22,21 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
-import type { IUserLite, TDataDictionary, TProduct, TProductExtendedFieldKey } from "@plane/types";
-import { Avatar, AvatarGroup } from "@plane/ui";
-import { cn, getDate, getFileURL, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
+import type { TDataDictionary, TProduct, TProductExtendedFieldKey } from "@plane/types";
+import { cn, getDate, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
+import {
+  MemberValueButton,
+  PROPERTY_READONLY_CLASS,
+  PROPERTY_VALUE_CLASS,
+  PROPERTY_VALUE_ERROR_CLASS,
+  PropertyRailGroup,
+  PropertyRailRow,
+  ReadonlyPeopleValue,
+} from "@/components/common/form-modal";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
-import { useMember } from "@/hooks/store/use-member";
 import { PRODUCT_DICTIONARY_FIELDS, PRODUCT_REQUIRED_EXTENDED_FIELDS } from "./extended-fields";
 import type {
   TProductDictionaryFieldKey,
@@ -65,72 +69,6 @@ type Props = {
   className?: string;
 };
 
-/** 值按钮：平时只是一行字，悬停才出底色；左移 10px，让文字和标签列后的网格线对齐 */
-const VALUE_CLASS =
-  "-ml-2.5 flex h-8 w-[calc(100%+0.625rem)] min-w-0 items-center gap-2 rounded-lg border border-transparent bg-transparent px-2.5 text-left text-14 font-normal text-primary hover:bg-layer-1-hover";
-/** 点过创建后仍缺的必填项：整格红底红框，占位换成「请填写 xx」 */
-const VALUE_ERROR_CLASS = "border-danger-subtle bg-danger-subtle hover:bg-danger-subtle";
-/** 只读态的值：和可编辑态同一行高，不带悬停 */
-const READONLY_CLASS = "flex h-8 min-w-0 items-center gap-2 text-14 text-primary";
-
-const Group = ({ title, children }: { title: string; children: ReactNode }) => (
-  <section>
-    <h3 className="mb-1 text-12 font-semibold tracking-wide text-tertiary">{title}</h3>
-    {children}
-  </section>
-);
-
-/** 一行一项：图标 + 字段名固定 122px，值在右侧成一列；必填挂红星 */
-const Row = ({
-  icon: Icon,
-  label,
-  required = false,
-  children,
-}: {
-  icon: LucideIcon;
-  label: string;
-  required?: boolean;
-  children: ReactNode;
-}) => (
-  <div className="grid min-h-9 grid-cols-[122px_minmax(0,1fr)] items-center">
-    <span className="flex min-w-0 items-center gap-2 text-13 text-tertiary">
-      <Icon className="size-3.75 shrink-0 text-placeholder" strokeWidth={1.8} />
-      <span className="truncate">
-        {label}
-        {required && <span className="ml-0.5 text-danger-primary">*</span>}
-      </span>
-    </span>
-    <div className="min-w-0">{children}</div>
-  </div>
-);
-
-const People = ({ users }: { users: IUserLite[] }) =>
-  users.length === 1 ? (
-    <>
-      <Avatar
-        name={users[0].display_name}
-        src={getFileURL(users[0].avatar_url ?? "")}
-        fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(users[0])}
-        showTooltip={false}
-      />
-      <span className="truncate">{users[0].display_name}</span>
-    </>
-  ) : (
-    <>
-      <AvatarGroup max={3} showTooltip={false}>
-        {users.map((user) => (
-          <Avatar
-            key={user.id}
-            name={user.display_name}
-            src={getFileURL(user.avatar_url ?? "")}
-            fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(user)}
-          />
-        ))}
-      </AvatarGroup>
-      <span className="truncate">{users.map((user) => user.display_name).join("、")}</span>
-    </>
-  );
-
 /**
  * 产品弹窗右栏：分类 / 研发等级 / 计划 / 团队四组属性，一行一项。
  *
@@ -151,7 +89,6 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
     className,
   } = props;
   const { t, currentLocale } = useTranslation();
-  const { getUserDetails } = useMember();
   // 中文写成「2026年10月8日」，其它语言沿用默认格式
   const dateToken = currentLocale.toLowerCase().startsWith("zh") ? "yyyy年M月d日" : undefined;
 
@@ -165,7 +102,7 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
     const detail = product?.[`${key}_detail` as const] ?? null;
     if (!editable) {
       return (
-        <span className={READONLY_CLASS}>
+        <span className={PROPERTY_READONLY_CLASS}>
           <DictionaryValueTag label={detail?.label ?? "—"} color={resolveDictionaryItemColor(detail, dictionary)} />
         </span>
       );
@@ -197,7 +134,7 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
         triggerClassName="hover:bg-transparent"
         fallbackItem={detail}
         isLoading={isDictionaryLoading}
-        buttonClassName={cn(VALUE_CLASS, error && VALUE_ERROR_CLASS)}
+        buttonClassName={cn(PROPERTY_VALUE_CLASS, error && PROPERTY_VALUE_ERROR_CLASS)}
       />
     );
   };
@@ -206,7 +143,7 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
     const value = values[key];
     if (!editable) {
       return (
-        <span className={cn(READONLY_CLASS, "tabular-nums", !value && "text-placeholder")}>
+        <span className={cn(PROPERTY_READONLY_CLASS, "tabular-nums", !value && "text-placeholder")}>
           {value ? renderFormattedDate(value, dateToken) : "—"}
         </span>
       );
@@ -224,7 +161,7 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
         formatToken={dateToken}
         className="w-full"
         buttonContainerClassName="w-full text-left"
-        buttonClassName={cn("group tabular-nums", VALUE_CLASS, error && VALUE_ERROR_CLASS)}
+        buttonClassName={cn("group tabular-nums", PROPERTY_VALUE_CLASS, error && PROPERTY_VALUE_ERROR_CLASS)}
         labelClassName={cn("text-14 font-normal", !value && (error ? "text-danger-primary" : "text-placeholder"))}
         // 清除叉号平时不占位，悬停才出
         clearIconClassName="hidden size-3 group-hover:block"
@@ -232,30 +169,10 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
     );
   };
 
-  /** 成员下拉的按钮：有人是头像 + 名字，没人是灰字占位，出错是红字 */
-  const memberButton = (ids: string[], placeholder: string, error?: string | null) => {
-    const users = ids.map((id) => getUserDetails(id)).filter((user): user is IUserLite => Boolean(user));
-    return (
-      <span className={cn(VALUE_CLASS, error && VALUE_ERROR_CLASS)}>
-        {users.length > 0 ? (
-          <People users={users} />
-        ) : (
-          <span className={cn("truncate", error ? "text-danger-primary" : "text-placeholder")}>
-            {error ?? placeholder}
-          </span>
-        )}
-      </span>
-    );
-  };
-
-  const renderReadonlyPeople = (users: IUserLite[]) => (
-    <span className={READONLY_CLASS}>{users.length > 0 ? <People users={users} /> : "—"}</span>
-  );
-
   const renderLead = (key: TLeadFieldKey) => {
     if (!editable) {
       const user = product?.[`${key}_detail` as const];
-      return renderReadonlyPeople(user ? [user] : []);
+      return <ReadonlyPeopleValue users={user ? [user] : []} />;
     }
     const value = values[key];
     return (
@@ -266,7 +183,7 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
         buttonVariant="transparent-with-text"
         className="w-full"
         buttonContainerClassName="text-left"
-        button={memberButton(value ? [value] : [], placeholderFor(true), errors[key])}
+        button={<MemberValueButton userIds={value ? [value] : []} placeholder={placeholderFor(true)} error={errors[key]} />}
       />
     );
   };
@@ -280,10 +197,16 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
       buttonVariant="transparent-with-text"
       className="w-full"
       buttonContainerClassName="text-left"
-      button={memberButton(owner.value ? [owner.value] : [], placeholderFor(true), owner.error)}
+      button={
+        <MemberValueButton
+          userIds={owner.value ? [owner.value] : []}
+          placeholder={placeholderFor(true)}
+          error={owner.error}
+        />
+      }
     />
   ) : (
-    renderReadonlyPeople(product?.owner_detail ? [product.owner_detail] : [])
+    <ReadonlyPeopleValue users={product?.owner_detail ? [product.owner_detail] : []} />
   );
 
   const reviewersControl = editable ? (
@@ -294,10 +217,10 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
       buttonVariant="transparent-with-text"
       className="w-full"
       buttonContainerClassName="text-left"
-      button={memberButton(values.reviewers, placeholderFor(false), errors.reviewers)}
+      button={<MemberValueButton userIds={values.reviewers} placeholder={placeholderFor(false)} error={errors.reviewers} />}
     />
   ) : (
-    renderReadonlyPeople(product?.reviewer_details ?? [])
+    <ReadonlyPeopleValue users={product?.reviewer_details ?? []} />
   );
 
   return (
@@ -308,62 +231,62 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
         className
       )}
     >
-      <Group title={t("workspace_products.extended.classification")}>
-        <Row icon={Layers} label={label("stage_short")} required={editable}>
+      <PropertyRailGroup title={t("workspace_products.extended.classification")}>
+        <PropertyRailRow icon={Layers} label={label("stage_short")} required={editable}>
           {renderDictionary("stage")}
-        </Row>
-        <Row icon={Activity} label={label("status_short")} required={editable}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={Activity} label={label("status_short")} required={editable}>
           {renderDictionary("status")}
-        </Row>
-        <Row icon={Tag} label={label("category_short")} required={editable}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={Tag} label={label("category_short")} required={editable}>
           {renderDictionary("category")}
-        </Row>
-      </Group>
+        </PropertyRailRow>
+      </PropertyRailGroup>
 
-      <Group title={t("workspace_products.extended.levels")}>
-        <Row icon={Cpu} label={label("hardware_level_short")} required={editable}>
+      <PropertyRailGroup title={t("workspace_products.extended.levels")}>
+        <PropertyRailRow icon={Cpu} label={label("hardware_level_short")} required={editable}>
           {renderDictionary("hardware_level")}
-        </Row>
-        <Row icon={Box} label={label("structure_level_short")} required={editable}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={Box} label={label("structure_level_short")} required={editable}>
           {renderDictionary("structure_level")}
-        </Row>
-        <Row icon={CodeXml} label={label("software_level_short")} required={editable}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={CodeXml} label={label("software_level_short")} required={editable}>
           {renderDictionary("software_level")}
-        </Row>
-      </Group>
+        </PropertyRailRow>
+      </PropertyRailGroup>
 
-      <Group title={t("workspace_products.extended.plan")}>
-        <Row icon={CalendarDays} label={label("start_date")} required={editable}>
+      <PropertyRailGroup title={t("workspace_products.extended.plan")}>
+        <PropertyRailRow icon={CalendarDays} label={label("start_date")} required={editable}>
           {renderDate("start_date")}
-        </Row>
-        <Row icon={Flag} label={label("o_phase_close_date_short")}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={Flag} label={label("o_phase_close_date_short")}>
           {renderDate("o_phase_close_date")}
-        </Row>
-        <Row icon={Flag} label={label("v_phase_close_date_short")}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={Flag} label={label("v_phase_close_date_short")}>
           {renderDate("v_phase_close_date")}
-        </Row>
-      </Group>
+        </PropertyRailRow>
+      </PropertyRailGroup>
 
-      <Group title={t("workspace_products.extended.team")}>
-        <Row icon={Crown} label={label("product_owner")} required={editable}>
+      <PropertyRailGroup title={t("workspace_products.extended.team")}>
+        <PropertyRailRow icon={Crown} label={label("product_owner")} required={editable}>
           {ownerControl}
-        </Row>
+        </PropertyRailRow>
         {editable && owner.warning ? (
           <p className="mb-1 flex items-start gap-1.5 pl-[122px] text-12 leading-5 text-warning-primary">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             {owner.warning}
           </p>
         ) : null}
-        <Row icon={UserRound} label={label("project_lead")} required={editable}>
+        <PropertyRailRow icon={UserRound} label={label("project_lead")} required={editable}>
           {renderLead("project_lead")}
-        </Row>
-        <Row icon={FlaskConical} label={label("test_lead")} required={editable}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={FlaskConical} label={label("test_lead")} required={editable}>
           {renderLead("test_lead")}
-        </Row>
-        <Row icon={UsersRound} label={label("reviewers")}>
+        </PropertyRailRow>
+        <PropertyRailRow icon={UsersRound} label={label("reviewers")}>
           {reviewersControl}
-        </Row>
-      </Group>
+        </PropertyRailRow>
+      </PropertyRailGroup>
     </div>
   );
 });

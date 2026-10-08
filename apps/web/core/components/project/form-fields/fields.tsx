@@ -18,10 +18,12 @@ import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-se
 import type { TFormVariant } from "@/components/common/form-section";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
+import { DictionaryLabelSelect } from "@/components/dropdowns/dictionary-label-select";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
 import type { TProject } from "@/plane-web/types/projects";
 import { getProjectFieldLabelKey, normalizeUserId } from "./constants";
+import { codeRules, dateRules, memberRules, requiredValueRules } from "./rules";
 import type {
   TProjectDateFieldKey,
   TProjectDictionaryFieldKey,
@@ -58,7 +60,7 @@ type TDictionaryEmptyHintProps = {
   name: TProjectFormDictionaryKey;
 };
 
-function DictionaryEmptyHint({ dictionaries, name }: TDictionaryEmptyHintProps) {
+export function DictionaryEmptyHint({ dictionaries, name }: TDictionaryEmptyHintProps) {
   const { t } = useTranslation();
   const dictionaryName = dictionaries.get(name)?.name ?? t(getProjectFieldLabelKey(name));
   return (
@@ -93,42 +95,31 @@ export function ProjectCodeField(props: TProjectCodeFieldProps) {
     <Controller
       control={control}
       name="code"
-      rules={{ validate: (value) => Boolean((value ?? "").trim()) || requiredMessage("code") }}
-      render={({ field: { value, onChange }, fieldState: { error } }) => {
-        const code = (value ?? "").trim();
-        const selected = code ? dictionary?.items.find((item) => item.label === code) : undefined;
-        return (
-          <FormFieldShell
-            label={label("code")}
-            required
-            editable={!disabled}
-            error={error?.message}
-            hint={hint}
-            styles={styles}
-          >
-            <div className={styles.control}>
-              <DictionaryItemSelect
-                dictionary={dictionary}
-                // 下拉按 item id 选，表单值是 label，这里来回换算；
-                // 字典未加载或存量代号（0355 之前）不在字典里时，用 fallbackItem 把当前值原样显示出来
-                value={selected?.id ?? (code || null)}
-                onChange={(itemId) => onChange(dictionary?.items.find((item) => item.id === itemId)?.label ?? "")}
-                fallbackItem={
-                  code && !selected
-                    ? { id: code, label: code, dictionary: dictionary?.id ?? "", color: "", is_colored: false }
-                    : undefined
-                }
-                disabled={disabled || empty}
-                placeholder={t("workspace_projects.fields.select_placeholder")}
-                hasError={Boolean(error)}
-                isLoading={dictionaries.isLoading}
-                buttonClassName={styles.dropdownButton}
-                tabIndex={tabIndex}
-              />
-            </div>
-          </FormFieldShell>
-        );
-      }}
+      rules={codeRules(requiredMessage("code"))}
+      render={({ field: { value, onChange }, fieldState: { error } }) => (
+        <FormFieldShell
+          label={label("code")}
+          required
+          editable={!disabled}
+          error={error?.message}
+          hint={hint}
+          styles={styles}
+        >
+          <div className={styles.control}>
+            <DictionaryLabelSelect
+              dictionary={dictionary}
+              value={value ?? ""}
+              onChange={onChange}
+              disabled={disabled || empty}
+              placeholder={t("workspace_projects.fields.select_placeholder")}
+              hasError={Boolean(error)}
+              isLoading={dictionaries.isLoading}
+              buttonClassName={styles.dropdownButton}
+              tabIndex={tabIndex}
+            />
+          </div>
+        </FormFieldShell>
+      )}
     />
   );
 }
@@ -205,7 +196,7 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
     <Controller
       control={control}
       name={name}
-      rules={required ? { validate: (value) => Boolean(value) || requiredMessage(name) } : undefined}
+      rules={requiredValueRules(required ? requiredMessage(name) : undefined)}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
         <FormFieldShell
           label={label(name)}
@@ -248,7 +239,7 @@ export function ProjectProductTypeField(props: TProjectProductTypeFieldProps) {
     <Controller
       control={control}
       name="product_type"
-      rules={required ? { required: requiredMessage("product_type") } : undefined}
+      rules={requiredValueRules(required ? requiredMessage("product_type") : undefined)}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
         <FormFieldShell
           label={label("product_type")}
@@ -301,8 +292,7 @@ export function ProjectMemberField(props: TProjectMemberFieldProps) {
     <Controller
       control={control}
       name={name}
-      // project_lead 可能是 IUserLite 对象，用 validate 而不是 required，先归一再判空
-      rules={required ? { validate: (value) => Boolean(normalizeUserId(value)) || requiredMessage(name) } : undefined}
+      rules={memberRules(required ? requiredMessage(name) : undefined)}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
         <FormFieldShell label={label(name)} required={required} editable={!disabled} error={error?.message} styles={styles}>
           <div className={styles.control}>
@@ -362,12 +352,7 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
     <Controller
       control={control}
       name={name}
-      rules={{
-        validate: (value) => {
-          if (required && !value) return requiredMessage(name);
-          return validate?.(value) ?? true;
-        },
-      }}
+      rules={dateRules(required ? requiredMessage(name) : undefined, validate)}
       render={({ field: { value, onChange }, fieldState: { error } }) => (
         <FormFieldShell
           label={label(name)}
