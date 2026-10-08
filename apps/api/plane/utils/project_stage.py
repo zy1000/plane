@@ -30,6 +30,7 @@ from plane.db.models import (
     StageReviewTemplate,
 )
 from plane.db.models.dev_mode import MAX_WORKLOAD_RATIO_TOTAL, SORT_ORDER_STEP
+from plane.utils.stage_review import follow_stage_dates, stage_plan_dates
 
 #: 周期上限（天）。只为挡住离谱输入
 MAX_DURATION_DAYS = 9999
@@ -478,7 +479,10 @@ def create_stage(project, *, actor, validated_data):
 
 
 def update_stage(stage, *, actor, validated_data):
-    """改字段。``parent`` 创建后不可改（serializer 已挡）。"""
+    """改字段。``parent`` 创建后不可改（serializer 已挡）。
+
+    计划开始 / 结束改了，挂在这个阶段下的评审跟着改（``follow_stage_dates``）。
+    """
     data = dict(validated_data)
     data.pop("parent", None)
     new_status = data.pop("status", None)
@@ -508,6 +512,7 @@ def update_stage(stage, *, actor, validated_data):
             "阶段已挂评审或裁剪格子，不能改类型。", code="PROJECT_STAGE_TYPE_IN_USE"
         )
 
+    old_dates = stage_plan_dates(stage)
     changed = []
     for field, value in data.items():
         if getattr(stage, field) != value:
@@ -526,6 +531,8 @@ def update_stage(stage, *, actor, validated_data):
     stage.updated_by = actor
     _validated(stage)
     stage.save(update_fields=[*dict.fromkeys(changed), "updated_by", "updated_at"])
+    if any(field in changed for field in _DATE_FIELDS):
+        follow_stage_dates(stage, old=old_dates, actor=actor)
     return stage
 
 

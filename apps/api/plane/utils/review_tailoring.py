@@ -1560,6 +1560,9 @@ def _create_stage_reviews(tailoring, items, actor):
                 product_id=item.product_id,
                 # 阶段跟着格子走，不是跟着模板节点的阶段类型
                 stage_id=item.stage_id,
+                # 计划日期取所在阶段的，之后阶段改日期会跟着改（stage_review.follow_stage_dates）
+                start_date=item.stage.start_date,
+                end_date=item.stage.end_date,
                 kind=template.kind,
                 parent_id=parent_id,
                 template=template,

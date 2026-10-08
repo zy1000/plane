@@ -495,6 +495,83 @@ def resolve_role_candidates(review, role):
     return _active_users(project_user_ids), ROLE_SOURCE_PROJECT
 
 
+# --- 计划日期跟随阶段 -------------------------------------------------------
+
+#: 评审的计划开始 / 结束，取自所在项目阶段的同名两列
+PLAN_DATE_FIELDS = ("start_date", "end_date")
+FOLLOW_STAGE_COMMENT = "随阶段计划日期同步"
+
+
+def stage_plan_dates(stage):
+    return {field: getattr(stage, field) for field in PLAN_DATE_FIELDS}
+
+
+def _follow_stage_dates(review, old, new):
+    """把评审的计划日期从阶段旧值 ``old`` 换到新值 ``new``，返回 ``[(字段, 旧值, 新值)]``。
+
+    开始、结束各自判断：还等于阶段旧值（两边都空也算）的那一头跟着换，在评审上单独改过的
+    那一头不动。换完会出现开始晚于结束的，整条不动 —— 留给人去对。
+    """
+    target = {
+        field: new[field] if getattr(review, field) == old[field] else getattr(review, field)
+        for field in PLAN_DATE_FIELDS
+    }
+    if target["start_date"] and target["end_date"] and target["start_date"] > target["end_date"]:
+        return []
+    changes = [
+        (field, getattr(review, field), target[field])
+        for field in PLAN_DATE_FIELDS
+        if getattr(review, field) != target[field]
+    ]
+    for field, _, value in changes:
+        setattr(review, field, value)
+    return changes
+
+
+def _write_date_activities(review, changes, *, actor, extra=None):
+    for field, old, new in changes:
+        write_activity(
+            review,
+            actor=actor,
+            verb="updated",
+            field=field,
+            old_value=_activity_value(field, old),
+            new_value=_activity_value(field, new),
+            comment=FOLLOW_STAGE_COMMENT,
+            extra=extra,
+        )
+
+
+def follow_stage_dates(stage, *, old, actor):
+    """阶段计划日期改了（``old`` 是改之前的两列）：挂在它下面的评审 / 评审活动跟着改。
+
+    已评审是定稿，不动。只看直接挂在这个阶段上的评审 —— 父阶段改日期不级联子阶段，评审
+    也就不跨阶段联动。调用方负责事务。
+    """
+    new = stage_plan_dates(stage)
+    if new == old:
+        return
+    same_as_old = Q()
+    for field in PLAN_DATE_FIELDS:
+        same_as_old |= (
+            Q(**{f"{field}__isnull": True}) if old[field] is None else Q(**{field: old[field]})
+        )
+    reviews = (
+        StageReview.objects.filter(stage_id=stage.id, project_id=stage.project_id)
+        .exclude(status=StageReviewStatus.COMPLETED)
+        .filter(same_as_old)
+    )
+    for review in reviews:
+        changes = _follow_stage_dates(review, old, new)
+        if not changes:
+            continue
+        review.updated_by = actor
+        review.save(
+            update_fields=[*(field for field, _, _ in changes), "updated_at", "updated_by"]
+        )
+        _write_date_activities(review, changes, actor=actor)
+
+
 # --- 手工新建 -------------------------------------------------------------
 
 
@@ -516,18 +593,24 @@ def create_manual_review(*, project, product, stage, actor, data):
                 code="STAGE_REVIEW_PARENT_INVALID",
             )
 
+    stage = parent.stage if parent else stage
+    # 计划日期没传就取阶段的；传了哪一头就按传的来，不和阶段的拼成一组
+    dates = (
+        {field: data.get(field) for field in PLAN_DATE_FIELDS}
+        if any(field in data for field in PLAN_DATE_FIELDS)
+        else stage_plan_dates(stage)
+    )
     review = StageReview(
         workspace_id=project.workspace_id,
         project=project,
         product=product,
-        stage=parent.stage if parent else stage,
+        stage=stage,
         kind=data["kind"],
         parent=parent,
         title=data["title"],
         description_html=data.get("description_html") or "",
         work_instruction=data.get("work_instruction") or "",
-        start_date=data.get("start_date"),
-        end_date=data.get("end_date"),
+        **dates,
         status=StageReviewStatus.NOT_STARTED,
         created_by=actor,
         updated_by=actor,
@@ -659,6 +742,8 @@ def move_review_stage(review, *, stage, actor, extra=None, title=None):
     **必须先置空 parent 再改 stage**：``StageReview.save()`` 有父时会把阶段抄回父评审的。
 
     ``title`` 只有裁剪表那个入口会给：标题开头的阶段名跟着换成目标阶段的，单独记一条轨迹。
+
+    计划日期按 ``_follow_stage_dates`` 从原阶段的换成目标阶段的（单独改过的那一头不动）。
     """
     if review.kind not in ACTIVITY_KINDS:
         raise StageReviewError(
@@ -669,12 +754,24 @@ def move_review_stage(review, *, stage, actor, extra=None, title=None):
     if old_stage is not None and old_stage.id == stage.id:
         return review
     old_title = review.title
+    date_changes = _follow_stage_dates(
+        review,
+        stage_plan_dates(old_stage) if old_stage is not None else dict.fromkeys(PLAN_DATE_FIELDS),
+        stage_plan_dates(stage),
+    )
     review.parent = None
     review.stage = stage
     review.title = title or old_title
     review.updated_by = actor
     review.save(
-        update_fields=["parent", "stage", "title", "updated_at", "updated_by"]
+        update_fields=[
+            "parent",
+            "stage",
+            "title",
+            *(field for field, _, _ in date_changes),
+            "updated_at",
+            "updated_by",
+        ]
     )
     write_activity(
         review,
@@ -697,6 +794,7 @@ def move_review_stage(review, *, stage, actor, extra=None, title=None):
             new_value=review.title,
             extra=extra,
         )
+    _write_date_activities(review, date_changes, actor=actor, extra=extra)
     return review
 
 
