@@ -38,6 +38,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
   const { stageOptions: stages, isLoading: isStagesLoading } = useStageTypes(workspaceSlug);
 
   const {
+    templates,
     groups,
     isLoading: isTemplatesLoading,
     isMutating,
@@ -81,7 +82,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
     const keyword = search.trim().toLowerCase();
     if (!keyword) return selectedGroup;
     const hit = (item: TStageReviewTemplate) =>
-      [item.title, item.initiator_role, item.leader_role, item.auditor_role]
+      [item.standard_code, item.title, item.initiator_role, item.leader_role, item.auditor_role]
         .join(" ")
         .toLowerCase()
         .includes(keyword);
@@ -269,6 +270,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
         template={editor.mode === "edit" ? editor.template : null}
         defaultParent={editor.mode === "create" ? editor.parent : null}
         stageRoots={selectedGroup?.nodes.map(({ node }) => node) ?? []}
+        allTemplates={templates}
         isSubmitting={isMutating}
         onClose={() => setEditor({ mode: "closed" })}
         onSubmit={handleSubmit}

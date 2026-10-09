@@ -176,18 +176,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
    * by_status / by_requirement_type 只跟随当前产品。
    */
   const facets = store.requirementsPage.extra_stats ?? null;
-  /**
-   * 左栏名单用关联行（0 条需求的产品也在）；条数叠 by_product 而不是直接用接口回的
-   * requirement_count —— 分面随列表一起刷新，关联/解除需求后左栏计数才跟得上。
-   */
-  const productNavLinks = useMemo(() => {
-    const counts = new Map((facets?.by_product ?? []).map((item) => [item.product_id, item.count]));
-    if (counts.size === 0) return productLinks;
-    return productLinks.map((link) => ({
-      ...link,
-      requirement_count: counts.get(link.product) ?? link.requirement_count ?? 0,
-    }));
-  }, [facets, productLinks]);
 
   const { areAllConfigsInitialized, configs } = useProjectRequirementFiltersConfig({
     workspaceSlug: slug ?? "",
@@ -417,7 +405,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             store={moduleStore}
             selectedModuleId={selectedModuleId}
             onSelect={setSelectedModuleId}
-            productLinks={productNavLinks}
+            productLinks={productLinks}
             isProductsLoading={isProductLinksLoading}
             selectedProductId={selectedProductId}
             onSelectProduct={setSelectedProductId}

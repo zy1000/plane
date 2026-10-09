@@ -91,7 +91,7 @@ export function StageReviewTemplateTable(props: Props) {
       )}
 
       <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-auto">
-        <div role="table" className="flex min-w-[860px] flex-col">
+        <div role="table" className="flex min-w-[1020px] flex-col">
           <div
             role="row"
             className={cn(
@@ -99,6 +99,8 @@ export function StageReviewTemplateTable(props: Props) {
               "sticky top-0 z-10 h-9 border-b border-subtle bg-layer-1 text-11 font-medium text-tertiary"
             )}
           >
+            <span />
+            <span>{t(`${I18N}.table.code`)}</span>
             <span>{t(`${I18N}.table.title`)}</span>
             <span>{t(`${I18N}.table.kind`)}</span>
             <span>{t(`${I18N}.table.initiator`)}</span>

@@ -25,7 +25,7 @@ class StageReviewTemplateViewSet(BaseViewSet):
 
     model = StageReviewTemplate
     serializer_class = StageReviewTemplateSerializer
-    search_fields = ["title", "leader_role", "auditor_role"]
+    search_fields = ["title", "standard_code", "leader_role", "auditor_role"]
     filterset_fields = {
         "stage_id": ["exact"],
         "kind": ["exact"],
@@ -51,6 +51,12 @@ class StageReviewTemplateViewSet(BaseViewSet):
 
     def _get_workspace(self):
         return Workspace.objects.filter(slug=self.workspace_slug).first()
+
+    def get_serializer_context(self):
+        # 标准编号查重要按工作区，新建时序列化器拿不到实例的工作区
+        context = super().get_serializer_context()
+        context["workspace"] = self._get_workspace()
+        return context
 
     def _get_template(self, pk):
         return self.get_queryset().filter(pk=pk).first()

@@ -1571,6 +1571,8 @@ def _create_stage_reviews(tailoring, items, actor):
                 initiator_role=template.initiator_role,
                 leader_role=template.leader_role,
                 auditor_role=template.auditor_role,
+                # 快照：模板后改编号不影响已生成的评审
+                standard_code=template.standard_code,
                 status=StageReviewStatus.NOT_STARTED,
                 sort_order=template.sort_order,
                 created_by=actor,

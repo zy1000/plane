@@ -69,6 +69,10 @@ class ReviewTailoringItemSerializer(BaseSerializer):
     template_sort_order = serializers.FloatField(
         source="template.sort_order", read_only=True
     )
+    # 模板节点当前的标准编号（读的是模板，不是快照 —— 格子还没生成评审时也要显示）
+    standard_code = serializers.CharField(
+        source="template.standard_code", read_only=True
+    )
     # 挪过阶段的评审活动：纵轴上本来那一格的阶段。没挪过为空
     origin_stage_id = serializers.UUIDField(read_only=True, allow_null=True)
     origin_stage_label = serializers.CharField(
@@ -111,6 +115,7 @@ class ReviewTailoringItemSerializer(BaseSerializer):
             "kind",
             "template_is_active",
             "template_sort_order",
+            "standard_code",
             "title",
             "selected",
             "reason",
@@ -152,6 +157,9 @@ class ReviewTailoringRowSerializer(serializers.Serializer):
     stage_depth = serializers.SerializerMethodField()
     kind = serializers.CharField(source="template.kind", read_only=True)
     title = serializers.CharField(read_only=True)
+    standard_code = serializers.CharField(
+        source="template.standard_code", read_only=True
+    )
     sort_order = serializers.FloatField(source="template.sort_order", read_only=True)
     # 「挪进来才有的行」（``detail_rows``）：格子都是从这个阶段挪来的。纵轴本来的行为空
     origin_stage_id = serializers.UUIDField(

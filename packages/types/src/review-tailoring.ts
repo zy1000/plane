@@ -78,6 +78,8 @@ export type TReviewTailoringRow = {
   stage_depth: number;
   kind: string;
   title: string;
+  /** 模板节点的标准编号 */
+  standard_code: string;
   sort_order: number;
   /**
    * 「挪进来才有的行」：评审活动挪到一个模式里没勾它的阶段后，后端补出这一行，
@@ -98,6 +100,8 @@ export type TReviewTailoringAxisOption = {
   parent_template_id: string | null;
   kind: string;
   title: string;
+  /** 模板节点的标准编号 */
+  standard_code: string;
   sort_order: number;
   in_matrix: boolean;
 };
@@ -123,6 +127,8 @@ export type TReviewTailoringItem = {
   kind: string;
   template_is_active: boolean;
   template_sort_order: number;
+  /** 模板节点当前的标准编号（读模板，不是快照） */
+  standard_code: string;
   /** 模板标题的快照，模板改名后历史表仍显示当时的口径 */
   title: string;
   selected: boolean;

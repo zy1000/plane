@@ -116,6 +116,8 @@ def _create_templates(workspace_id, stage_by_name, actor_id):
             stage_id=stage.id,
             kind=row["kind"],
             title=row["title"],
+            # 必须给：编号工作区内唯一，全是空串会撞约束，整批预置被吞掉
+            standard_code=row["standard_code"],
             initiator_role=row["initiator_role"],
             leader_role=row["leader_role"],
             auditor_role=row["auditor_role"],

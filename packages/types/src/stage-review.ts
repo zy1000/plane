@@ -76,6 +76,8 @@ export type TStageReview = {
   tailoring_title: string | null;
   kind: EStageReviewKind;
   title: string;
+  /** 生成时从模板快照的标准编号，只读；手工评审为空串 */
+  standard_code: string;
   status: EStageReviewStatus;
   /** 空串 = 还没有结论 */
   result: EStageReviewResult | "";

@@ -54,7 +54,8 @@ export function StageReviewTemplateRow(props: Props) {
         !template.is_active && "opacity-55"
       )}
     >
-      <span className="flex min-w-0 items-center gap-1">
+      {/* 拖柄 + 展开钮独占行首一格，编号列才能在所有行上竖向对齐 */}
+      <span className="flex items-center gap-1">
         {canDrag ? (
           <span
             data-sortable-drag-handle
@@ -78,8 +79,18 @@ export function StageReviewTemplateRow(props: Props) {
         ) : (
           <span className="size-4 shrink-0" />
         )}
+      </span>
+
+      <span
+        className={cn("truncate font-mono text-13 tabular-nums", isRoot ? "font-medium text-primary" : "text-secondary")}
+        title={template.standard_code}
+      >
+        {template.standard_code || "—"}
+      </span>
+
+      <span className="flex min-w-0 items-center gap-1">
         {/* 子节点用一段连接线表达从属，不靠纯缩进 */}
-        {isChild && <span className="ml-1 h-px w-3 shrink-0 bg-strong" />}
+        {isChild && <span className="mr-1 h-px w-3 shrink-0 bg-strong" />}
         <span
           className={cn("min-w-0 flex-1 truncate", isRoot ? "font-medium text-primary" : "text-primary")}
           title={template.title}

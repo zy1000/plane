@@ -22,6 +22,7 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   // 挪过阶段的行在阶段后面带「自 X」，留出它的宽度
   stage: 160,
   kind: 108,
+  standard_code: 112,
   name: 280,
   tailored: 104,
   created_by: 104,
@@ -32,7 +33,18 @@ const DEFAULT_WIDTHS: Record<string, number> = {
 /** 评审名称拖窄到认不出就没意义了，给它一个更大的下限 */
 const MIN_WIDTHS: Record<string, number> = { name: 160 };
 
-const COLUMNS = ["index", "product", "stage", "kind", "name", "tailored", "reason", "created_by", "created_at"] as const;
+const COLUMNS = [
+  "index",
+  "product",
+  "stage",
+  "kind",
+  "standard_code",
+  "name",
+  "tailored",
+  "reason",
+  "created_by",
+  "created_at",
+] as const;
 
 /**
  * 表格满宽铺开，跟裁剪矩阵一个口径：不套卡片、左右不留内边距，只画格线。
@@ -111,7 +123,7 @@ export const TailoringItemsTable = ({
   return (
     <>
       <Table
-        className={cn("min-w-[1240px] table-fixed border-separate border-spacing-0", GRID_TABLE_CLASS)}
+        className={cn("min-w-[1352px] table-fixed border-separate border-spacing-0", GRID_TABLE_CLASS)}
         // 让页面那层滚动容器接管横向滚动：它才带可见的滚动条，表头也才能真的 sticky
         wrapperClassName="overflow-visible"
       >
@@ -207,6 +219,12 @@ export const TailoringItemsTable = ({
                     </span>
                   </TableCell>
                   <TableCell className={metaClass}>{t(`workspace_templates.reviews.kind.${item.kind}`)}</TableCell>
+                  <TableCell
+                    className={cn(cellClass, "truncate font-mono tabular-nums text-secondary")}
+                    title={item.standard_code}
+                  >
+                    {item.standard_code}
+                  </TableCell>
                   <TableCell className={cn(cellClass, "truncate")} title={item.title}>
                     {item.title}
                   </TableCell>

@@ -22,6 +22,8 @@ export type TMatrixRow = {
   templateId: string;
   stageId: string;
   title: string;
+  /** 模板节点的标准编号，画在名称前、竖向对齐 */
+  standardCode: string;
   kind: string;
   /** 评审活动挂在它所属的评审下，渲染时缩进一级 */
   isChild: boolean;
@@ -63,6 +65,7 @@ const buildRows = (
     templateId: row.template_id,
     stageId: row.stage_id,
     title: row.title,
+    standardCode: row.standard_code,
     kind: row.kind,
     isChild,
     sortOrder: row.sort_order,
@@ -133,6 +136,7 @@ const withMovedRows = (
       stage_depth: item.stage_depth,
       kind: item.kind,
       title: item.title,
+      standard_code: item.standard_code,
       sort_order: item.template_sort_order,
       origin_stage_id: item.origin_stage_id,
       origin_stage_label: item.origin_stage_label,

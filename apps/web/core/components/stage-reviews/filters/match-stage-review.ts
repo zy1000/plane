@@ -70,8 +70,11 @@ const matchCondition = (review: TStageReview, condition: TStageReviewCondition, 
   };
 
   switch (condition.property) {
-    case "title":
-      return review.title.toLowerCase().includes(selected.join(",").toLowerCase());
+    case "title": {
+      // 「标题 包含」同时匹配标准编号，与搜索框口径一致
+      const keyword = selected.join(",").toLowerCase();
+      return review.title.toLowerCase().includes(keyword) || review.standard_code.toLowerCase().includes(keyword);
+    }
     case "status":
       return matchOption(review.status, condition.operator, selected);
     case "result":

@@ -472,6 +472,7 @@ class ReviewTailoringViewSet(BaseViewSet):
                         "title": stage_scoped_title(
                             template.title, stage.name, template.stage.name
                         ),
+                        "standard_code": template.standard_code,
                         "sort_order": template.sort_order,
                         # 纵轴是按节点加的，所以「已在表中」也是按节点判定 —— 一个节点
                         # 进表就意味着它在模式的每个阶段下都有了行

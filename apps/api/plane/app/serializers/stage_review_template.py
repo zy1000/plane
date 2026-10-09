@@ -36,6 +36,15 @@ class StageReviewTemplateSerializer(BaseSerializer):
         allow_null=True,
     )
     child_count = serializers.SerializerMethodField()
+    # 模型有 default=""，DRF 默认会推成非必填，所以显式声明成必填。错误码当消息，前端按码翻译。
+    standard_code = serializers.CharField(
+        max_length=80,
+        error_messages={
+            "required": "STAGE_REVIEW_TEMPLATE_CODE_REQUIRED",
+            "blank": "STAGE_REVIEW_TEMPLATE_CODE_REQUIRED",
+            "null": "STAGE_REVIEW_TEMPLATE_CODE_REQUIRED",
+        },
+    )
 
     class Meta:
         model = StageReviewTemplate
@@ -47,6 +56,8 @@ class StageReviewTemplateSerializer(BaseSerializer):
             "parent_id",
             "kind",
             "title",
+            # 工作区内唯一；生成评审时快照到 StageReview.standard_code
+            "standard_code",
             "description_html",
             # 三个角色存的都是**角色名称文本**而不是人：模板是工作区级标准流程，
             # 落到具体项目 + 产品时才解析成人。审核者留空 = 无需审核。
@@ -78,6 +89,25 @@ class StageReviewTemplateSerializer(BaseSerializer):
         if annotated is not None:
             return annotated
         return obj.children.count()
+
+    def validate_standard_code(self, value):
+        code = value.strip()
+        if not code:
+            raise serializers.ValidationError("STAGE_REVIEW_TEMPLATE_CODE_REQUIRED")
+        # 新建时实例还没有工作区，由 view 的 get_serializer_context 带进来
+        workspace_id = (
+            self.instance.workspace_id
+            if self.instance is not None
+            else self.context["workspace"].id
+        )
+        queryset = StageReviewTemplate.objects.filter(
+            workspace_id=workspace_id, standard_code=code
+        )
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("STAGE_REVIEW_TEMPLATE_CODE_ALREADY_EXISTS")
+        return code
 
     def validate(self, attrs):
         instance = self.instance

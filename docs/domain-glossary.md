@@ -269,6 +269,7 @@
 - **每一步由这一步的主人推进和退回，不允许代推**（2026-09-16 用户拍板；2026-09-28 起主人是名单，**名单里任意一人操作即可**，名单之外的人仍不能代推）：未评审 / 评审中归负责人（开始评审、提交审核、退回到未评审），审核中归审核者（审核通过、退回到评审中）；提交审核前还必须已指定至少一位审核者。`project.stage_review.manage` 只是前提。后端 `utils/stage_review.py::_assert_step_owner`，错误码 `STAGE_REVIEW_LEADER_REQUIRED` / `STAGE_REVIEW_AUDITOR_REQUIRED`（400）与 `STAGE_REVIEW_NOT_LEADER` / `STAGE_REVIEW_NOT_AUDITOR`（403）；前端 `stage-reviews/detail/stage-review-action-guard.ts` 置灰按钮并说明原因。
 - **前端不再提供手工新建 / 删除**（2026-09-14 用户拍板：评审只由裁剪表生成）。后端 `create` / `destroy` 端点与 `is_manual`（`template` 为空）暂时保留未动，库里若有旧的手工评审仍会正常列出。
 - 轨迹是新表 `StageReviewActivity`，**同步写**，口径同 `ReviewTailoringActivity`；`_delete_stage_reviews` 也要跟着删它。
+- **标准编号 `standard_code`（2026-10-09，迁移 `0409` / `0410`）**：模板节点必填，**工作区内唯一**（`srt_unique_workspace_code_active`；需求原话是「同一研发模型内唯一」，模板库工作区级共享、混合模式默认全勾，用户拍板按工作区做）。预置节点按 `{阶段类型编码}-{两位序号}`、阶段内树序编号（根评审 01、活动顺延；无根阶段活动从 01 起），种子 `iter_template_rows()` 与 0409 回填同一口径，`_create_templates` 必须传它，否则新工作区撞约束、整批预置被吞。生成评审时**快照**到 `StageReview.standard_code`（同三个角色字段，只读，手工评审为空）；裁剪表的行 / 格子 / 候选读的是模板当前值。重排、换父不重新编号。错误码 `STAGE_REVIEW_TEMPLATE_CODE_REQUIRED` / `_ALREADY_EXISTS` 放在 `standard_code` 字段消息里。
 - 权限 `project.stage_review.view/manage`（迁移 `0368`），推进状态不另给 key。
 
 ### 必须记住的三个陷阱
@@ -291,7 +292,7 @@
 | Serializers | `app/serializers/stage_review_template.py` / `review_tailoring.py` / `stage_review.py` |
 | URLs | `app/urls/stage_review.py`（模板 / 裁剪 / 评审实例三套路由都在这个文件里） |
 | 预置数据 | `db/seed_data/stage_review_templates.py`（10 阶段 / 7 根评审 / 59 活动，零 import 的纯常量模块，迁移与运行时共用） |
-| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限）`0367`（评审活动表）`0368`（评审实例权限）`0382`–`0384`（模板挂到阶段类型）`0388`–`0390`（格子与实例挂到模式阶段）`0391`（格子 `origin_stage`）`0398`–`0400`（格子与实例换挂项目阶段） |
+| 迁移 | `0360`（建表）`0361`（放宽 kind-parent）`0362`（预置模板）`0363`（模板库权限）`0364`（裁剪状态机改造）`0365`（裁剪权限）`0367`（评审活动表）`0368`（评审实例权限）`0382`–`0384`（模板挂到阶段类型）`0388`–`0390`（格子与实例挂到模式阶段）`0391`（格子 `origin_stage`）`0398`–`0400`（格子与实例换挂项目阶段）`0409`–`0410`（标准编号 + 回填 + 工作区唯一） |
 | 前端类型 | `packages/types/src/stage-review-template.ts`、`review-tailoring.ts`、`stage-review.ts` |
 | 前端 service | `core/services/stage-review-template.service.ts`、`review-tailoring.service.ts`、`stage-review.service.ts` |
 | 前端 hook | `core/hooks/store/use-stage-review-templates.ts`、`use-review-tailorings.ts`、`use-review-tailoring-detail.ts`、`use-review-tailoring-feed.ts`、`use-stage-reviews.ts`、`use-stage-review-detail.ts`（**都走局部 state，不进 MobX root store**） |

@@ -92,6 +92,8 @@ class StageReviewListSerializer(BaseSerializer):
             "tailoring_title",
             "kind",
             "title",
+            # 生成时从模板快照的标准编号，只读；手工评审为空串
+            "standard_code",
             "status",
             "result",
             "leader_ids",

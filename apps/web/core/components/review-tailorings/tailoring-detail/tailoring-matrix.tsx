@@ -24,7 +24,9 @@ import type { TCellSelection } from "./use-cell-selection";
 /** 钉在左侧的三列：勾选、阶段、评审 / 评审活动 */
 const SELECT_WIDTH = 40;
 const STAGE_WIDTH = 128;
-const REVIEW_WIDTH = 272;
+const REVIEW_WIDTH = 336;
+/** 标准编号在评审名称格里定宽打头，评审活动的缩进放在编号之后，编号竖向对齐 */
+const CODE_CLASS = "w-16 shrink-0 truncate font-mono text-12 tabular-nums";
 /** 两级表头每一级的高度 */
 const HEAD_ROW = 34;
 /** 往右滚之后，钉住的最后一列右侧的一道投影：说明底下还压着列 */
@@ -201,7 +203,10 @@ export const TailoringMatrix = ({
               className={cn(stickyHead, isScrolled && EDGE_SHADOW)}
               style={{ ...fixedWidth(REVIEW_WIDTH), left: reviewLeft }}
             >
-              {t("review_tailoring.matrix.review_column")}
+              <span className="flex items-center">
+                <span className="w-16 shrink-0 truncate">{t("review_tailoring.matrix.code_column")}</span>
+                {t("review_tailoring.matrix.review_column")}
+              </span>
             </th>
             <th rowSpan={2} className={cn(PLAIN_TH, "sticky top-0 z-[4]")} style={fixedWidth(88)}>
               {t("review_tailoring.matrix.type_column")}
@@ -372,16 +377,24 @@ export const TailoringMatrix = ({
                     className={cn(PLAIN_TD, "sticky z-[2]", rowBg, isScrolled && EDGE_SHADOW)}
                     style={{ ...fixedWidth(REVIEW_WIDTH), left: reviewLeft }}
                   >
-                    <span
-                      className={cn(
-                        "block truncate",
-                        row.isChild && "pl-5",
-                        !isActivityRow && "font-semibold",
-                        isVacated && "text-tertiary"
-                      )}
-                      title={row.title}
-                    >
-                      {rest}
+                    <span className="flex min-w-0 items-center">
+                      <span
+                        className={cn(CODE_CLASS, !isActivityRow ? "font-medium text-primary" : "text-tertiary")}
+                        title={row.standardCode || undefined}
+                      >
+                        {row.standardCode}
+                      </span>
+                      <span
+                        className={cn(
+                          "min-w-0 truncate",
+                          row.isChild && "pl-5",
+                          !isActivityRow && "font-semibold",
+                          isVacated && "text-tertiary"
+                        )}
+                        title={row.title}
+                      >
+                        {rest}
+                      </span>
                     </span>
                   </td>
                   <td className={cn(PLAIN_TD, "whitespace-nowrap text-secondary", rowBg)}>

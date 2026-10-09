@@ -67,6 +67,9 @@ STAGE_TYPE_SPECS = (
 # 一边的名字不影响另一边，但初始词表是同一份，所以这里派生而不是再抄一遍。
 PRODUCT_STAGE_LABELS = tuple(name for _code, name in STAGE_TYPE_SPECS)
 
+# 阶段名 → 阶段类型编码，给模板节点的标准编号用（``{编码}-{两位序号}``）
+_STAGE_CODE_BY_NAME = {name: code for code, name in STAGE_TYPE_SPECS}
+
 # 根类型 → 它下面活动的类型。没有根评审的阶段，活动固定用 "activity"。
 _ACTIVITY_KIND_BY_ROOT_KIND = {
     "review": "activity",
@@ -341,25 +344,30 @@ def _check_specs():
     unused = [label for label in PRODUCT_STAGE_LABELS if label not in spec_stages]
     if unused:
         raise AssertionError(f"词表里有阶段没被任何模板引用: {unused}")
-
-
-_check_specs()
+    # 标准编号工作区内唯一（srt_unique_workspace_code_active），撞了整批预置都会失败
+    codes = [row["standard_code"] for row in iter_template_rows()]
+    if len(codes) != len(set(codes)):
+        raise AssertionError("阶段评审规格生成的标准编号有重复")
 
 
 def iter_template_rows():
     """把规格摊平成 dict 行，**先吐所有根评审、再吐所有活动**，调用方顺序建库即可先父后子。
 
     每行：stage_label / kind / title / parent_title / initiator_role / leader_role /
-    auditor_role / sort_order。``parent_title`` 为 None 表示直接挂在阶段下。
+    auditor_role / sort_order / standard_code。``parent_title`` 为 None 表示直接挂在阶段下。
 
     sort_order 在 (阶段, 父) 分组内按出现次序编号 —— bulk_create 绕过
     StageReviewTemplate.save()，那里的「追加到末尾」逻辑不会跑，必须显式给。
     根评审排在本阶段第一位。
+
+    standard_code 是 ``{阶段类型编码}-{两位序号}``，阶段内按树序：根评审 01、活动顺延；
+    没有汇总评审的阶段活动从 01 起。迁移 0409 给存量回填用的是同一口径。
     """
     roots = []
     children = []
     for spec in STAGE_REVIEW_TEMPLATE_SPECS:
         stage_label = spec["stage"]
+        stage_code = _STAGE_CODE_BY_NAME[stage_label]
         root = spec["root"]
         parent_title = None
         activity_kind = _DEFAULT_ACTIVITY_KIND
@@ -377,8 +385,11 @@ def iter_template_rows():
                     "leader_role": leader,
                     "auditor_role": auditor,
                     "sort_order": SORT_ORDER_STEP,
+                    "standard_code": f"{stage_code}-01",
                 }
             )
+        # 有根时根占了 01，活动从 02 起
+        first_seq = 2 if root is not None else 1
         for index, (title, initiator, leader, auditor) in enumerate(spec["activities"]):
             row = {
                 "stage_label": stage_label,
@@ -390,9 +401,13 @@ def iter_template_rows():
                 "auditor_role": auditor,
                 # 组内序号：有根的阶段活动自成一组（parent=根），无根的阶段活动就是顶层组
                 "sort_order": (index + 1) * SORT_ORDER_STEP,
+                "standard_code": f"{stage_code}-{index + first_seq:02d}",
             }
             (children if parent_title is not None else roots).append(row)
     for row in roots:
         yield row
     for row in children:
         yield row
+
+
+_check_specs()

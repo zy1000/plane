@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { X } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TStageReviewTemplate } from "@plane/types";
@@ -21,6 +21,8 @@ export type TStageReviewFormValue = {
   /** null = 直接归属阶段（有些阶段没有汇总评审，活动本身就是顶层项） */
   parent_id: string | null;
   title: string;
+  /** 标准编号：必填，工作区内唯一；生成评审时快照到评审上 */
+  standard_code: string;
   /** 富文本 HTML —— 裁剪表生效生成评审实例时原样抄到 StageReview.description_html */
   description_html: string;
   initiator_role: string;
@@ -37,6 +39,8 @@ type Props = {
   stageRoots: TStageReviewTemplate[];
   /** 从某条评审的 ＋ 进来时的预选父级 */
   defaultParent: TStageReviewTemplate | null;
+  /** 工作区全部模板节点：标准编号工作区内唯一，提交前先在本地查重，能说出被哪个节点占了 */
+  allTemplates: TStageReviewTemplate[];
   isSubmitting: boolean;
   onClose: () => void;
   onSubmit: (value: TStageReviewFormValue) => Promise<unknown>;
@@ -56,6 +60,11 @@ const KIND_OPTIONS = [
 const INPUT_CLASS =
   "h-9 w-full rounded-md border border-subtle bg-surface-1 px-2.5 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong";
 
+type TErrorField = "title" | "standard_code" | null;
+
+/** 后端把标准编号的错误码放在字段消息里，例如 {standard_code: ["STAGE_REVIEW_TEMPLATE_CODE_ALREADY_EXISTS"]} */
+const CODE_ERROR_PREFIX = "STAGE_REVIEW_TEMPLATE_CODE_";
+
 /** 该活动类型能挂在哪些根类型下（父子必须同族） */
 const rootKindFor = (activityKind: EStageReviewKind): EStageReviewKind | null => {
   const entry = Object.entries(STAGE_REVIEW_ACTIVITY_KIND_BY_ROOT).find(([, child]) => child === activityKind);
@@ -64,7 +73,8 @@ const rootKindFor = (activityKind: EStageReviewKind): EStageReviewKind | null =>
 
 // observer：workspaceId 取自 MobX 的工作区 store，数据晚到时要能把编辑器从骨架切出来
 export const StageReviewTemplateFormModal = observer(function StageReviewTemplateFormModal(props: Props) {
-  const { isOpen, workspaceSlug, template, stageRoots, defaultParent, isSubmitting, onClose, onSubmit } = props;
+  const { isOpen, workspaceSlug, template, stageRoots, defaultParent, allTemplates, isSubmitting, onClose, onSubmit } =
+    props;
   const { t } = useTranslation();
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id?.toString();
@@ -73,6 +83,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
     kind: EStageReviewKind.REVIEW,
     parent_id: null,
     title: "",
+    standard_code: "",
     initiator_role: "",
     leader_role: "",
     auditor_role: "",
@@ -81,6 +92,8 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
   // 编辑器只在挂载时由 initialValue 灌一次内容，换编辑对象 / 重开弹窗都要换 key 重挂
   const [editorVersion, setEditorVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // 错误挂在哪个输入框上：标红那一格，并把提示放在编号 / 名称那一行下面；null = 其它错误，放在表单底部
+  const [errorField, setErrorField] = useState<TErrorField>(null);
 
   const isEdit = Boolean(template);
   const isActivity = STAGE_REVIEW_ACTIVITY_KINDS.includes(value.kind);
@@ -88,12 +101,14 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
+    setErrorField(null);
     setEditorVersion((current) => current + 1);
     if (template) {
       setValue({
         kind: template.kind,
         parent_id: template.parent_id,
         title: template.title,
+        standard_code: template.standard_code ?? "",
         initiator_role: template.initiator_role,
         leader_role: template.leader_role,
         auditor_role: template.auditor_role,
@@ -109,6 +124,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
       kind,
       parent_id: defaultParent?.id ?? null,
       title: "",
+      standard_code: "",
       initiator_role: "",
       leader_role: "",
       auditor_role: "",
@@ -135,20 +151,56 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
     });
   };
 
+  const showError = (message: string, field: TErrorField) => {
+    setError(message);
+    setErrorField(field);
+  };
+
+  const clearError = () => {
+    setError(null);
+    setErrorField(null);
+  };
+
   const handleSubmit = async () => {
+    const standardCode = value.standard_code.trim();
     const title = value.title.trim();
+    if (!standardCode) {
+      showError(t(`${I18N}.form.code_required`), "standard_code");
+      return;
+    }
     if (!title) {
-      setError(t(`${I18N}.form.title_required`));
+      showError(t(`${I18N}.form.title_required`), "title");
+      return;
+    }
+    // 本地先查一遍：后端只回错误码，说不出是被哪个节点占了
+    const taken = allTemplates.find((item) => item.standard_code === standardCode && item.id !== template?.id);
+    if (taken) {
+      showError(t(`${I18N}.form.code_taken`, { code: standardCode, title: taken.title }), "standard_code");
       return;
     }
     // 编辑器清空后留下的是 <p></p> 而不是空串，落库前抹平成空
     const isBlank = isEmptyHtmlString(descriptionHTML, ["img", "image-component", "table"]);
     try {
-      await onSubmit({ ...value, title, description_html: isBlank ? "" : descriptionHTML });
+      await onSubmit({
+        ...value,
+        standard_code: standardCode,
+        title,
+        description_html: isBlank ? "" : descriptionHTML,
+      });
     } catch (submitError) {
       const payload = submitError as Record<string, unknown> | undefined;
-      const first = payload ? Object.values(payload)[0] : undefined;
-      setError(Array.isArray(first) ? String(first[0]) : t(`${I18N}.form.save_failed`));
+      const codeError = payload?.standard_code;
+      const code = Array.isArray(codeError) ? String(codeError[0]) : null;
+      if (code?.startsWith(CODE_ERROR_PREFIX)) {
+        showError(t(`${I18N}.form.errors.${code.toLowerCase()}`), "standard_code");
+        return;
+      }
+      const first = payload ? Object.entries(payload)[0] : undefined;
+      if (first && Array.isArray(first[1])) {
+        showError(String(first[1][0]), first[0] === "title" ? "title" : null);
+        return;
+      }
+      showError(t(`${I18N}.form.save_failed`), null);
     }
   };
 
@@ -172,21 +224,54 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
       </div>
 
       <div className="flex flex-col gap-3.5 px-5 py-4">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-12 text-tertiary">{t(`${I18N}.table.title`)}</span>
-          <input
-            autoFocus
-            value={value.title}
-            maxLength={255}
-            disabled={isSubmitting}
-            onChange={(event) => {
-              setValue((current) => ({ ...current, title: event.target.value }));
-              setError(null);
-            }}
-            className={cn(INPUT_CLASS, error && "border-danger-strong")}
-            placeholder={t(`${I18N}.form.title_placeholder`)}
-          />
-        </label>
+        {/* 编号与名称同一行：编号定宽在左，名称吃剩余宽度；两者的错误都提示在这一行下面 */}
+        <div className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-[180px_minmax(0,1fr)] gap-3">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-12 text-tertiary">
+                {t(`${I18N}.table.code`)}
+                <span className="ml-0.5 text-danger-primary">*</span>
+              </span>
+              <input
+                autoFocus
+                value={value.standard_code}
+                maxLength={80}
+                disabled={isSubmitting}
+                aria-invalid={errorField === "standard_code"}
+                onChange={(event) => {
+                  setValue((current) => ({ ...current, standard_code: event.target.value }));
+                  clearError();
+                }}
+                className={cn(INPUT_CLASS, "font-mono", errorField === "standard_code" && "border-danger-strong")}
+                placeholder={t(`${I18N}.form.code_placeholder`)}
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-12 text-tertiary">
+                {t(`${I18N}.table.title`)}
+                <span className="ml-0.5 text-danger-primary">*</span>
+              </span>
+              <input
+                value={value.title}
+                maxLength={255}
+                disabled={isSubmitting}
+                aria-invalid={errorField === "title"}
+                onChange={(event) => {
+                  setValue((current) => ({ ...current, title: event.target.value }));
+                  clearError();
+                }}
+                className={cn(INPUT_CLASS, errorField === "title" && "border-danger-strong")}
+                placeholder={t(`${I18N}.form.title_placeholder`)}
+              />
+            </label>
+          </div>
+          {error && errorField && (
+            <p className="flex items-start gap-1 text-11 leading-4 text-danger-primary">
+              <AlertCircle className="mt-px size-3 shrink-0" />
+              {error}
+            </p>
+          )}
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-12 text-tertiary">{t(`${I18N}.table.kind`)}</span>
@@ -309,7 +394,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
 
         {/* 角色填的是名称不是人：模板是工作区级标准流程，落到项目 + 产品时才解析成人 */}
         <p className="text-10 leading-4 text-tertiary">{t(`${I18N}.form.role_hint`)}</p>
-        {error && <p className="text-10 leading-4 text-danger-primary">{error}</p>}
+        {error && !errorField && <p className="text-10 leading-4 text-danger-primary">{error}</p>}
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-subtle px-5 py-3">

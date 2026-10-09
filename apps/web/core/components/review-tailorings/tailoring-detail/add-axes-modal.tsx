@@ -46,6 +46,8 @@ type TFlatRow = {
   stageDepth: number;
   isReview: boolean;
   kind: string;
+  /** 模板节点的标准编号，画在名称前、竖向对齐，也能按它搜 */
+  standardCode: string;
   /** 活动行所属评审的标题；评审行为 null */
   parentTitle: string | null;
   /** 去掉父评审前缀后的标题，前缀由 parentTitle 那段淡色承担 */
@@ -170,6 +172,7 @@ export const AddAxesModal = observer(function AddAxesModal({
         stageDepth: option.stage_depth ?? 0,
         isReview: STAGE_REVIEW_ROOT_KINDS.includes(option.kind as EStageReviewKind),
         kind: option.kind,
+        standardCode: option.standard_code,
         parentTitle,
         title: parentTitle ? splitChildTitle(parentTitle, option.title).rest : option.title,
       };
@@ -213,8 +216,9 @@ export const AddAxesModal = observer(function AddAxesModal({
       rows.filter((row) => {
         if (stageFilter && row.stageId !== stageFilter) return false;
         if (!reviewKeyword) return true;
-        // 搜父评审名也带出它下面的活动，跟分组时代「搜到评审 = 看到整组」的手感一致
+        // 搜父评审名也带出它下面的活动，跟分组时代「搜到评审 = 看到整组」的手感一致；编号也能搜
         return (
+          row.standardCode.toLowerCase().includes(reviewKeyword) ||
           row.title.toLowerCase().includes(reviewKeyword) ||
           (row.parentTitle ?? "").toLowerCase().includes(reviewKeyword)
         );
@@ -333,15 +337,26 @@ export const AddAxesModal = observer(function AddAxesModal({
             {row.stageLabel}
           </span>
         </span>
-        <span className={cn(cell, "gap-2", !row.isReview && "pl-8")} title={row.title}>
-          {/* 前缀不截断：截一半就认不出是哪个评审了，让活动名去 truncate（悬停看全名） */}
-          {parentTitle && <span className="shrink-0 text-placeholder">{parentTitle} ›</span>}
-          <span className={cn("min-w-0 truncate", row.isReview && "font-semibold")}>{row.title}</span>
-          {spanned > 1 && (
-            <span className="shrink-0 text-12 text-placeholder">
-              {t(`${I18N}.add_axes_multi_stage`, { stages: spanned })}
-            </span>
-          )}
+        <span className={cell} title={row.title}>
+          {/* 编号定宽打头，活动的缩进放在编号之后，编号竖向对齐 */}
+          <span
+            className={cn(
+              "w-16 shrink-0 truncate font-mono text-12 tabular-nums",
+              blocked ? "text-placeholder" : row.isReview ? "font-medium text-primary" : "text-tertiary"
+            )}
+          >
+            {row.standardCode}
+          </span>
+          <span className={cn("flex min-w-0 flex-1 items-center gap-2", !row.isReview && "pl-5")}>
+            {/* 前缀不截断：截一半就认不出是哪个评审了，让活动名去 truncate（悬停看全名） */}
+            {parentTitle && <span className="shrink-0 text-placeholder">{parentTitle} ›</span>}
+            <span className={cn("min-w-0 truncate", row.isReview && "font-semibold")}>{row.title}</span>
+            {spanned > 1 && (
+              <span className="shrink-0 text-12 text-placeholder">
+                {t(`${I18N}.add_axes_multi_stage`, { stages: spanned })}
+              </span>
+            )}
+          </span>
         </span>
         <span className={cn(cell, !blocked && "text-secondary")}>
           {t(`workspace_templates.reviews.kind.${row.kind}`)}
@@ -391,7 +406,10 @@ export const AddAxesModal = observer(function AddAxesModal({
               onClearAll={clearAllReviews}
             />
             <span className={HEAD_CELL}>{t(`${I18N}.add_axes_col_stage`)}</span>
-            <span className={HEAD_CELL}>{t(`${I18N}.add_axes_col_review`)}</span>
+            <span className={HEAD_CELL}>
+              <span className="w-16 shrink-0 truncate">{t(`${I18N}.add_axes_col_code`)}</span>
+              {t(`${I18N}.add_axes_col_review`)}
+            </span>
             <span className={HEAD_CELL}>{t("review_tailoring.matrix.type_column")}</span>
             <span className={HEAD_CELL}>{t("review_tailoring.list.status")}</span>
           </div>

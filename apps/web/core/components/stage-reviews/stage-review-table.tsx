@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MessageSquare, Paperclip } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, MessageSquare, Paperclip } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -16,8 +16,8 @@ import type { TStageReviewFlashedCells } from "./bulk/use-stage-review-bulk-edit
 import type { TStageReviewColumn } from "./display/display-settings";
 import { StageReviewDatesCell } from "./dates-cell";
 import { RoleMemberSelect } from "./detail/role-member-select";
-import type { TStageReviewRow } from "./stage-review-rows";
-import { StageReviewStatusIcon } from "./status-icon";
+import type { TStageReviewActivityStats, TStageReviewRow } from "./stage-review-rows";
+import { STAGE_REVIEW_STATUS_FILL, StageReviewStatusIcon } from "./status-icon";
 
 const I18N = "stage_review";
 
@@ -40,8 +40,12 @@ const COLUMN_WIDTH: Record<TStageReviewColumn, string> = {
 
 const NO_DEFAULT_WIDTHS: Record<string, number> = {};
 
-/** 行高与表头高（h-11 / h-9，含底线）。行是定高的，虚拟列表直接按它算，不用逐行量 */
-const ROW_HEIGHT = 44;
+/**
+ * 行高与表头高（含底线）：评审 h-12、评审活动 h-10、表头 h-9。行高只看层级，虚拟列表直接
+ * 按它算，不用逐行量
+ */
+const ROW_HEIGHT = 48;
+const ACTIVITY_ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 36;
 
 /** 同工作项表格：每格左边一道竖线，与行底线一起画出格子 */
@@ -109,8 +113,8 @@ export type TStageReviewTableSelection = {
   onToggleAll: () => void;
 };
 
-/** 标题列拖宽时的下限；其它列统一 {@link MIN_COLUMN_WIDTH} */
-const MIN_TITLE_WIDTH = 160;
+/** 标题列拖宽时的下限（含折叠箭头与编号）；其它列统一 {@link MIN_COLUMN_WIDTH} */
+const MIN_TITLE_WIDTH = 260;
 const MIN_COLUMN_WIDTH = 64;
 const TITLE_KEY = "title";
 
@@ -165,6 +169,66 @@ const Count = ({ icon, value }: { icon: ReactNode; value: number }) =>
 type TTranslate = ReturnType<typeof useTranslation>["t"];
 
 /**
+ * 标题格从左到右：折叠箭头位、定宽的标准编号、标题。评审活动不缩进，编号与标题都和所属评审
+ * 竖向对齐，层级靠活动行的下沉底色区分。字号与文字色由调用方整串给（过 cn() 会互相吞掉）
+ */
+const CODE_CLASS = "w-[76px] shrink-0 truncate pr-3 font-mono tabular-nums";
+const GUTTER_CLASS = "mr-2 grid size-5 shrink-0 place-items-center";
+
+/** 活动行里与所属评审同值的这几列留空，免得一整段重复同一个产品 / 裁剪表 */
+const INHERITED_COLUMNS: Partial<Record<TStageReviewColumn, (review: TStageReview) => string | null | undefined>> = {
+  product: (review) => review.product_id,
+  project: (review) => review.project_id,
+  stage: (review) => review.stage_id,
+  tailoring: (review) => review.tailoring_title,
+};
+
+const isInheritedCell = (column: TStageReviewColumn, row: TStageReviewRow) => {
+  const pick = INHERITED_COLUMNS[column];
+  return Boolean(row.parent && pick && pick(row.review) === pick(row.parent));
+};
+
+/** 进度条的段从左到右：已评审 → 审核中 → 评审中，其余是底色（同左侧分组栏的阶段条） */
+const PROGRESS_SEGMENTS = [
+  EStageReviewStatus.COMPLETED,
+  EStageReviewStatus.IN_APPROVAL,
+  EStageReviewStatus.IN_REVIEW,
+] as const;
+
+/** 评审标题后面的活动进度：四色堆叠条 + 「已评审 / 总数」 */
+const ActivityProgress = ({ stats }: { stats: TStageReviewActivityStats }) => (
+  <span className="ml-2 flex shrink-0 items-center gap-2">
+    <span className="flex h-[5px] w-14 overflow-hidden rounded-full bg-layer-3">
+      {PROGRESS_SEGMENTS.map((status) =>
+        stats[status] > 0 ? (
+          <span
+            key={status}
+            className={cn("h-full", STAGE_REVIEW_STATUS_FILL[status])}
+            style={{ width: `${(stats[status] / stats.total) * 100}%` }}
+          />
+        ) : null
+      )}
+    </span>
+    <span className="text-12 tabular-nums text-tertiary">
+      <span className="font-medium text-secondary">{stats[EStageReviewStatus.COMPLETED]}</span>/{stats.total}
+    </span>
+  </span>
+);
+
+/** 搜索命中的那一段编号用淡黄底标出来；没有关键字或没命中时原样返回 */
+const highlightCode = (code: string, keyword: string): ReactNode => {
+  const index = keyword ? code.toLowerCase().indexOf(keyword) : -1;
+  if (index < 0) return code;
+  return (
+    <>
+      {code.slice(0, index)}
+      <mark className="rounded-sm bg-warning-subtle text-inherit">{code.slice(index, index + keyword.length)}</mark>
+      {code.slice(index + keyword.length)}
+    </>
+  );
+};
+
+/**
  * 一行里除标题以外的格子共用的东西。在表格里 useMemo 一次，滚动时行才不会跟着重渲。
  * 不放 `t`：useTranslation 每次渲染都给新的 t，放进来 memo 就失效了；行自己取 t，
  * 换语言时靠 `locale` 变化让所有行重渲。
@@ -181,6 +245,12 @@ type TRowContext = {
   selection?: TStageReviewTableSelection;
   hasSelection: boolean;
   onUpdateReview?: (review: TStageReview, payload: TUpdateStageReviewPayload) => void;
+  /** 搜索框的关键字（已 trim + 小写），用来高亮编号里命中的那一段 */
+  highlight: string;
+  /** 这张表里有「评审 → 活动」两层时才给标题格留折叠箭头位；铺平时不留 */
+  showGutter: boolean;
+  collapsedIds: Set<string>;
+  onToggleCollapse: (reviewId: string) => void;
 };
 
 /** `live` 为 false 时，人员与日期格子只画静态样子不挂下拉（见 StageReviewTableRow） */
@@ -315,21 +385,38 @@ const StageReviewTableRow = memo(function StageReviewTableRow({
   flashed: Set<TStageReviewColumn> | null;
   ctx: TRowContext;
 }) {
-  const { review, depth, carried, title, parentTitle } = row;
+  const { review, depth, carried, title, parentTitle, expandable, isFirstChild, activities } = row;
   const { t } = useTranslation();
-  const { columns, gridTemplateColumns, selection, hasSelection, onOpen } = ctx;
+  const { columns, gridTemplateColumns, selection, hasSelection, onOpen, highlight, showGutter } = ctx;
+  const isActivity = depth === 1;
+  const isEmphasized = depth === 0 && !parentTitle;
+  const isCollapsed = ctx.collapsedIds.has(review.id);
   const selectable = selection?.isSelectable(review) ?? false;
   const [isLive, setIsLive] = useState(false);
   const goLive = () => {
     if (!isLive) setIsLive(true);
   };
+  // 字号与文字色写成整串：过 cn() 会被当成同一组互相吞掉
+  const codeClass = `${CODE_CLASS} ${isActivity ? "text-12 text-placeholder" : "text-13 text-tertiary"}`;
+  const titleClass = isEmphasized
+    ? "min-w-0 cursor-pointer truncate text-left text-14 font-medium text-primary hover:text-accent-primary hover:underline"
+    : isActivity
+      ? "min-w-0 cursor-pointer truncate text-left text-13 text-secondary hover:text-accent-primary hover:underline"
+      : "min-w-0 cursor-pointer truncate text-left text-13 text-primary hover:text-accent-primary hover:underline";
   return (
     <div
       onMouseEnter={goLive}
       onFocusCapture={goLive}
       className={cn(
-        "group/row absolute top-0 left-0 grid h-11 w-full items-center border-b border-subtle transition-colors",
-        isActive || isSelected ? "bg-accent-subtle" : "hover:bg-layer-1",
+        "group/row absolute top-0 left-0 grid w-full items-center border-b border-subtle transition-colors",
+        isActivity ? "h-10" : "h-12",
+        // 评审活动落在所属评审下面的下沉区：浅灰底，第一行顶上压一道内阴影
+        isActive || isSelected
+          ? "bg-accent-subtle"
+          : isActivity
+            ? "bg-layer-1/60 hover:bg-layer-1-hover"
+            : "hover:bg-layer-1",
+        isFirstChild && "shadow-[inset_0_3px_5px_-3px_rgba(0,0,0,0.1)]",
         carried && "opacity-60"
       )}
       style={{ gridTemplateColumns, transform: `translateY(${offset}px)` }}
@@ -344,39 +431,44 @@ const StageReviewTableRow = memo(function StageReviewTableRow({
           onToggle={() => selection.onToggle(review.id)}
         />
       )}
-      <span
-        className={cn("relative flex h-full min-w-0 items-center gap-1.5 pr-3", depth === 1 ? "pl-[52px]" : "pl-6")}
-      >
-        {depth === 1 && (
-          <span
-            className="absolute top-0 left-[34px] h-1/2 w-3 rounded-bl-md border-b border-l border-subtle"
-            aria-hidden
-          />
+      <span className="relative flex h-full min-w-0 items-center pr-3 pl-6">
+        {showGutter && (
+          <span className={GUTTER_CLASS}>
+            {expandable && (
+              <button
+                type="button"
+                onClick={() => ctx.onToggleCollapse(review.id)}
+                aria-expanded={!isCollapsed}
+                aria-label={t(`${I18N}.table.${isCollapsed ? "expand" : "collapse"}`)}
+                title={t(`${I18N}.table.${isCollapsed ? "expand" : "collapse"}`)}
+                className="grid size-5 cursor-pointer place-items-center rounded-sm text-tertiary hover:bg-layer-1-hover hover:text-primary"
+              >
+                {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+              </button>
+            )}
+          </span>
         )}
-        {parentTitle && (
-          <span className="max-w-[40%] shrink-0 truncate text-13 text-placeholder">{parentTitle} ›</span>
-        )}
-        {/* 只有点标题才开抽屉，行上其它地方点了不动 */}
-        <button
-          type="button"
-          onClick={() => onOpen(review.id)}
-          // 字号与文字色写成整串：过 cn() 会被当成同一组互相吞掉
-          className={
-            depth === 0 && !parentTitle
-              ? "min-w-0 cursor-pointer truncate text-left text-13 font-medium text-primary hover:text-accent-primary hover:underline"
-              : "min-w-0 cursor-pointer truncate text-left text-13 text-primary hover:text-accent-primary hover:underline"
-          }
-          title={review.title}
-        >
-          {title}
-        </button>
+        {/* 生成时从模板快照的标准编号；手工评审为空，留出同样宽度保证对齐 */}
+        <span className={codeClass} title={review.standard_code || undefined}>
+          {highlightCode(review.standard_code, highlight)}
+        </span>
+        <span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
+          {parentTitle && (
+            <span className="max-w-[40%] shrink-0 truncate text-13 text-placeholder">{parentTitle} ›</span>
+          )}
+          {/* 只有点标题才开抽屉，行上其它地方点了不动 */}
+          <button type="button" onClick={() => onOpen(review.id)} className={titleClass} title={review.title}>
+            {title}
+          </button>
+          {activities && <ActivityProgress stats={activities} />}
+        </span>
       </span>
       {columns.map((column) => (
         <span
           key={column}
           className={cn(CELL_CLASS, "transition-colors duration-700", flashed?.has(column) && "bg-success-subtle")}
         >
-          {renderCell(column, review, ctx, isLive, t)}
+          {isInheritedCell(column, row) ? null : renderCell(column, review, ctx, isLive, t)}
         </span>
       ))}
     </div>
@@ -385,7 +477,8 @@ const StageReviewTableRow = memo(function StageReviewTableRow({
 
 /**
  * 左侧选中那一组的评审表：列由调用方算好（「显示属性」里开了哪些 + 作用域换列）。分组在左侧
- * 分组栏里，这张表本身不分组；评审活动缩进挂在所属评审下，或铺平时带「所属评审 ›」。
+ * 分组栏里，这张表本身不分组；评审活动不缩进，展开时落在所属评审下面的下沉区（可逐条或整组收起），
+ * 铺平时带「所属评审 ›」。
  */
 export const StageReviewTable = ({
   workspaceSlug,
@@ -399,6 +492,10 @@ export const StageReviewTable = ({
   flashedCells,
   onUpdateReview,
   scrollRef,
+  highlight = "",
+  collapsedIds,
+  onToggleCollapse,
+  collapseAll,
 }: {
   workspaceSlug: string;
   rows: TStageReviewRow[];
@@ -421,12 +518,19 @@ export const StageReviewTable = ({
    * 仍基于全量数据，不受影响）。
    */
   scrollRef: RefObject<HTMLDivElement | null>;
+  /** 搜索框的关键字（已 trim + 小写），编号里命中的那段会高亮 */
+  highlight?: string;
+  /** 收起了评审活动的评审；rows 里已经去掉了它们的活动行，这里只用来画箭头朝向 */
+  collapsedIds: Set<string>;
+  onToggleCollapse: (reviewId: string) => void;
+  /** 表头的「全部展开 / 收起」；这一组里没有能折叠的评审时不传 */
+  collapseAll?: { collapsed: boolean; onToggle: () => void };
 }) => {
   const { t, currentLocale } = useTranslation();
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: (index) => (rows[index]?.depth === 1 ? ACTIVITY_ROW_HEIGHT : ROW_HEIGHT),
     // 行在吸顶表头下面开始
     scrollMargin: HEADER_HEIGHT,
     overscan: 10,
@@ -436,11 +540,12 @@ export const StageReviewTable = ({
   const { widths, setWidth } = useColumnWidths(NO_DEFAULT_WIDTHS);
   const widthOf = (key: string, fallback: string) => (widths[key] ? `${widths[key]}px` : fallback);
   const gridTemplateColumns = [
-    widthOf(TITLE_KEY, "minmax(240px, 1fr)"),
+    widthOf(TITLE_KEY, "minmax(340px, 1fr)"),
     ...columns.map((column) => widthOf(column, COLUMN_WIDTH[column])),
   ].join(" ");
   const openInProject = t(`${I18N}.detail.open_in_project`);
   const hasSelection = Boolean(selection && selection.selectedSet.size > 0);
+  const showGutter = useMemo(() => rows.some((row) => row.expandable || row.depth === 1), [rows]);
   const rowContext = useMemo<TRowContext>(
     () => ({
       locale: currentLocale,
@@ -454,6 +559,10 @@ export const StageReviewTable = ({
       selection,
       hasSelection,
       onUpdateReview,
+      highlight,
+      showGutter,
+      collapsedIds,
+      onToggleCollapse,
     }),
     [
       currentLocale,
@@ -467,6 +576,10 @@ export const StageReviewTable = ({
       selection,
       hasSelection,
       onUpdateReview,
+      highlight,
+      showGutter,
+      collapsedIds,
+      onToggleCollapse,
     ]
   );
 
@@ -487,6 +600,26 @@ export const StageReviewTable = ({
           />
         )}
         <span className="relative flex h-full min-w-0 items-center pr-3 pl-6">
+          {showGutter && (
+            <span className={GUTTER_CLASS}>
+              {collapseAll && (
+                <button
+                  type="button"
+                  onClick={collapseAll.onToggle}
+                  aria-label={t(`${I18N}.table.${collapseAll.collapsed ? "expand_all" : "collapse_all"}`)}
+                  title={t(`${I18N}.table.${collapseAll.collapsed ? "expand_all" : "collapse_all"}`)}
+                  className="grid size-5 cursor-pointer place-items-center rounded-sm text-tertiary hover:bg-layer-1-hover hover:text-primary"
+                >
+                  {collapseAll.collapsed ? (
+                    <ChevronsUpDown className="size-3.5" />
+                  ) : (
+                    <ChevronsDownUp className="size-3.5" />
+                  )}
+                </button>
+              )}
+            </span>
+          )}
+          <span className="w-[76px] shrink-0 truncate pr-3">{t(`${I18N}.table.code`)}</span>
           <span className="truncate">{t(`${I18N}.table.title`)}</span>
           <ResizeHandle minWidth={MIN_TITLE_WIDTH} onResize={(width) => setWidth(TITLE_KEY, width)} />
         </span>

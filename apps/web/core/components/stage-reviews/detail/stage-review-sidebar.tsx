@@ -1,5 +1,16 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, Box, CalendarDays, ClipboardCheck, Factory, Flag, Truck, UserRound, UserRoundCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Box,
+  CalendarDays,
+  ClipboardCheck,
+  Factory,
+  Flag,
+  Hash,
+  Truck,
+  UserRound,
+  UserRoundCheck,
+} from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TProductionMode, TShipmentAssessment, TStageReviewDetail, TUpdateStageReviewPayload } from "@plane/types";
 import { STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
@@ -185,6 +196,10 @@ export const StageReviewSidebar = ({
       )}
     >
       <Card title={t(`${I18N}.detail.basic_info`)}>
+        {/* 生成时从模板快照的标准编号，只读；手工评审没有模板，显示「—」 */}
+        <Row icon={Hash} label={t(`${I18N}.fields.standard_code`)}>
+          <span className="block truncate font-mono tabular-nums">{detail.standard_code || "—"}</span>
+        </Row>
         <Row icon={Box} label={t(`${I18N}.fields.product`)}>
           <span className="block truncate">{detail.product_detail?.name ?? "—"}</span>
         </Row>

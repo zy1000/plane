@@ -38,9 +38,10 @@ import { useStageReviewPermissions } from "./permissions";
 import { ProductStageReviewsEmptyState } from "./product-empty-state";
 import type { TStageReviewScope } from "./scope";
 import { getStageReviewScopeId, getStageReviewStorageScope } from "./scope";
-import { STAGE_REVIEW_GROUP_ALL, stageReviewGroupKeys } from "./stage-review-rows";
+import { STAGE_REVIEW_GROUP_ALL, collapseStageReviewRows, stageReviewGroupKeys } from "./stage-review-rows";
 import type { TStageReviewTableSelection } from "./stage-review-table";
 import { StageReviewTable } from "./stage-review-table";
+import { useCollapsedStageReviews } from "./use-collapsed-stage-reviews";
 
 const I18N = "stage_review";
 
@@ -108,6 +109,7 @@ export const StageReviewList = observer(function StageReviewList({
   const { canManage } = useStageReviewPermissions(workspaceSlug, drawerProjectId);
 
   const { settings, updateSettings } = useStageReviewDisplay(storageScope, scopeKind, currentUser?.id);
+  const collapse = useCollapsedStageReviews(storageScope, currentUser?.id);
   const { areAllConfigsInitialized, configs } = useStageReviewFiltersConfig({
     reviews,
     workspaceSlug,
@@ -124,7 +126,10 @@ export const StageReviewList = observer(function StageReviewList({
     (review: TStageReview) => {
       const keyword = search.trim().toLowerCase();
       return (
-        (!keyword || review.title.toLowerCase().includes(keyword)) &&
+        // 搜索框同时匹配标题与标准编号
+        (!keyword ||
+          review.title.toLowerCase().includes(keyword) ||
+          review.standard_code.toLowerCase().includes(keyword)) &&
         stageReviewMatchesConditions(review, conditions, currentUser?.id)
       );
     },
@@ -163,7 +168,18 @@ export const StageReviewList = observer(function StageReviewList({
     : null;
   // 选「全部评审」时右侧按不分组的口径列、列也按不分组出
   const effectiveGroupBy = isGrouped && activeGroup?.id !== STAGE_REVIEW_GROUP_ALL ? settings.groupBy : "none";
-  const rows = isGrouped ? rowsOf(activeGroup?.id ?? null) : rowsOf(null);
+  const groupRows = isGrouped ? rowsOf(activeGroup?.id ?? null) : rowsOf(null);
+  // 收起的评审拿掉下面的活动行；勾选、空态都按收起后看得见的行算
+  const rows = useMemo(
+    () => collapseStageReviewRows(groupRows, collapse.collapsedIds),
+    [groupRows, collapse.collapsedIds]
+  );
+  // 表头「全部展开 / 收起」只作用于这一组：有一条还展开着就是「全部收起」
+  const expandableIds = useMemo(
+    () => groupRows.filter((row) => row.expandable).map((row) => row.review.id),
+    [groupRows]
+  );
+  const isAllCollapsed = expandableIds.every((id) => collapse.collapsedIds.has(id));
 
   // 列 = 这个作用域下开着的显示属性；产品页按项目分组时「项目」列换成「研发阶段」列。
   // 右侧只列选中那一组，当前分组维度那一列整列都是同一个值，藏掉（按产品分组时不出「产品」列）。
@@ -311,6 +327,17 @@ export const StageReviewList = observer(function StageReviewList({
         flashedCells={bulkEdit.flashedCells}
         onUpdateReview={canBulkEdit ? handleUpdateReview : undefined}
         scrollRef={scrollRef}
+        highlight={search.trim().toLowerCase()}
+        collapsedIds={collapse.collapsedIds}
+        onToggleCollapse={collapse.toggle}
+        collapseAll={
+          expandableIds.length > 0
+            ? {
+                collapsed: isAllCollapsed,
+                onToggle: () => collapse.setCollapsed(expandableIds, !isAllCollapsed),
+              }
+            : undefined
+        }
       />
     );
   };

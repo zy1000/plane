@@ -304,6 +304,11 @@ class StageReviewTemplate(BaseModel):
         verbose_name="所属评审",
     )
     title = models.CharField(max_length=255, verbose_name="标题")
+    # 标准编号：工作区内唯一（srt_unique_workspace_code_active）。必填由序列化器兜，模型留
+    # default="" 是为了 bulk_create / 历史迁移的中间态不炸；预置节点按「阶段类型编码-两位序号」
+    # 生成（seed_data/stage_review_templates.py::iter_template_rows）。生成评审时快照到
+    # StageReview.standard_code。重排 / 换父不重新编号 —— 编号由人维护。
+    standard_code = models.CharField(max_length=80, default="", verbose_name="标准编号")
     # 富文本。口径同 Requirement.description_html / Product.description_html：只存一列 HTML，
     # 不另存 json / stripped / binary —— 那三列是 Issue、Page 走协同编辑才需要的。
     description_html = models.TextField(blank=True, null=True, verbose_name="描述 HTML")
@@ -341,6 +346,13 @@ class StageReviewTemplate(BaseModel):
                 fields=["parent", "title"],
                 condition=Q(parent__isnull=False, deleted_at__isnull=True),
                 name="srt_unique_parent_title_active",
+            ),
+            # 标准编号工作区内唯一。需求原话是「同一研发模型内唯一」，但模板库是工作区级共享、
+            # 混合模式默认勾全部节点，按模式查重在真实数据上等价于工作区唯一，用户拍板按工作区做
+            models.UniqueConstraint(
+                fields=["workspace", "standard_code"],
+                condition=Q(deleted_at__isnull=True),
+                name="srt_unique_workspace_code_active",
             ),
             # 评审（含 O阶段评审）恒无父；活动有父没父都行 —— 有些阶段没有汇总评审，
             # 活动就是该阶段的顶层节点。有父时父必须是同族的评审，那半条在 clean() 里。
@@ -442,6 +454,10 @@ class StageReview(ProjectBaseModel):
     )
     auditor_role = models.CharField(
         max_length=255, blank=True, default="", verbose_name="审核者角色"
+    )
+    # 标准编号快照，口径同上面三个角色：生成时从模板抄，模板后改不影响。手工评审（无模板）为空
+    standard_code = models.CharField(
+        max_length=80, blank=True, default="", verbose_name="标准编号"
     )
     # 角色解析出来的实际人。leaders 就是原始表里的「负责人」（按产品的角色配置筛选人员）。
     # 两者都可多人：每一步由名单里任意一人推进即可（见 utils/stage_review.py）。
