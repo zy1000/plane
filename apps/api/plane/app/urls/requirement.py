@@ -246,6 +246,12 @@ urlpatterns = [
         ProjectRequirementViewSet.as_view({"get": "linkable"}),
         name="project-linkable-requirements",
     ),
+    # 项目页「提研发需求」：建在所选产品下，并把产品、需求一并关联进本项目
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/requirements/create-in-product/",
+        ProjectRequirementViewSet.as_view({"post": "create_requirement"}),
+        name="project-requirement-create-in-product",
+    ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/requirement-configuration/",
         ProjectRequirementViewSet.as_view({"get": "configuration"}),

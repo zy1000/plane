@@ -260,29 +260,62 @@ def linked_products_by_project(project_ids):
     return products_by_project
 
 
-def linkable_requirements_queryset(*, slug, project_id):
-    """候选池：本项目关联产品下、且尚未关联进来的需求。
+def visible_product_ids(*, user, slug):
+    """当前用户在工作区里看得见的产品 id，与产品列表接口（views/product/base.py）同一口径。"""
+    from plane.db.models import Workspace
+    from plane.utils.product import can_manage_workspace_products
 
-    唯一的排除条件是「已关联进本项目」：评审状态、closed 都不设门槛。
+    workspace = Workspace.objects.filter(slug=slug).first()
+    if workspace is None:
+        return Product.objects.none().values_list("id", flat=True)
+    queryset = Product.objects.filter(workspace=workspace)
+    if not can_manage_workspace_products(user, workspace):
+        queryset = queryset.filter(
+            Q(network=2)
+            | Q(owner=user)
+            | Q(reviewers=user)
+            | Q(network=0, member_product__member=user)
+        )
+    return queryset.order_by().values_list("id", flat=True).distinct()
+
+
+def linkable_requirements_queryset(*, user, slug, project_id):
+    """候选池：当前用户看得见的产品下、且尚未关联进本项目的需求。
+
+    不要求产品已关联本项目 —— 关联时顺带把产品关联进来（link_products_to_project）。
+    已关联本项目的产品排在前面。唯一的排除条件是「已关联进本项目」：评审状态、closed
+    都不设门槛。
     """
+    from django.db.models import Case, IntegerField, When
+
     return (
         Requirement.objects.filter(
             workspace__slug=slug,
-            product_id__in=linked_product_ids(project_id),
+            product_id__in=visible_product_ids(user=user, slug=slug),
         )
         .exclude(id__in=linked_requirement_ids(project_id))
         # module 供行序列化的 module_name 用；这条 queryset 只读、从不加锁，
         # 可空外键的 OUTER JOIN 在这里没有 select_for_update 的问题
         .select_related("product", "module")
-        .order_by("product__identifier", "sort_order", "created_at", "id")
+        .order_by(
+            Case(
+                When(product_id__in=linked_product_ids(project_id), then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            "product__identifier",
+            "sort_order",
+            "created_at",
+            "id",
+        )
     )
 
 
-def linkable_facets(*, slug, project_id):
-    """关联需求弹窗左侧产品分面的计数。
+def linkable_facets(queryset):
+    """关联研发需求弹窗按产品分组的计数。
 
-    口径与 requirement_facets 的 by_product 同一条规矩：统计**全集**（整个候选池），
-    不随搜索 / product_id 筛选变化 —— 分面是最外层作用域，自己的数字不该跟着选中项走。
+    统计传进来的候选池 —— 调用方已套上搜索 / 类型筛选、还没套产品筛选：分组要跟着
+    搜索走（没命中的产品整组不出），但不能被产品筛选收成一组。
     搭 linkable 列表一起返回（extra_stats），不另开端点、不多发请求。
 
     .order_by() 必须清掉候选池的默认排序，否则排序列会被拖进 GROUP BY。
@@ -291,12 +324,45 @@ def linkable_facets(*, slug, project_id):
 
     by_product = {
         str(row["product_id"]): row["count"]
-        for row in linkable_requirements_queryset(slug=slug, project_id=project_id)
-        .order_by()
-        .values("product_id")
-        .annotate(count=Count("id"))
+        for row in queryset.order_by().values("product_id").annotate(count=Count("id"))
     }
     return {"by_product": by_product, "total": sum(by_product.values())}
+
+
+def link_products_to_project(*, project, product_ids, actor):
+    """把产品关联进项目（幂等），返回本次新关联上的产品 id。
+
+    提研发需求、关联研发需求时顺带调用：需求所属的产品还没关联本项目就补上。
+    调用方负责产品的可见性校验（visible_product_ids / get_scoped_product）。
+    """
+    wanted = list(dict.fromkeys(str(item) for item in product_ids))
+    if not wanted:
+        return []
+    existing = {
+        str(product_id)
+        for product_id in ProductProject.objects.filter(
+            project_id=project.id, product_id__in=wanted
+        ).values_list("product_id", flat=True)
+    }
+    missing = [product_id for product_id in wanted if product_id not in existing]
+    if missing:
+        ProductProject.objects.bulk_create(
+            [
+                ProductProject(
+                    product_id=product_id,
+                    project_id=project.id,
+                    # bulk_create 不走 ProjectBaseModel.save()，workspace 不会被自动派生
+                    workspace_id=project.workspace_id,
+                    created_by_id=actor.id,
+                    updated_by_id=actor.id,
+                )
+                for product_id in missing
+            ],
+            batch_size=100,
+            # 配合 product_project_unique_when_deleted_at_null 做幂等
+            ignore_conflicts=True,
+        )
+    return missing
 
 
 def linked_requirements_queryset(*, slug, project_id):
@@ -571,11 +637,12 @@ def status_counts_by_product(*, project_id, product_ids):
     )
 
 
-def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
+def resolve_linkable_requirements(*, user, slug, requirement_ids):
     """把一批需求 id 解析成可关联的需求行；任一条不合格就整批拒绝。
 
     全有或全无 —— 与 row_base.bulk_destroy 同样的取舍：部分成功会让前端拿不准哪些
-    生效了，而这里的失败原因（产品没关联进本项目）都是用户可以自己修的。
+    生效了。所属产品不必已关联本项目（调用方随后用 link_products_to_project 补上），
+    但必须是调用者看得见的产品；看不见的与不存在的报同一个错。
     """
     requested = list(dict.fromkeys(str(item) for item in requirement_ids))
     if not requested:
@@ -589,7 +656,7 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
         )
     )
     found = {str(row.id): row for row in rows}
-    allowed_product_ids = {str(pid) for pid in linked_product_ids(project_id)}
+    allowed_product_ids = {str(pid) for pid in visible_product_ids(user=user, slug=slug)}
 
     conflicts = []
     for requirement_id in requested:
@@ -601,7 +668,7 @@ def resolve_linkable_requirements(*, slug, project_id, requirement_ids):
             # 「产品定义需求 → 项目交付需求」这条线上不存在它们。
             conflicts.append({"id": requirement_id, "reason": "NOT_PRODUCT_SCOPED"})
         elif str(row.product_id) not in allowed_product_ids:
-            conflicts.append({"id": requirement_id, "reason": "PRODUCT_NOT_LINKED"})
+            conflicts.append({"id": requirement_id, "reason": "NOT_FOUND"})
 
     if conflicts:
         raise RequirementLinkError(

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   TProjectRequirement,
+  TProjectRequirementCreatePayload,
   TProjectRequirementsResponse,
   TRequirementConfiguration,
   TRequirementFilter,
@@ -157,6 +158,16 @@ export const useProjectRequirements = ({
   }, [fetchRequirements]);
 
   /**
+   * 写成功之后的重拉。写已经落库，重拉失败不能让调用方当成写失败 —— 否则建需求弹窗会留着
+   * 草稿让人再点一次保存（建出重复的一条），或者放弃时把已被新需求引用的附件删掉。
+   * 失败原因两个 fetch 自己记进 configurationError / requirementsError，页面照常提示。
+   */
+  const refreshAfterWrite = useCallback(async () => {
+    await fetchConfiguration().catch(() => undefined);
+    await fetchRequirements({ cursor: undefined }).catch(() => undefined);
+  }, [fetchConfiguration, fetchRequirements]);
+
+  /**
    * 关联一批需求。
    *
    * 关联会改变本页构成，也可能引入新的需求类型（网格要多渲染几列自定义字段），
@@ -168,20 +179,40 @@ export const useProjectRequirements = ({
       if (!requirementIds.length) return;
       setIsMutating(true);
       try {
-        await requirementService.linkRequirementsToProject(workspaceSlug, projectId, {
+        const response = await requirementService.linkRequirementsToProject(workspaceSlug, projectId, {
           requirements: requirementIds,
         });
         // 结果集变了，游标必须回到第一页 —— 否则可能停在一个已经越界的页码上。
         // 显式传 cursor 覆盖闭包里的旧值；不能只靠 effect 重拉 —— 已在第一页时
         // setCursor(undefined) 是 no-op，effect 不会重发，刷新会被跳过
         setCursor(undefined);
-        await fetchConfiguration();
-        await fetchRequirements({ cursor: undefined });
+        await refreshAfterWrite();
+        return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [fetchConfiguration, fetchRequirements, projectId, workspaceSlug]
+    [projectId, refreshAfterWrite, workspaceSlug]
+  );
+
+  /**
+   * 提研发需求：建在所选产品下，产品和需求由服务端一并关联进本项目。
+   * 与关联同理，配置（可能多出一个需求类型）和列表都要重拉、游标回第一页。
+   */
+  const createRequirement = useCallback(
+    async (payload: TProjectRequirementCreatePayload) => {
+      if (!workspaceSlug || !projectId) throw new Error("Project is required.");
+      setIsMutating(true);
+      try {
+        const response = await requirementService.createProjectRequirement(workspaceSlug, projectId, payload);
+        setCursor(undefined);
+        await refreshAfterWrite();
+        return response;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [projectId, refreshAfterWrite, workspaceSlug]
   );
 
   const unlinkRequirements = useCallback(
@@ -327,6 +358,7 @@ export const useProjectRequirements = ({
     fetchConfiguration,
     fetchRequirements,
     linkRequirements,
+    createRequirement,
     unlinkRequirements,
     submitChange,
     updateStatus,

@@ -6,6 +6,9 @@ import type {
   TLinkableTestCasesResponse,
   TProductProject,
   TProjectRequirement,
+  TProjectRequirementCreatePayload,
+  TProjectRequirementCreateResponse,
+  TProjectRequirementLinkResponse,
   TProjectRequirementModulesResponse,
   TProfileRequirementsResponse,
   TProjectRequirementsResponse,
@@ -1174,7 +1177,8 @@ export class RequirementService extends APIService {
   /**
    * 候选池：可以关联进本项目的需求。
    *
-   * 只包含已关联产品下、且尚未关联进本项目的需求 —— 已关联的不再出现。
+   * 当前用户看得见的全部产品下、且尚未关联进本项目的需求，已关联本项目的产品排在前面。
+   * extra_stats.by_product 跟着搜索与类型走、不随 productId 变化，弹窗据此画产品分组。
    */
   async listLinkableRequirements(
     workspaceSlug: string,
@@ -1202,12 +1206,26 @@ export class RequirementService extends APIService {
       });
   }
 
+  /** 关联一批需求；所属产品还没关联本项目的，服务端一并关联，返回里带这批产品 id */
   async linkRequirementsToProject(
     workspaceSlug: string,
     projectId: string,
     payload: { requirements: string[] }
-  ): Promise<{ message: string }> {
+  ): Promise<TProjectRequirementLinkResponse> {
     return this.post(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 项目页「提研发需求」：建在所选产品下，产品和需求一并关联进本项目（一个事务） */
+  async createProjectRequirement(
+    workspaceSlug: string,
+    projectId: string,
+    payload: TProjectRequirementCreatePayload
+  ): Promise<TProjectRequirementCreateResponse> {
+    return this.post(`${this.projectRequirementsRoot(workspaceSlug, projectId)}/create-in-product/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -22,7 +22,10 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
-from plane.app.serializers.requirement import RequirementFilterSerializer
+from plane.app.serializers.requirement import (
+    RequirementCreateSerializer,
+    RequirementFilterSerializer,
+)
 from plane.app.serializers.requirement_change import (
     RequirementChangeRequestSerializer,
     RequirementProjectChangeSubmitSerializer,
@@ -34,7 +37,11 @@ from plane.app.serializers.requirement_project import (
 )
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.change import change_error_response
-from plane.app.views.requirement.mixins import get_scoped_product
+from plane.app.views.requirement.mixins import (
+    get_requirement_scope,
+    get_scoped_product,
+    resolve_row_layer,
+)
 from plane.app.views.requirement.row_base import annotate_pending
 from plane.db.models import (
     Product,
@@ -62,6 +69,7 @@ from plane.utils.requirement_project import (
     RequirementLinkError,
     apply_project_requirement_list_filters,
     can_submit_change_from_project,
+    link_products_to_project,
     linkable_facets,
     linkable_requirements_queryset,
     linked_requirement_ids,
@@ -158,7 +166,14 @@ class ProjectRequirementViewSet(BaseViewSet):
         return filter_payload, None
 
     def _apply_common_query(
-        self, request, queryset, *, specs, by_requirement_type, search_in=None
+        self,
+        request,
+        queryset,
+        *,
+        specs,
+        by_requirement_type,
+        search_in=None,
+        apply_product_filter=True,
     ):
         """?requirement_type_id= / ?product_id= / ?ids= / ?search= / ?filters= / ?search_in=
 
@@ -172,8 +187,9 @@ class ProjectRequirementViewSet(BaseViewSet):
         if requirement_type_ids:
             queryset = queryset.filter(requirement_type_id__in=requirement_type_ids)
 
+        # 关联研发需求的按产品分组计数要在产品筛选之前算，由调用方自己套产品筛选
         product_ids = split_query_csv(request.query_params.get("product_id"))
-        if product_ids:
+        if product_ids and apply_product_filter:
             queryset = queryset.filter(product_id__in=product_ids)
 
         raw_ids = request.query_params.get("ids")
@@ -300,13 +316,15 @@ class ProjectRequirementViewSet(BaseViewSet):
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def linkable(self, request, slug, project_id):
-        """候选池：可以关联进本项目的需求。
+        """候选池：可以关联进本项目的需求（当前用户看得见的全部产品，已关联的产品在前）。
 
         只给有 manage 权限的人 —— 它会露出尚未进入本项目的需求，那是产品侧的内容。
         """
-        queryset = linkable_requirements_queryset(slug=slug, project_id=project_id)
+        queryset = linkable_requirements_queryset(
+            user=request.user, slug=slug, project_id=project_id
+        )
 
-        # 候选池的字段来源是**关联产品下的全部需求**，不是已关联的那批
+        # 候选池的字段来源是**可见产品下的全部需求**，不是已关联的那批
         requirement_type_ids = get_referenced_requirement_type_ids(
             model=Requirement,
             scope={"id__in": queryset.order_by().values_list("id", flat=True)},
@@ -321,9 +339,16 @@ class ProjectRequirementViewSet(BaseViewSet):
             specs=specs,
             by_requirement_type=by_requirement_type,
             search_in="id_title",
+            apply_product_filter=False,
         )
         if error is not None:
             return error
+
+        # 按产品分组的计数跟着搜索 / 类型走，但要在产品筛选之前算
+        facets = linkable_facets(queryset)
+        product_ids = split_query_csv(request.query_params.get("product_id"))
+        if product_ids:
+            queryset = queryset.filter(product_id__in=product_ids)
 
         return self.paginate(
             request=request,
@@ -333,9 +358,8 @@ class ProjectRequirementViewSet(BaseViewSet):
             on_results=lambda rows: MultiProductRequirementSerializer(
                 rows, many=True, context=self._row_context(rows)
             ).data,
-            # 左侧产品分面的计数搭列表一起回来（全集口径，不随搜索/产品筛选变化），
-            # 与 list 的 extra_stats 同一套路：不另开端点、不多发请求。
-            extra_stats=linkable_facets(slug=slug, project_id=project_id),
+            # 按产品分组的计数搭列表一起回来，与 list 的 extra_stats 同一套路
+            extra_stats=facets,
             default_per_page=DEFAULT_PER_PAGE,
             max_per_page=MAX_PER_PAGE,
         )
@@ -366,7 +390,7 @@ class ProjectRequirementViewSet(BaseViewSet):
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def create(self, request, slug, project_id):
-        """把一批需求关联进本项目。"""
+        """把一批需求关联进本项目；所属产品还没关联本项目的，一并关联进来。"""
         requirements = request.data.get("requirements", [])
         if not requirements:
             return Response(
@@ -377,12 +401,17 @@ class ProjectRequirementViewSet(BaseViewSet):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         try:
             rows = resolve_linkable_requirements(
-                slug=slug, project_id=project_id, requirement_ids=requirements
+                user=request.user, slug=slug, requirement_ids=requirements
             )
         except RequirementLinkError as exc:
             return _link_error_response(exc)
 
         with transaction.atomic():
+            newly_linked_products = link_products_to_project(
+                project=project,
+                product_ids=[row.product_id for row in rows],
+                actor=request.user,
+            )
             RequirementProject.objects.bulk_create(
                 [
                     RequirementProject(
@@ -401,7 +430,85 @@ class ProjectRequirementViewSet(BaseViewSet):
             )
             # 关联进项目 = 只升不降的自动推进 (a)：not_started → projected
             promote_on_project_link([row.id for row in rows])
-        return Response({"message": "success"}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"message": "success", "linked_products": newly_linked_products},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    def create_requirement(self, request, slug, project_id):
+        """在项目里提研发需求：建在所选产品下，再把产品、需求一并关联进本项目。
+
+        建行与产品侧 RequirementViewSet.create 同一条路径（RequirementCreateSerializer
+        + layer.insert，产品行写锁取号），三件事在一个事务里，不会留下「需求建了、
+        没进项目」的半截数据。暂不校验产品侧的建需求权限，能看到本页的人都能提。
+        """
+        product_id = request.data.get("product_id")
+        if not product_id:
+            return Response(
+                {"error": "Product is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
+
+        try:
+            with transaction.atomic():
+                _, owner = get_requirement_scope(
+                    request.user, slug=slug, product_id=product_id, for_update=True
+                )
+                if owner is None:
+                    return Response(
+                        {"error": "Product not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                layer = resolve_row_layer(owner)
+                serializer = RequirementCreateSerializer(
+                    data=request.data.get("requirement") or {},
+                    context={
+                        "owner": owner,
+                        "parent_queryset": layer.queryset,
+                        "requirement_type_resolver": layer.requirement_type_resolver,
+                        "default_requirement_type_id": layer.default_requirement_type_id,
+                    },
+                )
+                serializer.is_valid(raise_exception=True)
+                builtin = dict(serializer.validated_data["builtin"])
+                # 新行一律从「未开始」开始，关联进项目后由 promote_on_project_link 推进
+                builtin["status"] = RequirementItemStatus.NOT_STARTED
+                row = layer.insert(
+                    data=serializer.validated_data["data"],
+                    builtin=builtin,
+                    requirement_type_id=serializer.validated_data["requirement_type_id"],
+                    actor=request.user,
+                    module_id=serializer.validated_data.get("module_id"),
+                )
+                newly_linked_products = link_products_to_project(
+                    project=project, product_ids=[product_id], actor=request.user
+                )
+                RequirementProject.objects.create(
+                    requirement_id=row.id,
+                    project_id=project_id,
+                    workspace_id=project.workspace_id,
+                    created_by_id=request.user.id,
+                    updated_by_id=request.user.id,
+                )
+                promote_on_project_link([row.id])
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 重读口径与 list 相同，前端拿到的就是网格里那一行
+        linked_row = (
+            annotate_pending(linked_requirements_queryset(slug=slug, project_id=project_id))
+            .filter(id=row.id)
+            .first()
+        )
+        return Response(
+            {
+                "requirement": self._serialize_rows([linked_row])[0] if linked_row else None,
+                "linked_product": bool(newly_linked_products),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
     def partial_update(self, request, slug, project_id, requirement_id):

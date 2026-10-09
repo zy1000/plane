@@ -10,7 +10,6 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
   TRequirementBatchSavePayload,
-  TRequirementBatchSaveResponse,
   TRequirementBuiltinFieldConfig,
   TRequirementBuiltinValues,
   TRequirementData,
@@ -78,6 +77,19 @@ export type TRequirementCreateContext = {
   typeName?: string;
 };
 
+/**
+ * 选归属的字段（项目页「提研发需求」选所属产品）：左栏第一行、与需求类型并排，算必填。
+ * 换了归属 entityId 跟着变，弹窗会清掉模块和父需求 —— 两者都跟着作用域走。
+ */
+export type TRequirementCreateScopeField = {
+  label: string;
+  icon?: LucideIcon;
+  control: ReactNode;
+  /** 字段下方整行的提示，例如「保存时会把产品关联到本项目」 */
+  notice?: ReactNode;
+  missing: boolean;
+};
+
 type TProps = {
   isOpen: boolean;
   workspaceSlug: string;
@@ -102,8 +114,15 @@ type TProps = {
   moduleId?: string | null;
   /** 当前选中模块的名字，打开时回显用；不传则只靠 id，下拉打开后再补 */
   moduleName?: string | null;
+  /** 弹窗标题，缺省「添加需求」 */
+  title?: string;
+  /** 标题旁的上下文，例如项目页提研发需求时显示本项目 */
+  headerContext?: ReactNode;
+  scopeField?: TRequirementCreateScopeField;
+  /** 页脚左侧的一句说明；有报错时让位给报错 */
+  footerNote?: ReactNode;
   onClose: () => void;
-  onSave: (payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
+  onSave: (payload: TRequirementBatchSavePayload) => Promise<unknown>;
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
 };
 
@@ -192,6 +211,10 @@ export const RequirementCreateModal = ({
   seed,
   moduleId = null,
   moduleName = null,
+  title,
+  headerContext,
+  scopeField,
+  footerNote,
   onClose,
   onSave,
   onUpload,
@@ -226,6 +249,15 @@ export const RequirementCreateModal = ({
     (key: string) => setTouched((current) => (current.has(key) ? current : new Set(current).add(key))),
     []
   );
+  /** 换了归属（项目页切换所属产品）：模块和父需求都跟着作用域走，旧值作废 */
+  const previousEntityIdRef = useRef(entityId);
+  useEffect(() => {
+    if (previousEntityIdRef.current === entityId) return;
+    previousEntityIdRef.current = entityId;
+    setDraftModuleId(null);
+    setDraftModuleName(null);
+    setBuiltin((current) => (current.parent_id ? { ...current, parent_id: null } : current));
+  }, [entityId]);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const typeFocusRef = useRef<HTMLElement | null>(null);
   const bindTypeFocus = useCallback((node: HTMLDivElement | null) => {
@@ -387,6 +419,9 @@ export const RequirementCreateModal = ({
    */
   const requiredEntries = useMemo<TCreateRequiredEntry[]>(() => {
     const entries: TCreateRequiredEntry[] = [];
+    if (scopeField) {
+      entries.push({ key: "scope", label: scopeField.label, missing: scopeField.missing });
+    }
     if (allowTypeSelection) {
       entries.push({ key: "type", label: t("requirement_detail.requirement_type"), missing: !typeId });
     }
@@ -396,7 +431,7 @@ export const RequirementCreateModal = ({
       entries.push({ key: field.id, label: field.name, missing: isRequirementValueEmpty(field, data[field.id]) });
     }
     return entries;
-  }, [allowTypeSelection, builtin.title, data, t, typeId, visibleFields]);
+  }, [allowTypeSelection, builtin.title, data, scopeField, t, typeId, visibleFields]);
   const missingKeys = useMemo(
     () => new Set(requiredEntries.filter((entry) => entry.missing).map((entry) => entry.key)),
     [requiredEntries]
@@ -433,7 +468,12 @@ export const RequirementCreateModal = ({
     >
       <div className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col">
         <div className="flex flex-shrink-0 items-center justify-between gap-4 rounded-t-lg border-b-[0.5px] border-subtle bg-surface-1 px-5 pt-4 pb-3.5">
-          <h3 className="text-16 leading-tight font-semibold text-primary">{t("requirement_grid.data.add")}</h3>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h3 className="shrink-0 text-16 leading-tight font-semibold text-primary">
+              {title ?? t("requirement_grid.data.add")}
+            </h3>
+            {headerContext}
+          </div>
           <button
             type="button"
             onClick={handleClose}
@@ -450,18 +490,43 @@ export const RequirementCreateModal = ({
             className="scrollbar-sm vertical-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-surface-1 px-5 pb-5"
           >
             <FormSection>
-              {allowTypeSelection && (
-                <ModalField
-                  label={t("requirement_detail.requirement_type")}
-                  icon={Shapes}
-                  required
-                  hint={t("requirement_grid.data.pick_type_hint")}
+              {(scopeField || allowTypeSelection) && (
+                <div
+                  className={cn(
+                    "grid items-start gap-3.5",
+                    scopeField && allowTypeSelection && "sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]"
+                  )}
                 >
-                  <div ref={bindTypeFocus}>
-                    <RequirementTypeSelect types={selectableTypes} value={typeId} onChange={setTypeId} />
-                  </div>
-                </ModalField>
+                  {scopeField && (
+                    <ModalField
+                      label={scopeField.label}
+                      icon={scopeField.icon}
+                      required
+                      error={
+                        showError("scope")
+                          ? t("requirement_grid.data.select_required", { field: scopeField.label })
+                          : undefined
+                      }
+                      onBlur={() => touch("scope")}
+                    >
+                      {scopeField.control}
+                    </ModalField>
+                  )}
+                  {allowTypeSelection && (
+                    <ModalField
+                      label={t("requirement_detail.requirement_type")}
+                      icon={Shapes}
+                      required
+                      hint={t("requirement_grid.data.pick_type_hint")}
+                    >
+                      <div ref={bindTypeFocus}>
+                        <RequirementTypeSelect types={selectableTypes} value={typeId} onChange={setTypeId} />
+                      </div>
+                    </ModalField>
+                  )}
+                </div>
               )}
+              {scopeField?.notice}
               <div
                 className={cn(
                   "grid gap-3.5",
@@ -600,7 +665,11 @@ export const RequirementCreateModal = ({
         </div>
 
         <div className="flex flex-shrink-0 items-center justify-end gap-2 rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-5 py-3">
-          {error && <p className="mr-auto text-12 text-danger-primary">{error}</p>}
+          {error ? (
+            <p className="mr-auto text-12 text-danger-primary">{error}</p>
+          ) : (
+            footerNote && <div className="mr-auto min-w-0">{footerNote}</div>
+          )}
           <Button variant="secondary" size="lg" onClick={handleClose} disabled={isSubmitting}>
             {t("discard")}
           </Button>

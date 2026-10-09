@@ -79,16 +79,14 @@ type TProps = {
   onRetry: () => void;
   /** 有 project.requirement_link.manage 才能关联/解除关联 */
   canManage: boolean;
-  /** 有 project.product_link.manage 才能改「本项目引用哪些产品」 */
-  canManageProducts: boolean;
-  /** 「没关联产品」空态的 CTA：关联在项目「产品」页做，这里只负责跳过去 */
-  onManageProducts: () => void;
   search: string;
   onSearchChange: (value: string) => void;
   onCursorChange: (value: string | undefined) => void;
   onPerPageChange: (value: number) => void;
   onOpenDetail: (requirementId: string) => void;
   onLink: () => void;
+  /** 「提研发需求」：建在所选产品下，产品和需求一并关联进本项目。不传就不出这个按钮（个人页只读复用） */
+  onCreate?: () => void;
   onUnlink: (requirementIds: string[]) => void;
   /** 改需求级交付状态。与关联/解除共用 canManage，不单设权限 key；不传则状态列恒只读 */
   onStatusChange?: (requirementId: string, status: TRequirementItemStatus) => void;
@@ -96,8 +94,6 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
   /** 插在搜索后面、其余操作前面，例如过滤按钮 */
   toolbarAfterSearch?: ReactNode;
-  /** 一条产品都没关联时，空态该说的是「先去关联产品」而不是「没有需求」 */
-  hasLinkedProducts: boolean;
   /** 本项目到底有没有关联过需求（取自分面总数，不随筛选变化） */
   hasAnyLinked: boolean;
   /** 当前生效的分面筛选数量。用来区分「没关联」和「筛没了」 */
@@ -122,19 +118,17 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     error,
     onRetry,
     canManage,
-    canManageProducts,
-    onManageProducts,
     search,
     onSearchChange,
     onCursorChange,
     onPerPageChange,
     onOpenDetail,
     onLink,
+    onCreate,
     onUnlink,
     onStatusChange,
     toolbarPortalEl,
     toolbarAfterSearch,
-    hasLinkedProducts,
     hasAnyLinked,
     activeFilterCount,
     onClearFilters,
@@ -489,8 +483,13 @@ export const ProjectRequirementsGrid = (props: TProps) => {
           </div>
         </div>
       </FiltersDropdown>
+      {onCreate && (
+        <Button variant="primary" size="lg" disabled={isMutating} onClick={onCreate}>
+          {t("project_requirements.create")}
+        </Button>
+      )}
       {canManage && (
-        <Button variant="primary" size="lg" disabled={isMutating || !hasLinkedProducts} onClick={onLink}>
+        <Button variant="secondary" size="lg" disabled={isMutating} onClick={onLink}>
           {t("project_requirements.link")}
         </Button>
       )}
@@ -517,10 +516,10 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         {isEmpty ? (
           <div className="grid h-full place-items-center p-10 text-center">
             {/*
-              三种空态语义完全不同，不能共用一段文案：
+              两种空态语义完全不同，不能共用一段文案：
               1. 筛没了 —— 有需求，只是当前筛选/搜索没命中，该给的是「清除筛选」
-              2. 没关联需求 —— 有产品可选，该给的是「关联需求」
-              3. 没关联产品 —— 链路的第一步都没做，该给的是「关联产品」
+              2. 一条研发需求都没有 —— 提一条新的，或从产品里关联已有的；产品会自动关联进本项目，
+                 所以这里不再分「有没有关联产品」，也不再给「关联产品」
             */}
             {isFilteredEmpty ? (
               <div className="max-w-md">
@@ -536,27 +535,22 @@ export const ProjectRequirementsGrid = (props: TProps) => {
               </div>
             ) : (
               <div className="max-w-md">
-                <p className="text-14 font-medium text-primary">
-                  {t(hasLinkedProducts ? "project_requirements.empty.title" : "project_requirements.no_products.title")}
-                </p>
-                <p className="mt-1.5 text-13 leading-5 text-secondary">
-                  {t(
-                    hasLinkedProducts
-                      ? "project_requirements.empty.description"
-                      : "project_requirements.no_products.description"
-                  )}
-                </p>
-                {hasLinkedProducts
-                  ? canManage && (
-                      <Button variant="primary" size="lg" className="mt-4" onClick={onLink}>
-                        {t("project_requirements.link")}
-                      </Button>
-                    )
-                  : canManageProducts && (
-                      <Button variant="primary" size="lg" className="mt-4" onClick={onManageProducts}>
-                        {t("project_products.link")}
+                <p className="text-14 font-medium text-primary">{t("project_requirements.empty.title")}</p>
+                <p className="mt-1.5 text-13 leading-5 text-secondary">{t("project_requirements.empty.description")}</p>
+                {(onCreate || canManage) && (
+                  <div className="mt-4 flex justify-center gap-2.5">
+                    {onCreate && (
+                      <Button variant="primary" size="lg" onClick={onCreate}>
+                        {t("project_requirements.create")}
                       </Button>
                     )}
+                    {canManage && (
+                      <Button variant="secondary" size="lg" onClick={onLink}>
+                        {t("project_requirements.link")}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

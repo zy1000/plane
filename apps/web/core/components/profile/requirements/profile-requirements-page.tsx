@@ -216,9 +216,6 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
               error={store.error}
               onRetry={() => void store.fetchRequirements().catch(() => undefined)}
               canManage={false}
-              canManageProducts={false}
-              onManageProducts={noop}
-              hasLinkedProducts
               hasAnyLinked={(facets?.total ?? 0) > 0}
               activeFilterCount={filter.allConditionsForDisplay.length + (store.search.trim() ? 1 : 0)}
               onClearFilters={() => {

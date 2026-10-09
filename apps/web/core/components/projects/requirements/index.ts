@@ -1,4 +1,4 @@
-export * from "./existing-requirements-modal";
+export * from "./link-modal/link-requirements-modal";
 export * from "./filters";
 export * from "./project-requirement-display-properties";
 export * from "./project-requirement-filters";

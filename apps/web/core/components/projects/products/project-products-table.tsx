@@ -14,14 +14,27 @@ import { getProductPickState } from "./picker-items";
 
 const ROW_GRID = "grid grid-cols-[1rem_minmax(0,1fr)_14rem_7rem_9rem] items-center gap-x-3.5 px-3.5";
 
-export const ProductPickTile = ({ logoProps, size = "md" }: { logoProps: TLogoProps | null; size?: "sm" | "md" }) => (
+const TILE_SIZE_CLASS = {
+  md: "size-7.5 rounded-lg",
+  sm: "size-7 rounded-md",
+  xs: "size-5 rounded-[5px]",
+} as const;
+
+export const ProductPickTile = ({
+  logoProps,
+  size = "md",
+}: {
+  logoProps: TLogoProps | null;
+  size?: keyof typeof TILE_SIZE_CLASS;
+}) => (
   <span
-    className={cn(
-      "grid shrink-0 place-items-center bg-accent-subtle text-accent-primary",
-      size === "md" ? "size-7.5 rounded-lg" : "size-7 rounded-md"
-    )}
+    className={cn("grid shrink-0 place-items-center bg-accent-subtle text-accent-primary", TILE_SIZE_CLASS[size])}
   >
-    {logoProps?.in_use ? <Logo logo={logoProps} size={16} /> : <Package className="size-4" strokeWidth={1.8} />}
+    {logoProps?.in_use ? (
+      <Logo logo={logoProps} size={size === "xs" ? 12 : 16} />
+    ) : (
+      <Package className={size === "xs" ? "size-3" : "size-4"} strokeWidth={1.8} />
+    )}
   </span>
 );
 

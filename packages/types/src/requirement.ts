@@ -441,10 +441,10 @@ export type TProjectRequirementModulesResponse = {
 export type TRequirementsResponse = TPaginatedResponse<TRequirement[]>;
 
 /**
- * 关联需求弹窗左侧产品分面的计数。
+ * 关联研发需求弹窗按产品分组的计数。
  *
- * 口径由服务端定死（utils/requirement_project.linkable_facets）：统计整个候选池，
- * 不随搜索与产品筛选变化。前端不要再二次加工这些数字。
+ * 口径由服务端定死（utils/requirement_project.linkable_facets）：跟着搜索与类型筛选走，
+ * 不随产品筛选变化。前端不要再二次加工这些数字。
  */
 export type TLinkableRequirementFacets = {
   /** product_id -> 候选数；没有候选的产品不出现在键里 */
@@ -478,6 +478,24 @@ export type TProjectRequirement = TRequirement & {
    * 多个迭代不猜，留给用户在创建弹窗里自己选。
    */
   linked_cycle_ids: string[];
+};
+
+/** 项目页「提研发需求」：建在所选产品下，产品和需求一并关联进本项目 */
+export type TProjectRequirementCreatePayload = {
+  product_id: string;
+  requirement: TRequirementBatchCreate;
+};
+
+export type TProjectRequirementCreateResponse = {
+  requirement: TProjectRequirement | null;
+  /** 这次是否顺带把产品关联进了本项目 */
+  linked_product: boolean;
+};
+
+export type TProjectRequirementLinkResponse = {
+  message: string;
+  /** 这次顺带关联进本项目的产品 id（所选需求的产品原先没关联本项目） */
+  linked_products: string[];
 };
 
 /**

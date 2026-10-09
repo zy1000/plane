@@ -12,13 +12,16 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "react-router";
 import {
-  PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
+import type {
+  TProjectRequirement,
+  TProjectRequirementCreatePayload,
+  TRequirementItemStatus,
+} from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { ProductChip } from "@/components/products/product-chip";
@@ -28,15 +31,14 @@ import { ProjectRequirementModuleSidebar } from "@/components/requirements/modul
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useProductRequirementCanEdit } from "@/hooks/store/use-product-requirement-can-edit";
 import { useProjectRequirements } from "@/hooks/store/use-project-requirements";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useAppRouter } from "@/hooks/use-app-router";
 import { RequirementService } from "@/services/requirement.service";
-import { ExistingRequirementsModal } from "./existing-requirements-modal";
 import {
   applyListQueryToSearchParams,
   listQueryToExpression,
@@ -47,6 +49,8 @@ import {
   useProjectRequirementFiltersConfig,
   type TProjectRequirementFilterExpression,
 } from "./filters";
+import { LinkRequirementsModal } from "./link-modal/link-requirements-modal";
+import { ProjectRequirementCreateModal } from "./project-requirement-create-modal";
 import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "./project-requirement-filters";
 import {
   PRODUCT_PARAM,
@@ -60,7 +64,6 @@ const requirementService = new RequirementService();
 
 export const ProjectRequirementsPage = observer(function ProjectRequirementsPage() {
   const { t } = useTranslation();
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const slug = workspaceSlug?.toString();
@@ -70,6 +73,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
 
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   /** 待确认解除的行；非空即弹确认框，单行与批量共用同一条链路 */
   const [idsToUnlink, setIdsToUnlink] = useState<string[]>([]);
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
@@ -92,12 +96,17 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     initialModuleId: urlModuleId,
     initialProductId,
   });
-  const { links: productLinks, isLoading: isProductLinksLoading } = useProjectProducts({
+  const {
+    links: productLinks,
+    isLoading: isProductLinksLoading,
+    fetchProducts: refreshProductLinks,
+  } = useProjectProducts({
     workspaceSlug: slug,
     projectId: project,
   });
-  /** 产品关联的增删在项目「产品」子菜单页；本页空态的「关联产品」只负责把人带过去 */
-  const goToProducts = () => router.push(`/${slug}/projects/${project}/products`);
+  const linkedProductIds = useMemo(() => new Set(productLinks.map((link) => link.product)), [productLinks]);
+  /** 提研发需求 / 关联研发需求都能选未关联本项目的产品，候选是当前用户看得见的全部产品 */
+  const { products: visibleProducts, isLoading: isVisibleProductsLoading } = useProducts(slug);
 
   const moduleStore = useRequirementModules(slug, project ? { kind: "project", projectId: project } : undefined);
 
@@ -157,11 +166,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const canView = allowProjectPermissionKeys([PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY], slug ?? "", project ?? "");
   const canManage = allowProjectPermissionKeys(
     [PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY],
-    slug ?? "",
-    project ?? ""
-  );
-  const canManageProducts = allowProjectPermissionKeys(
-    [PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY],
     slug ?? "",
     project ?? ""
   );
@@ -310,12 +314,37 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   };
 
   const handleLink = async (requirementIds: string[]) => {
-    await store.linkRequirements(requirementIds);
+    const response = await store.linkRequirements(requirementIds);
     // 关联进来的需求可能带来新模块 / 改变计数，左栏跟着刷
     void moduleStore.refresh().catch(() => undefined);
+    const linkedProductCount = response?.linked_products?.length ?? 0;
+    // 顺带关联进来的产品要出现在左栏产品列表里
+    if (linkedProductCount > 0) void refreshProductLinks().catch(() => undefined);
     setToast({
       type: TOAST_TYPE.SUCCESS,
-      title: t("project_requirements.toast.linked", { count: requirementIds.length }),
+      title:
+        linkedProductCount > 0
+          ? t("project_requirements.toast.linked_with_products", {
+              count: requirementIds.length,
+              products: linkedProductCount,
+            })
+          : t("project_requirements.toast.linked", { count: requirementIds.length }),
+    });
+  };
+
+  /** 提研发需求：失败由弹窗自己在页脚报错，这里只管成功后的刷新与提示 */
+  const handleCreate = async (payload: TProjectRequirementCreatePayload) => {
+    const response = await store.createRequirement(payload);
+    void moduleStore.refresh().catch(() => undefined);
+    if (response?.linked_product) void refreshProductLinks().catch(() => undefined);
+    const product = visibleProducts.find((item) => item.id === payload.product_id);
+    setToast({
+      type: TOAST_TYPE.SUCCESS,
+      title: response?.linked_product
+        ? t("project_requirements.toast.created_with_product", {
+            product: product ? product.name || product.identifier : "",
+          })
+        : t("project_requirements.toast.created"),
     });
   };
 
@@ -417,14 +446,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               workspaceSlug={slug}
               projectId={project}
               canManage={canManage}
-              canManageProducts={canManageProducts}
-              onManageProducts={goToProducts}
-              /*
-               * 请求还在飞、或者请求挂了的时候按「有产品」处理：这个标志只用来决定空态
-               * 说哪句话、以及要不要禁用「关联需求」。宁可让人点开一个空的候选池，也
-               * 不要在加载的那一瞬间把按钮变灰、把空态写成「先去关联产品」。
-               */
-              hasLinkedProducts={isProductLinksLoading || productLinks.length > 0}
               hasAnyLinked={(facets?.total ?? 0) > 0}
               activeFilterCount={filter.allConditionsForDisplay.length + (store.search.trim() ? 1 : 0)}
               onClearFilters={() => {
@@ -437,6 +458,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               onPerPageChange={store.setPerPage}
               onOpenDetail={setPeekRequirement}
               onLink={() => setIsLinkModalOpen(true)}
+              onCreate={() => setIsCreateOpen(true)}
               onUnlink={setIdsToUnlink}
               onStatusChange={(requirementId, status) => void handleStatusChange(requirementId, status)}
               toolbarPortalEl={dataToolbarHost}
@@ -493,18 +515,30 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
         />
       )}
 
-      <ExistingRequirementsModal
+      <LinkRequirementsModal
         isOpen={isLinkModalOpen}
         workspaceSlug={slug}
         projectId={project}
-        products={productLinks.map((link) => ({
-          id: link.product,
-          name: link.product_name,
-          identifier: link.product_identifier,
-        }))}
+        products={visibleProducts}
+        linkedProductIds={linkedProductIds}
         handleClose={() => setIsLinkModalOpen(false)}
         onSubmit={handleLink}
+        onCreate={() => setIsCreateOpen(true)}
       />
+
+      {isCreateOpen && (
+        <ProjectRequirementCreateModal
+          workspaceSlug={slug}
+          projectName={projectDetail?.name}
+          products={visibleProducts}
+          isProductsLoading={isVisibleProductsLoading}
+          linkedProductIds={linkedProductIds}
+          /* 左栏选中了哪个产品就预选它；本项目只关联了一个产品时预选那一个，否则让用户自己选 */
+          defaultProductId={selectedProductId ?? (productLinks.length === 1 ? productLinks[0].product : null)}
+          onClose={() => setIsCreateOpen(false)}
+          onSubmit={handleCreate}
+        />
+      )}
 
       <UnlinkRequirementConfirmModal
         isOpen={idsToUnlink.length > 0}
