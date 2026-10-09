@@ -279,6 +279,7 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
           products={products}
           isProductsLoading={isProductsLoading}
           links={links}
+          projectCode={projectDetail?.code?.trim() ?? ""}
           isSubmitting={isMutating}
           handleClose={() => setIsModalOpen(false)}
           onSubmit={handleModalSubmit}
