@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { FileText, Pencil } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import type { EditorRefApi } from "@plane/editor";
 import { EFileAssetType } from "@plane/types";
@@ -23,9 +23,6 @@ type Props = {
   onSave: (summaryHtml: string, summaryJson: unknown) => Promise<void>;
 };
 
-/** 页头的「编辑总结」按钮通过它打开编辑弹窗 */
-export type ReportSummaryEditorHandle = { open: () => void };
-
 const EMPTY_RICH_TEXT_HTML = "<p></p>";
 const MEDIA_CONTENT_REGEX =
   /<(img|image-component|video|iframe|embed|object|svg|audio)\b|data-type=["'](image|imageComponent|video)["']/i;
@@ -45,10 +42,15 @@ const isEmptyRichText = (html?: string | null): boolean => {
   return text.length === 0;
 };
 
-export const ReportSummaryEditor = forwardRef<ReportSummaryEditorHandle, Props>(function ReportSummaryEditor(
-  { workspaceId, workspaceSlug, projectId, reportId, summaryHtml, canEdit = true, onSave },
-  ref
-) {
+export const ReportSummaryEditor = ({
+  workspaceId,
+  workspaceSlug,
+  projectId,
+  reportId,
+  summaryHtml,
+  canEdit = true,
+  onSave,
+}: Props) => {
   const { t } = useTranslation();
   const editorRef = useRef<EditorRefApi>(null);
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
@@ -95,15 +97,13 @@ export const ReportSummaryEditor = forwardRef<ReportSummaryEditorHandle, Props>(
     [duplicateEditorAsset, projectId, workspaceSlug]
   );
 
-  const handleOpen = useCallback(() => {
+  const handleOpen = () => {
     if (!canEdit) return;
     setHtml(normalizedSummaryHtml);
     setJson(null);
     setEditorKey((prev) => prev + 1);
     setIsOpen(true);
-  }, [canEdit, normalizedSummaryHtml]);
-
-  useImperativeHandle(ref, () => ({ open: handleOpen }), [handleOpen]);
+  };
 
   const handleClose = () => {
     if (saving) return;
@@ -132,7 +132,7 @@ export const ReportSummaryEditor = forwardRef<ReportSummaryEditorHandle, Props>(
           title="报告总结"
           right={
             canEdit ? (
-              <Button variant="secondary" size="lg" prependIcon={<Pencil />} onClick={handleOpen}>
+              <Button variant="secondary" size="lg" onClick={handleOpen}>
                 编辑
               </Button>
             ) : undefined
@@ -244,4 +244,4 @@ export const ReportSummaryEditor = forwardRef<ReportSummaryEditorHandle, Props>(
       </Transition.Root>
     </>
   );
-});
+};

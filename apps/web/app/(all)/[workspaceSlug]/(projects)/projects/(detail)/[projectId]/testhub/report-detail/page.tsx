@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Download, Folder, ListChecks, Pencil } from "lucide-react";
+import { ArrowLeft, Folder, ListChecks } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
@@ -18,7 +18,7 @@ import { tmProjectBasePath } from "../route-helpers";
 import { useReportDetail } from "./use-report-detail";
 import { ReportOverviewCard } from "./report-overview-card";
 import { ReportPlansCard } from "./report-plans-card";
-import { ReportSummaryEditor, type ReportSummaryEditorHandle } from "./report-summary-editor";
+import { ReportSummaryEditor } from "./report-summary-editor";
 import { ReportCaseTable } from "./report-case-table";
 import { ReportCard, ReportCardHeader } from "./report-card";
 import { exportReportAsPdf } from "./export-report-pdf";
@@ -92,7 +92,6 @@ export default function ReportDetailPage() {
     (typeof window !== "undefined" ? sessionStorage.getItem("selectedReportName") : "") ||
     "";
   const [exporting, setExporting] = useState(false);
-  const summaryRef = useRef<ReportSummaryEditorHandle>(null);
 
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug as string)?.id : undefined;
@@ -212,21 +211,9 @@ export default function ReportDetailPage() {
           {detail && <ReportMeta detail={detail} planCount={planCount} />}
         </div>
         <div className="flex flex-shrink-0 items-center gap-2 pt-0.5">
-          {canEditReport && (
-            <Button
-              variant="secondary"
-              size="xl"
-              prependIcon={<Pencil />}
-              disabled={!detail}
-              onClick={() => summaryRef.current?.open()}
-            >
-              编辑总结
-            </Button>
-          )}
           <Button
             variant="primary"
             size="xl"
-            prependIcon={<Download />}
             onClick={handleExportPdf}
             loading={exporting}
             disabled={exporting || loading || !detail || !canExportReport}
@@ -260,7 +247,6 @@ export default function ReportDetailPage() {
             </div>
 
             <ReportSummaryEditor
-              ref={summaryRef}
               workspaceId={workspaceId ?? ""}
               workspaceSlug={String(workspaceSlug || "")}
               projectId={String(projectId || "")}
