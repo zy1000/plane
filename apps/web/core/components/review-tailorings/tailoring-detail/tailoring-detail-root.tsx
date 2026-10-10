@@ -222,13 +222,15 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     store.setCell(itemId, { selected });
   };
 
-  /** 批量保留 / 裁剪选中的格子：已经是目标值的、锁住的格子跳过；应用完清掉选中 */
+  /**
+   * 批量保留 / 裁剪选中的格子：已经是目标值的、锁住的格子跳过。
+   * 应用完**不清选中** —— 裁剪之后通常紧接着对同一批「填写原因」，清掉就得重新勾一遍。
+   */
   const handleSetCells = (cells: TReviewTailoringItem[], selected: boolean) => {
     store.setCells(
       cells.filter((cell) => cell.selected !== selected && !getCellLockReason(cell, selected)).map((cell) => cell.id),
       selected
     );
-    selection.clear();
   };
 
   /** 打开「移到阶段」：汇总评审与已评审的格子先排除，一格都挪不了就直接提示 */
@@ -648,11 +650,11 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         cutCount={selectedCut.length}
         overwriteCount={selectedCut.filter((cell) => cell.reason.trim()).length}
         onApply={(reason) => {
+          // 不清选中：填完原因可能还要对同一批接着改（换原因、移到阶段等）
           store.setReasonForMany(
             selectedCut.map((cell) => cell.id),
             reason
           );
-          selection.clear();
         }}
         onClose={() => setIsBulkReasonOpen(false)}
       />
