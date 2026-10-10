@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
-import type { TStageReviewChild, TStageReviewDetail } from "@plane/types";
+import type { TStageReviewChild, TStageReviewCutChild, TStageReviewDetail } from "@plane/types";
 import { EStageReviewStatus, STAGE_REVIEW_STATUS_ORDER } from "@plane/types";
-import { cn, renderFormattedPayloadDate } from "@plane/utils";
-import { formatShortDate } from "@/components/review-tailorings/list/tailoring-row";
-import { StageReviewResultBadge, StageReviewStatusBadge } from "../badges";
+import { cn } from "@plane/utils";
+import { ResultText } from "@/components/review-tailorings/tailoring-detail/result-select";
+import { StageReviewResultText, StageReviewStatusBadge } from "../badges";
 import { OStageValue, STAGE_REVIEW_O_STAGE_KINDS } from "../o-stage-fields";
 import { StageReviewPeople } from "../people";
 import { STAGE_REVIEW_STATUS_FILL } from "../status-icon";
@@ -18,25 +18,35 @@ const COLLAPSED_STORAGE_KEY = "stage_review_children_collapsed";
 /** 默认最多列几项：区块高度和一张成品表差不多，详情不被十几行评审活动拉长 */
 const DEFAULT_VISIBLE = 5;
 
-const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_112px_96px_78px_84px_14px] items-center gap-x-3 px-3.5";
-/** O阶段评审下面多两列：生产方式、出货评估（「出货前刷新结论」最长，给 128） */
+/** ID / 名称 / 裁剪 / 裁剪原因 / 评审结论 / 责任人 / 结论和状态 */
+const ROW_GRID =
+  "grid grid-cols-[72px_minmax(0,1.35fr)_44px_minmax(0,1fr)_minmax(0,1fr)_96px_136px] items-center gap-x-3 px-3.5";
+/** O阶段评审在评审结论后面多两列：生产方式、出货评估（「出货前刷新结论」最长，给 108） */
 const O_STAGE_ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_104px_84px_96px_128px_72px_80px_14px] items-center gap-x-3 px-3.5";
+  "grid grid-cols-[60px_minmax(0,1.4fr)_32px_minmax(0,1fr)_minmax(0,1fr)_68px_108px_76px_124px] items-center gap-x-2 px-3";
+const ROW_CLASS = "min-h-[52px] border-t border-subtle py-2 text-13";
+/** 名称、裁剪原因、评审结论最多两行，写不下的悬停看全文 */
+const CLAMP_CLASS = "line-clamp-2 break-words";
 
-/** 默认那几项先列谁：正在进行的（评审中 / 审核中）→ 未评审 → 已评审 */
+/** 表里的一行：保留下来的是评审活动本身；裁剪掉的没有评审，只有裁剪表里的那一格 */
+type TRow = { type: "review"; data: TStageReviewChild } | { type: "cut"; data: TStageReviewCutChild };
+
+/** 默认那几项先列谁：正在进行的（评审中 / 审核中）→ 未评审 → 已评审 → 裁剪掉的 */
 const ATTENTION_RANK: Record<EStageReviewStatus, number> = {
   [EStageReviewStatus.IN_REVIEW]: 0,
   [EStageReviewStatus.IN_APPROVAL]: 0,
   [EStageReviewStatus.NOT_STARTED]: 1,
   [EStageReviewStatus.COMPLETED]: 2,
 };
+const CUT_RANK = 3;
+const rankOf = (row: TRow) => (row.type === "cut" ? CUT_RANK : ATTENTION_RANK[row.data.status]);
 
 /** 进度条与「另有」从左到右的顺序：离完成近的在前 */
 const STATUS_DISPLAY_ORDER = [...STAGE_REVIEW_STATUS_ORDER].reverse();
 
-const countByStatus = (rows: TStageReviewChild[]) => {
+const countByStatus = (children: TStageReviewChild[]) => {
   const counts = new Map<EStageReviewStatus, number>();
-  rows.forEach((row) => counts.set(row.status, (counts.get(row.status) ?? 0) + 1));
+  children.forEach((child) => counts.set(child.status, (counts.get(child.status) ?? 0) + 1));
   return counts;
 };
 
@@ -48,11 +58,15 @@ const readCollapsed = () => {
   }
 };
 
+const EmptyCell = () => <span className="text-13 text-placeholder">—</span>;
+
 /**
- * 父评审详情里的「评审活动」：挂在这条评审下的评审活动，一行一项，只看不改。
+ * 父评审详情里的「评审活动」：挂在这条评审下的评审活动，加上来源裁剪表里被裁剪掉的那几项，
+ * 按模板顺序（即编号顺序）排在一起，只看不改。
  *
- * 默认最多列 5 项（正在进行的排前面），其余收在「展开全部」里；展开后按原顺序全部列出。
- * 点一行打开那一项：抽屉里是换抽屉内容（`onOpenReview`），独立页是跳那一项的独立页。
+ * 默认最多列 5 项（正在进行的排前面，裁剪掉的排最后），其余收在「展开全部」里；展开后按编号顺序全部列出。
+ * 点保留下来的一行打开那一项：抽屉里是换抽屉内容（`onOpenReview`），独立页是跳那一项的独立页。
+ * 裁剪掉的没有评审，不能点。
  */
 export const StageReviewChildren = ({
   detail,
@@ -63,26 +77,36 @@ export const StageReviewChildren = ({
   getPath: (reviewId: string) => string;
   onOpenReview?: (reviewId: string) => void;
 }) => {
-  const { t, currentLocale } = useTranslation();
+  const { t } = useTranslation();
   const [isCollapsed, setIsCollapsed] = useState(readCollapsed);
   const [showAll, setShowAll] = useState(false);
-  const children = detail.children;
+  const { children, cut_children: cutChildren } = detail;
 
   // 换一条父评审回到默认那几项
   useEffect(() => setShowAll(false), [detail.id]);
 
+  // 两边的 sort_order 都是模板顺序；sort 是稳定的，同值时评审活动在前
+  const rows = useMemo<TRow[]>(
+    () =>
+      [
+        ...children.map((data) => ({ type: "review" as const, data })),
+        ...cutChildren.map((data) => ({ type: "cut" as const, data })),
+      ].sort((a, b) => a.data.sort_order - b.data.sort_order),
+    [children, cutChildren]
+  );
   const counts = useMemo(() => countByStatus(children), [children]);
   const visible = useMemo(() => {
-    if (showAll || children.length <= DEFAULT_VISIBLE) return children;
-    // sort 是稳定的：同一档里保持原顺序
-    return [...children].sort((a, b) => ATTENTION_RANK[a.status] - ATTENTION_RANK[b.status]).slice(0, DEFAULT_VISIBLE);
-  }, [children, showAll]);
+    if (showAll || rows.length <= DEFAULT_VISIBLE) return rows;
+    return [...rows].sort((a, b) => rankOf(a) - rankOf(b)).slice(0, DEFAULT_VISIBLE);
+  }, [rows, showAll]);
 
-  if (children.length === 0) return null;
+  if (rows.length === 0) return null;
 
-  const today = renderFormattedPayloadDate(new Date()) ?? "";
   const done = counts.get(EStageReviewStatus.COMPLETED) ?? 0;
-  const hiddenCounts = countByStatus(children.filter((child) => !visible.includes(child)));
+  const hiddenRows = rows.filter((row) => !visible.includes(row));
+  const hiddenCounts = countByStatus(hiddenRows.flatMap((row) => (row.type === "review" ? [row.data] : [])));
+  const hiddenCut = hiddenRows.filter((row) => row.type === "cut").length;
+  const cutLabel = t("review_tailoring.matrix.cut");
   // 评审活动名多半以「父评审名-」开头，列在父评审下面是重复的，省掉
   const prefix = `${detail.title}-`;
   const displayTitle = (title: string) =>
@@ -107,25 +131,46 @@ export const StageReviewChildren = ({
   const toggleLabel = t(`${I18N}.detail.${isCollapsed ? "children_expand" : "children_collapse"}`);
   const isOStage = STAGE_REVIEW_O_STAGE_KINDS.includes(detail.kind);
   const rowGrid = isOStage ? O_STAGE_ROW_GRID : ROW_GRID;
-  const emptyCell = <span className="text-13 text-placeholder">—</span>;
+  const hiddenSummary = [
+    ...STATUS_DISPLAY_ORDER.filter((status) => hiddenCounts.get(status)).map(
+      (status) => `${t(`${I18N}.status.${status}`)} ${hiddenCounts.get(status)}`
+    ),
+    ...(hiddenCut > 0 ? [`${cutLabel} ${hiddenCut}`] : []),
+  ].join(" · ");
 
   return (
     <Block
       title={t(`${I18N}.detail.children_title`)}
-      count={children.length}
+      count={rows.length}
       action={
         <>
-          <span className="flex h-1.5 w-32 gap-0.5 overflow-hidden rounded-full" aria-hidden>
-            {STATUS_DISPLAY_ORDER.map((status) => {
-              const count = counts.get(status) ?? 0;
-              return count > 0 ? (
-                <span key={status} style={{ flexGrow: count }} className={cn("basis-0 rounded-full", STAGE_REVIEW_STATUS_FILL[status])} />
-              ) : null;
-            })}
-          </span>
-          <span className="ml-1.5 text-12 text-tertiary tabular-nums">
-            {t(`${I18N}.detail.children_progress`, { done, total: children.length })}
-          </span>
+          {children.length > 0 && (
+            <>
+              <span className="flex h-1.5 w-32 gap-0.5 overflow-hidden rounded-full" aria-hidden>
+                {STATUS_DISPLAY_ORDER.map((status) => {
+                  const count = counts.get(status) ?? 0;
+                  return count > 0 ? (
+                    <span
+                      key={status}
+                      style={{ flexGrow: count }}
+                      className={cn("basis-0 rounded-full", STAGE_REVIEW_STATUS_FILL[status])}
+                    />
+                  ) : null;
+                })}
+              </span>
+              <span className="ml-1.5 text-12 text-tertiary tabular-nums">
+                {t(`${I18N}.detail.children_progress`, { done, total: children.length })}
+              </span>
+            </>
+          )}
+          {cutChildren.length > 0 && (
+            <>
+              {children.length > 0 && <span className="mx-1 h-3 w-px bg-layer-3" aria-hidden />}
+              <span className="text-12 text-tertiary tabular-nums">
+                {cutLabel} {cutChildren.length}
+              </span>
+            </>
+          )}
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -141,73 +186,95 @@ export const StageReviewChildren = ({
     >
       {!isCollapsed && (
         <div className="overflow-x-auto rounded-lg border border-subtle">
-          <div className={isOStage ? "min-w-[820px]" : "min-w-[640px]"}>
-            <div className={cn(rowGrid, "h-8 bg-layer-1 text-12 font-medium text-tertiary")}>
+          <div className={isOStage ? "min-w-[860px]" : "min-w-[760px]"}>
+            <div className={cn(rowGrid, "h-9 bg-layer-1 text-12 font-medium whitespace-nowrap text-tertiary")}>
+              <span>{t(`${I18N}.detail.children_id`)}</span>
               <span>{t(`${I18N}.detail.children_name`)}</span>
-              <span>{t(`${I18N}.fields.leader`)}</span>
-              <span>{t(`${I18N}.fields.end_date`)}</span>
+              <span>{t(`${I18N}.detail.children_tailoring`)}</span>
+              <span>{t(`${I18N}.detail.children_reason`)}</span>
+              <span>{t(`${I18N}.detail.children_conclusion`)}</span>
               {isOStage && <span>{t(`${I18N}.fields.production_mode`)}</span>}
               {isOStage && <span>{t(`${I18N}.fields.shipment_assessment`)}</span>}
-              <span>{t(`${I18N}.display.property.result`)}</span>
-              <span>{t(`${I18N}.display.property.status`)}</span>
-              <span />
+              <span>{t(`${I18N}.detail.children_owner`)}</span>
+              <span>{t(`${I18N}.detail.children_result_status`)}</span>
             </div>
-            {visible.map((child) => {
+            {visible.map((row) => {
+              if (row.type === "cut") {
+                const cut = row.data;
+                return (
+                  <div key={cut.id} className={cn(rowGrid, ROW_CLASS)}>
+                    <span className="truncate text-12 text-placeholder tabular-nums">{cut.standard_code}</span>
+                    <span title={cut.title} className={cn(CLAMP_CLASS, "text-14 text-tertiary")}>
+                      {displayTitle(cut.title)}
+                    </span>
+                    <ResultText value={false} />
+                    <span title={cut.reason} className={cn(CLAMP_CLASS, "text-secondary")}>
+                      {cut.reason}
+                    </span>
+                    {/* 没有评审：评审结论、生产出货、责任人、结论和状态都留空 */}
+                    <span />
+                    {isOStage && <span />}
+                    {isOStage && <span />}
+                    <span />
+                    <span />
+                  </div>
+                );
+              }
+
+              const child = row.data;
               const isDone = child.status === EStageReviewStatus.COMPLETED;
-              const isLate = Boolean(child.end_date) && child.end_date! < today && !isDone;
               return (
                 <Link
                   key={child.id}
                   to={getPath(child.id)}
                   onClick={(event) => handleOpen(event, child.id)}
-                  className={cn(rowGrid, "group min-h-10 border-t border-subtle text-14 transition hover:bg-layer-1")}
+                  className={cn(rowGrid, ROW_CLASS, "transition hover:bg-layer-1")}
                 >
+                  {child.standard_code ? (
+                    <span className="truncate text-12 text-tertiary tabular-nums">{child.standard_code}</span>
+                  ) : (
+                    <EmptyCell />
+                  )}
                   <span
                     title={child.title}
-                    className={cn("truncate", isDone ? "text-secondary" : "font-medium text-primary")}
+                    className={cn(CLAMP_CLASS, "text-14", isDone ? "text-secondary" : "font-medium text-primary")}
                   >
                     {displayTitle(child.title)}
                   </span>
-                  <StageReviewPeople
-                    users={child.leader_details}
-                    unassigned={t(`${I18N}.detail.unassigned`)}
-                    showEmptyIcon={false}
-                  />
-                  {child.end_date ? (
-                    <span
-                      className={cn(
-                        "truncate text-13 tabular-nums",
-                        isLate ? "font-medium text-danger-primary" : "text-secondary"
-                      )}
-                    >
-                      {formatShortDate(child.end_date, currentLocale)}
+                  <ResultText value className="text-tertiary" />
+                  <span />
+                  {child.conditional_reason ? (
+                    <span title={child.conditional_reason} className={cn(CLAMP_CLASS, "text-secondary")}>
+                      {child.conditional_reason}
                     </span>
                   ) : (
-                    emptyCell
+                    <EmptyCell />
                   )}
                   {isOStage &&
                     (child.production_mode ? (
                       <OStageValue field="production_mode" value={child.production_mode} className="text-13" />
                     ) : (
-                      emptyCell
+                      <EmptyCell />
                     ))}
                   {isOStage &&
                     (child.shipment_assessment ? (
                       <OStageValue field="shipment_assessment" value={child.shipment_assessment} className="text-13" />
                     ) : (
-                      emptyCell
+                      <EmptyCell />
                     ))}
-                  <span className="flex min-w-0">
-                    <StageReviewResultBadge result={child.result} />
-                  </span>
-                  <span className="flex min-w-0">
+                  <StageReviewPeople
+                    users={child.leader_details}
+                    unassigned={t(`${I18N}.detail.unassigned`)}
+                    showEmptyIcon={false}
+                  />
+                  <span className="flex min-w-0 items-center gap-1.5">
                     <StageReviewStatusBadge status={child.status} />
+                    <StageReviewResultText result={child.result} className="text-13" />
                   </span>
-                  <ArrowRight className="size-3.5 text-secondary opacity-0 transition group-hover:opacity-100" />
                 </Link>
               );
             })}
-            {children.length > DEFAULT_VISIBLE && (
+            {rows.length > DEFAULT_VISIBLE && (
               <button
                 type="button"
                 onClick={() => setShowAll((prev) => !prev)}
@@ -218,14 +285,11 @@ export const StageReviewChildren = ({
                 <span className="font-medium text-primary">
                   {showAll
                     ? t(`${I18N}.detail.children_show_less`, { count: DEFAULT_VISIBLE })
-                    : t(`${I18N}.detail.children_expand_all`, { count: children.length })}
+                    : t(`${I18N}.detail.children_expand_all`, { count: rows.length })}
                 </span>
                 {!showAll && (
                   <span className="ml-auto text-12 text-placeholder tabular-nums">
-                    {t(`${I18N}.detail.children_rest`)}{" "}
-                    {STATUS_DISPLAY_ORDER.filter((status) => hiddenCounts.get(status))
-                      .map((status) => `${t(`${I18N}.status.${status}`)} ${hiddenCounts.get(status)}`)
-                      .join(" · ")}
+                    {t(`${I18N}.detail.children_rest`)} {hiddenSummary}
                   </span>
                 )}
               </button>

@@ -125,10 +125,33 @@ export type TStageReviewRowPayload = {
 /** 父评审详情里「评审活动」区块的一行：只读，只带这一行要画的字段 */
 export type TStageReviewChild = Pick<
   TStageReview,
-  "id" | "kind" | "title" | "status" | "result" | "leader_ids" | "leader_details" | "end_date" | "sort_order"
+  | "id"
+  | "kind"
+  | "title"
+  | "standard_code"
+  | "status"
+  | "result"
+  | "leader_ids"
+  | "leader_details"
+  | "end_date"
+  | "sort_order"
 > & {
+  /** 结论说明，表里的「评审结论」列 */
+  conditional_reason: string;
   production_mode: TProductionMode | "";
   shipment_assessment: TShipmentAssessment | "";
+};
+
+/**
+ * 「评审活动」区块里被裁剪掉的一项：没有评审实例，取自裁剪表的生效快照。
+ * ``id`` 是裁剪表格子的 id，``sort_order`` 与评审活动同口径（模板顺序），两者合起来排。
+ */
+export type TStageReviewCutChild = {
+  id: string;
+  title: string;
+  standard_code: string;
+  reason: string;
+  sort_order: number;
 };
 
 export type TStageReviewDetail = TStageReview & {
@@ -151,6 +174,8 @@ export type TStageReviewDetail = TStageReview & {
   component_versions: TStageReviewComponentVersion[];
   /** 挂在这条评审下的评审活动，顺序同列表；评审活动自己没有下一层，恒为空 */
   children: TStageReviewChild[];
+  /** 来源裁剪表里被裁剪掉的评审活动（生效版）；手工新建的评审恒为空 */
+  cut_children: TStageReviewCutChild[];
   created_by: string | null;
 };
 

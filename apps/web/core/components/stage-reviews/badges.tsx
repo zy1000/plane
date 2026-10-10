@@ -85,3 +85,21 @@ export const StageReviewResultBadge = ({
     </span>
   );
 };
+
+const RESULT_TEXT: Record<EStageReviewResult, string> = {
+  [EStageReviewResult.PASSED]: "text-success-primary",
+  [EStageReviewResult.REJECTED]: "text-danger-primary",
+  [EStageReviewResult.WAIVED]: "text-tertiary",
+  [EStageReviewResult.CONDITIONAL]: "text-warning-primary",
+};
+
+/** 结论的纯文字版，跟在状态药丸后面用（「审核中 条件通过」），配色同药丸；没有结论不渲染 */
+export const StageReviewResultText = ({ result, className }: { result: EStageReviewResult | ""; className?: string }) => {
+  const { t } = useTranslation();
+  if (!result) return null;
+  return (
+    <span className={cn("shrink-0 font-semibold whitespace-nowrap", RESULT_TEXT[result], className)}>
+      {t(`${I18N}.result.${result}`)}
+    </span>
+  );
+};

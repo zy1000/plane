@@ -1158,6 +1158,56 @@ def attach_effective_stage(tailoring, items):
     return items
 
 
+def cut_activities(review):
+    """父评审详情「评审活动」表里被裁剪掉的那几项，按模板顺序。
+
+    裁剪掉的活动不生成评审（生效时只建勾上的格子），父评审下面查不到，只能回到生成这条
+    父评审的裁剪表里找：同一产品、生效时落在同一阶段、模板挂在父评审模板下、生效快照里
+    没勾的格子。读生效快照不读格子本身 —— 修订中还没签批的改动不算数。挪过阶段的格子
+    不认：生成时它们也不挂父评审（见 ``_create_stage_reviews``）。
+    """
+    if not review.template_id:
+        return []
+    source = (
+        ReviewTailoringItem.objects.filter(
+            stage_review_id=review.id, deleted_at__isnull=True
+        )
+        .select_related("tailoring")
+        .first()
+    )
+    snapshot = source.tailoring.effective_snapshot if source else None
+    if not snapshot:
+        return []
+
+    items = ReviewTailoringItem.objects.filter(
+        tailoring_id=source.tailoring_id,
+        product_id=review.product_id,
+        template__parent_id=review.template_id,
+        deleted_at__isnull=True,
+    ).select_related("template")
+    rows = []
+    for item in items:
+        recorded = snapshot.get(str(item.id))
+        if (
+            not recorded
+            or recorded.get("selected")
+            or _snapshot_origin(recorded)
+            or _snapshot_stage(recorded, item) != str(review.stage_id)
+        ):
+            continue
+        rows.append(
+            {
+                "id": item.id,
+                "title": item.title,
+                "standard_code": item.template.standard_code,
+                "reason": recorded.get("reason") or "",
+                "sort_order": item.template.sort_order,
+            }
+        )
+    rows.sort(key=lambda row: row["sort_order"])
+    return rows
+
+
 def revision_changes(tailoring, items):
     """修订相对生效快照的逐条改动，签批弹窗的「改动明细」读它。
 

@@ -53,7 +53,7 @@ from plane.db.models import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
-from plane.utils.review_tailoring import project_stages
+from plane.utils.review_tailoring import cut_activities, project_stages
 from plane.utils.stage_review import (
     ROW_TABLES,
     StageReviewError,
@@ -236,6 +236,7 @@ class StageReviewViewSet(BaseViewSet):
         )
         if review is None:
             return self._not_found()
+        review.cut_children = cut_activities(review)
         return Response(StageReviewDetailSerializer(review).data, status=http_status)
 
     @staticmethod

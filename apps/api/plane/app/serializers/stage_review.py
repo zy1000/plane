@@ -158,8 +158,10 @@ class StageReviewChildSerializer(BaseSerializer):
             "id",
             "kind",
             "title",
+            "standard_code",
             "status",
             "result",
+            "conditional_reason",
             "leader_ids",
             "leader_details",
             "end_date",
@@ -171,6 +173,17 @@ class StageReviewChildSerializer(BaseSerializer):
 
     def get_leader_ids(self, obj):
         return [user.id for user in obj.leaders.all()]
+
+
+class StageReviewCutChildSerializer(serializers.Serializer):
+    """「评审活动」区块里被裁剪掉的一项。它没有评审实例，数据来自裁剪表的生效快照
+    （``utils/review_tailoring.py::cut_activities``），``id`` 是裁剪表格子的 id。"""
+
+    id = serializers.UUIDField()
+    title = serializers.CharField()
+    standard_code = serializers.CharField()
+    reason = serializers.CharField(allow_blank=True)
+    sort_order = serializers.FloatField()
 
 
 class StageReviewDetailSerializer(StageReviewListSerializer):
@@ -192,6 +205,8 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
     )
     # 挂在这条评审下的评审活动；评审活动自己没有下一层，恒为空。顺序由 view 的 prefetch 定
     children = StageReviewChildSerializer(many=True, read_only=True)
+    # 被裁剪掉的评审活动：view 算好挂在对象上（``cut_children``），和 children 一起列
+    cut_children = StageReviewCutChildSerializer(many=True, read_only=True)
 
     class Meta(StageReviewListSerializer.Meta):
         fields = StageReviewListSerializer.Meta.fields + [
@@ -208,6 +223,7 @@ class StageReviewDetailSerializer(StageReviewListSerializer):
             "finished_goods",
             "component_versions",
             "children",
+            "cut_children",
             "created_by",
         ]
         read_only_fields = fields
