@@ -10,7 +10,6 @@ import { StageReviewKindBadge } from "@/components/template-management/reviews/s
 import { PLAIN_ACTION, PLAIN_ACTION_DANGER, PLAIN_TABLE, PLAIN_TD, PLAIN_TH } from "../plain-table";
 import { CellReasonModal } from "./cell-reason-modal";
 import { ResultSelect, ResultText } from "./result-select";
-import { StageFilterChip } from "./stage-filter-chip";
 import type { TMatrixGroup, TMatrixRow } from "./tailoring-matrix-model";
 import {
   collectGroupCells,
@@ -75,7 +74,8 @@ const ScopeCheckbox = ({
  * 可编辑时：行首复选框选中整行（选中的单位仍是格子，保留 / 裁剪由页面底部的操作条一次应用），
  * 「结果」是下拉，行尾「操作」列是移动阶段 / 移除，产品列头的菜单管整列。
  * 评审活动只写自己的名字（标题里带的父评审前缀由 `splitChildTitle` 剥掉）并缩进一级。
- * 筛完一行不剩时表头仍然画出来，否则「阶段」列头上的筛选入口跟着消失。
+ * `products` 是筛选后看得见的列：行首 / 表头的勾选只收这几列的格子，免得批量改到看不见的产品。
+ * 筛完一行不剩时表头仍然画出来，空表体里写一句原因。
  */
 export const TailoringMatrix = ({
   groups,
@@ -85,9 +85,7 @@ export const TailoringMatrix = ({
   editable,
   dirtyIds,
   isScrolled,
-  stageFilter,
   emptyMessage,
-  onStageFilterChange,
   onToggle,
   selection,
   onReasonChange,
@@ -98,19 +96,17 @@ export const TailoringMatrix = ({
 }: {
   /** 当前筛选下要画的段（段只决定行的顺序） */
   groups: TMatrixGroup[];
-  /** 未筛选的全部段：阶段筛选的选项与列头小计按它算 */
+  /** 未筛选的全部段：列头小计按它算 */
   allGroups: TMatrixGroup[];
   items: TReviewTailoringItem[];
+  /** 筛选后看得见的产品列 */
   products: TReviewTailoringProduct[];
   editable: boolean;
   dirtyIds: Set<string>;
   /** 容器已经往右滚：钉住的列画一道投影 */
   isScrolled: boolean;
-  /** 只看某个阶段的行。null = 全部阶段；入口是「阶段」列头上的漏斗 */
-  stageFilter: string | null;
   /** 筛完一行不剩时写在表体里的那句话 */
   emptyMessage?: string;
-  onStageFilterChange: (stageId: string | null) => void;
   onToggle: (itemId: string, selected: boolean) => void;
   /** 批量选中，由页面持有：底部操作条要读它 */
   selection: TCellSelection;
@@ -128,15 +124,6 @@ export const TailoringMatrix = ({
   useEffect(() => {
     setMenuPortalEl(document.body);
   }, []);
-
-  const rowCount = allGroups.reduce((total, group) => total + group.rows.length, 0);
-  /** 阶段筛选的选项：各段多少行，按全表算（不跟当前筛选走，免得选项自己越筛越少） */
-  const stageOptions = allGroups.map((group) => ({
-    id: group.stageId,
-    label: group.stageLabel,
-    depth: group.stageDepth,
-    hint: t("review_tailoring.matrix.rows_count", { count: group.rows.length }),
-  }));
 
   const productCounts = useMemo(
     () => new Map(products.map((product) => [product.id, countCells(collectGroupCells(allGroups, product.id))])),
@@ -171,7 +158,7 @@ export const TailoringMatrix = ({
               >
                 <span className="grid place-items-center">
                   <ScopeCheckbox
-                    cells={collectGroupCells(groups)}
+                    cells={products.flatMap((product) => collectGroupCells(groups, product.id))}
                     selection={selection}
                     label={t("review_tailoring.matrix.select_all")}
                   />
@@ -184,19 +171,7 @@ export const TailoringMatrix = ({
               className={cn(stickyHead, !editable && "pl-6")}
               style={{ ...fixedWidth(STAGE_WIDTH), left: stageLeft }}
             >
-              <span className="flex items-center gap-1">
-                <span className="truncate">{t("review_tailoring.matrix.stage_column")}</span>
-                {/* 筛选长在字段上：选中的阶段名每一行都写着，这里只留漏斗与清除 */}
-                <StageFilterChip
-                  variant="icon"
-                  label={t("review_tailoring.matrix.stage_filter")}
-                  allLabel={t("review_tailoring.detail.filter_all")}
-                  value={stageFilter}
-                  options={stageOptions}
-                  allHint={t("review_tailoring.matrix.rows_count", { count: rowCount })}
-                  onChange={onStageFilterChange}
-                />
-              </span>
+              <span className="block truncate">{t("review_tailoring.matrix.stage_column")}</span>
             </th>
             <th
               rowSpan={2}
@@ -313,7 +288,11 @@ export const TailoringMatrix = ({
           )}
           {groups.flatMap((group) =>
             group.rows.map((row, index) => {
-              const cells = [...row.cells.values()];
+              // 只算看得见的产品列：勾行、移动阶段都不该碰到被筛掉的产品
+              const cells = products.flatMap((product) => {
+                const cell = row.cells.get(product.id);
+                return cell ? [cell] : [];
+              });
               let parentTitle: string | undefined;
               if (row.isChild) {
                 for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
@@ -332,7 +311,7 @@ export const TailoringMatrix = ({
               // 字重按类型分：挪出来的活动脱离了父评审成了顶层行，也还是活动的字重
               const isActivityRow = row.isChild || STAGE_REVIEW_ACTIVITY_KINDS.includes(row.kind as EStageReviewKind);
               // 格子全挪走、移动还没生效的原处：标题压淡，只剩「已移至」的空位（生效后这行由模型层藏掉）
-              const isVacated = cells.length === 0 && row.movedOut.size > 0;
+              const isVacated = row.cells.size === 0 && row.movedOut.size > 0;
               return (
                 <tr key={row.rowKey} className="group">
                   {editable && (

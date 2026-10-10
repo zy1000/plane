@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
@@ -8,11 +8,14 @@ import type {
   TAddReviewTailoringAxesPayload,
   TReviewTailoringItem,
   TReviewTailoringProduct,
+  TReviewTailoringRow,
   TSubmitReviewTailoringPayload,
 } from "@plane/types";
+import { COLLECTION_OPERATOR, LOGICAL_OPERATOR } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
 import { reviewTailoringDetailPath, reviewTailoringsPath } from "@/components/reviews/routes";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { useReviewTailoringDetail } from "@/hooks/store/use-review-tailoring-detail";
 import { useReviewTailoringFeed } from "@/hooks/store/use-review-tailoring-feed";
 import { getTailoringError } from "@/hooks/store/use-review-tailorings";
@@ -27,27 +30,26 @@ import { BulkReasonModal } from "./bulk-reason-modal";
 import { DetailHeaderActions } from "./detail-header-actions";
 import { DetailInfoRow } from "./detail-info-row";
 import type { TDetailTab } from "./detail-tab-bar";
-import { DetailTabBar, TabBarSelect } from "./detail-tab-bar";
+import { DetailTabBar, TabBarFilterButton, TabBarSearch, TabBarSelect } from "./detail-tab-bar";
 import {
   REVIEW_TAILORING_DETAIL_ACTIONS_SLOT_ID,
   REVIEW_TAILORING_DETAIL_TITLE_SLOT_ID,
   useHeaderSlot,
 } from "./header-slots";
 import { MoveStageModal } from "./move-stage-modal";
-import { ProductPager } from "./product-pager";
+import { buildDetailMatcher, filterMatrixGroups } from "./rich-filters/match-detail";
+import { DETAIL_REASON_MISSING } from "./rich-filters/types";
+import { useDetailFilter } from "./rich-filters/use-detail-filter";
 import { SaveFooter } from "./save-footer";
 import { SkippedMovesBanner } from "./skipped-moves-banner";
 import { SubmitApprovalModal } from "./submit-approval-modal";
 import { TailoringActivityTable } from "./tailoring-activity-table";
 import { TailoringBulkBar } from "./tailoring-bulk-bar";
 import { TailoringComments } from "./tailoring-comments";
-import type { TItemResultFilter } from "./tailoring-items-table";
 import { buildItemRows, TailoringItemsTable } from "./tailoring-items-table";
 import { TailoringMatrix } from "./tailoring-matrix";
-import type { TMatrixFilter } from "./tailoring-matrix-model";
 import {
   buildMatrixGroups,
-  filterMatrixGroups,
   getCellLockReason,
   getMoveBlockReason,
   getTailoringStats,
@@ -59,6 +61,9 @@ import { useCellSelection } from "./use-cell-selection";
 import { useMatrixScroll } from "./use-matrix-scroll";
 
 const I18N = "review_tailoring";
+
+const EMPTY_ROWS: TReviewTailoringRow[] = [];
+const EMPTY_PRODUCTS: TReviewTailoringProduct[] = [];
 
 /** 轴为空时的引导：一句标题、一句说明、一个按钮。横轴纵轴共用 */
 const AxisEmptyState = ({
@@ -131,31 +136,40 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const [toRemove, setToRemove] = useState<TRemoveTarget | null>(null);
   const [isCancelRevisionOpen, setIsCancelRevisionOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  /** 矩阵的快速筛选：全部 / 裁剪 / 待补原因（只读时没有「待补原因」） */
-  const [filter, setFilter] = useState<TMatrixFilter>("all");
-  /** 明细 Tab 按产品、按裁剪结果筛，挂在 Tab 条右上角 */
-  const [productFilter, setProductFilter] = useState("all");
-  const [resultFilter, setResultFilter] = useState<TItemResultFilter>("all");
+  /** 矩阵与明细共用的搜索词（编号 / 名称），与筛选行的条件叠加 */
+  const [search, setSearch] = useState("");
   /** 变更历史的筛选：全部 / 状态 / 修改，挂在 Tab 条右上角 */
   const [timelineFilter, setTimelineFilter] = useState<TTimelineFilter>("all");
-  /** 矩阵只看某个阶段的行。null = 全部阶段；纵轴平铺后靠它顶替原来的折叠 */
-  const [stageFilter, setStageFilter] = useState<string | null>(null);
   /** 「移到阶段」弹窗要挪的格子，以及选区里被排除（汇总评审 / 已评审）的格数 */
   const [moveTarget, setMoveTarget] = useState<{ cells: TReviewTailoringItem[]; excluded: number } | null>(null);
 
   const { detail, items, isLoading, isMutating, isEditable, dirtyIds } = store;
   const stats = useMemo(() => getTailoringStats(items), [items]);
   const allGroups = useMemo(() => buildMatrixGroups(detail?.rows ?? [], items), [detail?.rows, items]);
+  /** 筛选行：阶段 / 类型 / 产品 / 结果 / 裁剪原因 / 评审状态，多选、多条件取交集，矩阵与明细共用 */
+  const detailFilter = useDetailFilter({
+    workspaceSlug,
+    tailoringId,
+    rows: detail?.rows ?? EMPTY_ROWS,
+    items,
+    products: detail?.products ?? EMPTY_PRODUCTS,
+  });
+  const conditions = detailFilter.allConditionsForDisplay;
+  const matcher = useMemo(() => buildDetailMatcher(conditions, search), [conditions, search]);
   /** 明细 Tab 当前筛选下的行：表格、表头全选、底部操作条的「选择全部」算的都是它 */
   const itemRows = useMemo(
-    () => buildItemRows(items, detail?.products ?? [], productFilter, resultFilter),
-    [items, detail?.products, productFilter, resultFilter]
+    () => buildItemRows(items, detail?.products ?? EMPTY_PRODUCTS, matcher),
+    [items, detail?.products, matcher]
   );
   const selection = useCellSelection();
+  /** 条件或搜索词一变，看得见的格子就变了：留着看不见的选中容易误改 */
+  const filterKey = `${JSON.stringify(conditions.map((condition) => [condition.property, condition.operator, condition.value]))}:${search}`;
+  const clearSelection = selection.clear;
+  useEffect(() => {
+    clearSelection();
+  }, [filterKey, clearSelection]);
   /** 矩阵的横向滚动：首列投影、右缘渐隐、产品列翻页器共用 */
-  const scroll = useMatrixScroll(
-    `${tab}:${detail?.products.length ?? 0}:${allGroups.length}:${stageFilter ?? ""}:${filter}`
-  );
+  const scroll = useMatrixScroll(`${tab}:${detail?.products.length ?? 0}:${allGroups.length}:${filterKey}`);
 
   const translateError = (requestError: unknown) => {
     const { message, code } = getTailoringError(requestError);
@@ -192,10 +206,15 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
 
   /** 编辑权 = 有 manage 且表处在可编辑状态 */
   const editable = canManage && isEditable;
-  const activeFilter: TMatrixFilter = !editable && filter === "missing" ? "all" : filter;
-  /** 阶段筛选与保留 / 裁剪筛选叠加生效；选中的阶段被移除后自动退回全部 */
-  const stageGroups = stageFilter ? allGroups.filter((group) => group.stageId === stageFilter) : allGroups;
-  const groups = filterMatrixGroups(stageGroups.length > 0 ? stageGroups : allGroups, activeFilter);
+  /** 产品条件收列，其余条件筛行 */
+  const visibleProducts = matcher.isActive
+    ? detail.products.filter((product) => matcher.matchProduct(product.id))
+    : detail.products;
+  const groups = filterMatrixGroups(
+    allGroups,
+    matcher,
+    visibleProducts.map((product) => product.id)
+  );
   const hasMatrix = detail.rows.length > 0 && detail.products.length > 0;
   /** 选中的格子以当前数据为准：行列被移除后，残留的 id 自然不算 */
   const selectedCells =
@@ -255,23 +274,9 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   /** 选区里有评审活动才出「移到阶段」 */
   const canMoveSelection = selectedCells.some((cell) => getMoveBlockReason(cell) !== "move_not_activity");
 
-  const changeFilter = (next: TMatrixFilter) => {
-    setFilter(next);
-    // 筛选一变，看得见的格子就变了，留着看不见的选中容易误改
-    selection.clear();
-  };
-
-  /** 换 Tab、换明细的筛选，同理：看得见的那批变了就清掉选中 */
+  /** 换 Tab：看得见的那批变了就清掉选中 */
   const changeTab = (next: TDetailTab) => {
     setTab(next);
-    selection.clear();
-  };
-  const changeProductFilter = (next: string) => {
-    setProductFilter(next);
-    selection.clear();
-  };
-  const changeResultFilter = (next: TItemResultFilter) => {
-    setResultFilter(next);
     selection.clear();
   };
 
@@ -329,12 +334,6 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     });
   };
 
-  /** 换阶段跟换筛选一样：看得见的格子变了就清掉选中 */
-  const changeStageFilter = (next: string | null) => {
-    setStageFilter(next);
-    selection.clear();
-  };
-
   // copyUrlToClipboard 自己补域名，这里传不带前导斜杠的路径
   const detailPath = reviewTailoringDetailPath(workspaceSlug, projectId, tailoringId).slice(1);
 
@@ -345,35 +344,39 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
     { key: "comments", label: t(`${I18N}.comments.title`), count: feed.comments.length },
   ];
 
-  const filterOptions: { key: TMatrixFilter; label: string; count?: number }[] = [
-    { key: "all", label: t(`${I18N}.detail.filter_all`) },
-    { key: "cut", label: t(`${I18N}.detail.filter_cut`), count: stats.cut },
-    ...(editable ? [{ key: "missing" as const, label: t(`${I18N}.detail.filter_missing`), count: stats.missing }] : []),
-  ];
-
-  const itemsTools = tab === "items" && (
+  /** 矩阵与明细共用的搜索 + 筛选入口 */
+  const filterTools = (
     <>
-      <TabBarSelect
-        label={t(`${I18N}.actions.add_axes_col_product`)}
-        value={productFilter}
-        options={[
-          { key: "all", label: t(`${I18N}.detail.filter_all`) },
-          ...detail.products.map((product) => ({ key: product.id, label: product.name })),
-        ]}
-        onChange={changeProductFilter}
+      <TabBarSearch
+        value={search}
+        placeholder={t(`${I18N}.detail.search_placeholder`)}
+        clearLabel={t("common.clear")}
+        onChange={setSearch}
       />
-      <TabBarSelect
-        label={t(`${I18N}.items.tailored`)}
-        value={resultFilter}
-        options={[
-          { key: "all" as const, label: t(`${I18N}.detail.filter_all`) },
-          { key: "kept" as const, label: t(`${I18N}.matrix.keep`), count: stats.selected },
-          { key: "cut" as const, label: t(`${I18N}.matrix.cut`), count: stats.cut },
-        ]}
-        onChange={changeResultFilter}
-      />
+      <TabBarFilterButton filter={detailFilter} label={t(`${I18N}.detail.filter_button`)} />
     </>
   );
+  const isFilterableTab = (tab === "matrix" && hasMatrix) || (tab === "items" && items.length > 0);
+
+  const itemsTools = tab === "items" && items.length > 0 && filterTools;
+
+  /** 筛选行右侧的统计：矩阵数行（收了列再带上产品数），明细数条 */
+  const shownRowCount = groups.reduce((total, group) => total + group.rows.length, 0);
+  const totalRowCount = allGroups.reduce((total, group) => total + group.rows.length, 0);
+  const filterSummary =
+    tab === "items"
+      ? t(`${I18N}.detail.filter_summary_items`, { shown: itemRows.length, total: items.length })
+      : [
+          t(`${I18N}.detail.filter_summary_rows`, { shown: shownRowCount, total: totalRowCount }),
+          visibleProducts.length !== detail.products.length
+            ? t(`${I18N}.detail.filter_summary_products`, {
+                shown: visibleProducts.length,
+                total: detail.products.length,
+              })
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   const timelineCounts = countTimeline(feed.activities);
   const activityTools = tab === "activity" && feed.activities.length > 0 && (
@@ -391,18 +394,10 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
 
   const matrixTools = tab === "matrix" && (hasMatrix || editable) && (
     <>
-      {hasMatrix && (
-        <TabBarSelect
-          label={t(`${I18N}.detail.filter_label`)}
-          value={activeFilter}
-          options={filterOptions}
-          onChange={changeFilter}
-        />
-      )}
-      {hasMatrix && <ProductPager scroll={scroll} />}
+      {hasMatrix && filterTools}
       {editable && (
         <Button variant="secondary" size="lg" onClick={() => setIsAddAxesOpen(true)}>
-          {t(`${I18N}.detail.add_axes`)}
+          {t("add")}
         </Button>
       )}
     </>
@@ -453,6 +448,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
       </div>
 
       <DetailTabBar tabs={tabs} active={tab} onChange={changeTab} tools={matrixTools || itemsTools || activityTools || undefined} />
+      {isFilterableTab && <FiltersRow filter={detailFilter} summary={filterSummary} />}
 
       <div className="relative min-h-0 flex-1">
         <div
@@ -485,23 +481,11 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 groups={groups}
                 allGroups={allGroups}
                 items={items}
-                products={detail.products}
+                products={visibleProducts}
                 editable={editable}
                 dirtyIds={dirtyIds}
                 isScrolled={scroll.isScrolled}
-                stageFilter={stageFilter}
-                emptyMessage={
-                  groups.length === 0
-                    ? t(
-                        activeFilter === "missing"
-                          ? `${I18N}.detail.filtered_empty_missing`
-                          : activeFilter === "cut"
-                            ? `${I18N}.detail.filtered_empty_cut`
-                            : `${I18N}.detail.filtered_empty_stage`
-                      )
-                    : undefined
-                }
-                onStageFilterChange={changeStageFilter}
+                emptyMessage={groups.length === 0 ? t(`${I18N}.detail.filtered_empty`) : undefined}
                 onToggle={handleToggle}
                 selection={selection}
                 onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}
@@ -602,9 +586,15 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
         onFixMissing={() => {
           setIsSubmitOpen(false);
           setTab("matrix");
-          changeFilter("missing");
-          // 待补原因可能散在别的阶段，跳过去之前先把阶段筛选放开
-          setStageFilter(null);
+          // 待补原因可能散在别的阶段、别的产品：先放开所有条件，只留「裁剪原因 = 待补」
+          setSearch("");
+          if (detailFilter.canClearFilters) void detailFilter.clearFilters();
+          detailFilter.addCondition(
+            LOGICAL_OPERATOR.AND,
+            { property: "reason", operator: COLLECTION_OPERATOR.IN, value: [DETAIL_REASON_MISSING] },
+            false
+          );
+          detailFilter.toggleVisibility(true);
         }}
         onSubmit={async (payload: TSubmitReviewTailoringPayload) => {
           const ok = await run(() => store.submit(payload), "submitted");

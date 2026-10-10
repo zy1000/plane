@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { observer } from "mobx-react";
+import { Check, ChevronDown, ListFilter, Search, X } from "lucide-react";
+import type { IFilterInstance } from "@plane/shared-state";
+import type { TExternalFilter, TFilterProperty } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { AddFilterButton } from "@/components/rich-filters/add-filters/button";
 
 export type TDetailTab = "matrix" | "items" | "activity" | "comments";
 
 /**
  * Tab 条：左边四个 Tab（数量直接写在名字后面），右边是当前 Tab 自己的工具
- * （矩阵的筛选与加轴，明细的产品与结果筛选，变更历史的类型筛选）。
+ * （矩阵与明细的搜索、筛选，矩阵的产品翻页与加轴，变更历史的类型筛选）。
  */
 export const DetailTabBar = ({
   tabs,
@@ -91,3 +95,86 @@ export const TabBarSelect = <T extends string>({
     </CustomMenu>
   );
 };
+
+/** Tab 条右侧常驻的搜索框：矩阵与明细共用一个搜索词，按编号或名称收窄 */
+export const TabBarSearch = ({
+  value,
+  placeholder,
+  clearLabel,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  clearLabel: string;
+  onChange: (value: string) => void;
+}) => (
+  <label className="flex h-7 w-56 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 focus-within:border-accent-strong">
+    <Search className="size-3.5 shrink-0 text-placeholder" />
+    <input
+      value={value}
+      aria-label={placeholder}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && value) onChange("");
+      }}
+      className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
+    />
+    {value && (
+      <button
+        type="button"
+        aria-label={clearLabel}
+        className="grid size-4 shrink-0 place-items-center rounded text-placeholder hover:text-secondary"
+        onClick={() => onChange("")}
+      >
+        <X className="size-3" />
+      </button>
+    )}
+  </label>
+);
+
+/**
+ * Tab 条上的「筛选」：还没有条件时点开直接选属性（选完筛选行出现）；
+ * 有条件后显示条数、点一下收起 / 展开筛选行。
+ */
+export const TabBarFilterButton = observer(function TabBarFilterButton<
+  P extends TFilterProperty,
+  E extends TExternalFilter,
+>({ filter, label }: { filter: IFilterInstance<P, E>; label: string }) {
+  const count = filter.allConditionsForDisplay.length;
+  if (count === 0 && !filter.isVisible) {
+    return (
+      <AddFilterButton
+        filter={filter}
+        buttonConfig={{
+          label,
+          variant: "secondary",
+          size: "lg",
+          iconConfig: { shouldShowIcon: true, iconComponent: ListFilter },
+        }}
+        onFilterSelect={() => filter.toggleVisibility(true)}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={filter.isVisible}
+      onClick={() => filter.toggleVisibility()}
+      className={cn(
+        "flex h-7 items-center gap-1.5 rounded-md border px-2 text-13 font-medium whitespace-nowrap",
+        count > 0
+          ? "border-accent-subtle-1 bg-accent-subtle text-accent-primary"
+          : "border-subtle bg-surface-1 text-secondary hover:bg-layer-1"
+      )}
+    >
+      <ListFilter className="size-4" />
+      {label}
+      {count > 0 && (
+        <span className="grid h-4 min-w-4 place-items-center rounded-full bg-accent-primary px-1 text-11 font-semibold text-on-color tabular-nums">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+});

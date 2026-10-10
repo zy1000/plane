@@ -341,36 +341,6 @@ export const getTailoringStats = (items: TReviewTailoringItem[]): TTailoringStat
   return stats;
 };
 
-/** 矩阵的快速筛选：只看缺原因（可编辑时）/ 只看裁掉的（只读时） */
-export type TMatrixFilter = "all" | "missing" | "cut";
-
-const cellMatches = (cell: TReviewTailoringItem, filter: TMatrixFilter) => {
-  if (filter === "missing") return !cell.selected && !cell.reason.trim();
-  if (filter === "cut") return !cell.selected;
-  return true;
-};
-
-/**
- * 按筛选收窄每一段的行。子行命中时把它的父行也留下 —— 否则活动会脱离所属评审孤零零地挂着。
- * 没有行留下的段整段不画。
- */
-export const filterMatrixGroups = (groups: TMatrixGroup[], filter: TMatrixFilter): TMatrixGroup[] => {
-  if (filter === "all") return groups;
-  return groups
-    .map((group) => {
-      const keep = new Set<number>();
-      let lastRootIndex = -1;
-      group.rows.forEach((row, index) => {
-        if (!row.isChild) lastRootIndex = index;
-        if (![...row.cells.values()].some((cell) => cellMatches(cell, filter))) return;
-        keep.add(index);
-        if (row.isChild && lastRootIndex >= 0) keep.add(lastRootIndex);
-      });
-      return { ...group, rows: group.rows.filter((_, index) => keep.has(index)) };
-    })
-    .filter((group) => group.rows.length > 0);
-};
-
 /** 一个顶层评审下挂了几个活动（行首的「N 个活动」） */
 export const countChildren = (rows: TMatrixRow[], index: number): number => {
   let count = 0;

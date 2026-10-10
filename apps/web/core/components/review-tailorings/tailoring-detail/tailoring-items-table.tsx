@@ -9,11 +9,10 @@ import { TableSelectCheckbox } from "@/components/common/table-select-checkbox";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import { CellReasonModal } from "./cell-reason-modal";
 import { ResultSelect, ResultText } from "./result-select";
+import type { TDetailMatcher } from "./rich-filters/match-detail";
+import { itemMatches } from "./rich-filters/match-detail";
 import { getCellLockReason } from "./tailoring-matrix-model";
 import type { TCellSelection } from "./use-cell-selection";
-
-/** 明细按裁剪结果筛：全部 / 只看保留 / 只看裁剪 */
-export type TItemResultFilter = "all" | "kept" | "cut";
 
 /** 列宽默认值。「裁剪原因」不在表里 —— 它吃掉剩余宽度，所以右边不会留白 */
 const DEFAULT_WIDTHS: Record<string, number> = {
@@ -55,7 +54,7 @@ const GRID_TABLE_CLASS =
   "[&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_th:last-child]:pr-6 [&_td:last-child]:pr-6";
 
 /**
- * 明细里看得见的那批行：按 Tab 条上的产品与裁剪结果筛选，再按
+ * 明细里看得见的那批行：按筛选行的条件与搜索词收窄（与矩阵同一套），再按
  * 「产品 → 阶段 → 模板顺序」排，读起来是「这个产品每个阶段要做什么」。
  *
  * 页面也要这一批：底部操作条的「选择全部」与表头三态勾选算的都是它。
@@ -63,15 +62,10 @@ const GRID_TABLE_CLASS =
 export const buildItemRows = (
   items: TReviewTailoringItem[],
   products: TReviewTailoringProduct[],
-  productFilter: string,
-  resultFilter: TItemResultFilter = "all"
+  matcher: TDetailMatcher
 ) => {
   const nameOf = new Map(products.map((product) => [product.id, product.name]));
-  const rows = items.filter(
-    (item) =>
-      (productFilter === "all" || item.product_id === productFilter) &&
-      (resultFilter === "all" || item.selected === (resultFilter === "kept"))
-  );
+  const rows = matcher.isActive ? items.filter((item) => itemMatches(item, matcher)) : items;
   return [...rows].sort((a, b) => {
     const left = nameOf.get(a.product_id) ?? "";
     const right = nameOf.get(b.product_id) ?? "";

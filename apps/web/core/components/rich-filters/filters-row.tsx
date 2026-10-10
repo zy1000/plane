@@ -23,6 +23,8 @@ export type TFiltersRowProps<K extends TFilterProperty, E extends TExternalFilte
   disabledAllOperations?: boolean;
   filter: IFilterInstance<K, E>;
   variant?: "modal" | "header";
+  /** 右侧「清除」前的一句统计（如「9 / 42 行」），有条件时才显示 */
+  summary?: React.ReactNode;
   trackerElements?: {
     clearFilter?: string;
     saveView?: string;
@@ -38,6 +40,7 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
     disabledAllOperations: disabledAllOperationsProp = false,
     filter,
     variant = "header",
+    summary,
     trackerElements,
   } = props;
   // states
@@ -89,6 +92,9 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
 
   const rightContent = !disabledAllOperations && (
     <>
+      {summary && hasAnyConditions && (
+        <span className="text-13 whitespace-nowrap text-tertiary tabular-nums">{summary}</span>
+      )}
       <ElementTransition show={filter.canClearFilters}>
         <Button
           variant="secondary"

@@ -23,11 +23,12 @@ import { TAILORING_FILTER_ME } from "./types";
 
 const I18N = "review_tailoring";
 
-type TOption = { id: string; label: string; value: string; icon?: ReactNode };
+export type TOption = { id: string; label: string; value: string; icon?: ReactNode };
 
-type TOperatorParams = { isEnabled: boolean; allowedOperators: Set<TSupportedOperators>; allowNegative: boolean };
+export type TOperatorParams = { isEnabled: boolean; allowedOperators: Set<TSupportedOperators>; allowNegative: boolean };
 
-const multiSelect = (options: TOption[], params: TOperatorParams, operatorLabel: string) =>
+/** 多选类属性的算子表：只有「是 / 是其中之一」，一个值时显示成「是」 */
+export const multiSelect = (options: TOption[], params: TOperatorParams, operatorLabel: string) =>
   new Map([
     createOperatorConfigEntry(COLLECTION_OPERATOR.IN, params, (updated) =>
       getMultiSelectConfig<TOption, string, TOption>(

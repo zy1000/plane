@@ -3,20 +3,20 @@ import type { SingleOrArray, TFilterExpression, TFilterValue, TSupportedOperator
 import { LOGICAL_OPERATOR, MULTI_VALUE_OPERATORS } from "@plane/types";
 import { createAndGroupNode, createConditionNode, isAndGroupNode, isConditionNode } from "@plane/utils";
 import { FilterAdapter } from "@plane/shared-state";
-import type {
-  TTailoringFilterConditionData,
-  TTailoringFilterExpression,
-  TTailoringFilterExpressionData,
-  TTailoringFilterProperty,
-} from "./types";
+import type { TFlatFilterConditionData, TFlatFilterExpression, TFlatFilterExpressionData } from "./types";
 import { TAILORING_FILTER_PROPERTY_KEYS } from "./types";
 
 /**
- * 筛选行内部表达式树 ⇄ 本地存储里的扁平对象（`{ "status__in": "in_review,in_approval" }`）。
- * 结构照阶段评审（stage-reviews/filters）的 adapter，只换了属性键。
+ * 筛选行内部表达式树 ⇄ 扁平对象（`{ "status__in": "in_review,in_approval" }`）。
+ * 结构照阶段评审（stage-reviews/filters）的 adapter；属性键由构造参数给，
+ * 裁剪表列表与详情页共用这一份实现。
  */
-class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TTailoringFilterExpression> {
-  toInternal(externalFilter: TTailoringFilterExpression): TFilterExpression<TTailoringFilterProperty> | null {
+class TailoringFiltersAdapter<P extends string> extends FilterAdapter<P, TFlatFilterExpression<P>> {
+  constructor(private readonly propertyKeys: readonly P[]) {
+    super();
+  }
+
+  toInternal(externalFilter: TFlatFilterExpression<P>): TFilterExpression<P> | null {
     if (!externalFilter || isEmpty(externalFilter)) return null;
     try {
       return this._toInternal(externalFilter);
@@ -26,7 +26,7 @@ class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TT
     }
   }
 
-  toExternal(internalFilter: TFilterExpression<TTailoringFilterProperty> | null): TTailoringFilterExpression {
+  toExternal(internalFilter: TFilterExpression<P> | null): TFlatFilterExpression<P> {
     if (!internalFilter) return {};
     try {
       return this._toExternal(internalFilter);
@@ -36,7 +36,7 @@ class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TT
     }
   }
 
-  private _toInternal(expression: TTailoringFilterExpressionData): TFilterExpression<TTailoringFilterProperty> {
+  private _toInternal(expression: TFlatFilterExpressionData<P>): TFilterExpression<P> {
     if (!expression || isEmpty(expression)) throw new Error("Empty tailoring filter expression");
 
     if (this._isConditionData(expression)) {
@@ -45,7 +45,7 @@ class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TT
     }
 
     if (LOGICAL_OPERATOR.AND in expression) {
-      const children = (expression as { [LOGICAL_OPERATOR.AND]: TTailoringFilterExpressionData[] })[
+      const children = (expression as { [LOGICAL_OPERATOR.AND]: TFlatFilterExpressionData<P>[] })[
         LOGICAL_OPERATOR.AND
       ];
       if (!Array.isArray(children) || children.length === 0) throw new Error("AND group must not be empty");
@@ -55,7 +55,7 @@ class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TT
     throw new Error(`Unknown tailoring filter keys [${Object.keys(expression).join(", ")}]`);
   }
 
-  private _toExternal(expression: TFilterExpression<TTailoringFilterProperty>): TTailoringFilterExpressionData {
+  private _toExternal(expression: TFilterExpression<P>): TFlatFilterExpressionData<P> {
     if (isConditionNode(expression)) {
       const value = Array.isArray(expression.value) ? expression.value.join(",") : expression.value;
       return { [`${expression.property}__${expression.operator}`]: value as string | boolean | number };
@@ -72,28 +72,26 @@ class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TT
     return [key.substring(0, index), key.substring(index + 2)];
   }
 
-  private _isConditionData(data: unknown): data is TTailoringFilterConditionData {
+  private _isConditionData(data: unknown): data is TFlatFilterConditionData<P> {
     if (!data || typeof data !== "object" || isEmpty(data)) return false;
     const keys = Object.keys(data);
     if (keys.includes(LOGICAL_OPERATOR.AND)) return false;
     return keys.every((key) => {
       const parts = this._splitKey(key);
-      return Boolean(parts) && TAILORING_FILTER_PROPERTY_KEYS.includes(parts![0] as TTailoringFilterProperty);
+      return Boolean(parts) && this.propertyKeys.includes(parts![0] as P);
     });
   }
 
-  private _extractCondition(
-    data: TTailoringFilterConditionData
-  ): [TTailoringFilterProperty, TSupportedOperators, SingleOrArray<TFilterValue>] {
+  private _extractCondition(data: TFlatFilterConditionData<P>): [P, TSupportedOperators, SingleOrArray<TFilterValue>] {
     const keys = Object.keys(data);
     if (keys.length !== 1) throw new Error("Tailoring filter condition must have exactly one key");
     const [property, operator] = this._splitKey(keys[0])!;
-    const rawValue = data[keys[0] as keyof TTailoringFilterConditionData] as TFilterValue;
+    const rawValue = data[keys[0] as keyof TFlatFilterConditionData<P>] as TFilterValue;
     const value =
       MULTI_VALUE_OPERATORS.includes(operator as TSupportedOperators) && typeof rawValue === "string"
         ? this._splitValue(rawValue)
         : rawValue;
-    return [property as TTailoringFilterProperty, operator as TSupportedOperators, value];
+    return [property as P, operator as TSupportedOperators, value];
   }
 
   private _splitValue(value: string): SingleOrArray<TFilterValue> {
@@ -106,4 +104,7 @@ class TailoringFiltersAdapter extends FilterAdapter<TTailoringFilterProperty, TT
   }
 }
 
-export const tailoringFiltersAdapter = new TailoringFiltersAdapter();
+export const createTailoringFiltersAdapter = <P extends string>(propertyKeys: readonly P[]) =>
+  new TailoringFiltersAdapter(propertyKeys);
+
+export const tailoringFiltersAdapter = createTailoringFiltersAdapter(TAILORING_FILTER_PROPERTY_KEYS);

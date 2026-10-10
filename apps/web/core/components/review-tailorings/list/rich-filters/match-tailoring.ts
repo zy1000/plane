@@ -6,13 +6,15 @@ import { TAILORING_FILTER_ME } from "./types";
 
 export type TTailoringCondition = TFilterConditionNodeForDisplay<TTailoringFilterProperty, TFilterValue>;
 
-const asStrings = (value: unknown): string[] =>
+/** 条件值统一摊成字符串数组（多选存成逗号串，也可能是数组） */
+export const asStrings = (value: unknown): string[] =>
   (toFilterArray(value as never) ?? [])
     .flatMap((item) => String(item).split(","))
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
 
-const matchOption = (candidate: string, operator: TSupportedOperators, selected: string[]) => {
+/** 选项类条件：是 / 是其中之一，以及取反的不是 / 不是其中之一 */
+export const matchOption = (candidate: string, operator: TSupportedOperators, selected: string[]) => {
   const isNegative =
     operator === EXTENDED_EQUALITY_OPERATOR.NOT_EXACT || operator === EXTENDED_COLLECTION_OPERATOR.NOT_IN;
   return selected.includes(candidate) !== isNegative;

@@ -22,9 +22,12 @@ export const TailoringModalHeader = ({
   extra,
   onBack,
   onClose,
+  className,
 }: {
   title: string;
   subtitle?: string;
+  /** 下面紧跟页签条时传 `border-b-0`，免得两道线夹着页签 */
+  className?: string;
   /** 关闭按钮左边的附加动作（「打开裁剪表」） */
   extra?: ReactNode;
   onBack?: () => void;
@@ -32,7 +35,7 @@ export const TailoringModalHeader = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <div className="flex h-14 shrink-0 items-center gap-3 border-b border-subtle pr-4 pl-6">
+    <div className={cn("flex h-14 shrink-0 items-center gap-3 border-b border-subtle pr-4 pl-6", className)}>
       {onBack && (
         <button
           type="button"
