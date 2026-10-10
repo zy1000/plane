@@ -4,7 +4,7 @@ import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-erro
 import { Button } from "@plane/propel/button";
 import { Input, EModalPosition, EModalWidth, ModalCore, CustomSearchSelect } from "@plane/ui";
 import { PlanService } from "@/services/qa/plan.service";
-import { ReportService, type TReportType } from "@/services/qa/report.service";
+import { ReportService, type TReportModule, type TReportType } from "@/services/qa/report.service";
 
 type TMode = "create" | "edit";
 
@@ -19,6 +19,8 @@ type Props = {
     name?: string;
     report_type?: TReportType;
     plans?: string[];
+    /** 所属模块，可选；新建时由页面带入左树当前选中项 */
+    module?: string | null;
   } | null;
   onSuccess?: () => void | Promise<void>;
 };
@@ -30,6 +32,19 @@ const REPORT_TYPE_OPTIONS: { value: TReportType; label: string; disabled?: boole
   { value: "计划报告", label: "计划报告" },
   { value: "对外报告", label: "对外报告（敬请期待）", disabled: true },
 ];
+
+type TModuleOption = { value: string; query: string; content: React.ReactNode; label: string };
+
+/** 把模块树铺平成下拉选项，子模块显示「父 / 子」路径好看出层级 */
+const flattenModules = (nodes: TReportModule[], trail: string[] = []): TModuleOption[] =>
+  nodes.flatMap((node) => {
+    const path = [...trail, node.name];
+    const label = path.join(" / ");
+    return [
+      { value: String(node.id), query: node.name, label, content: <span className="flex-grow truncate">{label}</span> },
+      ...flattenModules(node.children || [], path),
+    ];
+  });
 
 export const CreateUpdateReportModal: React.FC<Props> = (props) => {
   const {
@@ -48,7 +63,9 @@ export const CreateUpdateReportModal: React.FC<Props> = (props) => {
   const [name, setName] = useState<string>(initialData?.name ?? "");
   const [reportType, setReportType] = useState<TReportType>(initialData?.report_type ?? "计划报告");
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>(initialData?.plans ?? []);
+  const [moduleId, setModuleId] = useState<string | null>(initialData?.module ?? null);
   const [planOptions, setPlanOptions] = useState<Array<{ value: string; query: string; content: React.ReactNode }>>([]);
+  const [moduleOptions, setModuleOptions] = useState<TModuleOption[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errors, setErrors] = useState<{ name?: string; plans?: string }>({});
 
@@ -56,6 +73,7 @@ export const CreateUpdateReportModal: React.FC<Props> = (props) => {
     setName(initialData?.name ?? "");
     setReportType(initialData?.report_type ?? "计划报告");
     setSelectedPlanIds(initialData?.plans ?? []);
+    setModuleId(initialData?.module ?? null);
     setErrors({});
     setSubmitting(false);
   };
@@ -70,9 +88,18 @@ export const CreateUpdateReportModal: React.FC<Props> = (props) => {
     setName(initialData?.name ?? "");
     setReportType(initialData?.report_type ?? "计划报告");
     setSelectedPlanIds(initialData?.plans ?? []);
+    setModuleId(initialData?.module ?? null);
     setErrors({});
     setSubmitting(false);
   }, [isOpen, mode, reportId, initialData]);
+
+  useEffect(() => {
+    if (!isOpen || !workspaceSlug || !projectId) return;
+    reportService
+      .getReportModules(workspaceSlug, projectId)
+      .then((data) => setModuleOptions(flattenModules(data)))
+      .catch(() => setModuleOptions([]));
+  }, [isOpen, workspaceSlug, projectId]);
 
   useEffect(() => {
     if (!isOpen || !workspaceSlug) return;
@@ -110,6 +137,8 @@ export const CreateUpdateReportModal: React.FC<Props> = (props) => {
         report_type: reportType,
         project: projectId,
         plans: selectedPlanIds,
+        // 编辑时显式传 null 才能清空所属模块
+        module: moduleId ?? null,
       };
       if (mode === "create") {
         await reportService.createReport(workspaceSlug, projectId, payload);
@@ -196,6 +225,52 @@ export const CreateUpdateReportModal: React.FC<Props> = (props) => {
                 </label>
               ))}
             </div>
+          </div>
+
+          <div className="col-span-1">
+            <label className="text-sm text-secondary mb-1 block">
+              所属模块<span className="ml-1.5 text-xs text-placeholder">可选</span>
+            </label>
+            <CustomSearchSelect
+              className="w-full"
+              value={moduleId ?? undefined}
+              onChange={(val: string | null) => setModuleId(val ?? null)}
+              options={moduleOptions}
+              multiple={false}
+              customButtonClassName="w-full hover:bg-transparent focus:bg-transparent active:bg-transparent"
+              customButton={
+                <div className="flex w-full items-center justify-between gap-2 rounded border-[0.5px] border-subtle-1 px-3 py-2 text-sm">
+                  {moduleId ? (
+                    <>
+                      <span className="truncate text-primary">
+                        {moduleOptions.find((o) => o.value === moduleId)?.label ?? "…"}
+                      </span>
+                      {/* 外层 CustomSearchSelect 本身是 button，这里不能再嵌 button */}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="清空所属模块"
+                        className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full bg-layer-3 text-xs text-secondary hover:text-primary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModuleId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setModuleId(null);
+                        }}
+                      >
+                        ×
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-placeholder">请选择所属模块</span>
+                  )}
+                </div>
+              }
+            />
           </div>
 
           <div className="col-span-1">

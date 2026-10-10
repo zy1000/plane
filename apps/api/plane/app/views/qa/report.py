@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,14 +12,136 @@ from plane.app.serializers.qa import (
     build_report_stats_map,
 )
 from plane.app.serializers.qa.report import (
+    ReportModuleCreateUpdateSerializer,
+    ReportModuleListSerializer,
     TestReportCreateUpdateSerializer,
     TestReportDetailSerializer,
 )
 from plane.app.views import BaseAPIView, BaseViewSet
+from plane.app.views.qa.filters import TestReportFilter
 from plane.app.permissions import allow_fine_permission, PermissionKey
-from plane.db.models import TestReport, PlanCase
+from plane.db.models import TestReport, PlanCase, ReportModule
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
+
+
+def _project_report_modules(slug, project_id):
+    return ReportModule.objects.filter(
+        project_id=project_id,
+        project__workspace__slug=slug,
+        deleted_at__isnull=True,
+    )
+
+
+def _direct_report_counts(modules_qs):
+    """每个模块直属（未软删）报告数：{module_id: count}。"""
+    return dict(
+        modules_qs.annotate(
+            report_count=Count("reports", filter=Q(reports__deleted_at__isnull=True))
+        ).values_list("id", "report_count")
+    )
+
+
+class ReportModuleAPIView(BaseAPIView):
+    """报告模块树：列表 / 新建 / 批量删除（项目作用域）。"""
+
+    model = ReportModule
+    serializer_class = ReportModuleListSerializer
+
+    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    def get(self, request, slug, project_id):
+        modules = list(_project_report_modules(slug, project_id).order_by("created_at"))
+        children_map = defaultdict(list)
+        for module in modules:
+            if module.parent_id:
+                children_map[module.parent_id].append(module)
+        count_map = _direct_report_counts(_project_report_modules(slug, project_id))
+        roots = [m for m in modules if not m.parent_id]
+        serializer = self.serializer_class(
+            instance=roots,
+            many=True,
+            context={"children_map": children_map, "count_map": count_map},
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.QA_REPORT_CREATE)
+    def post(self, request, slug, project_id):
+        data = request.data.copy()
+        data["project"] = str(project_id)
+        serializer = ReportModuleCreateUpdateSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        module = serializer.save()
+        return Response(
+            ReportModuleListSerializer(instance=module).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @allow_fine_permission(PermissionKey.QA_REPORT_DELETE)
+    def delete(self, request, slug, project_id):
+        module_ids = request.data.get("ids") or []
+        # 硬删：子模块随 CASCADE 一起删，报告的 module 由 SET_NULL 置空
+        _project_report_modules(slug, project_id).filter(id__in=module_ids).delete(
+            soft=False
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ReportModuleDetailAPIView(BaseAPIView):
+    """报告模块改名 / 换父。"""
+
+    model = ReportModule
+    serializer_class = ReportModuleCreateUpdateSerializer
+
+    @allow_fine_permission(PermissionKey.QA_REPORT_EDIT)
+    def patch(self, request, slug, project_id, module_id):
+        module = get_object_or_404(_project_report_modules(slug, project_id), id=module_id)
+        serializer = self.serializer_class(instance=module, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        module.refresh_from_db()
+        return Response(
+            ReportModuleListSerializer(instance=module).data, status=status.HTTP_200_OK
+        )
+
+
+class ReportModuleCountAPIView(BaseAPIView):
+    """{total: 项目报告总数, <module_id>: 子树累计报告数}，与列表按模块递归过滤同口径。"""
+
+    model = ReportModule
+
+    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    def get(self, request, slug, project_id):
+        modules_qs = _project_report_modules(slug, project_id)
+        direct_counts = {}
+        children_map = defaultdict(list)
+        for mid, parent_id, count in modules_qs.annotate(
+            report_count=Count("reports", filter=Q(reports__deleted_at__isnull=True))
+        ).values_list("id", "parent_id", "report_count"):
+            direct_counts[str(mid)] = int(count or 0)
+            if parent_id:
+                children_map[str(parent_id)].append(str(mid))
+
+        memo = {}
+
+        def subtree_count(mid):
+            if mid in memo:
+                return memo[mid]
+            total = direct_counts.get(mid, 0)
+            for child in children_map.get(mid, []):
+                total += subtree_count(child)
+            memo[mid] = total
+            return total
+
+        result = {
+            "total": TestReport.objects.filter(
+                project_id=project_id,
+                project__workspace__slug=slug,
+                deleted_at__isnull=True,
+            ).count()
+        }
+        for mid in direct_counts:
+            result[mid] = subtree_count(mid)
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class TestReportAPIView(BaseAPIView):
@@ -27,18 +151,14 @@ class TestReportAPIView(BaseAPIView):
     queryset = TestReport.objects.all()
     serializer_class = TestReportCreateUpdateSerializer
     pagination_class = CustomPaginator
-    filterset_fields = {
-        "project_id": ["exact", "in"],
-        "report_type": ["exact", "in"],
-        "name": ["exact", "icontains", "in"],
-    }
+    filterset_class = TestReportFilter
 
     def _project_queryset(self, slug, project_id):
         return self.queryset.filter(
             project_id=project_id,
             project__workspace__slug=slug,
             deleted_at__isnull=True,
-        )
+        ).select_related("module")
 
     @allow_fine_permission(PermissionKey.QA_REPORT_CREATE)
     def post(self, request, slug, project_id):

@@ -51,7 +51,13 @@ from plane.app.views.qa.review import (
     ReviewListAPIView,
 )
 from plane.app.views.qa.execution_file import PlanCaseRecordFileAPI
-from plane.app.views.qa.report import TestReportAPIView, ReportView
+from plane.app.views.qa.report import (
+    TestReportAPIView,
+    ReportView,
+    ReportModuleAPIView,
+    ReportModuleDetailAPIView,
+    ReportModuleCountAPIView,
+)
 from plane.app.views.qa.template import (
     TemplateCaseAPIView,
     TemplateCaseIdsAPIView,
@@ -80,6 +86,21 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/",
         TestReportAPIView.as_view(),
         name="test-report",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/module/",
+        ReportModuleAPIView.as_view(),
+        name="test-report-module",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/module/count/",
+        ReportModuleCountAPIView.as_view(),
+        name="test-report-module-count",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/module/<uuid:module_id>/",
+        ReportModuleDetailAPIView.as_view(),
+        name="test-report-module-detail",
     ),
     path(
         "workspaces/<str:slug>/test/plan/list/",

@@ -13,11 +13,26 @@ export type TReportPassRate = {
   [key: string]: number | undefined;
 };
 
+export type TReportModule = {
+  id: string;
+  name: string;
+  project: string | null;
+  parent: string | null;
+  /** 树接口给的是直属数，页面用 count 接口的子树数覆盖 */
+  count?: number;
+  children?: TReportModule[];
+};
+
+/** `GET .../test/report/module/count/`：total 是项目报告总数，其余 key 是模块 id → 子树累计数 */
+export type TReportModuleCounts = { total: number } & Record<string, number>;
+
 export type TReportListItem = {
   id: string;
   name: string;
   report_type: TReportType;
   project: string | null;
+  module: string | null;
+  module_name: string | null;
   plan_names: string[];
   pass_rate: TReportPassRate;
   case_count: number;
@@ -39,6 +54,8 @@ export type TReportDetail = {
   summary_html: string;
   summary_json: unknown;
   project: string | null;
+  module: string | null;
+  module_name: string | null;
   plans: TReportPlanBrief[];
   created_by_detail?: { id: string; display_name: string; avatar?: string; is_bot?: boolean } | null;
   created_by?: string | null;
@@ -82,6 +99,8 @@ export type TReportCreatePayload = {
   summary_json?: unknown;
   project?: string;
   plans?: string[];
+  /** 所属模块，可选；编辑时显式传 null 才能清空 */
+  module?: string | null;
 };
 
 export type TReportUpdatePayload = Partial<TReportCreatePayload> & { id: string };
@@ -89,6 +108,59 @@ export type TReportUpdatePayload = Partial<TReportCreatePayload> & { id: string 
 export class ReportService extends APIService {
   constructor() {
     super(API_BASE_URL);
+  }
+
+  private moduleUrl(workspaceSlug: string, projectId: string) {
+    return `/api/workspaces/${workspaceSlug}/projects/${projectId}/test/report/module/`;
+  }
+
+  async getReportModules(workspaceSlug: string, projectId: string): Promise<TReportModule[]> {
+    return this.get(this.moduleUrl(workspaceSlug, projectId))
+      .then((response) => (Array.isArray(response?.data) ? response.data : []))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getReportModulesCount(workspaceSlug: string, projectId: string): Promise<TReportModuleCounts> {
+    return this.get(`${this.moduleUrl(workspaceSlug, projectId)}count/`)
+      .then((response) => response?.data ?? { total: 0 })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createReportModule(
+    workspaceSlug: string,
+    projectId: string,
+    data: { name: string; parent?: string | null }
+  ): Promise<TReportModule> {
+    return this.post(this.moduleUrl(workspaceSlug, projectId), data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateReportModule(
+    workspaceSlug: string,
+    projectId: string,
+    moduleId: string,
+    data: { name?: string; parent?: string | null }
+  ): Promise<TReportModule> {
+    return this.patch(`${this.moduleUrl(workspaceSlug, projectId)}${moduleId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteReportModule(workspaceSlug: string, projectId: string, ids: string[]): Promise<void> {
+    return this.delete(this.moduleUrl(workspaceSlug, projectId), { ids })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
   }
 
   async getReports(workspaceSlug: string, projectId: string, queries?: any): Promise<TReportListResponse> {

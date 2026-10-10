@@ -936,6 +936,32 @@ class CaseReviewRecord(BaseModel):
         ordering = ("-created_at",)
 
 
+class ReportModule(BaseModel):
+    """测试报告的目录树：项目自己的一份，不挂用例库，与 PlanModule / CaseReviewModule 同构。"""
+
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
+    name = models.CharField(max_length=30)
+    project = models.ForeignKey(
+        "db.Project",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="project_%(class)s",
+    )
+
+    class Meta:
+        verbose_name = "ReportModule"
+        verbose_name_plural = "ReportModule"
+        db_table = "test_report_modules"
+        ordering = ("created_at",)
+
+
 class TestReport(BaseModel):
     """测试报告：聚合一个或多个测试计划的执行数据，统计实时计算。"""
 
@@ -965,6 +991,14 @@ class TestReport(BaseModel):
     )
     plans = models.ManyToManyField(
         TestPlan, blank=True, related_name="reports", db_table="test_report_plans"
+    )
+    module = models.ForeignKey(
+        ReportModule,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name="ReportModule",
+        related_name="reports",
     )
 
     class Meta:
