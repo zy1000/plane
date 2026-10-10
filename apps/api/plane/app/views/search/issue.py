@@ -13,8 +13,19 @@ from rest_framework.response import Response
 
 # Module imports
 from .base import BaseAPIView
-from plane.db.models import Issue, ProjectMember, IssueRelation, IssueType, RequirementIssue
+from plane.db.models import (
+    Issue,
+    ProjectMember,
+    IssueRelation,
+    IssueType,
+    RequirementIssue,
+    IssueAssignee,
+    ReleaseIssue,
+    CycleIssue,
+    ModuleIssue,
+)
 from plane.utils.issue_search import search_issues
+from plane.utils.work_item_picker import build_picker_rows, order_picker_issues
 
 
 class IssueSearchEndpoint(BaseAPIView):
@@ -106,6 +117,25 @@ class IssueSearchEndpoint(BaseAPIView):
 
         return issues
 
+    def exclude_issues_in_cycle(self, issues: QuerySet, cycle_id: str) -> QuerySet:
+        """
+        只排除已在**这个**迭代里的（打开「包含已在其他迭代中的」时用）。
+
+        用 id__in 子查询而不是 exclude(Q(a__x) & Q(a__y))：后者会编成两个独立的 EXISTS，
+        「曾从本迭代移除、现挂别的迭代」的工作项会被误排除。CycleIssue.objects 只看 live 行。
+        """
+        return issues.exclude(
+            id__in=CycleIssue.objects.filter(cycle_id=cycle_id).order_by().values_list("issue_id", flat=True)
+        )
+
+    def exclude_issues_in_release(self, issues: QuerySet, release_id: str) -> QuerySet:
+        """
+        只排除已在**这个**发布里的（发布与工作项多对多，用 id__in 避免两个 NOT EXISTS 落在不同关联行上）
+        """
+        return issues.exclude(
+            id__in=ReleaseIssue.objects.filter(release_id=release_id).order_by().values_list("issue_id", flat=True)
+        )
+
     def exclude_issues_in_releases(self, issues: QuerySet) -> QuerySet:
         """
         Exclude issues already linked to releases
@@ -134,8 +164,13 @@ class IssueSearchEndpoint(BaseAPIView):
     def exclude_issues_in_module(self, issues: QuerySet, module: str) -> QuerySet:
         """
         Exclude issues in a module
+
+        同 exclude_issues_in_cycle：子查询只取 live 的 ModuleIssue，避免「曾从本模块移除、
+        现挂别的模块」被两个独立 EXISTS 误排除。
         """
-        issues = issues.exclude(Q(issue_module__module=module) & Q(issue_module__deleted_at__isnull=True))
+        issues = issues.exclude(
+            id__in=ModuleIssue.objects.filter(module_id=module).order_by().values_list("issue_id", flat=True)
+        )
         return issues
 
     def filter_issues_without_target_date(self, issues: QuerySet) -> QuerySet:
@@ -187,6 +222,9 @@ class IssueSearchEndpoint(BaseAPIView):
 
         return parsed
 
+    def parse_csv_query_param(self, value: Optional[str]) -> list:
+        return [item.strip() for item in (value or "").split(",") if item.strip()]
+
     def get(self, request, slug, project_id):
         query = request.query_params.get("search", False)
         workspace_search = request.query_params.get("workspace_search", "false")
@@ -204,6 +242,17 @@ class IssueSearchEndpoint(BaseAPIView):
         issue_type_id = request.query_params.get("issue_type_id", False)
         my_work_items = request.query_params.get("my_work_items", "false")
         type_ids = request.query_params.get("type_ids", "")
+        # 「添加工作项」表格弹窗用的参数
+        paginated = request.query_params.get("paginated", "false")
+        cycle_id = request.query_params.get("cycle_id")
+        include_other_cycles = request.query_params.get("include_other_cycles", "false")
+        release_id = request.query_params.get("release_id")
+        include_other_releases = request.query_params.get("include_other_releases", "false")
+        state_groups = self.parse_csv_query_param(request.query_params.get("state_groups"))
+        priorities = self.parse_csv_query_param(request.query_params.get("priorities"))
+        assignee_ids = self.parse_csv_query_param(request.query_params.get("assignee_ids"))
+        order_by = request.query_params.get("order_by", "created_at")
+        order = request.query_params.get("order", "desc")
         limit = self.parse_int_query_param(request.query_params.get("limit"), 100, minimum=1, maximum=1000)
         offset = self.parse_int_query_param(request.query_params.get("offset"), 0, minimum=0)
 
@@ -242,11 +291,30 @@ class IssueSearchEndpoint(BaseAPIView):
         if my_work_items == "true":
             issues = issues.filter(Q(created_by=self.request.user) | Q(assignees=self.request.user)).distinct()
 
+        if state_groups:
+            issues = issues.filter(state__group__in=state_groups)
+
+        if priorities:
+            issues = issues.filter(priority__in=priorities)
+
+        if assignee_ids:
+            issues = issues.filter(
+                id__in=IssueAssignee.objects.filter(assignee_id__in=assignee_ids).order_by().values_list(
+                    "issue_id", flat=True
+                )
+            )
+
         if cycle == "true":
-            issues = self.exclude_issues_in_cycles(issues)
+            if include_other_cycles == "true" and cycle_id:
+                issues = self.exclude_issues_in_cycle(issues, cycle_id)
+            else:
+                issues = self.exclude_issues_in_cycles(issues)
 
         if release == "true":
-            issues = self.exclude_issues_in_releases(issues)
+            if include_other_releases == "true" and release_id:
+                issues = self.exclude_issues_in_release(issues, release_id)
+            else:
+                issues = self.exclude_issues_in_releases(issues)
 
         if exclude_requirement_id:
             issues = self.exclude_issues_linked_to_requirement(issues, exclude_requirement_id)
@@ -264,6 +332,14 @@ class IssueSearchEndpoint(BaseAPIView):
                 project_id=project_id, member=self.request.user, is_active=True, role=5
         ).exists():
             issues = issues.filter(created_by=self.request.user)
+
+        if paginated == "true":
+            issues = order_picker_issues(issues, order_by, order)
+            page_ids = list(issues.values_list("id", flat=True)[offset : offset + limit])
+            return Response(
+                {"results": build_picker_rows(page_ids), "total_count": issues.count()},
+                status=status.HTTP_200_OK,
+            )
 
         issues = issues.order_by("-created_at")
 

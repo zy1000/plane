@@ -39,7 +39,7 @@ import { Breadcrumbs, BreadcrumbNavigationSearchDropdown, CustomMenu, Header } f
 import { cn } from "@plane/utils";
 // components
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
@@ -269,12 +269,13 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
         onClose={() => setAnalyticsModal(false)}
         cycleDetails={cycleDetails ?? undefined}
       />
-      <ExistingIssuesListModal
+      <AddWorkItemsModal
         workspaceSlug={workspaceSlug?.toString()}
         projectId={projectId?.toString()}
+        kind="cycle"
+        targetId={cycleId?.toString()}
         isOpen={openExistingIssueListModal}
         handleClose={() => setOpenExistingIssueListModal(false)}
-        searchParams={{ cycle: true }}
         handleOnSubmit={handleAddExistingIssuesToCycle}
       />
       <Header>

@@ -17,7 +17,7 @@ import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -73,12 +73,13 @@ export const ReleaseEmptyState = observer(function ReleaseEmptyState() {
 
   return (
     <div className="relative h-full w-full overflow-y-auto">
-      <ExistingIssuesListModal
+      <AddWorkItemsModal
         workspaceSlug={workspaceSlug?.toString()}
         projectId={projectId?.toString()}
+        kind="release"
+        targetId={releaseId}
         isOpen={releaseIssuesListModal}
         handleClose={() => setReleaseIssuesListModal(false)}
-        searchParams={{ search: "" }}
         handleOnSubmit={handleAddIssuesToRelease}
       />
       <div className="grid h-full w-full place-items-center">

@@ -8,6 +8,7 @@ import type { TLogoProps } from "../common";
 import type { TDataDictionaryItemLite } from "../data-dictionary";
 import type { TDevModeLite } from "../dev-mode";
 import type { TUserPermissions } from "../enums";
+import type { TIssuePriorities } from "../issues";
 import type { TStateGroups } from "../state";
 import type { IUser, IUserLite } from "../users";
 import type { IWorkspace } from "../workspace";
@@ -257,6 +258,45 @@ export type TProjectIssuesSearchParams = {
   offset?: number;
   my_work_items?: boolean;
   type_ids?: string;
+  /** 「添加工作项」表格弹窗：true 时响应为 TWorkItemPickerResponse */
+  paginated?: boolean;
+  /** 配合 include_other_cycles：只排除已在这个迭代里的 */
+  cycle_id?: string;
+  include_other_cycles?: boolean;
+  /** 配合 include_other_releases：只排除已在这个发布里的 */
+  release_id?: string;
+  include_other_releases?: boolean;
+  /** 以下三项都是逗号分隔 */
+  state_groups?: string;
+  priorities?: string;
+  assignee_ids?: string;
+  order_by?: TWorkItemPickerOrderBy;
+  order?: "asc" | "desc";
+};
+
+export type TWorkItemPickerOrderBy = "priority" | "sequence_id" | "target_date" | "created_at" | "updated_at";
+
+export type TWorkItemPickerContainer = {
+  id: string;
+  name: string;
+  /** 后端直接给中文标签（迭代状态本来就存中文，发布状态由后端转成标签） */
+  status: string | null;
+};
+
+export type TWorkItemPickerRow = ISearchIssueResponse & {
+  state_id: string;
+  priority: TIssuePriorities;
+  target_date: string | null;
+  created_at: string;
+  updated_at: string;
+  assignee_ids: string[];
+  cycle: TWorkItemPickerContainer | null;
+  releases: TWorkItemPickerContainer[];
+};
+
+export type TWorkItemPickerResponse = {
+  results: TWorkItemPickerRow[];
+  total_count: number;
 };
 
 export interface ISearchIssueResponse {

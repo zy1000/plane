@@ -16,7 +16,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 // components
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -74,12 +74,13 @@ export const CycleEmptyState = observer(function CycleEmptyState() {
 
   return (
     <div className="relative h-full w-full overflow-y-auto">
-      <ExistingIssuesListModal
+      <AddWorkItemsModal
         workspaceSlug={workspaceSlug?.toString()}
         projectId={projectId?.toString()}
+        kind="cycle"
+        targetId={cycleId}
         isOpen={cycleIssuesListModal}
         handleClose={() => setCycleIssuesListModal(false)}
-        searchParams={{ cycle: true }}
         handleOnSubmit={handleAddIssuesToCycle}
       />
       <div className="grid h-full w-full place-items-center">

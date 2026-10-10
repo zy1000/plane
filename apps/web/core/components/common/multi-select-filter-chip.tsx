@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
@@ -13,9 +14,11 @@ export type TMultiFilterOption = {
   dim?: boolean;
   /** 子阶段缩进一级 */
   depth?: number;
+  /** 标签前的小图标（优先级、状态组、头像等） */
+  icon?: ReactNode;
 };
 
-const I18N = "review_tailoring.actions";
+const I18N = "multi_select_filter";
 
 /** 选项前的勾：画出来的，不是 input —— 整行是一个按钮，按钮里不能再套表单控件 */
 const CheckMark = ({ checked }: { checked: boolean }) => (
@@ -43,12 +46,15 @@ export const MultiSelectFilterChip = ({
   options,
   value,
   onChange,
+  searchable = true,
 }: {
   icon: LucideIcon;
   label: string;
   options: TMultiFilterOption[];
   value: string[];
   onChange: (value: string[]) => void;
+  /** 选项少（优先级、状态组）时不必搜索 */
+  searchable?: boolean;
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -62,10 +68,19 @@ export const MultiSelectFilterChip = ({
   const keyword = query.trim().toLowerCase();
   const visible = keyword ? options.filter((option) => option.label.toLowerCase().includes(keyword)) : options;
 
+  const handleEscape = (event: React.KeyboardEvent) => {
+    if (!isOpen || event.key !== "Escape") return;
+    // ModalCore 的 Dialog 在 window 上听 Esc，并跳过 defaultPrevented 的事件
+    event.preventDefault();
+    event.stopPropagation();
+    setIsOpen(false);
+  };
+
   const toggle = (id: string) => onChange(picked.has(id) ? value.filter((entry) => entry !== id) : [...value, id]);
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    // Esc 挂在外层：没有搜索框时焦点留在触发按钮上，挂在浮层上接不到，会一路冒到弹窗把整个弹窗关掉
+    <div ref={ref} className="relative shrink-0" onKeyDown={handleEscape}>
       <div
         className={cn(
           "flex h-8 items-center rounded-md border text-13 whitespace-nowrap transition-colors",
@@ -85,7 +100,7 @@ export const MultiSelectFilterChip = ({
           <Icon className={cn("size-3.5 shrink-0", active ? "text-accent-primary" : "text-placeholder")} />
           <span className={active ? "text-accent-primary" : "text-tertiary"}>{label}</span>
           <span className={cn("max-w-40 truncate font-medium", active ? "text-accent-primary" : "text-primary")}>
-            {active ? shown.join("、") : t(`${I18N}.add_axes_filter_all`)}
+            {active ? shown.join("、") : t(`${I18N}.all`)}
           </span>
           {!active && <ChevronDown className="size-3.5 shrink-0 text-placeholder" />}
         </button>
@@ -104,28 +119,25 @@ export const MultiSelectFilterChip = ({
       {isOpen && (
         <div
           className="absolute top-full left-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border border-subtle bg-surface-1 shadow-overlay-200"
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            setIsOpen(false);
-          }}
         >
-          <label className="flex h-9 items-center gap-2 border-b border-subtle px-3">
-            <Search className="size-3.5 shrink-0 text-placeholder" />
-            <input
-              // 点开就能直接打字筛选项
-              // eslint-disable-next-line jsx-a11y/no-autofocus
-              autoFocus
-              value={query}
-              aria-label={t(`${I18N}.add_axes_filter_search`, { label })}
-              placeholder={t(`${I18N}.add_axes_filter_search`, { label })}
-              onChange={(event) => setQuery(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
-            />
-          </label>
+          {searchable && (
+            <label className="flex h-9 items-center gap-2 border-b border-subtle px-3">
+              <Search className="size-3.5 shrink-0 text-placeholder" />
+              <input
+                // 点开就能直接打字筛选项
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+                value={query}
+                aria-label={t(`${I18N}.search`, { label })}
+                placeholder={t(`${I18N}.search`, { label })}
+                onChange={(event) => setQuery(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
+              />
+            </label>
+          )}
           <div className="max-h-72 overflow-y-auto p-1">
             {visible.length === 0 ? (
-              <p className="px-2 py-3 text-12 text-placeholder">{t(`${I18N}.add_axes_filter_no_match`)}</p>
+              <p className="px-2 py-3 text-12 text-placeholder">{t(`${I18N}.no_match`)}</p>
             ) : (
               visible.map((option) => (
                 <button
@@ -137,6 +149,7 @@ export const MultiSelectFilterChip = ({
                   onClick={() => toggle(option.id)}
                 >
                   <CheckMark checked={picked.has(option.id)} />
+                  {option.icon}
                   <span
                     className={cn("min-w-0 flex-1 truncate text-left", option.dim && "text-tertiary")}
                     style={option.depth ? { paddingLeft: option.depth * 12 } : undefined}
@@ -150,18 +163,16 @@ export const MultiSelectFilterChip = ({
             )}
           </div>
           <div className="flex items-center gap-3 border-t border-subtle bg-layer-1 px-3 py-2 text-12">
-            <span className="mr-auto text-tertiary tabular-nums">
-              {t(`${I18N}.add_axes_filter_selected`, { count: value.length })}
-            </span>
+            <span className="mr-auto text-tertiary tabular-nums">{t(`${I18N}.selected`, { count: value.length })}</span>
             <button
               type="button"
               className="font-medium text-accent-primary hover:underline"
               onClick={() => onChange([...new Set([...value, ...visible.map((option) => option.id)])])}
             >
-              {t(`${I18N}.add_axes_select_all`)}
+              {t(`${I18N}.select_all`)}
             </button>
             <button type="button" className="text-tertiary hover:text-secondary" onClick={() => onChange([])}>
-              {t(`${I18N}.add_axes_clear_all`)}
+              {t(`${I18N}.clear`)}
             </button>
           </div>
         </div>

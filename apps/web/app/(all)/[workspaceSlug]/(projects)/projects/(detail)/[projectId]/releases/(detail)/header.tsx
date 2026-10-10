@@ -39,7 +39,7 @@ import {
   getReleaseScopeSubTabStorageKey,
   useScopeSubTab,
 } from "@/components/common/use-scope-sub-tab";
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import {
   DisplayFiltersSelection,
   FiltersDropdown,
@@ -244,12 +244,13 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
         onClose={() => setAnalyticsModal(false)}
         projectDetails={currentProjectDetails}
       />
-      <ExistingIssuesListModal
+      <AddWorkItemsModal
         workspaceSlug={workspaceSlugValue}
         projectId={projectIdValue}
+        kind="release"
+        targetId={releaseId?.toString()}
         isOpen={openExistingIssueListModal}
         handleClose={() => setOpenExistingIssueListModal(false)}
-        searchParams={{ search: "", release: true }}
         handleOnSubmit={handleAddExistingIssuesToRelease}
       />
       <Header>

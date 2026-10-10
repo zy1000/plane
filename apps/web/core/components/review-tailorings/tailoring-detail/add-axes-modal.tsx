@@ -14,13 +14,13 @@ import type {
 import { type EReviewTailoringKind, type EStageReviewKind, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
 import { Avatar, Checkbox, EModalPosition, EModalWidth, Loader, ModalCore, ToggleSwitch } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import type { TMultiFilterOption } from "@/components/common/multi-select-filter-chip";
+import { MultiSelectFilterChip } from "@/components/common/multi-select-filter-chip";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
 import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useTailoringAxisOptions } from "@/hooks/store/use-tailoring-axis-options";
 import { ModalSearch, TailoringModalFooter, TailoringModalHeader } from "./modal-frame";
-import type { TMultiFilterOption } from "./multi-select-filter-chip";
-import { MultiSelectFilterChip } from "./multi-select-filter-chip";
 import { splitChildTitle } from "./tailoring-matrix-model";
 
 const I18N = "review_tailoring.actions";

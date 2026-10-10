@@ -20,7 +20,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse } from "@plane/types";
 import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
 // components
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -88,12 +88,13 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
 
   return (
     <div className="relative h-full w-full overflow-y-auto">
-      <ExistingIssuesListModal
+      <AddWorkItemsModal
         workspaceSlug={workspaceSlug?.toString()}
         projectId={projectId?.toString()}
+        kind="module"
+        targetId={moduleId}
         isOpen={moduleIssuesListModal}
         handleClose={() => setModuleIssuesListModal(false)}
-        searchParams={{ module: moduleId != undefined ? moduleId.toString() : "" }}
         handleOnSubmit={handleAddIssuesToModule}
       />
       <div className="grid h-full w-full place-items-center">

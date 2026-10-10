@@ -34,7 +34,7 @@ import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 import { Breadcrumbs, BreadcrumbNavigationSearchDropdown, CustomMenu, Header } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import {
@@ -171,12 +171,13 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
         moduleDetails={moduleDetails ?? undefined}
         projectDetails={currentProjectDetails}
       />
-      <ExistingIssuesListModal
+      <AddWorkItemsModal
         workspaceSlug={workspaceSlug?.toString()}
         projectId={projectId?.toString()}
+        kind="module"
+        targetId={moduleId?.toString()}
         isOpen={openExistingIssueListModal}
         handleClose={() => setOpenExistingIssueListModal(false)}
-        searchParams={{ module: moduleId != undefined ? moduleId.toString() : "" }}
         handleOnSubmit={handleAddExistingIssuesToModule}
       />
       <Header>

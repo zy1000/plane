@@ -18,7 +18,7 @@ import type { TIssue, ISearchIssueResponse, TIssueGroupByOptions } from "@plane/
 import { CustomMenu } from "@plane/ui";
 // components
 import { cn } from "@plane/utils";
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import { MultipleSelectGroupAction } from "@/components/core/multiple-select";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 // constants
@@ -71,7 +71,6 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
   const storeType = useIssueStoreType();
   // derived values
   const renderExistingIssueModal = moduleId || cycleId;
-  const existingIssuesListModalPayload = moduleId ? { module: moduleId.toString() } : { cycle: true };
   const isGroupSelectionEmpty = selectionHelpers.isGroupSelected(groupID) === "empty";
   // auth
   const canSelectIssues = canEditProperties(projectId?.toString()) && !selectionHelpers.isSelectionDisabled;
@@ -193,12 +192,13 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
         )}
 
         {renderExistingIssueModal && (
-          <ExistingIssuesListModal
+          <AddWorkItemsModal
             workspaceSlug={workspaceSlug?.toString()}
             projectId={projectId?.toString()}
+            kind={moduleId ? "module" : "cycle"}
+            targetId={(moduleId ?? cycleId)?.toString()}
             isOpen={openExistingIssueListModal}
             handleClose={() => setOpenExistingIssueListModal(false)}
-            searchParams={existingIssuesListModalPayload}
             handleOnSubmit={handleAddIssuesToView}
           />
         )}

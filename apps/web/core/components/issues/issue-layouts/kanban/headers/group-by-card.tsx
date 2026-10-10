@@ -17,7 +17,7 @@ import type { TIssue, ISearchIssueResponse, TIssueKanbanFilters, TIssueGroupByOp
 // ui
 import { CustomMenu } from "@plane/ui";
 // components
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 // constants
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
@@ -69,7 +69,6 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
   const { workspaceSlug, projectId, moduleId, cycleId } = useParams();
 
   const renderExistingIssueModal = moduleId || cycleId;
-  const ExistingIssuesListModalPayload = moduleId ? { module: moduleId.toString() } : { cycle: true };
 
   const handleAddIssuesToView = async (data: ISearchIssueResponse[]) => {
     if (!workspaceSlug || !projectId) return;
@@ -121,12 +120,13 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
       )}
 
       {renderExistingIssueModal && (
-        <ExistingIssuesListModal
+        <AddWorkItemsModal
           workspaceSlug={workspaceSlug?.toString()}
           projectId={projectId?.toString()}
+          kind={moduleId ? "module" : "cycle"}
+          targetId={(moduleId ?? cycleId)?.toString()}
           isOpen={openExistingIssueListModal}
           handleClose={() => setOpenExistingIssueListModal(false)}
-          searchParams={ExistingIssuesListModalPayload}
           handleOnSubmit={handleAddIssuesToView}
         />
       )}

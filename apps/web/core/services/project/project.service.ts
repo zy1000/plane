@@ -13,6 +13,7 @@ import type {
   TProjectAnalyticsCount,
   TProjectAnalyticsCountParams,
   TProjectIssuesSearchParams,
+  TWorkItemPickerResponse,
 } from "@plane/types";
 // helpers
 // plane web types
@@ -240,6 +241,21 @@ export class ProjectService extends APIService {
   ): Promise<ISearchIssueResponse[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/search-issues/`, {
       params,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 「添加工作项」表格弹窗：同一个搜索接口的分页模式，带总数 */
+  async workItemPickerSearch(
+    workspaceSlug: string,
+    projectId: string,
+    params: TProjectIssuesSearchParams
+  ): Promise<TWorkItemPickerResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/search-issues/`, {
+      params: { ...params, paginated: true },
     })
       .then((response) => response?.data)
       .catch((error) => {
