@@ -16,6 +16,7 @@ from plane.app.serializers.qa.report import (
     ReportModuleListSerializer,
     TestReportCreateUpdateSerializer,
     TestReportDetailSerializer,
+    build_report_plan_stats,
 )
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.views.qa.filters import TestReportFilter
@@ -256,6 +257,7 @@ class ReportView(BaseViewSet):
                 "pass_rate": dict(pass_rate),
                 "overall_pass_rate": overall_pass_rate,
                 "completion_rate": completion_rate,
+                **build_report_plan_stats(report),
             },
             status=status.HTTP_200_OK,
         )

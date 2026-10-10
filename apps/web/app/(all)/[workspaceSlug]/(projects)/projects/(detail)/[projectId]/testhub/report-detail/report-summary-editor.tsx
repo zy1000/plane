@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
+import { FileText, Pencil } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { Card } from "@plane/ui";
 import type { EditorRefApi } from "@plane/editor";
 import { EFileAssetType } from "@plane/types";
 import { RichTextEditor } from "@/components/editor/rich-text";
@@ -11,6 +11,7 @@ import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
+import { ReportCard, ReportCardHeader } from "./report-card";
 
 type Props = {
   workspaceId: string;
@@ -21,6 +22,9 @@ type Props = {
   canEdit?: boolean;
   onSave: (summaryHtml: string, summaryJson: unknown) => Promise<void>;
 };
+
+/** 页头的「编辑总结」按钮通过它打开编辑弹窗 */
+export type ReportSummaryEditorHandle = { open: () => void };
 
 const EMPTY_RICH_TEXT_HTML = "<p></p>";
 const MEDIA_CONTENT_REGEX =
@@ -41,15 +45,10 @@ const isEmptyRichText = (html?: string | null): boolean => {
   return text.length === 0;
 };
 
-export const ReportSummaryEditor = ({
-  workspaceId,
-  workspaceSlug,
-  projectId,
-  reportId,
-  summaryHtml,
-  canEdit = true,
-  onSave,
-}: Props) => {
+export const ReportSummaryEditor = forwardRef<ReportSummaryEditorHandle, Props>(function ReportSummaryEditor(
+  { workspaceId, workspaceSlug, projectId, reportId, summaryHtml, canEdit = true, onSave },
+  ref
+) {
   const { t } = useTranslation();
   const editorRef = useRef<EditorRefApi>(null);
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
@@ -96,13 +95,15 @@ export const ReportSummaryEditor = ({
     [duplicateEditorAsset, projectId, workspaceSlug]
   );
 
-  const handleOpen = () => {
+  const handleOpen = useCallback(() => {
     if (!canEdit) return;
     setHtml(normalizedSummaryHtml);
     setJson(null);
     setEditorKey((prev) => prev + 1);
     setIsOpen(true);
-  };
+  }, [canEdit, normalizedSummaryHtml]);
+
+  useImperativeHandle(ref, () => ({ open: handleOpen }), [handleOpen]);
 
   const handleClose = () => {
     if (saving) return;
@@ -126,14 +127,19 @@ export const ReportSummaryEditor = ({
 
   return (
     <>
-      <Card className="flex h-[min(48vh,30rem)] min-h-[16rem] flex-col p-4">
-        <div className="flex items-center justify-end">
-          <Button variant="link-neutral" className="text-xs" onClick={handleOpen} disabled={!canEdit}>
-            编辑
-          </Button>
-        </div>
+      <ReportCard>
+        <ReportCardHeader
+          title="报告总结"
+          right={
+            canEdit ? (
+              <Button variant="secondary" size="lg" prependIcon={<Pencil />} onClick={handleOpen}>
+                编辑
+              </Button>
+            ) : undefined
+          }
+        />
         {hasSummaryContent ? (
-          <div className="vertical-scrollbar mt-3 scrollbar-sm min-h-0 flex-1 overflow-y-auto">
+          <div className="px-5 pb-5 pt-3">
             <RichTextEditor
               id={`test-report-summary-preview-${reportId}`}
               editable={false}
@@ -143,15 +149,21 @@ export const ReportSummaryEditor = ({
               workspaceSlug={workspaceSlug}
               workspaceId={workspaceId}
               projectId={projectId}
-              containerClassName="!h-full !pb-0 !pl-0 text-sm leading-relaxed text-secondary"
+              containerClassName="!pb-0 !pl-0 text-sm leading-relaxed text-primary"
             />
           </div>
         ) : (
-          <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
-            {canEdit ? "暂无报告总结，点击右上角编辑添加。" : "暂无报告总结"}
+          <div className="flex items-center gap-3.5 px-5 pb-5 pt-4 text-13 text-tertiary">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-layer-1 text-placeholder">
+              <FileText className="size-[18px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <b className="block font-medium text-secondary">还没有总结</b>
+              {canEdit ? "点右上角「编辑」写几句结论、风险和遗留问题，导出 PDF 时会一并带上。" : "报告创建人还没有填写总结。"}
+            </div>
           </div>
         )}
-      </Card>
+      </ReportCard>
 
       <Transition.Root show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-[100]" onClose={handleClose}>
@@ -232,4 +244,4 @@ export const ReportSummaryEditor = ({
       </Transition.Root>
     </>
   );
-};
+});

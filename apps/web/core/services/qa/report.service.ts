@@ -63,6 +63,22 @@ export type TReportDetail = {
   updated_at: string;
 };
 
+/** 详情页「关联测试计划」每个计划自己的统计 */
+export type TReportPlanStat = {
+  id: string;
+  name: string;
+  state: string;
+  threshold: number | null;
+  begin_time: string | null;
+  end_time: string | null;
+  case_count: number;
+  success_count: number;
+  assignee_count: number;
+  pass_rate: TReportPassRate;
+  overall_pass_rate: number;
+  completion_rate: number;
+};
+
 export type TReportAnalysis = {
   report_id: string;
   plan_count: number;
@@ -71,6 +87,13 @@ export type TReportAnalysis = {
   pass_rate: TReportPassRate;
   overall_pass_rate: number;
   completion_rate: number;
+  plans: TReportPlanStat[];
+  not_started_plan_count: number;
+  /** 同一用例进多个计划只算一次 */
+  distinct_case_count: number;
+  /** 报告内用例关联的缺陷（去重） */
+  defect_count: number;
+  high_priority_defect_count: number;
 };
 
 export type TReportCaseRow = {

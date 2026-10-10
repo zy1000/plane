@@ -3,7 +3,7 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from plane.app.serializers import UserLiteSerializer
-from plane.db.models import TestReport, TestPlan, PlanCase, ReportModule
+from plane.db.models import Issue, TestReport, TestPlan, PlanCase, ReportModule
 
 
 class ReportModuleCreateUpdateSerializer(ModelSerializer):
@@ -172,6 +172,82 @@ def build_report_stats_map(report_ids):
             if row["result"] == PlanCase.Result.SUCCESS:
                 entry["success_count"] += row["count"]
     return stats
+
+
+def _rate(numerator, denominator):
+    return round((numerator / denominator) * 100, 2) if denominator else 0.0
+
+
+def build_report_plan_stats(report):
+    """详情页「执行概览 + 关联计划」用的扩展统计。
+
+    返回 {plans: [每个计划的五态计数 / 通过率 / 完成率 / 执行人数], not_started_plan_count,
+    distinct_case_count, defect_count, high_priority_defect_count}。
+    用例数与 build_report_stats_map 同口径（同一用例进两个计划算两条），去重数单独给。
+    """
+    plans = list(
+        report.plans.filter(deleted_at__isnull=True)
+        .order_by("created_at")
+        .values("id", "name", "state", "threshold", "begin_time", "end_time")
+    )
+    plan_ids = [p["id"] for p in plans]
+    empty_pass_rate = {label: 0 for label in PlanCase.Result.values}
+    per_plan = {
+        pid: {"case_count": 0, "success_count": 0, "pass_rate": dict(empty_pass_rate), "assignee_count": 0}
+        for pid in plan_ids
+    }
+    base_qs = PlanCase.objects.filter(plan_id__in=plan_ids, deleted_at__isnull=True)
+    if plan_ids:
+        for row in base_qs.values("plan_id", "result").annotate(count=Count("id")):
+            entry = per_plan[row["plan_id"]]
+            entry["case_count"] += row["count"]
+            if row["result"] in entry["pass_rate"]:
+                entry["pass_rate"][row["result"]] += row["count"]
+            if row["result"] == PlanCase.Result.SUCCESS:
+                entry["success_count"] += row["count"]
+        for row in (
+            base_qs.filter(assignee__isnull=False)
+            .values("plan_id")
+            .annotate(count=Count("assignee_id", distinct=True))
+        ):
+            per_plan[row["plan_id"]]["assignee_count"] = row["count"]
+
+    plan_rows = []
+    for plan in plans:
+        entry = per_plan[plan["id"]]
+        not_start = entry["pass_rate"].get(PlanCase.Result.NOT_START, 0)
+        plan_rows.append(
+            {
+                "id": str(plan["id"]),
+                "name": plan["name"],
+                "state": plan["state"],
+                "threshold": plan["threshold"],
+                "begin_time": plan["begin_time"],
+                "end_time": plan["end_time"],
+                "case_count": entry["case_count"],
+                "success_count": entry["success_count"],
+                "assignee_count": entry["assignee_count"],
+                "pass_rate": entry["pass_rate"],
+                "overall_pass_rate": _rate(entry["success_count"], entry["case_count"]),
+                "completion_rate": _rate(entry["case_count"] - not_start, entry["case_count"]),
+            }
+        )
+
+    # 缺陷挂在用例上（TestCase.issues），按报告内所有用例去重
+    defects = Issue.objects.filter(
+        cases__plan_cases__plan_id__in=plan_ids,
+        cases__plan_cases__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    )
+    return {
+        "plans": plan_rows,
+        "not_started_plan_count": sum(1 for p in plans if p["state"] == TestPlan.State.NOT_START),
+        "distinct_case_count": base_qs.values("case_id").distinct().count() if plan_ids else 0,
+        "defect_count": defects.distinct().count() if plan_ids else 0,
+        "high_priority_defect_count": (
+            defects.filter(priority__in=["urgent", "high"]).distinct().count() if plan_ids else 0
+        ),
+    }
 
 
 class TestReportListSerializer(ModelSerializer):

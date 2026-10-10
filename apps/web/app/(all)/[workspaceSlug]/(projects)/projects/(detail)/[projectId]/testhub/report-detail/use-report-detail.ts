@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ReportService,
   type TReportDetail,
@@ -13,6 +13,7 @@ const reportService = new ReportService();
 export type TReportDetailState = {
   detail: TReportDetail | null;
   analysis: TReportAnalysis | null;
+  analysisFetchedAt: Date | null;
   cases: TReportCaseRow[];
   caseCount: number;
   loading: boolean;
@@ -31,7 +32,11 @@ export const useReportDetail = (
 ): TReportDetailState => {
   const [detail, setDetail] = useState<TReportDetail | null>(null);
   const [analysis, setAnalysis] = useState<TReportAnalysis | null>(null);
+  /** 统计是实时算的，页面上「数据截至」显示的是这次拉到 analysis 的时刻 */
+  const [analysisFetchedAt, setAnalysisFetchedAt] = useState<Date | null>(null);
   const [cases, setCases] = useState<TReportCaseRow[]>([]);
+  // 明细请求序号：筛选 / 搜索连续触发时只认最后一次的响应
+  const caseRequestSeq = useRef(0);
   const [caseCount, setCaseCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,7 @@ export const useReportDetail = (
     try {
       const data = await reportService.getReportAnalysis(workspaceSlug, projectId, reportId);
       setAnalysis(data);
+      setAnalysisFetchedAt(new Date());
     } catch {
       setError("获取报告分析数据失败");
     }
@@ -59,6 +65,7 @@ export const useReportDetail = (
   const fetchCases = useCallback(
     async (page: number, pageSize: number, opts?: { name?: string; result?: string }) => {
       if (!workspaceSlug || !projectId || !reportId) return;
+      const seq = ++caseRequestSeq.current;
       try {
         const res = await reportService.getReportCaseList(workspaceSlug, projectId, {
           report_id: reportId,
@@ -67,9 +74,11 @@ export const useReportDetail = (
           name__icontains: opts?.name,
           result: opts?.result,
         });
+        if (seq !== caseRequestSeq.current) return;
         setCases(res.data);
         setCaseCount(res.count);
       } catch {
+        if (seq !== caseRequestSeq.current) return;
         setError("获取执行明细失败");
       }
     },
@@ -122,6 +131,7 @@ export const useReportDetail = (
   return {
     detail,
     analysis,
+    analysisFetchedAt,
     cases,
     caseCount,
     loading,
