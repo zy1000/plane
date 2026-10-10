@@ -6,6 +6,7 @@ import type { EStageReviewKind, TReviewTailoringItem, TReviewTailoringProduct } 
 import { STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
 import { Checkbox, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import { PLAIN_ACTION, PLAIN_ACTION_DANGER, PLAIN_TABLE, PLAIN_TD, PLAIN_TH } from "../plain-table";
 import { CellReasonModal } from "./cell-reason-modal";
 import { ResultSelect, ResultText } from "./result-select";
@@ -397,8 +398,8 @@ export const TailoringMatrix = ({
                       </span>
                     </span>
                   </td>
-                  <td className={cn(PLAIN_TD, "whitespace-nowrap text-secondary", rowBg)}>
-                    {t(`workspace_templates.reviews.kind.${row.kind}`)}
+                  <td className={cn(PLAIN_TD, "whitespace-nowrap", rowBg)}>
+                    <StageReviewKindBadge kind={row.kind as EStageReviewKind} />
                   </td>
 
                   {products.map((product) => {

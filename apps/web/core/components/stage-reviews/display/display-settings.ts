@@ -3,8 +3,9 @@ import { useLocalStorage } from "@plane/hooks";
 import type { TStageReviewScopeKind } from "../scope";
 import { STAGE_REVIEW_SCOPE_HIDDEN_DIMENSION } from "../scope";
 
-/** 「显示属性」里能开关的列，顺序即表格列顺序。`product` 只在项目页出现，`project` 只在产品页出现 */
+/** 「显示属性」里能开关的列，顺序即表格列顺序（标题列固定在最前，不在这里）。`product` 只在项目页出现，`project` 只在产品页出现 */
 export const STAGE_REVIEW_DISPLAY_PROPERTIES = [
+  "kind",
   "product",
   "project",
   "status",
@@ -14,7 +15,6 @@ export const STAGE_REVIEW_DISPLAY_PROPERTIES = [
   "dates",
   "attachment_count",
   "comment_count",
-  "kind",
   "tailoring",
   "updated_at",
 ] as const;
@@ -77,9 +77,8 @@ export const DEFAULT_STAGE_REVIEW_DISPLAY: TStageReviewDisplaySettings = {
     dates: true,
     attachment_count: false,
     comment_count: false,
-    kind: false,
-    // 同一产品的同一评审在多张裁剪表里都保留时会各生成一条，标题完全一样，默认开着这列才分得开
-    tailoring: true,
+    kind: true,
+    tailoring: false,
     updated_at: false,
   },
   groupBy: DEFAULT_STAGE_REVIEW_GROUP_BY.project,
@@ -109,7 +108,8 @@ export type TStageReviewDisplayPatch = Partial<Omit<TStageReviewDisplaySettings,
  *
  * 键带版本号：v1 时分组默认「无」且整份设置一起存，改成默认按研发阶段分组后，旧值会把
  * 默认顶掉，所以换 v2 让所有人回到默认；项目页默认改成按产品分组时同理换 v3；「来源裁剪表」列
- * 默认打开时换 v4；「审核人」列默认打开时换 v5。**改默认值时同理要升版本。**
+ * 默认打开时换 v4；「审核人」列默认打开时换 v5；「来源裁剪表」改默认关、「类型」改默认开时换 v6。
+ * **改默认值时同理要升版本。**
  */
 export const useStageReviewDisplay = (
   storageScope: string,
@@ -117,7 +117,7 @@ export const useStageReviewDisplay = (
   userId: string | undefined
 ) => {
   const { storedValue, setValue } = useLocalStorage<TStageReviewDisplaySettings | null>(
-    `stage-reviews-display:v5:${storageScope}:${userId ?? "anonymous"}`,
+    `stage-reviews-display:v6:${storageScope}:${userId ?? "anonymous"}`,
     null
   );
 

@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@plane/propel/table";
-import type { TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
+import type { EStageReviewKind, TReviewTailoringItem, TReviewTailoringProduct } from "@plane/types";
 import { cn, renderFormattedDateTime } from "@plane/utils";
 import { ResizableTableHead, useColumnWidths } from "@/components/common/resizable-table-head";
 import { TableSelectCheckbox } from "@/components/common/table-select-checkbox";
+import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import { CellReasonModal } from "./cell-reason-modal";
 import { ResultSelect, ResultText } from "./result-select";
 import { getCellLockReason } from "./tailoring-matrix-model";
@@ -218,7 +219,9 @@ export const TailoringItemsTable = ({
                       )}
                     </span>
                   </TableCell>
-                  <TableCell className={metaClass}>{t(`workspace_templates.reviews.kind.${item.kind}`)}</TableCell>
+                  <TableCell className={metaClass}>
+                    <StageReviewKindBadge kind={item.kind as EStageReviewKind} />
+                  </TableCell>
                   <TableCell
                     className={cn(cellClass, "truncate font-mono tabular-nums text-secondary")}
                     title={item.standard_code}

@@ -584,7 +584,7 @@ const DetailBody = (props: DetailBodyProps) => {
           ) : (
             <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{shownTitle}</h2>
           )}
-          <StageReviewKindBadge kind={detail.kind} className="shrink-0 rounded-md border-0 px-2 text-12" />
+          <StageReviewKindBadge kind={detail.kind} className="shrink-0 rounded-md px-2 text-12" />
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-3">

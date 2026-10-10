@@ -15,6 +15,7 @@ import { cn, isEmptyHtmlString } from "@plane/utils";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
+import { StageReviewKindBadge } from "./stage-review-kind-badge";
 
 export type TStageReviewFormValue = {
   kind: EStageReviewKind;
@@ -282,15 +283,14 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
                 type="button"
                 disabled={isSubmitting || isEdit}
                 onClick={() => handleKindChange(kind)}
+                // 选项里直接放列表里那枚类型徽章，颜色与各处一致；选中靠描边区分
                 className={cn(
-                  "h-8 flex-1 rounded-md border text-12 transition-colors",
-                  value.kind === kind
-                    ? "border-accent-strong bg-accent-primary/10 font-medium text-accent-primary"
-                    : "border-subtle text-secondary hover:bg-layer-1-hover",
+                  "flex h-8 flex-1 items-center justify-center rounded-md border transition-colors",
+                  value.kind === kind ? "border-accent-strong" : "border-subtle hover:bg-layer-1-hover",
                   (isSubmitting || isEdit) && "cursor-not-allowed opacity-60"
                 )}
               >
-                {t(`${I18N}.kind.${kind}`)}
+                <StageReviewKindBadge kind={kind} />
               </button>
             ))}
           </div>

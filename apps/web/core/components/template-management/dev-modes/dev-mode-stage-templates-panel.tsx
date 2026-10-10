@@ -2,14 +2,13 @@ import { Link } from "react-router";
 import { ExternalLink, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TDevModeStage } from "@plane/types";
+import type { EStageReviewKind, TDevModeStage } from "@plane/types";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TDevModeTemplateTreeNode } from "@/hooks/store/use-dev-mode-detail";
+import { StageReviewKindBadge } from "../reviews/stage-review-kind-badge";
 import { reviewTemplatesPath } from "./routes";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
-
-const I18N_REVIEWS = "workspace_templates.reviews";
 
 /**
  * 阶段勾选面板：该阶段类型下的评审树（评审 → 活动两层），父节点全选 / 半选。
@@ -116,9 +115,7 @@ export function DevModeStageTemplatesPanel({
                   />
                   <span className="min-w-0 flex-1 truncate">{node.title}</span>
                   {children.length > 0 && (
-                    <span className="shrink-0 rounded bg-layer-1 px-1.5 py-px text-11 font-medium text-tertiary">
-                      {t(`${I18N_REVIEWS}.kind.${node.kind}`)}
-                    </span>
+                    <StageReviewKindBadge kind={node.kind as EStageReviewKind} className="shrink-0" />
                   )}
                   <span className="shrink-0 text-11 font-normal text-tertiary">{node.auditor_role || "—"}</span>
                 </label>

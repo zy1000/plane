@@ -12,6 +12,7 @@ import type {
 import { type EReviewTailoringKind, type EStageReviewKind, STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { StageReviewKindBadge } from "@/components/template-management/reviews/stage-review-kind-badge";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useTailoringAxisOptions } from "@/hooks/store/use-tailoring-axis-options";
 import { PLAIN_TD, PLAIN_TH } from "../plain-table";
@@ -358,8 +359,8 @@ export const AddAxesModal = observer(function AddAxesModal({
             )}
           </span>
         </span>
-        <span className={cn(cell, !blocked && "text-secondary")}>
-          {t(`workspace_templates.reviews.kind.${row.kind}`)}
+        <span className={cell}>
+          <StageReviewKindBadge kind={row.kind as EStageReviewKind} className={cn(blocked && "opacity-60")} />
         </span>
         <span className={cell}>{blocked ? inMatrixLabel : <span className="text-placeholder">—</span>}</span>
       </label>
