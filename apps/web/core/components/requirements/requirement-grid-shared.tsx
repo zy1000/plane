@@ -389,7 +389,7 @@ export const LeafValue = ({
  * - 标题列 sticky 左固定，横滚时始终知道自己在看哪一行
  * - 行高 44px（h-11），表头等高
  * - 只留竖线；横线由单元格自己的 border-b 给
- * - 表头 = 图标 + 列名，text-13 text-secondary（正文是 text-primary，拉开层级）
+ * - 表头 = 图标 + 列名，text-12 text-tertiary（与项目里其他列表的表头同一档，正文 text-13 拉开层级）
  * --------------------------------------------------------------------------- */
 
 /** 属性列宽。与 spreadsheet-table.tsx 的 PROPERTY_COLUMN_WIDTH 对齐 */
@@ -564,12 +564,12 @@ export const RequirementGridColumnResizer = ({
  * 单列 rowSpan=2 会被一起拉高，列名漂在一格空白中间。
  */
 const HEADER_CELL_BASE =
-  "group/header relative h-11 border-r border-b border-strong bg-layer-1 text-left align-middle text-13 font-medium";
+  "group/header relative h-11 border-r border-b border-strong bg-layer-1 text-left align-middle text-12 font-medium";
 export const REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS = HEADER_CELL_BASE;
 export const REQUIREMENT_GRID_HEADER_CELL_CLASS = `${HEADER_CELL_BASE} px-page-x`;
 /** 表单分组名那一行：略高于细条，字号与叶子列对齐，行高仍靠 leading-none 压住。 */
 export const REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS =
-  "group/header relative h-7 border-r border-b border-strong bg-layer-1 text-center align-middle text-13 font-medium";
+  "group/header relative h-7 border-r border-b border-strong bg-layer-1 text-center align-middle text-12 font-medium";
 /**
  * 二级表头的叶子行：与分组条同高（h-7），有二级表头时盖掉叶子格的 h-11。
  * rowSpan 格高度改由两行相加，列名落在这条带里。
@@ -661,8 +661,8 @@ export const RequirementGridHeaderLabel = ({
   label: string;
   isRequired?: boolean;
 }) => (
-  <span className="flex w-full min-w-0 items-center gap-1.5 text-13 font-medium text-secondary">
-    {Icon && <Icon className="size-4 shrink-0 text-placeholder" />}
+  <span className="flex w-full min-w-0 items-center gap-1.5 text-12 font-medium text-tertiary">
+    {Icon && <Icon className="size-3.5 shrink-0 text-placeholder" />}
     <span className="truncate">{label}</span>
     {isRequired && <span className="shrink-0 text-danger-primary">*</span>}
   </span>
@@ -840,7 +840,7 @@ export const RequirementGridHeader = ({
         colSpan={getFormColumnCount(field, showActionGutter, showFormRowNumber)}
         className={cn(REQUIREMENT_GRID_HEADER_GROUP_CELL_CLASS, "px-page-x")}
       >
-        <span className="truncate text-13 font-medium leading-none text-secondary">{field.name}</span>
+        <span className="truncate text-12 font-medium leading-none text-tertiary">{field.name}</span>
       </th>
     ) : (
       <th
@@ -858,7 +858,7 @@ export const RequirementGridHeader = ({
     );
 
   return (
-    <thead className="sticky top-0 z-[12] text-13 font-medium">
+    <thead className="sticky top-0 z-[12] text-12 font-medium">
       <tr>
         {resolvedLeadingHeaders.map((header) => (
           <th
@@ -900,7 +900,7 @@ export const RequirementGridHeader = ({
                     className={cn(
                       REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
                       HEADER_FORM_LEAF_ROW_CLASS,
-                      "px-1 text-center font-medium text-secondary"
+                      "px-1 text-center font-medium text-tertiary"
                     )}
                   >
                     {t("requirement_grid.data.row_number")}

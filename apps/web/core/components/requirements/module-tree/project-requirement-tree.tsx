@@ -95,11 +95,11 @@ const TreeRow = ({
       </span>
       <span className={cn("min-w-0 flex-1 truncate text-sm", !isMuted && "font-medium")}>{label}</span>
       {count !== undefined && (
+        // 不走 cn：它会把 text-primary / text-placeholder 当成和 text-xs、text-center 同组，把字号吞掉
         <span
-          className={cn(
-            "min-w-[24px] shrink-0 text-center text-xs tabular-nums",
+          className={`min-w-[24px] shrink-0 text-center text-xs tabular-nums ${
             isMuted ? "text-placeholder" : "font-medium text-primary"
-          )}
+          }`}
         >
           {count}
         </span>

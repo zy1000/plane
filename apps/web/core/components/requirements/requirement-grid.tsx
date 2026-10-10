@@ -874,10 +874,10 @@ export const RequirementGrid = observer(
                               onClick={() => onOpenDetail(requirement.id)}
                               className="min-w-0 truncate text-left hover:text-accent-primary"
                             >
-                              <RequirementIdentifier displayId={requirement.display_id} />
+                              <RequirementIdentifier displayId={requirement.display_id} size="md" />
                             </button>
                           ) : (
-                            <RequirementIdentifier displayId={requirement.display_id} />
+                            <RequirementIdentifier displayId={requirement.display_id} size="md" />
                           )
                         ) : (
                           <span className="text-placeholder">—</span>
@@ -1014,7 +1014,7 @@ export const RequirementGrid = observer(
                 {isFirstRow && showSourceColumn && (
                   <td rowSpan={totalRows} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}>
                     {requirement.source_display_id ? (
-                      <RequirementIdentifier displayId={requirement.source_display_id} />
+                      <RequirementIdentifier displayId={requirement.source_display_id} size="md" />
                     ) : (
                       <span className="text-placeholder">—</span>
                     )}

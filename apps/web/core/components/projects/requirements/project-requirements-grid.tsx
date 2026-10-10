@@ -346,7 +346,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
             onClick={() => onOpenDetail(requirement.id)}
             className="min-w-0 truncate text-left hover:text-accent-primary"
           >
-            <RequirementIdentifier displayId={requirement.display_id} />
+            <RequirementIdentifier displayId={requirement.display_id} size="md" />
           </button>
         ) : (
           <span className="text-placeholder">—</span>
@@ -564,7 +564,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                 <col key={key} style={{ width: getWidth(key, defaultColumnWidth(key)) }} />
               ))}
             </colgroup>
-            <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
+            <thead className="sticky top-0 z-[12] border-b border-subtle text-12 font-medium">
               <tr>
                 {isDisplayIdVisible && (
                   <th
@@ -788,7 +788,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                           <button
                             type="button"
                             onClick={() => onOpenDetail(requirement.id)}
-                            className="min-w-0 flex-1 truncate text-left hover:text-accent-primary"
+                            className="min-w-0 flex-1 truncate text-left font-medium hover:text-accent-primary"
                           >
                             <BuiltinCellValue columnKey="title" values={requirement} />
                           </button>

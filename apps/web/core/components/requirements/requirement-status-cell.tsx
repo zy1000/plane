@@ -102,7 +102,7 @@ export const RequirementStatusCell = ({
     ) : (
       <span
         className={cn(
-          "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-11 font-medium",
+          "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-12 font-medium",
           style.pill,
           className
         )}

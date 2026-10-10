@@ -665,7 +665,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               <col style={{ width: getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
             )}
           </colgroup>
-          <thead className="sticky top-0 z-[12] border-b border-subtle text-13 font-medium">
+          <thead className="sticky top-0 z-[12] border-b border-subtle text-12 font-medium">
             <tr>
               {isDisplayIdVisible && (
                 <th
@@ -882,7 +882,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                             onClick={() => onOpenDetail(requirement.id)}
                             className="min-w-0 flex-1 truncate text-left hover:text-accent-primary"
                           >
-                            <RequirementIdentifier displayId={requirement.display_id} />
+                            <RequirementIdentifier displayId={requirement.display_id} size="md" />
                           </button>
                         ) : (
                           <span className="min-w-0 flex-1 text-placeholder">—</span>
@@ -974,7 +974,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                         <button
                           type="button"
                           onClick={() => onOpenDetail(requirement.id)}
-                          className="min-w-0 flex-1 truncate text-left hover:text-accent-primary"
+                          className="min-w-0 flex-1 truncate text-left font-medium hover:text-accent-primary"
                         >
                           <BuiltinCellValue columnKey="title" values={requirement} />
                         </button>
@@ -1025,7 +1025,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                   {isSourceDisplayIdVisible && (
                     <td className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
                       {requirement.source_display_id ? (
-                        <RequirementIdentifier displayId={requirement.source_display_id} />
+                        <RequirementIdentifier displayId={requirement.source_display_id} size="md" />
                       ) : (
                         <span className="text-placeholder">—</span>
                       )}
