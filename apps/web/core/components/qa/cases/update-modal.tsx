@@ -914,8 +914,9 @@ function UpdateModalBody({
   }
 
   // 内容区域：左右布局（抽屉与独立页共用同一结构）
+  // case-drawer-body：编辑器正文收到 14px，与执行页右栏只读正文同档，规则在 globals.css
   const detailContent = (
-        <div className="flex min-h-0 flex-1">
+        <div className="case-drawer-body flex min-h-0 flex-1">
           {/* 左侧：2/3宽度 */}
           <div className="h-full w-[73%] overflow-y-auto px-6 py-4">
             <TitleInput

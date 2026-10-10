@@ -1377,7 +1377,7 @@ export default function TestExecutionPage() {
                                   aria-label="前置条件"
                                   placeholder="暂无内容"
                                   editable={false}
-                                  readonlyTextClassName="text-sm leading-5 text-primary"
+                                  readonlyTextClassName="text-sm leading-6 text-primary"
                                 />
                               </div>
 
@@ -1397,7 +1397,7 @@ export default function TestExecutionPage() {
                                       aria-label="文本描述"
                                       placeholder="暂无内容"
                                       editable={false}
-                                      readonlyTextClassName="text-sm leading-5 text-primary"
+                                      readonlyTextClassName="text-sm leading-6 text-primary"
                                     />
                                   </div>
                                   <div>
@@ -1411,7 +1411,7 @@ export default function TestExecutionPage() {
                                       aria-label="预期结果"
                                       placeholder="暂无内容"
                                       editable={false}
-                                      readonlyTextClassName="text-sm leading-5 text-primary"
+                                      readonlyTextClassName="text-sm leading-6 text-primary"
                                     />
                                   </div>
                                 </>
@@ -1444,7 +1444,7 @@ export default function TestExecutionPage() {
                                   aria-label="备注"
                                   placeholder="暂无内容"
                                   editable={false}
-                                  readonlyTextClassName="text-sm leading-5 text-primary"
+                                  readonlyTextClassName="text-sm leading-6 text-primary"
                                 />
                               </div>
 
