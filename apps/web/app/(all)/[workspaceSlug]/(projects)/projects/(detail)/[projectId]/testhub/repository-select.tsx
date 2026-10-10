@@ -17,6 +17,8 @@ type RepositorySelectProps = {
   buttonClassName?: string;
   labelClassName?: string;
   hideChevron?: boolean;
+  /** 按钮文字前的小图标（树头用） */
+  leftIcon?: React.ReactNode;
   defaultRepositoryId?: string | null;
   onRepositoryChange?: (repository: { id: string | null; name?: string | null }) => void;
 };
@@ -28,6 +30,7 @@ export const RepositorySelect: React.FC<RepositorySelectProps> = ({
   buttonClassName,
   labelClassName,
   hideChevron = false,
+  leftIcon,
   defaultRepositoryId = null,
   onRepositoryChange,
 }) => {
@@ -105,6 +108,7 @@ export const RepositorySelect: React.FC<RepositorySelectProps> = ({
           )}
           onClick={() => setIsOpen((p) => !p)}
         >
+          {leftIcon && <span className="flex shrink-0 items-center">{leftIcon}</span>}
           <span className={cn("truncate max-w-[180px]", labelClassName)}>{selectedName}</span>
           {!hideChevron && <ChevronDown className="h-3 w-3 flex-shrink-0" />}
         </button>

@@ -5,9 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { PageHead } from "@/components/core/page-title";
-import { Button, Col, Dropdown, Input, Modal, Pagination, Row, Tag, Tree } from "antd";
-import { AppstoreOutlined, EllipsisOutlined, PlusOutlined, ShareAltOutlined } from "@ant-design/icons";
-import type { TreeProps } from "antd";
+import { Col, Dropdown, Modal, Pagination, Row, Tag } from "antd";
+import { ShareAltOutlined } from "@ant-design/icons";
+import { Copy, FolderInput, FolderPlus, Pencil, Trash2 } from "lucide-react";
+import {
+  MODULE_TREE_ROOT_KEY,
+  ModuleTreePanel,
+  type TModuleTreeEditing,
+  type TModuleTreeMenuItem,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import { CaseService } from "@/services/qa/case.service";
 import { CreateCaseModal } from "./create-modal";
 import { ImportCaseModal } from "./import-modal";
@@ -23,7 +30,6 @@ import { CaseModuleService } from "@/services/qa";
 import UpdateModal from "./update-modal";
 import { useQueryParams } from "@/hooks/use-query-params";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
-import { FolderOpenDot } from "lucide-react";
 import {
   formatDateTime,
   globalEnums,
@@ -98,6 +104,14 @@ type TCasesFilters = {
 } & TCasesFilterQueryParams;
 
 const EMPTY_CASE_FILTER_EXPRESSION: TCaseFilterExpression = {};
+const treeNodesFind = (nodes: TModuleTreeNode[], key: string): TModuleTreeNode | undefined => {
+  for (const node of nodes) {
+    if (node.key === key) return node;
+    const found = treeNodesFind(node.children ?? [], key);
+    if (found) return found;
+  }
+  return undefined;
+};
 const QA_CASE_CREATE_PERMISSION_KEY = "qa.case.create" as const;
 const QA_CASE_EDIT_PERMISSION_KEY = "qa.case.edit" as const;
 const QA_CASE_DELETE_PERMISSION_KEY = "qa.case.delete" as const;
@@ -105,54 +119,18 @@ const QA_CASE_IMPORT_EXPORT_PERMISSION_KEY = "qa.case.import_export" as const;
 // 删除走 DELETE ?id__in=，跨页全选上千条时分批发，避免 URL 超长
 const DELETE_BATCH_SIZE = 100;
 
-// 独立的输入组件，避免 Tree 渲染导致输入法中断
-const ModuleInput = ({
-  defaultValue = "",
-  placeholder = "",
-  onCommit,
-}: {
-  defaultValue?: string;
-  placeholder?: string;
-  onCommit: (value: string) => void;
-}) => {
-  const [value, setValue] = useState(defaultValue);
-  const committedRef = useRef(false);
-
-  const commit = () => {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onCommit(value);
-  };
-
-  return (
-    <div className="w-full" onClick={(e) => e.stopPropagation()}>
-      <Input
-        size="small"
-        autoFocus
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        onPressEnter={commit}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-};
-
 export type TRepositoryCasesViewProps = {
   workspaceSlug: string;
   projectId?: string; // 本次抽取后项目页必传；可选是为后续模板模式预留
   repositoryId: string | null; // 页面在 URL/sessionStorage 解析完成前可能为 null，组件按原页面行为处理空态
   repositoryName?: string;
   mode?: "project" | "template"; // 本次只实现 "project"（默认），类型先预留
-  headerLeft?: ReactNode; // 工具栏左侧的页面级内容（面包屑 + 库切换器），由壳层传入
+  treeHeader?: ReactNode; // 树头左侧内容（项目页放用例库切换器），由壳层传入
   toolbarPortalEl?: HTMLElement | null; // 传入后搜索/筛选/操作按钮挂到页头右侧
 };
 
 export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
-  const { workspaceSlug, repositoryId, repositoryName, headerLeft, toolbarPortalEl, mode = "project" } = props;
+  const { workspaceSlug, repositoryId, repositoryName, treeHeader, toolbarPortalEl, mode = "project" } = props;
   // 模板模式：workspace 级模板库，无项目语境（权限=工作区成员，走 template-case 接口）
   const isTemplateMode = mode === "template";
   // project 模式必传；模板模式恒为 undefined
@@ -241,9 +219,8 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     caseTypeEnums,
     casePriorityEnums,
   });
-  // 新增：创建子模块的临时状态
-  const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
-  const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  // 树的行内编辑态（新建 / 重命名），同一时间只有一个
+  const [editing, setEditing] = useState<TModuleTreeEditing>(null);
   const [copyingModule, setCopyingModule] = useState<{ id: string; name: string } | null>(null);
   const [movingModule, setMovingModule] = useState<{ id: string; name: string } | null>(null);
 
@@ -275,41 +252,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     lastSelectionContextKeyRef.current = selectionContextKey;
   }, [selectionContextKey]);
 
-  const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
-  const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
-  const onExpand: TreeProps["onExpand"] = (keys) => {
-    setExpandedKeys(keys as string[]);
-    setAutoExpandParent(false);
-  };
-  const [searchModule, setSearchModule] = useState<string>("");
-
-  const [leftWidth, setLeftWidth] = useState<number>(250);
-  const isDraggingRef = useRef<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const onMouseDownResize = (e: any) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    window.addEventListener("mousemove", onMouseMoveResize);
-    window.addEventListener("mouseup", onMouseUpResize);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-  };
-  const onMouseMoveResize = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const delta = e.clientX - startXRef.current;
-    const next = Math.min(300, Math.max(200, startWidthRef.current + delta));
-    setLeftWidth(next);
-  };
-  const onMouseUpResize = () => {
-    isDraggingRef.current = false;
-    window.removeEventListener("mousemove", onMouseMoveResize);
-    window.removeEventListener("mouseup", onMouseUpResize);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  };
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
   const batchUpdateModuleCounts = (modules: any[], countsMap: Record<string, number>): any[] => {
     return modules.map((m) => {
@@ -377,49 +320,34 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     }
   };
 
-  // 新增：添加行为 - 在当前节点下插入临时输入框
-  const handleAddUnderNode = (parentId: string | "all") => {
+  // 添加：在该节点的子级末尾出现行内输入框（根 key 表示新建一级模块）
+  const handleAddUnderNode = (parentId: string) => {
     if (!canCreateCase) return;
     if (!repositoryId) return;
-    setCreatingParentId(parentId);
-
-    // 新增：确保当前父节点展开，便于显示临时输入框
-    setExpandedKeys((prev) => {
-      const prevKeys = prev || [];
-      const pid = String(parentId);
-      return prevKeys.includes(pid) ? prevKeys : [...prevKeys, pid];
-    });
-    setAutoExpandParent(true);
+    setEditing({ kind: "create", parentKey: parentId });
+    if (parentId !== MODULE_TREE_ROOT_KEY)
+      setExpandedKeys((prev) => (prev.includes(parentId) ? prev : [...prev, parentId]));
   };
 
-  // 新增：输入框失焦或回车时调用创建接口
-  const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
-    if (!canCreateCase) {
-      setCreatingParentId(null);
-      return;
-    }
+  const handleCreateCommit = async (parentId: string, inputValue: string) => {
+    setEditing(null);
+    if (!canCreateCase) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug || !repositoryId) {
-      setCreatingParentId(null);
-      return;
-    }
+    if (!name || !workspaceSlug || !repositoryId) return;
     const payload: any = {
       name,
       repository: repositoryId,
     };
-    if (parentId !== "all") {
+    if (parentId !== MODULE_TREE_ROOT_KEY) {
       payload.parent = parentId;
     }
     try {
       await caseService.createModules(workspaceSlug as string, payload);
-      // 刷新模块树与列表
-      setCreatingParentId(null);
       await fetchModules();
       await fetchCases(1, pageSize, filters);
     } catch (e) {
       console.error("创建模块失败:", e);
       qaCaseSetToastError(e, t, "创建模块失败");
-      setCreatingParentId(null);
     }
   };
   // 新增：删除确认弹窗与删除逻辑
@@ -451,34 +379,27 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
 
   const startRenameNode = (moduleId: string, currentName: string) => {
     if (!canEditCase) return;
-    setCreatingParentId(null);
-    setRenamingModuleId(moduleId);
-    setExpandedKeys((prev) => {
-      const prevKeys = prev || [];
-      return prevKeys.includes(moduleId) ? prevKeys : [...prevKeys, moduleId];
-    });
-    setAutoExpandParent(true);
+    setEditing({ kind: "rename", key: moduleId, initialValue: currentName });
   };
 
-  const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
-    if (!canEditCase) {
-      setRenamingModuleId(null);
-      return;
-    }
+  const handleRenameCommit = async (moduleId: string, inputValue: string) => {
+    setEditing(null);
+    if (!canEditCase) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug) {
-      setRenamingModuleId(null);
-      return;
-    }
+    if (!name || !workspaceSlug) return;
     try {
       await caseModuleService.updateCaseModule(workspaceSlug as string, moduleId, { name });
-      setRenamingModuleId(null);
       await fetchModules();
     } catch (e) {
       console.error("重命名失败:", e);
       qaCaseSetToastError(e, t, "重命名失败");
-      setRenamingModuleId(null);
     }
+  };
+
+  const handleEditCommit = (value: string) => {
+    if (!editing) return;
+    if (editing.kind === "create") void handleCreateCommit(editing.parentKey, value);
+    else void handleRenameCommit(editing.key, value);
   };
 
   // 修改 fetchCases：支持 module_id 过滤
@@ -608,24 +529,10 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModuleId]);
 
-  // 新增：Tree onSelect 处理（仅更新选中状态，不直接调用 fetchCases）
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const keyStr = String(info?.node?.key);
-    // 忽略临时创建节点，避免设置成选中模块从而发起错误过滤请求
-    if (keyStr.startsWith("__creating__")) {
-      return;
-    }
-
-    // 如果是“取消选择”事件（再次点击同一模块），则忽略，保持当前选中不变
-    if (!info.selected) {
-      if (String(info?.node?.key) === "all") {
-        setSelectedModuleId(null);
-      }
-      return;
-    }
+  const handleTreeSelect = (key: string) => {
+    const nextModuleId = key === MODULE_TREE_ROOT_KEY ? null : key;
+    if (nextModuleId === selectedModuleId) return;
     fetchModules();
-    const key = selectedKeys[0] as string | undefined;
-    const nextModuleId = !key || key === "all" ? null : key;
     setSelectedModuleId(nextModuleId);
     // 切换模块后重置选中
     setSelectedCaseIds([]);
@@ -637,235 +544,67 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     return typeof c === "number" ? c : undefined;
   };
 
-  // 自定义节点标题：统一图标 + 名称 + 右侧数量
-  const renderNodeTitle = (title: string, count?: number, nodeId?: string | "all") => {
-    const actualId = String(nodeId || "all");
-    if (renamingModuleId && renamingModuleId === actualId) {
-      return (
-        <ModuleInput
-          placeholder="请输入模块名称"
-          defaultValue={title}
-          onCommit={(val) => handleRenameBlurOrEnter(actualId, val)}
-        />
-      );
-    }
-    const items = [
+  const treeNodes = useMemo<TModuleTreeNode[]>(() => {
+    const build = (list: any[]): TModuleTreeNode[] =>
+      (Array.isArray(list) ? list : []).map((node: any) => ({
+        key: String(node?.id),
+        label: String(node?.name ?? "-"),
+        count: getNodeCount(node),
+        children: build(node?.children || []),
+      }));
+    return build(modules);
+  }, [modules]);
+
+  const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
+    if (!repositoryId) return [];
+    return [
       {
         key: "add",
-        label: (
-          <Button
-            type="text"
-            size="small"
-            disabled={!canCreateCase}
-            onClick={() => handleAddUnderNode(nodeId || "all")}
-          >
-            添加
-          </Button>
-        ),
+        label: "添加子模块",
+        icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreateCase,
+        onClick: () => handleAddUnderNode(node.key),
       },
       {
         key: "rename",
-        label: (
-          <Button type="text" size="small" disabled={!canEditCase} onClick={() => startRenameNode(actualId, title)}>
-            重命名
-          </Button>
-        ),
+        label: "重命名",
+        icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canEditCase,
+        onClick: () => startRenameNode(node.key, node.label),
       },
       {
         key: "copy",
-        label: (
-          <Button
-            type="text"
-            size="small"
-            disabled={!canCreateCase}
-            onClick={() => {
-              if (!canCreateCase) return;
-              if (actualId && actualId !== "all") {
-                setCopyingModule({ id: actualId, name: title });
-              }
-            }}
-          >
-            复制
-          </Button>
-        ),
+        label: "复制",
+        icon: <Copy className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreateCase,
+        onClick: () => setCopyingModule({ id: node.key, name: node.label }),
       },
       {
         key: "move",
-        label: (
-          <Button
-            type="text"
-            size="small"
-            disabled={!canEditCase}
-            onClick={() => {
-              if (!canEditCase) return;
-              if (actualId && actualId !== "all") {
-                setMovingModule({ id: actualId, name: title });
-              }
-            }}
-          >
-            移动
-          </Button>
-        ),
+        label: "移动到…",
+        icon: <FolderInput className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canEditCase,
+        onClick: () => setMovingModule({ id: node.key, name: node.label }),
       },
       {
         key: "delete",
-        label: (
-          <Button
-            type="text"
-            danger
-            size="small"
-            disabled={!canDeleteCase}
-            onClick={() => confirmDeleteNode(nodeId || "all", title)}
-          >
-            删除
-          </Button>
-        ),
+        label: "删除",
+        icon: <Trash2 className="size-3.5" strokeWidth={1.75} />,
+        danger: true,
+        disabled: !canDeleteCase,
+        onClick: () => confirmDeleteNode(node.key, node.label),
       },
     ];
-    return (
-      <div className="group flex w-full items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-            <FolderOpenDot size={14} />
-          </span>
-          <span className="text-sm text-primary">{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-          {repositoryId && (
-            <Dropdown trigger={["hover"]} menu={{ items }}>
-              <Button
-                type="text"
-                icon={<EllipsisOutlined />}
-                size="small"
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-              ></Button>
-            </Dropdown>
-          )}
-        </div>
-      </div>
-    );
-  };
-  const renderCreatingInput = (parentId: string | "all") => (
-    <ModuleInput placeholder="请输入模块名称" onCommit={(val) => handleCreateBlurOrEnter(parentId, val)} />
-  );
-
-  // 新增：递归构建树节点，任意层级都支持插入“添加”的临时输入框
-  const buildTreeNodes = (list: any[]): any[] => {
-    if (!Array.isArray(list)) return [];
-    return list.map((node: any) => {
-      const nodeId = String(node?.id);
-      const childrenNodes = buildTreeNodes(node?.children || []);
-      const creatingChild =
-        creatingParentId === nodeId
-          ? [
-              {
-                title: renderCreatingInput(nodeId),
-                key: `__creating__${nodeId}`,
-                icon: <PlusOutlined />,
-                selectable: false, // 防止选中临时输入节点
-              },
-            ]
-          : [];
-      return {
-        title: renderNodeTitle(node?.name ?? "-", getNodeCount(node), nodeId),
-        key: nodeId,
-        icon: <AppstoreOutlined />,
-        children: [...creatingChild, ...childrenNodes],
-      };
-    });
   };
 
-  const filterModulesByName = (list: any[], q: string): any[] => {
-    if (!q) return list || [];
-    const query = q.trim().toLowerCase();
-    const walk = (nodes: any[]): any[] => {
-      return (nodes || [])
-        .map((n) => {
-          const name = String(n?.name || "").toLowerCase();
-          const childMatches = walk(n?.children || []);
-          const selfMatch = name.includes(query);
-          if (selfMatch || childMatches.length) {
-            return { ...n, children: childMatches };
-          }
-          return null;
-        })
-        .filter(Boolean) as any[];
-    };
-    return walk(list || []);
-  };
-
-  const filteredModules = useMemo(() => filterModulesByName(modules, searchModule), [modules, searchModule]);
-
-  const treeData = [
-    {
-      // 修改：根节点“全部用例”仅显示添加，不显示删除
-      title: (
-        <div className="group flex w-full items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-              <AppstoreOutlined />
-            </span>
-            <span className="text-sm font-medium text-primary">全部用例</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {typeof total === "number" && <span className="text-xs text-secondary">{allTotal}</span>}
-            {repositoryId && (
-              <Dropdown
-                trigger={["hover"]}
-                menu={{
-                  items: [
-                    {
-                      key: "add",
-                      label: (
-                        <Button
-                          type="text"
-                          size="small"
-                          disabled={!canCreateCase}
-                          onClick={() => handleAddUnderNode("all")}
-                        >
-                          添加
-                        </Button>
-                      ),
-                    },
-                  ],
-                }}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<EllipsisOutlined />}
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
-                ></Button>
-              </Dropdown>
-            )}
-          </div>
-        </div>
-      ),
-      key: "all",
-      icon: <AppstoreOutlined />,
-      children: [
-        ...(creatingParentId === "all"
-          ? [
-              {
-                title: renderCreatingInput("all"),
-                key: "__creating__root",
-                icon: <PlusOutlined />,
-                selectable: false, // 防止选中根下临时输入节点
-              },
-            ]
-          : []),
-        // 递归构建所有模块与子模块（任意层级）
-        ...buildTreeNodes(filteredModules),
-      ],
-    },
-  ];
+  const selectedModuleName = selectedModuleId
+    ? treeNodesFind(treeNodes, selectedModuleId)?.label
+    : undefined;
 
   const moduleMove = useCaseModuleMove({
     workspaceSlug: workspaceSlug as string | undefined,
     modules,
     canEdit: canEditCase,
-    renamingModuleId,
     onMoved: async (newParentId) => {
       if (newParentId) {
         setExpandedKeys((prev) => (prev.includes(newParentId) ? prev : [...prev, newParentId]));
@@ -1175,67 +914,29 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       <div className="h-full w-full">
         <div className="flex h-full w-full flex-col">
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
-            <Col
-              className="relative flex h-full flex-col border-r border-subtle"
-              flex="0 0 auto"
-              style={{ width: leftWidth, minWidth: 200, maxWidth: 300 }}
-            >
-              <div
-                onMouseDown={onMouseDownResize}
-                className="absolute top-0 right-0 h-full w-2"
-                style={{ cursor: "col-resize", zIndex: 10 }}
-              />
-              <style
-                dangerouslySetInnerHTML={{
-                  __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 20px !important;
-                  margin-inline-end: 0px !important;
-                  display: flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  margin-top: 2px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 0px !important;
-                }
-              `,
-                }}
-              />
-              <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto pt-3">
-                <Tree
-                  draggable={moduleMove.draggable}
-                  allowDrop={moduleMove.allowDrop}
-                  onDrop={moduleMove.onDrop}
-                  showLine={false}
-                  defaultExpandAll
-                  switcherIcon={(nodeProps) => (
-                    <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-                      <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
-                    </span>
-                  )}
-                  onSelect={onSelect}
-                  onExpand={onExpand}
-                  expandedKeys={expandedKeys}
-                  autoExpandParent={autoExpandParent}
-                  treeData={treeData}
-                  selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
-                  className="custom-tree-indent py-2 pl-2"
-                />
-              </div>
-            </Col>
+            <ModuleTreePanel
+              headerLeft={treeHeader}
+              root={{ label: "全部用例", count: allTotal }}
+              nodes={treeNodes}
+              selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+              onSelect={handleTreeSelect}
+              expandedKeys={expandedKeys}
+              onExpandedKeysChange={setExpandedKeys}
+              editing={editing}
+              onEditCommit={handleEditCommit}
+              onEditCancel={() => setEditing(null)}
+              getMenuItems={getMenuItems}
+              dragMode={repositoryId && canEditCase ? "sort" : "none"}
+              onDrop={moduleMove.onDrop}
+              onAddRoot={repositoryId && canCreateCase ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+              railLabel={selectedModuleName || "全部用例"}
+            />
             {/* 右侧表格 */}
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="flex h-full flex-col">
                 {useExternalToolbar && toolbarPortalEl && createPortal(toolbarActions, toolbarPortalEl)}
-                {(headerLeft || !useExternalToolbar) && (
-                  <div className="flex flex-shrink-0 items-center justify-between px-3 pt-2 pb-2 sm:pt-2">
-                    <div>{headerLeft}</div>
-                    {!useExternalToolbar && toolbarActions}
-                  </div>
+                {!useExternalToolbar && (
+                  <div className="flex flex-shrink-0 items-center justify-end px-3 pt-2 pb-2">{toolbarActions}</div>
                 )}
                 {repositoryId && <FiltersRow filter={casesFilter} />}
                 <div className="min-h-0 flex-1 overflow-hidden">

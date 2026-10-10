@@ -4,11 +4,16 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { PlanService, type TPlanListRow } from "@/services/qa/plan.service";
-import { Input, Button, Dropdown, Modal, Pagination, Tree } from "antd";
-import { AppstoreOutlined, EllipsisOutlined } from "@ant-design/icons";
-import { FolderOpenDot } from "lucide-react";
-import type { TreeProps } from "antd";
-import { ChevronDownIcon } from "@plane/propel/icons";
+import { Modal, Pagination } from "antd";
+import { FolderPlus, Pencil, Trash2 } from "lucide-react";
+import {
+  MODULE_TREE_ROOT_KEY,
+  ModuleTreePanel,
+  type TModuleTreeDropEvent,
+  type TModuleTreeEditing,
+  type TModuleTreeMenuItem,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 type PlanModule = {
   id: string;
   name: string;
@@ -63,16 +68,10 @@ export default function TestPlanDetailPage() {
     });
   }, [canCreatePlan, registerOpenNewPlanModal]);
   const planService = new PlanService();
-  const [leftWidth, setLeftWidth] = useState<number>(220);
-  const isDraggingRef = useRef<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const [searchModule, setSearchModule] = useState<string>("");
   const [modules, setModules] = useState<PlanModule[]>([]);
-  const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
-  const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
-  const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
-  const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
+  // 树的行内编辑态（新建 / 重命名），同一时间只有一个
+  const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,39 +86,6 @@ export default function TestPlanDetailPage() {
       (list || []).reduce((acc, n) => acc + Number(n?.total || 0) + sum(n?.children || []), 0);
     return sum(modules);
   }, [modules]);
-
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    window.addEventListener("mousemove", onMouseMoveResize as any);
-    window.addEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
-
-  const onMouseMoveResize = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const next = Math.min(300, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
-    setLeftWidth(next);
-  };
-
-  const onMouseUpResize = () => {
-    isDraggingRef.current = false;
-    window.removeEventListener("mousemove", onMouseMoveResize as any);
-    window.removeEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  };
-
-  useEffect(
-    () => () => {
-      window.removeEventListener("mousemove", onMouseMoveResize as any);
-      window.removeEventListener("mouseup", onMouseUpResize as any);
-    },
-    []
-  );
 
   const appliedModuleIdFromUrlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -153,42 +119,6 @@ export default function TestPlanDetailPage() {
       }
       return updated;
     });
-  };
-
-  // 独立的输入组件，避免 Tree 渲染导致输入法中断
-  const ModuleInput = ({
-    defaultValue = "",
-    placeholder = "",
-    onCommit,
-  }: {
-    defaultValue?: string;
-    placeholder?: string;
-    onCommit: (value: string) => void;
-  }) => {
-    const [value, setValue] = useState(defaultValue);
-    const committedRef = useRef(false);
-
-    const commit = () => {
-      if (committedRef.current) return;
-      committedRef.current = true;
-      onCommit(value);
-    };
-
-    return (
-      <div className="w-full" onClick={(e) => e.stopPropagation()}>
-        <Input
-          size="small"
-          autoFocus
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={commit}
-          onPressEnter={commit}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      </div>
-    );
   };
 
   const fetchModules = async () => {
@@ -328,70 +258,52 @@ export default function TestPlanDetailPage() {
     fetchTestPlans(1, size, filters);
   };
 
-  const onExpand: TreeProps["onExpand"] = (keys) => {
-    setExpandedKeys(keys as string[]);
-    setAutoExpandParent(false);
-  };
-
-  const handleAddUnderNode = (parentId: string | "all") => {
+  const handleAddUnderNode = (parentId: string) => {
     if (!canCreatePlan) return;
-    setRenamingModuleId(null);
-    setCreatingParentId(parentId);
-    setExpandedKeys((prev) => {
-      const pid = String(parentId);
-      return prev.includes(pid) ? prev : [...prev, pid];
-    });
-    setAutoExpandParent(true);
+    setEditing({ kind: "create", parentKey: parentId });
+    if (parentId !== MODULE_TREE_ROOT_KEY)
+      setExpandedKeys((prev) => (prev.includes(parentId) ? prev : [...prev, parentId]));
   };
 
-  const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
-    if (!canCreatePlan) {
-      setCreatingParentId(null);
-      return;
-    }
+  const handleCreateCommit = async (parentId: string, inputValue: string) => {
+    setEditing(null);
+    if (!canCreatePlan) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug || !projectId) {
-      setCreatingParentId(null);
-      return;
-    }
+    if (!name || !workspaceSlug || !projectId) return;
     const pid = Array.isArray(projectId) ? projectId[0] : projectId;
     const payload: any = { name, project: pid };
-    if (parentId !== "all") payload.parent = parentId;
+    if (parentId !== MODULE_TREE_ROOT_KEY) payload.parent = parentId;
     try {
       await planService.createPlanModule(workspaceSlug as string, payload);
-      setCreatingParentId(null);
       await fetchModules();
       await fetchTestPlans(1, pageSize, filters, selectedModuleId ?? undefined);
     } catch (e) {
-      setCreatingParentId(null);
+      qaCaseSetToastError(e, t, "创建模块失败");
     }
   };
 
   const startRenameNode = (moduleId: string, currentName: string) => {
     if (!canEditPlan) return;
-    setCreatingParentId(null);
-    setRenamingModuleId(moduleId);
-    setExpandedKeys((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId]));
-    setAutoExpandParent(true);
+    setEditing({ kind: "rename", key: moduleId, initialValue: currentName });
   };
 
-  const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
-    if (!canEditPlan) {
-      setRenamingModuleId(null);
-      return;
-    }
+  const handleRenameCommit = async (moduleId: string, inputValue: string) => {
+    setEditing(null);
+    if (!canEditPlan) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug) {
-      setRenamingModuleId(null);
-      return;
-    }
+    if (!name || !workspaceSlug) return;
     try {
       await planService.updatePlanModule(workspaceSlug as string, moduleId, { name });
-      setRenamingModuleId(null);
       await fetchModules();
     } catch (e) {
-      setRenamingModuleId(null);
+      qaCaseSetToastError(e, t, "重命名失败");
     }
+  };
+
+  const handleEditCommit = (value: string) => {
+    if (!editing) return;
+    if (editing.kind === "create") void handleCreateCommit(editing.parentKey, value);
+    else void handleRenameCommit(editing.key, value);
   };
 
   const confirmDeleteModule = (node: PlanModule) => {
@@ -414,139 +326,55 @@ export default function TestPlanDetailPage() {
     });
   };
 
-  const renderCreatingInput = (parentId: string | "all") => (
-    <ModuleInput placeholder="请输入模块名称" onCommit={(val) => handleCreateBlurOrEnter(parentId, val)} />
-  );
-
   const getNodeCount = (m: any) => {
     const c = m?.total ?? m?.count;
     return typeof c === "number" ? c : undefined;
   };
 
-  const renderNodeTitle = (node: any) => {
-    const nodeId = String(node?.id);
-    const title = String(node?.name || "-");
-    const isDefault = Boolean(node?.is_default);
-    const count = getNodeCount(node);
+  const treeNodes = useMemo<TModuleTreeNode[]>(() => {
+    const build = (list: PlanModule[]): TModuleTreeNode[] =>
+      (list || []).map((m) => ({
+        key: String(m.id),
+        label: String(m.name || "-"),
+        count: getNodeCount(m),
+        children: build(m.children || []),
+      }));
+    return build(modules);
+  }, [modules]);
 
-    if (renamingModuleId && renamingModuleId === nodeId) {
-      return (
-        <ModuleInput
-          placeholder="请输入模块名称"
-          defaultValue={title}
-          onCommit={(val) => handleRenameBlurOrEnter(nodeId, val)}
-        />
-      );
-    }
-
-    const menuItems = [
+  const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
+    const module = findModuleById(modules, node.key);
+    if (!module) return [];
+    const items: TModuleTreeMenuItem[] = [
       {
         key: "add",
-        label: (
-          <Button type="text" size="small" disabled={!canCreatePlan} onClick={() => handleAddUnderNode(nodeId)}>
-            添加
-          </Button>
-        ),
+        label: "添加子模块",
+        icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreatePlan,
+        onClick: () => handleAddUnderNode(node.key),
       },
-      ...(!isDefault
-        ? [
-            {
-              key: "rename",
-              label: (
-                <Button type="text" size="small" disabled={!canEditPlan} onClick={() => startRenameNode(nodeId, title)}>
-                  重命名
-                </Button>
-              ),
-            },
-            {
-              key: "delete",
-              label: (
-                <Button
-                  type="text"
-                  danger
-                  size="small"
-                  disabled={!canDeletePlan}
-                  onClick={() => confirmDeleteModule(node)}
-                >
-                  删除
-                </Button>
-              ),
-            },
-          ]
-        : []),
     ];
-
-    return (
-      <div className="group flex w-full items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-            <FolderOpenDot size={14} />
-          </span>
-          <span className="text-sm text-primary">{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-          <Dropdown
-            trigger={["hover"]}
-            menu={{
-              items: menuItems,
-            }}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<EllipsisOutlined />}
-              className="opacity-0 transition-opacity group-hover:opacity-100"
-            />
-          </Dropdown>
-        </div>
-      </div>
-    );
+    if (!module.is_default) {
+      items.push(
+        {
+          key: "rename",
+          label: "重命名",
+          icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
+          disabled: !canEditPlan,
+          onClick: () => startRenameNode(node.key, node.label),
+        },
+        {
+          key: "delete",
+          label: "删除",
+          icon: <Trash2 className="size-3.5" strokeWidth={1.75} />,
+          danger: true,
+          disabled: !canDeletePlan,
+          onClick: () => confirmDeleteModule(module),
+        }
+      );
+    }
+    return items;
   };
-
-  const buildTreeNodes = (list: any[]): any[] => {
-    if (!Array.isArray(list)) return [];
-    return list.map((node: any) => {
-      const nodeId = String(node?.id);
-      const childrenNodes = buildTreeNodes(node?.children || []);
-      const creatingChild =
-        creatingParentId === nodeId
-          ? [
-              {
-                title: renderCreatingInput(nodeId),
-                key: `__creating__${nodeId}`,
-                selectable: false,
-              },
-            ]
-          : [];
-      return {
-        title: renderNodeTitle(node),
-        key: nodeId,
-        children: [...creatingChild, ...childrenNodes],
-      };
-    });
-  };
-
-  const filterModulesByName = (list: any[], q: string): any[] => {
-    if (!q) return list || [];
-    const query = q.trim().toLowerCase();
-    const walk = (nodes: any[]): any[] => {
-      return (nodes || [])
-        .map((n) => {
-          const name = String(n?.name || "").toLowerCase();
-          const childMatches = walk(n?.children || []);
-          const selfMatch = name.includes(query);
-          if (selfMatch || childMatches.length) {
-            return { ...n, children: childMatches };
-          }
-          return null;
-        })
-        .filter(Boolean) as any[];
-    };
-    return walk(list || []);
-  };
-
-  const filteredModules = useMemo(() => filterModulesByName(modules, searchModule), [modules, searchModule]);
 
   const findModuleById = (list: PlanModule[], id: string): PlanModule | null => {
     for (const item of list || []) {
@@ -588,110 +416,37 @@ export default function TestPlanDetailPage() {
       fetchTestPlans(1, pageSize, filters, null);
       return;
     }
-    setExpandedKeys((prev) => Array.from(new Set([...prev, "all", ...ancestors])));
-    setAutoExpandParent(true);
+    setExpandedKeys((prev) => Array.from(new Set([...prev, ...ancestors])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modules, moduleIdFromUrl]);
 
-  const treeData = [
-    {
-      title: (
-        <div className="group flex w-full items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-              <AppstoreOutlined />
-            </span>
-            <span className="text-sm font-medium text-primary">全部计划</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-secondary">
-              {typeof allTotal === "number" ? allTotal : totalPlansFromModules}
-            </span>
-            <Dropdown
-              trigger={["hover"]}
-              menu={{
-                items: [
-                  {
-                    key: "add",
-                    label: (
-                      <Button
-                        type="text"
-                        size="small"
-                        disabled={!canCreatePlan}
-                        onClick={() => handleAddUnderNode("all")}
-                      >
-                        添加
-                      </Button>
-                    ),
-                  },
-                ],
-              }}
-            >
-              <Button
-                type="text"
-                size="small"
-                icon={<EllipsisOutlined />}
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-              />
-            </Dropdown>
-          </div>
-        </div>
-      ),
-      key: "all",
-      children: [
-        ...(creatingParentId === "all"
-          ? [
-              {
-                title: renderCreatingInput("all"),
-                key: "__creating__root",
-                selectable: false,
-              },
-            ]
-          : []),
-        ...buildTreeNodes(filteredModules),
-      ],
-    },
-  ];
-
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const keyStr = String(info?.node?.key);
-    if (keyStr.startsWith("__creating__")) return;
-    if (!info.selected) {
-      if (keyStr === "all") setSelectedModuleId(null);
-      return;
-    }
-    const key = selectedKeys[0] as string | undefined;
-    const nextModuleId = !key || key === "all" ? null : key;
+  const handleTreeSelect = (key: string) => {
+    const nextModuleId = key === MODULE_TREE_ROOT_KEY ? null : key;
+    if (nextModuleId === selectedModuleId) return;
     setSelectedModuleId(nextModuleId);
     setCurrentPage(1);
     fetchModules();
     fetchTestPlans(1, pageSize, filters, nextModuleId);
   };
 
-  const onDrop: TreeProps["onDrop"] = async (info) => {
-    if (!canEditPlan) return;
-    const dragKey = String(info.dragNode?.key);
-    const dropKey = String(info.node?.key);
-    if (!workspaceSlug) return;
-    if (!dragKey || !dropKey) return;
-    if (info.dropToGap) return;
-    if (dragKey === dropKey) return;
-    if (dragKey === "all" || dragKey.startsWith("__creating__")) return;
-    if (dropKey.startsWith("__creating__")) return;
+  // 计划模块树只支持换父级：拖到节点上成为其子模块，拖到「全部计划」上回到一级
+  const handleTreeDrop = async ({ dragKey, targetKey, position }: TModuleTreeDropEvent) => {
+    if (!canEditPlan || !workspaceSlug || position !== "into") return;
     const dragModule = findModuleById(modules, dragKey);
     if (!dragModule) return;
-    if (dropKey !== "all" && hasDescendant(dragModule, dropKey)) return;
-    const newParent = dropKey === "all" ? null : dropKey;
+    if (targetKey !== MODULE_TREE_ROOT_KEY && hasDescendant(dragModule, targetKey)) return;
+    const newParent = targetKey === MODULE_TREE_ROOT_KEY ? null : targetKey;
     try {
       await planService.updatePlanModule(workspaceSlug as string, dragKey, { parent: newParent });
-      setExpandedKeys((prev) => {
-        if (dropKey === "all" || prev.includes(dropKey)) return prev;
-        return [...prev, dropKey];
-      });
+      if (newParent) setExpandedKeys((prev) => (prev.includes(newParent) ? prev : [...prev, newParent]));
       await fetchModules();
       await fetchTestPlans(1, pageSize, filters, selectedModuleId ?? undefined);
-    } catch (e) {}
+    } catch (e) {
+      qaCaseSetToastError(e, t, "移动模块失败");
+    }
   };
+
+  const selectedModuleName = selectedModuleId ? findModuleById(modules, selectedModuleId)?.name : undefined;
 
   const canViewPlans = permissionsFetched && hasPermission("qa.plan.view");
 
@@ -714,60 +469,22 @@ export default function TestPlanDetailPage() {
           <div className="flex h-full w-full flex-col">
             <div className="flex-1 overflow-hidden p-0">
               <div className="flex h-[calc(100%-0px)] w-full">
-                <div
-                  className="relative flex h-full max-w-[300px] min-w-[200px] flex-col border-r border-subtle"
-                  style={{ width: leftWidth }}
-                >
-                  <div
-                    onMouseDown={onMouseDownResize}
-                    className="absolute top-0 right-0 h-full w-2"
-                    style={{ cursor: "col-resize", zIndex: 10 }}
-                  />
-                  <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto pt-2">
-                    <style
-                      dangerouslySetInnerHTML={{
-                        __html: `
-                    .custom-tree-indent .ant-tree-indent-unit {
-                      width: 10px !important;
-                    }
-                    .custom-tree-indent .ant-tree-switcher {
-                      width: 20px !important;
-                      margin-inline-end: 0px !important;
-                      display: flex !important;
-                      align-items: center !important;
-                      justify-content: center !important;
-                      margin-top: 2px !important;
-                    }
-                    .custom-tree-indent .ant-tree-node-content-wrapper {
-                      padding-inline: 0px !important;
-                    }
-                  `,
-                      }}
-                    />
-                    <Tree
-                      blockNode
-                      draggable={canEditPlan}
-                      showIcon={false}
-                      switcherIcon={(nodeProps) => (
-                        <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-                          <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
-                        </span>
-                      )}
-                      treeData={treeData as any}
-                      selectedKeys={[selectedModuleId ?? "all"]}
-                      expandedKeys={expandedKeys}
-                      autoExpandParent={autoExpandParent}
-                      onExpand={onExpand}
-                      onSelect={onSelect}
-                      onDrop={onDrop}
-                      className="custom-tree-indent testhub-plan-module-tree py-2 pl-2"
-                    />
-                  </div>
-                  <div
-                    className="absolute top-0 right-0 h-full w-[6px] cursor-col-resize"
-                    onMouseDown={onMouseDownResize}
-                  />
-                </div>
+                <ModuleTreePanel
+                  root={{ label: "全部计划", count: typeof allTotal === "number" ? allTotal : totalPlansFromModules }}
+                  nodes={treeNodes}
+                  selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+                  onSelect={handleTreeSelect}
+                  expandedKeys={expandedKeys}
+                  onExpandedKeysChange={setExpandedKeys}
+                  editing={editing}
+                  onEditCommit={handleEditCommit}
+                  onEditCancel={() => setEditing(null)}
+                  getMenuItems={getMenuItems}
+                  dragMode={canEditPlan ? "reparent" : "none"}
+                  onDrop={handleTreeDrop}
+                  onAddRoot={canCreatePlan ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+                  railLabel={selectedModuleName || "全部计划"}
+                />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                   {error ? (
                     <div className="m-4 rounded-md border border-danger-subtle bg-danger-subtle p-4 text-13 text-danger-primary">
@@ -835,40 +552,6 @@ export default function TestPlanDetailPage() {
                         background: transparent;
                       }
 
-                      .testhub-plan-module-tree .ant-tree-draggable-icon{
-                        display: none !important;
-                      }
-                      .custom-tree-indent .ant-tree-indent-unit {
-                        width: 10px !important;
-                      }
-                      .custom-tree-indent .ant-tree-switcher {
-                        width: 14px !important;
-                        margin-inline-end: 2px !important;
-                      }
-                      .custom-tree-indent .ant-tree-node-content-wrapper {
-                        display: flex;
-                        align-items: center;
-                        min-height: 32px;
-                        padding-inline: 6px !important;
-                        border-radius: 6px;
-                      }
-                      .testhub-plan-module-tree .ant-tree-title {
-                        display: block;
-                        flex: 1;
-                        min-width: 0;
-                      }
-                      .testhub-plan-module-tree .ant-tree-node-content-wrapper:hover {
-                        background: var(--bg-layer-1) !important;
-                      }
-                      .testhub-plan-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected,
-                      .testhub-plan-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected:hover {
-                        background: var(--bg-accent-subtle) !important;
-                        color: var(--text-color-accent-primary) !important;
-                      }
-                      .testhub-plan-module-tree .ant-tree-node-selected .text-primary,
-                      .testhub-plan-module-tree .ant-tree-node-selected .text-secondary {
-                        color: inherit !important;
-                      }
                     `,
                     }}
                   />

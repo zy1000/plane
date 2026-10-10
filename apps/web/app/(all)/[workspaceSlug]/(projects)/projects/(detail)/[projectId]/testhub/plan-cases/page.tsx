@@ -43,13 +43,18 @@ import {
   type TPlanCaseGroupBy,
   type TPlanCaseOrderBy,
 } from "@/components/qa/plans/plan-case-display-filters";
-import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
 import { PlanCasePriorityBadge } from "@/components/qa/plans/plan-case-priority-badge";
-import { PlanCaseRailTree, type TPlanCaseRailTreeNode } from "@/components/qa/plans/plan-case-rail-tree";
 import { PlanCasesBulkBar } from "@/components/qa/plans/plan-cases-bulk-bar";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
-import { PlanCaseGroupTree } from "@/components/qa/plans/plan-case-group-tree";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
+import { PlanCaseGroupBySwitcher } from "@/components/qa/plans/plan-case-group-by-switcher";
+import {
+  buildPlanCaseAssigneeNodes,
+  buildPlanCaseGroupNodes,
+  buildPlanCaseModuleNodes,
+  findPlanCaseTreeLabel,
+} from "@/components/qa/plans/plan-case-tree-nodes";
+import { ModuleTreePanel, type TModuleTreeNode } from "@/components/qa/module-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
 import { PlanCaseResultTag, PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
 import { PlanCaseReviewModal } from "@/components/qa/plans/plan-case-review-modal";
@@ -134,7 +139,7 @@ export default function PlanCasesPage() {
   );
   const canEditPlan = permissionsFetched && hasPermission(QA_PLAN_EDIT_PERMISSION_KEY);
 
-  const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
@@ -361,7 +366,7 @@ export default function PlanCasesPage() {
     try {
       const data = await caseService.getPlanCaseTree(String(workspaceSlug), { plan_id: String(planId) });
       setPlanTree(data || null);
-      setExpandedKeys(data ? collectDefaultExpandedKeys(data) : undefined);
+      setExpandedKeys(data ? collectDefaultExpandedKeys(data) : []);
     } catch {}
   };
 
@@ -551,42 +556,6 @@ export default function PlanCasesPage() {
     onExpressionChange: handleRichFiltersChange,
   });
 
-  const [leftWidth, setLeftWidth] = useState<number>(260);
-  const isDraggingRef = useRef<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    window.addEventListener("mousemove", onMouseMoveResize as any);
-    window.addEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
-  const onMouseMoveResize = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const next = Math.min(320, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
-    setLeftWidth(next);
-  };
-  const onMouseUpResize = () => {
-    isDraggingRef.current = false;
-    window.removeEventListener("mousemove", onMouseMoveResize as any);
-    window.removeEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  };
-
-  useEffect(
-    () => () => {
-      window.removeEventListener("mousemove", onMouseMoveResize as any);
-      window.removeEventListener("mouseup", onMouseUpResize as any);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
   function collectDefaultExpandedKeys(node: any): string[] {
     const keys = new Set<string>();
     const visit = (n: any) => {
@@ -601,27 +570,23 @@ export default function PlanCasesPage() {
     return Array.from(keys);
   }
 
-  // 左栏模块树：「全部模块」这一层不单独显示，子模块直接挂在用例库下；每个节点带计划用例数
-  const moduleRailNodes = useMemo<TPlanCaseRailTreeNode[]>(() => {
-    if (!planTree) return [];
-    const build = (node: any): TPlanCaseRailTreeNode => {
-      const children: any[] = Array.isArray(node?.children) ? node.children : [];
-      const visibleChildren = children.flatMap((child) =>
-        String(child?.kind || "") === "repository_modules_all"
-          ? Array.isArray(child?.children)
-            ? child.children
-            : []
-          : [child]
-      );
-      return {
-        key: getTreeNodeKey(node),
-        label: node?.name ?? "-",
-        count: typeof node?.count === "number" ? node.count : undefined,
-        children: visibleChildren.map(build),
-      };
-    };
-    return [build(planTree)];
-  }, [planTree]);
+  // 左栏三种分组的节点：模块（用例库 → 模块）/ 执行人 / 枚举值；「全部用例」是树的固定首行
+  const moduleTreeNodes = useMemo<TModuleTreeNode[]>(
+    () => buildPlanCaseModuleNodes(planTree, getTreeNodeKey),
+    [planTree]
+  );
+  const assigneeTreeNodes = useMemo<TModuleTreeNode[]>(() => buildPlanCaseAssigneeNodes(assigneeTree), [assigneeTree]);
+  const groupTreeNodes = useMemo<TModuleTreeNode[]>(
+    () => buildPlanCaseGroupNodes(groupTree, planCaseResultEnums, planCaseReviewStatusEnums),
+    [groupTree, planCaseResultEnums, planCaseReviewStatusEnums]
+  );
+  const activeTree =
+    groupBy === "module"
+      ? { nodes: moduleTreeNodes, total: planTree?.count, loading: false, onSelect: handleModuleTreeSelect }
+      : groupBy === "assignee"
+        ? { nodes: assigneeTreeNodes, total: assigneeTree?.count, loading: assigneeTreeLoading, onSelect: handleAssigneeTreeSelect }
+        : { nodes: groupTreeNodes, total: groupTree?.count, loading: groupTreeLoading, onSelect: handleGroupTreeSelect };
+  const treeRailLabel = selectedTreeKey === "root" ? "全部用例" : findPlanCaseTreeLabel(activeTree.nodes, selectedTreeKey);
 
   const moduleTreeNodeMetaMap = useMemo(() => {
     const map = new Map<string, TModuleTreeNodeMeta>();
@@ -982,10 +947,8 @@ export default function PlanCasesPage() {
             <PlanCaseDisplayFilters
               disabled={!planId}
               displayProperties={planCaseDisplayProperties}
-              groupBy={groupBy}
               ordering={ordering}
               onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
-              onGroupByChange={handleGroupByChange}
               onOrderByChange={handleSortChange}
             />
             <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
@@ -1033,43 +996,18 @@ export default function PlanCasesPage() {
           </div>
         </div>
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div
-            className="relative min-h-0 flex-shrink-0 overflow-y-auto border-r border-subtle pt-3 pl-3"
-            style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
-          >
-            <div
-              onMouseDown={onMouseDownResize}
-              className="absolute top-0 right-0 h-full w-2"
-              style={{ cursor: "col-resize", zIndex: 10 }}
-              role="presentation"
-            />
-            {groupBy === "module" ? (
-              <PlanCaseRailTree
-                nodes={moduleRailNodes}
-                selectedKey={selectedTreeKey}
-                onSelect={handleModuleTreeSelect}
-                expandedKeys={expandedKeys}
-                onExpandedKeysChange={setExpandedKeys}
-                className="pr-3 pb-2"
-              />
-            ) : groupBy === "assignee" ? (
-              <PlanCaseAssigneeTree
-                tree={assigneeTree}
-                loading={assigneeTreeLoading}
-                selectedKey={selectedTreeKey}
-                onSelect={handleAssigneeTreeSelect}
-              />
-            ) : (
-              <PlanCaseGroupTree
-                tree={groupTree}
-                loading={groupTreeLoading}
-                selectedKey={selectedTreeKey}
-                onSelect={handleGroupTreeSelect}
-                resultColors={planCaseResultEnums}
-                reviewStatusColors={planCaseReviewStatusEnums}
-              />
-            )}
-          </div>
+          <ModuleTreePanel
+            headerLeft={<PlanCaseGroupBySwitcher value={groupBy} disabled={!planId} onChange={handleGroupByChange} />}
+            root={{ key: "root", label: "全部用例", count: activeTree.total }}
+            nodes={activeTree.nodes}
+            selectedKey={selectedTreeKey}
+            onSelect={activeTree.onSelect}
+            expandedKeys={expandedKeys}
+            onExpandedKeysChange={setExpandedKeys}
+            loading={activeTree.loading}
+            emptyText="计划里还没有用例"
+            railLabel={treeRailLabel || "全部用例"}
+          />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
               {loading && (

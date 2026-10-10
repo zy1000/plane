@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
-import { Input, Dropdown, Button, Modal, Pagination, Tree } from "antd";
-import type { TreeProps } from "antd";
-import { AppstoreOutlined, EllipsisOutlined } from "@ant-design/icons";
-import { FolderOpenDot } from "lucide-react";
+import { Modal, Pagination } from "antd";
+import { FolderPlus, Pencil, Trash2 } from "lucide-react";
 import styles from "./reviews.module.css";
 import { CaseService } from "@/services/qa/review.service";
-import { ChevronDownIcon } from "@plane/propel/icons";
+import {
+  MODULE_TREE_ROOT_KEY,
+  ModuleTreePanel,
+  type TModuleTreeDropEvent,
+  type TModuleTreeEditing,
+  type TModuleTreeMenuItem,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import CreateReviewModal from "@/components/qa/review/CreateReviewModal";
 import { DEFAULT_REVIEW_DISPLAY_PROPERTIES } from "@/components/qa/review/reviews-display-filters";
 import { ReviewsTable } from "@/components/qa/review/reviews-table";
@@ -60,24 +65,6 @@ const getNodeCount = (module: any) => {
   return typeof count === "number" ? count : undefined;
 };
 
-const filterModulesByName = (list: any[], queryValue: string): any[] => {
-  if (!queryValue) return list || [];
-  const query = queryValue.trim().toLowerCase();
-  const walk = (nodes: any[]): any[] =>
-    (nodes || [])
-      .map((node) => {
-        const name = String(node?.name || "").toLowerCase();
-        const childMatches = walk(node?.children || []);
-        const selfMatch = name.includes(query);
-        if (selfMatch || childMatches.length) {
-          return Object.assign({}, node, { children: childMatches });
-        }
-        return null;
-      })
-      .filter(Boolean) as any[];
-  return walk(list || []);
-};
-
 const findModuleById = (list: ReviewModule[], id: string): ReviewModule | null => {
   for (const item of list || []) {
     if (String(item.id) === id) return item;
@@ -112,48 +99,6 @@ const normalizeReviewsResponse = (response: unknown): { count: number; data: Rev
   };
 };
 
-// 独立的输入组件，避免 Tree 渲染导致输入法中断
-const ModuleInput = ({
-  defaultValue = "",
-  placeholder = "",
-  onCommit,
-}: {
-  defaultValue?: string;
-  placeholder?: string;
-  onCommit: (value: string) => void;
-}) => {
-  const [value, setValue] = useState(defaultValue);
-  const committedRef = useRef(false);
-
-  const commit = () => {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onCommit(value);
-  };
-
-  return (
-    <div
-      className="w-full"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-      role="presentation"
-    >
-      <Input
-        size="small"
-        // eslint-disable-next-line jsx-a11y/no-autofocus
-        autoFocus
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        onPressEnter={commit}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-};
-
 export default function ReviewsPage() {
   const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
@@ -170,11 +115,6 @@ export default function ReviewsPage() {
   const canCreateReview = permissionsFetched && hasPermission(QA_REVIEW_CREATE_PERMISSION_KEY);
   const canEditReview = permissionsFetched && hasPermission(QA_REVIEW_EDIT_PERMISSION_KEY);
   const canDeleteReview = permissionsFetched && hasPermission(QA_REVIEW_DELETE_PERMISSION_KEY);
-  const [leftWidth, setLeftWidth] = useState<number>(300);
-  const isDraggingRef = useRef<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const search = "";
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   useEffect(() => {
     selectedModuleIdRef.current = selectedModuleId;
@@ -182,10 +122,9 @@ export default function ReviewsPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
   const [modules, setModules] = useState<ReviewModule[]>([]);
-  const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
-  const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
-  const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
-  const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
+  // 树的行内编辑态（新建 / 重命名），同一时间只有一个
+  const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews);
   const [total, setTotal] = useState<number>(0);
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
@@ -216,39 +155,6 @@ export default function ReviewsPage() {
     return sum(modules);
   }, [modules]);
   const totalReviews = typeof allTotal === "number" ? allTotal : modulesTotalReviews;
-
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    window.addEventListener("mousemove", onMouseMoveResize as any);
-    window.addEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
-
-  const onMouseMoveResize = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const next = Math.min(300, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
-    setLeftWidth(next);
-  };
-
-  const onMouseUpResize = () => {
-    isDraggingRef.current = false;
-    window.removeEventListener("mousemove", onMouseMoveResize as any);
-    window.removeEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  };
-
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("mousemove", onMouseMoveResize as any);
-      window.removeEventListener("mouseup", onMouseUpResize as any);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (!workspaceSlug) return;
@@ -328,71 +234,51 @@ export default function ReviewsPage() {
     [caseService, projectId, t, workspaceSlug]
   );
 
-  const onExpand: TreeProps["onExpand"] = (keys) => {
-    setExpandedKeys(keys as string[]);
-    setAutoExpandParent(false);
-  };
-
-  const handleAddUnderNode = (parentId: string | "all") => {
+  const handleAddUnderNode = (parentId: string) => {
     if (!canCreateReview) return;
-    setRenamingModuleId(null);
-    setCreatingParentId(parentId);
-    setExpandedKeys((prev) => {
-      const pid = String(parentId);
-      return prev.includes(pid) ? prev : [...prev, pid];
-    });
-    setAutoExpandParent(true);
+    setEditing({ kind: "create", parentKey: parentId });
+    if (parentId !== MODULE_TREE_ROOT_KEY)
+      setExpandedKeys((prev) => (prev.includes(parentId) ? prev : [...prev, parentId]));
   };
 
-  const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
-    if (!canCreateReview) {
-      setCreatingParentId(null);
-      return;
-    }
+  const handleCreateCommit = async (parentId: string, inputValue: string) => {
+    setEditing(null);
+    if (!canCreateReview) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug || !projectId) {
-      setCreatingParentId(null);
-      return;
-    }
+    if (!name || !workspaceSlug || !projectId) return;
     const payload: any = { name, project: projectId };
-    if (parentId !== "all") payload.parent = parentId;
+    if (parentId !== MODULE_TREE_ROOT_KEY) payload.parent = parentId;
     try {
       await caseService.createReviewModule(workspaceSlug as string, payload);
-      setCreatingParentId(null);
       await fetchModules();
       await fetchAllReviewsTotal();
     } catch (e: unknown) {
-      setCreatingParentId(null);
       qaCaseSetToastError(e, t, "创建评审模块失败");
     }
   };
 
-  const startRenameNode = (moduleId: string) => {
+  const startRenameNode = (moduleId: string, currentName: string) => {
     if (!canEditReview) return;
-    setCreatingParentId(null);
-    setRenamingModuleId(moduleId);
-    setExpandedKeys((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId]));
-    setAutoExpandParent(true);
+    setEditing({ kind: "rename", key: moduleId, initialValue: currentName });
   };
 
-  const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
-    if (!canEditReview) {
-      setRenamingModuleId(null);
-      return;
-    }
+  const handleRenameCommit = async (moduleId: string, inputValue: string) => {
+    setEditing(null);
+    if (!canEditReview) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug) {
-      setRenamingModuleId(null);
-      return;
-    }
+    if (!name || !workspaceSlug) return;
     try {
       await caseService.updateReviewModule(workspaceSlug as string, moduleId, { name });
-      setRenamingModuleId(null);
       await fetchModules();
     } catch (e: unknown) {
-      setRenamingModuleId(null);
       qaCaseSetToastError(e, t, "重命名评审模块失败");
     }
+  };
+
+  const handleEditCommit = (value: string) => {
+    if (!editing) return;
+    if (editing.kind === "create") void handleCreateCommit(editing.parentKey, value);
+    else void handleRenameCommit(editing.key, value);
   };
 
   const confirmDeleteModule = (module: ReviewModule) => {
@@ -440,217 +326,77 @@ export default function ReviewsPage() {
     });
   };
 
-  const renderCreatingInput = (parentId: string | "all") => (
-    <ModuleInput placeholder="请输入模块名称" onCommit={(val) => handleCreateBlurOrEnter(parentId, val)} />
-  );
+  const treeNodes = useMemo<TModuleTreeNode[]>(() => {
+    const build = (list: ReviewModule[]): TModuleTreeNode[] =>
+      (list || []).map((m) => ({
+        key: String(m.id),
+        label: String(m.name || "-"),
+        count: getNodeCount(m),
+        children: build(m.children || []),
+      }));
+    return build(modules);
+  }, [modules]);
 
-  const renderNodeTitle = (node: any) => {
-    const nodeId = String(node?.id);
-    const title = String(node?.name || "-");
-    const isDefault = Boolean(node?.is_default);
-    const count = getNodeCount(node);
-
-    if (renamingModuleId && renamingModuleId === nodeId) {
-      return (
-        <ModuleInput
-          placeholder="请输入模块名称"
-          defaultValue={title}
-          onCommit={(val) => handleRenameBlurOrEnter(nodeId, val)}
-        />
-      );
-    }
-
-    const menuItems = [
+  const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
+    const module = findModuleById(modules, node.key);
+    if (!module) return [];
+    const items: TModuleTreeMenuItem[] = [
       {
         key: "add",
-        label: (
-          <Button type="text" size="small" disabled={!canCreateReview} onClick={() => handleAddUnderNode(nodeId)}>
-            添加
-          </Button>
-        ),
+        label: "添加子模块",
+        icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreateReview,
+        onClick: () => handleAddUnderNode(node.key),
       },
-      ...(!isDefault
-        ? [
-            {
-              key: "rename",
-              label: (
-                <Button
-                  type="text"
-                  size="small"
-                  disabled={!canEditReview}
-                  onClick={() => startRenameNode(nodeId)}
-                >
-                  重命名
-                </Button>
-              ),
-            },
-            {
-              key: "delete",
-              label: (
-                <Button
-                  type="text"
-                  danger
-                  size="small"
-                  disabled={!canDeleteReview}
-                  onClick={() => confirmDeleteModule(node)}
-                >
-                  删除
-                </Button>
-              ),
-            },
-          ]
-        : []),
     ];
-
-    return (
-      <div className="group flex w-full items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-            <FolderOpenDot size={14} />
-          </span>
-          <span className="text-sm text-primary">{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-          <Dropdown
-            trigger={["hover"]}
-            menu={{
-              items: menuItems,
-            }}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<EllipsisOutlined />}
-              className="opacity-0 transition-opacity group-hover:opacity-100"
-            />
-          </Dropdown>
-        </div>
-      </div>
-    );
-  };
-
-  const buildTreeNodes = (list: any[]): any[] => {
-    if (!Array.isArray(list)) return [];
-    return list.map((node: any) => {
-      const nodeId = String(node?.id);
-      const childrenNodes = buildTreeNodes(node?.children || []);
-      const creatingChild =
-        creatingParentId === nodeId
-          ? [
-              {
-                title: renderCreatingInput(nodeId),
-                key: `__creating__${nodeId}`,
-                selectable: false,
-              },
-            ]
-          : [];
-      return {
-        title: renderNodeTitle(node),
-        key: nodeId,
-        children: [...creatingChild, ...childrenNodes],
-      };
-    });
-  };
-
-  const filteredModules = useMemo(() => filterModulesByName(modules, search), [modules, search]);
-
-  const treeData = [
-    {
-      title: (
-        <div className="group flex w-full items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-              <AppstoreOutlined />
-            </span>
-            <span className="text-sm font-medium text-primary">全部评审</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-secondary">{totalReviews}</span>
-            <Dropdown
-              trigger={["hover"]}
-              menu={{
-                items: [
-                  {
-                    key: "add",
-                    label: (
-                      <Button
-                        type="text"
-                        size="small"
-                        disabled={!canCreateReview}
-                        onClick={() => handleAddUnderNode("all")}
-                      >
-                        添加
-                      </Button>
-                    ),
-                  },
-                ],
-              }}
-            >
-              <Button
-                type="text"
-                size="small"
-                icon={<EllipsisOutlined />}
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-              />
-            </Dropdown>
-          </div>
-        </div>
-      ),
-      key: "all",
-      children: [
-        ...(creatingParentId === "all"
-          ? [
-              {
-                title: renderCreatingInput("all"),
-                key: "__creating__root",
-                selectable: false,
-              },
-            ]
-          : []),
-        ...buildTreeNodes(filteredModules),
-      ],
-    },
-  ];
-
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const keyStr = String(info?.node?.key);
-    if (keyStr.startsWith("__creating__")) return;
-    if (!info.selected) {
-      if (keyStr === "all") setSelectedModuleId(null);
-      return;
+    if (!module.is_default) {
+      items.push(
+        {
+          key: "rename",
+          label: "重命名",
+          icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
+          disabled: !canEditReview,
+          onClick: () => startRenameNode(node.key, node.label),
+        },
+        {
+          key: "delete",
+          label: "删除",
+          icon: <Trash2 className="size-3.5" strokeWidth={1.75} />,
+          danger: true,
+          disabled: !canDeleteReview,
+          onClick: () => confirmDeleteModule(module),
+        }
+      );
     }
-    const key = selectedKeys[0] as string | undefined;
-    const nextModuleId = !key || key === "all" ? null : key;
+    return items;
+  };
+
+  const handleTreeSelect = (key: string) => {
+    const nextModuleId = key === MODULE_TREE_ROOT_KEY ? null : key;
+    if (nextModuleId === selectedModuleId) return;
     setSelectedModuleId(nextModuleId);
     setCurrentPage(1);
     fetchModules();
   };
 
-  const onDrop: TreeProps["onDrop"] = async (info) => {
-    if (!canEditReview) return;
-    const dragKey = String(info.dragNode?.key);
-    const dropKey = String(info.node?.key);
-    if (!workspaceSlug) return;
-    if (!dragKey || !dropKey) return;
-    if (info.dropToGap) return;
-    if (dragKey === dropKey) return;
-    if (dragKey === "all" || dragKey.startsWith("__creating__")) return;
-    if (dropKey.startsWith("__creating__")) return;
+  // 评审模块树只支持换父级：拖到节点上成为其子模块，拖到「全部评审」上回到一级
+  const handleTreeDrop = async ({ dragKey, targetKey, position }: TModuleTreeDropEvent) => {
+    if (!canEditReview || !workspaceSlug || position !== "into") return;
     const dragModule = findModuleById(modules, dragKey);
     if (!dragModule) return;
-    if (dropKey !== "all" && hasDescendant(dragModule, dropKey)) return;
-    const newParent = dropKey === "all" ? null : dropKey;
+    if (targetKey !== MODULE_TREE_ROOT_KEY && hasDescendant(dragModule, targetKey)) return;
+    const newParent = targetKey === MODULE_TREE_ROOT_KEY ? null : targetKey;
     try {
       await caseService.updateReviewModule(workspaceSlug as string, dragKey, { parent: newParent });
-      setExpandedKeys((prev) => {
-        if (dropKey === "all" || prev.includes(dropKey)) return prev;
-        return [...prev, dropKey];
-      });
+      if (newParent) setExpandedKeys((prev) => (prev.includes(newParent) ? prev : [...prev, newParent]));
       await fetchModules();
       await fetchAllReviewsTotal();
-    } catch {}
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "移动评审模块失败");
+    }
   };
+
+  const selectedModuleName = selectedModuleId ? findModuleById(modules, selectedModuleId)?.name : undefined;
 
   useEffect(() => {
     if (!permissionsFetched) return;
@@ -733,49 +479,22 @@ export default function ReviewsPage() {
         </div>
       ) : (
         <div className={styles.split}>
-          <div className={`${styles.left} flex h-full flex-col`} style={{ width: leftWidth }}>
-            <div className={`${styles.treeRoot} vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto pt-2`}>
-              <style
-                dangerouslySetInnerHTML={{
-                  __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 20px !important;
-                  margin-inline-end: 0px !important;
-                  display: flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  margin-top: 2px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 0px !important;
-                }
-              `,
-                }}
-              />
-              <Tree
-                blockNode
-                draggable={canEditReview}
-                showIcon={false}
-                switcherIcon={() => (
-                  <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-                    <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
-                  </span>
-                )}
-                treeData={treeData as any}
-                selectedKeys={[selectedModuleId ?? "all"]}
-                expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                onExpand={onExpand}
-                onSelect={onSelect}
-                onDrop={onDrop}
-                className="custom-tree-indent testhub-review-module-tree py-2 pl-2"
-              />
-            </div>
-            <div className={styles.resizer} onMouseDown={onMouseDownResize} role="presentation" />
-          </div>
+          <ModuleTreePanel
+            root={{ label: "全部评审", count: totalReviews }}
+            nodes={treeNodes}
+            selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+            onSelect={handleTreeSelect}
+            expandedKeys={expandedKeys}
+            onExpandedKeysChange={setExpandedKeys}
+            editing={editing}
+            onEditCommit={handleEditCommit}
+            onEditCancel={() => setEditing(null)}
+            getMenuItems={getMenuItems}
+            dragMode={canEditReview ? "reparent" : "none"}
+            onDrop={handleTreeDrop}
+            onAddRoot={canCreateReview ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+            railLabel={selectedModuleName || "全部评审"}
+          />
           <div className={`${styles.right} overflow-hidden !py-0`}>
             <div className="flex h-full flex-col overflow-hidden">
               <div className="min-h-0 flex-1 overflow-hidden">
@@ -832,20 +551,6 @@ export default function ReviewsPage() {
                   scrollbar-gutter: stable;
                 }
 
-                .testhub-review-module-tree .ant-tree-draggable-icon{
-                  display: none !important;
-                }
-
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 2px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
-                }
               `,
               }}
             />

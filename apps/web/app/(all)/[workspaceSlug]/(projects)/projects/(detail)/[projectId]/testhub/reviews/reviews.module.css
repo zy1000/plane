@@ -5,9 +5,7 @@
   flex-direction: column;
 }
 .split { display: flex; flex: 1; min-height: 0; width: 100%; }
-.left { position: relative; border-right: 1px solid #e8e8e8; transition: width 0.2s ease; min-width: 200px; max-width: 300px; overflow: hidden; display: flex; flex-direction: column; }
 .leftHeader { padding: 8px; }
-.treeRoot { flex: 1; overflow: auto; }
 .treeList { display: block; }
 .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; cursor: pointer; transition: background-color 0.2s ease; }
 .row:hover { background-color: #f5f5f5; }
@@ -21,7 +19,6 @@
 .actionMenu { opacity: 0; transition: opacity 0.2s ease; width: 24px; }
 .row:hover .actionMenu { opacity: 1; }
 .menuSpace { width: 24px; display: inline-flex; align-items: center; justify-content: center; }
-.resizer { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
 .right { flex: 1; overflow: auto; padding: 8px 8px 8px 0; }
 .passRateCell { display: flex; align-items: center; gap: 8px; }
 .progressWrap { flex: 0 0 75%; min-width: 120px; }

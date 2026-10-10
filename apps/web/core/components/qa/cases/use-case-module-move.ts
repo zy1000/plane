@@ -1,16 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
-import type { TreeProps } from "antd";
 import { useTranslation } from "@plane/i18n";
 import { CaseModuleService } from "@/services/qa";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
+import { MODULE_TREE_ROOT_KEY, type TModuleTreeDropEvent } from "@/components/qa/module-tree";
 import { findModuleById, findModuleParentId, isModuleInSubtree } from "./case-tree-utils";
 
 const caseModuleService = new CaseModuleService();
-
-const ROOT_KEY = "all";
-const isCreatingKey = (key: string) => key.startsWith("__creating__");
 
 type TMovePayload = {
   module_id: string;
@@ -24,17 +21,15 @@ type Params = {
   /** 完整模块树（未经搜索过滤），用于找父级 / 子孙 */
   modules: any[];
   canEdit: boolean;
-  /** 正在重命名的节点不可拖，避免拖动输入框 */
-  renamingModuleId?: string | null;
   /** 移动成功后回调，newParentId 为 null 表示移到根级 */
   onMoved: (newParentId: string | null) => void | Promise<void>;
 };
 
 /**
- * 用例模块树的库内移动：给 antd Tree 提供 draggable / allowDrop / onDrop，
+ * 用例模块树的库内移动：把 ModuleTree 的拖拽落点换算成后端 move 接口的参数，
  * 同时暴露 moveModule 供「移动到」弹窗使用。排序由后端按锚点重排同级序号。
  */
-export const useCaseModuleMove = ({ workspaceSlug, modules, canEdit, renamingModuleId, onMoved }: Params) => {
+export const useCaseModuleMove = ({ workspaceSlug, modules, canEdit, onMoved }: Params) => {
   const { t } = useTranslation();
 
   const submitMove = useCallback(
@@ -59,66 +54,28 @@ export const useCaseModuleMove = ({ workspaceSlug, modules, canEdit, renamingMod
     [submitMove]
   );
 
-  const draggable: TreeProps["draggable"] = canEdit
-    ? {
-        icon: false,
-        nodeDraggable: (node) => {
-          const key = String(node.key);
-          return key !== ROOT_KEY && !isCreatingKey(key) && key !== renamingModuleId;
-        },
+  const onDrop = useCallback(
+    ({ dragKey, targetKey, position }: TModuleTreeDropEvent) => {
+      if (!canEdit) return;
+      const dragModule = findModuleById(modules, dragKey);
+      if (!dragModule) return;
+
+      // 落在节点上：成为它的子模块（追加到末尾）；落在「全部用例」上 = 移到根级
+      if (position === "into") {
+        const targetParentId = targetKey === MODULE_TREE_ROOT_KEY ? null : targetKey;
+        if (targetParentId && isModuleInSubtree(dragModule, targetParentId)) return;
+        void submitMove({ module_id: dragKey, target_parent_id: targetParentId });
+        return;
       }
-    : false;
 
-  const allowDrop: TreeProps["allowDrop"] = ({ dragNode, dropNode, dropPosition }) => {
-    const dragKey = String(dragNode.key);
-    const dropKey = String(dropNode.key);
-    if (isCreatingKey(dropKey)) return false;
-    // 「全部用例」只能作为落点（= 移到根级），不能排到它的前后
-    if (dropKey === ROOT_KEY) return dropPosition === 0;
-    return !isModuleInSubtree(findModuleById(modules, dragKey), dropKey);
-  };
+      // 落在节点前 / 后：与它同级，排在它前 / 后
+      if (targetKey === MODULE_TREE_ROOT_KEY || isModuleInSubtree(dragModule, targetKey)) return;
+      const parentId = findModuleParentId(modules, targetKey);
+      if (parentId === undefined) return;
+      void submitMove({ module_id: dragKey, target_parent_id: parentId, anchor_id: targetKey, placement: position });
+    },
+    [canEdit, modules, submitMove]
+  );
 
-  const onDrop: TreeProps["onDrop"] = (info) => {
-    if (!canEdit) return;
-    const dragKey = String(info.dragNode.key);
-    const dropKey = String(info.node.key);
-    if (dragKey === dropKey || isCreatingKey(dropKey)) return;
-
-    const dragModule = findModuleById(modules, dragKey);
-    if (!dragModule) return;
-
-    // 落在节点上：成为它的子模块（追加到末尾）
-    if (!info.dropToGap) {
-      const targetParentId = dropKey === ROOT_KEY ? null : dropKey;
-      if (targetParentId && isModuleInSubtree(dragModule, targetParentId)) return;
-      void submitMove({ module_id: dragKey, target_parent_id: targetParentId });
-      return;
-    }
-
-    if (dropKey === ROOT_KEY) return;
-    const dropPos = String(info.node.pos).split("-");
-    const relative = info.dropPosition - Number(dropPos[dropPos.length - 1]);
-
-    // 落在「已展开且有子模块」的节点下沿：antd 的指示线表示插到它的第一个子模块前
-    const dropModule = findModuleById(modules, dropKey);
-    const dropChildren: any[] = dropModule?.children || [];
-    if (relative === 1 && info.node.expanded && dropChildren.length > 0) {
-      const firstChildId = String(dropChildren[0].id);
-      if (firstChildId === dragKey) return;
-      void submitMove({ module_id: dragKey, target_parent_id: dropKey, anchor_id: firstChildId, placement: "before" });
-      return;
-    }
-
-    // 落在节点前/后间隙：与它同级，排在它前/后
-    const parentId = findModuleParentId(modules, dropKey);
-    if (parentId === undefined) return;
-    void submitMove({
-      module_id: dragKey,
-      target_parent_id: parentId,
-      anchor_id: dropKey,
-      placement: relative === -1 ? "before" : "after",
-    });
-  };
-
-  return { draggable, allowDrop, onDrop, moveModule };
+  return { onDrop, moveModule };
 };

@@ -2,8 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Breadcrumbs } from "@plane/ui";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { Library } from "lucide-react";
 import { RepositoryCasesView } from "@/components/qa/cases/repository-cases-view";
 import { qaCaseSetToastWarning } from "@/utils/qa-case-error";
 import { RepositorySelect } from "../repository-select";
@@ -55,45 +54,35 @@ export default function TestCasesPage() {
       projectId={String(projectId || "")}
       repositoryId={repositoryId}
       repositoryName={repositoryName}
-      headerLeft={
-        <Breadcrumbs>
-          <Breadcrumbs.Item
-            component={<BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub`} label="测试用例库" />}
-          />
-          <Breadcrumbs.Item
-            isLast
-            component={
-              <RepositorySelect
-                key={`repository-select-${repositoryId || "all"}`}
-                workspaceSlug={String(workspaceSlug || "")}
-                projectId={String(projectId || "")}
-                className="inline-flex"
-                buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-secondary hover:text-primary hover:bg-layer-1 cursor-pointer gap-2 h-full"
-                labelClassName="max-w-[150px] leading-4"
-                hideChevron
-                defaultRepositoryId={repositoryId}
-                onRepositoryChange={({ id, name }) => {
-                  setRepositoryId(id);
-                  setRepositoryName(name ? String(name) : "");
-                  try {
-                    if (id) {
-                      sessionStorage.setItem("selectedRepositoryId", String(id));
-                      if (name) sessionStorage.setItem("selectedRepositoryName", String(name));
-                    } else {
-                      sessionStorage.removeItem("selectedRepositoryId");
-                      sessionStorage.removeItem("selectedRepositoryName");
-                    }
-                  } catch {}
-                  const ws = String(workspaceSlug || "");
-                  const pid = String(projectId || "");
-                  if (id)
-                    router.push(`/${ws}/projects/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`);
-                  else router.push(`/${ws}/projects/${pid}/testhub/cases`);
-                }}
-              />
-            }
-          />
-        </Breadcrumbs>
+      // 用例库切换放在树头：树只管当前库
+      treeHeader={
+        <RepositorySelect
+          key={`repository-select-${repositoryId || "all"}`}
+          workspaceSlug={String(workspaceSlug || "")}
+          projectId={String(projectId || "")}
+          className="min-w-0 max-w-full"
+          buttonClassName="h-7 min-w-0 max-w-full gap-1.5 rounded-md border-0 px-1.5 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
+          labelClassName="max-w-[170px] text-13 leading-4"
+          leftIcon={<Library className="size-3.5 text-tertiary" strokeWidth={1.75} />}
+          defaultRepositoryId={repositoryId}
+          onRepositoryChange={({ id, name }) => {
+            setRepositoryId(id);
+            setRepositoryName(name ? String(name) : "");
+            try {
+              if (id) {
+                sessionStorage.setItem("selectedRepositoryId", String(id));
+                if (name) sessionStorage.setItem("selectedRepositoryName", String(name));
+              } else {
+                sessionStorage.removeItem("selectedRepositoryId");
+                sessionStorage.removeItem("selectedRepositoryName");
+              }
+            } catch {}
+            const ws = String(workspaceSlug || "");
+            const pid = String(projectId || "");
+            if (id) router.push(`/${ws}/projects/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`);
+            else router.push(`/${ws}/projects/${pid}/testhub/cases`);
+          }}
+        />
       }
     />
   );
