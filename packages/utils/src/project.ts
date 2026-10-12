@@ -12,12 +12,8 @@ import type {
   TDevModeFeatures,
   TProject,
   TProjectDisplayFilters,
-  TProjectFilters,
   TProjectOrderByOptions,
 } from "@plane/types";
-// local imports
-import { getDate } from "./datetime";
-import { satisfiesDateFilter } from "./filter";
 
 /**
  * Updates the sort order of the project.
@@ -122,41 +118,16 @@ export const projectIdentifierSanitizer = (identifier: string): string =>
   identifier.replace(/[^ÇŞĞIİÖÜA-Za-z0-9]/g, "");
 
 /**
- * @description filters projects based on the filter
+ * @description 项目列表的范围过滤（我的项目 / 归档）。属性筛选走富筛选，见 apps/web `project/filters/`
  * @param {TProject} project
- * @param {TProjectFilters} filters
  * @param {TProjectDisplayFilters} displayFilters
  * @returns {boolean}
  */
-export const shouldFilterProject = (
-  project: TProject,
-  displayFilters: TProjectDisplayFilters,
-  filters: TProjectFilters
-): boolean => {
-  let fallsInFilters = true;
-  Object.keys(filters).forEach((key) => {
-    const filterKey = key as keyof TProjectFilters;
-    if (filterKey === "access" && filters.access && filters.access.length > 0)
-      fallsInFilters = fallsInFilters && filters.access.includes(`${project.network}`);
-    if (filterKey === "lead" && filters.lead && filters.lead.length > 0)
-      fallsInFilters = fallsInFilters && filters.lead.includes(`${project.project_lead}`);
-    if (filterKey === "members" && filters.members && filters.members.length > 0) {
-      const memberIds = project.members;
-      fallsInFilters = fallsInFilters && filters.members.some((memberId) => memberIds?.includes(memberId));
-    }
-    if (filterKey === "created_at" && filters.created_at && filters.created_at.length > 0) {
-      const createdDate = getDate(project.created_at);
-      filters.created_at.forEach((dateFilter) => {
-        fallsInFilters = fallsInFilters && !!createdDate && satisfiesDateFilter(createdDate, dateFilter);
-      });
-    }
-  });
-  if (displayFilters.my_projects && !project.member_role) fallsInFilters = false;
-  if (displayFilters.archived_projects && !project.archived_at) fallsInFilters = false;
-  if (!displayFilters.archived_projects && !displayFilters.show_archived_projects && project.archived_at)
-    fallsInFilters = false;
-
-  return fallsInFilters;
+export const shouldFilterProject = (project: TProject, displayFilters: TProjectDisplayFilters): boolean => {
+  if (displayFilters.my_projects && !project.member_role) return false;
+  if (displayFilters.archived_projects && !project.archived_at) return false;
+  if (!displayFilters.archived_projects && !displayFilters.show_archived_projects && project.archived_at) return false;
+  return true;
 };
 
 /**
@@ -176,6 +147,10 @@ export const orderProjects = (projects: TProject[], orderByKey: TProjectOrderByO
   if (orderByKey === "-created_at") orderedProjects = sortBy(projects, [(p) => p.created_at ?? ""]).reverse();
   if (orderByKey === "members_length") orderedProjects = sortBy(projects, [(p) => p.members?.length]);
   if (orderByKey === "-members_length") orderedProjects = sortBy(projects, [(p) => p.members?.length]).reverse();
+  if (orderByKey === "start_date") orderedProjects = sortBy(projects, [(p) => p.start_date ?? ""]);
+  if (orderByKey === "-start_date") orderedProjects = sortBy(projects, [(p) => p.start_date ?? ""]).reverse();
+  if (orderByKey === "end_date") orderedProjects = sortBy(projects, [(p) => p.end_date ?? ""]);
+  if (orderByKey === "-end_date") orderedProjects = sortBy(projects, [(p) => p.end_date ?? ""]).reverse();
 
   return orderedProjects;
 };

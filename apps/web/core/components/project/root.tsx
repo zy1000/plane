@@ -4,22 +4,21 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import type { TProjectAppliedDisplayFilterKeys, TProjectFilters } from "@plane/types";
-import { calculateTotalFilters } from "@plane/utils";
 // components
 import { PageHead } from "@/components/core/page-title";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
-import { ProjectAppliedFiltersList } from "./applied-filters";
 import { ProjectCardList } from "./card-list";
+import { useProjectListFiltering } from "./filters/use-project-list-filtering";
 import { ProjectTableList } from "./table-list";
 
 export const ProjectRoot = observer(function ProjectRoot() {
@@ -27,55 +26,17 @@ export const ProjectRoot = observer(function ProjectRoot() {
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
+  const workspaceSlugString = workspaceSlug?.toString();
   // store
   const { totalProjectIds, filteredProjectIds } = useProject();
-  const {
-    currentWorkspaceFilters,
-    currentWorkspaceAppliedDisplayFilters,
-    clearAllFilters,
-    clearAllAppliedDisplayFilters,
-    updateFilters,
-    updateDisplayFilters,
-    viewMode,
-  } = useProjectFilter();
+  const { updateDisplayFilters, viewMode } = useProjectFilter();
+  const { lookups, filter } = useProjectListFiltering(workspaceSlugString);
   // derived values
   const pageTitle = currentWorkspace?.name
     ? `${currentWorkspace?.name} - ${t("workspace_projects.label", { count: 2 })}`
     : undefined;
 
   const isArchived = pathname.includes("/archives");
-
-  const allowedDisplayFilters =
-    currentWorkspaceAppliedDisplayFilters?.filter((filter) => (isArchived ? true : filter !== "archived_projects")) ??
-    [];
-
-  const handleRemoveFilter = useCallback(
-    (key: keyof TProjectFilters, value: string | null) => {
-      if (!workspaceSlug) return;
-      let newValues = currentWorkspaceFilters?.[key] ?? [];
-
-      if (!value) newValues = [];
-      else newValues = newValues.filter((val) => val !== value);
-
-      updateFilters(workspaceSlug.toString(), { [key]: newValues });
-    },
-    [currentWorkspaceFilters, updateFilters, workspaceSlug]
-  );
-
-  const handleRemoveDisplayFilter = useCallback(
-    (key: TProjectAppliedDisplayFilterKeys) => {
-      if (!workspaceSlug) return;
-      updateDisplayFilters(workspaceSlug.toString(), { [key]: false });
-    },
-    [updateDisplayFilters, workspaceSlug]
-  );
-
-  const handleClearAllFilters = useCallback(() => {
-    if (!workspaceSlug) return;
-    clearAllFilters(workspaceSlug.toString());
-    clearAllAppliedDisplayFilters(workspaceSlug.toString());
-    if (isArchived) updateDisplayFilters(workspaceSlug.toString(), { archived_projects: true });
-  }, [clearAllFilters, clearAllAppliedDisplayFilters, isArchived, updateDisplayFilters, workspaceSlug]);
 
   useEffect(() => {
     if (!workspaceSlug) return;
@@ -103,16 +64,13 @@ export const ProjectRoot = observer(function ProjectRoot() {
     <>
       <PageHead title={pageTitle} />
       <div className="flex h-full w-full flex-col">
-        {(calculateTotalFilters(currentWorkspaceFilters ?? {}) !== 0 || allowedDisplayFilters.length > 0) && (
-          <ProjectAppliedFiltersList
-            appliedFilters={currentWorkspaceFilters ?? {}}
-            appliedDisplayFilters={allowedDisplayFilters}
-            handleClearAllFilters={handleClearAllFilters}
-            handleRemoveFilter={handleRemoveFilter}
-            handleRemoveDisplayFilter={handleRemoveDisplayFilter}
-            filteredProjects={filteredProjectIds?.length ?? 0}
-            totalProjects={totalProjectIds?.length ?? 0}
-            alwaysAllowEditing
+        {filter && (
+          <FiltersRow
+            filter={filter}
+            summary={t("workspace_projects.filters.summary", {
+              filtered: filteredProjectIds?.length ?? 0,
+              total: totalProjectIds?.length ?? 0,
+            })}
           />
         )}
         <div
@@ -120,7 +78,7 @@ export const ProjectRoot = observer(function ProjectRoot() {
             viewOpacity === 0 ? "opacity-0" : "opacity-100"
           }`}
         >
-          {renderedViewMode === "list" ? <ProjectTableList /> : <ProjectCardList />}
+          {renderedViewMode === "list" ? <ProjectTableList lookups={lookups} /> : <ProjectCardList />}
         </div>
       </div>
     </>

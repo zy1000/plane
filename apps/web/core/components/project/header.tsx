@@ -19,9 +19,8 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useUserPermissions } from "@/hooks/store/user";
-// plane web constants
 // components
-import HeaderFilters from "./filters";
+import { ProjectListHeaderActions } from "./header-actions";
 import { ProjectSearch } from "./search-projects";
 
 export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
@@ -53,8 +52,8 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
       </Header.LeftItem>
       <Header.RightItem>
         <ProjectSearch />
-        <div className="hidden md:flex">
-          <HeaderFilters />
+        <div className="hidden items-center gap-2 md:flex">
+          <ProjectListHeaderActions />
         </div>
         {!isArchived && (
           <Tooltip

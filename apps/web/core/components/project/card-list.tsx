@@ -5,13 +5,13 @@
  */
 
 import { observer } from "mobx-react";
+import { useParams } from "next/navigation";
 // plane imports
 import { WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { ContentWrapper } from "@plane/ui";
 // components
-import { calculateTotalFilters } from "@plane/utils";
 import { ProjectsLoader } from "@/components/ui/loader/projects-loader";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -30,6 +30,7 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
   const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
   // plane hooks
   const { t } = useTranslation();
+  const { workspaceSlug } = useParams();
   // store hooks
   const { toggleCreateProjectModal } = useCommandPalette();
   const {
@@ -39,12 +40,14 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
     filteredProjectIds: storeFilteredProjectIds,
     getProjectById,
   } = useProject();
-  const { currentWorkspaceDisplayFilters, currentWorkspaceFilters } = useProjectFilter();
+  const { currentWorkspaceDisplayFilters, getRichFilter } = useProjectFilter();
   const { allowWorkspacePermissionKeys } = useUserPermissions();
 
   // derived values
   const totalProjectIds = totalProjectIdsProps ?? storeTotalProjectIds;
   const filteredProjectIds = filteredProjectIdsProps ?? storeFilteredProjectIds;
+  const hasActiveFilters = workspaceSlug ? (getRichFilter(workspaceSlug.toString())?.hasActiveFilters ?? false) : false;
+  const isArchivedEmpty = !!currentWorkspaceDisplayFilters?.archived_projects && !hasActiveFilters;
 
   // permissions
   const canPerformEmptyStateActions = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
@@ -78,24 +81,13 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
   if (filteredProjectIds.length === 0)
     return (
       <EmptyStateDetailed
-        title={
-          currentWorkspaceDisplayFilters?.archived_projects &&
-          calculateTotalFilters(currentWorkspaceFilters ?? {}) === 0
-            ? t("workspace_empty_state.projects_archived.title")
-            : t("common_empty_state.search.title")
-        }
+        title={isArchivedEmpty ? t("workspace_empty_state.projects_archived.title") : t("common_empty_state.search.title")}
         description={
-          currentWorkspaceDisplayFilters?.archived_projects &&
-          calculateTotalFilters(currentWorkspaceFilters ?? {}) === 0
+          isArchivedEmpty
             ? t("workspace_empty_state.projects_archived.description")
             : t("common_empty_state.search.description")
         }
-        assetKey={
-          currentWorkspaceDisplayFilters?.archived_projects &&
-          calculateTotalFilters(currentWorkspaceFilters ?? {}) === 0
-            ? "archived-work-item"
-            : "search"
-        }
+        assetKey={isArchivedEmpty ? "archived-work-item" : "search"}
         assetClassName="size-40"
       />
     );

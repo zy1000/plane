@@ -11,15 +11,17 @@ import { useParams } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 // components
 import { PageHead } from "@/components/core/page-title";
-import { ProjectTableList } from "@/components/project/table-list";
 import { ProjectCardList } from "@/components/project/card-list";
+import { useProjectListFiltering } from "@/components/project/filters/use-project-list-filtering";
+import { ProjectTableList } from "@/components/project/table-list";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
 // hooks
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 
 /**
  * Standalone workspace-level archives page component.
- * Displays only archived projects without the filter bar.
+ * Displays only archived projects; the rich filter row still applies on top.
  * This is intentionally kept separate from ProjectRoot to allow
  * independent customization of the workspace archives view.
  */
@@ -28,6 +30,7 @@ export const WorkspaceArchivesRoot = observer(function WorkspaceArchivesRoot() {
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspace();
   const { updateDisplayFilters, viewMode } = useProjectFilter();
+  const { lookups, filter } = useProjectListFiltering(workspaceSlug?.toString());
 
   const pageTitle = currentWorkspace?.name
     ? `${currentWorkspace?.name} - ${t("archives")}`
@@ -56,12 +59,13 @@ export const WorkspaceArchivesRoot = observer(function WorkspaceArchivesRoot() {
     <>
       <PageHead title={pageTitle} />
       <div className="flex h-full w-full flex-col">
+        {filter && <FiltersRow filter={filter} />}
         <div
           className={`flex-1 min-h-0 overflow-hidden transition-opacity duration-150 ease-linear ${
             viewOpacity === 0 ? "opacity-0" : "opacity-100"
           }`}
         >
-          {renderedViewMode === "list" ? <ProjectTableList /> : <ProjectCardList />}
+          {renderedViewMode === "list" ? <ProjectTableList lookups={lookups} /> : <ProjectCardList />}
         </div>
       </div>
     </>

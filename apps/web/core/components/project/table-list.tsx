@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { Pagination } from "antd";
-import { Archive, ArchiveRestoreIcon, ArrowDown, ArrowUp, ArrowUpDown, Globe2, Link as LinkIcon, Settings, Star } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   EUserPermissions,
   EUserPermissionsLevel,
@@ -20,8 +20,9 @@ import { Logo } from "@plane/propel/emoji-icon-picker";
 import { LockIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import { Avatar, ContentWrapper, ERowVariant } from "@plane/ui";
-import { calculateTotalFilters, cn, copyUrlToClipboard, getFileURL, renderFormattedDate } from "@plane/utils";
+import type { TProject, TProjectOrderByOptions } from "@plane/types";
+import { ContentWrapper, ERowVariant } from "@plane/ui";
+import { cn, copyUrlToClipboard, renderFormattedPayloadDate } from "@plane/utils";
 import { ProjectsLoader } from "@/components/ui/loader/projects-loader";
 import { captureClick } from "@/helpers/event-tracker.helper";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -31,30 +32,45 @@ import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useUserPermissions } from "@/hooks/store/user";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
 import { ArchiveRestoreProjectModal } from "@/components/project/archive-restore-modal";
-import {
-  ProjectProductRows,
-  ProjectProductsToggle,
-  ProjectProductsTogglePlaceholder,
-} from "@/components/project/project-product-rows";
 import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
-import type { TProject } from "@plane/types";
+import { parseOrderBy, toOrderBy } from "./display/display-dropdown";
+import { projectConditionsNeedDetails } from "./filters/match-project";
+import type { TProjectListLookups } from "./filters/use-project-list-lookups";
+import { useProjectListLookups } from "./filters/use-project-list-lookups";
+import type { TProjectTableContext } from "./table/columns";
+import {
+  ACTIONS_COLUMN_WIDTH,
+  NAME_COLUMN_MIN_WIDTH,
+  PROJECT_COLUMN_WIDTH,
+  getVisibleProjectColumns,
+  renderProjectCell,
+} from "./table/columns";
+import { ProjectRowActions } from "./table/row-actions";
 
 type Props = {
   totalProjectIds?: string[];
   filteredProjectIds?: string[];
+  /** 页面根已经拉过字典时传进来，省一次请求；不传就自己拉 */
+  lookups?: TProjectListLookups;
 };
 
-type TSortKey = "name" | "created_at" | "status";
-type TSortDirection = "asc" | "desc";
+type TSortKey = "name" | "created_at" | "start_date" | "end_date" | "members_length";
 
-const isSortKey = (key: string): key is TSortKey =>
-  key === "name" || key === "created_at" || key === "status";
+/** 表头点一个新列时的默认方向；再点一次翻转 */
+const DEFAULT_SORT_DIRECTION: Record<TSortKey, "asc" | "desc"> = {
+  name: "asc",
+  created_at: "desc",
+  start_date: "asc",
+  end_date: "asc",
+  members_length: "desc",
+};
 
-/** 表头列数；产品子行用 colSpan 占满整行，加减列时同步改这里 */
-const TABLE_COLUMN_COUNT = 5;
+const HEADER_CELL_CLASS = "px-4 py-3 text-left text-xs font-medium text-secondary whitespace-nowrap";
+/** 名称列左侧固定；横向滚动时底色要自己画，否则后面的列会从它底下透出来 */
+const STICKY_CELL_CLASS = "sticky left-0 z-[1]";
 
 export const ProjectTableList = observer(function ProjectTableList(props: Props) {
-  const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
+  const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps, lookups: lookupsProps } = props;
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -71,16 +87,17 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     addProjectToFavorites,
     removeProjectFromFavorites,
   } = useProject();
-  const {
-    currentWorkspaceDisplayFilters,
-    currentWorkspaceFilters,
-    updateDisplayFilters,
-  } = useProjectFilter();
+  const { currentWorkspaceDisplayFilters, currentWorkspaceDisplayProperties, updateDisplayFilters, getRichFilter } =
+    useProjectFilter();
   const { allowPermissions, allowWorkspacePermissionKeys, allowProjectPermissionKeys } = useUserPermissions();
   const { getUserDetails } = useMember();
+  const ownLookups = useProjectListLookups(lookupsProps ? undefined : workspaceSlugString);
+  const lookups = lookupsProps ?? ownLookups;
 
   const totalProjectIds = totalProjectIdsProps ?? storeTotalProjectIds;
   const filteredProjectIds = filteredProjectIdsProps ?? storeFilteredProjectIds;
+  const richFilter = workspaceSlugString ? getRichFilter(workspaceSlugString) : undefined;
+  const hasActiveFilters = richFilter?.hasActiveFilters ?? false;
 
   const canPerformEmptyStateActions = allowWorkspacePermissionKeys(
     [WORKSPACE_PROJECT_CREATE_PERMISSION_KEY],
@@ -88,62 +105,40 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   );
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [sortKey, setSortKey] = useState<TSortKey>("created_at");
-  const [sortDirection, setSortDirection] = useState<TSortDirection>("desc");
   const [publishProjectId, setPublishProjectId] = useState<string | null>(null);
   const [archiveProjectId, setArchiveProjectId] = useState<string | null>(null);
   const [restoreProjectId, setRestoreProjectId] = useState<string | null>(null);
-  // 展开了关联产品子行的项目；按 id 记，翻页 / 排序不清空
-  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
 
-  useEffect(() => {
-    const orderBy = currentWorkspaceDisplayFilters?.order_by?.toString();
-    if (!orderBy) return;
-    const isDescending = orderBy[0] === "-";
-    const key = (isDescending ? orderBy.slice(1) : orderBy).trim();
-    if (!isSortKey(key)) return;
-    setSortKey(key);
-    setSortDirection(isDescending ? "desc" : "asc");
-  }, [currentWorkspaceDisplayFilters?.order_by]);
+  const { key: sortKey, direction: sortDirection } = parseOrderBy(currentWorkspaceDisplayFilters?.order_by);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [filteredProjectIds?.length, sortKey, sortDirection]);
 
+  // 排序已由 store 的 orderProjects 做完，这里只按 id 取出来
   const projects = useMemo(() => {
     if (!filteredProjectIds) return [];
-    return filteredProjectIds
-      .map((id) => getProjectById(id))
-      .filter((p): p is TProject => !!p);
+    return filteredProjectIds.map((id) => getProjectById(id)).filter((p): p is TProject => !!p);
   }, [filteredProjectIds, getProjectById]);
 
-  const sortedProjects = useMemo(() => {
-    const arr = [...projects];
-    const factor = sortDirection === "asc" ? 1 : -1;
+  const columns = useMemo(() => getVisibleProjectColumns(currentWorkspaceDisplayProperties), [currentWorkspaceDisplayProperties]);
+  const tableMinWidth =
+    NAME_COLUMN_MIN_WIDTH + columns.reduce((sum, column) => sum + PROJECT_COLUMN_WIDTH[column.key], 0) + ACTIONS_COLUMN_WIDTH;
 
-    arr.sort((a, b) => {
-      if (sortKey === "name") return factor * a.name.localeCompare(b.name);
-      if (sortKey === "created_at")
-        return factor * (new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
-      if (sortKey === "status") {
-        const av = a.archived_at ? 1 : 0;
-        const bv = b.archived_at ? 1 : 0;
-        if (av !== bv) return factor * (av - bv);
-        return factor * a.name.localeCompare(b.name);
-      }
-      return factor * a.name.localeCompare(b.name);
-    });
+  const cellContext = useMemo<TProjectTableContext>(
+    () => ({ lookups, getUserDetails, today: renderFormattedPayloadDate(new Date()) ?? "", t }),
+    // t 每次渲染都是新引用（见 use-translation.ts），不放依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lookups, getUserDetails]
+  );
 
-    return arr;
-  }, [projects, sortDirection, sortKey]);
-
-  const total = sortedProjects.length;
+  const total = projects.length;
   const currentPath = getPathWithSearch(pathname, searchParams);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(currentPage * pageSize, total);
   const currentPageProjects = useMemo(
-    () => sortedProjects.slice(startIndex, startIndex + pageSize),
-    [sortedProjects, startIndex, pageSize]
+    () => projects.slice(startIndex, startIndex + pageSize),
+    [projects, startIndex, pageSize]
   );
   const handlePaginationChange = useCallback((page: number, size: number) => {
     setCurrentPage(page);
@@ -158,17 +153,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
 
       try {
         await copyUrlToClipboard(`${workspaceSlugString}/projects/${projectId}/issues`);
-        setToast({
-          type: TOAST_TYPE.SUCCESS,
-          title: "链接已复制",
-          message: "项目链接已复制到剪贴板",
-        });
+        setToast({ type: TOAST_TYPE.SUCCESS, title: "链接已复制", message: "项目链接已复制到剪贴板" });
       } catch {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "复制失败",
-          message: "未能复制链接，请重试",
-        });
+        setToast({ type: TOAST_TYPE.ERROR, title: "复制失败", message: "未能复制链接，请重试" });
       }
     },
     [workspaceSlugString]
@@ -186,68 +173,37 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
       try {
         if (projectDetails.is_favorite) {
           await removeProjectFromFavorites(workspaceSlugString, projectId);
-          setToast({
-            type: TOAST_TYPE.INFO,
-            title: "已取消收藏",
-          });
+          setToast({ type: TOAST_TYPE.INFO, title: "已取消收藏" });
         } else {
           await addProjectToFavorites(workspaceSlugString, projectId);
-          setToast({
-            type: TOAST_TYPE.SUCCESS,
-            title: "已收藏",
-          });
+          setToast({ type: TOAST_TYPE.SUCCESS, title: "已收藏" });
         }
       } catch {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "操作失败",
-          message: "请稍后重试",
-        });
+        setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: "请稍后重试" });
       }
     },
     [addProjectToFavorites, getProjectById, removeProjectFromFavorites, workspaceSlugString]
   );
 
-  const toggleProjectExpanded = useCallback((projectId: string) => {
-    setExpandedProjectIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
-      return next;
-    });
-  }, []);
-
-  const handleOpenPublishModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setPublishProjectId(projectId);
-  }, []);
-
-  const handleOpenArchiveModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setArchiveProjectId(projectId);
-  }, []);
-
-  const handleOpenRestoreModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setRestoreProjectId(projectId);
-  }, []);
+  const openModal = useCallback(
+    (setter: (id: string | null) => void) => (e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setter(projectId);
+    },
+    []
+  );
+  const handleOpenPublishModal = useMemo(() => openModal(setPublishProjectId), [openModal]);
+  const handleOpenArchiveModal = useMemo(() => openModal(setArchiveProjectId), [openModal]);
+  const handleOpenRestoreModal = useMemo(() => openModal(setRestoreProjectId), [openModal]);
 
   const handleSort = useCallback(
     (key: TSortKey) => {
-      const nextDirection: TSortDirection = key === sortKey ? (sortDirection === "asc" ? "desc" : "asc") : "asc";
-      setSortKey(key);
-      setSortDirection(nextDirection);
-
-      if (!workspaceSlug) return;
-      if (key === "name" || key === "created_at") {
-        const orderBy = nextDirection === "desc" ? `-${key}` : key;
-        updateDisplayFilters(workspaceSlug.toString(), { order_by: orderBy as any });
-      }
+      if (!workspaceSlugString) return;
+      const nextDirection = key === sortKey ? (sortDirection === "asc" ? "desc" : "asc") : DEFAULT_SORT_DIRECTION[key];
+      updateDisplayFilters(workspaceSlugString, { order_by: toOrderBy(key, nextDirection) as TProjectOrderByOptions });
     },
-    [sortDirection, sortKey, updateDisplayFilters, workspaceSlug]
+    [sortDirection, sortKey, updateDisplayFilters, workspaceSlugString]
   );
 
   const renderSortIcon = useCallback(
@@ -259,9 +215,16 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     [sortDirection, sortKey]
   );
 
+  const renderSortableHeader = (label: string, key: TSortKey) => (
+    <button type="button" className="flex items-center gap-1 transition-colors hover:text-primary" onClick={() => handleSort(key)}>
+      {label}
+      {renderSortIcon(key)}
+    </button>
+  );
+
   // 轻量的 projects 接口就够渲染表格，不必死等更重的 projects/details。
   // 例外：按成员筛选依赖 project.members，只有 details 才返回，否则会先闪一下「无结果」。
-  const isMembersFilterApplied = (currentWorkspaceFilters?.members?.length ?? 0) > 0;
+  const isMembersFilterApplied = projectConditionsNeedDetails(richFilter?.allConditionsForDisplay ?? []);
   const isProjectDataReady =
     fetchStatus === "complete" || (fetchStatus === "partial" && !isMembersFilterApplied);
 
@@ -292,36 +255,26 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
       />
     );
 
-  if (filteredProjectIds.length === 0)
+  if (filteredProjectIds.length === 0) {
+    const isArchivedEmpty = currentWorkspaceDisplayFilters?.archived_projects && !hasActiveFilters;
     return (
       <EmptyStateDetailed
-        title={
-          currentWorkspaceDisplayFilters?.archived_projects && calculateTotalFilters(currentWorkspaceFilters ?? {}) === 0
-            ? t("workspace_empty_state.projects_archived.title")
-            : t("common_empty_state.search.title")
-        }
+        title={isArchivedEmpty ? t("workspace_empty_state.projects_archived.title") : t("common_empty_state.search.title")}
         description={
-          currentWorkspaceDisplayFilters?.archived_projects && calculateTotalFilters(currentWorkspaceFilters ?? {}) === 0
+          isArchivedEmpty
             ? t("workspace_empty_state.projects_archived.description")
             : t("common_empty_state.search.description")
         }
-        assetKey={
-          currentWorkspaceDisplayFilters?.archived_projects && calculateTotalFilters(currentWorkspaceFilters ?? {}) === 0
-            ? "archived-work-item"
-            : "search"
-        }
+        assetKey={isArchivedEmpty ? "archived-work-item" : "search"}
         assetClassName="size-40"
       />
     );
+  }
 
   return (
     <>
       {publishProjectId && (
-        <PublishProjectModal
-          isOpen={!!publishProjectId}
-          projectId={publishProjectId}
-          onClose={() => setPublishProjectId(null)}
-        />
+        <PublishProjectModal isOpen={!!publishProjectId} projectId={publishProjectId} onClose={() => setPublishProjectId(null)} />
       )}
       {archiveProjectId && workspaceSlugString && (
         <ArchiveRestoreProjectModal
@@ -342,43 +295,27 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
         />
       )}
       <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
-        <div className="w-full h-full rounded border border-subtle bg-surface-1 m-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-auto vertical-scrollbar scrollbar-lg">
-            <table className="min-w-[980px] w-full text-sm">
-              <thead className="border-b border-subtle bg-layer-1">
+        <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-auto vertical-scrollbar horizontal-scrollbar scrollbar-lg">
+            <table className="w-full table-fixed text-sm" style={{ minWidth: tableMinWidth }}>
+              <colgroup>
+                <col />
+                {columns.map((column) => (
+                  <col key={column.key} style={{ width: PROJECT_COLUMN_WIDTH[column.key] }} />
+                ))}
+                <col style={{ width: ACTIONS_COLUMN_WIDTH }} />
+              </colgroup>
+              <thead className="sticky top-0 z-[2] border-b border-subtle bg-layer-1">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-secondary">
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 transition-colors hover:text-primary"
-                      onClick={() => handleSort("name")}
-                    >
-                      项目名称
-                      {renderSortIcon("name")}
-                    </button>
+                  <th className={cn(HEADER_CELL_CLASS, STICKY_CELL_CLASS, "bg-layer-1")}>
+                    {renderSortableHeader(t("workspace_projects.fields.name"), "name")}
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden sm:table-cell">负责人</th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 transition-colors hover:text-primary"
-                      onClick={() => handleSort("status")}
-                    >
-                      状态
-                      {renderSortIcon("status")}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden lg:table-cell">
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 transition-colors hover:text-primary"
-                      onClick={() => handleSort("created_at")}
-                    >
-                      创建时间
-                      {renderSortIcon("created_at")}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary">操作</th>
+                  {columns.map((column) => (
+                    <th key={column.key} className={HEADER_CELL_CLASS}>
+                      {column.orderByKey ? renderSortableHeader(t(column.i18n_label), column.orderByKey) : t(column.i18n_label)}
+                    </th>
+                  ))}
+                  <th className={HEADER_CELL_CLASS}>{t("workspace_projects.fields.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -400,269 +337,101 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       project.id
                     ) ||
                     (project.permission_keys ?? []).some(
-                      (k) =>
-                        k === PROJECT_PUBLISH_VIEW_PERMISSION_KEY ||
-                        k === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
+                      (k) => k === PROJECT_PUBLISH_VIEW_PERMISSION_KEY || k === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
                     );
-                  const projectLead =
-                    typeof project.project_lead === "string"
-                      ? getUserDetails(project.project_lead)
-                      : project.project_lead ?? undefined;
                   const projectSettingsPath = workspaceSlugString
                     ? buildProjectSettingsPath({ workspaceSlug: workspaceSlugString, projectId: project.id, currentPath })
                     : "#";
-                  const linkedProducts = project.products ?? [];
-                  const isProductsExpanded = linkedProducts.length > 0 && expandedProjectIds.has(project.id);
 
                   return (
-                    <Fragment key={project.id}>
                     <tr
-                      className={cn("hover:bg-layer-1-hover", {
-                        "bg-layer-1": isArchived,
-                        "opacity-70": isArchived,
+                      key={project.id}
+                      className={cn("group border-b border-subtle hover:bg-layer-1-hover", {
+                        "bg-layer-1 opacity-70": isArchived,
                       })}
                     >
-                  <td className="px-4 py-3">
-                    <div className="flex min-w-0 items-center gap-1">
-                    {linkedProducts.length > 0 ? (
-                      <ProjectProductsToggle
-                        count={linkedProducts.length}
-                        isExpanded={isProductsExpanded}
-                        onToggle={() => toggleProjectExpanded(project.id)}
-                      />
-                    ) : (
-                      <ProjectProductsTogglePlaceholder />
-                    )}
-                    <Link
-                      href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-primary"
-                      data-prevent-progress={isArchived || isInviteOnly}
-                      onClick={(e) => {
-                        if (isArchived || isInviteOnly) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }
-                        if (isInviteOnly) {
-                          setToast({
-                            type: TOAST_TYPE.INFO,
-                            title: t("workspace_projects.network.private.description"),
-                          });
-                        }
-                      }}
-                    >
-                      <div className="flex-grow flex items-center gap-1.5 text-left select-none w-full min-w-0">
-                        <div className="size-4 grid place-items-center flex-shrink-0">
-                          <Logo logo={project.logo_props} size={14} />
+                      <td
+                        className={cn(
+                          STICKY_CELL_CLASS,
+                          "px-4 py-3 group-hover:bg-layer-1-hover",
+                          isArchived ? "bg-layer-1" : "bg-surface-1"
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center">
+                          <Link
+                            href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-primary"
+                            data-prevent-progress={isArchived || isInviteOnly}
+                            onClick={(e) => {
+                              if (isArchived || isInviteOnly) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }
+                              if (isInviteOnly) {
+                                setToast({ type: TOAST_TYPE.INFO, title: t("workspace_projects.network.private.description") });
+                              }
+                            }}
+                          >
+                            <div className="flex w-full min-w-0 flex-grow select-none items-center gap-1.5 text-left">
+                              <div className="grid size-4 flex-shrink-0 place-items-center">
+                                <Logo logo={project.logo_props} size={14} />
+                              </div>
+                              <div className="flex min-w-0 flex-grow items-center gap-2">
+                                <p className="min-w-0 truncate text-sm font-medium text-primary">{project.name}</p>
+                                {isPrivateProject && (
+                                  <Tooltip tooltipContent={t("workspace_projects.network.private.title")} position="top">
+                                    <span className="grid flex-shrink-0 place-items-center">
+                                      <LockIcon className="h-3 w-3 text-placeholder" />
+                                    </span>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </div>
+                          </Link>
                         </div>
-                        <div className="flex min-w-0 flex-grow items-center gap-2">
-                          <p className="min-w-0 truncate text-sm font-medium text-primary">{project.name}</p>
-                          {isPrivateProject && (
-                            <Tooltip tooltipContent={t("workspace_projects.network.private.title")} position="top">
-                              <span className="grid flex-shrink-0 place-items-center">
-                                <LockIcon className="h-3 w-3 text-placeholder" />
-                              </span>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    {projectLead ? (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Avatar
-                          name={projectLead.display_name}
-                          src={getFileURL(projectLead.avatar_url)}
-                          showTooltip={false}
+                      </td>
+                      {columns.map((column) => (
+                        <td key={column.key} className="px-4 py-3">
+                          {renderProjectCell(column.key, project, cellContext)}
+                        </td>
+                      ))}
+                      <td className="px-4 py-3">
+                        <ProjectRowActions
+                          project={project}
+                          canManageProject={canManageProject}
+                          canPublishProject={canPublishProject}
+                          settingsPath={projectSettingsPath}
+                          onCopyLink={handleCopyProjectLink}
+                          onToggleFavorite={handleToggleProjectFavorite}
+                          onPublish={handleOpenPublishModal}
+                          onArchive={handleOpenArchiveModal}
+                          onRestore={handleOpenRestoreModal}
                         />
-                        <span
-                          className={cn("truncate text-xs", {
-                            "text-primary": !isArchived,
-                            "text-placeholder": isArchived,
-                          })}
-                        >
-                          {projectLead.display_name ?? projectLead.email}
-                        </span>
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 pl-1 hidden md:table-cell">
-                    <span
-                      className={cn("inline-flex items-center rounded px-2 py-1 text-xs font-medium", {
-                        "text-primary": !isArchived,
-                        "text-placeholder": isArchived,
-                      })}
-                    >
-                      {isArchived ? "已归档" : "进行中"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-secondary hidden lg:table-cell">
-                    {project.created_at ? renderFormattedDate(project.created_at) : "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-start gap-2">
-                      <Tooltip
-                        tooltipContent={
-                          <div className="text-xs text-primary">{isArchived ? "已归档不可复制链接" : "复制链接"}</div>
-                        }
-                        position="top"
-                      >
-                        <button
-                          type="button"
-                          disabled={isArchived}
-                          className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                            isArchived
-                              ? "cursor-not-allowed opacity-50"
-                              : "hover:text-primary hover:bg-layer-1-hover"
-                          )}
-                          aria-label="复制链接"
-                          onClick={(e) => handleCopyProjectLink(e, project.id)}
-                        >
-                          <LinkIcon className="h-3 w-3" />
-                        </button>
-                      </Tooltip>
-                      <Tooltip
-                        tooltipContent={
-                          <div className="text-xs text-primary">{isArchived ? "已归档不可收藏" : "收藏"}</div>
-                        }
-                        position="top"
-                      >
-                        <button
-                          type="button"
-                          disabled={isArchived}
-                          className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                            isArchived
-                              ? "cursor-not-allowed opacity-50"
-                              : "hover:text-primary hover:bg-layer-1-hover"
-                          )}
-                          aria-label="收藏"
-                          onClick={(e) => handleToggleProjectFavorite(e, project.id)}
-                        >
-                          <Star className="transition-all h-3 w-3" fill={project.is_favorite ? "currentColor" : "none"} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip
-                        tooltipContent={
-                          <div className="text-xs text-primary">
-                            {isArchived ? "已归档不可发布" : canPublishProject ? "发布项目" : "无权限发布"}
-                          </div>
-                        }
-                        position="top"
-                      >
-                        <button
-                          type="button"
-                          disabled={isArchived || !canPublishProject}
-                          className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                            isArchived || !canPublishProject
-                              ? "cursor-not-allowed opacity-50"
-                              : "hover:text-primary hover:bg-layer-1-hover"
-                          )}
-                          aria-label="发布项目"
-                          onClick={(e) => handleOpenPublishModal(e, project.id)}
-                        >
-                          <Globe2 className="h-3 w-3" />
-                        </button>
-                      </Tooltip>
-                      {isArchived ? (
-                        <Tooltip
-                          tooltipContent={
-                            <div className="text-xs text-primary">
-                              {canManageProject ? "恢复项目" : "无权限恢复"}
-                            </div>
-                          }
-                          position="top"
-                        >
-                          <button
-                            type="button"
-                            disabled={!canManageProject}
-                            className={cn(
-                              "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                              !canManageProject
-                                ? "cursor-not-allowed opacity-50"
-                                : "hover:text-primary hover:bg-layer-1-hover"
-                            )}
-                            aria-label="恢复项目"
-                            onClick={(e) => handleOpenRestoreModal(e, project.id)}
-                          >
-                            <ArchiveRestoreIcon className="h-3 w-3" />
-                          </button>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip
-                          tooltipContent={
-                            <div className="text-xs text-primary">
-                              {canManageProject ? "归档" : "无权限归档"}
-                            </div>
-                          }
-                          position="top"
-                        >
-                          <button
-                            type="button"
-                            disabled={!canManageProject}
-                            className={cn(
-                              "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                              !canManageProject
-                                ? "cursor-not-allowed opacity-50"
-                                : "hover:text-primary hover:bg-layer-1-hover"
-                            )}
-                            aria-label="归档项目"
-                            onClick={(e) => handleOpenArchiveModal(e, project.id)}
-                          >
-                            <Archive className="h-3 w-3" />
-                          </button>
-                        </Tooltip>
-                      )}
-                      <Tooltip tooltipContent={<div className="text-xs text-primary">设置</div>} position="top">
-                        <Link
-                          className="flex items-center justify-center rounded p-1 text-placeholder hover:bg-layer-1-hover hover:text-primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          href={projectSettingsPath}
-                        >
-                          <Settings className="h-3.5 w-3.5" />
-                        </Link>
-                      </Tooltip>
-                    </div>
-                  </td>
-                </tr>
-                {isProductsExpanded && workspaceSlugString && (
-                  <ProjectProductRows
-                    workspaceSlug={workspaceSlugString}
-                    products={linkedProducts}
-                    colSpan={TABLE_COLUMN_COUNT}
-                  />
-                )}
-                </Fragment>
-              );
+                      </td>
+                    </tr>
+                  );
                 })}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-secondary">
-              {total > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${total} 条` : ""}
-            </span>
+              </tbody>
+            </table>
           </div>
-          <Pagination
-            simple
-            current={currentPage}
-            pageSize={pageSize}
-            total={total}
-            showSizeChanger
-            pageSizeOptions={["10", "20", "50", "100"]}
-            onChange={handlePaginationChange}
-            onShowSizeChange={handlePaginationChange}
-            size="small"
-          />
+          <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-secondary">{total > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${total} 条` : ""}</span>
+            </div>
+            <Pagination
+              simple
+              current={currentPage}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger
+              pageSizeOptions={["10", "20", "50", "100"]}
+              onChange={handlePaginationChange}
+              onShowSizeChange={handlePaginationChange}
+              size="small"
+            />
+          </div>
         </div>
-      </div>
-    </ContentWrapper>
+      </ContentWrapper>
     </>
   );
 });

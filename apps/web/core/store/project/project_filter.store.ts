@@ -7,41 +7,61 @@
 import { set } from "lodash-es";
 import { action, computed, observable, makeObservable, runInAction, reaction } from "mobx";
 import { computedFn } from "mobx-utils";
-// types
-import type { TProjectDisplayFilters, TProjectFilters, TProjectAppliedDisplayFilterKeys } from "@plane/types";
+// plane imports
+import { DEFAULT_PROJECT_DISPLAY_PROPERTIES } from "@plane/constants";
+import { FilterInstance } from "@plane/shared-state";
+import type { IFilterInstance } from "@plane/shared-state";
+import type { TProjectDisplayFilters, TProjectDisplayProperties, TProjectFilterProperty } from "@plane/types";
+// components
+import { projectFiltersAdapter } from "@/components/project/filters/adapter";
+import type { TProjectFilterExpression } from "@/components/project/filters/types";
+// hooks
+import { getValueFromLocalStorage, setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 // store
 import type { CoreRootStore } from "../root.store";
 
 export type TProjectViewMode = "card" | "list";
 
+export type TProjectRichFilter = IFilterInstance<TProjectFilterProperty, TProjectFilterExpression>;
+
 const PROJECTS_VIEW_MODE_STORAGE_KEY = "plane_projects_view_mode_v2";
+/**
+ * 显示设置（排序 / 列 / 范围）按工作区记在本地；改默认列时升版本号，否则旧值会把新默认顶掉。
+ * v2：研发模式列默认打开。
+ */
+const getDisplayStorageKey = (workspaceSlug: string) => `projects-display:v2:${workspaceSlug}`;
+const getFilterStorageKey = (workspaceSlug: string) => `projects-filter:v1:${workspaceSlug}`;
+
+/** 落本地的那部分显示设置；`archived_projects` 由路由决定，不存 */
+type TStoredDisplayFilters = Pick<
+  TProjectDisplayFilters,
+  "order_by" | "display_properties" | "my_projects" | "show_archived_projects"
+>;
 
 export interface IProjectFilterStore {
   // observables
   displayFilters: Record<string, TProjectDisplayFilters>;
-  filters: Record<string, TProjectFilters>;
+  richFilters: Map<string, TProjectRichFilter>;
   searchQuery: string;
   viewMode: TProjectViewMode;
   // computed
   currentWorkspaceDisplayFilters: TProjectDisplayFilters | undefined;
-  currentWorkspaceAppliedDisplayFilters: TProjectAppliedDisplayFilterKeys[] | undefined;
-  currentWorkspaceFilters: TProjectFilters | undefined;
+  currentWorkspaceDisplayProperties: TProjectDisplayProperties;
   // computed functions
   getDisplayFiltersByWorkspaceSlug: (workspaceSlug: string) => TProjectDisplayFilters | undefined;
-  getFiltersByWorkspaceSlug: (workspaceSlug: string) => TProjectFilters | undefined;
+  getRichFilter: (workspaceSlug: string) => TProjectRichFilter | undefined;
   // actions
+  getOrCreateRichFilter: (workspaceSlug: string) => TProjectRichFilter;
   updateDisplayFilters: (workspaceSlug: string, displayFilters: TProjectDisplayFilters) => void;
-  updateFilters: (workspaceSlug: string, filters: TProjectFilters) => void;
+  updateDisplayProperties: (workspaceSlug: string, properties: Partial<TProjectDisplayProperties>) => void;
   updateSearchQuery: (query: string) => void;
   updateViewMode: (mode: TProjectViewMode) => void;
-  clearAllFilters: (workspaceSlug: string) => void;
-  clearAllAppliedDisplayFilters: (workspaceSlug: string) => void;
 }
 
 export class ProjectFilterStore implements IProjectFilterStore {
   // observables
   displayFilters: Record<string, TProjectDisplayFilters> = {};
-  filters: Record<string, TProjectFilters> = {};
+  richFilters: Map<string, TProjectRichFilter> = new Map();
   searchQuery: string = "";
   viewMode: TProjectViewMode = "list";
   // root store
@@ -51,20 +71,18 @@ export class ProjectFilterStore implements IProjectFilterStore {
     makeObservable(this, {
       // observables
       displayFilters: observable,
-      filters: observable,
+      richFilters: observable,
       searchQuery: observable.ref,
       viewMode: observable.ref,
       // computed
       currentWorkspaceDisplayFilters: computed,
-      currentWorkspaceAppliedDisplayFilters: computed,
-      currentWorkspaceFilters: computed,
+      currentWorkspaceDisplayProperties: computed,
       // actions
+      getOrCreateRichFilter: action,
       updateDisplayFilters: action,
-      updateFilters: action,
+      updateDisplayProperties: action,
       updateSearchQuery: action,
       updateViewMode: action,
-      clearAllFilters: action,
-      clearAllAppliedDisplayFilters: action,
     });
     // root store
     this.rootStore = _rootStore;
@@ -103,28 +121,10 @@ export class ProjectFilterStore implements IProjectFilterStore {
   }
 
   /**
-   * @description get project state applied display filter of the current workspace
-   * @returns {TProjectAppliedDisplayFilterKeys[] | undefined} // An array of keys of applied display filters
+   * @description 当前工作区表格要显示的列（默认值与用户选择合并，新加的列按默认值显示）
    */
-  // TODO: Figure out a better approach for this
-  get currentWorkspaceAppliedDisplayFilters() {
-    const workspaceSlug = this.rootStore.router.workspaceSlug;
-    if (!workspaceSlug) return;
-    const displayFilters = this.displayFilters[workspaceSlug];
-    return Object.keys(displayFilters).filter(
-      (key): key is TProjectAppliedDisplayFilterKeys =>
-        ["my_projects", "archived_projects", "show_archived_projects"].includes(key) &&
-        !!displayFilters[key as keyof TProjectDisplayFilters]
-    );
-  }
-
-  /**
-   * @description get filters of the current workspace
-   */
-  get currentWorkspaceFilters() {
-    const workspaceSlug = this.rootStore.router.workspaceSlug;
-    if (!workspaceSlug) return;
-    return this.filters[workspaceSlug];
+  get currentWorkspaceDisplayProperties(): TProjectDisplayProperties {
+    return { ...DEFAULT_PROJECT_DISPLAY_PROPERTIES, ...this.currentWorkspaceDisplayFilters?.display_properties };
   }
 
   /**
@@ -134,23 +134,42 @@ export class ProjectFilterStore implements IProjectFilterStore {
   getDisplayFiltersByWorkspaceSlug = computedFn((workspaceSlug: string) => this.displayFilters[workspaceSlug]);
 
   /**
-   * @description get filters of a workspace by workspaceSlug
-   * @param {string} workspaceSlug
+   * @description 工作区的富筛选实例；没建过时返回 undefined（列表页挂载时才会建）
    */
-  getFiltersByWorkspaceSlug = computedFn((workspaceSlug: string) => this.filters[workspaceSlug]);
+  getRichFilter = computedFn((workspaceSlug: string) => this.richFilters.get(workspaceSlug));
 
   /**
-   * @description initialize display filters and filters of a workspace
+   * @description initialize display filters of a workspace
    * @param {string} workspaceSlug
    */
   initWorkspaceFilters = (workspaceSlug: string) => {
     const displayFilters = this.getDisplayFiltersByWorkspaceSlug(workspaceSlug);
+    const stored = getValueFromLocalStorage(getDisplayStorageKey(workspaceSlug), {}) as TStoredDisplayFilters;
     runInAction(() => {
       this.displayFilters[workspaceSlug] = {
-        order_by: displayFilters?.order_by || "-created_at",
+        ...stored,
+        ...displayFilters,
+        order_by: displayFilters?.order_by || stored.order_by || "-created_at",
       };
-      this.filters[workspaceSlug] = this.filters[workspaceSlug] ?? {};
     });
+  };
+
+  /**
+   * @description 建（或取）工作区的富筛选实例。条件记在本地，下次进来还是上次的筛选
+   */
+  getOrCreateRichFilter = (workspaceSlug: string) => {
+    const existing = this.richFilters.get(workspaceSlug);
+    if (existing) return existing;
+    const storageKey = getFilterStorageKey(workspaceSlug);
+    const filter = new FilterInstance<TProjectFilterProperty, TProjectFilterExpression>({
+      adapter: projectFiltersAdapter,
+      initialExpression: getValueFromLocalStorage(storageKey, {}) as TProjectFilterExpression,
+      onExpressionChange: (expression) => setValueIntoLocalStorage(storageKey, expression),
+    });
+    runInAction(() => {
+      this.richFilters.set(workspaceSlug, filter);
+    });
+    return filter;
   };
 
   /**
@@ -164,19 +183,15 @@ export class ProjectFilterStore implements IProjectFilterStore {
         set(this.displayFilters, [workspaceSlug, key], displayFilters[key as keyof TProjectDisplayFilters]);
       });
     });
+    this.persistDisplayFilters(workspaceSlug);
   };
 
   /**
-   * @description update filters of a workspace
-   * @param {string} workspaceSlug
-   * @param {TProjectFilters} filters
+   * @description 开关表格列
    */
-  updateFilters = (workspaceSlug: string, filters: TProjectFilters) => {
-    runInAction(() => {
-      Object.keys(filters).forEach((key) => {
-        set(this.filters, [workspaceSlug, key], filters[key as keyof TProjectFilters]);
-      });
-    });
+  updateDisplayProperties = (workspaceSlug: string, properties: Partial<TProjectDisplayProperties>) => {
+    const current = this.displayFilters[workspaceSlug]?.display_properties ?? {};
+    this.updateDisplayFilters(workspaceSlug, { display_properties: { ...current, ...properties } });
   };
 
   /**
@@ -187,27 +202,15 @@ export class ProjectFilterStore implements IProjectFilterStore {
 
   updateViewMode = (mode: TProjectViewMode) => (this.viewMode = mode);
 
-  /**
-   * @description clear all filters of a workspace
-   * @param {string} workspaceSlug
-   */
-  clearAllFilters = (workspaceSlug: string) => {
-    runInAction(() => {
-      this.filters[workspaceSlug] = {};
-    });
-  };
-
-  /**
-   * @description clear project display filters of a workspace
-   * @param {string} workspaceSlug
-   */
-  clearAllAppliedDisplayFilters = (workspaceSlug: string) => {
-    runInAction(() => {
-      if (!this.currentWorkspaceAppliedDisplayFilters) return;
-      this.currentWorkspaceAppliedDisplayFilters.forEach((key) => {
-        set(this.displayFilters, [workspaceSlug, key], false);
-      });
-      set(this.displayFilters, [workspaceSlug, "show_archived_projects"], false);
-    });
+  private persistDisplayFilters = (workspaceSlug: string) => {
+    const current = this.displayFilters[workspaceSlug];
+    if (!current) return;
+    const stored: TStoredDisplayFilters = {
+      order_by: current.order_by,
+      display_properties: current.display_properties,
+      my_projects: current.my_projects,
+      show_archived_projects: current.show_archived_projects,
+    };
+    setValueIntoLocalStorage(getDisplayStorageKey(workspaceSlug), stored);
   };
 }

@@ -11,25 +11,49 @@ export type TProjectOrderByOptions =
   | "created_at"
   | "-created_at"
   | "members_length"
-  | "-members_length";
+  | "-members_length"
+  | "start_date"
+  | "-start_date"
+  | "end_date"
+  | "-end_date";
+
+/** 项目列表表格里可以开关的列；项目名称与操作列固定，不在此列 */
+export type TProjectDisplayPropertyKey =
+  | "code"
+  | "project_type"
+  | "product_type"
+  | "status"
+  | "business_unit"
+  | "dev_mode"
+  | "lead"
+  | "product_manager"
+  | "start_date"
+  | "end_date"
+  | "duration"
+  | "created_at"
+  | "members_count";
+
+export type TProjectDisplayProperties = Record<TProjectDisplayPropertyKey, boolean>;
 
 export type TProjectDisplayFilters = {
   my_projects?: boolean;
   archived_projects?: boolean;
   show_archived_projects?: boolean;
   order_by?: TProjectOrderByOptions;
+  display_properties?: Partial<TProjectDisplayProperties>;
 };
 
-export type TProjectAppliedDisplayFilterKeys = "my_projects" | "archived_projects" | "show_archived_projects";
-
-export type TProjectFilters = {
-  access?: string[] | null;
-  lead?: string[] | null;
-  members?: string[] | null;
-  created_at?: string[] | null;
-};
-
-export type TProjectStoredFilters = {
-  display_filters?: TProjectDisplayFilters;
-  filters?: TProjectFilters;
-};
+/** 项目列表富筛选可用的属性；值的匹配规则见 apps/web `project/filters/` */
+export type TProjectFilterProperty =
+  | "status"
+  | "project_type"
+  | "business_unit"
+  | "product_type"
+  | "dev_mode"
+  | "lead"
+  | "product_manager"
+  | "members"
+  | "network"
+  | "start_date"
+  | "end_date"
+  | "created_at";

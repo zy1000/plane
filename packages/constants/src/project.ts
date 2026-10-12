@@ -5,7 +5,12 @@
  */
 
 // plane imports
-import type { TProjectAppliedDisplayFilterKeys, TProjectOrderByOptions } from "@plane/types";
+import type {
+  TDataDictionaryColorKey,
+  TProjectDisplayProperties,
+  TProjectDisplayPropertyKey,
+  TProjectOrderByOptions,
+} from "@plane/types";
 // local imports
 
 export type TNetworkChoiceIconKey = "Lock" | "Globe2";
@@ -110,28 +115,74 @@ export const PROJECT_ORDER_BY_OPTIONS: {
     i18n_label: "workspace_projects.sort.created_at",
   },
   {
+    key: "start_date",
+    i18n_label: "workspace_projects.sort.start_date",
+  },
+  {
+    key: "end_date",
+    i18n_label: "workspace_projects.sort.end_date",
+  },
+  {
     key: "members_length",
     i18n_label: "workspace_projects.sort.members_length",
   },
 ];
 
-export const PROJECT_DISPLAY_FILTER_OPTIONS: {
-  key: TProjectAppliedDisplayFilterKeys;
+/**
+ * 项目列表表格可开关的列，顺序即表格里的列序（名称列固定最前、操作列固定最后）。
+ * 排序键为空的列表头不可点击排序。
+ */
+export const PROJECT_DISPLAY_PROPERTIES: {
+  key: TProjectDisplayPropertyKey;
   i18n_label: string;
+  orderByKey?: Extract<TProjectOrderByOptions, "name" | "created_at" | "start_date" | "end_date" | "members_length">;
 }[] = [
-  {
-    key: "my_projects",
-    i18n_label: "workspace_projects.scope.my_projects",
-  },
-  {
-    key: "archived_projects",
-    i18n_label: "workspace_projects.scope.archived_projects",
-  },
-  {
-    key: "show_archived_projects",
-    i18n_label: "workspace_projects.scope.archived_projects",
-  },
+  { key: "code", i18n_label: "workspace_projects.fields.code" },
+  { key: "project_type", i18n_label: "workspace_projects.fields.project_type" },
+  { key: "product_type", i18n_label: "workspace_projects.fields.product_type" },
+  { key: "status", i18n_label: "workspace_projects.fields.status_short" },
+  { key: "business_unit", i18n_label: "workspace_projects.fields.business_unit" },
+  { key: "dev_mode", i18n_label: "workspace_projects.fields.dev_mode" },
+  { key: "lead", i18n_label: "workspace_projects.fields.project_lead" },
+  { key: "product_manager", i18n_label: "workspace_projects.fields.product_manager" },
+  { key: "start_date", i18n_label: "workspace_projects.fields.start_date", orderByKey: "start_date" },
+  { key: "end_date", i18n_label: "workspace_projects.fields.end_date", orderByKey: "end_date" },
+  { key: "duration", i18n_label: "workspace_projects.fields.duration" },
+  { key: "created_at", i18n_label: "workspace_projects.fields.created_at", orderByKey: "created_at" },
+  { key: "members_count", i18n_label: "workspace_projects.fields.members_count", orderByKey: "members_length" },
 ];
+
+export const DEFAULT_PROJECT_DISPLAY_PROPERTIES: TProjectDisplayProperties = {
+  code: false,
+  project_type: true,
+  product_type: false,
+  status: true,
+  business_unit: false,
+  dev_mode: true,
+  lead: true,
+  product_manager: false,
+  start_date: true,
+  end_date: true,
+  duration: false,
+  created_at: false,
+  members_count: false,
+};
+
+/** 完成日期已过但项目状态是这些值时不算逾期（按字典值标签判断） */
+export const PROJECT_CLOSED_STATUS_LABELS = ["已完成", "已取消"];
+
+/**
+ * 项目状态在列表里始终以彩色标签显示。字典没开「彩色显示」或值没指定颜色时，
+ * 按预置状态的标签兜底一套颜色；不在表里的标签用灰色。
+ */
+export const PROJECT_STATUS_DEFAULT_COLORS: Record<string, TDataDictionaryColorKey> = {
+  待启动: "gray",
+  活跃中: "green",
+  维护: "amber",
+  已完成: "blue",
+  已暂停: "orange",
+  已取消: "red",
+};
 
 export const PROJECT_ERROR_MESSAGES = {
   permissionError: {

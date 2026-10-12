@@ -11,6 +11,8 @@ import { computedFn } from "mobx-utils";
 import type { TFetchStatus, TLoader, TProjectAnalyticsCount, TProjectAnalyticsCountParams } from "@plane/types";
 // helpers
 import { orderProjects, shouldFilterProject } from "@plane/utils";
+// components
+import { projectMatchesConditions } from "@/components/project/filters/match-project";
 // services
 import type { TProject, TPartialProject } from "@/plane-web/types/projects";
 import { IssueLabelService, IssueService } from "@/services/issue";
@@ -161,18 +163,20 @@ export class ProjectStore implements IProjectStore {
    */
   get filteredProjectIds() {
     const workspaceDetails = this.rootStore.workspaceRoot.currentWorkspace;
-    const {
-      currentWorkspaceDisplayFilters: displayFilters,
-      currentWorkspaceFilters: filters,
-      searchQuery,
-    } = this.rootStore.projectRoot.projectFilter;
-    if (!workspaceDetails || !displayFilters || !filters) return;
+    const workspaceSlug = this.rootStore.router.workspaceSlug;
+    const { currentWorkspaceDisplayFilters: displayFilters, searchQuery, getRichFilter } =
+      this.rootStore.projectRoot.projectFilter;
+    if (!workspaceDetails || !displayFilters) return;
+    // 属性条件来自富筛选实例（列表页挂载时才建）；没建过就只做搜索 + 范围过滤
+    const conditions = workspaceSlug ? (getRichFilter(workspaceSlug)?.allConditionsForDisplay ?? []) : [];
+    const currentUserId = this.rootStore.user.data?.id;
     let workspaceProjects = Object.values(this.projectMap).filter(
       (p) =>
         p.workspace === workspaceDetails.id &&
         (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.identifier.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        shouldFilterProject(p, displayFilters, filters)
+        shouldFilterProject(p, displayFilters) &&
+        projectMatchesConditions(p, conditions, currentUserId)
     );
     workspaceProjects = orderProjects(workspaceProjects, displayFilters.order_by);
     return workspaceProjects.map((p) => p.id);
