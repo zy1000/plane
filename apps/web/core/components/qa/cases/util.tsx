@@ -9,7 +9,7 @@ import {
   CopyOutlined,
   EllipsisOutlined,
 } from "@ant-design/icons";
-import { Button, Input, Modal, Popover } from "antd";
+import { Button, ConfigProvider, Input, Modal, Popover } from "antd";
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css"; // 引入默认样式
@@ -475,7 +475,7 @@ export const RichTextEditor = ({
   );
 };
 
-// 步骤表共享样式：详情页 StepsEditor 与执行页只读步骤表（test-execution）共用同一套视觉
+// 步骤表共享样式：详情页 StepsEditor 与执行页/评审页只读步骤表共用同一套视觉
 export const STEPS_TABLE_LINE = "#e8eaed";
 export const STEPS_TABLE_TH_STYLE: React.CSSProperties = {
   padding: "8px 10px",
@@ -485,6 +485,8 @@ export const STEPS_TABLE_TH_STYLE: React.CSSProperties = {
   textAlign: "left",
   fontWeight: 500,
   fontSize: "14px",
+  // 详情页手写表格的表头继承 body 的 1.5；antd Table 自带 1.5714，这里写死保证两边都是 21px
+  lineHeight: 1.5,
 };
 export const STEPS_TABLE_TD_STYLE: React.CSSProperties = {
   padding: 10,
@@ -496,6 +498,18 @@ export const STEPS_TABLE_TD_STYLE: React.CSSProperties = {
   fontSize: "14px",
   lineHeight: 1.5,
 };
+// 只读步骤表（执行页/评审页）用 antd Table 实现时的外壳。
+// antd 会在每个组件根节点写死自己的 font-family，表格里的文字会和详情页手写表格（继承 body 字体）不是一个字体族，
+// 所以用 ConfigProvider 把表格内的 antd 字体换回页面字体。
+export const STEPS_TABLE_ANTD_CLASSNAME =
+  "text-sm [&_.ant-table]:text-sm [&_.ant-table-thead_.ant-table-cell::before]:!hidden [&_.ant-table-cell]:!border-b-0";
+export const StepsTableFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ConfigProvider theme={{ token: { fontFamily: "var(--font-body)" } }}>
+    <div className="overflow-hidden rounded-lg" style={{ background: "#fff" }}>
+      {children}
+    </div>
+  </ConfigProvider>
+);
 
 export const StepsEditor: React.FC<{
   value?: { description?: string; result?: string }[];

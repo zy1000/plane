@@ -13,7 +13,13 @@ import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { PlanService as PlanApiService } from "@/services/qa/plan.service";
 import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
-import { RichTextEditor, STEPS_TABLE_TH_STYLE, STEPS_TABLE_TD_STYLE } from "../cases/util";
+import {
+  RichTextEditor,
+  STEPS_TABLE_TH_STYLE,
+  STEPS_TABLE_TD_STYLE,
+  STEPS_TABLE_ANTD_CLASSNAME,
+  StepsTableFrame,
+} from "../cases/util";
 import { TitleInput } from "../cases/update-modal/title-input";
 import { CaseMetaForm } from "../cases/update-modal/case-meta-form";
 import { RequirementDisplayPanel } from "../cases/requirement-display-panel";
@@ -926,7 +932,7 @@ export default function TestExecutionPage() {
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
-          className="resize-none !p-2.5 text-sm !bg-transparent focus:!shadow-none"
+          className="resize-none !p-2.5 text-sm !leading-5 !bg-transparent focus:!shadow-none"
         />
       );
     };
@@ -939,7 +945,7 @@ export default function TestExecutionPage() {
         {
           title: "序号",
           key: "index",
-          width: 60,
+          width: 48,
           render: (_: any, __: any, idx: number) => <span>{idx + 1}</span>,
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
@@ -950,7 +956,7 @@ export default function TestExecutionPage() {
           key: "description",
           width: "30%",
           render: (text: any) => (
-            <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>
+            <span className="whitespace-pre-wrap break-words leading-5">{String(text || "")}</span>
           ),
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
@@ -961,7 +967,7 @@ export default function TestExecutionPage() {
           key: "result",
           width: "30%",
           render: (text: any) => (
-            <span className="whitespace-pre-wrap break-words">
+            <span className="whitespace-pre-wrap break-words leading-5">
               {String(text || "")}
             </span>
           ),
@@ -1005,18 +1011,18 @@ export default function TestExecutionPage() {
       [resultOptions, onChangeActual, onChangeExec]
     );
     return (
-      <div className="overflow-hidden rounded-lg" style={{ background: "#fff" }}>
+      <StepsTableFrame>
         <Table
           size="small"
           pagination={false}
           bordered={false}
           tableLayout="fixed"
-          className="text-sm [&_.ant-table]:text-sm [&_.ant-table-thead_.ant-table-cell::before]:!hidden [&_.ant-table-cell]:!border-b-0"
+          className={STEPS_TABLE_ANTD_CLASSNAME}
           rowKey={(r: any) => String(r?.__key)}
           dataSource={dataSource}
           columns={columns as any}
         />
-      </div>
+      </StepsTableFrame>
     );
   };
   const StepsTable = React.memo(StepsTableBase);
@@ -1179,7 +1185,8 @@ export default function TestExecutionPage() {
                 className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm"
                 style={{ scrollPaddingBottom: 80 }}
               >
-                <div className="p-4" style={{ scrollPaddingBottom: 16 }}>
+                {/* font-body：详情区在 antd Row 里，antd 会把字体族换成系统字体栈，这里拉回页面字体，与用例抽屉一致 */}
+                <div className="p-4 font-body" style={{ scrollPaddingBottom: 16 }}>
                   {!selectedCaseId ? (
                     <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
                   ) : detailLoading ? (

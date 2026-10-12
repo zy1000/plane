@@ -11,7 +11,6 @@ import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, Do
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/services/qa/review.service";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { Button as PlaneButton } from "@plane/propel/button";
 import {
   ModuleTreePanel,
@@ -24,14 +23,20 @@ import * as LucideIcons from "lucide-react";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
-import { RichTextEditor } from "../cases/util";
+import {
+  RichTextEditor,
+  STEPS_TABLE_TH_STYLE,
+  STEPS_TABLE_TD_STYLE,
+  STEPS_TABLE_ANTD_CLASSNAME,
+  StepsTableFrame,
+} from "../cases/util";
+import { CaseMetaForm } from "../cases/update-modal/case-meta-form";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { workItemTypeName } from "../cases/work-item-category";
 import { ReviewRecordsPanel } from "./review-records";
 import { ReviewCaseFilterBar, useReviewCaseFilter } from "./review-case-filter";
 import { ReviewCaseList } from "./review-case-list";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
-import { CasePriorityPill } from "../shared/case-picker-modal-styles";
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
@@ -44,54 +49,61 @@ const reviewEnumsCache = new Map<string, Record<string, Record<string, { label: 
 
 type StepItem = { result: string; description: string };
 
+// 只读步骤表：表头/单元格样式与用例抽屉的 StepsEditor 共用同一套常量
 const StepsTable: React.FC<{ steps?: StepItem[] }> = ({ steps }) => {
   if (!Array.isArray(steps) || steps.length === 0) {
     return <span className="text-secondary">暂无内容</span>;
   }
-  const headerStyle = { backgroundColor: "var(--bg-layer-1)", padding: 12, border: "1px solid var(--border-subtle)" } as const;
-  const cellStyle = { padding: 12, border: "1px solid var(--border-subtle)" } as const;
   const columns = [
     {
       title: "序号",
       key: "index",
-      width: 80,
-      render: (_: any, __: StepItem, idx: number) => idx + 1,
-      onHeaderCell: () => ({ style: headerStyle }),
-      onCell: () => ({ style: cellStyle }),
+      width: 48,
+      render: (_: any, __: StepItem, idx: number) => <span>{idx + 1}</span>,
+      onHeaderCell: () => ({ style: STEPS_TABLE_TH_STYLE }),
+      onCell: () => ({ style: STEPS_TABLE_TD_STYLE }),
     },
     {
       title: "步骤描述",
       dataIndex: "description",
       key: "description",
-      render: (text: any) => <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>,
-      onHeaderCell: () => ({ style: headerStyle }),
-      onCell: () => ({ style: cellStyle }),
+      render: (text: any) => <span className="whitespace-pre-wrap break-words leading-5">{String(text || "")}</span>,
+      onHeaderCell: () => ({ style: STEPS_TABLE_TH_STYLE }),
+      onCell: () => ({ style: STEPS_TABLE_TD_STYLE }),
     },
     {
       title: "预期结果",
       dataIndex: "result",
       key: "result",
-      render: (text: any) => (
-        <span className="whitespace-pre-wrap break-words text-secondary">{String(text || "")}</span>
-      ),
-      onHeaderCell: () => ({ style: headerStyle }),
-      onCell: () => ({ style: cellStyle }),
+      render: (text: any) => <span className="whitespace-pre-wrap break-words leading-5">{String(text || "")}</span>,
+      onHeaderCell: () => ({ style: STEPS_TABLE_TH_STYLE }),
+      onCell: () => ({ style: STEPS_TABLE_TD_STYLE }),
     },
   ];
   return (
-    <div className="rounded border border-subtle">
-      <div className="overflow-x-auto">
-        <Table
-          size="small"
-          pagination={false}
-          bordered={false}
-          rowKey={(_: any, idx?: number) => String(idx ?? 0)}
-          dataSource={steps}
-          columns={columns as any}
-        />
-      </div>
-    </div>
+    <StepsTableFrame>
+      <Table
+        size="small"
+        pagination={false}
+        bordered={false}
+        tableLayout="fixed"
+        className={STEPS_TABLE_ANTD_CLASSNAME}
+        rowKey={(_: any, idx?: number) => String(idx ?? 0)}
+        dataSource={steps}
+        columns={columns as any}
+      />
+    </StepsTableFrame>
   );
+};
+
+// 抽屉同款属性行需要的数据规范化：id/枚举值统一成字符串，与下拉 options 的 value 类型一致
+const normalizeId = (v: any): string | undefined => {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === "object") {
+    const id = v.id ?? v.value ?? v.uuid;
+    return id ? String(id) : undefined;
+  }
+  return String(v);
 };
 
 export default function CaseReview() {
@@ -111,7 +123,6 @@ export default function CaseReview() {
   const caseService = React.useMemo(() => new CaseApiService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const {
-    getUserDetails,
     workspace: { fetchWorkspaceMembers },
   } = useMember();
   const { data: currentUser } = useUser();
@@ -141,6 +152,16 @@ export default function CaseReview() {
     case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
   }>({});
+  const caseTypeOptions = React.useMemo(
+    () =>
+      Object.entries(enumsData.case_type || {}).map(([value, label]) => ({ value, label, title: String(label) })),
+    [enumsData.case_type]
+  );
+  const casePriorityOptions = React.useMemo(
+    () =>
+      Object.entries(enumsData.case_priority || {}).map(([value, label]) => ({ value, label, title: String(label) })),
+    [enumsData.case_priority]
+  );
   const [attachments, setAttachments] = React.useState<any[]>([]);
   const [activeTab, setActiveTab] = React.useState<"basic" | "work" | "defect" | "attachment" | "history">(
     "basic"
@@ -779,7 +800,8 @@ export default function CaseReview() {
         >
           <div className="flex flex-col flex-1 min-h-0">
             <div className="min-h-0 flex-1 overflow-hidden">
-              <div className="flex h-full min-h-0 min-w-0 flex-col p-4" style={{ scrollPaddingBottom: 16 }}>
+              {/* font-body：详情区在 antd Row 里，antd 会把字体族换成系统字体栈，这里拉回页面字体，与用例抽屉一致 */}
+              <div className="flex h-full min-h-0 min-w-0 flex-col p-4 font-body" style={{ scrollPaddingBottom: 16 }}>
                 {!selectedCaseId ? (
                   <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
                 ) : detailLoading ? (
@@ -795,7 +817,7 @@ export default function CaseReview() {
                     <button
                       type="button"
                       onClick={() => setActiveTab("basic")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                         activeTab === "basic"
                           ? "text-accent-primary border-accent-strong"
                           : "text-primary border-transparent hover:text-accent-primary"
@@ -807,7 +829,7 @@ export default function CaseReview() {
                     <button
                       type="button"
                       onClick={() => setActiveTab("work")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                         activeTab === "work"
                           ? "text-accent-primary border-accent-strong"
                           : "text-primary border-transparent hover:text-accent-primary"
@@ -819,7 +841,7 @@ export default function CaseReview() {
                     <button
                       type="button"
                       onClick={() => setActiveTab("defect")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                         activeTab === "defect"
                           ? "text-accent-primary border-accent-strong"
                           : "text-primary border-transparent hover:text-accent-primary"
@@ -831,7 +853,7 @@ export default function CaseReview() {
                     <button
                       type="button"
                       onClick={() => setActiveTab("attachment")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                         activeTab === "attachment"
                           ? "text-accent-primary border-accent-strong"
                           : "text-primary border-transparent hover:text-accent-primary"
@@ -843,7 +865,7 @@ export default function CaseReview() {
                     <button
                       type="button"
                       onClick={() => setActiveTab("history")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                         activeTab === "history"
                           ? "text-accent-primary border-accent-strong"
                           : "text-primary border-transparent hover:text-accent-primary"
@@ -866,90 +888,64 @@ export default function CaseReview() {
                       >
                         {activeTab === "basic" && (
                           <div className="flex min-h-full flex-col gap-4 pb-20">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              className="text-lg font-semibold min-w-0 break-words text-left hover:text-accent-primary cursor-pointer transition-colors"
-                              onClick={handleOpenCase}
-                              disabled={!selectedCaseId}
-                            >
-                              {caseDetail?.name ?? "-"}
-                            </button>
-                            <Tag className="m-0 shrink-0" color="blue">
-                              {loadingCaseVersions ? "加载中..." : currentVersionLabel}
-                            </Tag>
-                            <Button
-                              size="small"
-                              type="link"
-                              className="px-0 ml-4"
-                              disabled={loadingCaseVersions || (caseVersions || []).length <= 0 || !selectedCaseId}
-                              onClick={() => setCompareOpen(true)}
-                            >
-                              版本对比
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                          <div className="col-span-1">
-                            <div className="text-sm leading-5 font-medium text-secondary mb-1">维护人</div>
-                            {caseDetail?.assignee ? (
-                              <MemberDropdown
-                                multiple={false}
-                                value={caseDetail.assignee.id}
-                                onChange={() => {}}
-                                disabled={true}
-                                placeholder={getUserDetails(caseDetail.assignee)?.display_name || "未知用户"}
-                                className="w-full text-sm h-8"
-                                buttonContainerClassName="w-full text-left p-0 cursor-default h-8 flex items-center"
-                                buttonVariant="transparent-with-text"
-                                buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit h-8"
-                                showUserDetails={true}
-                                optionsClassName="z-[60]"
-                              />
-                            ) : (
-                              <div className="text-sm text-secondary h-8 flex items-center">未设置维护人</div>
-                            )}
-                          </div>
-                          <div className="col-span-1">
-                            <div className="text-sm leading-5 font-medium text-secondary mb-1">用例编号</div>
-                            <div className="h-8 flex items-center text-sm">
-                              {caseDetail?.sequence_id ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}` : (caseDetail?.code ?? "-")}
+                        {/* 标题区排版对齐用例抽屉的 TitleInput：编号 11px 在上，标题 20px/600 在下；标题仍是按钮，点击打开抽屉 */}
+                        <div>
+                          <div className="mb-3">
+                            <div className="mb-5 flex min-h-5 items-center">
+                              <span className="text-caption-sm-regular font-medium whitespace-nowrap text-secondary">
+                                {caseDetail?.sequence_id
+                                  ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}`
+                                  : (caseDetail?.code ?? "-")}
+                              </span>
+                            </div>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                className="min-w-0 break-words py-1 text-left text-xl font-semibold text-primary transition-colors hover:text-accent-primary cursor-pointer"
+                                onClick={handleOpenCase}
+                                disabled={!selectedCaseId}
+                              >
+                                {caseDetail?.name ?? "-"}
+                              </button>
+                              <Tag className="m-0 shrink-0" color="blue">
+                                {loadingCaseVersions ? "加载中..." : currentVersionLabel}
+                              </Tag>
+                              <Button
+                                size="small"
+                                type="link"
+                                className="px-0 ml-4"
+                                disabled={loadingCaseVersions || (caseVersions || []).length <= 0 || !selectedCaseId}
+                                onClick={() => setCompareOpen(true)}
+                              >
+                                版本对比
+                              </Button>
                             </div>
                           </div>
-                          <div className="col-span-1">
-                            <div className="text-sm leading-5 font-medium text-secondary mb-1">类型</div>
-                            <div className="h-8 flex items-center">
-                              <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
-                            </div>
-                          </div>
-                          <div className="col-span-1">
-                            <div className="text-sm leading-5 font-medium text-secondary mb-1">等级</div>
-                            <div className="h-8 flex items-center">
-                              <CasePriorityPill
-                                value={caseDetail?.priority}
-                                label={enumsData.case_priority?.[String(caseDetail?.priority)]}
-                              />
-                            </div>
-                          </div>
-                          <div className="col-span-1">
-                            <div className="text-sm leading-5 font-medium text-secondary mb-1">标签</div>
-                            <div className="flex flex-wrap items-center gap-1 min-h-[32px]">
-                               {Array.isArray(caseDetail?.labels) && caseDetail.labels.length > 0 ? (
-                                 caseDetail.labels.map((label: any) => (
-                                   <div key={label?.id || label} className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs border border-blue-100">
-                                     {label?.name || label}
-                                   </div>
-                                 ))
-                               ) : (
-                                 <span className="text-sm text-secondary">-</span>
-                               )}
-                            </div>
-                          </div>
+                          <CaseMetaForm
+                            disabled
+                            projectId={projectId ? String(projectId) : undefined}
+                            assignee={normalizeId(caseDetail?.assignee)}
+                            onAssigneeChange={() => {}}
+                            onAssigneeBlur={() => {}}
+                            assigneeOptions={[]}
+                            stateValue={undefined}
+                            onStateChange={() => {}}
+                            onStateBlur={() => {}}
+                            caseStateOptions={[]}
+                            typeValue={normalizeId(caseDetail?.type)}
+                            onTypeChange={() => {}}
+                            onTypeBlur={() => {}}
+                            caseTypeOptions={caseTypeOptions}
+                            priorityValue={normalizeId(caseDetail?.priority)}
+                            onPriorityChange={() => {}}
+                            onPriorityBlur={() => {}}
+                            casePriorityOptions={casePriorityOptions}
+                            labelList={Array.isArray(caseDetail?.labels) ? caseDetail.labels : []}
+                          />
                         </div>
 
                         <div>
-                          <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                             前置条件
                           </label>
                           <RichTextEditor
@@ -959,18 +955,19 @@ export default function CaseReview() {
                             aria-label="前置条件"
                             placeholder="暂无内容"
                             editable={false}
+                            readonlyTextClassName="text-sm leading-6 text-primary"
                           />
                         </div>
 
                         <div>
-                          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                             测试步骤
                           </label>
                           <StepsTable steps={caseDetail?.steps as StepItem[]} />
                         </div>
 
                         <div>
-                          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
                             备注
                           </label>
                           <RichTextEditor
@@ -980,6 +977,7 @@ export default function CaseReview() {
                             aria-label="备注"
                             placeholder="暂无内容"
                             editable={false}
+                            readonlyTextClassName="text-sm leading-6 text-primary"
                           />
                         </div>
 
