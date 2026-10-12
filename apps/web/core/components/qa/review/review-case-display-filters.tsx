@@ -71,6 +71,12 @@ const ORDER_BY_OPTIONS: TOrderByOption[] = [
   { key: "case__updated_at", label: "最早更新" },
 ];
 
+// 评审详情页与逐条评审页共用同一个默认排序，评审页才能和详情页顺序一致
+export const DEFAULT_REVIEW_CASE_ORDERING: TReviewCaseOrderBy = "-case__updated_at";
+
+export const isReviewCaseOrderBy = (value: unknown): value is TReviewCaseOrderBy =>
+  ORDER_BY_OPTIONS.some((option) => option.key === value);
+
 export const ReviewCaseDisplayFilters = ({
   disabled = false,
   displayProperties,
@@ -81,7 +87,7 @@ export const ReviewCaseDisplayFilters = ({
   const [displayPropertiesExpanded, setDisplayPropertiesExpanded] = useState(true);
   const [orderByExpanded, setOrderByExpanded] = useState(true);
 
-  const activeOrderBy: TReviewCaseOrderBy = (ordering as TReviewCaseOrderBy) || "-case__updated_at";
+  const activeOrderBy: TReviewCaseOrderBy = (ordering as TReviewCaseOrderBy) || DEFAULT_REVIEW_CASE_ORDERING;
 
   return (
     <FiltersDropdown

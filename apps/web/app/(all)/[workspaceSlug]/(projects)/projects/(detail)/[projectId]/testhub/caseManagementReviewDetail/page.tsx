@@ -19,6 +19,7 @@ import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModa
 import { CasesSearchInput } from "@/components/qa/cases/cases-search";
 import {
   DEFAULT_REVIEW_CASE_DISPLAY_PROPERTIES,
+  DEFAULT_REVIEW_CASE_ORDERING,
   ReviewCaseDisplayFilters,
 } from "@/components/qa/review/review-case-display-filters";
 import type {
@@ -59,7 +60,6 @@ type TReviewCaseListFilters = {
 } & TReviewCaseFilterQueryParams;
 
 const EMPTY_REVIEW_CASE_FILTER_EXPRESSION: TReviewCaseFilterExpression = {};
-const DEFAULT_REVIEW_CASE_ORDERING: TReviewCaseOrderBy = "-case__updated_at";
 
 export default function CaseManagementReviewDetailPage() {
   const { t } = useTranslation();
@@ -396,9 +396,12 @@ export default function CaseManagementReviewDetailPage() {
 
   const handleReviewCase = (record: ReviewCaseRow) => {
     if (!workspaceSlug || !reviewId) return;
+    // 排序随 URL 带到评审页，让评审页用例顺序沿用当前列表；默认值不带参数
+    const orderingQuery =
+      ordering !== DEFAULT_REVIEW_CASE_ORDERING ? `&ordering=${encodeURIComponent(ordering)}` : "";
     const href = `/${workspaceSlug}/projects/${projectId}/testhub/case-review?review_id=${encodeURIComponent(
       reviewId
-    )}&case_id=${encodeURIComponent(record.case_id)}`;
+    )}&case_id=${encodeURIComponent(record.case_id)}${orderingQuery}`;
     router.push(href);
   };
 

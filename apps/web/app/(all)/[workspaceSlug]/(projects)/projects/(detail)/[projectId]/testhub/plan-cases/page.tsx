@@ -38,6 +38,7 @@ import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import {
   DEFAULT_PLAN_CASE_DISPLAY_PROPERTIES,
   DEFAULT_PLAN_CASE_GROUP_BY,
+  DEFAULT_PLAN_CASE_ORDERING,
   PlanCaseDisplayFilters,
   type TPlanCaseDisplayProperties,
   type TPlanCaseGroupBy,
@@ -92,7 +93,6 @@ type TPlanCaseListFilters = {
 } & TPlanCaseFilterQueryParams;
 
 const EMPTY_PLAN_CASE_FILTER_EXPRESSION: TPlanCaseFilterExpression = {};
-const DEFAULT_PLAN_CASE_ORDERING: TPlanCaseOrderBy = "-case__updated_at";
 const toStringArray = (value: unknown): string[] => {
   if (value === null || value === undefined) return [];
   if (Array.isArray(value)) {
@@ -853,12 +853,14 @@ export default function PlanCasesPage() {
   const handleViewExecution = (record: TPlanCaseItem) => {
     const caseId = record?.case?.id;
     if (!caseId) return;
-    // 分组方式随 URL 带到执行页，让执行页左树沿用当前结构；模块分组是默认值，不带参数
+    // 分组方式、排序随 URL 带到执行页，让执行页左树和用例顺序沿用当前列表；默认值不带参数
     const groupByQuery = groupBy !== "module" ? `&group_by=${encodeURIComponent(groupBy)}` : "";
+    const orderingQuery =
+      ordering !== DEFAULT_PLAN_CASE_ORDERING ? `&ordering=${encodeURIComponent(ordering)}` : "";
     router.push(
       `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(
         String(caseId)
-      )}&plan_id=${encodeURIComponent(String(planId || ""))}${groupByQuery}`
+      )}&plan_id=${encodeURIComponent(String(planId || ""))}${groupByQuery}${orderingQuery}`
     );
   };
 

@@ -36,6 +36,11 @@ import { workItemTypeName } from "../cases/work-item-category";
 import { ReviewRecordsPanel } from "./review-records";
 import { ReviewCaseFilterBar, useReviewCaseFilter } from "./review-case-filter";
 import { ReviewCaseList } from "./review-case-list";
+import {
+  DEFAULT_REVIEW_CASE_ORDERING,
+  isReviewCaseOrderBy,
+  type TReviewCaseOrderBy,
+} from "./review-case-display-filters";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
@@ -114,6 +119,9 @@ export default function CaseReview() {
   const pathname = usePathname();
   const reviewId = searchParams.get("review_id") ?? "";
   const initialCaseId = searchParams.get("case_id") ?? undefined;
+  // 排序从评审详情页随 URL 带过来，没带就用详情页同一个默认值，保证两边顺序一致
+  const orderingParam = searchParams.get("ordering");
+  const ordering: TReviewCaseOrderBy = isReviewCaseOrderBy(orderingParam) ? orderingParam : DEFAULT_REVIEW_CASE_ORDERING;
 
   const [reviewName, setReviewName] = React.useState<string>(() => {
     if (typeof window !== "undefined") return sessionStorage.getItem("selectedReviewName") || "";
@@ -245,6 +253,7 @@ export default function CaseReview() {
       const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
         all: true,
+        ordering,
         // 卡片只用得到 mine 和待评审头像，别把每行的评审人 id 全拉回来
         slim: true,
         ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),

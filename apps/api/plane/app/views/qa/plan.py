@@ -116,19 +116,27 @@ from django.utils import timezone
 
 
 class NumericSuffixCodeOrderingFilter(OrderingFilter):
+    @staticmethod
+    def _with_tiebreaker(ordering):
+        # 排序值相同的行（批量改过属性的用例 updated_at 完全一样）在列表分页查询和执行页全量查询里
+        # 可能被数据库排出不同顺序，补 id 兜底让两边一致
+        if any(field.lstrip("-") in ("id", "pk") for field in ordering):
+            return list(ordering)
+        return [*ordering, "id"]
+
     def filter_queryset(self, request, queryset, view):
         ordering = self.get_ordering(request, queryset, view)
         if not ordering:
             return queryset
 
         if connection.vendor != "postgresql":
-            return queryset.order_by(*ordering)
+            return queryset.order_by(*self._with_tiebreaker(ordering))
 
         needs_code = any(
             field.lstrip("-") in ("code", "case__code") for field in ordering
         )
         if not needs_code:
-            return queryset.order_by(*ordering)
+            return queryset.order_by(*self._with_tiebreaker(ordering))
 
         code_field = (
             "case__code"
@@ -183,7 +191,7 @@ class NumericSuffixCodeOrderingFilter(OrderingFilter):
             new_ordering.append("-_code_num" if desc else "_code_num")
             new_ordering.append(f"-{code_field}" if desc else code_field)
 
-        return queryset.order_by(*new_ordering)
+        return queryset.order_by(*self._with_tiebreaker(new_ordering))
 
 
 class RepositoryAPIView(BaseAPIView):
@@ -586,6 +594,8 @@ PLAN_CASE_ENUM_GROUPS = {
 
 class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
+    # case-list 的 ordering 白名单，与计划用例列表页（PlanCaseAPIView）保持一致，执行页才能沿用列表页的顺序
+    ordering_fields = ["case__updated_at", "case__code"]
 
     def _filtered_plan_case_qs(self, request):
         query = PlanCase.objects.select_related("case", "assignee").filter(
@@ -683,7 +693,9 @@ class PlanView(BaseViewSet):
 
     @action(detail=False, methods=["get"], url_path="case-list")
     def case_list(self, request, slug):
-        query = self._filtered_plan_case_qs(request)
+        query = NumericSuffixCodeOrderingFilter().filter_queryset(
+            request, self._filtered_plan_case_qs(request), self
+        )
         all_param = str(request.query_params.get("all", "")).strip().lower()
         if all_param in {"1", "true", "yes"}:
             serializer = PlanCaseCardSerializer(instance=query, many=True)

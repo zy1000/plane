@@ -397,6 +397,7 @@ export class PlanService extends APIService {
       all?: boolean;
       page?: number;
       page_size?: number;
+      ordering?: "case__code" | "-case__code" | "case__updated_at" | "-case__updated_at";
       repository_id?: string | null;
       module_id?: string | null;
       assignee_id?: string | null;

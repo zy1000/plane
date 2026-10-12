@@ -101,6 +101,12 @@ const ORDER_BY_OPTIONS: TOrderByOption[] = [
   { key: "case__updated_at", label: "最早更新" },
 ];
 
+// 计划用例页与执行页共用同一个默认排序，执行页才能和列表页顺序一致
+export const DEFAULT_PLAN_CASE_ORDERING: TPlanCaseOrderBy = "-case__updated_at";
+
+export const isPlanCaseOrderBy = (value: unknown): value is TPlanCaseOrderBy =>
+  ORDER_BY_OPTIONS.some((option) => option.key === value);
+
 export const PlanCaseDisplayFilters = ({
   disabled = false,
   displayProperties,
@@ -111,7 +117,7 @@ export const PlanCaseDisplayFilters = ({
   const [displayPropertiesExpanded, setDisplayPropertiesExpanded] = useState(true);
   const [orderByExpanded, setOrderByExpanded] = useState(true);
 
-  const activeOrderBy: TPlanCaseOrderBy = (ordering as TPlanCaseOrderBy) || "-case__updated_at";
+  const activeOrderBy: TPlanCaseOrderBy = (ordering as TPlanCaseOrderBy) || DEFAULT_PLAN_CASE_ORDERING;
 
   return (
     <FiltersDropdown

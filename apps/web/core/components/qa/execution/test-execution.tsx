@@ -37,8 +37,11 @@ import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
 import { ExecutionCaseFilterBar, useExecutionCaseFilter } from "./execution-case-filter";
 import {
   DEFAULT_PLAN_CASE_GROUP_BY,
+  DEFAULT_PLAN_CASE_ORDERING,
   isPlanCaseGroupBy,
+  isPlanCaseOrderBy,
   type TPlanCaseGroupBy,
+  type TPlanCaseOrderBy,
 } from "@/components/qa/plans/plan-case-display-filters";
 import { PlanCaseGroupBySwitcher } from "@/components/qa/plans/plan-case-group-by-switcher";
 import { buildPlanCaseAssigneeNodes, buildPlanCaseGroupNodes } from "@/components/qa/plans/plan-case-tree-nodes";
@@ -114,6 +117,9 @@ export default function TestExecutionPage() {
   // 列表页「显示 → 分组方式」经 URL 带过来；直接进 URL 或值非法时回落到默认的模块树
   const groupByParam = searchParams.get("group_by");
   const groupBy: TPlanCaseGroupBy = isPlanCaseGroupBy(groupByParam) ? groupByParam : DEFAULT_PLAN_CASE_GROUP_BY;
+  // 排序从计划用例页随 URL 带过来，没带就用列表页同一个默认值，保证两边顺序一致
+  const orderingParam = searchParams.get("ordering");
+  const ordering: TPlanCaseOrderBy = isPlanCaseOrderBy(orderingParam) ? orderingParam : DEFAULT_PLAN_CASE_ORDERING;
 
   const [planName, setPlanName] = React.useState<string>(() => {
     if (typeof window !== "undefined") return sessionStorage.getItem("selectedPlanName") || "";
@@ -260,6 +266,7 @@ export default function TestExecutionPage() {
       const input = (kw ?? keyword).trim();
       const res = await planService.getPlanCaseList(String(workspaceSlug), String(planId), {
         all: true,
+        ordering,
         ...(repoId ? { repository_id: repoId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
         ...buildGroupFilterParams(groupValue),
@@ -420,7 +427,7 @@ export default function TestExecutionPage() {
         message.error(msg);
       }
     }
-  }, [workspaceSlug, planId, initialCaseId, groupBy]);
+  }, [workspaceSlug, planId, initialCaseId, groupBy, ordering]);
 
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
@@ -441,7 +448,7 @@ export default function TestExecutionPage() {
       debounce((v: string) => {
         fetchCases(v);
       }, 300),
-    [workspaceSlug, planId, selectedRepositoryId, selectedModuleId]
+    [workspaceSlug, planId, selectedRepositoryId, selectedModuleId, ordering]
   );
 
   const handleModuleTreeSelect = (key: string) => {
