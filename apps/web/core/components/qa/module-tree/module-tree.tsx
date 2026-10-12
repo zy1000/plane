@@ -64,7 +64,7 @@ const renderHighlighted = (label: string, query: string): ReactNode => {
 };
 
 /**
- * 测试管理四个页面共用的模块树主体：固定首行「全部」、缩进 + 引导线表达层级、
+ * 测试管理四个页面共用的模块树主体：固定首行「全部」、缩进表达层级、
  * 悬停出 ⋯ 菜单、行内新建 / 重命名、可选拖拽（换父 / 排序）。数据、请求和权限都由调用方负责。
  */
 export const ModuleTree = ({
@@ -339,15 +339,10 @@ export const ModuleTree = ({
         <Fragment key={node.key}>
           {renaming ? renderInputRow(depth, editing.initialValue) : renderRow(node, depth, expanded)}
           {expanded && (
-            <div className="relative">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute top-[3px] bottom-[3px] w-0 border-l border-strong"
-                style={{ left: BASE_PADDING + depth * INDENT + SLOT / 2 - 0.5 }}
-              />
+            <>
               {renderNodes(node.children ?? [], depth + 1)}
               {creatingHere && renderInputRow(depth + 1)}
-            </div>
+            </>
           )}
         </Fragment>
       );
