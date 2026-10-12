@@ -48,13 +48,13 @@ import { PlanCasesBulkBar } from "@/components/qa/plans/plan-cases-bulk-bar";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
 import { PlanCaseGroupBySwitcher } from "@/components/qa/plans/plan-case-group-by-switcher";
+import { buildPlanCaseAssigneeNodes, buildPlanCaseGroupNodes } from "@/components/qa/plans/plan-case-tree-nodes";
 import {
-  buildPlanCaseAssigneeNodes,
-  buildPlanCaseGroupNodes,
-  buildPlanCaseModuleNodes,
-  findPlanCaseTreeLabel,
-} from "@/components/qa/plans/plan-case-tree-nodes";
-import { ModuleTreePanel, type TModuleTreeNode } from "@/components/qa/module-tree";
+  ModuleTreePanel,
+  buildRepositoryModuleNodes,
+  findModuleTreeLabel,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
 import { PlanCaseResultTag, PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
 import { PlanCaseReviewModal } from "@/components/qa/plans/plan-case-review-modal";
@@ -572,7 +572,7 @@ export default function PlanCasesPage() {
 
   // 左栏三种分组的节点：模块（用例库 → 模块）/ 执行人 / 枚举值；「全部用例」是树的固定首行
   const moduleTreeNodes = useMemo<TModuleTreeNode[]>(
-    () => buildPlanCaseModuleNodes(planTree, getTreeNodeKey),
+    () => buildRepositoryModuleNodes(planTree, getTreeNodeKey),
     [planTree]
   );
   const assigneeTreeNodes = useMemo<TModuleTreeNode[]>(() => buildPlanCaseAssigneeNodes(assigneeTree), [assigneeTree]);
@@ -586,7 +586,7 @@ export default function PlanCasesPage() {
       : groupBy === "assignee"
         ? { nodes: assigneeTreeNodes, total: assigneeTree?.count, loading: assigneeTreeLoading, onSelect: handleAssigneeTreeSelect }
         : { nodes: groupTreeNodes, total: groupTree?.count, loading: groupTreeLoading, onSelect: handleGroupTreeSelect };
-  const treeRailLabel = selectedTreeKey === "root" ? "全部用例" : findPlanCaseTreeLabel(activeTree.nodes, selectedTreeKey);
+  const treeRailLabel = selectedTreeKey === "root" ? "全部用例" : findModuleTreeLabel(activeTree.nodes, selectedTreeKey);
 
   const moduleTreeNodeMetaMap = useMemo(() => {
     const map = new Map<string, TModuleTreeNodeMeta>();

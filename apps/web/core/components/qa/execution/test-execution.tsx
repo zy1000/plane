@@ -2,13 +2,12 @@
 
 import React from "react";
 import { Transition } from "@headlessui/react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal, Checkbox, Upload, Dropdown } from "antd";
-import type { TreeProps } from "antd";
-import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
+import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Modal, Checkbox, Upload, Dropdown } from "antd";
+import { DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -19,7 +18,6 @@ import { TitleInput } from "../cases/update-modal/title-input";
 import { CaseMetaForm } from "../cases/update-modal/case-meta-form";
 import { RequirementDisplayPanel } from "../cases/requirement-display-panel";
 import { CaseReviewRecordsTable } from "../cases/case-review-records-table";
-import { ChevronDownIcon } from "@plane/propel/icons";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
@@ -36,8 +34,14 @@ import {
   isPlanCaseGroupBy,
   type TPlanCaseGroupBy,
 } from "@/components/qa/plans/plan-case-display-filters";
-import { PlanCaseAssigneeTree } from "@/components/qa/plans/plan-case-assignee-tree";
-import { PlanCaseGroupTree } from "@/components/qa/plans/plan-case-group-tree";
+import { PlanCaseGroupBySwitcher } from "@/components/qa/plans/plan-case-group-by-switcher";
+import { buildPlanCaseAssigneeNodes, buildPlanCaseGroupNodes } from "@/components/qa/plans/plan-case-tree-nodes";
+import {
+  ModuleTreePanel,
+  buildRepositoryModuleNodes,
+  findModuleTreeLabel,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import { PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
@@ -95,6 +99,7 @@ const formatFileSize = (bytes: number): string => {
 export default function TestExecutionPage() {
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const initialCaseId = searchParams.get("case_id") ?? undefined;
   const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
@@ -123,8 +128,8 @@ export default function TestExecutionPage() {
   const [keyword, setKeyword] = React.useState<string>("");
   const [selectedCaseId, setSelectedCaseId] = React.useState<string | undefined>(initialCaseId ?? undefined);
 
-  const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
-  const [autoExpandParent, setAutoExpandParent] = React.useState<boolean>(true);
+  const [expandedKeys, setExpandedKeys] = React.useState<string[]>([]);
+  const [treeLoading, setTreeLoading] = React.useState<boolean>(false);
   const [selectedTreeKey, setSelectedTreeKey] = React.useState<string>("root");
   const [selectedRepositoryId, setSelectedRepositoryId] = React.useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
@@ -219,38 +224,6 @@ export default function TestExecutionPage() {
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
 
-  // Resize logic
-  const [leftWidth, setLeftWidth] = React.useState<number>(280);
-  const isDraggingRef = React.useRef<boolean>(false);
-  const startXRef = React.useRef<number>(0);
-  const startWidthRef = React.useRef<number>(0);
-
-  const onMouseMoveResize = React.useCallback((e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const delta = e.clientX - startXRef.current;
-    const next = Math.min(600, Math.max(200, startWidthRef.current + delta));
-    setLeftWidth(next);
-  }, []);
-
-  const onMouseUpResize = React.useCallback(() => {
-    isDraggingRef.current = false;
-    document.removeEventListener("mousemove", onMouseMoveResize);
-    document.removeEventListener("mouseup", onMouseUpResize);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  }, [onMouseMoveResize]);
-
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    document.addEventListener("mousemove", onMouseMoveResize);
-    document.addEventListener("mouseup", onMouseUpResize);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
-
   // 分组树选中值 → 中间列表的精确过滤参数；模块分组或未选中时为空
   const buildGroupFilterParams = (groupValue: string | null) => {
     if (!groupValue) return {};
@@ -325,15 +298,14 @@ export default function TestExecutionPage() {
 
   const fetchPlanTree = async () => {
     if (!workspaceSlug || !planId) return;
+    setTreeLoading(true);
     try {
       const data = await caseService.getPlanCaseTree(String(workspaceSlug), { plan_id: String(planId) });
       setPlanTree(data || null);
-      setExpandedKeys(data ? collectDefaultExpandedKeys(data) : undefined);
-      setAutoExpandParent(true);
     } catch {
       setPlanTree(null);
-      setExpandedKeys(undefined);
-      setAutoExpandParent(true);
+    } finally {
+      setTreeLoading(false);
     }
   };
 
@@ -466,14 +438,11 @@ export default function TestExecutionPage() {
     [workspaceSlug, planId, selectedRepositoryId, selectedModuleId]
   );
 
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+  const handleModuleTreeSelect = (key: string) => {
     setSelectedTreeKey(key);
+    const meta = treeNodeMetaMap.get(key);
 
-    const node: any = (info as any)?.node || {};
-    const kind = node?.kind as string | undefined;
-
-    if (!kind || kind === "root") {
+    if (!meta || meta.kind === "root") {
       setSelectedRepositoryId(null);
       setSelectedModuleId(null);
       setSelectedCaseId(undefined);
@@ -482,8 +451,8 @@ export default function TestExecutionPage() {
       return;
     }
 
-    if (kind === "repository" || kind === "repository_modules_all") {
-      const repoId = node?.repositoryId ? String(node.repositoryId) : null;
+    if (meta.kind === "repository" || meta.kind === "repository_modules_all") {
+      const repoId = meta.repositoryId;
       setSelectedRepositoryId(repoId);
       setSelectedModuleId(null);
       setSelectedCaseId(undefined);
@@ -492,15 +461,23 @@ export default function TestExecutionPage() {
       return;
     }
 
-    if (kind === "module") {
-      const repoId = node?.repositoryId ? String(node.repositoryId) : null;
-      const moduleId = node?.moduleId ? String(node.moduleId) : null;
+    if (meta.kind === "module") {
+      const repoId = meta.repositoryId;
+      const moduleId = meta.moduleId;
       setSelectedRepositoryId(repoId);
       setSelectedModuleId(moduleId);
       setSelectedCaseId(undefined);
       setCaseDetail(null);
       fetchCases(keyword, repoId, moduleId, true);
     }
+  };
+
+  // 树头切换分组：只改 URL 的 group_by，下面按 groupBy 重置选中并重拉的 effect 会接手
+  const handleGroupByChange = (nextGroupBy: TPlanCaseGroupBy) => {
+    if (nextGroupBy === groupBy) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("group_by", nextGroupBy);
+    router.replace(`${pathname}?${params.toString()}`);
   };
 
   // 执行人树 / 枚举分组树共用：key 形如 root、assignee:<id>、unassigned、<kind>:<枚举值>
@@ -514,23 +491,6 @@ export default function TestExecutionPage() {
     fetchCases(keyword, null, null, true, false, nextGroupValue);
   };
 
-  const onExpand: TreeProps["onExpand"] = (keys) => {
-    setExpandedKeys(keys as string[]);
-    setAutoExpandParent(false);
-  };
-
-  const renderNodeTitle = (title: string, icon: React.ReactNode, count?: number, fontMedium?: boolean) => (
-    <div className="group flex items-center justify-between gap-2 w-full">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
-        <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-      </div>
-    </div>
-  );
-
   function getTreeNodeKey(node: any): string {
     const kind = String(node?.kind || "");
     const id = String(node?.id || "");
@@ -543,54 +503,48 @@ export default function TestExecutionPage() {
     return id;
   }
 
-  function collectDefaultExpandedKeys(node: any): string[] {
-    const keys = new Set<string>();
-    const visit = (n: any) => {
-      const kind = String(n?.kind || "");
-      if (kind === "root" || kind === "repository" || kind === "repository_modules_all") {
-        keys.add(getTreeNodeKey(n));
-      }
-      const children = Array.isArray(n?.children) ? n.children : [];
-      children.forEach(visit);
+  // 左栏三种分组的节点：模块（用例库 → 模块）/ 执行人 / 枚举值；「全部用例」是树的固定首行
+  const moduleTreeNodes = React.useMemo<TModuleTreeNode[]>(
+    () => buildRepositoryModuleNodes(planTree, getTreeNodeKey),
+    [planTree]
+  );
+  const assigneeTreeNodes = React.useMemo<TModuleTreeNode[]>(
+    () => buildPlanCaseAssigneeNodes(assigneeTree),
+    [assigneeTree]
+  );
+  const groupTreeNodes = React.useMemo<TModuleTreeNode[]>(
+    () => buildPlanCaseGroupNodes(groupTree, enumsData.plan_case_result, enumsData.plan_case_review_status),
+    [groupTree, enumsData.plan_case_result, enumsData.plan_case_review_status]
+  );
+  const activeTree =
+    groupBy === "module"
+      ? { nodes: moduleTreeNodes, total: planTree?.count, loading: treeLoading, onSelect: handleModuleTreeSelect }
+      : groupBy === "assignee"
+        ? { nodes: assigneeTreeNodes, total: assigneeTree?.count, loading: assigneeTreeLoading, onSelect: handleGroupTreeSelect }
+        : { nodes: groupTreeNodes, total: groupTree?.count, loading: groupTreeLoading, onSelect: handleGroupTreeSelect };
+  const treeRailLabel =
+    selectedTreeKey === "root" ? "全部用例" : findModuleTreeLabel(activeTree.nodes, selectedTreeKey) || "全部用例";
+
+  // key → 节点种类 / 所属用例库 / 模块 id，模块树选中时据此决定列表过滤参数
+  const treeNodeMetaMap = React.useMemo(() => {
+    const map = new Map<string, { kind: string; repositoryId: string | null; moduleId: string | null }>();
+    const visit = (node: any) => {
+      const kind = String(node?.kind || "");
+      map.set(getTreeNodeKey(node), {
+        kind,
+        repositoryId: node?.repository_id ? String(node.repository_id) : null,
+        moduleId: kind === "module" && node?.id ? String(node.id) : null,
+      });
+      (Array.isArray(node?.children) ? node.children : []).forEach(visit);
     };
-    visit(node);
-    return Array.from(keys);
-  }
-
-  const buildTreeNodes = (node: any): any => {
-    const kind = String(node?.kind || "");
-    const id = String(node?.id || "");
-    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
-
-    const key = getTreeNodeKey(node);
-
-    const icon =
-      kind === "root" ? (
-        <AppstoreOutlined />
-      ) : kind === "repository" ? (
-        <LucideIcons.Atom size={14} />
-      ) : kind === "repository_modules_all" ? (
-        <AppstoreOutlined />
-      ) : (
-        <LucideIcons.FolderOpenDot size={14} />
-      );
-
-    const children = Array.isArray(node?.children) ? node.children : [];
-
-    return {
-      title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
-      key,
-      kind,
-      repositoryId,
-      moduleId: kind === "module" ? id : null,
-      children: children.map((c: any) => buildTreeNodes(c)),
-    };
-  };
-
-  const treeData = React.useMemo(() => {
-    if (!planTree) return [];
-    return [buildTreeNodes(planTree)];
+    if (planTree) visit(planTree);
+    return map;
   }, [planTree]);
+
+  // 树刷新后默认展开各用例库，模块层级保持收起
+  React.useEffect(() => {
+    setExpandedKeys(moduleTreeNodes.map((node) => node.key));
+  }, [moduleTreeNodes]);
 
   const handleChangeActual = React.useCallback(
     (idx: number, val: string) => setStepActualResultMap((prev) => ({ ...prev, [idx]: val })),
@@ -1104,79 +1058,20 @@ export default function TestExecutionPage() {
 
       <Transition show={mounted} enter="transition-opacity duration-200" enterFrom="opacity-0" enterTo="opacity-100">
         <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
-          <Col
-            className="relative border-r border-subtle max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
-            flex="0 0 auto"
-            style={{ width: leftWidth, minWidth: 200, maxWidth: 600, maxHeight: `calc(100dvh - ${topOffset}px)` }}
-          >
-            <style
-              dangerouslySetInnerHTML={{
-                __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 20px !important;
-                  margin-inline-end: 0px !important;
-                  display: flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  margin-top: 2px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 0px !important;
-                  font-size: 0.875rem !important;
-                  line-height: 1.25rem !important;
-                  font-weight: 500 !important;
-                }
-              `,
-              }}
-            />
-            <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2 pl-1">
-              {groupBy === "module" ? (
-                <Tree
-                  showLine={false}
-                  defaultExpandAll
-                  switcherIcon={(nodeProps) => (
-                    <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                      <ChevronDownIcon
-                        className={`size-4 transition-transform rotate-0`}
-                        strokeWidth={2.5}
-                      />
-                    </span>
-                  )}
-                  onSelect={onSelect}
-                  onExpand={onExpand}
-                  expandedKeys={expandedKeys}
-                  autoExpandParent={autoExpandParent}
-                  treeData={treeData}
-                  selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                  className="pb-2 pl-2 custom-tree-indent"
-                />
-              ) : groupBy === "assignee" ? (
-                <PlanCaseAssigneeTree
-                  tree={assigneeTree}
-                  loading={assigneeTreeLoading}
-                  selectedKey={selectedTreeKey}
-                  onSelect={handleGroupTreeSelect}
-                />
-              ) : (
-                <PlanCaseGroupTree
-                  tree={groupTree}
-                  loading={groupTreeLoading}
-                  selectedKey={selectedTreeKey}
-                  onSelect={handleGroupTreeSelect}
-                  resultColors={enumsData.plan_case_result}
-                  reviewStatusColors={enumsData.plan_case_review_status}
-                />
-              )}
-            </div>
-            {/* Resize Handle */}
-            <div
-              onMouseDown={onMouseDownResize}
-              className="absolute top-0 right-[-3px] bottom-0 w-[6px] cursor-col-resize z-10"
-            />
-          </Col>
+          {/* 左树与右边两栏等高：Row 没定高，面板自带的 h-full 算不出值反而不拉伸，用 h-auto 盖掉让它 stretch，再靠 max-h 钉在视口内 */}
+          <ModuleTreePanel
+            className={topOffset === 180 ? "h-auto max-h-[calc(100dvh-180px)]" : "h-auto max-h-[calc(100dvh-130px)]"}
+            headerLeft={<PlanCaseGroupBySwitcher value={groupBy} disabled={!planId} onChange={handleGroupByChange} />}
+            root={{ key: "root", label: "全部用例", count: activeTree.total }}
+            nodes={activeTree.nodes}
+            selectedKey={selectedTreeKey}
+            onSelect={activeTree.onSelect}
+            expandedKeys={expandedKeys}
+            onExpandedKeysChange={setExpandedKeys}
+            loading={activeTree.loading}
+            emptyText="计划里还没有用例"
+            railLabel={treeRailLabel}
+          />
 
           <Col
             flex="0 0 auto"

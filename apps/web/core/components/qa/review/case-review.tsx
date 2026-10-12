@@ -6,15 +6,19 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Input, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Tree, Checkbox } from "antd";
-import type { TreeProps } from "antd";
-import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
+import { Row, Col, Input, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Checkbox } from "antd";
+import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ChevronDownIcon } from "@plane/propel/icons";
 import { Button as PlaneButton } from "@plane/propel/button";
+import {
+  ModuleTreePanel,
+  buildRepositoryModuleNodes,
+  findModuleTreeLabel,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import { getEnums, globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import * as LucideIcons from "lucide-react";
 import { useMember } from "@/hooks/store/use-member";
@@ -120,8 +124,8 @@ export default function CaseReview() {
   const [cases, setCases] = React.useState<ReviewCaseRow[]>([]);
   const [keyword, setKeyword] = React.useState<string>("");
   const [selectedCaseId, setSelectedCaseId] = React.useState<string | undefined>(initialCaseId ?? undefined);
-  const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
-  const [autoExpandParent, setAutoExpandParent] = React.useState<boolean>(true);
+  const [expandedKeys, setExpandedKeys] = React.useState<string[]>([]);
+  const [treeLoading, setTreeLoading] = React.useState<boolean>(false);
   const [selectedTreeKey, setSelectedTreeKey] = React.useState<string>("root");
   const [selectedRepositoryId, setSelectedRepositoryId] = React.useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
@@ -156,38 +160,6 @@ export default function CaseReview() {
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
-
-  // Resize logic
-  const [leftWidth, setLeftWidth] = React.useState<number>(280);
-  const isDraggingRef = React.useRef<boolean>(false);
-  const startXRef = React.useRef<number>(0);
-  const startWidthRef = React.useRef<number>(0);
-
-  const onMouseMoveResize = React.useCallback((e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const delta = e.clientX - startXRef.current;
-    const next = Math.min(600, Math.max(200, startWidthRef.current + delta));
-    setLeftWidth(next);
-  }, []);
-
-  const onMouseUpResize = React.useCallback(() => {
-    isDraggingRef.current = false;
-    document.removeEventListener("mousemove", onMouseMoveResize);
-    document.removeEventListener("mouseup", onMouseUpResize);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  }, [onMouseMoveResize]);
-
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    document.addEventListener("mousemove", onMouseMoveResize);
-    document.addEventListener("mouseup", onMouseUpResize);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
 
   type TCaseVersionItem = { id: string; version: number; created_at?: string };
   const [caseVersions, setCaseVersions] = React.useState<TCaseVersionItem[]>([]);
@@ -302,15 +274,14 @@ export default function CaseReview() {
 
   const fetchReviewTree = async () => {
     if (!workspaceSlug || !reviewId) return;
+    setTreeLoading(true);
     try {
       const data = await caseService.getReviewCaseTree(String(workspaceSlug), { review_id: String(reviewId) });
       setReviewTree(data || null);
-      setExpandedKeys(data ? collectDefaultExpandedKeys(data) : undefined);
-      setAutoExpandParent(true);
     } catch {
       setReviewTree(null);
-      setExpandedKeys(undefined);
-      setAutoExpandParent(true);
+    } finally {
+      setTreeLoading(false);
     }
   };
 
@@ -510,23 +481,6 @@ export default function CaseReview() {
     }
   };
 
-  const onExpand: TreeProps["onExpand"] = (keys) => {
-    setExpandedKeys(keys as string[]);
-    setAutoExpandParent(false);
-  };
-
-  const renderNodeTitle = (title: string, icon: React.ReactNode, count?: number, fontMedium?: boolean) => (
-    <div className="group flex items-center justify-between gap-2 w-full">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
-        <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-      </div>
-    </div>
-  );
-
   function getTreeNodeKey(node: any): string {
     const kind = String(node?.kind || "");
     const id = String(node?.id || "");
@@ -539,54 +493,33 @@ export default function CaseReview() {
     return id;
   }
 
-  function collectDefaultExpandedKeys(node: any): string[] {
-    const keys = new Set<string>();
-    const visit = (n: any) => {
-      const kind = String(n?.kind || "");
-      if (kind === "root" || kind === "repository" || kind === "repository_modules_all") {
-        keys.add(getTreeNodeKey(n));
-      }
-      const children = Array.isArray(n?.children) ? n.children : [];
-      children.forEach(visit);
+  // 左栏节点：用例库 → 模块 → 子模块；「全部用例」是树的固定首行
+  const moduleTreeNodes = React.useMemo<TModuleTreeNode[]>(
+    () => buildRepositoryModuleNodes(reviewTree, getTreeNodeKey),
+    [reviewTree]
+  );
+  // key → 节点种类 / 所属用例库 / 模块 id，选中时据此决定列表过滤参数
+  const treeNodeMetaMap = React.useMemo(() => {
+    const map = new Map<string, { kind: string; repositoryId: string | null; moduleId: string | null }>();
+    const visit = (node: any) => {
+      const kind = String(node?.kind || "");
+      map.set(getTreeNodeKey(node), {
+        kind,
+        repositoryId: node?.repository_id ? String(node.repository_id) : null,
+        moduleId: kind === "module" && node?.id ? String(node.id) : null,
+      });
+      (Array.isArray(node?.children) ? node.children : []).forEach(visit);
     };
-    visit(node);
-    return Array.from(keys);
-  }
-
-  const buildTreeNodes = (node: any): any => {
-    const kind = String(node?.kind || "");
-    const id = String(node?.id || "");
-    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
-
-    const key = getTreeNodeKey(node);
-
-    const icon =
-      kind === "root" ? (
-        <AppstoreOutlined />
-      ) : kind === "repository" ? (
-        <LucideIcons.Atom size={14} />
-      ) : kind === "repository_modules_all" ? (
-        <AppstoreOutlined />
-      ) : (
-        <LucideIcons.FolderOpenDot size={14} />
-      );
-
-    const children = Array.isArray(node?.children) ? node.children : [];
-
-    return {
-      title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
-      key,
-      kind,
-      repositoryId,
-      moduleId: kind === "module" ? id : null,
-      children: children.map((c: any) => buildTreeNodes(c)),
-    };
-  };
-
-  const treeData = React.useMemo(() => {
-    if (!reviewTree) return [];
-    return [buildTreeNodes(reviewTree)];
+    if (reviewTree) visit(reviewTree);
+    return map;
   }, [reviewTree]);
+  const treeRailLabel =
+    selectedTreeKey === "root" ? "全部用例" : findModuleTreeLabel(moduleTreeNodes, selectedTreeKey) || "全部用例";
+
+  // 树刷新后默认展开各用例库，模块层级保持收起
+  React.useEffect(() => {
+    setExpandedKeys(moduleTreeNodes.map((node) => node.key));
+  }, [moduleTreeNodes]);
 
   const updateFilterQueryParams = React.useCallback(
     (next: { project_id?: string | null; repository_id?: string | null; module_id?: string | null }) => {
@@ -604,14 +537,11 @@ export default function CaseReview() {
     [pathname, reviewId, router, searchParams]
   );
 
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+  const handleTreeSelect = (key: string) => {
     setSelectedTreeKey(key);
+    const meta = treeNodeMetaMap.get(key);
 
-    const node: any = (info as any)?.node || {};
-    const kind = node?.kind as string | undefined;
-
-    if (!kind || kind === "root") {
+    if (!meta || meta.kind === "root") {
       setSelectedRepositoryId(null);
       setSelectedModuleId(null);
       setSelectedCaseId(undefined);
@@ -622,8 +552,8 @@ export default function CaseReview() {
       return;
     }
 
-    if (kind === "repository" || kind === "repository_modules_all") {
-      const repositoryId = node?.repositoryId ? String(node.repositoryId) : null;
+    if (meta.kind === "repository" || meta.kind === "repository_modules_all") {
+      const repositoryId = meta.repositoryId;
       setSelectedRepositoryId(repositoryId);
       setSelectedModuleId(null);
       setSelectedCaseId(undefined);
@@ -634,9 +564,9 @@ export default function CaseReview() {
       return;
     }
 
-    if (kind === "module") {
-      const moduleId = node?.moduleId ? String(node.moduleId) : null;
-      const repositoryId = node?.repositoryId ? String(node.repositoryId) : null;
+    if (meta.kind === "module") {
+      const moduleId = meta.moduleId;
+      const repositoryId = meta.repositoryId;
       setSelectedRepositoryId(repositoryId);
       setSelectedModuleId(moduleId);
       setSelectedCaseId(undefined);
@@ -781,58 +711,19 @@ export default function CaseReview() {
       </Breadcrumbs>
 
       <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
-        <Col
-          className="relative border-r border-subtle max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
-          flex="0 0 auto"
-          style={{ width: leftWidth, minWidth: 200, maxWidth: 600, maxHeight: `calc(100dvh - ${topOffset}px)` }}
-        >
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `
-              .custom-tree-indent .ant-tree-indent-unit {
-                width: 10px !important;
-              }
-              .custom-tree-indent .ant-tree-switcher {
-                width: 20px !important;
-                margin-inline-end: 0px !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                margin-top: 2px !important;
-              }
-              .custom-tree-indent .ant-tree-node-content-wrapper {
-                padding-inline: 0px !important;
-              }
-            `,
-            }}
-          />
-          <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2 pl-2">
-            <Tree
-              showLine={false}
-              defaultExpandAll
-              switcherIcon={(nodeProps) => (
-                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                  <ChevronDownIcon
-                    className={`size-4 transition-transform rotate-0`}
-                    strokeWidth={2.5}
-                  />
-                </span>
-              )}
-              onSelect={onSelect}
-              onExpand={onExpand}
-              expandedKeys={expandedKeys}
-              autoExpandParent={autoExpandParent}
-              treeData={treeData}
-              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="pb-2 custom-tree-indent"
-            />
-          </div>
-          {/* Resize Handle */}
-          <div
-            onMouseDown={onMouseDownResize}
-            className="absolute top-0 right-[-3px] bottom-0 w-[6px] cursor-col-resize z-10"
-          />
-        </Col>
+        {/* 左树与右边两栏等高：Row 没定高，面板自带的 h-full 算不出值反而不拉伸，用 h-auto 盖掉让它 stretch，再靠 max-h 钉在视口内 */}
+        <ModuleTreePanel
+          className={topOffset === 180 ? "h-auto max-h-[calc(100dvh-180px)]" : "h-auto max-h-[calc(100dvh-130px)]"}
+          root={{ key: "root", label: "全部用例" }}
+          nodes={moduleTreeNodes}
+          selectedKey={selectedTreeKey}
+          onSelect={handleTreeSelect}
+          expandedKeys={expandedKeys}
+          onExpandedKeysChange={setExpandedKeys}
+          loading={treeLoading}
+          emptyText="评审里还没有用例"
+          railLabel={treeRailLabel}
+        />
 
         <Col
           flex="0 0 auto"

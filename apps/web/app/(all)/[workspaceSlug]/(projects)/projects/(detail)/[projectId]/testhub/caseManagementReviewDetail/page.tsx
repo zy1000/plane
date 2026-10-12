@@ -1,18 +1,20 @@
 "use client";
 
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Tree, Pagination, Popconfirm, Select } from "antd";
-import type { TreeProps } from "antd";
-import { AppstoreOutlined } from "@ant-design/icons";
+import { Pagination, Popconfirm, Select } from "antd";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/services/qa/review.service";
-import { ChevronDownIcon } from "@plane/propel/icons";
-import { FolderOpenDot, Atom } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
+import {
+  ModuleTreePanel,
+  buildRepositoryModuleNodes,
+  findModuleTreeLabel,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
 import { CasesSearchInput } from "@/components/qa/cases/cases-search";
 import {
@@ -81,8 +83,8 @@ export default function CaseManagementReviewDetailPage() {
 
   const [reviewTree, setReviewTree] = useState<any | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
-  const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
-  const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  const [treeLoading, setTreeLoading] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewCases, setReviewCases] = useState<ReviewCaseRow[]>([]);
@@ -191,53 +193,16 @@ export default function CaseManagementReviewDetailPage() {
     lastSelectionContextKeyRef.current = selectionContextKey;
   }, [selectionContextKey]);
 
-  const [leftWidth, setLeftWidth] = useState<number>(280);
-  const isDraggingRef = useRef<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    window.addEventListener("mousemove", onMouseMoveResize as any);
-    window.addEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
-  const onMouseMoveResize = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const next = Math.min(320, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
-    setLeftWidth(next);
-  };
-  const onMouseUpResize = () => {
-    isDraggingRef.current = false;
-    window.removeEventListener("mousemove", onMouseMoveResize as any);
-    window.removeEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  };
-
-  useEffect(
-    () => () => {
-      window.removeEventListener("mousemove", onMouseMoveResize as any);
-      window.removeEventListener("mouseup", onMouseUpResize as any);
-    },
-    []
-  );
-
-  const onExpand: TreeProps["onExpand"] = (keys) => {
-    setExpandedKeys(keys as string[]);
-    setAutoExpandParent(false);
-  };
-
   const fetchReviewTree = async () => {
     if (!workspaceSlug || !reviewId) return;
+    setTreeLoading(true);
     try {
       const data = await caseService.getReviewCaseTree(workspaceSlug as string, { review_id: reviewId });
       setReviewTree(data || null);
     } catch (e) {
       setError("获取用例树失败，请稍后重试");
+    } finally {
+      setTreeLoading(false);
     }
   };
 
@@ -490,20 +455,6 @@ export default function CaseManagementReviewDetailPage() {
     router.push(`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?${params.toString()}`);
   };
 
-  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
-    return (
-      <div className="group flex w-full items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
-          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-        </div>
-      </div>
-    );
-  };
-
   function getTreeNodeKey(node: any): string {
     const kind = String(node?.kind || "");
     const id = String(node?.id || "");
@@ -516,206 +467,114 @@ export default function CaseManagementReviewDetailPage() {
     return id;
   }
 
-  function collectDefaultExpandedKeys(node: any): string[] {
-    const keys = new Set<string>();
-    const visit = (n: any) => {
-      const kind = String(n?.kind || "");
-      if (kind === "root" || kind === "repository" || kind === "repository_modules_all") {
-        keys.add(getTreeNodeKey(n));
-      }
-      const children = Array.isArray(n?.children) ? n.children : [];
-      children.forEach(visit);
-    };
-    visit(node);
-    return Array.from(keys);
-  }
+  // 左栏节点：用例库 → 模块 → 子模块；「全部用例」是树的固定首行
+  const moduleTreeNodes = useMemo<TModuleTreeNode[]>(
+    () => buildRepositoryModuleNodes(reviewTree, getTreeNodeKey),
+    [reviewTree]
+  );
+  const treeRailLabel =
+    selectedTreeKey === "root" ? "全部用例" : findModuleTreeLabel(moduleTreeNodes, selectedTreeKey) || "全部用例";
 
-  const treeData = useMemo(() => {
-    if (!reviewTree) return [];
-    const buildTreeNodes = (node: any): any => {
-      const kind = String(node?.kind || "");
-      const id = String(node?.id || "");
-      const repositoryId = node?.repository_id ? String(node.repository_id) : null;
-
-      const key = getTreeNodeKey(node);
-
-      const icon =
-        kind === "root" ? (
-          <AppstoreOutlined />
-        ) : kind === "repository" ? (
-          <Atom size={14} />
-        ) : kind === "repository_modules_all" ? (
-          <AppstoreOutlined />
-        ) : (
-          <FolderOpenDot size={14} />
-        );
-
-      const children = Array.isArray(node?.children) ? node.children : [];
-
-      return {
-        title: renderNodeTitle(
-          node?.name ?? "-",
-          icon,
-          undefined,
-          kind === "root" || kind === "repository_modules_all"
-        ),
-        key,
-        kind,
-        repositoryId,
-        moduleId: kind === "module" ? id : null,
-        children: children.map((c: any) => buildTreeNodes(c)),
-      };
-    };
-    return [buildTreeNodes(reviewTree)];
-  }, [reviewTree]);
-
+  // 树刷新后默认展开各用例库，模块层级保持收起
   useEffect(() => {
-    if (!reviewTree) return;
-    setExpandedKeys(collectDefaultExpandedKeys(reviewTree));
-    setAutoExpandParent(true);
-  }, [reviewTree]);
+    setExpandedKeys(moduleTreeNodes.map((node) => node.key));
+  }, [moduleTreeNodes]);
 
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+  const handleTreeSelect = (key: string) => {
     setSelectedTreeKey(key);
-
-    const node: any = (info as any)?.node || {};
-    const kind = node?.kind as string | undefined;
-
-    if (!kind || kind === "root" || kind === "repository" || kind === "repository_modules_all") {
-      setSelectedModuleId(null);
-      fetchReviewCaseList(1, pageSize, { moduleId: null });
-      return;
-    }
-
-    if (kind === "module") {
-      const moduleId = node?.moduleId ? String(node.moduleId) : null;
-      setSelectedModuleId(moduleId);
-      fetchReviewCaseList(1, pageSize, { moduleId });
-    }
+    // 只有模块节点过滤列表；选中用例库或「全部用例」都看整个评审
+    const moduleId = key.startsWith("module:") ? key.slice("module:".length) : null;
+    setSelectedModuleId(moduleId);
+    fetchReviewCaseList(1, pageSize, { moduleId });
   };
 
   return (
     <>
-      <div className="flex h-full w-full flex-col overflow-hidden pr-4 pb-0">
+      <div className="h-full w-full">
         <PageHead title="评审详情" />
-        <div className="flex min-h-0 w-full flex-1 overflow-hidden rounded-md border border-subtle">
-          <div
-            className="relative h-full min-h-0 flex-shrink-0 overflow-y-auto border-r border-subtle pt-4 pl-4"
-            style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
-          >
-            <div
-              onMouseDown={onMouseDownResize}
-              className="absolute top-0 right-0 h-full w-2"
-              style={{ cursor: "col-resize", zIndex: 10 }}
-            />
-            <style
-              dangerouslySetInnerHTML={{
-                __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 20px !important;
-                  margin-inline-end: 0px !important;
-                  display: flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  margin-top: 2px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 0px !important;
-                }
-              `,
-              }}
-            />
-            <Tree
-              showLine={false}
-              defaultExpandAll
-              switcherIcon={(nodeProps) => (
-                <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
-                  <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
-                </span>
-              )}
-              onSelect={onSelect}
-              onExpand={onExpand}
-              expandedKeys={expandedKeys}
-              autoExpandParent={autoExpandParent}
-              treeData={treeData as any}
-              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="custom-tree-indent py-2 pl-2"
-            />
+        <div className="flex h-full w-full flex-col">
+          {/* 页头横跨整行，左栏与表格从它下面开始，两者等高（与计划详情页一致） */}
+          <div className="flex flex-shrink-0 items-center justify-between border-b border-subtle px-3 pt-2 pb-2">
+            <div>
+              <Breadcrumbs className="grow-0">
+                <Breadcrumbs.Item
+                  component={
+                    <BreadcrumbLink
+                      href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`}
+                      label="用例评审"
+                    />
+                  }
+                />
+                <Breadcrumbs.Item
+                  component={
+                    <Breadcrumbs.ItemWrapper className="min-w-0 !cursor-pointer !gap-2 !px-1.5 !py-1 !text-sm !font-medium !text-secondary hover:!bg-layer-1 hover:!text-primary">
+                      <Select
+                        value={reviewId || undefined}
+                        placeholder="选择评审"
+                        loading={reviewListLoading}
+                        showSearch
+                        optionFilterProp="label"
+                        className="h-full min-w-[200px] max-w-[240px] !cursor-pointer [&_.ant-select-selection-item]:!max-w-[180px] [&_.ant-select-selection-item]:!truncate [&_.ant-select-selection-item]:!text-inherit [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!font-medium [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-placeholder]:!text-inherit [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!font-medium [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-search-input]:!text-sm [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-0 [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!bg-transparent [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!shadow-none"
+                        variant="borderless"
+                        suffixIcon={null}
+                        showArrow={false}
+                        options={reviewList.map((r) => ({ value: String(r.id), label: String(r.name || "-") }))}
+                        onChange={onChangeReview}
+                      />
+                    </Breadcrumbs.ItemWrapper>
+                  }
+                />
+              </Breadcrumbs>
+            </div>
+            <div className="flex items-center gap-2">
+              <CasesSearchInput
+                value={filters.search ?? ""}
+                onSearch={(query) => {
+                  const trimmedQuery = query.trim();
+                  const nextFilters: TReviewCaseListFilters = { ...filters };
+                  if (trimmedQuery) nextFilters.search = trimmedQuery;
+                  else delete nextFilters.search;
+                  setFilters(nextFilters);
+                  fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
+                }}
+              />
+              <FiltersToggle filter={reviewCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+              <ReviewCaseDisplayFilters
+                displayProperties={reviewCaseDisplayProperties}
+                ordering={ordering}
+                onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+                onOrderByChange={handleSortChange}
+              />
+              <button
+                type="button"
+                disabled={!canEditReview}
+                onClick={() => {
+                  if (!canEditReview) return;
+                  setIsCaseSelectionOpen(true);
+                }}
+                className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                关联用例
+              </button>
+            </div>
           </div>
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-              <div className="flex flex-shrink-0 items-center justify-between pt-2 pr-4 pb-2 pl-7">
-                <div>
-                  <Breadcrumbs className="grow-0">
-                    <Breadcrumbs.Item
-                      component={
-                        <BreadcrumbLink
-                          href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`}
-                          label="用例评审"
-                        />
-                      }
-                    />
-                    <Breadcrumbs.Item
-                      component={
-                        <Breadcrumbs.ItemWrapper className="min-w-0 !cursor-pointer !gap-2 !px-1.5 !py-1 !text-sm !font-medium !text-secondary hover:!bg-layer-1 hover:!text-primary">
-                          <Select
-                            value={reviewId || undefined}
-                            placeholder="选择评审"
-                            loading={reviewListLoading}
-                            showSearch
-                            optionFilterProp="label"
-                            className="h-full min-w-[200px] max-w-[240px] !cursor-pointer [&_.ant-select-selection-item]:!max-w-[180px] [&_.ant-select-selection-item]:!truncate [&_.ant-select-selection-item]:!text-inherit [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!font-medium [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-placeholder]:!text-inherit [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!font-medium [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-search-input]:!text-sm [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-0 [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!bg-transparent [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!shadow-none"
-                            variant="borderless"
-                            suffixIcon={null}
-                            showArrow={false}
-                            options={reviewList.map((r) => ({ value: String(r.id), label: String(r.name || "-") }))}
-                            onChange={onChangeReview}
-                          />
-                        </Breadcrumbs.ItemWrapper>
-                      }
-                    />
-                  </Breadcrumbs>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CasesSearchInput
-                    value={filters.search ?? ""}
-                    onSearch={(query) => {
-                      const trimmedQuery = query.trim();
-                      const nextFilters: TReviewCaseListFilters = { ...filters };
-                      if (trimmedQuery) nextFilters.search = trimmedQuery;
-                      else delete nextFilters.search;
-                      setFilters(nextFilters);
-                      fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
-                    }}
-                  />
-                  <FiltersToggle filter={reviewCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
-                  <ReviewCaseDisplayFilters
-                    displayProperties={reviewCaseDisplayProperties}
-                    ordering={ordering}
-                    onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
-                    onOrderByChange={handleSortChange}
-                  />
-                  <button
-                    type="button"
-                    disabled={!canEditReview}
-                    onClick={() => {
-                      if (!canEditReview) return;
-                      setIsCaseSelectionOpen(true);
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    关联用例
-                  </button>
-                </div>
-              </div>
-              <div className="flex-shrink-0 pr-4 pb-1">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <ModuleTreePanel
+              root={{ key: "root", label: "全部用例" }}
+              nodes={moduleTreeNodes}
+              selectedKey={selectedTreeKey}
+              onSelect={handleTreeSelect}
+              expandedKeys={expandedKeys}
+              onExpandedKeysChange={setExpandedKeys}
+              loading={treeLoading}
+              emptyText="评审里还没有用例"
+              railLabel={treeRailLabel}
+            />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-shrink-0 px-3 pt-1.5 pb-1">
                 <FiltersRow filter={reviewCaseFilter} />
               </div>
-              <div className="min-h-0 min-w-0 flex-1 overflow-hidden pr-4 pt-0 pb-2">
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-secondary">加载中...</div>

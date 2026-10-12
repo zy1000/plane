@@ -1,6 +1,6 @@
 "use client";
 
-import { Library, UserX } from "lucide-react";
+import { UserX } from "lucide-react";
 import { cn } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import type { TModuleTreeNode } from "@/components/qa/module-tree";
@@ -31,35 +31,7 @@ const Dot = ({ color }: { color?: string }) => (
   <span className={cn("size-2 rounded-full", DOT_COLOR_CLASS[color || "default"] ?? DOT_COLOR_CLASS.default)} />
 );
 
-/**
- * 按模块：计划 → 用例库 → 模块 → 子模块。根节点由树的固定首行承担，这里只返回用例库这一级起的节点；
- * 「全部模块」（repository_modules_all）这一层被拍平，子模块直接挂在用例库下。
- */
-export const buildPlanCaseModuleNodes = (planTree: any, getKey: (node: any) => string): TModuleTreeNode[] => {
-  if (!planTree) return [];
-  const build = (node: any): TModuleTreeNode => {
-    const kind = String(node?.kind || "");
-    const children: any[] = Array.isArray(node?.children) ? node.children : [];
-    const visibleChildren = children.flatMap((child) =>
-      String(child?.kind || "") === "repository_modules_all"
-        ? Array.isArray(child?.children)
-          ? child.children
-          : []
-        : [child]
-    );
-    const isRepository = kind === "repository";
-    return {
-      key: getKey(node),
-      label: String(node?.name ?? "-"),
-      count: typeof node?.count === "number" ? node.count : undefined,
-      icon: isRepository ? <Library className="size-3.5" strokeWidth={1.75} /> : undefined,
-      emphasis: isRepository,
-      children: visibleChildren.map(build),
-    };
-  };
-  const topLevel: any[] = Array.isArray(planTree?.children) ? planTree.children : [];
-  return topLevel.map(build);
-};
+/** 按模块（计划 → 用例库 → 模块）的节点构建已挪到 module-tree/repository-module-nodes，与评审详情页共用 */
 
 /** 按执行人：各执行人（头像）+ 未分配 */
 export const buildPlanCaseAssigneeNodes = (tree: TPlanAssigneeTree | null): TModuleTreeNode[] => {
@@ -99,14 +71,4 @@ export const buildPlanCaseGroupNodes = (
     count: node.count,
     leading: leadingFor(node),
   }));
-};
-
-/** 按 key 找节点文字，收起成窄条时竖排显示用 */
-export const findPlanCaseTreeLabel = (nodes: TModuleTreeNode[], key: string): string | undefined => {
-  for (const node of nodes) {
-    if (node.key === key) return node.label;
-    const found = findPlanCaseTreeLabel(node.children ?? [], key);
-    if (found) return found;
-  }
-  return undefined;
 };
