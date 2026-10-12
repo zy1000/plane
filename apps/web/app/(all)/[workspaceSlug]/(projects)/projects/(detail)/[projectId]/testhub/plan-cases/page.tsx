@@ -885,7 +885,7 @@ export default function PlanCasesPage() {
         {/* 页头横跨整行，左栏与表格从它下面开始，两者等高 */}
         <div className="flex flex-shrink-0 items-start justify-between border-b border-subtle px-3 pt-2 pb-2">
           <div>
-            <Breadcrumbs>
+            <Breadcrumbs className="h-8">
               <Breadcrumbs.Item
                 component={
                   <BreadcrumbLink
@@ -927,7 +927,7 @@ export default function PlanCasesPage() {
                 }
               />
             </Breadcrumbs>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-1">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-1 empty:hidden">
               {/* 已选筛选条件接在页头信息后面，没有条件时不渲染 */}
               <PlanCaseFiltersInline filter={planCaseFilter} />
             </div>
