@@ -366,6 +366,9 @@ class TestPlanListSerializer(ModelSerializer):
     repository_name = serializers.SlugRelatedField(
         source="repository", read_only=True, slug_field="name"
     )
+    # 列表展示用名称；调用方需 select_related("cycle") + prefetch_related("releases")
+    cycle_name = serializers.SerializerMethodField()
+    release_names = serializers.SerializerMethodField()
 
     def _stats(self, obj: TestPlan):
         plan_stats = self.context.get("plan_stats") or {}
@@ -384,6 +387,13 @@ class TestPlanListSerializer(ModelSerializer):
 
     def get_assignee_ids(self, obj: TestPlan):
         return list(self._stats(obj)["assignee_ids"])
+
+    def get_cycle_name(self, obj: TestPlan):
+        cycle = obj.cycle
+        return cycle.name if cycle and cycle.deleted_at is None else None
+
+    def get_release_names(self, obj: TestPlan):
+        return [release.name for release in obj.releases.all()]
 
     def get_result(self, obj: TestPlan):
         stats = self._stats(obj)

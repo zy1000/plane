@@ -16,12 +16,12 @@ import { PlanPassRate } from "./plan-pass-rate";
 
 /** 各列按比例分宽度，名称列不独占剩余空间；顺序即视觉顺序 */
 const GRID_TEMPLATE_COLUMNS =
-  "minmax(320px, 2.4fr) minmax(76px, 0.6fr) minmax(84px, 0.7fr) minmax(96px, 0.8fr) minmax(92px, 0.8fr) minmax(112px, 1fr) minmax(116px, 1fr) minmax(112px, 1fr)";
+  "minmax(320px, 2.4fr) minmax(76px, 0.6fr) minmax(84px, 0.7fr) minmax(96px, 0.8fr) minmax(92px, 0.8fr) minmax(112px, 1fr) minmax(116px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(112px, 1fr)";
 
 /** 每格自己带右竖线和内边距，最后一格不画线 */
 const CELL = "flex h-full min-w-0 items-center border-r border-subtle px-3 last:border-r-0";
 
-const HEADERS = ["计划名称", "用例数", "通过率", "状态", "执行结果", "执行人", "复核人", "计划周期"];
+const HEADERS = ["计划名称", "用例数", "通过率", "状态", "执行结果", "执行人", "复核人", "迭代", "发布", "计划周期"];
 
 const TAG = "inline-flex h-[22px] items-center rounded px-2 text-12 font-medium";
 
@@ -108,6 +108,7 @@ export const PlanListTable = ({ plans, canEdit, canDelete, onOpen, onEdit, onDel
         const assignees = (plan.assignee_ids ?? []).map(String);
         const reviewers = (plan.reviewers ?? []).map(String);
         const ruleLabel = getPlanReviewRuleLabel(plan);
+        const releaseText = (plan.release_names ?? []).join("、");
         const isLate = Boolean(plan.end_time) && String(plan.end_time) < today && plan.state !== "已完成";
         return (
           <div
@@ -178,6 +179,16 @@ export const PlanListTable = ({ plans, canEdit, canDelete, onOpen, onEdit, onDel
             </span>
             <span className={CELL}>
               <ViewOnlyPeople userIds={reviewers} caption={ruleLabel || undefined} />
+            </span>
+            <span className={cn(CELL, "text-13 text-secondary")}>
+              <span className="truncate" title={plan.cycle_name ?? undefined}>
+                {plan.cycle_name}
+              </span>
+            </span>
+            <span className={cn(CELL, "text-13 text-secondary")}>
+              <span className="truncate" title={releaseText || undefined}>
+                {releaseText}
+              </span>
             </span>
             <span className={cn(CELL, "text-13 tabular-nums", isLate ? "text-danger-primary" : "text-secondary")}>
               {plan.begin_time || plan.end_time

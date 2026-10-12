@@ -95,6 +95,10 @@ export type TPlanListRow = {
   module?: string | null;
   module_id?: string | null;
   cycle?: string | null;
+  /** 所属迭代名称（列表展示用） */
+  cycle_name?: string | null;
+  /** 关联发布名称（列表展示用） */
+  release_names?: string[];
   /** 通过阈值 0-100 */
   threshold?: number | null;
   case_count?: number;

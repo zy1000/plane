@@ -293,8 +293,10 @@ class PlanAPIView(BaseAPIView):
     filterset_class = TestPlanFilter
 
     def get_queryset(self):
-        # reviewers 是 M2M，列表逐行取会 N+1
-        return TestPlan.objects.prefetch_related("reviewers")
+        # reviewers / releases 是 M2M，列表逐行取会 N+1；cycle 供列表显示迭代名
+        return TestPlan.objects.select_related("cycle").prefetch_related(
+            "reviewers", "releases"
+        )
 
     @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
