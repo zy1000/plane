@@ -895,9 +895,10 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         <div className="mx-auto mt-0.5 h-0.5 w-6 rounded-full bg-tertiary/0 transition-colors group-hover/top:bg-tertiary/40" />
                       </div>
 
+                      {/* 文字层压在休息覆盖层（z-[5]）之上，避免休息段边线横穿文字 */}
                       <div
                         className={cn(
-                          "flex h-full min-h-0 justify-start overflow-hidden px-2 py-1",
+                          "relative z-[6] flex h-full min-h-0 justify-start overflow-hidden px-2 py-1",
                           compact ? "flex-col gap-0" : "flex-col gap-0.5"
                         )}
                       >
@@ -956,7 +957,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                       )}
                       style={{ top: CONTENT_PADDING_TOP + dragPreview.topPx, height: dragPreview.heightPx }}
                     >
-                      <div className={cn("flex h-full min-h-0 justify-start overflow-hidden px-2 py-1", ghCompact ? "flex-col gap-0" : "flex-col gap-0.5")}>
+                      <div className={cn("relative z-[6] flex h-full min-h-0 justify-start overflow-hidden px-2 py-1", ghCompact ? "flex-col gap-0" : "flex-col gap-0.5")}>
                         <div className="flex items-center gap-1 min-w-0">
                           {renderBlockIcon(gb, getProjectById, 3)}
                           <p className="text-xs font-medium leading-snug text-primary truncate min-w-0">{gb.label}</p>
