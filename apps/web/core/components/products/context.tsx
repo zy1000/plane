@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo, useState } from "react";
 import type { TProduct } from "@plane/types";
 import { useProducts } from "@/hooks/store/use-products";
+import type { TProductRichFilter } from "./filters/use-product-list-filter";
+import { useProductListFilterInstance } from "./filters/use-product-list-filter";
 
 export type TProductModalMode = "view" | "create" | "edit";
 
@@ -14,6 +16,8 @@ type TProductsContext = ReturnType<typeof useProducts> & {
   workspaceSlug: string;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
+  /** 列表页的富筛选实例（页头漏斗 + 筛选行共用），属性配置由列表页根注册 */
+  filter: TProductRichFilter;
   modal: TProductModalState;
   productToDelete: TProduct | null;
   openProductModal: (mode: TProductModalMode, product?: TProduct) => void;
@@ -26,6 +30,7 @@ const ProductsContext = createContext<TProductsContext | undefined>(undefined);
 export function ProductsProvider(props: { children: React.ReactNode; workspaceSlug: string }) {
   const { children, workspaceSlug } = props;
   const products = useProducts(workspaceSlug);
+  const filter = useProductListFilterInstance(workspaceSlug);
   const [searchQuery, setSearchQuery] = useState("");
   const [modal, setModal] = useState<TProductModalState>({
     isOpen: false,
@@ -58,13 +63,14 @@ export function ProductsProvider(props: { children: React.ReactNode; workspaceSl
       workspaceSlug,
       searchQuery,
       setSearchQuery,
+      filter,
       modal,
       productToDelete,
       openProductModal,
       closeProductModal,
       setProductToDelete,
     }),
-    [modal, productToDelete, products, searchQuery, workspaceSlug]
+    [filter, modal, productToDelete, products, searchQuery, workspaceSlug]
   );
 
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>;

@@ -6,6 +6,7 @@ import { Button } from "@plane/propel/button";
 import { EUserWorkspaceRoles } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useProductsContext } from "./context";
 
@@ -13,7 +14,7 @@ export const ProductsHeader = observer(function ProductsHeader() {
   const { workspaceSlug } = useParams();
   const { t } = useTranslation();
   const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
-  const { searchQuery, setSearchQuery, openProductModal } = useProductsContext();
+  const { searchQuery, setSearchQuery, filter, openProductModal } = useProductsContext();
   const slug = workspaceSlug?.toString() ?? "";
   const workspaceInfo = workspaceInfoBySlug(slug);
   const canCreate =
@@ -46,6 +47,9 @@ export const ProductsHeader = observer(function ProductsHeader() {
             className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-8 text-12 text-primary outline-none placeholder:text-placeholder"
           />
         </label>
+        <div className="hidden items-center md:flex">
+          <FiltersToggle filter={filter} enableQuickAddFilter={false} />
+        </div>
         {canCreate && (
           <Button variant="primary" size="lg" onClick={() => openProductModal("create")}>
             {t("workspace_products.create_product")}
