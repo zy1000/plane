@@ -409,13 +409,13 @@ export const PlanCasesTable = ({
                     </button>
                   )}
                   <Popconfirm
-                    title="确定取关该用例？"
+                    title="确定移除该用例？"
                     onConfirm={() => onCancelRelation(recordId)}
                     okText="确定"
                     cancelText="取消"
                   >
                     <button type="button" className="text-13 text-danger-primary transition-colors hover:opacity-80">
-                      取关
+                      移除
                     </button>
                   </Popconfirm>
                 </div>

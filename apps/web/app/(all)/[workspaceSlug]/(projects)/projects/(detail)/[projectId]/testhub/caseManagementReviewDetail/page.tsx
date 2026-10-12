@@ -863,11 +863,11 @@ export default function CaseManagementReviewDetailPage() {
                               <span
                                 className={`text-sm transition-colors ${
                                   canEditReview
-                                    ? "text-red-500 hover:text-red-600 cursor-pointer"
-                                    : "text-red-300 cursor-not-allowed"
+                                    ? "cursor-pointer text-danger-primary hover:opacity-80"
+                                    : "cursor-not-allowed text-danger-primary opacity-50"
                                 }`}
                               >
-                                取关
+                                移除
                               </span>
                             </Popconfirm>
                           </div>

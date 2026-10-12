@@ -321,11 +321,11 @@ export const ReviewCaseDetailTable = ({
                     </button>
                     <button
                       type="button"
-                      className="text-red-500 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="text-danger-primary transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={!canEditReview}
                       onClick={() => onCancel(record)}
                     >
-                      取关
+                      移除
                     </button>
                   </div>
                 </TableCell>

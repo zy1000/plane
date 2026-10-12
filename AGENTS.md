@@ -57,18 +57,14 @@
 
 - `.codex/rules`: Raw Cursor rules copied for Codex-side reference
 - `.codex/skills`: Raw Cursor skills copied in Codex skill folder shape
-- `apps/api/AGENTS.md`: Backend API and resource conventions
 - `apps/api/plane/app/serializers/AGENTS.md`: Serializer contract and validation guidance
 - `apps/api/plane/db/models/AGENTS.md`: Model invariants, constraints, and scope propagation guidance
 - `apps/api/plane/app/views/workflow/AGENTS.md`: Workflow and approval endpoint guidance
-- `apps/web/AGENTS.md`: Frontend service, hook, and page integration flow
 - `apps/web/core/hooks/store/AGENTS.md`: Hook/store synchronization and source-of-truth guidance
 - `apps/web/core/services/project/AGENTS.md`: Project-scoped API service guidance
 - `apps/web/core/components/issues/AGENTS.md`: Issue detail, modal, layout, and approval UI guidance
-- `packages/shared-state/AGENTS.md`: Shared store and filter-state guidance
 - `packages/shared-state/src/store/rich-filters/AGENTS.md`: Generic rich-filter engine guidance
 - `packages/shared-state/src/store/work-item-filters/AGENTS.md`: Work-item filter instance and sidebar sync guidance
-- `packages/ui/AGENTS.md`: Reusable UI component guidance
 - `docs/ai-change-map.md`: Fast lookup for common change requests
 
 ## Commands

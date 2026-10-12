@@ -95,10 +95,10 @@ export const PlanCasesBulkBar = ({
 
     <span className="mx-0.5 h-4 border-l border-subtle" aria-hidden />
 
-    <Popconfirm title="确定取关选中用例？" onConfirm={onCancelRelation} okText="确定" cancelText="取消">
+    <Popconfirm title="确定移除选中用例？" onConfirm={onCancelRelation} okText="确定" cancelText="取消">
       <Button variant="ghost" size="lg" className="text-danger-primary">
         <Unlink className="size-3.5" />
-        取关
+        移除
       </Button>
     </Popconfirm>
   </BulkOperationsBar>
