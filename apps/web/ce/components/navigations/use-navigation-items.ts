@@ -40,7 +40,7 @@ import {
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import { isProjectFeatureEnabled } from "@plane/utils";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, Bug, ClipboardList, Folder, Layers, Package, Rocket, Rss } from "lucide-react";
+import { ArchiveIcon, Bug, ClipboardList, Folder, Layers, Package, Rocket, Rss, ShieldAlert } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -175,6 +175,17 @@ export const useNavigationItems = ({
         // 评审受研发模式的评审开关控制：Scrum 这类不走阶段评审的模式直接没有这个标签
         shouldRender: isProjectFeatureEnabled(project, "review_view"),
         sortOrder: 3.7,
+      },
+      {
+        // 风险：项目成员可读写、访客只读，没有细粒度 key 也没有功能开关，菜单常驻
+        i18n_key: "sidebar.risks",
+        key: "risks",
+        name: "风险",
+        href: `/${workspaceSlug}/projects/${projectId}/risks`,
+        icon: ShieldAlert,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 3.8,
       },
       {
         // 阶段（PMS-101，原「里程碑」）：项目自己的阶段列表，从研发模式带出

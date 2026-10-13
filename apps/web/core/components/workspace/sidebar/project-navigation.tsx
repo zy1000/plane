@@ -38,7 +38,7 @@ import {
   TestManagementIcon,
   RequirementIcon,
 } from "@plane/propel/icons";
-import { Bug, Clock } from "lucide-react";
+import { Bug, Clock, ShieldAlert } from "lucide-react";
 import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
@@ -243,6 +243,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         permissionKeys: [PROJECT_INTAKE_VIEW_PERMISSION_KEY],
         shouldRender: project?.inbox_view ?? false,
         sortOrder: 7,
+      },
+      {
+        i18n_key: "sidebar.risks",
+        key: "risks",
+        name: "风险",
+        href: `/${workspaceSlug}/projects/${projectId}/risks`,
+        icon: ShieldAlert,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 7.8,
       },
       {
         i18n_key: "sidebar.stages",

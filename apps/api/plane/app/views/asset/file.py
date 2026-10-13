@@ -76,6 +76,7 @@ ONLYOFFICE_ENTITY_TYPES = (
     FILESTORE_ENTITY_TYPE,
     FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
     FileAsset.EntityTypeContext.STAGE_REVIEW_FILE,
+    FileAsset.EntityTypeContext.RISK_FILE,
 )
 # 能交给 OnlyOffice 打开的扩展名；项目级编辑/预览与工作区级需求附件预览共用
 ONLYOFFICE_PREVIEW_EXTENSIONS = (

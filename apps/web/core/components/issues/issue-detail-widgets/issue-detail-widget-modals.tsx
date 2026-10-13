@@ -14,9 +14,12 @@ import type { ISearchIssueResponse, TIssue, TIssueServiceType, TWorkItemWidgets 
 // components
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
+import { RiskSelectModal } from "@/components/risks/risk-select-modal";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { getRiskError } from "@/hooks/store/use-risks";
 import { useWorkItemRequirements } from "@/hooks/store/use-work-item-requirements";
+import { useWorkItemRisks } from "@/hooks/store/use-work-item-risks";
 // plane web imports
 import { WorkItemAdditionalWidgetModals } from "@/plane-web/components/issues/issue-detail-widgets/modals";
 // local imports
@@ -44,6 +47,8 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
     setIssueLinkData,
     isWorkItemRequirementLinkModalOpen,
     toggleWorkItemRequirementLinkModal,
+    isWorkItemRiskLinkModalOpen,
+    toggleWorkItemRiskLinkModal,
     isCreateIssueModalOpen,
     toggleCreateIssueModal,
     isSubIssuesModalOpen,
@@ -63,6 +68,13 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
   const handleLinkOperations = useLinkOperations(workspaceSlug, projectId, issueId, issueServiceType);
   // 与「关联需求」折叠区块共用同一个 SWR key，这里 link 成功后区块自动刷新
   const { linkRequirements } = useWorkItemRequirements(workspaceSlug, projectId, issueId);
+  // 与「关联风险」区块共用同一个 SWR key，link 成功后区块自动刷新。只在弹窗打开期间挂上
+  // issueId：弹窗只有缺陷才打得开，这样非缺陷的工作项不会多发一条会 400 的请求
+  const { risks: linkedRisks, linkRisks } = useWorkItemRisks(
+    workspaceSlug,
+    projectId,
+    isWorkItemRiskLinkModalOpen ? issueId : ""
+  );
 
   // handlers
   const handleIssueCrudState = (
@@ -121,6 +133,23 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
       message: t("project_requirements.toast.linked", { count: requirementIds.length }),
     });
     setLastWidgetAction("requirements");
+  };
+
+  /** 失败在这里 toast（翻 risk.errors.<code>）并把错误抛回去，弹窗据此保持打开 */
+  const handleWorkItemRiskLinkSubmit = async (riskIds: string[]) => {
+    try {
+      await linkRisks(riskIds);
+    } catch (error) {
+      const { message, code } = getRiskError(error);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: code ? t(`risk.errors.${code}`) : message,
+      });
+      throw error;
+    }
+    setToast({ type: TOAST_TYPE.SUCCESS, title: t("risk.widget.link_success") });
+    setLastWidgetAction("risks");
   };
 
   const handleRelationOnClose = () => {
@@ -213,6 +242,17 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
           excludeIssueId={issueId}
           handleClose={() => toggleWorkItemRequirementLinkModal(false)}
           onSubmit={handleWorkItemRequirementLinkSubmit}
+        />
+      )}
+
+      {!hideWidgets?.includes("risks") && (
+        <RiskSelectModal
+          isOpen={isWorkItemRiskLinkModalOpen}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          linkedRiskIds={linkedRisks.map((risk) => risk.id)}
+          onClose={() => toggleWorkItemRiskLinkModal(false)}
+          onSubmit={handleWorkItemRiskLinkSubmit}
         />
       )}
 

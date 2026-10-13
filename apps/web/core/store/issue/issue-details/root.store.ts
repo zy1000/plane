@@ -87,6 +87,7 @@ export interface IIssueDetail
   isCreateIssueModalOpen: boolean;
   isIssueLinkModalOpen: boolean;
   isWorkItemRequirementLinkModalOpen: boolean;
+  isWorkItemRiskLinkModalOpen: boolean;
   isParentIssueModalOpen: string | null;
   isDeleteIssueModalOpen: string | null;
   isArchiveIssueModalOpen: string | null;
@@ -104,6 +105,7 @@ export interface IIssueDetail
   toggleCreateIssueModal: (value: boolean) => void;
   toggleIssueLinkModal: (value: boolean) => void;
   toggleWorkItemRequirementLinkModal: (value: boolean) => void;
+  toggleWorkItemRiskLinkModal: (value: boolean) => void;
   toggleParentIssueModal: (issueId: string | null) => void;
   toggleDeleteIssueModal: (issueId: string | null) => void;
   toggleArchiveIssueModal: (value: string | null) => void;
@@ -151,6 +153,7 @@ export abstract class IssueDetail implements IIssueDetail {
   isCreateIssueModalOpen: boolean = false;
   isIssueLinkModalOpen: boolean = false;
   isWorkItemRequirementLinkModalOpen: boolean = false;
+  isWorkItemRiskLinkModalOpen: boolean = false;
   isParentIssueModalOpen: string | null = null;
   isDeleteIssueModalOpen: string | null = null;
   isArchiveIssueModalOpen: string | null = null;
@@ -182,6 +185,7 @@ export abstract class IssueDetail implements IIssueDetail {
       isCreateIssueModalOpen: observable,
       isIssueLinkModalOpen: observable.ref,
       isWorkItemRequirementLinkModalOpen: observable.ref,
+      isWorkItemRiskLinkModalOpen: observable.ref,
       isParentIssueModalOpen: observable.ref,
       isDeleteIssueModalOpen: observable.ref,
       isArchiveIssueModalOpen: observable.ref,
@@ -199,6 +203,7 @@ export abstract class IssueDetail implements IIssueDetail {
       toggleCreateIssueModal: action,
       toggleIssueLinkModal: action,
       toggleWorkItemRequirementLinkModal: action,
+      toggleWorkItemRiskLinkModal: action,
       toggleParentIssueModal: action,
       toggleDeleteIssueModal: action,
       toggleArchiveIssueModal: action,
@@ -233,6 +238,7 @@ export abstract class IssueDetail implements IIssueDetail {
       this.isCreateIssueModalOpen ||
       this.isIssueLinkModalOpen ||
       this.isWorkItemRequirementLinkModalOpen ||
+      this.isWorkItemRiskLinkModalOpen ||
       !!this.isParentIssueModalOpen ||
       !!this.isDeleteIssueModalOpen ||
       !!this.isArchiveIssueModalOpen ||
@@ -256,6 +262,7 @@ export abstract class IssueDetail implements IIssueDetail {
   toggleCreateIssueModal = (value: boolean) => (this.isCreateIssueModalOpen = value);
   toggleIssueLinkModal = (value: boolean) => (this.isIssueLinkModalOpen = value);
   toggleWorkItemRequirementLinkModal = (value: boolean) => (this.isWorkItemRequirementLinkModalOpen = value);
+  toggleWorkItemRiskLinkModal = (value: boolean) => (this.isWorkItemRiskLinkModalOpen = value);
   toggleParentIssueModal = (issueId: string | null) => (this.isParentIssueModalOpen = issueId);
   toggleDeleteIssueModal = (issueId: string | null) => (this.isDeleteIssueModalOpen = issueId);
   toggleArchiveIssueModal = (issueId: string | null) => (this.isArchiveIssueModalOpen = issueId);

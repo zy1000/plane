@@ -26,6 +26,7 @@ from plane.db.models import (
     Project,
     Product,
     RequirementLibrary,
+    RiskComment,
     User,
     Cycle,
     Release,
@@ -582,6 +583,12 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 {"error": "You do not have permission to delete this asset."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # 同 ProjectAssetEndpoint.delete：有专属删除接口的附件不走这个通用入口
+        if asset.entity_type in DEDICATED_DELETE_ENTITY_TYPES:
+            return Response(
+                {"error": "This asset must be deleted through its own endpoint."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
@@ -769,6 +776,13 @@ class AssetRestoreEndpoint(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+#: 有专属删除接口的附件类型：通用项目资产删除对它们一律拒绝（见 ProjectAssetEndpoint.delete）
+DEDICATED_DELETE_ENTITY_TYPES = (
+    FileAsset.EntityTypeContext.RISK_FILE,
+    FileAsset.EntityTypeContext.STAGE_REVIEW_FILE,
+)
+
+
 class ProjectAssetEndpoint(BaseAPIView):
     """This endpoint is used to upload cover images/logos etc for workspace, projects and users."""
 
@@ -848,6 +862,11 @@ class ProjectAssetEndpoint(BaseAPIView):
         # （与 STAGE_REVIEW_FILE 共享同一存储目录，不需要 rebind）。
         if entity_type == FileAsset.EntityTypeContext.STAGE_REVIEW_COMMENT_DESCRIPTION:
             return {"stage_review_id": entity_id}
+
+        # 上传阶段 RiskComment 尚未创建，entity_identifier 是 risk_id，先以风险作为 path
+        # 父级；bulk 阶段再回填 risk_comment_id（与 RISK_FILE 共享同一存储目录）。
+        if entity_type == FileAsset.EntityTypeContext.RISK_COMMENT_DESCRIPTION:
+            return {"risk_id": entity_id}
 
         return {}
 
@@ -930,6 +949,13 @@ class ProjectAssetEndpoint(BaseAPIView):
         asset = FileAsset.objects.get(
             id=pk, workspace__slug=slug, project_id=project_id
         )
+        # 风险 / 阶段评审附件有自己的删除接口（分别按项目角色、细粒度 key 鉴权），这个通用
+        # 入口对访客也开放，放过去就绕开了那边的限制
+        if asset.entity_type in DEDICATED_DELETE_ENTITY_TYPES:
+            return Response(
+                {"error": "This asset must be deleted through its own endpoint."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         # Check deleted assets
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
@@ -1059,6 +1085,21 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
             except IntegrityError:
                 pass
 
+        # RiskComment 创建完成后回填 risk_comment_id；path 在上传时已挂到风险节点下。
+        if asset.entity_type == FileAsset.EntityTypeContext.RISK_COMMENT_DESCRIPTION:
+            # assets 只按工作区取的：只回填「评论在本项目、图片挂在这条评论所属风险」的那些，
+            # 别的项目 / 别的风险的图不能被绑过来（绑上以后删评论会把人家的图一起软删）
+            comment = RiskComment.objects.filter(
+                id=entity_id, project_id=project_id, workspace__slug=slug
+            ).first()
+            if comment is not None:
+                try:
+                    assets.filter(project_id=project_id, risk_id=comment.risk_id).update(
+                        risk_comment_id=entity_id
+                    )
+                except IntegrityError:
+                    pass
+
         if needs_rebind:
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -1127,6 +1168,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
 
         if entity_type == FileAsset.EntityTypeContext.STAGE_REVIEW_COMMENT_DESCRIPTION:
             return {"stage_review_id": entity_id}
+
+        if entity_type == FileAsset.EntityTypeContext.RISK_COMMENT_DESCRIPTION:
+            return {"risk_id": entity_id}
 
         # 测试用例附件/模板用例富文本贴图（entity_id 为空表示不绑 case）
         if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:

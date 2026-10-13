@@ -21,6 +21,7 @@ import { RelationsCollapsible } from "./relations";
 import { SubIssuesCollapsible } from "./sub-issues";
 import { QaCasesCollapsible } from "./qa-cases/root";
 import { WorkItemRequirementsCollapsible } from "./work-item-requirements";
+import { WorkItemRisksCollapsible } from "./work-item-risks";
 
 type Props = {
   workspaceSlug: string;
@@ -85,6 +86,16 @@ export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidget
       )}
       {!hideWidgets?.includes("requirements") && (
         <WorkItemRequirementsCollapsible
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          disabled={disabled}
+          issueServiceType={issueServiceType}
+        />
+      )}
+      {/* 只有缺陷才渲染，是否缺陷在组件内判定 */}
+      {!hideWidgets?.includes("risks") && (
+        <WorkItemRisksCollapsible
           workspaceSlug={workspaceSlug}
           projectId={projectId}
           issueId={issueId}

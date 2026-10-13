@@ -46,6 +46,7 @@ export * from "./stage-review";
 export * from "./stage-type";
 export * from "./dev-mode";
 export * from "./project-stage";
+export * from "./risk";
 export * from "./page";
 export * from "./payment";
 export * from "./pragmatic";

@@ -5,6 +5,7 @@
  */
 
 import axios from "axios";
+import type { AxiosProgressEvent } from "axios";
 // api service
 import { APIService } from "../api.service";
 
@@ -24,10 +25,15 @@ export class FileUploadService extends APIService {
    * Uploads a file to the specified signed URL
    * @param {string} url - The URL to upload the file to
    * @param {FormData} data - The form data to upload
+   * @param {Function} [onUploadProgress] - Axios 上传进度回调（风险 / 阶段评审附件的进度条用）
    * @returns {Promise<void>} Promise resolving to void
    * @throws {Error} If the request fails
    */
-  async uploadFile(url: string, data: FormData): Promise<void> {
+  async uploadFile(
+    url: string,
+    data: FormData,
+    onUploadProgress?: (event: AxiosProgressEvent) => void
+  ): Promise<void> {
     this.cancelSource = axios.CancelToken.source();
     return this.post(url, data, {
       headers: {
@@ -35,6 +41,7 @@ export class FileUploadService extends APIService {
       },
       cancelToken: this.cancelSource.token,
       withCredentials: false,
+      onUploadProgress,
     })
       .then((response) => response?.data)
       .catch((error) => {

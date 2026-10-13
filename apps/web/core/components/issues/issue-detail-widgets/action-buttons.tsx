@@ -8,7 +8,7 @@
 
 import React from "react";
 import { observer } from "mobx-react";
-import { Paperclip, FlaskConical } from "lucide-react";
+import { Paperclip, FlaskConical, ShieldAlert } from "lucide-react";
 import { PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, ViewsIcon, RelationPropertyIcon, RequirementIcon } from "@plane/propel/icons";
@@ -25,6 +25,8 @@ import { SubIssuesActionButton } from "./sub-issues";
 import { IssueDetailWidgetButton } from "./widget-button";
 import IssueCaseSelectionModal from "./qa-cases/IssueCaseSelectionModal";
 import { WorkItemRequirementsActionButton } from "./work-item-requirements";
+import { WorkItemRisksActionButton, useIsDefectWorkItem } from "./work-item-risks";
+import { useRiskPermissions } from "@/components/risks/permissions";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useUserPermissions } from "@/hooks/store/user";
 
@@ -67,6 +69,10 @@ export const IssueDetailWidgetActionButtons = observer(function IssueDetailWidge
   // peek 可能从工作区级视图打开，靠路由回退会判错项目
   const canManageRequirements =
     !disabled && allowProjectPermissionKeys([PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY], workspaceSlug, projectId);
+  // 关联风险只对缺陷开放（风险 ↔ 缺陷多对多），且要项目成员角色
+  const isDefect = useIsDefectWorkItem(workspaceSlug, projectId, issueId, issueServiceType);
+  const { canEdit: canEditRisks } = useRiskPermissions(workspaceSlug, projectId);
+  const canManageRisks = !disabled && isDefect && canEditRisks;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -147,6 +153,26 @@ export const IssueDetailWidgetActionButtons = observer(function IssueDetailWidge
                     showLabel={false}
                     title={t("project_requirements.container.link_button")}
                     icon={<RequirementIcon className="h-3.5 w-3.5 flex-shrink-0" />}
+                    disabled={disabled}
+                  />
+                }
+                disabled={disabled}
+                issueServiceType={issueServiceType}
+              />
+            </WidgetGroupTooltip>
+          </div>
+        )}
+        {!hideWidgets?.includes("risks") && canManageRisks && (
+          <div className={WIDGET_GROUP_SEGMENT}>
+            <WidgetGroupTooltip content={t("risk.widget.add")}>
+              <WorkItemRisksActionButton
+                className={WIDGET_GROUP_TRIGGER_CLASS}
+                customButton={
+                  <IssueDetailWidgetButton
+                    asContentOnly
+                    showLabel={false}
+                    title={t("risk.widget.add")}
+                    icon={<ShieldAlert className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
                     disabled={disabled}
                   />
                 }

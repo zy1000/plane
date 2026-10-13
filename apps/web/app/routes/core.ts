@@ -413,6 +413,20 @@ export const coreRoutes: RouteConfigEntry[] = [
             ]
           ),
 
+          // Risks（项目风险）：列表 + 独立详情页（抽屉与详情页共用一个组件）
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/risks/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/risks",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/risks/(list)/page.tsx"
+            ),
+          ]),
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/risks/(detail)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/risks/:riskId",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/risks/(detail)/[riskId]/page.tsx"
+            ),
+          ]),
+
           // Project stages（PMS-101，原 milestones）
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stages/(list)/layout.tsx", [
             route(

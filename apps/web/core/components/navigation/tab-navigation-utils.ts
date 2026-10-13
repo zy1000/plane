@@ -77,6 +77,7 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
     cycles: `${baseUrl}/cycles`,
     modules: `${baseUrl}/modules`,
     stages: `${baseUrl}/stages`,
+    risks: `${baseUrl}/risks`,
     // 里程碑已改成「阶段」（PMS-101）。存量 tab 偏好里还留着旧 key，指到新页面而不是掉进 /issues 兜底
     milestones: `${baseUrl}/stages`,
     reviews: `${baseUrl}/reviews`,

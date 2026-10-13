@@ -374,6 +374,31 @@ class _Resolver:
                 display_name=getattr(stage_review, "title", "") or "",
             )
 
+        if et == "RISK_FILE":
+            risk = self._get_related(asset, "risk")
+            if risk is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            return self._get_or_create_node(
+                parent=cat_node,
+                entity_type="RISK",
+                entity_id=risk.pk,
+                display_name=getattr(risk, "name", "") or "",
+            )
+
+        # 风险评论中的内联图片：复用与 RISK_FILE 相同的目录节点（Workspace -> Project ->
+        # 风险 -> Risk），上传期靠 risk_id 定位父级，与具体 risk_comment 解耦。
+        if et == "RISK_COMMENT_DESCRIPTION":
+            risk = self._get_related(asset, "risk")
+            if risk is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            risk_category = self._category_node(parent=proj_node, entity_type="RISK_FILE")
+            return self._get_or_create_node(
+                parent=risk_category,
+                entity_type="RISK",
+                entity_id=risk.pk,
+                display_name=getattr(risk, "name", "") or "",
+            )
+
         if et == "RELEASE_FILE":
             release = self._get_related(asset, "release")
             if release is None:
