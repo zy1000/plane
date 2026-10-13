@@ -1,9 +1,7 @@
 import { useCallback, useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { DropdownIcon, PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Tooltip } from "@plane/propel/tooltip";
 import type { TRiskAttachment } from "@plane/types";
 import { cn } from "@plane/utils";
 import {
@@ -16,14 +14,14 @@ import {
 } from "../attachments/risk-attachment-rows";
 import { useRiskAttachmentDrop, useRiskUploadQueue } from "../attachments/use-risk-upload-queue";
 import { RISK_I18N } from "../constants";
+import { RiskCollapsibleHeader } from "./risk-collapsible-header";
 import { useRiskAttachmentPreview } from "./use-risk-attachment-preview";
 
 /**
  * 风险附件，外形照工作项的附件小部件（issue-detail-widgets/attachments）：可折叠标题「▾ 附件 N」+ 右侧「+」，
  * 行是 文件图标 · 名称 · 大小，右侧上传人头像，悬停出「⋯」（下载 / 删除，删除要确认）；整行点开预览。
  * 整块可拖入上传，可多选，逐个上传，正在传的排在最前面。走 FileAsset 预签名两步上传，文件不经过 Django。
- *
- * 不嵌套按钮：标题的折叠按钮和「+」是两个并排的按钮（工作项那版是按钮套按钮）。
+
  * 访客（editable=false）只能预览与下载。
  */
 export const RiskAttachments = ({
@@ -69,7 +67,6 @@ export const RiskAttachments = ({
   });
 
   const isEmpty = attachments.length === 0 && uploads.length === 0;
-  const uploadLabel = t(`${RISK_I18N}.detail.upload`);
 
   return (
     <section className="-mx-2.5 flex flex-col">
@@ -80,33 +77,14 @@ export const RiskAttachments = ({
         onConfirm={(asset) => onDelete(asset.id)}
       />
 
-      {/* 标题行：同 @plane/ui 的 CollapsibleButton（h-12、8px 三角、标题 + 灰色计数） */}
-      <div className="flex h-12 items-center gap-3 px-2.5">
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((current) => !current)}
-          className="flex min-w-0 items-center gap-3"
-        >
-          <DropdownIcon
-            className={cn("size-2 text-tertiary transition-transform duration-300 hover:text-secondary", !isOpen && "-rotate-90")}
-          />
-          <span className="text-14 font-semibold text-primary">{t(`${RISK_I18N}.detail.attachments`)}</span>
-          <span className="text-14 text-tertiary tabular-nums">{attachments.length}</span>
-        </button>
-        {editable && isOpen && (
-          <Tooltip tooltipContent={uploadLabel} position="top">
-            <button
-              type="button"
-              aria-label={uploadLabel}
-              onClick={open}
-              className="ml-auto grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
-            >
-              <PlusIcon className="size-4" />
-            </button>
-          </Tooltip>
-        )}
-      </div>
+      <RiskCollapsibleHeader
+        title={t(`${RISK_I18N}.detail.attachments`)}
+        count={attachments.length}
+        isOpen={isOpen}
+        onToggle={() => setIsOpen((current) => !current)}
+        actionLabel={t(`${RISK_I18N}.detail.upload`)}
+        onAction={editable ? open : undefined}
+      />
 
       {isOpen && (
         <div
