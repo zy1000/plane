@@ -144,7 +144,10 @@ export const ProductProjectsModal = (props: TProps) => {
                   isSelected && "border-accent-strong bg-accent-primary/5"
                 )}
               >
-                <Checkbox checked={isSelected} onChange={() => toggle(project.id)} />
+                {/* 勾选由整行承担，Checkbox 只负责画，不单独接 onChange，避免点一次翻两次 */}
+                <span className="pointer-events-none flex">
+                  <Checkbox checked={isSelected} readOnly tabIndex={-1} />
+                </span>
                 <span className="grid size-4 shrink-0 place-items-center">
                   <Logo logo={project.logo_props} size={14} />
                 </span>
