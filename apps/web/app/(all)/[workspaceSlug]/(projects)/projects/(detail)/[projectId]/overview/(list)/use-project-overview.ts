@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { STATE_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { REQUIREMENT_STATUSES } from "@plane/types";
+import type { TRequirementItemStatus } from "@plane/types";
+import { REQUIREMENT_STATUS_BAR_COLOR } from "@/components/products/projects/product-project-status-bar";
 import { useProject } from "@/hooks/store/use-project";
 import type {
   IOverviewDefectTrendPoint,
   IOverviewMemberStat,
-  IOverviewTrendPoint,
   IProjectOverviewAnalytics,
   TOverviewDefectPriority,
 } from "./overview-analytics.types";
@@ -26,6 +28,18 @@ export type TDistributionSlice = {
   label: string;
   value: number;
   color: string;
+};
+
+export type TRequirementDistributionSlice = {
+  key: TRequirementItemStatus;
+  label: string;
+  value: number;
+  color: string;
+};
+
+export type TRequirementCounts = {
+  total: number;
+  closed: number;
 };
 
 export type THealthVerdict = {
@@ -56,7 +70,10 @@ export type TProjectOverviewData = {
   health: THealthVerdict;
   /** 五个状态组全部给出（含 0），Hero 的状态条与图例按它渲染 */
   distribution: TDistributionSlice[];
-  trend: IOverviewTrendPoint[];
+  /** 本项目引用的需求：总数 / 已关闭数 */
+  requirementCounts: TRequirementCounts;
+  /** 五个需求状态全部给出（含 0），顺序同 REQUIREMENT_STATUSES */
+  requirementDistribution: TRequirementDistributionSlice[];
   memberStats: IOverviewMemberStat[];
 };
 
@@ -162,6 +179,18 @@ export function useProjectOverview(workspaceSlug: string, projectId: string): TP
       color: STATE_GROUPS[key].color,
     }));
 
+    const requirementStatusCounts = analytics?.requirement_status_distribution;
+    const requirementDistribution: TRequirementDistributionSlice[] = REQUIREMENT_STATUSES.map((key) => ({
+      key,
+      label: t(`requirement_fields.statuses.${key}`),
+      value: requirementStatusCounts?.[key] ?? 0,
+      color: REQUIREMENT_STATUS_BAR_COLOR[key],
+    }));
+    const requirementCounts: TRequirementCounts = {
+      total: requirementDistribution.reduce((sum, slice) => sum + slice.value, 0),
+      closed: requirementStatusCounts?.closed ?? 0,
+    };
+
     return {
       analytics,
       isLoading,
@@ -177,7 +206,8 @@ export function useProjectOverview(workspaceSlug: string, projectId: string): TP
       defectTrend: analytics?.defect_trend ?? [],
       health,
       distribution,
-      trend: analytics?.created_completed_trend ?? [],
+      requirementCounts,
+      requirementDistribution,
       memberStats: analytics?.member_stats ?? [],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale 代表 t 的变化

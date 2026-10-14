@@ -19,6 +19,8 @@ from plane.db.models import (
     ModuleIssue,
     TimeSheet,
     ProjectMember,
+    RequirementProject,
+    RequirementItemStatus,
 )
 from django.db import models
 from django.db.models import F, Case, When, Value
@@ -154,8 +156,31 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             "pending_defects": defect_counts["pending_defects"] or 0,
             "pending_defects_by_priority": pending_defects_by_priority,
             "defect_trend": defect_trend,
-            "created_completed_trend": self.get_created_completed_trend(scope_queryset),
+            # 需求是项目级的，不随 cycle / module 作用域收窄
+            "requirement_status_distribution": self.get_requirement_status_distribution(
+                project_id
+            ),
         }
+
+    def get_requirement_status_distribution(self, project_id: str) -> Dict[str, int]:
+        """概览 Hero「需求状态分布」：本项目引用的需求按需求状态分桶，五个键全给（含 0）。
+
+        口径与关联产品卡的 status_counts 同源（utils/requirement_project._requirement_status_counts）：
+        按 RequirementProject 计数，软删的需求不计。
+        """
+        counts = {value: 0 for value in RequirementItemStatus.values}
+        rows = (
+            RequirementProject.objects.filter(
+                project_id=project_id, requirement__deleted_at__isnull=True
+            )
+            .order_by()
+            .values("requirement__status")
+            .annotate(count=Count("id"))
+        )
+        for row in rows:
+            if row["requirement__status"] in counts:
+                counts[row["requirement__status"]] = row["count"]
+        return counts
 
     def get_created_completed_trend(
             self, scope_queryset, months: int = 6
@@ -283,7 +308,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
         cache_payload = (
             f"{slug}:{project_id}:{request.user.id}:{query_signature}"
         )
-        cache_key = f"project_analytics_v3:{hashlib.md5(cache_payload.encode()).hexdigest()}"
+        cache_key = f"project_analytics_v4:{hashlib.md5(cache_payload.encode()).hexdigest()}"
         cached_stats = cache.get(cache_key)
         if cached_stats is not None:
             return Response(cached_stats, status=status.HTTP_200_OK)

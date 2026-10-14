@@ -4,7 +4,6 @@ import { useTranslation } from "@plane/i18n";
 import { InfoIcon } from "@plane/propel/icons";
 import { Popover } from "@plane/propel/popover";
 import { cn } from "@plane/utils";
-import type { IOverviewTrendPoint } from "./overview-analytics.types";
 import type { THealthLevel, TProjectOverviewData } from "./use-project-overview";
 
 type Props = {
@@ -12,6 +11,7 @@ type Props = {
   onOverdueClick?: () => void;
   onDueSoonClick?: () => void;
   onPendingDefectsClick?: () => void;
+  onRequirementsClick?: () => void;
   /** Hero 底部的事实条 */
   children?: ReactNode;
 };
@@ -117,84 +117,99 @@ const HealthRulesHint: FC = () => {
   );
 };
 
-/** 近 6 月完成数的小柱迹：只做趋势提示，不承担读数 */
-const CompletedSparkline: FC<{ trend: IOverviewTrendPoint[] }> = ({ trend }) => {
-  const { t } = useTranslation();
-  if (trend.length === 0) return null;
-  const max = Math.max(1, ...trend.map((point) => point.completed));
-  const slotWidth = 50;
-  const barWidth = 40;
-  const height = 34;
-  const recent = trend.slice(-3);
+type TDistributionItem = { key: string; label: string; value: number; color: string };
 
-  return (
-    <div className="mt-4 flex items-center gap-3.5 border-t border-dashed border-subtle pt-3.5">
-      <span className="whitespace-nowrap text-12 text-tertiary">{t("project_overview.hero.recent_completed")}</span>
-      <svg viewBox={`0 0 ${trend.length * slotWidth} ${height}`} preserveAspectRatio="none" className="h-8 min-w-0 flex-1">
-        {trend.map((point, index) => {
-          const barHeight = Math.max(3, (point.completed / max) * (height - 2));
-          return (
-            <rect
-              key={point.month}
-              x={index * slotWidth + (slotWidth - barWidth) / 2}
-              y={height - barHeight}
-              width={barWidth}
-              height={barHeight}
-              rx="1.5"
-              fill="var(--bg-success-primary)"
-              opacity="0.85"
-            >
-              <title>{`${point.month} · ${point.completed}`}</title>
-            </rect>
-          );
-        })}
-      </svg>
-      <span className="whitespace-nowrap text-12 tabular-nums text-secondary">
-        {recent.map((point, index) => (
-          <span key={point.month}>
-            {index > 0 && <span className="text-placeholder"> · </span>}
-            {t("project_overview.hero.month_label", { month: Number(point.month.slice(5)) })}{" "}
-            <span className="font-semibold text-primary">{point.completed}</span>
-          </span>
-        ))}
-      </span>
-    </div>
+/** 标题 + 右侧计数 + 堆叠色条 + 图例；工作项与需求两段同构 */
+const DistributionBlock: FC<{
+  title: string;
+  meta: string;
+  /** 图例按此渲染（含 0） */
+  items: TDistributionItem[];
+  /** 色条剔除的键：工作项剔除已取消；需求不剔除，已关闭以浅灰画在末段（与关联产品卡一致） */
+  excludedKey?: string;
+  /** 传了就替代图例：没有数据时的引导行 */
+  empty?: ReactNode;
+}> = ({ title, meta, items, excludedKey, empty }) => {
+  const barItems = items.filter((item) => item.key !== excludedKey && item.value > 0);
+  const denominator = Math.max(
+    barItems.reduce((sum, item) => sum + item.value, 0),
+    1
   );
-};
-
-const StateDistribution: FC<{ overview: TProjectOverviewData }> = ({ overview }) => {
-  const { t } = useTranslation();
-  const { counts, distribution, trend } = overview;
-  const effectiveTotal = Math.max(counts.total - counts.cancelled, 0);
-  const denominator = Math.max(effectiveTotal, 1);
-  const barSlices = distribution.filter((slice) => slice.key !== "cancelled" && slice.value > 0);
 
   return (
     <div className="min-w-0">
       <div className="mb-2.5 flex items-baseline justify-between gap-3 text-12 text-tertiary">
-        <span>{t("project_overview.hero.distribution")}</span>
-        <span className="font-medium tabular-nums text-primary">
-          {t("project_overview.hero.distribution_meta", { total: effectiveTotal })}
-        </span>
+        <span>{title}</span>
+        <span className="font-medium tabular-nums text-primary">{meta}</span>
       </div>
       <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-md bg-layer-2">
-        {barSlices.map((slice) => (
+        {barItems.map((item) => (
           <div
-            key={slice.key}
-            title={`${slice.label} ${slice.value}`}
-            style={{ width: `${(slice.value / denominator) * 100}%`, backgroundColor: slice.color }}
+            key={item.key}
+            title={`${item.label} ${item.value}`}
+            style={{ width: `${(item.value / denominator) * 100}%`, backgroundColor: item.color }}
           />
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-12 text-secondary">
-        {distribution.map((slice) => (
-          <span key={slice.key} className="inline-flex items-center gap-1.5">
-            <span className="size-2 rounded-sm" style={{ backgroundColor: slice.color }} />
-            {slice.label} <span className="font-semibold tabular-nums text-primary">{slice.value}</span>
-          </span>
-        ))}
-      </div>
-      <CompletedSparkline trend={trend} />
+      {empty ?? (
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-12 text-secondary">
+          {items.map((item) => (
+            <span key={item.key} className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-sm" style={{ backgroundColor: item.color }} />
+              {item.label} <span className="font-semibold tabular-nums text-primary">{item.value}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const RequirementEmptyHint: FC<{ onClick?: () => void }> = ({ onClick }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-12 text-placeholder">
+      <span>{t("project_overview.hero.requirement_empty")}</span>
+      {onClick && (
+        <button type="button" onClick={onClick} className="font-medium text-accent-primary hover:underline">
+          {t("project_overview.hero.requirement_empty_action")}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const StateDistribution: FC<{ overview: TProjectOverviewData; onRequirementsClick?: () => void }> = ({
+  overview,
+  onRequirementsClick,
+}) => {
+  const { t } = useTranslation();
+  const { counts, distribution, requirementCounts, requirementDistribution } = overview;
+  const effectiveTotal = Math.max(counts.total - counts.cancelled, 0);
+  const hasRequirements = requirementCounts.total > 0;
+  const requirementMeta =
+    requirementCounts.closed > 0
+      ? t("project_overview.hero.requirement_distribution_meta", {
+          total: requirementCounts.total,
+          closed: requirementCounts.closed,
+        })
+      : t("project_overview.hero.requirement_distribution_total", { total: requirementCounts.total });
+
+  return (
+    <div className="min-w-0">
+      <DistributionBlock
+        title={t("project_overview.hero.distribution")}
+        meta={t("project_overview.hero.distribution_meta", { total: effectiveTotal })}
+        items={distribution}
+        excludedKey="cancelled"
+      />
+      <div className="mt-4 mb-3.5 border-t border-dashed border-subtle" />
+      <DistributionBlock
+        title={t("project_overview.hero.requirement_distribution")}
+        meta={requirementMeta}
+        items={requirementDistribution}
+        empty={hasRequirements ? undefined : <RequirementEmptyHint onClick={onRequirementsClick} />}
+      />
     </div>
   );
 };
@@ -241,6 +256,7 @@ export const OverviewHero: FC<Props> = ({
   onOverdueClick,
   onDueSoonClick,
   onPendingDefectsClick,
+  onRequirementsClick,
   children,
 }) => {
   const { t } = useTranslation();
@@ -282,7 +298,7 @@ export const OverviewHero: FC<Props> = ({
           </div>
         </div>
 
-        <StateDistribution overview={overview} />
+        <StateDistribution overview={overview} onRequirementsClick={onRequirementsClick} />
 
         <div className="grid grid-cols-3 gap-2.5 lg:col-span-2 xl:col-span-1">
           <RiskTile

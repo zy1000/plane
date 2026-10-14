@@ -1,3 +1,5 @@
+import type { TRequirementItemStatus } from "@plane/types";
+
 export interface IOverviewWorkItemCount {
   count: number;
 }
@@ -13,14 +15,6 @@ export interface IOverviewMemberStat {
   /** 未完成且目标日期已过的工作项数 */
   overdue_count?: number;
   timesheet_hours?: number;
-}
-
-/** 近 N 个月「新建 vs 完成」节奏趋势的单点 */
-export interface IOverviewTrendPoint {
-  /** YYYY-MM */
-  month: string;
-  created: number;
-  completed: number;
 }
 
 /** 近 N 个月缺陷「新建 vs 解决」的单点 */
@@ -54,6 +48,6 @@ export interface IProjectOverviewAnalytics {
   pending_defects_by_priority?: Record<TOverviewDefectPriority, number>;
   /** 近 6 个月缺陷新建 vs 解决 */
   defect_trend?: IOverviewDefectTrendPoint[];
-  /** 近 6 个月新建 vs 完成趋势 */
-  created_completed_trend?: IOverviewTrendPoint[];
+  /** 本项目引用的需求按需求状态分桶，五个键全给（含 0） */
+  requirement_status_distribution?: Record<TRequirementItemStatus, number>;
 }

@@ -140,6 +140,10 @@ export const OverviewListView: FC<TPageView> = observer((props) => {
     router.push(`/${workspaceSlug}/projects/${project.id}/defects?${DEFECT_PRESET_PARAM}=open`);
   }, [project.id, router, workspaceSlug]);
 
+  const goToRequirements = useCallback(() => {
+    router.push(`/${workspaceSlug}/projects/${project.id}/requirements`);
+  }, [project.id, router, workspaceSlug]);
+
   const createAnnouncementButton = (
     <button
       type="button"
@@ -166,6 +170,7 @@ export const OverviewListView: FC<TPageView> = observer((props) => {
             onOverdueClick={() => setWorkItemListMetric("overdue")}
             onDueSoonClick={() => setWorkItemListMetric("due_soon")}
             onPendingDefectsClick={goToPendingDefects}
+            onRequirementsClick={goToRequirements}
           >
             <OverviewFactsStrip
               memberCount={memberCount}
