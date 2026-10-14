@@ -1,4 +1,6 @@
+import { Library, ListChecks } from "lucide-react";
 import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { ModuleTreeTitle } from "@/components/qa/module-tree";
 
 export const CASE_PICKER_MODAL_CLASS = "qa-case-picker-modal";
 
@@ -38,47 +40,26 @@ export const CasePriorityPill = ({ value, label }: { value?: number | string | n
   );
 };
 
+/** 选用例弹窗（计划 / 评审）左侧用例目录树的节点标题：按后端 kind 取图标，其余同各页模块树 */
+export const CaseTreeNodeTitle = ({ kind, name, count }: { kind: string; name: string; count?: number }) => (
+  <ModuleTreeTitle
+    label={name}
+    count={count}
+    icon={
+      kind === "repository" ? (
+        <Library className="size-3.5" />
+      ) : kind === "root" || kind === "repository_modules_all" ? (
+        <ListChecks className="size-3.5" />
+      ) : undefined
+    }
+  />
+);
+
 export const CasePickerModalStyles = () => (
   <style
     dangerouslySetInnerHTML={{
       __html: `
-        .qa-case-picker-modal .custom-tree-indent .ant-tree-indent-unit {
-          width: 12px !important;
-        }
-        .qa-case-picker-modal .custom-tree-indent .ant-tree-switcher {
-          width: 16px !important;
-          margin-inline-end: 4px !important;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .qa-case-picker-modal .custom-tree-indent .ant-tree-node-content-wrapper {
-          padding-inline: 6px !important;
-        }
-        /* Tree */
-        .qa-case-picker-modal .ant-tree {
-          background: transparent;
-          color: var(--txt-primary);
-          font-size: inherit;
-        }
-        .qa-case-picker-modal .ant-tree .ant-tree-treenode {
-          width: 100%;
-          padding: 1px 0;
-          align-items: center;
-        }
-        .qa-case-picker-modal .ant-tree .ant-tree-node-content-wrapper {
-          min-height: 30px;
-          display: flex;
-          align-items: center;
-          border-radius: 6px;
-          transition: background-color 0.15s ease;
-        }
-        .qa-case-picker-modal .ant-tree .ant-tree-node-content-wrapper:hover {
-          background: var(--bg-layer-1-hover);
-        }
-        .qa-case-picker-modal .ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected {
-          background: var(--bg-accent-subtle);
-        }
+        /* 树的行样式统一走 module-tree 的 antd 皮肤（MODULE_TREE_SKIN_CLASS），这里只管勾选框配色 */
         .qa-case-picker-modal .ant-tree .ant-tree-checkbox {
           align-self: center;
           margin: 0 4px 0 0;

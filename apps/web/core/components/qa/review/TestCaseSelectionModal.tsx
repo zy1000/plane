@@ -5,16 +5,22 @@ import { Input, Pagination, Table, Tooltip, Tree } from "antd";
 import { globalEnums, getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import type { TableProps, TreeProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
-import { ChevronDown, Layers, Search, X } from "lucide-react";
+import { Layers, Search, X } from "lucide-react";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import {
+  MODULE_TREE_SKIN_CLASS,
+  ModuleTreeSkinStyles,
+  moduleTreeSwitcherIcon,
+} from "@/components/qa/module-tree";
+import {
   CASE_PICKER_MODAL_CLASS,
   CasePickerModalStyles,
   CasePriorityPill,
+  CaseTreeNodeTitle,
   CaseTypePill,
 } from "../shared/case-picker-modal-styles";
 
@@ -239,15 +245,6 @@ export default function TestCaseSelectionModal({
     document.body.style.userSelect = "auto";
   };
 
-  const renderNodeTitle = (title: string, count?: number, fontMedium?: boolean) => {
-    return (
-      <div className="group flex w-full items-center gap-2 py-0.5">
-        <span className={`flex-1 truncate text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-        {typeof count === "number" && <span className="ml-auto shrink-0 text-xs text-secondary">{count}</span>}
-      </div>
-    );
-  };
-
   const buildTreeNode = (node: any): any => {
     const kind = String(node?.kind || "");
     const id = String(node?.id || "");
@@ -267,7 +264,7 @@ export default function TestCaseSelectionModal({
 
     const children = Array.isArray(node?.children) ? node.children : [];
     return {
-      title: renderNodeTitle(node?.name ?? "-", count, kind === "root" || kind === "repository_modules_all"),
+      title: <CaseTreeNodeTitle kind={kind} name={String(node?.name ?? "-")} count={count} />,
       key,
       kind,
       repositoryId,
@@ -393,6 +390,7 @@ export default function TestCaseSelectionModal({
     <ModalCore isOpen={open} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.VIIXL}>
       <div className={`${CASE_PICKER_MODAL_CLASS} flex w-full flex-col text-sm text-primary`}>
         <CasePickerModalStyles />
+        <ModuleTreeSkinStyles />
 
         <div className="flex items-start justify-between gap-4 border-b border-subtle px-6 py-4">
           <div className="flex items-center gap-3">
@@ -411,21 +409,14 @@ export default function TestCaseSelectionModal({
         <div className="h-[82vh]">
           <div className="flex h-full overflow-hidden">
             <div className="relative flex flex-col bg-layer-1/40" style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}>
-              <div className="flex items-center gap-2 px-4 pb-2 pt-4">
-                <span className="text-sm text-secondary">用例目录</span>
+              <div className="flex items-center gap-2 px-3 pb-1.5 pt-3">
+                <span className="text-xs font-medium text-tertiary">用例目录</span>
               </div>
-              <div className="tree-scroll flex-1 min-h-0 px-2 pb-3">
+              <div className="tree-scroll flex-1 min-h-0 px-1.5 pb-3">
                 <Tree
                   showLine={false}
                   checkable
-                  switcherIcon={({ expanded, isLeaf }: any) =>
-                    isLeaf ? null : (
-                      <ChevronDown
-                        className="size-3.5 text-tertiary transition-transform"
-                        style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-                      />
-                    )
-                  }
+                  switcherIcon={moduleTreeSwitcherIcon}
                   onSelect={onSelect}
                   onCheck={onCheck}
                   onExpand={onExpand}
@@ -434,7 +425,7 @@ export default function TestCaseSelectionModal({
                   treeData={treeData}
                   selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
                   checkedKeys={checkedTreeKeys}
-                  className="custom-tree-indent"
+                  className={MODULE_TREE_SKIN_CLASS}
                 />
               </div>
               <div

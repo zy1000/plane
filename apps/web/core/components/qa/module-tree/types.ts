@@ -8,12 +8,12 @@ export type TModuleTreeNode = {
   /** 纯文本名称：用于单行省略、title 提示和搜索高亮 */
   label: string;
   count?: number;
-  /** 展开符后面的小图标（如计划详情页的用例库） */
+  /** 图标位的图标，不传默认文件夹（如计划详情页的用例库用书架图标） */
   icon?: ReactNode;
-  /** 没有子节点时顶替展开符位置的元素（头像 / 色点 / 优先级块） */
+  /** 顶替图标位的元素（头像 / 色点 / 优先级块），优先于 icon */
   leading?: ReactNode;
-  /** 名称加粗（用例库这类上一级实体） */
-  emphasis?: boolean;
+  /** 灰字、不加粗（如「未分配」这类兜底分组） */
+  muted?: boolean;
   /** 显式禁止拖动；默认跟随面板的 dragMode */
   draggable?: boolean;
   children?: TModuleTreeNode[];

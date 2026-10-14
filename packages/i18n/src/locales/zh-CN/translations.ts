@@ -2135,6 +2135,7 @@ export default {
     column: "模块",
     empty: "暂无模块",
     add: "添加",
+    add_child: "添加子模块",
     rename: "重命名",
     delete: "删除",
     name_placeholder: "请输入模块名称",

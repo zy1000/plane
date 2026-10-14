@@ -2,8 +2,7 @@
 
 import { Fragment, useCallback, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
-import { DownOutlined } from "@ant-design/icons";
-import { LayoutGrid } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, ListChecks } from "lucide-react";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ModuleTreeInput } from "./module-tree-input";
@@ -18,11 +17,14 @@ import type {
 } from "./types";
 import { MODULE_TREE_ROOT_KEY } from "./types";
 
-const INDENT = 20;
-const BASE_PADDING = 8;
-const SLOT = 20;
-/** 连线取 border-strong，与 antd Tree showLine 的 colorBorder 同档 */
-const LINE_CLASS = "pointer-events-none absolute border-strong";
+/**
+ * 行样式与项目研发需求页的树（requirements/module-tree/project-requirement-tree.tsx）同一套紧凑数值：
+ * 行高 28、13 号常规字（选中加粗）、图标 14、每层缩进 16、不画连接线
+ */
+const INDENT = 16;
+const BASE_PADDING = 6;
+/** 箭头位 14 + 间距 4，拖拽指示线从图标处起 */
+const SLOT = 18;
 
 export type TModuleTreeRoot = {
   key?: string;
@@ -67,7 +69,7 @@ const renderHighlighted = (label: string, query: string): ReactNode => {
 };
 
 /**
- * 测试管理各页面共用的模块树主体：固定首行「全部」、antd Tree showLine + 向下箭头式的连线与展开符、
+ * 各页面共用的模块树主体：固定首行「全部」（与一级节点平级）、箭头 + 图标 + 名称 + 计数的行、
  * 悬停出 ⋯ 菜单、行内新建 / 重命名、可选拖拽（换父 / 排序）。数据、请求和权限都由调用方负责。
  */
 export const ModuleTree = ({
@@ -91,8 +93,6 @@ export const ModuleTree = ({
   const visibleNodes = useMemo(() => filterModuleTree(nodes, query), [nodes, query]);
   const { nodeByKey, parentByKey } = useMemo(() => indexModuleTree(nodes), [nodes]);
   const expandedSet = useMemo(() => new Set(expandedKeys), [expandedKeys]);
-  /** 纯平铺的分组列表（执行人 / 类型等）不画叶子连线 */
-  const hasHierarchy = useMemo(() => nodes.some((node) => node.children?.length), [nodes]);
 
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TDropTarget | null>(null);
@@ -204,7 +204,7 @@ export const ModuleTree = ({
         closeOnSelect
         placement="bottom-end"
         ariaLabel="更多操作"
-        buttonClassName="size-[22px] rounded-md text-tertiary hover:bg-layer-transparent-active aria-expanded:bg-layer-transparent-active aria-expanded:text-primary"
+        buttonClassName="size-5 rounded-md text-tertiary hover:bg-layer-transparent-active aria-expanded:bg-layer-transparent-active aria-expanded:text-primary"
         optionsClassName="min-w-[160px]"
       >
         {items.map((item) => (
@@ -225,88 +225,62 @@ export const ModuleTree = ({
     </span>
   );
 
-  /** 祖先层的兄弟竖线：ends[i] 表示第 i 层祖先是同级末位，末位下方不再续线（同 antd indent-unit-end） */
-  const renderIndentLines = (ends: boolean[]) =>
-    ends.map((end, i) =>
-      end ? null : (
-        <span
-          key={i}
-          aria-hidden
-          className={cn(LINE_CLASS, "top-0 bottom-0 w-0 border-l")}
-          style={{ left: BASE_PADDING + i * INDENT + SLOT / 2 }}
-        />
-      )
+  const renderChevron = (node: TModuleTreeNode | null, expanded: boolean) => {
+    if (!node?.children?.length) return <span className="size-3.5 shrink-0" />;
+    return (
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={expanded ? "收起" : "展开"}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleExpand(node.key);
+        }}
+        className="grid size-3.5 shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary"
+      >
+        {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+      </button>
     );
-
-  /** 叶子连线：非末位 ├，末位 └ */
-  const renderLeafLine = (isLast: boolean) => (
-    <>
-      <span
-        aria-hidden
-        className={cn(LINE_CLASS, "top-0 w-0 border-l", isLast ? "bottom-1/2" : "bottom-0")}
-        style={{ left: SLOT / 2 }}
-      />
-      <span aria-hidden className={cn(LINE_CLASS, "top-1/2 h-0 border-t")} style={{ left: SLOT / 2, width: SLOT / 2 - 2 }} />
-    </>
-  );
-
-  const renderSlot = (node: TModuleTreeNode | null, expanded: boolean, isLast: boolean): ReactNode => {
-    if (!node) return root?.icon ?? <LayoutGrid className="size-3.5" strokeWidth={2} />;
-    if (node.children?.length)
-      return (
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label={expanded ? "收起" : "展开"}
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleExpand(node.key);
-          }}
-          className="flex size-[18px] items-center justify-center rounded text-secondary hover:bg-layer-transparent-active hover:text-primary"
-        >
-          <DownOutlined className={cn("text-[10px] transition-transform", !expanded && "-rotate-90")} />
-        </button>
-      );
-    if (node.leading) return node.leading;
-    return hasHierarchy ? renderLeafLine(isLast) : null;
   };
 
-  const renderSlotBox = (content: ReactNode, className?: string) => (
-    <span
-      className={cn("relative flex shrink-0 items-center justify-center self-stretch", className)}
-      style={{ width: SLOT }}
-    >
-      {content}
+  /** 图标位：头像 / 色点等 leading 优先，其次节点自带图标；「全部」默认清单图标，其余默认文件夹 */
+  const renderIcon = (node: TModuleTreeNode | null, isSelected: boolean) => (
+    <span className={cn("grid size-3.5 shrink-0 place-items-center", isSelected ? "text-primary" : "text-tertiary")}>
+      {node
+        ? (node.leading ?? node.icon ?? <Folder className="size-3.5" />)
+        : (root?.icon ?? <ListChecks className="size-3.5" />)}
     </span>
   );
 
-  const renderInputRow = (depth: number, ends: boolean[], slot: ReactNode, initialValue?: string) => (
-    <div className="relative flex h-7 items-center pr-1" style={{ paddingLeft: BASE_PADDING + depth * INDENT }}>
-      {renderIndentLines(ends)}
-      {renderSlotBox(slot)}
-      <div className="ml-1 min-w-0 flex-1">
-        <ModuleTreeInput
-          initialValue={initialValue}
-          onCommit={(value) => onEditCommit?.(value)}
-          onCancel={() => onEditCancel?.()}
-        />
+  const renderInputRow = (depth: number, chevron: ReactNode, initialValue?: string) => (
+    <div
+      className="flex h-7 items-center gap-1 pr-1.5"
+      style={{ paddingLeft: BASE_PADDING + depth * INDENT }}
+    >
+      {chevron}
+      <div className="flex min-w-0 flex-1 items-center gap-[7px]">
+        <span className="grid size-3.5 shrink-0 place-items-center text-tertiary">
+          <Folder className="size-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <ModuleTreeInput
+            initialValue={initialValue}
+            onCommit={(value) => onEditCommit?.(value)}
+            onCancel={() => onEditCancel?.()}
+          />
+        </div>
       </div>
     </div>
   );
 
-  const renderRow = (
-    node: TModuleTreeNode | null,
-    depth: number,
-    ends: boolean[],
-    expanded: boolean,
-    isLast: boolean
-  ) => {
+  const renderRow = (node: TModuleTreeNode | null, depth: number, expanded: boolean) => {
     const isRoot = node === null;
     const key = node?.key ?? rootKey;
     const label = node?.label ?? root?.label ?? "";
     const count = node ? node.count : root?.count;
     const hasChildren = Boolean(node?.children?.length);
     const isSelected = selectedKey === key;
+    const isMuted = Boolean(node?.muted) && !isSelected;
     const menuItems = node && getMenuItems ? getMenuItems(node) : [];
     const canDrag = !isRoot && dragMode !== "none" && node?.draggable !== false;
     const isDragging = dragKey === key;
@@ -333,37 +307,29 @@ export const ModuleTree = ({
         onDragOver={(e) => handleDragOver(e, node, expanded)}
         onDrop={(e) => handleDrop(e, node, expanded)}
         className={cn(
-          "group/row relative flex h-7 cursor-pointer items-center pr-1 text-13 outline-none select-none",
+          "group/row relative flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md pr-1.5 outline-none select-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-accent-strong focus-visible:ring-inset",
+          isSelected
+            ? "bg-layer-transparent-active text-primary"
+            : isMuted
+              ? "text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
+              : "text-secondary hover:bg-layer-transparent-hover hover:text-primary",
+          dropHere === "into" && "bg-accent-subtle ring-1 ring-accent-strong ring-inset",
           isDragging && "opacity-40"
         )}
         style={{ paddingLeft: indent }}
       >
-        {renderIndentLines(ends)}
-        {renderSlotBox(
-          renderSlot(node, expanded, isLast),
-          isRoot ? (isSelected ? "text-accent-primary" : "text-secondary") : undefined
-        )}
-        {/* 同 antd：选中 / 悬停底色只铺在标题上，展开符与连线留在外面 */}
-        <div
-          className={cn(
-            "ml-1 flex h-6 min-w-0 flex-1 items-center rounded-md pr-1.5 pl-1",
-            isSelected
-              ? "bg-accent-subtle font-medium text-accent-primary"
-              : "text-primary group-hover/row:bg-layer-transparent-hover",
-            dropHere === "into" && "bg-accent-subtle ring-1 ring-accent-strong ring-inset"
-          )}
-        >
-          {node?.icon && <span className="mr-1 flex shrink-0 items-center text-tertiary">{node.icon}</span>}
-          <span className={cn("min-w-0 flex-1 truncate", node?.emphasis && "font-medium")}>
+        {renderChevron(node, expanded)}
+        <div className="flex h-full min-w-0 flex-1 items-center gap-[7px]">
+          {renderIcon(node, isSelected)}
+          <span className={cn("min-w-0 flex-1 truncate text-13", isSelected && "font-medium")}>
             {renderHighlighted(label, query)}
           </span>
           {typeof count === "number" && (
+            // 不走 cn：它会把 text-xs / text-center 与 text-primary 当成同组，把字号吞掉
             <span
-              className={cn(
-                "shrink-0 pl-2 text-12 tabular-nums",
-                isSelected ? "text-accent-primary" : "text-tertiary",
-                menuItems.length > 0 && "group-hover/row:hidden group-has-[[aria-expanded=true]]/row:hidden"
-              )}
+              className={`min-w-[24px] shrink-0 text-center text-xs tabular-nums ${
+                isSelected ? "font-medium text-primary" : isMuted ? "text-placeholder" : "text-tertiary"
+              } ${menuItems.length > 0 ? "group-hover/row:hidden group-has-[[aria-expanded=true]]/row:hidden" : ""}`}
             >
               {count}
             </span>
@@ -373,34 +339,31 @@ export const ModuleTree = ({
         {(dropHere === "before" || dropHere === "after") && (
           <span
             aria-hidden
-            className="pointer-events-none absolute right-1.5 h-0.5 rounded-full bg-accent-primary"
-            style={{ left: indent + SLOT / 2, [dropHere === "before" ? "top" : "bottom"]: -1 }}
+            className="pointer-events-none absolute right-1.5 z-[1] h-0.5 rounded-full bg-accent-primary"
+            style={{ left: indent + SLOT, [dropHere === "before" ? "top" : "bottom"]: -1.5 }}
           >
-            <span className="absolute top-[-2.5px] left-[-7px] size-[7px] rounded-full bg-accent-primary" />
+            <span className="absolute top-[-2.5px] left-[-6px] size-[7px] rounded-full bg-accent-primary" />
           </span>
         )}
       </div>
     );
   };
 
-  /** ends：各层祖先是否同级末位；creatingAtEnd：列表末尾还挂着新建输入行，原末位不再画 └ */
-  const renderNodes = (list: TModuleTreeNode[], depth: number, ends: boolean[], creatingAtEnd = false): ReactNode =>
-    list.map((node, index) => {
-      const isLast = index === list.length - 1 && !creatingAtEnd;
+  const renderNodes = (list: TModuleTreeNode[], depth: number): ReactNode =>
+    list.map((node) => {
       const hasChildren = Boolean(node.children?.length);
       const creatingHere = editing?.kind === "create" && editing.parentKey === node.key;
       const expanded = (hasChildren && (searching || expandedSet.has(node.key))) || creatingHere;
       const renaming = editing?.kind === "rename" && editing.key === node.key;
-      const childEnds = [...ends, isLast];
       return (
         <Fragment key={node.key}>
           {renaming
-            ? renderInputRow(depth, ends, renderSlot(node, expanded, isLast), editing.initialValue)
-            : renderRow(node, depth, ends, expanded, isLast)}
+            ? renderInputRow(depth, renderChevron(node, expanded), editing.initialValue)
+            : renderRow(node, depth, expanded)}
           {expanded && (
             <>
-              {renderNodes(node.children ?? [], depth + 1, childEnds, creatingHere)}
-              {creatingHere && renderInputRow(depth + 1, childEnds, hasHierarchy ? renderLeafLine(true) : null)}
+              {renderNodes(node.children ?? [], depth + 1)}
+              {creatingHere && renderInputRow(depth + 1, renderChevron(null, false))}
             </>
           )}
         </Fragment>
@@ -412,19 +375,14 @@ export const ModuleTree = ({
   return (
     <div
       role="tree"
-      className={cn("flex flex-col", className)}
+      className={cn("flex flex-col gap-px", className)}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropTarget(null);
       }}
     >
-      {root && (
-        <>
-          {renderRow(null, 0, [], true, true)}
-          <div className="my-1 border-t border-subtle" />
-        </>
-      )}
-      {renderNodes(visibleNodes, 0, [], creatingAtRoot)}
-      {creatingAtRoot && renderInputRow(0, [], hasHierarchy ? renderLeafLine(true) : null)}
+      {root && renderRow(null, 0, true)}
+      {renderNodes(visibleNodes, 0)}
+      {creatingAtRoot && renderInputRow(0, renderChevron(null, false))}
     </div>
   );
 };

@@ -7,8 +7,8 @@ import { useTranslation } from "@plane/i18n";
 import type { TProductProject, TProjectRequirementModuleGroup, TRequirementModule } from "@plane/types";
 import { cn } from "@plane/utils";
 
-/** 每深一层缩进 18px，不画连接线 */
-const INDENT = 18;
+/** 每深一层缩进 16px，不画连接线；行高 28、13 号常规字（选中加粗）、图标 14，与各页共用的 ModuleTree 同一套数值 */
+const INDENT = 16;
 
 /** 选中模块所在的产品与祖先模块（不含自己），用来把选中项所在的路径展开 */
 const findModulePath = (
@@ -62,7 +62,7 @@ const TreeRow = ({
   <div
     style={{ paddingLeft: 6 + depth * INDENT }}
     className={cn(
-      "flex h-8 w-full items-center gap-1 rounded-md pr-1.5 transition-colors duration-150",
+      "flex h-7 w-full items-center gap-1 rounded-md pr-1.5 transition-colors duration-150",
       isActive
         ? "bg-layer-transparent-active text-primary"
         : isMuted
@@ -71,34 +71,34 @@ const TreeRow = ({
     )}
   >
     {isExpanded === undefined ? (
-      <span className="size-4 shrink-0" />
+      <span className="size-3.5 shrink-0" />
     ) : (
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isExpanded}
         aria-label={toggleLabel}
-        className="grid size-4 shrink-0 cursor-pointer place-items-center rounded-sm text-tertiary hover:text-primary"
+        className="grid size-3.5 shrink-0 cursor-pointer place-items-center rounded-sm text-tertiary hover:text-primary"
       >
-        {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
       </button>
     )}
     <button
       type="button"
       onClick={onSelect}
       aria-current={isActive ? "true" : undefined}
-      className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 text-left outline-none"
+      className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-[7px] text-left outline-none"
       title={label}
     >
-      <span className={cn("grid size-4 shrink-0 place-items-center", isActive ? "text-primary" : "text-tertiary")}>
+      <span className={cn("grid size-3.5 shrink-0 place-items-center", isActive ? "text-primary" : "text-tertiary")}>
         {icon}
       </span>
-      <span className={cn("min-w-0 flex-1 truncate text-sm", !isMuted && "font-medium")}>{label}</span>
+      <span className={cn("min-w-0 flex-1 truncate text-13", isActive && "font-medium")}>{label}</span>
       {count !== undefined && (
         // 不走 cn：它会把 text-primary / text-placeholder 当成和 text-xs、text-center 同组，把字号吞掉
         <span
           className={`min-w-[24px] shrink-0 text-center text-xs tabular-nums ${
-            isMuted ? "text-placeholder" : "font-medium text-primary"
+            isActive ? "font-medium text-primary" : isMuted ? "text-placeholder" : "text-tertiary"
           }`}
         >
           {count}
@@ -197,7 +197,7 @@ export const ProjectRequirementTree = (props: TProps) => {
         <Fragment key={item.id}>
           <TreeRow
             depth={depth}
-            icon={<Folder className="size-4" />}
+            icon={<Folder className="size-3.5" />}
             label={item.name}
             count={item.count}
             isActive={selectedModuleId === item.id}
@@ -215,10 +215,10 @@ export const ProjectRequirementTree = (props: TProps) => {
     });
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-px">
       <TreeRow
         depth={0}
-        icon={<ListChecks className="size-4" />}
+        icon={<ListChecks className="size-3.5" />}
         label={t("requirement_modules.all")}
         count={total}
         isActive={!selectedProductId && !selectedModuleId}
@@ -233,7 +233,7 @@ export const ProjectRequirementTree = (props: TProps) => {
           <Fragment key={group.product_id}>
             <TreeRow
               depth={0}
-              icon={<Package className="size-4" />}
+              icon={<Package className="size-3.5" />}
               label={label}
               count={group.total}
               isActive={selectedProductId === group.product_id && !selectedModuleId}
@@ -252,7 +252,7 @@ export const ProjectRequirementTree = (props: TProps) => {
           <div className="mx-2 my-2 border-t border-subtle" />
           <TreeRow
             depth={0}
-            icon={<Package className="size-4" />}
+            icon={<Package className="size-3.5" />}
             label={t("project_requirements.tree.products_without_requirements")}
             count={emptyProducts.length}
             isActive={false}
@@ -267,7 +267,7 @@ export const ProjectRequirementTree = (props: TProps) => {
               <TreeRow
                 key={link.product}
                 depth={1}
-                icon={<Package className="size-4" />}
+                icon={<Package className="size-3.5" />}
                 label={link.product_name || link.product_identifier}
                 isActive={selectedProductId === link.product && !selectedModuleId}
                 isMuted

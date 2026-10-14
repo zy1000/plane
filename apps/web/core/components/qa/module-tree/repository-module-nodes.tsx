@@ -25,8 +25,7 @@ export const buildRepositoryModuleNodes = (tree: any, getKey: (node: any) => str
       key: getKey(node),
       label: String(node?.name ?? "-"),
       count: typeof node?.count === "number" ? node.count : undefined,
-      icon: isRepository ? <Library className="size-3.5" strokeWidth={1.75} /> : undefined,
-      emphasis: isRepository,
+      icon: isRepository ? <Library className="size-3.5" /> : undefined,
       children: visibleChildren.map(build),
     };
   };

@@ -3,20 +3,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Tree, message, Empty, Spin } from "antd";
 import type { TreeProps } from "antd";
-import {
-  Check,
-  ChevronRight,
-  Folder,
-  FolderInput,
-  FolderKanban,
-  FolderOpen,
-  Layers,
-  Library,
-  Loader2,
-  Search,
-  X,
-} from "lucide-react";
+import { Briefcase, Check, FolderInput, Library, Loader2, Search, X } from "lucide-react";
 import { cn } from "@plane/utils";
+import {
+  MODULE_TREE_SKIN_CLASS,
+  ModuleTreeSkinStyles,
+  ModuleTreeTitle,
+  moduleTreeSwitcherIcon,
+} from "@/components/qa/module-tree";
 import { CaseService } from "@/services/qa/case.service";
 import { CaseModuleService } from "@/services/qa/case-module.service";
 import { filterTree } from "./case-tree-utils";
@@ -43,6 +37,9 @@ const caseModuleService = new CaseModuleService();
 
 const NO_PROJECT_KEY = "__no_project__";
 
+/** 选中的目标行尾打勾 */
+const selectedMark = <Check className="size-3.5 shrink-0 text-primary" />;
+
 /** 收集过滤后树中所有非叶子节点的 key，搜索时全部展开以直接看到命中结果 */
 const collectExpandableKeys = (nodes: any[]): React.Key[] =>
   (nodes || []).flatMap((n) => (n?.children?.length ? [n.key, ...collectExpandableKeys(n.children)] : []));
@@ -59,7 +56,7 @@ export const CopyCaseModal: React.FC<Props> = ({
   const [target, setTarget] = useState<CopyTarget | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fetching, setFetching] = useState(false);
-  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(["root"]);
+  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
   const [search, setSearch] = useState<string>("");
   // 当前工作空间下 项目 -> 用例库 -> 模块 的全量数据：来自用户模块树接口一次拉全，不分页，
@@ -78,7 +75,7 @@ export const CopyCaseModal: React.FC<Props> = ({
     if (!isOpen) return;
     setTarget(null);
     setSearch("");
-    setExpandedKeys(["root"]);
+    setExpandedKeys([]);
     setAutoExpandParent(true);
     setFetching(true);
     caseModuleService
@@ -149,25 +146,8 @@ export const CopyCaseModal: React.FC<Props> = ({
       const name = String(node?.name ?? "-");
       const childrenNodes = buildModuleNodes(node?.children || [], repositoryIdValue);
       const isSelected = target?.kind === "module" && target.id === nodeId;
-      const hasChildren = childrenNodes.length > 0;
       return {
-        title: (
-          <div className="flex w-full items-center justify-between gap-2 pr-0.5">
-            <span className="flex min-w-0 items-center gap-2">
-              {isSelected ? (
-                <FolderOpen size={15} className="shrink-0 text-accent-primary" />
-              ) : hasChildren ? (
-                <FolderOpen size={15} className="shrink-0 text-tertiary" />
-              ) : (
-                <Folder size={15} className="shrink-0 text-tertiary" />
-              )}
-              <span className={cn("truncate text-[13px]", isSelected ? "font-medium text-accent-primary" : "text-primary")}>
-                {name}
-              </span>
-            </span>
-            {isSelected && <Check size={15} className="shrink-0 text-accent-primary" />}
-          </div>
-        ),
+        title: <ModuleTreeTitle label={name} suffix={isSelected ? selectedMark : undefined} />,
         key: `module:${nodeId}`,
         name,
         kind: "module",
@@ -199,18 +179,12 @@ export const CopyCaseModal: React.FC<Props> = ({
         const moduleNodes = buildModuleNodes(repo?.modules || [], repoId);
         return {
           title: (
-            <div className="flex w-full items-center justify-between gap-2 pr-0.5">
-              <span className="flex min-w-0 items-center gap-2">
-                <Library size={15} className={cn("shrink-0", isSelected ? "text-accent-primary" : "text-secondary")} />
-                <span
-                  className={cn("truncate text-[13px] font-medium", isSelected ? "text-accent-primary" : "text-primary")}
-                >
-                  {repoName}
-                </span>
-                {moduleNodes.length === 0 && <span className="shrink-0 text-[11px] text-tertiary">（空）</span>}
-              </span>
-              {isSelected && <Check size={15} className="shrink-0 text-accent-primary" />}
-            </div>
+            <ModuleTreeTitle
+              label={moduleNodes.length === 0 ? `${repoName}（空）` : repoName}
+              icon={<Library className="size-3.5" />}
+              muted={moduleNodes.length === 0}
+              suffix={isSelected ? selectedMark : undefined}
+            />
           ),
           key: `repo:${repoId}`,
           name: repoName,
@@ -221,17 +195,7 @@ export const CopyCaseModal: React.FC<Props> = ({
         };
       });
       return {
-        title: (
-          <span className="flex w-full items-center gap-2">
-            <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-primary">
-              <FolderKanban size={13} />
-            </span>
-            <span className="truncate text-[13px] font-semibold text-primary">{projectName}</span>
-            <span className="shrink-0 rounded-full bg-layer-1 px-1.5 py-0.5 text-[11px] leading-none text-tertiary">
-              {repoNodes.length}
-            </span>
-          </span>
-        ),
+        title: <ModuleTreeTitle label={projectName} icon={<Briefcase className="size-3.5" />} count={repoNodes.length} />,
         key: `project:${projId}`,
         name: projectName,
         kind: "project",
@@ -248,36 +212,15 @@ export const CopyCaseModal: React.FC<Props> = ({
   const handleSearchChange = (value: string) => {
     setSearch(value);
     const query = value.trim();
-    // 搜索时展开命中路径上的全部节点，便于直接看到结果；清空后回到只展开根节点
-    setExpandedKeys(query ? ["root", ...collectExpandableKeys(filterTree(projectNodes, query))] : ["root"]);
+    // 搜索时展开命中路径上的全部节点，便于直接看到结果；清空后全部收起
+    setExpandedKeys(query ? collectExpandableKeys(filterTree(projectNodes, query)) : []);
     setAutoExpandParent(true);
   };
 
   const handleSearchClear = () => handleSearchChange("");
 
-  const treeData = useMemo(
-    () => [
-      {
-        title: (
-          <span className="flex w-full items-center gap-2">
-            <Layers size={15} className="shrink-0 text-secondary" />
-            <span className="text-[13px] font-semibold text-primary">全部用例库</span>
-            {repoCount > 0 && (
-              <span className="shrink-0 rounded-full bg-layer-1 px-1.5 py-0.5 text-[11px] leading-none text-tertiary">
-                {repoCount}
-              </span>
-            )}
-          </span>
-        ),
-        key: "root",
-        name: "全部用例库",
-        kind: "root",
-        selectable: false,
-        children: filteredProjectNodes,
-      },
-    ],
-    [filteredProjectNodes, repoCount]
-  );
+  // 不再包一层「全部用例库」根节点：它不可选，只多一层缩进；项目直接是第一层
+  const treeData = filteredProjectNodes;
 
   const isEmpty = filteredProjectNodes.length === 0;
   const selectedKeys = target ? [target.kind === "module" ? `module:${target.id}` : `repo:${target.id}`] : [];
@@ -306,32 +249,10 @@ export const CopyCaseModal: React.FC<Props> = ({
               border-color: var(--border-color-accent-strong);
               box-shadow: 0 0 0 3px color-mix(in oklch, var(--border-color-accent-strong) 16%, transparent);
             }
-            .copy-module-tree .ant-tree { background: transparent !important; font-size: 13px; }
-            .copy-module-tree .ant-tree-treenode { width: 100%; padding: 1px 0 !important; align-items: center; }
-            .copy-module-tree .ant-tree-switcher {
-              width: 20px; align-self: stretch; display: flex; align-items: center; justify-content: center; background: transparent;
-            }
-            .copy-module-tree .ant-tree-node-content-wrapper {
-              flex: 1; min-width: 0; min-height: 30px; display: flex; align-items: center;
-              padding: 3px 8px !important; border-radius: 8px;
-              transition: background-color .15s ease, box-shadow .15s ease;
-            }
-            .copy-module-tree .ant-tree-node-content-wrapper .ant-tree-title { width: 100%; }
-            .copy-module-tree .ant-tree-node-content-wrapper:hover { background: var(--background-color-layer-1) !important; }
-            .copy-module-tree .ant-tree-treenode-selected > .ant-tree-node-content-wrapper,
-            .copy-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected,
-            .copy-module-tree .ant-tree-node-content-wrapper.ant-tree-node-selected:hover {
-              background: var(--background-color-accent-subtle) !important;
-              box-shadow: inset 2px 0 0 0 var(--border-color-accent-strong);
-            }
-            .copy-module-tree .ant-tree-indent-unit { position: relative; width: 18px; }
-            .copy-module-tree .ant-tree-indent-unit::before {
-              content: ""; position: absolute; top: -4px; bottom: -4px; left: 9px;
-              border-left: 1px dashed var(--border-subtle); opacity: .7;
-            }
           `,
         }}
       />
+      <ModuleTreeSkinStyles />
       <div className="copy-module-body flex flex-col bg-surface-1">
         {/* Header */}
         <div className="relative overflow-hidden border-b border-subtle px-5 py-4">
@@ -395,7 +316,7 @@ export const CopyCaseModal: React.FC<Props> = ({
         {/* Tree */}
         <div className="px-5 py-3">
           <Spin spinning={fetching}>
-            <div className="copy-module-tree vertical-scrollbar h-[320px] overflow-y-auto rounded-xl border border-subtle bg-surface-1 p-2">
+            <div className="vertical-scrollbar h-[320px] overflow-y-auto rounded-xl border border-subtle bg-surface-1 p-1.5">
               {isEmpty ? (
                 <div className="flex h-full items-center justify-center">
                   <Empty
@@ -418,16 +339,8 @@ export const CopyCaseModal: React.FC<Props> = ({
                   autoExpandParent={autoExpandParent}
                   treeData={treeData}
                   selectedKeys={selectedKeys}
-                  switcherIcon={({ expanded, isLeaf }: any) =>
-                    isLeaf ? (
-                      <span className="inline-block h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronRight
-                        size={14}
-                        className={cn("text-tertiary transition-transform duration-150", expanded && "rotate-90")}
-                      />
-                    )
-                  }
+                  switcherIcon={moduleTreeSwitcherIcon}
+                  className={MODULE_TREE_SKIN_CLASS}
                 />
               )}
             </div>

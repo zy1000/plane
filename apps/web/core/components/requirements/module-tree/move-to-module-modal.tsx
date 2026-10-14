@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Modal, Tree } from "antd";
-import type { TreeProps } from "antd";
-import { FolderOpenDot, Layers } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Modal } from "antd";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementModule } from "@plane/types";
+import {
+  MODULE_TREE_ROOT_KEY,
+  ModuleTree,
+  collectBranchKeys,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import type { TRequirementModulesStore } from "@/hooks/store/use-requirement-modules";
+
+const toTreeNodes = (list: TRequirementModule[]): TModuleTreeNode[] =>
+  list.map((node) => ({ key: node.id, label: node.name, children: toTreeNodes(node.children ?? []) }));
 
 type TProps = {
   isOpen: boolean;
@@ -30,17 +37,17 @@ export const MoveToModuleModal = (props: TProps) => {
   /** undefined = 尚未选择；null = 选中「全部（不挂模块）」 */
   const [target, setTarget] = useState<string | null | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
+  const treeNodes = useMemo(() => toTreeNodes(store.modules), [store.modules]);
+
+  // 每次打开清掉上次的选择，并像以前的 defaultExpandAll 一样全部展开
   useEffect(() => {
-    if (isOpen) setTarget(undefined);
+    if (!isOpen) return;
+    setTarget(undefined);
+    setExpandedKeys(collectBranchKeys(treeNodes));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
-
-  const handleSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    if (!info.selected) return;
-    const key = selectedKeys[0] as string | undefined;
-    if (!key) return;
-    setTarget(key === "all" ? null : key);
-  };
 
   const handleOk = async () => {
     if (target === undefined) {
@@ -74,35 +81,6 @@ export const MoveToModuleModal = (props: TProps) => {
     }
   };
 
-  const buildTreeNodes = (list: TRequirementModule[]): NonNullable<TreeProps["treeData"]> =>
-    list.map((node) => ({
-      title: (
-        <div className="flex w-full items-center gap-2">
-          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-secondary">
-            <FolderOpenDot size={14} />
-          </span>
-          <span className="truncate text-sm text-primary">{node.name}</span>
-        </div>
-      ),
-      key: node.id,
-      children: buildTreeNodes(node.children ?? []),
-    }));
-
-  const treeData: TreeProps["treeData"] = [
-    {
-      title: (
-        <div className="flex w-full items-center gap-2">
-          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-secondary">
-            <Layers size={14} />
-          </span>
-          <span className="truncate text-sm font-medium text-primary">{t("requirement_modules.move_none")}</span>
-        </div>
-      ),
-      key: "all",
-      children: buildTreeNodes(store.modules),
-    },
-  ];
-
   return (
     <Modal
       title={t("requirement_modules.move_modal_title")}
@@ -113,14 +91,15 @@ export const MoveToModuleModal = (props: TProps) => {
       okText={t("confirm")}
       cancelText={t("cancel")}
     >
-      <div className="h-[400px] overflow-y-auto rounded border border-subtle p-2">
-        <Tree
-          blockNode
-          defaultExpandAll
-          onSelect={handleSelect}
-          treeData={treeData}
-          selectedKeys={target === undefined ? [] : target === null ? ["all"] : [target]}
-          className="py-2"
+      <div className="h-[400px] overflow-y-auto rounded-md border border-subtle p-1.5">
+        {/* 「全部需求（不挂模块）」可选，等于取消挂靠 */}
+        <ModuleTree
+          root={{ label: t("requirement_modules.move_none") }}
+          nodes={treeNodes}
+          selectedKey={target === undefined ? "" : (target ?? MODULE_TREE_ROOT_KEY)}
+          onSelect={(key) => setTarget(key === MODULE_TREE_ROOT_KEY ? null : key)}
+          expandedKeys={expandedKeys}
+          onExpandedKeysChange={setExpandedKeys}
         />
       </div>
     </Modal>

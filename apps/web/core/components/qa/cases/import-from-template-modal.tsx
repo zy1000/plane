@@ -11,7 +11,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Pagination, Spin, Table, Tooltip, Tree, message } from "antd";
 import type { TableProps, TreeProps } from "antd";
-import { ChevronDown, FolderInput, Layers, Search, X } from "lucide-react";
+import { FolderInput, Layers, Library, Search, X } from "lucide-react";
+import {
+  MODULE_TREE_SKIN_CLASS,
+  ModuleTreeSkinStyles,
+  ModuleTreeTitle,
+  moduleTreeSwitcherIcon,
+} from "@/components/qa/module-tree";
 import { CaseService } from "@/services/qa/case.service";
 import type { ModuleCountResponse } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
@@ -67,7 +73,8 @@ const normalizeListResponse = (res: any): any[] => (Array.isArray(res) ? res : r
 const buildLeftModuleNodes = (
   list: any[],
   repositoryId: string,
-  ancestorKeys: string[]
+  ancestorKeys: string[],
+  counts?: Partial<ModuleCountResponse>
 ): { nodes: any[]; keys: string[] } => {
   const nodes: any[] = [];
   const keys: string[] = [];
@@ -76,13 +83,10 @@ const buildLeftModuleNodes = (
     if (!moduleId) return;
     const key = `module:${moduleId}`;
     const name = String(mod?.name ?? "-");
-    const child = buildLeftModuleNodes(mod?.children || [], repositoryId, [...ancestorKeys, key]);
+    const child = buildLeftModuleNodes(mod?.children || [], repositoryId, [...ancestorKeys, key], counts);
+    const count = counts?.[moduleId];
     nodes.push({
-      title: (
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate">{name}</span>
-        </span>
-      ),
+      title: <ModuleTreeTitle label={name} count={typeof count === "number" ? count : undefined} />,
       key,
       kind: "module",
       moduleId,
@@ -101,15 +105,17 @@ const buildLeftModuleNodes = (
 const buildLeftTreeData = (repos: TemplateRepo[], repoCounts: Record<string, Partial<ModuleCountResponse>>): any[] =>
   repos.map((repo) => {
     const repoKey = `repo:${repo.id}`;
-    const { nodes, keys } = buildLeftModuleNodes(repo.modules, repo.id, [repoKey]);
+    const { nodes, keys } = buildLeftModuleNodes(repo.modules, repo.id, [repoKey], repoCounts[repo.id]);
     const total = repoCounts[repo.id]?.total;
     const isEmptyRepo = typeof total === "number" && total === 0;
     return {
       title: (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-medium">{repo.name}</span>
-          {isEmptyRepo && <span className="shrink-0 text-xs text-tertiary">（空）</span>}
-        </span>
+        <ModuleTreeTitle
+          label={repo.name}
+          icon={<Library className="size-3.5" />}
+          count={typeof total === "number" ? total : undefined}
+          muted={isEmptyRepo}
+        />
       ),
       key: repoKey,
       kind: "repository",
@@ -702,6 +708,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
     >
       <div className={`${CASE_PICKER_MODAL_CLASS} flex w-full flex-col bg-surface-1 text-sm text-primary`}>
         <CasePickerModalStyles />
+        <ModuleTreeSkinStyles />
 
         {/* Header */}
         <div className="flex items-center justify-between gap-4 border-b border-subtle px-6 py-4">
@@ -727,8 +734,8 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
         <div className="flex h-[62vh] overflow-hidden">
           {/* Left: 模板库 + 模块树 */}
           <div className="flex w-[300px] shrink-0 flex-col border-r border-subtle bg-layer-1/40">
-            <div className="flex items-center justify-between px-4 pb-2 pt-4">
-              <span className="text-sm text-secondary">模板用例库</span>
+            <div className="flex items-center justify-between px-3 pb-2 pt-3">
+              <span className="text-xs font-medium text-tertiary">模板用例库</span>
               {pendingCheckKeys.size > 0 && <span className="text-xs text-tertiary">正在载入勾选范围…</span>}
             </div>
             <div className="px-3 pb-2">
@@ -741,7 +748,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
               />
             </div>
             <Spin spinning={repoLoading}>
-              <div className="tree-scroll h-[calc(62vh-88px)] min-h-0 px-2 pb-3">
+              <div className="tree-scroll h-[calc(62vh-88px)] min-h-0 px-1.5 pb-3">
                 {repos.length === 0 ? (
                   !repoLoading && (
                     <div className="flex h-full items-center justify-center">
@@ -763,14 +770,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                     // checkStrictly 下 rc-tree 不做父子 conduction，对象形态 checkedKeys 原样生效
                     checkStrictly
                     expandAction="click"
-                    switcherIcon={({ expanded, isLeaf }: any) =>
-                      isLeaf ? null : (
-                        <ChevronDown
-                          className="size-3.5 text-tertiary transition-transform"
-                          style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-                        />
-                      )
-                    }
+                    switcherIcon={moduleTreeSwitcherIcon}
                     treeData={leftTreeData}
                     expandedKeys={expandedKeys}
                     autoExpandParent={autoExpandParent}
@@ -779,7 +779,7 @@ export const ImportFromTemplateModal: React.FC<Props> = ({
                     onCheck={onTreeCheck}
                     selectedKeys={selectedTreeKeys}
                     checkedKeys={{ checked: treeCheckedState.checked, halfChecked: treeCheckedState.halfChecked }}
-                    className="custom-tree-indent"
+                    className={MODULE_TREE_SKIN_CLASS}
                   />
                 )}
               </div>

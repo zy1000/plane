@@ -1,20 +1,22 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useLocalStorage } from "@plane/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FolderPlus, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementModule } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
-import { cn } from "@plane/utils";
+import {
+  MODULE_TREE_ROOT_KEY,
+  ModuleTreePanel,
+  collectAncestorKeys,
+  indexModuleTree,
+  isInSubtree,
+  type TModuleTreeEditing,
+  type TModuleTreeMenuItem,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import type { TRequirementModulesStore } from "@/hooks/store/use-requirement-modules";
-import { RequirementModuleTree } from "./module-tree";
-
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 300;
-const COLLAPSED_WIDTH = 44;
-const COLLAPSE_STORAGE_KEY = "requirement_module_sidebar_collapsed";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === "object") {
@@ -25,26 +27,13 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-/** 在当前树里找出某个模块及其全部后代的 id —— 删除后判断选中是否失效 */
-const collectSubtreeIds = (modules: TRequirementModule[], moduleId: string): Set<string> => {
-  const result = new Set<string>();
-  const collect = (node: TRequirementModule) => {
-    result.add(node.id);
-    node.children?.forEach(collect);
-  };
-  const find = (nodes: TRequirementModule[]): TRequirementModule | null => {
-    for (const node of nodes) {
-      if (node.id === moduleId) return node;
-      const hit = find(node.children ?? []);
-      if (hit) return hit;
-    }
-    return null;
-  };
-  const target = find(modules);
-  if (target) collect(target);
-  else result.add(moduleId);
-  return result;
-};
+const toTreeNodes = (list: TRequirementModule[]): TModuleTreeNode[] =>
+  list.map((item) => ({
+    key: item.id,
+    label: item.name,
+    count: item.count,
+    children: toTreeNodes(item.children ?? []),
+  }));
 
 type TProps = {
   store: TRequirementModulesStore;
@@ -56,152 +45,139 @@ type TProps = {
 
 /**
  * 库页 / 产品页左侧的可编辑模块树侧栏：建 / 重命名 / 删模块 + 点击过滤。
- * 宽度可拖拽（200–300px，与 QA 用例页一致）；顶栏 chevron 折叠，偏好记在本地。
+ * 外壳与树体用测试管理共用的 ModuleTreePanel（可拖宽、可收起、可搜索），行样式同项目研发需求页。
  */
 export const RequirementModuleSidebar = (props: TProps) => {
   const { store, selectedModuleId, onSelect, readonly = false } = props;
   const { t } = useTranslation();
-  const { storedValue: collapsedStored, setValue: setCollapsed } = useLocalStorage(
-    COLLAPSE_STORAGE_KEY,
-    false
-  );
-  const isCollapsed = collapsedStored === true;
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TModuleTreeNode | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [width, setWidth] = useState(240);
-  const widthRef = useRef(width);
 
-  const onMouseDownResize = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = widthRef.current;
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + moveEvent.clientX - startX));
-      widthRef.current = next;
-      setWidth(next);
-    };
-    const onMouseUp = () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  }, []);
+  const treeNodes = useMemo(() => toTreeNodes(store.modules), [store.modules]);
+  const { nodeByKey } = useMemo(() => indexModuleTree(treeNodes), [treeNodes]);
 
-  const handleCreate = useCallback(
-    async (parentId: string | null, name: string) => {
-      try {
-        await store.createModule({ name, parent: parentId });
-      } catch (error) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("error"),
-          message: getErrorMessage(error, t("requirement_modules.toast.create_failed")),
-        });
-      }
-    },
-    [store, t]
+  // 选中项（通常来自 URL）藏在收起的分支里时，把它的祖先展开；只在第一次拿到树时做
+  const initialExpandDone = useRef(false);
+  useEffect(() => {
+    if (initialExpandDone.current || !selectedModuleId || treeNodes.length === 0) return;
+    initialExpandDone.current = true;
+    const ancestors = collectAncestorKeys(treeNodes, selectedModuleId);
+    if (ancestors?.length) setExpandedKeys((prev) => Array.from(new Set([...prev, ...ancestors])));
+  }, [selectedModuleId, treeNodes]);
+
+  const showError = useCallback(
+    (error: unknown, fallbackKey: string) =>
+      setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: getErrorMessage(error, t(fallbackKey)) }),
+    [t]
   );
 
-  const handleRename = useCallback(
-    async (moduleId: string, name: string) => {
-      try {
-        await store.updateModule(moduleId, { name });
-      } catch (error) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("error"),
-          message: getErrorMessage(error, t("requirement_modules.toast.rename_failed")),
-        });
-      }
-    },
-    [store, t]
-  );
+  const startCreate = (parentKey: string) => {
+    setEditing({ kind: "create", parentKey });
+    if (parentKey !== MODULE_TREE_ROOT_KEY)
+      setExpandedKeys((prev) => (prev.includes(parentKey) ? prev : [...prev, parentKey]));
+  };
 
-  const handleDeleteConfirm = useCallback(async () => {
+  const handleEditCommit = async (value: string) => {
+    const current = editing;
+    setEditing(null);
+    const name = value.trim();
+    if (!current || !name || readonly) return;
+    if (current.kind === "create") {
+      try {
+        await store.createModule({
+          name,
+          parent: current.parentKey === MODULE_TREE_ROOT_KEY ? null : current.parentKey,
+        });
+      } catch (error) {
+        showError(error, "requirement_modules.toast.create_failed");
+      }
+      return;
+    }
+    if (name === current.initialValue) return;
+    try {
+      await store.updateModule(current.key, { name });
+    } catch (error) {
+      showError(error, "requirement_modules.toast.rename_failed");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
       // 选中项落在被删子树里时要退回「全部」，子树关系得在删除前从当前树里算
-      const doomedIds = collectSubtreeIds(store.modules, deleteTarget.id);
-      await store.deleteModule(deleteTarget.id);
-      if (selectedModuleId && doomedIds.has(selectedModuleId)) onSelect(null);
+      const selectedWillBeGone =
+        selectedModuleId !== null &&
+        (selectedModuleId === deleteTarget.key || isInSubtree(deleteTarget, selectedModuleId));
+      await store.deleteModule(deleteTarget.key);
+      if (selectedWillBeGone) onSelect(null);
       setDeleteTarget(null);
     } catch (error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: getErrorMessage(error, t("requirement_modules.toast.delete_failed")),
-      });
+      showError(error, "requirement_modules.toast.delete_failed");
     } finally {
       setIsDeleting(false);
     }
-  }, [deleteTarget, onSelect, selectedModuleId, store, t]);
+  };
+
+  const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] =>
+    readonly
+      ? []
+      : [
+          {
+            key: "add",
+            label: t("requirement_modules.add_child"),
+            icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+            onClick: () => startCreate(node.key),
+          },
+          {
+            key: "rename",
+            label: t("requirement_modules.rename"),
+            icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
+            onClick: () => setEditing({ kind: "rename", key: node.key, initialValue: node.label }),
+          },
+          {
+            key: "delete",
+            label: t("requirement_modules.delete"),
+            icon: <Trash2 className="size-3.5" strokeWidth={1.75} />,
+            danger: true,
+            onClick: () => setDeleteTarget(node),
+          },
+        ];
+
+  const allLabel = t("requirement_modules.all");
 
   return (
-    <aside
-      className="relative flex shrink-0 flex-col border-r border-subtle bg-surface-1 transition-[width] duration-300 ease-in-out"
-      style={
-        isCollapsed
-          ? { width: COLLAPSED_WIDTH }
-          : { width, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH }
-      }
-    >
-      <div className="flex h-9 min-h-9 flex-shrink-0 items-center border-b border-subtle px-1.5">
-        {!isCollapsed && (
-          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium tracking-wider text-tertiary">
-            {t("requirement_modules.sidebar_label")}
-          </span>
-        )}
-        <button
-          type="button"
-          className={cn(
-            "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-tertiary outline-none transition-colors duration-150 hover:bg-layer-transparent-hover hover:text-primary",
-            isCollapsed && "mx-auto"
-          )}
-          aria-expanded={!isCollapsed}
-          aria-label={isCollapsed ? "展开模块侧栏" : "收起模块侧栏"}
-          onClick={() => setCollapsed(!isCollapsed)}
-        >
-          {isCollapsed ? (
-            <ChevronRight className="size-4" strokeWidth={2} />
-          ) : (
-            <ChevronLeft className="size-4" strokeWidth={2} />
-          )}
-        </button>
-      </div>
-      {!isCollapsed && (
-        <>
-          <div
-            onMouseDown={onMouseDownResize}
-            className="absolute top-9 right-0 z-10 bottom-0 w-1.5"
-            style={{ cursor: "col-resize" }}
-          />
-          <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-2 pt-3 pb-3">
-            <RequirementModuleTree
-              modules={store.modules}
-              total={store.total}
-              selectedModuleId={selectedModuleId}
-              onSelect={onSelect}
-              readonly={readonly}
-              onCreate={handleCreate}
-              onRename={handleRename}
-              onDelete={setDeleteTarget}
-            />
-          </div>
-        </>
-      )}
+    <>
+      <ModuleTreePanel
+        title={t("requirement_modules.sidebar_label")}
+        root={{ label: allLabel, count: store.total }}
+        nodes={treeNodes}
+        selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+        onSelect={(key) => onSelect(key === MODULE_TREE_ROOT_KEY ? null : key)}
+        expandedKeys={expandedKeys}
+        onExpandedKeysChange={setExpandedKeys}
+        editing={editing}
+        onEditCommit={(value) => void handleEditCommit(value)}
+        onEditCancel={() => setEditing(null)}
+        getMenuItems={getMenuItems}
+        onAddRoot={readonly ? undefined : () => startCreate(MODULE_TREE_ROOT_KEY)}
+        railLabel={(selectedModuleId && nodeByKey.get(selectedModuleId)?.label) || allLabel}
+        loading={store.isLoading}
+        emptyText={t("requirement_modules.empty")}
+      />
       <AlertModalCore
         isOpen={deleteTarget !== null}
         handleClose={() => setDeleteTarget(null)}
         handleSubmit={() => void handleDeleteConfirm()}
         isSubmitting={isDeleting}
         title={t("requirement_modules.delete_confirm_title")}
-        content={t("requirement_modules.delete_confirm_content", { name: deleteTarget?.name ?? "" })}
+        content={t("requirement_modules.delete_confirm_content", { name: deleteTarget?.label ?? "" })}
         // AlertModalCore 的按钮默认是英文硬编码
         primaryButtonText={{ default: t("delete"), loading: t("deleting") }}
         secondaryButtonText={t("cancel")}
       />
-    </aside>
+    </>
   );
 };

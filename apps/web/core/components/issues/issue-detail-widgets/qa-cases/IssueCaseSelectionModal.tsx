@@ -1,8 +1,14 @@
 "use client";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { Modal, Space, Button, Input, Table, Tag, message, Tree, Select } from "antd";
+import { Modal, Space, Button, Input, Table, Tag, message, Select } from "antd";
 import type { TableProps } from "antd";
+import {
+  MODULE_TREE_ROOT_KEY,
+  ModuleTree,
+  collectBranchKeys,
+  type TModuleTreeNode,
+} from "@/components/qa/module-tree";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
 import useDebounce from "@/hooks/use-debounce";
@@ -13,7 +19,12 @@ import {
   getEnums,
 } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 
-type TModuleNode = { id: string; name: string; children?: TModuleNode[]; total?: number };
+const toModuleTreeNodes = (list: any[]): TModuleTreeNode[] =>
+  (list || []).map((m: any) => ({
+    key: String(m.id),
+    label: String(m.name ?? "-"),
+    children: toModuleTreeNodes(m.children || []),
+  }));
 type TTestCase = {
   id: string;
   name: string;
@@ -104,10 +115,9 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
 
   const [repositories, setRepositories] = useState<any[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
-  const [modules, setModules] = useState<TModuleNode[]>([]);
+  const [modules, setModules] = useState<TModuleTreeNode[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
-  const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
-  const [autoExpandParent, setAutoExpandParent] = useState(true);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [leftPaneWidth, setLeftPaneWidth] = useState<number>(320);
   const leftPaneWidthRef = useRef<number>(leftPaneWidth);
@@ -192,18 +202,10 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
     qaCaseService
       .getModules(workspaceSlug, selectedRepositoryId)
       .then((moduleData: any[]) => {
-        const withCounts = (moduleData || []).map((m: any) => ({
-          id: String(m.id),
-          name: String(m.name),
-          children: (m.children || []).map((c: any) => ({
-            id: String(c.id),
-            name: String(c.name),
-            children: c.children || [],
-          })),
-        }));
-        setModules(withCounts);
-        setExpandedKeys(undefined);
-        setAutoExpandParent(true);
+        const nodes = toModuleTreeNodes(moduleData || []);
+        setModules(nodes);
+        // 同以前的 defaultExpandAll：换库后全部展开
+        setExpandedKeys(collectBranchKeys(nodes));
       })
       .catch((err: any) => {
         setModules([]);
@@ -371,26 +373,6 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
     }
   };
 
-  const onTreeSelect = (_keys: any, info: any) => {
-    const key = String(info?.node?.key || "");
-    if (key) setSelectedModuleId(key === "all" ? null : key);
-  };
-
-  const treeData = [
-    {
-      title: <span className="text-sm text-primary">全部模块</span>,
-      key: "all",
-      children: (modules || []).map((m) => ({
-        title: (
-          <div className="flex items-center justify-between gap-2 w-full">
-            <span className="text-sm text-primary">{m.name}</span>
-          </div>
-        ),
-        key: m.id,
-        children: (m.children || []).map((c) => ({ title: String(c.name), key: String(c.id) })),
-      })),
-    },
-  ];
 
   return (
     <Modal
@@ -450,18 +432,14 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
               borderRight: "none",
             }}
           >
-            <div className="px-2">
-              <Tree
-                defaultExpandAll
-                onSelect={onTreeSelect}
-                onExpand={(keys) => {
-                  setExpandedKeys(keys as string[]);
-                  setAutoExpandParent(false);
-                }}
+            <div className="px-1.5">
+              <ModuleTree
+                root={{ label: "全部模块" }}
+                nodes={modules}
+                selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+                onSelect={(key) => setSelectedModuleId(key === MODULE_TREE_ROOT_KEY ? null : key)}
                 expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                treeData={treeData}
-                selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
+                onExpandedKeysChange={setExpandedKeys}
               />
             </div>
           </div>

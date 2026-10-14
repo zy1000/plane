@@ -1,6 +1,6 @@
 "use client";
 
-import { UserX } from "lucide-react";
+import { Shapes, UserX } from "lucide-react";
 import { cn } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import type { TModuleTreeNode } from "@/components/qa/module-tree";
@@ -40,18 +40,19 @@ export const buildPlanCaseAssigneeNodes = (tree: TPlanAssigneeTree | null): TMod
     key: node.kind === "unassigned" ? "unassigned" : `assignee:${node.id}`,
     label: node.name || "-",
     count: node.count,
+    muted: node.kind === "unassigned",
     leading:
       node.kind === "unassigned" ? (
-        <span className="flex size-[18px] items-center justify-center rounded-full bg-layer-3 text-tertiary">
-          <UserX className="size-3" strokeWidth={2} />
+        <span className="flex size-3.5 items-center justify-center rounded-full bg-layer-3 text-tertiary">
+          <UserX className="size-2.5" strokeWidth={2} />
         </span>
       ) : (
-        <ButtonAvatars showTooltip={false} userIds={String(node.id)} size="md" />
+        <ButtonAvatars showTooltip={false} userIds={String(node.id)} size="sm" />
       ),
   }));
 };
 
-/** 按类型 / 优先级 / 执行结果 / 复核状态：优先级用色块，结果与复核状态用色点，类型是纯文本 */
+/** 按类型 / 优先级 / 执行结果 / 复核状态：优先级用色块，结果与复核状态用色点，类型用统一图标（不能落到默认的文件夹图标） */
 export const buildPlanCaseGroupNodes = (
   tree: TPlanGroupTree | null,
   resultColors?: Record<string, string>,
@@ -63,7 +64,7 @@ export const buildPlanCaseGroupNodes = (
     if (node.kind === "priority") return <PlanCasePriorityBadge value={node.id} className="size-4 text-10" />;
     if (node.kind === "result") return <Dot color={resultColors?.[name] ?? RESULT_FALLBACK_COLOR[name]} />;
     if (node.kind === "review_status") return <Dot color={reviewStatusColors?.[name] ?? RESULT_FALLBACK_COLOR[name]} />;
-    return undefined;
+    return <Shapes className="size-3.5" />;
   };
   return (tree.children || []).map((node) => ({
     key: `${node.kind}:${node.id}`,

@@ -2,9 +2,14 @@
 
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { Modal, Tree, Input, message } from "antd";
-import { AppstoreOutlined, GlobalOutlined, ProjectOutlined } from "@ant-design/icons";
-import { FolderOpenDot } from "lucide-react";
+import { Briefcase, Globe, Library } from "lucide-react";
 import type { TreeProps } from "antd";
+import {
+  MODULE_TREE_SKIN_CLASS,
+  ModuleTreeSkinStyles,
+  ModuleTreeTitle,
+  moduleTreeSwitcherIcon,
+} from "@/components/qa/module-tree";
 import { CaseModuleService } from "@/services/qa/case-module.service";
 import { filterTree } from "./case-tree-utils";
 
@@ -41,7 +46,7 @@ export const CopyModuleModal: React.FC<Props> = ({
   const [target, setTarget] = useState<SelectionTarget | null>(null);
   const [loading, setLoading] = useState(false);
   const [treeLoading, setTreeLoading] = useState(false);
-  const [expandedKeys, setExpandedKeys] = useState<string[]>(["root"]);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
   const [search, setSearch] = useState("");
   const [workspaceTrees, setWorkspaceTrees] = useState<any[]>([]);
@@ -58,7 +63,8 @@ export const CopyModuleModal: React.FC<Props> = ({
     try {
       const workspaces = await caseModuleService.getUserModuleTree(repositoryQuery);
       setWorkspaceTrees(workspaces || []);
-      setExpandedKeys(["root"]);
+      // 去掉根节点后默认展开各工作区，打开即见项目一层
+      setExpandedKeys((workspaces || []).map((ws: any) => `ws:${ws.slug}`));
       setAutoExpandParent(true);
     } catch {
       message.error("获取数据失败");
@@ -118,20 +124,13 @@ export const CopyModuleModal: React.FC<Props> = ({
   const renderTitle = (title: string, kind: "workspace" | "project" | "repository" | "module") => {
     const icon =
       kind === "workspace" ? (
-        <GlobalOutlined className="text-secondary" />
+        <Globe className="size-3.5" />
       ) : kind === "project" ? (
-        <ProjectOutlined className="text-secondary" />
+        <Briefcase className="size-3.5" />
       ) : kind === "repository" ? (
-        <AppstoreOutlined className="text-secondary" />
-      ) : (
-        <FolderOpenDot size={14} className="text-secondary" />
-      );
-    return (
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center justify-center w-4 h-4">{icon}</span>
-        <span className="text-sm text-primary">{title}</span>
-      </div>
-    );
+        <Library className="size-3.5" />
+      ) : undefined;
+    return <ModuleTreeTitle label={title} icon={icon} />;
   };
 
   const buildModuleNodes = (list: any[], wsSlug: string): any[] => {
@@ -190,16 +189,8 @@ export const CopyModuleModal: React.FC<Props> = ({
   const treeNodes = useMemo(() => buildTree(workspaceTrees), [workspaceTrees, emptyProjectGroupLabel]);
   const filteredNodes = useMemo(() => filterTree(treeNodes, search), [treeNodes, search]);
 
-  const treeData = [
-    {
-      title: renderTitle("全部工作区", "workspace"),
-      key: "root",
-      name: "全部工作区",
-      kind: "root",
-      selectable: false,
-      children: filteredNodes,
-    },
-  ];
+  // 不再包一层「全部工作区」根节点：它不可选，只多一层缩进
+  const treeData = filteredNodes;
 
   const selectedKey = useMemo(() => {
     if (!target) return [];
@@ -227,19 +218,21 @@ export const CopyModuleModal: React.FC<Props> = ({
           size="small"
         />
       </div>
-      <div className="h-[380px] overflow-y-auto border rounded p-2">
+      <ModuleTreeSkinStyles />
+      <div className="h-[380px] overflow-y-auto rounded-md border border-subtle p-1.5">
         {treeLoading ? (
           <div className="flex items-center justify-center h-full text-secondary text-sm">加载中...</div>
         ) : (
           <Tree
             blockNode
+            switcherIcon={moduleTreeSwitcherIcon}
             onSelect={onSelect}
             onExpand={onExpand}
             expandedKeys={expandedKeys}
             autoExpandParent={autoExpandParent}
             treeData={treeData}
             selectedKeys={selectedKey}
-            className="py-1 custom-tree-indent"
+            className={MODULE_TREE_SKIN_CLASS}
           />
         )}
       </div>

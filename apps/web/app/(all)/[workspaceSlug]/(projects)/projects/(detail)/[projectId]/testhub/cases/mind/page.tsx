@@ -9,9 +9,16 @@ import { RepositorySelect } from "../../repository-select";
 import { UnorderedListOutlined, ShareAltOutlined } from "@ant-design/icons";
 import { Col, Input, Modal, Row, Tree } from "antd";
 import type { TreeProps } from "antd";
+import { ListChecks } from "lucide-react";
 import { CaseService } from "@/services/qa/case.service";
 import { CaseModuleService } from "@/services/qa/case-module.service";
 import { CaseMindmap } from "@/components/qa/cases/case-mindmap";
+import {
+  MODULE_TREE_SKIN_CLASS,
+  ModuleTreeSkinStyles,
+  ModuleTreeTitle,
+  moduleTreeSwitcherIcon,
+} from "@/components/qa/module-tree";
 import type { MindElixirData, NodeObj, Operation, Topic } from "mind-elixir";
 import { useUser } from "@/hooks/store/user";
 import { useTranslation } from "@plane/i18n";
@@ -115,12 +122,7 @@ export default function TestCasesMindPage() {
   const buildTreeNodes = (modules: any[]): any[] => {
     return (modules || []).map((m) => ({
       key: String(m.id),
-      title: (
-        <div className="flex items-center justify-between gap-2 min-w-0">
-          <span className="truncate">{String(m.name ?? "")}</span>
-          <span className="text-xs text-placeholder flex-shrink-0">{Number(m.total ?? 0)}</span>
-        </div>
-      ),
+      title: <ModuleTreeTitle label={String(m.name ?? "")} count={Number(m.total ?? 0)} />,
       children: buildTreeNodes(m.children || []),
     }));
   };
@@ -149,25 +151,22 @@ export default function TestCasesMindPage() {
 
       const withCounts = applyCounts(Array.isArray(moduleData) ? moduleData : []);
       const nodes = buildTreeNodes(withCounts);
+      // 「全部用例」与一级模块平级（同各页模块树）；勾选 / 点选 "all" 的逻辑按 key 判断，不依赖父子关系
       setTreeData([
         {
           key: "all",
-          title: (
-            <div className="flex items-center justify-between gap-2 min-w-0">
-              <span className="truncate">全部用例</span>
-              <span className="text-xs text-placeholder flex-shrink-0">{total}</span>
-            </div>
-          ),
-          children: nodes,
+          title: <ModuleTreeTitle label="全部用例" icon={<ListChecks className="size-3.5" />} count={total} />,
+          isLeaf: true,
         },
+        ...nodes,
       ]);
       if (!expandedKeys?.length) setExpandedKeys(["all"]);
     } catch {
       setTreeData([
         {
           key: "all",
-          title: "全部用例",
-          children: [],
+          title: <ModuleTreeTitle label="全部用例" icon={<ListChecks className="size-3.5" />} />,
+          isLeaf: true,
         },
       ]);
     }
@@ -910,25 +909,11 @@ export default function TestCasesMindPage() {
                 className="absolute right-0 top-0 h-full w-2"
                 style={{ cursor: "col-resize", zIndex: 10 }}
               />
-              <style
-                dangerouslySetInnerHTML={{
-                  __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 2px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
-                }
-              `,
-                }}
-              />
-              <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+              <ModuleTreeSkinStyles />
+              <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-1.5 pt-2 pb-3">
                 <Tree
                   showLine={false}
+                  switcherIcon={moduleTreeSwitcherIcon}
                   defaultExpandAll
                   checkable
                   checkStrictly
@@ -995,7 +980,7 @@ export default function TestCasesMindPage() {
                     halfChecked: [],
                   }}
                   selectedKeys={[selectedModuleIds[0] || "all"]}
-                  className="py-2 pl-2 custom-tree-indent"
+                  className={MODULE_TREE_SKIN_CLASS}
                 />
               </div>
             </Col>

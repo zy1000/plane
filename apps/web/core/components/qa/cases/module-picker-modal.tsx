@@ -3,8 +3,13 @@
 import React, { useEffect, useState } from "react";
 import { Modal, Tree, message } from "antd";
 import type { TreeProps } from "antd";
-import { AppstoreOutlined } from "@ant-design/icons";
-import { FolderOpenDot } from "lucide-react";
+import { ListChecks } from "lucide-react";
+import {
+  MODULE_TREE_SKIN_CLASS,
+  ModuleTreeSkinStyles,
+  ModuleTreeTitle,
+  moduleTreeSwitcherIcon,
+} from "@/components/qa/module-tree";
 import { CaseService } from "@/services/qa/case.service";
 
 type Props = {
@@ -21,13 +26,6 @@ type Props = {
 };
 
 const caseService = new CaseService();
-
-const renderNodeTitle = (title: React.ReactNode, icon: React.ReactNode, bold = false) => (
-  <div className="flex w-full items-center gap-2">
-    <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
-    <span className={`text-sm text-primary ${bold ? "font-medium" : ""}`}>{title}</span>
-  </div>
-);
 
 /** 当前用例库内的「选择模块」弹窗，供移动用例 / 移动模块共用 */
 export const ModulePickerModal: React.FC<Props> = ({
@@ -93,19 +91,17 @@ export const ModulePickerModal: React.FC<Props> = ({
       const nodeId = String(node?.id);
       const disabled = parentDisabled || nodeId === disabledSubtreeOf;
       return {
-        title: renderNodeTitle(node?.name ?? "-", <FolderOpenDot size={14} />),
+        title: <ModuleTreeTitle label={String(node?.name ?? "-")} />,
         key: nodeId,
         disabled,
         children: buildTreeNodes(node?.children || [], disabled),
       };
     });
 
+  // 「全部模块」与一级模块平级（同各页左侧模块树），不再是包住所有模块的根节点
   const treeData = [
-    {
-      title: renderNodeTitle("全部模块", <AppstoreOutlined />, true),
-      key: "all",
-      children: buildTreeNodes(modules),
-    },
+    { title: <ModuleTreeTitle label="全部模块" icon={<ListChecks className="size-3.5" />} />, key: "all", isLeaf: true },
+    ...buildTreeNodes(modules),
   ];
 
   const treeSelectedKeys = selectedKey === undefined ? [] : [selectedKey ?? "all"];
@@ -120,16 +116,18 @@ export const ModulePickerModal: React.FC<Props> = ({
       okText="确定"
       cancelText="取消"
     >
-      <div className="h-[400px] overflow-y-auto rounded border p-2">
+      <ModuleTreeSkinStyles />
+      <div className="h-[400px] overflow-y-auto rounded-md border border-subtle p-1.5">
         <Tree
           blockNode
+          switcherIcon={moduleTreeSwitcherIcon}
           onSelect={onSelect}
           onExpand={onExpand}
           expandedKeys={expandedKeys}
           autoExpandParent={autoExpandParent}
           treeData={treeData}
           selectedKeys={treeSelectedKeys}
-          className="custom-tree-indent py-2"
+          className={MODULE_TREE_SKIN_CLASS}
         />
       </div>
     </Modal>

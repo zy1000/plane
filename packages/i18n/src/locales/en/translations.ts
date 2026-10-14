@@ -1953,6 +1953,7 @@ export default {
     column: "Module",
     empty: "No modules yet",
     add: "Add",
+    add_child: "Add submodule",
     rename: "Rename",
     delete: "Delete",
     name_placeholder: "Module name",

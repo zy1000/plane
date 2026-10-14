@@ -8,11 +8,11 @@ import { cn } from "@plane/utils";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { ModuleTree, type TModuleTreeProps } from "./module-tree";
 
-const DEFAULT_WIDTH = 264;
-const MIN_WIDTH = 220;
+const DEFAULT_WIDTH = 240;
+const MIN_WIDTH = 200;
 const MAX_WIDTH = 360;
-/** 四个页面共用一个宽度，切页不跳 */
-const WIDTH_STORAGE_KEY = "qa_module_tree_width";
+/** 各页面共用一个宽度，切页不跳；默认宽从 264 改成 240 时换了键，旧值不再沿用 */
+const WIDTH_STORAGE_KEY = "module_tree_width";
 
 const clampWidth = (value: number) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value));
 
@@ -32,7 +32,7 @@ const IconButton = ({
       type="button"
       aria-label={tip}
       onClick={onClick}
-      className="flex size-[26px] shrink-0 items-center justify-center rounded-md text-tertiary outline-none hover:bg-layer-transparent-hover hover:text-primary"
+      className="flex size-[26px] shrink-0 items-center justify-center rounded-md text-tertiary outline-none hover:bg-layer-transparent-hover hover:text-primary focus-visible:bg-layer-transparent-hover"
     >
       {children}
     </button>
@@ -56,8 +56,8 @@ export type TModuleTreePanelProps = Omit<TModuleTreeProps, "query" | "className"
 };
 
 /**
- * 测试管理左侧目录树的外壳：树头（标题 / 自定义左侧 + 搜索 / 新建 / 收起）、
- * 可拖宽（220–360，记在 localStorage）、可收成 36px 窄条、空态。树本身见 ModuleTree。
+ * 左侧模块树的外壳：树头（小字标题 / 自定义左侧 + 搜索 / 新建 / 收起，无底边框，同项目研发需求页）、
+ * 可拖宽（200–360，记在 localStorage）、可收成 36px 窄条、空态。树本身见 ModuleTree。
  */
 export const ModuleTreePanel = ({
   title = "模块",
@@ -147,10 +147,10 @@ export const ModuleTreePanel = ({
       className={cn("relative flex h-full shrink-0 flex-col border-r border-subtle bg-surface-1", className)}
       style={{ width }}
     >
-      <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-subtle pr-1.5 pl-2">
+      <div className="flex h-10 shrink-0 items-center gap-0.5 pt-1 pr-1.5 pl-3">
         {searchOpen ? (
           <>
-            <Search className="ml-1 size-[15px] shrink-0 text-tertiary" strokeWidth={2} />
+            <Search className="size-[15px] shrink-0 text-tertiary" strokeWidth={2} />
             <input
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
@@ -170,10 +170,9 @@ export const ModuleTreePanel = ({
           </>
         ) : (
           <>
-            <div className="flex min-w-0 flex-1 items-center">
-              {headerLeft ?? (
-                <span className="truncate pl-1.5 text-12 font-medium tracking-wide text-tertiary">{title}</span>
-              )}
+            {/* 下拉类的树头自带 px-1.5 和悬停底，往左让出同样宽度，文字与小字标题对齐 */}
+            <div className={cn("flex min-w-0 flex-1 items-center", headerLeft && "-ml-1.5")}>
+              {headerLeft ?? <span className="truncate text-12 font-medium text-tertiary">{title}</span>}
             </div>
             {searchable && (
               <IconButton tip="搜索模块" onClick={() => setSearchOpen(true)}>
@@ -194,7 +193,7 @@ export const ModuleTreePanel = ({
         )}
       </div>
 
-      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-1.5 py-1">
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-1.5 pt-0.5 pb-3">
         <ModuleTree {...treeProps} query={query} />
         {loading && treeProps.nodes.length === 0 && (
           <div className="px-2 py-3 text-13 text-tertiary">加载中…</div>

@@ -34,7 +34,7 @@ export const ModuleTreeInput = ({ initialValue = "", placeholder = "模块名称
       value={value}
       placeholder={placeholder}
       aria-label={placeholder}
-      className="h-[26px] w-full min-w-0 rounded-md border border-accent-strong bg-surface-1 px-2 text-13 text-primary ring-2 ring-accent-subtle outline-none placeholder:text-placeholder"
+      className="h-6 w-full min-w-0 rounded-md border border-accent-strong bg-surface-1 px-2 text-13 text-primary ring-2 ring-accent-subtle outline-none placeholder:text-placeholder"
       onChange={(e) => setValue(e.target.value)}
       onCompositionStart={() => {
         composingRef.current = true;
