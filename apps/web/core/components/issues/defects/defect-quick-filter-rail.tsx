@@ -17,6 +17,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { FilterOption } from "@/components/issues/issue-layouts/filters";
 import { useDefectQuickCounts } from "@/hooks/store/use-defect-quick-counts";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { DEFECT_PRESET_PARAM, DEFECT_PRESETS, getDefectPreset } from "./defect-presets";
@@ -36,18 +37,19 @@ const PRESET_ICONS: Record<TDefectPreset, LucideIcon> = {
 };
 
 const RAIL_COLLAPSED_STORAGE_KEY = "plane:project-defects:rail-collapsed";
+const RAIL_SHOW_EMPTY_STORAGE_KEY = "plane:project-defects:rail-show-empty";
 
-const readCollapsed = (): boolean => {
+const readFlag = (key: string): boolean => {
   try {
-    return localStorage.getItem(RAIL_COLLAPSED_STORAGE_KEY) === "1";
+    return localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 };
 
-const writeCollapsed = (collapsed: boolean) => {
+const writeFlag = (key: string, value: boolean) => {
   try {
-    localStorage.setItem(RAIL_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0");
+    localStorage.setItem(key, value ? "1" : "0");
   } catch {
     // 隐私模式等拿不到 localStorage 时只影响记忆，不影响功能
   }
@@ -70,12 +72,20 @@ export const DefectQuickFilterRail = observer(function DefectQuickFilterRail(pro
   const searchParams = useSearchParams();
   const preset = getDefectPreset(searchParams.get(DEFECT_PRESET_PARAM));
   const { counts } = useDefectQuickCounts(workspaceSlug, projectId);
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
+  const [collapsed, setCollapsed] = useState<boolean>(() => readFlag(RAIL_COLLAPSED_STORAGE_KEY));
+  // 默认不显示空组，与缺陷页「显示」里 show_empty_groups 的默认值一致
+  const [showEmpty, setShowEmpty] = useState<boolean>(() => readFlag(RAIL_SHOW_EMPTY_STORAGE_KEY));
 
   const toggleCollapsed = useCallback((next: boolean) => {
     setCollapsed(next);
-    writeCollapsed(next);
+    writeFlag(RAIL_COLLAPSED_STORAGE_KEY, next);
   }, []);
+
+  const toggleShowEmpty = useCallback(() => {
+    const next = !showEmpty;
+    setShowEmpty(next);
+    writeFlag(RAIL_SHOW_EMPTY_STORAGE_KEY, next);
+  }, [showEmpty]);
 
   const handleSelect = useCallback(
     (next: TDefectPreset) => {
@@ -97,7 +107,9 @@ export const DefectQuickFilterRail = observer(function DefectQuickFilterRail(pro
     >
       <div className="flex h-9 min-h-9 flex-shrink-0 items-center border-b border-subtle px-1.5">
         {!collapsed && (
-          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium tracking-wider text-tertiary">快捷筛选</span>
+          <div className="min-w-0 flex-1">
+            <FilterOption isChecked={showEmpty} title="显示空组" onClick={toggleShowEmpty} />
+          </div>
         )}
         <button
           type="button"
@@ -121,6 +133,8 @@ export const DefectQuickFilterRail = observer(function DefectQuickFilterRail(pro
           {DEFECT_PRESETS.map(({ key, label }) => {
             const isActive = key === preset;
             const count = counts?.[key];
+            // 当前选中项即使为 0 也保留，免得选中的项凭空消失
+            if (!showEmpty && count === 0 && !isActive) return null;
             const Icon = PRESET_ICONS[key];
 
             const rowButton = (
