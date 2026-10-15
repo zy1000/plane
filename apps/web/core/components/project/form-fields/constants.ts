@@ -72,6 +72,7 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
 export const PROJECT_REQUIRED_FIELDS = [
   "code",
   "project_type",
+  "product_type",
   "status",
   "project_lead",
   "product_manager",
@@ -84,6 +85,10 @@ export type TProjectRequiredFieldKey = (typeof PROJECT_REQUIRED_FIELDS)[number];
 /** 字段 → i18n label key（description_html 与 description 共用一个 label） */
 export const getProjectFieldLabelKey = (key: TProjectFormFieldKey) =>
   `workspace_projects.fields.${key === "description_html" ? "description" : key}`;
+
+/** 中文界面日期写成「2026年10月8日」，其它语言沿用 renderFormattedDate 的默认格式；创建弹窗与设置页共用 */
+export const getProjectDateFormatToken = (locale: string) =>
+  locale.toLowerCase().startsWith("zh") ? "yyyy年M月d日" : undefined;
 
 /** project_lead 在列表 / 详情接口里分别是 id 与 IUserLite，统一归一到 id */
 export const normalizeUserId = (value: IUserLite | string | null | undefined): string | null =>

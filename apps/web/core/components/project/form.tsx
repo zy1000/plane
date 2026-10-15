@@ -4,17 +4,13 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
-import { Info } from "lucide-react";
+import { differenceInCalendarDays } from "date-fns";
+import { Controller, useWatch } from "react-hook-form";
 import { useTranslation } from "@plane/i18n";
 // plane imports
-import { Button } from "@plane/propel/button";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Tooltip } from "@plane/propel/tooltip";
-import type { IProject, IWorkspace } from "@plane/types";
+import type { IProject } from "@plane/types";
 import { Input } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn, getDate } from "@plane/utils";
 import {
   FORM_VARIANT_STYLES,
   FormFieldShell,
@@ -22,346 +18,224 @@ import {
   getFormGridClassName,
 } from "@/components/common/form-section";
 import { TimezoneSelect } from "@/components/global";
-// hooks
-import { useProject } from "@/hooks/store/use-project";
-import { usePlatformOS } from "@/hooks/use-platform-os";
-// plane web types
-import type { TProject } from "@/plane-web/types/projects";
-// services
-import { ProjectService } from "@/services/project";
 // local imports
 import {
+  ProjectCodeField,
+  ProjectDateField,
   ProjectDevModeReadOnlyField,
-  ProjectLogoField,
-  ProjectNetworkField,
-  ProjectSharedFields,
-  applyProjectServerErrors,
-  getMissingProjectRequiredFields,
+  ProjectDictionaryField,
+  ProjectMemberField,
+  ProjectProductTypeField,
+  getProjectDateFormatToken,
   getProjectFieldLabelKey,
-  normalizeUserId,
   useProjectDictionaries,
+  validateEndDate,
 } from "./form-fields";
+import type { TProjectFormFieldKey } from "./form-fields";
 import { ProjectDescriptionFormEditor } from "./project-description-form-editor";
+import {
+  PROJECT_SETTINGS_FORM_ID,
+  ProjectSettingsGroup,
+  ProjectSettingsIdentity,
+  ProjectSettingsSaveBar,
+  useProjectSettingsForm,
+} from "./settings/general";
+import { GeneralProjectSettingsControlSection } from "./settings/control-section";
 
 export interface IProjectDetailsForm {
   project: IProject;
   workspaceSlug: string;
   projectId: string;
-  isAdmin: boolean;
 }
-const projectService = new ProjectService();
 
-/** store 里 project_lead 可能是对象（详情接口）也可能是 id（列表接口 / PATCH 响应），进表单前归一 */
-const toFormValues = (project: IProject): TProject => ({
-  ...project,
-  workspace: (project.workspace as IWorkspace).id,
-  project_lead: normalizeUserId(project.project_lead),
-});
+const VARIANT = "grouped-settings" as const;
 
+/**
+ * 项目设置常规页（管理员）：顶部身份区，下面按 基本信息 / 团队 / 排期 / 描述 / 系统 分组，
+ * 危险操作区在最后；有改动时底部浮出保存条。非管理员走 ProjectSettingsReadOnly。
+ */
 export function ProjectDetailsForm(props: IProjectDetailsForm) {
-  const { project, workspaceSlug, projectId, isAdmin } = props;
-  const { t } = useTranslation();
-  // states
-  const [isLoading, setIsLoading] = useState(false);
-  // store hooks
-  const { updateProject } = useProject();
-  const { isMobile } = usePlatformOS();
-  // 一次拉全量字典给所属BU / 项目状态 / 项目类型共用；无编辑权限不请求
-  const dictionaries = useProjectDictionaries(workspaceSlug, isAdmin);
-
-  // form info
+  const { project, workspaceSlug, projectId } = props;
+  const { t, currentLocale } = useTranslation();
+  // 一次拉全量字典给所属BU / 项目状态 / 项目类型共用
+  const dictionaries = useProjectDictionaries(workspaceSlug, true);
+  const { form, dirtyCount, isSaving, missingRequiredFields, editorVersion, discard, onSubmit } =
+    useProjectSettingsForm({ project, workspaceSlug, projectId });
   const {
-    handleSubmit,
     control,
-    setValue,
-    setError,
-    reset,
     formState: { errors },
-    getValues,
-  } = useForm<TProject>({
-    defaultValues: toFormValues(project),
-  });
+  } = form;
   // derived values
-  const styles = FORM_VARIANT_STYLES.settings;
-  const grid = getFormGridClassName("settings");
-  const sectionProps = { control, variant: "settings" as const, disabled: !isAdmin };
-  // 0348 之前的存量项目缺必填字段，顶部横幅提示；RHF 的 rules 会在保存时拦截
-  const missingRequiredFields = useMemo(() => getMissingProjectRequiredFields(project), [project]);
-
-  useEffect(() => {
-    if (project && projectId !== getValues("id")) {
-      reset(toFormValues(project));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, projectId]);
-
-  // handlers
-  const handleIdentifierChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = event.target;
-    const alphanumericValue = value.replace(/[^a-zA-Z0-9]/g, "");
-    const formattedValue = alphanumericValue.toUpperCase();
-    setValue("identifier", formattedValue);
-  };
-
-  const handleUpdateChange = async (payload: Partial<TProject>) => {
-    if (!workspaceSlug || !project) return;
-    return updateProject(workspaceSlug.toString(), project.id, payload)
-      .then(() => {
-        setToast({
-          type: TOAST_TYPE.SUCCESS,
-          title: t("toast.success"),
-          message: t("project_settings.general.toast.success"),
-        });
-      })
-      .catch((err) => {
-        // 字段级错误（名称 / 项目 ID / 代号重复、字典值无效…）行内展示；其余 toast
-        if (applyProjectServerErrors(err ?? {}, setError, t)) return;
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("toast.error"),
-          message: t("something_went_wrong"),
-        });
-      });
-  };
-
-  const onSubmit = async (formData: TProject) => {
-    if (!workspaceSlug) return;
-    setIsLoading(true);
-    const payload: Partial<TProject> = {
-      name: formData.name,
-      network: formData.network,
-      identifier: formData.identifier,
-      description_html: formData.description_html ?? "<p></p>",
-      logo_props: formData.logo_props,
-      timezone: formData.timezone,
-      pms_project_name: formData.pms_project_name?.trim() || null,
-      // 0348 扩展字段：必填项都挂了 rules，走到这里不会是 null；business_unit 选填允许 null
-      code: formData.code?.trim() ?? "",
-      business_unit: formData.business_unit ?? null,
-      product_manager: normalizeUserId(formData.product_manager),
-      status: formData.status ?? null,
-      project_type: formData.project_type ?? null,
-      product_type: formData.product_type ?? null,
-      start_date: formData.start_date ?? null,
-      end_date: formData.end_date ?? null,
-      project_lead: normalizeUserId(formData.project_lead),
-    };
-
-    if (project.identifier !== formData.identifier)
-      await projectService
-        .checkProjectIdentifierAvailability(workspaceSlug, payload.identifier ?? "")
-        .then(async (res) => {
-          if (res.exists) setError("identifier", { message: t("common.identifier_already_exists") });
-          else await handleUpdateChange(payload);
-        });
-    else await handleUpdateChange(payload);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 300);
-  };
+  const styles = FORM_VARIANT_STYLES[VARIANT];
+  const grid = getFormGridClassName(VARIANT);
+  const base = { control, variant: VARIANT };
+  const label = (key: TProjectFormFieldKey) => t(getProjectFieldLabelKey(key));
+  const dateToken = getProjectDateFormatToken(currentLocale);
+  const startDate = getDate(useWatch({ control, name: "start_date" }));
+  const endDate = getDate(useWatch({ control, name: "end_date" }));
+  // 起止都填了且没颠倒才算工期，首尾两天都算在内
+  const durationDays =
+    startDate && endDate && endDate >= startDate ? differenceInCalendarDays(endDate, startDate) + 1 : null;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div className="mt-8 space-y-8">
-        {isAdmin && missingRequiredFields.length > 0 && (
-          <FormWarningBanner>
+    <div>
+      <form id={PROJECT_SETTINGS_FORM_ID} onSubmit={onSubmit}>
+        {missingRequiredFields.length > 0 && (
+          <FormWarningBanner className="mb-6">
             {t("workspace_projects.validation.legacy_incomplete", {
               fields: missingRequiredFields.map((key) => t(getProjectFieldLabelKey(key))).join("、"),
             })}
           </FormWarningBanner>
         )}
 
-        <div className={grid}>
-          <FormFieldShell
-            label={t("workspace_projects.fields.name")}
-            required
-            editable={isAdmin}
-            error={errors.name?.message}
-            styles={styles}
-          >
-            <div className="flex items-center gap-2">
-              <ProjectLogoField control={control} disabled={!isAdmin} />
-              <Controller
-                control={control}
-                name="name"
-                rules={{
-                  required: t("name_is_required"),
-                  maxLength: {
-                    value: 255,
-                    message: t("workspace_projects.validation.max_length", {
-                      field: t("workspace_projects.fields.name"),
-                      max: 255,
-                    }),
-                  },
-                }}
-                render={({ field: { value, onChange, ref } }) => (
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    ref={ref}
-                    value={value}
-                    onChange={onChange}
-                    hasError={Boolean(errors.name)}
-                    className={cn(styles.input, "min-w-0 flex-1 font-medium")}
-                    placeholder={t("common.project_name")}
-                    disabled={!isAdmin}
-                  />
-                )}
+        <ProjectSettingsIdentity project={project} control={control} errors={errors} />
+
+        <div className="mt-8">
+          <ProjectSettingsGroup title={t("project_settings.general.groups.basics")}>
+            <div className={grid}>
+              <ProjectCodeField {...base} dictionaries={dictionaries} />
+              <ProjectDevModeReadOnlyField
+                variant={VARIANT}
+                devMode={project.dev_mode_detail}
+                workspaceSlug={workspaceSlug}
+              />
+              <ProjectDictionaryField
+                {...base}
+                name="project_type"
+                required
+                dictionaries={dictionaries}
+                fallbackItem={project.project_type_detail}
+              />
+              <ProjectProductTypeField {...base} required />
+              <ProjectDictionaryField
+                {...base}
+                name="business_unit"
+                required={false}
+                dictionaries={dictionaries}
+                fallbackItem={project.business_unit_detail}
+              />
+              <ProjectDictionaryField
+                {...base}
+                name="status"
+                required
+                dictionaries={dictionaries}
+                fallbackItem={project.status_detail}
               />
             </div>
-          </FormFieldShell>
-          <FormFieldShell
-            label={t("workspace_projects.fields.identifier")}
-            required
-            editable={isAdmin}
-            error={errors.identifier?.message}
-            styles={styles}
-          >
-            <div className="relative">
-              <Controller
-                control={control}
-                name="identifier"
-                rules={{
-                  required: t("project_id_is_required"),
-                  validate: (value) =>
-                    /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) || t("project_id_allowed_char"),
-                  minLength: {
-                    value: 1,
-                    message: t("project_id_min_char"),
-                  },
-                  maxLength: {
-                    value: 10,
-                    message: t("project_id_max_char"),
-                  },
-                }}
-                render={({ field: { value, ref } }) => (
-                  <Input
-                    id="identifier"
-                    name="identifier"
-                    type="text"
-                    value={value}
-                    onChange={handleIdentifierChange}
-                    ref={ref}
-                    hasError={Boolean(errors.identifier)}
-                    placeholder={t("project_settings.general.enter_project_id")}
-                    className={cn(styles.input, "pr-8 font-medium")}
-                    disabled={!isAdmin}
-                  />
-                )}
-              />
-              <Tooltip
-                isMobile={isMobile}
-                tooltipContent={t("project_id_tooltip_content")}
-                className="text-13"
-                position="right-start"
-              >
-                <Info className="absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-placeholder" />
-              </Tooltip>
+          </ProjectSettingsGroup>
+
+          <ProjectSettingsGroup title={t("project_settings.general.groups.team")}>
+            <div className={grid}>
+              {/* 负责人只能从项目成员里选：后端 PATCH 不会把负责人补成项目成员，权限层却按负责人给全量权限 */}
+              <ProjectMemberField {...base} name="project_lead" required projectId={projectId} />
+              <ProjectMemberField {...base} name="product_manager" required />
             </div>
-          </FormFieldShell>
-          {/* 研发模式：创建时选定，之后只读（项目不允许切换模式） */}
-          <ProjectDevModeReadOnlyField
-            variant="settings"
-            devMode={project?.dev_mode_detail}
-            workspaceSlug={workspaceSlug}
-          />
-          <ProjectSharedFields {...sectionProps} dictionaries={dictionaries} project={project} projectId={projectId} />
-          <FormFieldShell
-            className="md:col-span-2"
-            label={t("workspace_projects.fields.description")}
-            required={false}
-            editable={isAdmin}
-            styles={styles}
-          >
+          </ProjectSettingsGroup>
+
+          <ProjectSettingsGroup title={t("project_settings.general.groups.schedule")}>
+            <div className={cn(grid, "md:grid-cols-3")}>
+              <ProjectDateField {...base} name="start_date" required maxDate={endDate} formatToken={dateToken} />
+              <ProjectDateField
+                {...base}
+                name="end_date"
+                required
+                minDate={startDate}
+                validate={validateEndDate(startDate, t)}
+                formatToken={dateToken}
+              />
+              <div className="min-w-0">
+                <span className={styles.label}>{t("workspace_projects.fields.duration")}</span>
+                <div className={cn(styles.control, "flex items-center")}>
+                  {durationDays !== null ? (
+                    <span className="inline-flex h-6.5 items-center rounded-md bg-accent-subtle px-2.5 text-13 font-semibold text-accent-primary tabular-nums">
+                      {t("workspace_projects.create.duration_days", { count: durationDays })}
+                    </span>
+                  ) : (
+                    <span className="text-14 text-placeholder">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </ProjectSettingsGroup>
+
+          <ProjectSettingsGroup title={t("project_settings.general.groups.description")}>
             <Controller
               name="description_html"
               control={control}
               render={({ field: { value, onChange } }) => (
                 <ProjectDescriptionFormEditor
+                  key={editorVersion}
                   workspaceSlug={workspaceSlug}
                   projectId={projectId}
                   value={value}
                   onChange={onChange}
-                  disabled={!isAdmin}
                   placeholder={t("project_description_placeholder")}
+                  maxHeightClass="max-h-[320px] min-h-[128px]"
                 />
               )}
             />
-          </FormFieldShell>
-          <ProjectNetworkField {...sectionProps} />
-          <FormFieldShell
-            label={t("workspace_projects.fields.pms_project_name")}
-            required={false}
-            editable={isAdmin}
-            error={errors.pms_project_name?.message}
-            styles={styles}
-          >
-            <Controller
-              control={control}
-              name="pms_project_name"
-              rules={{
-                maxLength: {
-                  value: 255,
-                  message: t("workspace_projects.validation.max_length", {
-                    field: t("workspace_projects.fields.pms_project_name"),
-                    max: 255,
-                  }),
-                },
-              }}
-              render={({ field: { value, onChange, ref } }) => (
-                <Input
-                  id="pms_project_name"
-                  name="pms_project_name"
-                  type="text"
-                  ref={ref}
-                  value={value ?? ""}
-                  onChange={onChange}
-                  hasError={Boolean(errors.pms_project_name)}
-                  className={styles.input}
-                  placeholder={t("workspace_projects.fields.pms_project_name")}
-                  disabled={!isAdmin}
-                />
-              )}
-            />
-          </FormFieldShell>
-          <FormFieldShell
-            label={t("workspace_projects.fields.timezone")}
-            required
-            editable={isAdmin}
-            error={errors.timezone?.message}
-            styles={styles}
-          >
-            <Controller
-              name="timezone"
-              control={control}
-              rules={{ required: t("project_settings.general.please_select_a_timezone") }}
-              render={({ field: { value, onChange } }) => (
-                <TimezoneSelect
-                  value={value}
-                  onChange={(value: string) => {
-                    onChange(value);
-                  }}
-                  error={Boolean(errors.timezone)}
-                  buttonClassName={styles.select}
-                  disabled={!isAdmin}
-                />
-              )}
-            />
-          </FormFieldShell>
-        </div>
+          </ProjectSettingsGroup>
 
-        <div className="flex items-center justify-between py-2">
-          <>
-            <Button variant="primary" size="lg" type="submit" loading={isLoading} disabled={!isAdmin}>
-              {isLoading ? t("updating") : t("common.update_project")}
-            </Button>
-            <span className="text-13 text-placeholder italic">
-              {t("common.created_on")} {renderFormattedDate(project?.created_at)}
-            </span>
-          </>
+          <ProjectSettingsGroup title={t("project_settings.general.groups.system")}>
+            <div className={grid}>
+              <FormFieldShell label={label("timezone")} required editable error={errors.timezone?.message} styles={styles}>
+                <Controller
+                  name="timezone"
+                  control={control}
+                  rules={{ required: t("project_settings.general.please_select_a_timezone") }}
+                  render={({ field: { value, onChange } }) => (
+                    <TimezoneSelect
+                      value={value}
+                      onChange={(next: string) => onChange(next)}
+                      error={Boolean(errors.timezone)}
+                      buttonClassName={styles.select}
+                    />
+                  )}
+                />
+              </FormFieldShell>
+              <FormFieldShell
+                label={label("pms_project_name")}
+                required={false}
+                editable
+                error={errors.pms_project_name?.message}
+                styles={styles}
+              >
+                <Controller
+                  control={control}
+                  name="pms_project_name"
+                  rules={{
+                    maxLength: {
+                      value: 255,
+                      message: t("workspace_projects.validation.max_length", {
+                        field: label("pms_project_name"),
+                        max: 255,
+                      }),
+                    },
+                  }}
+                  render={({ field: { value, onChange, ref } }) => (
+                    <Input
+                      id="pms_project_name"
+                      name="pms_project_name"
+                      type="text"
+                      ref={ref}
+                      value={value ?? ""}
+                      onChange={onChange}
+                      hasError={Boolean(errors.pms_project_name)}
+                      className={styles.input}
+                      placeholder={t("workspace_projects.fields.pms_project_name_placeholder")}
+                    />
+                  )}
+                />
+              </FormFieldShell>
+            </div>
+          </ProjectSettingsGroup>
         </div>
-      </div>
-    </form>
+      </form>
+
+      {/* 归档 / 删除带各自的弹窗，放在 <form> 外面，免得弹窗里的按钮触发提交 */}
+      <GeneralProjectSettingsControlSection projectId={projectId} />
+
+      {dirtyCount > 0 && <ProjectSettingsSaveBar count={dirtyCount} isSaving={isSaving} onDiscard={discard} />}
+    </div>
   );
 }

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Controller } from "react-hook-form";
 import type { Control } from "react-hook-form";
 import { Link } from "react-router";
-import { NETWORK_CHOICES, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
+import { PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmojiPicker, EmojiIconPickerTypes, Logo } from "@plane/propel/emoji-icon-picker";
 import type { TDataDictionaryItemLite, TProjectProductType } from "@plane/types";
@@ -20,7 +20,6 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-select";
 import { DictionaryLabelSelect } from "@/components/dropdowns/dictionary-label-select";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
 import type { TProject } from "@/plane-web/types/projects";
 import { getProjectFieldLabelKey, normalizeUserId } from "./constants";
 import { codeRules, dateRules, memberRules, requiredValueRules } from "./rules";
@@ -120,58 +119,6 @@ export function ProjectCodeField(props: TProjectCodeFieldProps) {
           </div>
         </FormFieldShell>
       )}
-    />
-  );
-}
-
-// ---- 可见性（network）----
-export function ProjectNetworkField(props: TProjectFieldProps) {
-  const { control, variant, disabled = false, tabIndex } = props;
-  const { t, styles, label } = useFieldHelpers(variant);
-  return (
-    <Controller
-      control={control}
-      name="network"
-      render={({ field: { value, onChange } }) => {
-        const selected = NETWORK_CHOICES.find((network) => network.key === value);
-        return (
-          <FormFieldShell label={label("network")} required={false} editable={!disabled} styles={styles}>
-            <CustomSelect
-              value={value}
-              onChange={onChange}
-              label={
-                <span className="flex items-center gap-1.5">
-                  {selected ? (
-                    <>
-                      <ProjectNetworkIcon iconKey={selected.iconKey} className="h-3.5 w-3.5" />
-                      {t(selected.i18n_label)}
-                    </>
-                  ) : (
-                    <span className="text-placeholder">{t("select_network")}</span>
-                  )}
-                </span>
-              }
-              className="w-full"
-              buttonClassName={styles.select}
-              input
-              disabled={disabled}
-              tabIndex={tabIndex}
-            >
-              {NETWORK_CHOICES.map((network) => (
-                <CustomSelect.Option key={network.key} value={network.key}>
-                  <div className="flex items-start gap-2">
-                    <ProjectNetworkIcon iconKey={network.iconKey} className="h-3.5 w-3.5" />
-                    <div className="-mt-1">
-                      <p>{t(network.i18n_label)}</p>
-                      <p className="text-11 text-placeholder">{t(network.description)}</p>
-                    </div>
-                  </div>
-                </CustomSelect.Option>
-              ))}
-            </CustomSelect>
-          </FormFieldShell>
-        );
-      }}
     />
   );
 }
@@ -330,6 +277,8 @@ type TProjectDateFieldProps = TProjectFieldProps & {
   labelHidden?: boolean;
   placeholder?: string;
   className?: string;
+  /** 显示格式（date-fns token），见 getProjectDateFormatToken；不传用默认的「MMM dd, yyyy」 */
+  formatToken?: string;
 };
 
 export function ProjectDateField(props: TProjectDateFieldProps) {
@@ -346,6 +295,7 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
     labelHidden,
     placeholder,
     className,
+    formatToken,
   } = props;
   const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
   return (
@@ -372,6 +322,7 @@ export function ProjectDateField(props: TProjectDateFieldProps) {
               minDate={minDate}
               maxDate={maxDate}
               placeholder={placeholder ?? t("workspace_projects.fields.date_placeholder")}
+              formatToken={formatToken}
               className="h-full w-full"
               buttonContainerClassName="h-full w-full"
               buttonClassName={cn(styles.dropdownButton, error && "border-danger-strong")}

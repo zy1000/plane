@@ -21,7 +21,7 @@ type Props = {
   className?: string;
 };
 
-/** 可见性（私有 / 公开）的分段开关，创建弹窗身份区用；设置页仍是 ProjectNetworkField 下拉 */
+/** 可见性（私有 / 公开）的分段开关，创建弹窗与设置页的身份区共用 */
 export function ProjectNetworkSegmented(props: Props) {
   const { control, disabled = false, tabIndex, isMobile = false, className } = props;
   const { t } = useTranslation();

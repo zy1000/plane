@@ -18,7 +18,7 @@ import { cn } from "@plane/utils";
  * 表单所在容器：弹窗 / 设置页 / 分组弹窗（组名靠左、字段靠右，不标必填红星、非必填挂「可选」标签），
  * 各自一套字号与边框 token
  */
-export type TFormVariant = "modal" | "settings" | "grouped-modal";
+export type TFormVariant = "modal" | "settings" | "grouped-modal" | "grouped-settings";
 
 export type TFormVariantStyles = {
   title: string;
@@ -91,11 +91,32 @@ export const FORM_VARIANT_STYLES: Record<TFormVariant, TFormVariantStyles> = {
     optionalBadge: "rounded border border-subtle-1 px-1 text-11 font-normal leading-4 text-tertiary",
     dropdownLabel: "text-14 font-normal leading-5",
   },
+  /** 项目设置页：组名靠左的分组布局，42px 控件 / 10px 圆角，必填红星 + 非必填「可选」标签 */
+  "grouped-settings": {
+    title: "text-14 font-semibold text-primary",
+    grid: "md:grid-cols-2",
+    label: "mb-2 flex items-center gap-1.5 text-13 font-medium leading-5 text-secondary",
+    control: "h-10.5 w-full",
+    input: "h-10.5 min-h-10.5 w-full rounded-[10px] border !border-subtle-1 bg-surface-1 px-3.5 !py-0 text-14 leading-5 text-primary",
+    dropdownButton: "h-full w-full rounded-[10px] border !border-subtle-1 bg-surface-1 px-3.5 text-14 font-normal",
+    select:
+      "!border-subtle-1 !shadow-none flex !h-10.5 !min-h-10.5 !max-h-10.5 w-full items-center rounded-[10px] border bg-surface-1 px-3.5 !py-0 text-left text-14 font-normal leading-5",
+    text: "flex min-h-10.5 items-center text-14 text-primary",
+    error: "mt-1.5 text-12 text-danger-primary",
+    hint: "mt-1.5 text-12 text-tertiary",
+    requiredMarker: true,
+    optionalBadge: "rounded bg-layer-2 px-1.5 text-11 font-medium leading-[18px] text-tertiary",
+    dropdownLabel: "text-14 font-normal leading-5",
+  },
 };
 
 /** 分区内字段网格：弹窗 gap-x-5 / 设置页 gap-x-6 */
 export const getFormGridClassName = (variant: TFormVariant) =>
-  cn("grid grid-cols-1", variant === "settings" ? "gap-x-6 gap-y-4" : "gap-x-5 gap-y-4", FORM_VARIANT_STYLES[variant].grid);
+  cn(
+    "grid grid-cols-1",
+    variant === "settings" ? "gap-x-6 gap-y-4" : variant === "grouped-settings" ? "gap-x-6 gap-y-5" : "gap-x-5 gap-y-4",
+    FORM_VARIANT_STYLES[variant].grid
+  );
 
 export type TFormSectionProps = {
   title: string;
@@ -150,6 +171,8 @@ export type TFormFieldShellProps = {
   label: string;
   /** 视觉上隐藏 label（仅留给读屏），如排期区里并排的起止日期 */
   labelHidden?: boolean;
+  /** 字段名后面的小字附注（如研发模式的「创建后不可更改」） */
+  labelNote?: ReactNode;
   required: boolean;
   /** 只读态不显示必填星号 */
   editable: boolean;
@@ -168,6 +191,7 @@ export function FormFieldShell(props: TFormFieldShellProps) {
   const {
     label,
     labelHidden = false,
+    labelNote,
     required,
     editable,
     optionalText = "",
@@ -192,6 +216,9 @@ export function FormFieldShell(props: TFormFieldShellProps) {
         ) : null}
         {editable && !required && !styles.optionalBadge && showOptional ? (
           <span className="ml-1 font-normal text-tertiary">({optionalText})</span>
+        ) : null}
+        {labelNote ? (
+          <span className="inline-flex items-center gap-1 text-11 font-normal text-placeholder">{labelNote}</span>
         ) : null}
       </span>
       {children}

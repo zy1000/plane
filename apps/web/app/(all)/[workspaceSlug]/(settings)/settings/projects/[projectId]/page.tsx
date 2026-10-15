@@ -12,6 +12,7 @@ import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view
 import { PageHead } from "@/components/core/page-title";
 import { ProjectDetailsForm } from "@/components/project/form";
 import { ProjectDetailsFormLoader } from "@/components/project/form-loader";
+import { ProjectSettingsReadOnly } from "@/components/project/settings/general";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
@@ -19,7 +20,6 @@ import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import type { Route } from "./+types/page";
 import { GeneralProjectSettingsHeader } from "./header";
-import { GeneralProjectSettingsControlSection } from "@/components/project/settings/control-section";
 
 function ProjectSettingsPage({ params }: Route.ComponentProps) {
   // router
@@ -44,19 +44,14 @@ function ProjectSettingsPage({ params }: Route.ComponentProps) {
   return (
     <SettingsContentWrapper header={<GeneralProjectSettingsHeader />}>
       <PageHead title={pageTitle} />
-      <div className={`w-full ${canEdit ? "" : "opacity-60"}`}>
-        {currentProjectDetails ? (
-          <ProjectDetailsForm
-            project={currentProjectDetails}
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            isAdmin={canEdit}
-          />
-        ) : (
-          <ProjectDetailsFormLoader />
-        )}
-        <GeneralProjectSettingsControlSection projectId={projectId} disabled={!canEdit} />
-      </div>
+      {/* 管理员是可编辑表单（含危险操作区）；其他成员是同一套分组的只读视图 */}
+      {!currentProjectDetails ? (
+        <ProjectDetailsFormLoader />
+      ) : canEdit ? (
+        <ProjectDetailsForm project={currentProjectDetails} workspaceSlug={workspaceSlug} projectId={projectId} />
+      ) : (
+        <ProjectSettingsReadOnly project={currentProjectDetails} workspaceSlug={workspaceSlug} projectId={projectId} />
+      )}
     </SettingsContentWrapper>
   );
 }

@@ -106,7 +106,7 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
           icon={ArrowLeft}
           onClick={() => router.push(returnPath)}
         />
-        <p>Project settings</p>
+        <p>{t("project_settings.title")}</p>
       </div>
       <div className="mt-1.5 px-5 py-0.5">
         <CustomSearchSelect

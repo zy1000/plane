@@ -49,7 +49,9 @@ export const ProjectSettingsSidebarItemCategories = observer(function ProjectSet
 
         return (
           <div key={category} className="shrink-0 py-3 first:pt-0 last:pb-0">
-            <div className="p-2 text-caption-md-medium text-tertiary capitalize">{t(category)}</div>
+            <div className="p-2 text-caption-md-medium text-tertiary capitalize">
+              {t(`project_settings.categories.${category}`)}
+            </div>
             <div className="flex flex-col">
               {accessibleItems.map((item) => {
                 const itemHref = `/${workspaceSlug}/settings/projects/${projectId}${item.href}/`;

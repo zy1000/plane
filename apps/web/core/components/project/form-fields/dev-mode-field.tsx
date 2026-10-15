@@ -6,7 +6,7 @@
 
 import { useMemo } from "react";
 import { Controller } from "react-hook-form";
-import { Lock } from "lucide-react";
+import { ExternalLink, Lock } from "lucide-react";
 import { Link } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -161,6 +161,20 @@ export function ProjectDevModeField(props: TProjectDevModeFieldProps) {
 }
 
 // ---- 项目设置：只读的一格 ----
+
+/** 研发模式的取值展示：图标 + 名称 + 预置标签；设置页的锁定格与成员只读视图共用 */
+export function DevModeValue({ devMode }: { devMode: TDevModeLite | null | undefined }) {
+  const { t } = useTranslation();
+  if (!devMode) return <span className="text-placeholder">{t("workspace_projects.fields.not_set")}</span>;
+  return (
+    <>
+      <TypeIcon iconProps={devMode.icon_props?.icon} className="size-6 rounded-md" iconClassName="size-3.5" />
+      <span className="truncate font-medium">{devMode.name}</span>
+      {devMode.is_system ? <span className={PRESET_BADGE}>{t(`${DEV_MODE_I18N}.card.preset`)}</span> : null}
+    </>
+  );
+}
+
 type TProjectDevModeReadOnlyFieldProps = {
   variant: TProjectFieldProps["variant"];
   devMode: TDevModeLite | null | undefined;
@@ -170,7 +184,8 @@ type TProjectDevModeReadOnlyFieldProps = {
 /**
  * 项目设置里的「研发模式」：只显示，不可改（需求 4.2，项目不允许切换模式）。
  *
- * 不进表单、不进保存 payload —— 做成禁用的下拉会让人以为改得动，所以直接是一格只读。
+ * 不进表单、不进保存 payload —— 做成禁用的下拉会让人以为改得动，所以直接是一格锁定的只读格：
+ * 字段名旁挂「创建后不可更改」，格子右侧放「查看模式配置」外链。
  */
 export function ProjectDevModeReadOnlyField(props: TProjectDevModeReadOnlyFieldProps) {
   const { variant, devMode, workspaceSlug } = props;
@@ -179,35 +194,29 @@ export function ProjectDevModeReadOnlyField(props: TProjectDevModeReadOnlyFieldP
   return (
     <FormFieldShell
       label={label("dev_mode")}
+      labelNote={
+        <>
+          <Lock className="size-2.75" aria-hidden="true" />
+          {t("workspace_projects.create.dev_mode_locked")}
+        </>
+      }
+      required={false}
       editable={false}
       styles={styles}
-      hint={
-        devMode ? (
-          <span className="flex flex-wrap items-center gap-x-1">
-            {t("workspace_projects.fields.dev_mode_readonly_hint")}
-            <Link to={devModeDetailPath(workspaceSlug, devMode.id)} className="text-accent-primary hover:underline">
-              {t("workspace_projects.fields.dev_mode_view")}
-            </Link>
-          </span>
-        ) : undefined
-      }
     >
-      <div
-        className={cn(
-          styles.control,
-          "flex items-center gap-2 rounded-lg border border-subtle bg-layer-1 px-3 text-14 text-primary"
-        )}
-      >
+      <div className={cn(styles.select, "gap-2 bg-layer-1 text-primary")}>
+        <DevModeValue devMode={devMode} />
         {devMode ? (
-          <>
-            <TypeIcon iconProps={devMode.icon_props?.icon} className="size-6 rounded-md" iconClassName="size-3.5" />
-            <span className="truncate font-medium">{devMode.name}</span>
-            {devMode.is_system ? <span className={PRESET_BADGE}>{t(`${DEV_MODE_I18N}.card.preset`)}</span> : null}
-          </>
+          <Link
+            to={devModeDetailPath(workspaceSlug, devMode.id)}
+            className="ml-auto inline-flex shrink-0 items-center gap-1 text-12 font-medium text-accent-primary hover:underline"
+          >
+            {t("workspace_projects.fields.dev_mode_view")}
+            <ExternalLink className="size-3" aria-hidden="true" />
+          </Link>
         ) : (
-          <span className="text-placeholder">{t("workspace_projects.fields.not_set")}</span>
+          <Lock className="ml-auto size-3.5 shrink-0 text-placeholder" aria-hidden="true" />
         )}
-        <Lock className="ml-auto size-3.5 shrink-0 text-placeholder" aria-hidden="true" />
       </div>
     </FormFieldShell>
   );

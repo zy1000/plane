@@ -28,6 +28,7 @@ import { DictionaryItemSelect } from "@/components/dropdowns/dictionary-item-sel
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import {
   dateRules,
+  getProjectDateFormatToken,
   getProjectFieldLabelKey,
   memberRules,
   normalizeUserId,
@@ -71,8 +72,7 @@ export const ProjectCreateProperties = observer(function ProjectCreateProperties
     formState: { errors },
   } = useFormContext<TProject>();
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
-  // 中文写成「2026年10月8日」，其它语言沿用默认格式
-  const dateToken = currentLocale.toLowerCase().startsWith("zh") ? "yyyy年M月d日" : undefined;
+  const dateToken = getProjectDateFormatToken(currentLocale);
   const label = (key: Parameters<typeof getProjectFieldLabelKey>[0]) => t(getProjectFieldLabelKey(key));
   const requiredMessage = (key: Parameters<typeof getProjectFieldLabelKey>[0]) =>
     t("workspace_projects.validation.required", { field: label(key) });
