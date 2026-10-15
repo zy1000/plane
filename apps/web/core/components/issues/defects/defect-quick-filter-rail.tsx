@@ -1,13 +1,39 @@
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  BadgeCheck,
+  Bug,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  CircleDot,
+  CircleX,
+  Hourglass,
+  RotateCcw,
+  UserCheck,
+  UserPen,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useDefectQuickCounts } from "@/hooks/store/use-defect-quick-counts";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { DEFECT_PRESET_PARAM, DEFECT_PRESETS, getDefectPreset } from "./defect-presets";
 import type { TDefectPreset } from "./defect-presets";
+
+/** 收起后只剩图标，所以每个预设都要有图标 */
+const PRESET_ICONS: Record<TDefectPreset, LucideIcon> = {
+  all: Bug,
+  open: CircleDot,
+  reopen: RotateCcw,
+  assigned: UserCheck,
+  reported: UserPen,
+  to_verify: BadgeCheck,
+  rejected: CircleX,
+  pending_reject: Hourglass,
+  closed: CircleCheck,
+};
 
 const RAIL_COLLAPSED_STORAGE_KEY = "plane:project-defects:rail-collapsed";
 
@@ -27,24 +53,6 @@ const writeCollapsed = (collapsed: boolean) => {
   }
 };
 
-/** 收起 / 展开按钮，样式与模块树面板（qa/module-tree）的图标按钮一致 */
-const RailToggleButton = ({ tip, onClick, collapsed }: { tip: string; onClick: () => void; collapsed: boolean }) => (
-  <Tooltip tooltipContent={tip} position={collapsed ? "right" : "bottom"}>
-    <button
-      type="button"
-      aria-label={tip}
-      onClick={onClick}
-      className="flex size-[26px] shrink-0 items-center justify-center rounded-md text-tertiary outline-none hover:bg-layer-transparent-hover hover:text-primary focus-visible:bg-layer-transparent-hover"
-    >
-      {collapsed ? (
-        <PanelLeftOpen className="size-[15px]" strokeWidth={2} />
-      ) : (
-        <PanelLeftClose className="size-[15px]" strokeWidth={2} />
-      )}
-    </button>
-  </Tooltip>
-);
-
 type Props = {
   workspaceSlug: string;
   projectId: string;
@@ -53,7 +61,7 @@ type Props = {
 /**
  * 缺陷页左侧的快捷筛选列：九个固定口径 + 实时计数。
  * 选中项写进 URL 的 `?preset=`，由 DefectListRoot 读取并转成筛选条件；
- * 收起后留一条窄栏（展开按钮 + 竖排当前选中项），同模块树面板。
+ * 样式照工作项列表左侧的分组栏（issue-layouts/list/group-sidebar.tsx），收起后只留图标。
  */
 export const DefectQuickFilterRail = observer(function DefectQuickFilterRail(props: Props) {
   const { workspaceSlug, projectId } = props;
@@ -80,60 +88,97 @@ export const DefectQuickFilterRail = observer(function DefectQuickFilterRail(pro
     [searchParams, router, pathname]
   );
 
-  if (collapsed) {
-    const selectedLabel = DEFECT_PRESETS.find((option) => option.key === preset)?.label;
-    return (
-      <aside className="flex h-full w-9 shrink-0 flex-col items-center gap-2.5 border-r border-subtle bg-surface-1 pt-[7px]">
-        <RailToggleButton tip="展开快捷筛选" collapsed onClick={() => toggleCollapsed(false)} />
-        {selectedLabel && (
-          <span
-            className="max-h-[60%] truncate text-12 tracking-[0.08em] text-tertiary [writing-mode:vertical-rl]"
-            title={selectedLabel}
-          >
-            {selectedLabel}
-          </span>
-        )}
-      </aside>
-    );
-  }
-
   return (
-    <aside className="flex h-full w-[212px] shrink-0 flex-col border-r border-subtle bg-surface-1">
-      {/* 左边距 18px = 列表 px-2 + 项 px-2.5，标题与各项文字对齐 */}
-      <div className="flex h-10 shrink-0 items-center gap-0.5 pt-1 pr-1.5 pl-[18px]">
-        <span className="min-w-0 flex-1 truncate text-12 font-medium text-tertiary">快捷筛选</span>
-        <RailToggleButton tip="收起快捷筛选" collapsed={false} onClick={() => toggleCollapsed(true)} />
+    <div
+      className={cn(
+        "flex h-full flex-shrink-0 flex-col border-r border-subtle bg-surface-1 transition-[width] duration-300 ease-in-out",
+        collapsed ? "w-11" : "w-[240px]"
+      )}
+    >
+      <div className="flex h-9 min-h-9 flex-shrink-0 items-center border-b border-subtle px-1.5">
+        {!collapsed && (
+          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium tracking-wider text-tertiary">快捷筛选</span>
+        )}
+        <button
+          type="button"
+          className={cn(
+            "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-tertiary outline-none transition-colors duration-150 hover:bg-layer-transparent-hover hover:text-primary",
+            collapsed && "mx-auto"
+          )}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "展开快捷筛选" : "收起快捷筛选"}
+          onClick={() => toggleCollapsed(!collapsed)}
+        >
+          {collapsed ? (
+            <ChevronRight className="size-4" strokeWidth={2} />
+          ) : (
+            <ChevronLeft className="size-4" strokeWidth={2} />
+          )}
+        </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pt-0.5 pb-3">
-        {DEFECT_PRESETS.map(({ key, label }) => {
-          const isSelected = key === preset;
-          const count = counts?.[key];
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={isSelected}
-              onClick={() => handleSelect(key)}
-              className={cn(
-                "flex h-[34px] shrink-0 items-center justify-between gap-2 rounded-md px-2.5 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-accent-strong focus-visible:ring-inset",
-                isSelected
-                  ? "bg-layer-transparent-active text-primary"
-                  : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-              )}
-            >
-              <span className={cn("min-w-0 flex-1 truncate text-14", isSelected && "font-medium")}>{label}</span>
-              {typeof count === "number" && (
-                // 不走 cn：它会把 text-13 与 text-tertiary 当成同组，把字号吞掉
-                <span
-                  className={`shrink-0 text-13 tabular-nums ${isSelected ? "font-medium text-accent-primary" : "text-tertiary"}`}
+      <div className={cn("vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto", collapsed ? "px-1 py-1" : "p-1.5")}>
+        <div className="flex flex-col gap-0.5">
+          {DEFECT_PRESETS.map(({ key, label }) => {
+            const isActive = key === preset;
+            const count = counts?.[key];
+            const Icon = PRESET_ICONS[key];
+
+            const rowButton = (
+              <button
+                type="button"
+                className={cn(
+                  "group flex w-full cursor-pointer items-center outline-none transition-all duration-150",
+                  collapsed ? "justify-center rounded-md p-1.5" : "gap-2 rounded-md px-2.5 py-1.5 text-left",
+                  isActive
+                    ? "bg-layer-transparent-active text-primary"
+                    : "text-secondary hover:bg-layer-transparent-hover hover:text-primary active:bg-layer-transparent-active"
+                )}
+                aria-label={typeof count === "number" ? `${label}，${count} 项` : label}
+                aria-current={isActive ? "true" : undefined}
+                onClick={() => handleSelect(key)}
+              >
+                <div className="grid flex-shrink-0 place-items-center">
+                  <Icon className="size-4" strokeWidth={2} />
+                </div>
+                {!collapsed && (
+                  <>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
+                    {typeof count === "number" && (
+                      <span className="min-w-[24px] flex-shrink-0 text-center text-xs font-medium tabular-nums text-primary">
+                        {count}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            );
+
+            if (collapsed) {
+              return (
+                <Tooltip
+                  key={key}
+                  tooltipContent={
+                    <span className="tabular-nums">
+                      {label}
+                      {typeof count === "number" && (
+                        <>
+                          <span className="text-tertiary"> · </span>
+                          {count}
+                        </>
+                      )}
+                    </span>
+                  }
+                  position="right"
                 >
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  {rowButton}
+                </Tooltip>
+              );
+            }
+
+            return <Fragment key={key}>{rowButton}</Fragment>;
+          })}
+        </div>
       </div>
-    </aside>
+    </div>
   );
 });
