@@ -17,12 +17,12 @@ export type TDefectPresetOption = { key: TDefectPreset; label: string };
 export const DEFECT_PRESETS: TDefectPresetOption[] = [
   { key: "all", label: "全部" },
   { key: "open", label: "未解决" },
+  { key: "reopen", label: "重新打开" },
   { key: "assigned", label: "指派给我" },
   { key: "reported", label: "我提交的" },
   { key: "to_verify", label: "待我验证" },
-  { key: "pending_reject", label: "待确认驳回" },
-  { key: "reopen", label: "重新打开" },
   { key: "rejected", label: "已驳回" },
+  { key: "pending_reject", label: "待确认驳回" },
   { key: "closed", label: "已关闭" },
 ];
 
