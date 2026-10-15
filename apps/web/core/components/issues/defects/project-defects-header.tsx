@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { ClipboardCheck, GitBranch, PanelLeft, Plus } from "lucide-react";
+import { ClipboardCheck, GitBranch, Plus } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { EIssuesStoreType } from "@plane/types";
@@ -19,7 +19,7 @@ import { useProjectWorkflowFlowchart } from "@/hooks/store/use-project-workflow-
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
-import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT, PROJECT_DEFECT_RAIL_TOGGLE_EVENT } from "./defect-filter-events";
+import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
 
 export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
   const { workspaceSlug, projectId } = useParams();
@@ -72,25 +72,11 @@ export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
       })
     );
   }, [projectIdValue]);
-  const handleRailToggle = useCallback(() => {
-    window.dispatchEvent(new Event(PROJECT_DEFECT_RAIL_TOGGLE_EVENT));
-  }, []);
 
   return (
     <Header>
       <Header.LeftItem>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={handleRailToggle}
-            aria-label="收起或展开快捷筛选"
-            title="快捷筛选"
-            className="grid size-7 place-items-center rounded-md text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
-          >
-            <PanelLeft className="size-4" />
-          </button>
-          <span className="text-body-sm-medium text-primary">缺陷</span>
-        </div>
+        <span className="text-body-sm-medium text-primary">缺陷</span>
       </Header.LeftItem>
       <Header.RightItem>
         {workspaceSlugValue && projectIdValue ? (

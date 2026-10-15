@@ -15,7 +15,7 @@ export type TDefectPresetOption = { key: TDefectPreset; label: string };
 
 /** 缺陷页左侧快捷筛选，数组顺序即展示顺序 */
 export const DEFECT_PRESETS: TDefectPresetOption[] = [
-  { key: "all", label: "全部" },
+  { key: "all", label: "全部缺陷" },
   { key: "open", label: "未解决" },
   { key: "reopen", label: "重新打开" },
   { key: "assigned", label: "指派给我" },
