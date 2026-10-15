@@ -9,7 +9,7 @@ import { Outlet } from "react-router";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-quick-filter-bar";
+import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-presets";
 import { ProjectDefectsHeader } from "@/components/issues/defects/project-defects-header";
 import { useAppRouter } from "@/hooks/use-app-router";
 

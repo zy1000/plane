@@ -34,6 +34,7 @@ def _headers():
 def _post(path, body):
     url = settings.JIANDAOYUN_API_BASE_URL.rstrip("/") + path
     try:
+        print(_headers())
         response = requests.post(
             url,
             json=body,
@@ -45,20 +46,28 @@ def _post(path, body):
         raise IntegrationError("INTEGRATION_REMOTE_UNREACHABLE", str(exc)) from exc
     if response.status_code in (401, 403):
         # 不透传上游 401：前端会当成本站会话过期
-        raise IntegrationError("INTEGRATION_REMOTE_UNAUTHORIZED", f"upstream {response.status_code}")
+        raise IntegrationError(
+            "INTEGRATION_REMOTE_UNAUTHORIZED", f"upstream {response.status_code}"
+        )
     if not 200 <= response.status_code < 300:
         raise IntegrationError(
-            "INTEGRATION_REMOTE_BAD_RESPONSE", f"upstream {response.status_code}: {response.text[:200]}"
+            "INTEGRATION_REMOTE_BAD_RESPONSE",
+            f"upstream {response.status_code}: {response.text[:200]}",
         )
     try:
         payload = response.json()
     except ValueError as exc:
-        raise IntegrationError("INTEGRATION_REMOTE_BAD_RESPONSE", "non-JSON body") from exc
+        raise IntegrationError(
+            "INTEGRATION_REMOTE_BAD_RESPONSE", "non-JSON body"
+        ) from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
         # 简道云的错误体是 {"code": .., "msg": ..}，带出来便于排查
         code = payload.get("code") if isinstance(payload, dict) else None
         msg = payload.get("msg") if isinstance(payload, dict) else None
-        raise IntegrationError("INTEGRATION_REMOTE_BAD_RESPONSE", f"missing data list (code={code}, msg={msg})")
+        raise IntegrationError(
+            "INTEGRATION_REMOTE_BAD_RESPONSE",
+            f"missing data list (code={code}, msg={msg})",
+        )
     return payload
 
 
@@ -72,9 +81,15 @@ def fetch_entry_field_values(app_id, entry_id, field):
     for page in range(1, MAX_PAGES + 1):
         if time.monotonic() - started > TOTAL_TIME_BUDGET_SECONDS:
             raise IntegrationError(
-                "INTEGRATION_REMOTE_UNREACHABLE", f"time budget of {TOTAL_TIME_BUDGET_SECONDS}s exceeded"
+                "INTEGRATION_REMOTE_UNREACHABLE",
+                f"time budget of {TOTAL_TIME_BUDGET_SECONDS}s exceeded",
             )
-        body = {"app_id": app_id, "entry_id": entry_id, "fields": [field], "limit": PAGE_LIMIT}
+        body = {
+            "app_id": app_id,
+            "entry_id": entry_id,
+            "fields": [field],
+            "limit": PAGE_LIMIT,
+        }
         if data_id:
             body["data_id"] = data_id
         rows = _post(ENTRY_DATA_LIST_PATH, body)["data"]
@@ -90,5 +105,7 @@ def fetch_entry_field_values(app_id, entry_id, field):
         seen_ids.add(last_id)
         data_id = last_id
     else:
-        raise IntegrationError("INTEGRATION_REMOTE_BAD_RESPONSE", f"exceeded {MAX_PAGES} pages")
+        raise IntegrationError(
+            "INTEGRATION_REMOTE_BAD_RESPONSE", f"exceeded {MAX_PAGES} pages"
+        )
     return values, page

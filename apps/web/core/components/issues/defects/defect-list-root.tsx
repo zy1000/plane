@@ -28,14 +28,16 @@ import { ProjectSpreadsheetLayout } from "@/components/issues/issue-layouts/spre
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
+import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 import { useUser } from "@/hooks/store/user";
 import { IssuesStoreContext, TypedPageIssueTypeIdsContext } from "@/hooks/use-issue-layout-store";
 import { type TProjectIssueScope } from "@/store/issue/project";
 // local
 import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
-import { DEFECT_PRESET_PARAM, getDefectPreset } from "./defect-quick-filter-bar";
-import type { TDefectPreset } from "./defect-quick-filter-bar";
+import { DEFECT_PRESET_PARAM, DEFECT_PRESET_STATE_NAMES, getDefectPreset } from "./defect-presets";
+import type { TDefectPreset } from "./defect-presets";
+import { DefectQuickFilterRail } from "./defect-quick-filter-rail";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -121,17 +123,39 @@ function composeAnd(conditions: TConditionItem[]): TWorkItemFilterExpression {
   return { [LOGICAL_OPERATOR.AND]: conditions } as TWorkItemFilterExpression;
 }
 
-/** 预设 → 固定 rich filter 条件（缺陷口径之外的状态/负责人约束） */
-function getPresetConditions(preset: TDefectPreset, myId: string | undefined): TConditionItem[] {
+/** 按状态名解析出来的预设 state_id（见 DEFECT_PRESET_STATE_NAMES） */
+type TPresetStateIds = Partial<Record<TDefectPreset, string[]>>;
+
+/** 项目里没有同名状态时用一个不存在的 id，让列表为空，而不是退化成不过滤 */
+const NO_MATCH_STATE_ID = "00000000-0000-0000-0000-000000000000";
+
+const stateIdsCondition = (stateIds: string[] | undefined): TConditionItem => ({
+  state_id__in: (stateIds && stateIds.length > 0 ? stateIds : [NO_MATCH_STATE_ID]).join(","),
+});
+
+/** 预设 → 固定 rich filter 条件（缺陷口径之外的状态 / 负责人 / 提交人约束） */
+function getPresetConditions(
+  preset: TDefectPreset,
+  myId: string | undefined,
+  stateIds: TPresetStateIds
+): TConditionItem[] {
   switch (preset) {
     case "open":
       return [{ state_group__in: OPEN_STATE_GROUPS }];
-    case "mine":
+    case "assigned":
       return myId ? [{ assignee_id__in: myId }] : [];
-    case "mine_open":
-      return myId ? [{ assignee_id__in: myId }, { state_group__in: OPEN_STATE_GROUPS }] : [];
-    case "mine_done":
-      return myId ? [{ assignee_id__in: myId }, { state_group__in: "completed" }] : [];
+    case "reported":
+      return myId ? [{ created_by_id__in: myId }] : [];
+    case "to_verify":
+      return myId ? [{ created_by_id__in: myId }, stateIdsCondition(stateIds.to_verify)] : [];
+    case "pending_reject":
+      return [stateIdsCondition(stateIds.pending_reject)];
+    case "reopen":
+      return [stateIdsCondition(stateIds.reopen)];
+    case "rejected":
+      return [{ state_group__in: "cancelled" }];
+    case "closed":
+      return [{ state_group__in: "completed" }];
     default:
       return [];
   }
@@ -204,9 +228,11 @@ export const DefectListRoot = observer(function DefectListRoot() {
   // ── Store hooks ────────────────────────────────────────────────────────
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  const { getProjectStates } = useProjectState();
   const { deleteFilter } = useWorkItemFilters();
   const { data: currentUser } = useUser();
   const myId = currentUser?.id ? String(currentUser.id) : undefined;
+  const projectStates = getProjectStates(projectId);
 
   const scope = DEFECT_SCOPE;
   const initializingFilterProjectIdRef = useRef<string>();
@@ -258,8 +284,25 @@ export const DefectListRoot = observer(function DefectListRoot() {
     setInitializedFilterProjectId(projectId);
   }, [workspaceSlug, projectId, issuesFilter, areStoreFiltersReady, deleteFilter, scope]);
 
-  // ── 三层条件：用户(非托管) + 固定缺陷类别 + 预设(状态/负责人) ───────────────
-  const presetConditions = useMemo(() => getPresetConditions(preset, myId), [preset, myId]);
+  // ── 三层条件：用户(非托管) + 固定缺陷类别 + 预设(状态/负责人/提交人) ─────────
+  // 「待我验证 / 待确认驳回 / 重新打开」按状态名解析 state_id，只看缺陷类型（或未绑定类型）的状态
+  const presetStateIds = useMemo<TPresetStateIds>(() => {
+    const candidates = (projectStates ?? []).filter(
+      (state) => !state.issue_type_id || fixedTypeIds.includes(state.issue_type_id)
+    );
+    const result: TPresetStateIds = {};
+    (Object.entries(DEFECT_PRESET_STATE_NAMES) as [TDefectPreset, string][]).forEach(([key, name]) => {
+      const lowered = name.toLowerCase();
+      result[key] = candidates
+        .filter((state) => state.name.trim().toLowerCase() === lowered)
+        .map((state) => state.id);
+    });
+    return result;
+  }, [projectStates, fixedTypeIds]);
+  const presetConditions = useMemo(
+    () => getPresetConditions(preset, myId, presetStateIds),
+    [preset, myId, presetStateIds]
+  );
   const lastAppliedPresetConditionsRef = useRef<TConditionItem[]>([]);
   const previousPresetConditions = lastAppliedPresetConditionsRef.current;
   // 固定口径：按「工作项类型的类别 = 缺陷」过滤（由后端 type__category__name__in 解析），
@@ -373,19 +416,22 @@ export const DefectListRoot = observer(function DefectListRoot() {
           workspaceSlug={workspaceSlug}
         >
           {({ filter: typedPageFilter }) => (
-            <div className="relative flex h-full w-full flex-col overflow-hidden">
-              {typedPageFilter && (
-                <DefectFiltersRow entityId={`${projectId}_defects`} filter={typedPageFilter} />
-              )}
-              <div className="relative h-full w-full overflow-auto bg-surface-1">
-                {issues?.getIssueLoader() === "mutation" && (
-                  <div className="shadow-sm fixed top-[70px] right-[20px] z-50 flex h-[40px] w-[40px] items-center justify-center rounded-sm bg-layer-1">
-                    <Spinner className="h-4 w-4" />
-                  </div>
+            <div className="relative flex h-full w-full overflow-hidden">
+              <DefectQuickFilterRail workspaceSlug={workspaceSlug} projectId={projectId} />
+              <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+                {typedPageFilter && (
+                  <DefectFiltersRow entityId={`${projectId}_defects`} filter={typedPageFilter} />
                 )}
-                <DefectIssueLayout activeLayout={activeLayout} />
+                <div className="relative h-full w-full overflow-auto bg-surface-1">
+                  {issues?.getIssueLoader() === "mutation" && (
+                    <div className="shadow-sm fixed top-[70px] right-[20px] z-50 flex h-[40px] w-[40px] items-center justify-center rounded-sm bg-layer-1">
+                      <Spinner className="h-4 w-4" />
+                    </div>
+                  )}
+                  <DefectIssueLayout activeLayout={activeLayout} />
+                </div>
+                <IssuePeekOverview />
               </div>
-              <IssuePeekOverview />
             </div>
           )}
         </ProjectLevelWorkItemFiltersHOC>

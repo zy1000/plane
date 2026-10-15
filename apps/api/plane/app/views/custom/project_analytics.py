@@ -759,3 +759,44 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
         }
         cache.set(cache_key, stats, timeout=60)
         return Response(stats, status=status.HTTP_200_OK)
+
+
+class ProjectDefectQuickCountsEndpoint(BaseAPIView):
+    """缺陷页左侧快捷筛选的计数。
+
+    九个口径与前端 ``defects/defect-presets.ts`` 一一对应。按名字匹配的三个状态
+    （Fixed / Pending-Reject / Reopen）来自缺陷类型的默认状态集，前端解析 state_id
+    时用的是同一组名字；项目里没有同名状态时对应计数为 0。
+    """
+
+    DEFECT_CATEGORY_NAME = "缺陷"
+    OPEN_STATE_GROUPS = ["backlog", "unstarted", "started"]
+
+    @allow_fine_permission(PermissionKey.PROJECT_DEFECTS_VIEW)
+    def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
+        user_id = request.user.id
+        queryset = Issue.issue_objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            type__category__name=self.DEFECT_CATEGORY_NAME,
+        )
+        counts = queryset.aggregate(
+            all=Count("id"),
+            open=Count("id", filter=Q(state__group__in=self.OPEN_STATE_GROUPS)),
+            reported=Count("id", filter=Q(created_by_id=user_id)),
+            to_verify=Count("id", filter=Q(created_by_id=user_id, state__name__iexact="Fixed")),
+            pending_reject=Count("id", filter=Q(state__name__iexact="Pending-Reject")),
+            reopen=Count("id", filter=Q(state__name__iexact="Reopen")),
+            rejected=Count("id", filter=Q(state__group="cancelled")),
+            closed=Count("id", filter=Q(state__group="completed")),
+        )
+        # 负责人是多对多，单独算，避免 join 之后把其它计数翻倍
+        counts["assigned"] = (
+            queryset.filter(
+                issue_assignee__assignee_id=user_id,
+                issue_assignee__deleted_at__isnull=True,
+            )
+            .distinct()
+            .count()
+        )
+        return Response(counts, status=status.HTTP_200_OK)

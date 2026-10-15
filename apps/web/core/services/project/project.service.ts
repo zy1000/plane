@@ -118,6 +118,15 @@ export class ProjectService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  /** 缺陷页左侧快捷筛选的计数，键与 defects/defect-presets.ts 的预设 key 一致 */
+  async getProjectDefectQuickCounts(workspaceSlug: string, projectId: string): Promise<Record<string, number>> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/defect-quick-counts/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
   async getProjectAnalyticsCount(
     workspaceSlug: string,
     params?: TProjectAnalyticsCountParams

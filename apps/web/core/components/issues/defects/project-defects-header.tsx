@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams, usePathname, useSearchParams } from "next/navigation";
-import { ClipboardCheck, GitBranch, Plus } from "lucide-react";
+import { useParams } from "next/navigation";
+import { ClipboardCheck, GitBranch, PanelLeft, Plus } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { EIssuesStoreType } from "@plane/types";
@@ -18,20 +18,13 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectWorkflowFlowchart } from "@/hooks/store/use-project-workflow-flowchart";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
-import { useAppRouter } from "@/hooks/use-app-router";
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
-import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
-import { DefectQuickFilterBar, DEFECT_PRESET_PARAM, getDefectPreset } from "./defect-quick-filter-bar";
-import type { TDefectPreset } from "./defect-quick-filter-bar";
+import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT, PROJECT_DEFECT_RAIL_TOGGLE_EVENT } from "./defect-filter-events";
 
 export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const workspaceSlugValue = workspaceSlug?.toString();
   const projectIdValue = projectId?.toString();
-  const preset = getDefectPreset(searchParams.get(DEFECT_PRESET_PARAM));
   const { currentProjectDetails } = useProject();
   const { allowPermissions } = useUserPermissions();
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
@@ -79,22 +72,24 @@ export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
       })
     );
   }, [projectIdValue]);
-  const handlePresetChange = useCallback(
-    (next: TDefectPreset) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next === "all") params.delete(DEFECT_PRESET_PARAM);
-      else params.set(DEFECT_PRESET_PARAM, next);
-      const query = params.toString();
-      router.push(query ? `${pathname}?${query}` : pathname);
-    },
-    [searchParams, router, pathname]
-  );
+  const handleRailToggle = useCallback(() => {
+    window.dispatchEvent(new Event(PROJECT_DEFECT_RAIL_TOGGLE_EVENT));
+  }, []);
 
   return (
     <Header>
       <Header.LeftItem>
-        <div className="flex max-w-full flex-wrap items-center gap-2.5">
-          <DefectQuickFilterBar value={preset} onChange={handlePresetChange} variant="header" />
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleRailToggle}
+            aria-label="收起或展开快捷筛选"
+            title="快捷筛选"
+            className="grid size-7 place-items-center rounded-md text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+          >
+            <PanelLeft className="size-4" />
+          </button>
+          <span className="text-body-sm-medium text-primary">缺陷</span>
         </div>
       </Header.LeftItem>
       <Header.RightItem>

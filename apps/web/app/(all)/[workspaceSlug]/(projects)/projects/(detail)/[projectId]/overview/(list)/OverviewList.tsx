@@ -10,7 +10,7 @@ import { useTranslation } from "@plane/i18n";
 import type { IProject } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getDate, getFileURL, renderFormattedDate } from "@plane/utils";
-import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-quick-filter-bar";
+import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-presets";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
