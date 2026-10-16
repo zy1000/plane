@@ -4574,6 +4574,7 @@ export default {
           added: "+{count} chars",
           removed: "−{count} chars",
           rewritten: "Rewritten",
+          rich_layout: "Has tables or images · compared as rendered",
           expand: "Show full text",
           collapse: "Collapse",
           mode_label: "Compare mode",

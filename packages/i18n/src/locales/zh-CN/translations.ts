@@ -4755,6 +4755,7 @@ export default {
           added: "+{count} 字",
           removed: "−{count} 字",
           rewritten: "整段改写",
+          rich_layout: "含表格或图片 · 按排版对照",
           expand: "展开全文",
           collapse: "收起",
           mode_label: "对照方式",

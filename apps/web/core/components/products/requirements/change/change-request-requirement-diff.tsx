@@ -31,7 +31,7 @@ import {
 } from "@/components/requirements/requirement-builtin-layout";
 import { getFormRows, LeafValue, RequirementAttachmentChips } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
-import { ChangeLongTextDiff } from "./change-long-text-diff";
+import { ChangeLongTextDiff, ChangeRichTextView, hasRichStructure } from "./change-long-text-diff";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 type TProps = {
@@ -105,7 +105,9 @@ const VALUE_CELL_CLASS = "min-w-0 break-words [overflow-wrap:anywhere] [&_.trunc
 const LONG_TEXT_THRESHOLD = 60;
 
 /** 长文本字段返回两侧的纯文本，其余返回 null 留在三栏表里 */
-const getLongText = (row: TRow): { before: string; after: string } | null => {
+const getLongText = (
+  row: TRow
+): { before: string; after: string; beforeHtml?: string; afterHtml?: string } | null => {
   const isHtml = row.columnKey === "description_html" || row.field?.field_type === "rich_text";
   if (!isHtml && row.field?.field_type !== "text") return null;
   const toText = (value: TRequirementValue | undefined) => {
@@ -114,7 +116,10 @@ const getLongText = (row: TRow): { before: string; after: string } | null => {
   };
   const before = toText(row.before);
   const after = toText(row.after);
-  if (isHtml) return { before, after };
+  if (isHtml) {
+    const rawHtml = (value: TRequirementValue | undefined) => (typeof value === "string" ? value : undefined);
+    return { before, after, beforeHtml: rawHtml(row.before), afterHtml: rawHtml(row.after) };
+  }
   const isLong = [before, after].some((text) => text.length > LONG_TEXT_THRESHOLD || text.includes("\n"));
   return isLong ? { before, after } : null;
 };
@@ -318,6 +323,18 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                       // 新增/删除单里的描述也要看全文，不能被网格版的 180 字截断
                       const text = getLongText(row);
                       if (text) {
+                        const html = isCreate ? text.afterHtml : text.beforeHtml;
+                        // 含表格 / 图片的富文本按排版出，纯文本会把表格拆成零散的词
+                        if (hasRichStructure(html)) {
+                          return (
+                            <ChangeRichTextView
+                              key={`${item.id}-${row.key}`}
+                              workspaceSlug={workspaceSlug}
+                              editorId={`${item.id}-${row.key}-${isCreate ? "after" : "before"}`}
+                              html={html as string}
+                            />
+                          );
+                        }
                         const value = isCreate ? text.after : text.before;
                         return value ? (
                           <p className={cn("whitespace-pre-wrap", isCreate ? DIFF_NEW_VALUE : DIFF_OLD_VALUE)}>
@@ -369,13 +386,18 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
         </div>
       )}
 
-      {longRows.map(({ row, before: beforeText, after: afterText }) => (
+      {longRows.map(({ row, before: beforeText, after: afterText, beforeHtml, afterHtml }) => (
         <ChangeLongTextDiff
-          key={row.key}
+          // 换条目时整块重建：只读编辑器只在挂载时吃 initialValue，复用会显示上一条的内容
+          key={`${item.id}-${row.key}`}
           label={row.label}
           before={beforeText}
           after={afterText}
           changed={row.changed}
+          beforeHtml={beforeHtml}
+          afterHtml={afterHtml}
+          workspaceSlug={workspaceSlug}
+          editorKey={`${item.id}-${row.key}`}
         />
       ))}
 

@@ -12,6 +12,7 @@ import { diffArrays } from "diff";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 import { diffPlainText, type TTextDiffSegment } from "@/components/common/inline-text-diff";
+import { RequirementRichTextValue } from "@/components/requirements/requirement-rich-text";
 
 type TMode = "inline" | "split" | "new_only";
 
@@ -32,6 +33,28 @@ const REWRITE_RATIO = 0.5;
 const WRAP_CLASS = "break-words whitespace-pre-wrap [overflow-wrap:anywhere]";
 const DEL_CLASS = "rounded-sm bg-danger-subtle-hover px-0.5 text-danger-primary line-through";
 const INS_CLASS = "rounded-sm bg-success-subtle-1 px-0.5 text-success-primary no-underline";
+
+/**
+ * 富文本里有表格 / 图片 / 代码块这类结构时，转成纯文本再逐词比会把结构拆成零散的词（表格变成一格一行），
+ * 审批人看不出改成了什么 —— 这种情况按真实排版左右对照。
+ */
+const RICH_STRUCTURE_PATTERN = /<(table|img|image-component|pre)\b/i;
+export const hasRichStructure = (html?: string | null) => Boolean(html && RICH_STRUCTURE_PATTERN.test(html));
+
+/** 只读渲染富文本，字号与需求抽屉一致（14px，见 globals.css 的 .requirement-drawer-body） */
+export const ChangeRichTextView = ({
+  workspaceSlug,
+  editorId,
+  html,
+}: {
+  workspaceSlug: string;
+  editorId: string;
+  html: string;
+}) => (
+  <div className="requirement-drawer-body min-w-0 overflow-x-auto">
+    <RequirementRichTextValue workspaceSlug={workspaceSlug} editorId={editorId} value={html} />
+  </div>
+);
 
 const toLines = (text: string) => (text ? text.split("\n") : []);
 const countChars = (text: string) => text.replace(/\s/g, "").length;
@@ -192,10 +215,26 @@ type TProps = {
   after: string;
   /** 「显示全部字段」时没变的长字段也走这里，只展示正文 */
   changed: boolean;
+  /** 富文本字段的原始 HTML；有表格 / 图片等结构时按排版渲染，而不是纯文本逐词对比 */
+  beforeHtml?: string;
+  afterHtml?: string;
+  workspaceSlug?: string;
+  /** 只读编辑器的 id 前缀，同页多个富文本块不能重复 */
+  editorKey?: string;
 };
 
-export function ChangeLongTextDiff({ label, before, after, changed }: TProps) {
+export function ChangeLongTextDiff({
+  label,
+  before,
+  after,
+  changed,
+  beforeHtml,
+  afterHtml,
+  workspaceSlug,
+  editorKey = label,
+}: TProps) {
   const { t } = useTranslation();
+  const isRich = Boolean(workspaceSlug) && (hasRichStructure(beforeHtml) || hasRichStructure(afterHtml));
 
   const { rows, stats, isRewrite } = useMemo(() => {
     const paragraphRows = buildRows(before, after);
@@ -209,10 +248,13 @@ export function ChangeLongTextDiff({ label, before, after, changed }: TProps) {
     };
   }, [after, before]);
 
-  const [mode, setMode] = useState<TMode>(isRewrite ? "split" : "inline");
+  const [mode, setMode] = useState<TMode>(isRich || isRewrite ? "split" : "inline");
 
   const modes: { key: TMode; label: string; className?: string }[] = [
-    { key: "inline", label: t("workspace_products.requirements.change.long_text.mode.inline") },
+    // 有表格 / 图片时逐词合并对照没有意义，只留按排版的左右对照与只看新版
+    ...(isRich
+      ? []
+      : [{ key: "inline" as const, label: t("workspace_products.requirements.change.long_text.mode.inline") }]),
     {
       key: "split",
       label: t("workspace_products.requirements.change.long_text.mode.split"),
@@ -222,7 +264,35 @@ export function ChangeLongTextDiff({ label, before, after, changed }: TProps) {
     { key: "new_only", label: t("workspace_products.requirements.change.long_text.mode.new_only") },
   ];
 
+  const renderRich = (html: string | undefined, side: "before" | "after") =>
+    html && workspaceSlug ? (
+      <ChangeRichTextView workspaceSlug={workspaceSlug} editorId={`${editorKey}-${side}`} html={html} />
+    ) : (
+      <span className="text-13 text-placeholder">{t("workspace_products.requirements.change.empty_value")}</span>
+    );
+
   const renderBody = () => {
+    if (isRich) {
+      if (!changed || mode === "new_only") {
+        return <CollapsibleBody className="px-5 py-4">{renderRich(afterHtml, "after")}</CollapsibleBody>;
+      }
+      return (
+        <CollapsibleBody>
+          <div className="grid grid-cols-2 border-b border-subtle text-12 font-semibold">
+            <span className="px-5 py-2 text-danger-secondary">{t("workspace_products.requirements.change.before")}</span>
+            <span className="border-l border-subtle px-5 py-2 text-success-secondary">
+              {t("workspace_products.requirements.change.after")}
+            </span>
+          </div>
+          <div className="grid grid-cols-2">
+            <div className="min-w-0 bg-danger-subtle/40 px-5 py-4">{renderRich(beforeHtml, "before")}</div>
+            <div className="min-w-0 border-l border-subtle bg-success-subtle/40 px-5 py-4">
+              {renderRich(afterHtml, "after")}
+            </div>
+          </div>
+        </CollapsibleBody>
+      );
+    }
     if (!changed) {
       return (
         <CollapsibleBody className="px-5 py-4">
@@ -305,10 +375,16 @@ export function ChangeLongTextDiff({ label, before, after, changed }: TProps) {
                 {t("workspace_products.requirements.change.long_text.removed", { count: stats.removed })}
               </span>
             )}
-            {isRewrite && (
+            {isRich ? (
               <span className="rounded-full bg-layer-2 px-2 py-0.5 text-11 text-secondary">
-                {t("workspace_products.requirements.change.long_text.rewritten")}
+                {t("workspace_products.requirements.change.long_text.rich_layout")}
               </span>
+            ) : (
+              isRewrite && (
+                <span className="rounded-full bg-layer-2 px-2 py-0.5 text-11 text-secondary">
+                  {t("workspace_products.requirements.change.long_text.rewritten")}
+                </span>
+              )
             )}
             <div
               role="group"
