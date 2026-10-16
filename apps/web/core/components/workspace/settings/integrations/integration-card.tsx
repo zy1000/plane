@@ -31,6 +31,32 @@ export function IntegrationCard(props: Props) {
   const { target, remote, last_sync: lastSync } = integration;
   const providerLabel = getProviderLabel(integration.provider, t);
 
+  const renderTarget = () => {
+    if (target?.kind === "workspace_members") {
+      return (
+        <>
+          <Link to={`/${workspaceSlug}/settings/members`} className="text-accent-primary hover:underline">
+            {t(`${I18N}.card.mapping_to_members`)}
+          </Link>
+          <span className="text-tertiary">
+            {t(`${I18N}.card.members_count`, { count: target.member_count, synced: target.synced_count })}
+          </span>
+        </>
+      );
+    }
+    if (target?.kind === "dictionary" && target.dictionary_id) {
+      return (
+        <>
+          <Link to={`/${workspaceSlug}/settings/data-dictionaries`} className="text-accent-primary hover:underline">
+            {t(`${I18N}.card.mapping_to`, { name: target.dictionary_name ?? target.dictionary_key })}
+          </Link>
+          <span className="text-tertiary">{t(`${I18N}.card.target_count`, { count: target.item_count })}</span>
+        </>
+      );
+    }
+    return <span>{t(`${I18N}.card.target_missing`)}</span>;
+  };
+
   const renderLastSync = () => {
     if (!lastSync) return <span className="text-tertiary">{t(`${I18N}.card.never_synced`)}</span>;
     const who = lastSync.triggered_by?.display_name ?? t(`${I18N}.card.by_schedule`);
@@ -73,16 +99,7 @@ export function IntegrationCard(props: Props) {
             <span>{providerLabel}</span>
             {remote?.field && <code className={CODE_CLASS}>{remote.field}</code>}
             <ArrowRight className="size-3.5 shrink-0 text-tertiary" aria-hidden />
-            {target?.dictionary_id ? (
-              <Link to={`/${workspaceSlug}/settings/data-dictionaries`} className="text-accent-primary hover:underline">
-                {t(`${I18N}.card.mapping_to`, { name: target.dictionary_name ?? target.dictionary_key })}
-              </Link>
-            ) : (
-              <span>{t(`${I18N}.card.target_missing`)}</span>
-            )}
-            {target?.dictionary_id && (
-              <span className="text-tertiary">{t(`${I18N}.card.target_count`, { count: target.item_count })}</span>
-            )}
+            {renderTarget()}
           </dd>
           {!integration.is_configured && (
             <>

@@ -18,6 +18,7 @@ from .project import urlpatterns as project_urls
 from .product import urlpatterns as product_urls
 from .data_dictionary import urlpatterns as data_dictionary_urls
 from .external_integration import urlpatterns as external_integration_urls
+from .department import urlpatterns as department_urls
 from .requirement import urlpatterns as requirement_urls
 from .stage_review import urlpatterns as stage_review_urls
 from .stage_type import urlpatterns as stage_type_urls
@@ -57,6 +58,7 @@ urlpatterns = [
     *product_urls,
     *data_dictionary_urls,
     *external_integration_urls,
+    *department_urls,
     *requirement_urls,
     *stage_review_urls,
     *stage_type_urls,

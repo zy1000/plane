@@ -17,8 +17,8 @@ export type TExternalIntegrationErrorCode =
   | "INTEGRATION_TARGET_MISSING"
   | "INTEGRATION_INTERNAL_ERROR";
 
-/** 拉取型集成一次同步的汇总（只新增，不删除：local_only 只是报告数） */
-export type TExternalIntegrationSyncSummary = {
+/** 数据字典型集成一次同步的汇总（只新增，不删除：local_only 只是报告数） */
+export type TExternalIntegrationDictionarySyncSummary = {
   remote_total: number;
   unique: number;
   created: number;
@@ -28,6 +28,22 @@ export type TExternalIntegrationSyncSummary = {
   local_only: number;
   pages: number;
 };
+
+/** 人员信息集成一次同步的汇总 */
+export type TExternalIntegrationPersonSyncSummary = {
+  remote_total: number;
+  users_created: number;
+  users_matched: number;
+  members_added: number;
+  departments_created: number;
+  leaders_unresolved: number;
+  skipped_no_email: number;
+  skipped_duplicate: number;
+};
+
+export type TExternalIntegrationSyncSummary =
+  | TExternalIntegrationDictionarySyncSummary
+  | TExternalIntegrationPersonSyncSummary;
 
 export type TExternalIntegrationSyncSnapshot = {
   status: TExternalIntegrationSyncStatus;
@@ -39,13 +55,23 @@ export type TExternalIntegrationSyncSnapshot = {
   error: { code: string; detail: string } | null;
 };
 
-export type TExternalIntegrationTarget = {
+export type TExternalIntegrationDictionaryTarget = {
+  kind: "dictionary";
   dictionary_key: string;
   dictionary_id: string | null;
   /** 读 DB 行：用户可能改过名，或系统字典带了「（key）」后缀 */
   dictionary_name: string | null;
   item_count: number;
 };
+
+export type TExternalIntegrationWorkspaceMembersTarget = {
+  kind: "workspace_members";
+  member_count: number;
+  /** 带工号的成员数 */
+  synced_count: number;
+};
+
+export type TExternalIntegrationTarget = TExternalIntegrationDictionaryTarget | TExternalIntegrationWorkspaceMembersTarget;
 
 export type TExternalIntegration = {
   key: string;

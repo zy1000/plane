@@ -596,6 +596,11 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/webhooks/:webhookId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/webhooks/[webhookId]/page.tsx"
           ),
+          // Workspace departments（只读，人员信息集成同步）
+          route(
+            ":workspaceSlug/settings/departments",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/departments/page.tsx"
+          ),
           // Workspace third-party integrations
           route(
             ":workspaceSlug/settings/integrations",

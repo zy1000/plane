@@ -1,12 +1,16 @@
-import type { TExternalIntegration, TExternalIntegrationSyncSummary } from "@plane/types";
+import type {
+  TExternalIntegration,
+  TExternalIntegrationPersonSyncSummary,
+  TExternalIntegrationSyncSummary,
+} from "@plane/types";
 
 export const INTEGRATIONS_I18N = "workspace_settings.settings.integrations";
 
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
 
 /** 前端已知的集成 key / 来源：名称与描述走 i18n；后端新加了集成但前端还没补词条时回落后端文案 */
-const CATALOG_KEYS = new Set(["jiandaoyun_project_code"]);
-const PROVIDER_KEYS = new Set(["jiandaoyun"]);
+const CATALOG_KEYS = new Set(["jiandaoyun_project_code", "mdm_person_info"]);
+const PROVIDER_KEYS = new Set(["jiandaoyun", "mdm"]);
 const ERROR_CODES = new Set([
   "INTEGRATION_NOT_FOUND",
   "INTEGRATION_NOT_CONFIGURED",
@@ -44,8 +48,31 @@ export const getIntegrationErrorMessage = (error: unknown, t: TTranslate) => {
   return getIntegrationErrorLabel(null, t);
 };
 
+const isPersonSummary = (summary: TExternalIntegrationSyncSummary): summary is TExternalIntegrationPersonSyncSummary =>
+  "users_created" in summary;
+
+/** 人员：「远端 558 条 · 新建账号 12 · 匹配 540 · 加入工作区 30 · 新部门 3 · 上级未解析 5 · 无邮箱 6」，为 0 的尾项不显示 */
+const formatPersonSummary = (summary: TExternalIntegrationPersonSyncSummary, t: TTranslate) => {
+  const parts = [
+    t(`${INTEGRATIONS_I18N}.summary.remote_total`, { count: summary.remote_total }),
+    t(`${INTEGRATIONS_I18N}.summary.users_created`, { count: summary.users_created }),
+    t(`${INTEGRATIONS_I18N}.summary.users_matched`, { count: summary.users_matched }),
+    t(`${INTEGRATIONS_I18N}.summary.members_added`, { count: summary.members_added }),
+  ];
+  if (summary.departments_created > 0)
+    parts.push(t(`${INTEGRATIONS_I18N}.summary.departments_created`, { count: summary.departments_created }));
+  if (summary.leaders_unresolved > 0)
+    parts.push(t(`${INTEGRATIONS_I18N}.summary.leaders_unresolved`, { count: summary.leaders_unresolved }));
+  if (summary.skipped_no_email > 0)
+    parts.push(t(`${INTEGRATIONS_I18N}.summary.skipped_no_email`, { count: summary.skipped_no_email }));
+  if (summary.skipped_duplicate > 0)
+    parts.push(t(`${INTEGRATIONS_I18N}.summary.skipped`, { count: summary.skipped_duplicate }));
+  return parts.join(" · ");
+};
+
 /** 「远端 130 条 · 新增 3 · 已存在 122 · 跳过 4 · 本地多出 2」，为 0 的跳过 / 本地多出不显示 */
 export const formatSyncSummary = (summary: TExternalIntegrationSyncSummary, t: TTranslate) => {
+  if (isPersonSummary(summary)) return formatPersonSummary(summary, t);
   const parts = [
     t(`${INTEGRATIONS_I18N}.summary.remote_total`, { count: summary.remote_total }),
     t(`${INTEGRATIONS_I18N}.summary.created`, { count: summary.created }),

@@ -4,10 +4,10 @@ from django.db.models import Count
 
 from plane.db.models import DataDictionary
 
-from . import project_code
+from . import person_info, project_code
 from .base import get_last_sync
 
-INTEGRATIONS = (project_code.SPEC,)
+INTEGRATIONS = (project_code.SPEC, person_info.SPEC)
 _BY_KEY = {spec.key: spec for spec in INTEGRATIONS}
 
 
@@ -16,6 +16,8 @@ def get_integration(key):
 
 
 def _describe_target(spec, workspace):
+    if spec.describe_target is not None:
+        return spec.describe_target(workspace)
     if not spec.target_dictionary_key:
         return None
     # 名称读 DB 行：用户可能改过名，或系统字典带了「（key）」后缀
@@ -25,6 +27,7 @@ def _describe_target(spec, workspace):
         .first()
     )
     return {
+        "kind": "dictionary",
         "dictionary_key": spec.target_dictionary_key,
         "dictionary_id": str(dictionary.id) if dictionary else None,
         "dictionary_name": dictionary.name if dictionary else None,

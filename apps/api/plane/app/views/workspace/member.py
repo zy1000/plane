@@ -34,6 +34,7 @@ from plane.db.models import (
     DraftIssue,
     Project,
     ProjectMember,
+    UserExtraInfo,
     WorkspaceMember,
     WorkspaceMemberRole,
     Workspace,
@@ -134,6 +135,17 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             group_ids_by_member[member_id].append(str(group_id))
         return group_ids_by_member
 
+    def _get_extra_info_by_user(self, workspace_members):
+        user_ids = [workspace_member.member_id for workspace_member in workspace_members]
+        if not user_ids:
+            return {}
+        return {
+            extra.user_id: extra
+            for extra in UserExtraInfo.objects.filter(user_id__in=user_ids).select_related(
+                "organization__parent", "leader"
+            )
+        }
+
     def _can_view_admin_details(self, request, slug):
         permission_keys = getattr(
             request, "_plane_workspace_permission_keys", None
@@ -164,6 +176,9 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 "group_role_ids",
                 "group_ids",
                 "is_active",
+                "employee_id",
+                "department",
+                "leader",
             ),
             many=True,
             context={
@@ -171,6 +186,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                     workspace_members
                 ),
                 "group_ids_by_member": self._get_group_ids_by_member(workspace_members),
+                "extra_info_by_user": self._get_extra_info_by_user(workspace_members),
             },
         )
         return Response(serializer.data, status=status.HTTP_200_OK)

@@ -157,7 +157,38 @@ class WorkspaceMemberRoleFieldsMixin(serializers.Serializer):
         return [str(group_id) for group_id in get_workspace_member_group_ids(obj)]
 
 
-class WorkSpaceMemberSerializer(WorkspaceMemberRoleFieldsMixin, DynamicBaseSerializer):
+class WorkspaceMemberExtraInfoFieldsMixin(serializers.Serializer):
+    """成员列表的人员扩展信息（工号 / 部门 / 上级）。列表视图把 extra_info_by_user 放进 context，一次查完；
+    没有 context 时按行取（只有 retrieve 会走到）。"""
+
+    employee_id = serializers.SerializerMethodField(read_only=True)
+    department = serializers.SerializerMethodField(read_only=True)
+    leader = serializers.SerializerMethodField(read_only=True)
+
+    def _extra_info(self, obj):
+        extra_info_by_user = self.context.get("extra_info_by_user")
+        if extra_info_by_user is not None:
+            return extra_info_by_user.get(obj.member_id)
+        return getattr(obj.member, "extra_info", None)
+
+    def get_employee_id(self, obj):
+        extra = self._extra_info(obj)
+        return extra.employee_id if extra else None
+
+    def get_department(self, obj):
+        extra = self._extra_info(obj)
+        if not extra:
+            return None
+        return extra.organization.path if extra.organization_id else extra.department
+
+    def get_leader(self, obj):
+        extra = self._extra_info(obj)
+        if not extra or not extra.leader_id:
+            return None
+        return {"id": str(extra.leader_id), "display_name": extra.leader.display_name}
+
+
+class WorkSpaceMemberSerializer(WorkspaceMemberRoleFieldsMixin, WorkspaceMemberExtraInfoFieldsMixin, DynamicBaseSerializer):
     member = UserLiteSerializer(read_only=True)
 
     class Meta:
@@ -173,7 +204,9 @@ class WorkspaceMemberMeSerializer(WorkspaceMemberRoleFieldsMixin, BaseSerializer
         fields = "__all__"
 
 
-class WorkspaceMemberAdminSerializer(WorkspaceMemberRoleFieldsMixin, DynamicBaseSerializer):
+class WorkspaceMemberAdminSerializer(
+    WorkspaceMemberRoleFieldsMixin, WorkspaceMemberExtraInfoFieldsMixin, DynamicBaseSerializer
+):
     member = UserAdminLiteSerializer(read_only=True)
 
     class Meta:

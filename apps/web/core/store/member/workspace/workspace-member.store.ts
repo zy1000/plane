@@ -251,7 +251,13 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
     await this.workspaceService.fetchWorkspaceMembers(workspaceSlug).then((response) => {
       runInAction(() => {
         response.forEach((member) => {
-          set(this.memberRoot?.memberMap, member.member.id, { ...member.member, joining_date: member.created_at });
+          set(this.memberRoot?.memberMap, member.member.id, {
+            ...member.member,
+            joining_date: member.created_at,
+            employee_id: member.employee_id ?? null,
+            department: member.department ?? null,
+            leader: member.leader ?? null,
+          });
           set(this.workspaceMemberMap, [workspaceSlug, member.member.id], {
             id: member.id,
             member: member.member.id,

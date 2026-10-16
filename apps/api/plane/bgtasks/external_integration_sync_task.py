@@ -1,4 +1,4 @@
-"""每天把「拉取型」第三方集成对所有活跃工作区跑一遍。beat 计划在 plane/celery.py。"""
+"""每天把「拉取型」且 scheduled 的第三方集成对所有活跃工作区跑一遍。beat 计划在 plane/celery.py。"""
 
 import logging
 
@@ -14,7 +14,7 @@ logger = logging.getLogger("plane")
 
 @shared_task
 def sync_external_integrations():
-    specs = [spec for spec in INTEGRATIONS if spec.direction == DIRECTION_PULL]
+    specs = [spec for spec in INTEGRATIONS if spec.direction == DIRECTION_PULL and spec.scheduled]
     if not specs:
         return
     for workspace in Workspace.objects.filter(deleted_at__isnull=True).iterator():

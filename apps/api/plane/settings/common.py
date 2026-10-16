@@ -335,6 +335,9 @@ JIANDAOYUN_APP_KEY = os.environ.get("JIANDAOYUN_APP_KEY", "")
 JIANDAOYUN_PROJECT_CODE_APP_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_APP_ID", "")
 JIANDAOYUN_PROJECT_CODE_ENTRY_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_ENTRY_ID", "")
 JIANDAOYUN_TIMEOUT_SECONDS = int(os.environ.get("JIANDAOYUN_TIMEOUT_SECONDS", "30"))
+# 主数据平台（MDM）人员名单，见 plane/integrations/person_info.py；认证只有请求头 appkey
+PERSON_INFO_API_URL = os.environ.get("PERSON_INFO_API_URL", "")
+PERSON_INFO_APP_KEY = os.environ.get("PERSON_INFO_APP_KEY", "")
 
 # Analytics
 ANALYTICS_SECRET_KEY = os.environ.get("ANALYTICS_SECRET_KEY", False)

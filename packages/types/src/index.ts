@@ -17,6 +17,7 @@ export * from "./cycle";
 export * from "./dashboard";
 export * from "./data-dictionary";
 export * from "./external-integration";
+export * from "./department";
 export * from "./test-case";
 export * from "./de-dupe";
 export * from "./description_version";

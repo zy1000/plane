@@ -32,7 +32,16 @@ export interface IUserLite {
   is_bot: boolean;
   last_name: string;
   joining_date?: string;
+  // 人员扩展信息（只有工作区成员列表接口带）
+  employee_id?: string | null;
+  department?: string | null;
+  leader?: IUserLeader | null;
 }
+
+export type IUserLeader = {
+  id: string;
+  display_name: string;
+};
 export interface IUser extends IUserLite {
   // only for uploading the cover image
   cover_image_asset?: string | null;

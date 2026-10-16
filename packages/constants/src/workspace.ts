@@ -212,6 +212,15 @@ export const WORKSPACE_SETTINGS = {
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
+  departments: {
+    key: "departments",
+    i18n_label: "workspace_settings.settings.departments.title",
+    href: `/settings/departments`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    // 与后端 GET departments 的权限 key 一致；「立即同步」另看 WORKSPACE_SETTINGS_EDIT
+    permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/departments`),
+  },
   integrations: {
     key: "integrations",
     i18n_label: "workspace_settings.settings.integrations.title",

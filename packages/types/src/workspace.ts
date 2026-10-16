@@ -8,7 +8,7 @@ import type { TPaginationInfo } from "./common";
 import type { ICycle } from "./cycle";
 import type { TUserPermissions } from "./enums";
 import type { TProjectMembership } from "./project";
-import type { IUser, IUserLite } from "./users";
+import type { IUser, IUserLeader, IUserLite } from "./users";
 import type { TLoginMediums } from "./instance";
 import type { IWorkspaceViewProps } from "./view-props";
 
@@ -101,6 +101,10 @@ export interface IWorkspaceMember {
   custom_role_ids: string[];
   group_role_ids: string[];
   group_ids: string[];
+  // 人员扩展信息：工号 / 部门路径 / 上级
+  employee_id?: string | null;
+  department?: string | null;
+  leader?: IUserLeader | null;
 }
 
 export interface IWorkspaceMemberMe {

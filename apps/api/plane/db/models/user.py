@@ -19,6 +19,7 @@ from django.utils import timezone
 # Module imports
 from plane.db.models import FileAsset
 from ..mixins import TimeAuditModel
+from .base import BaseModel
 from plane.utils.color import get_random_color
 
 
@@ -330,13 +331,61 @@ def create_user_notification(sender, instance, created, **kwargs):
         )
 
 
+class Department(BaseModel):
+    """组织关系：两层树。parent 为空是三级组织（如「营销中心」），有 parent 是四级组织（如「海外销售部」）。
+
+    全局表（人员不分工作区），由「人员信息」集成按远端 orgeh3txt / orgeh4txt 自动建；只增不删。
+    """
+
+    name = models.CharField(max_length=255)
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="children"
+    )
+
+    class Meta:
+        verbose_name = "Department"
+        verbose_name_plural = "Departments"
+        db_table = "departments"
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parent", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="department_unique_parent_name_when_deleted_at_null",
+            ),
+            # parent 为 NULL 时上面的约束不生效（NULL 互不相等），顶层另约束一次
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(parent__isnull=True, deleted_at__isnull=True),
+                name="department_unique_top_name_when_deleted_at_null",
+            ),
+        ]
+
+    @property
+    def path(self):
+        """「营销中心 / 海外销售部」；顶层只返回自己的名字。"""
+        return f"{self.parent.name} / {self.name}" if self.parent_id else self.name
+
+    def __str__(self):
+        return self.path
+
+
 class UserExtraInfo(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="extra_info"
     )
+    # 部门文本：LDAP 登录写入；人员信息集成同步时写成 Department.path，工时报表等旧读取方继续可用
     department = models.CharField(max_length=255, blank=True, null=True)
     employee_id = models.CharField(max_length=50, blank=True, null=True)
     cn = models.CharField(max_length=255, blank=True, null=True)
+    # 以下三项由「人员信息」集成维护
+    ad_account = models.CharField(max_length=255, blank=True, null=True)
+    organization = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="people"
+    )
+    leader = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="subordinates"
+    )
 
     class Meta:
         verbose_name = "User Extra Info"

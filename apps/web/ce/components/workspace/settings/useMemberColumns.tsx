@@ -121,6 +121,34 @@ export const useMemberColumns = () => {
     },
 
     {
+      key: "Employee id",
+      content: t("workspace_settings.settings.members.details.employee_id"),
+      tdRender: (rowData: RowData) => (
+        <div className={`w-24 ${isSuspended(rowData) ? "text-placeholder" : ""}`}>{rowData.member.employee_id ?? ""}</div>
+      ),
+    },
+
+    {
+      key: "Department",
+      content: t("workspace_settings.settings.members.details.department"),
+      tdRender: (rowData: RowData) => (
+        <div className={`w-40 truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.department ?? ""}>
+          {rowData.member.department ?? ""}
+        </div>
+      ),
+    },
+
+    {
+      key: "Leader",
+      content: t("workspace_settings.settings.members.details.leader"),
+      tdRender: (rowData: RowData) => (
+        <div className={`w-24 truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>
+          {rowData.member.leader?.display_name ?? ""}
+        </div>
+      ),
+    },
+
+    {
       key: "Custom roles",
       content: "Role",
       tdRender: (rowData: RowData) => (

@@ -55,6 +55,10 @@ class IntegrationSpec:
     target_dictionary_key: str | None = None
     # 懒读 settings，给前端展示远端表单 / 字段（只放标识符，不放密钥）
     remote_info: Callable[[], dict] | None = None
+    # 目标不是数据字典时自己描述：`describe_target(workspace) -> dict`，要带 kind
+    describe_target: Callable | None = None
+    # False = 不进每日 beat，只能在设置页手动触发
+    scheduled: bool = True
 
     def missing_settings(self):
         return [name for name in self.required_settings if not getattr(settings, name, "")]
@@ -108,6 +112,13 @@ def run_integration(spec, workspace, actor=None):
     except IntegrationError as exc:
         snapshot.update(_timing(started), status="failed", summary=None, error={"code": exc.code, "detail": exc.detail})
         set_last_sync(workspace.id, spec.key, snapshot)
+        logger.warning(
+            "external integration failed: workspace=%s integration=%s code=%s detail=%s",
+            workspace.slug,
+            spec.key,
+            exc.code,
+            exc.detail,
+        )
         raise
     except Exception as exc:
         log_exception(exc)
@@ -121,4 +132,11 @@ def run_integration(spec, workspace, actor=None):
         raise
     snapshot.update(_timing(started), status="success", summary=summary, error=None)
     set_last_sync(workspace.id, spec.key, snapshot)
+    logger.info(
+        "external integration synced: workspace=%s integration=%s duration_ms=%s summary=%s",
+        workspace.slug,
+        spec.key,
+        snapshot["duration_ms"],
+        summary,
+    )
     return snapshot

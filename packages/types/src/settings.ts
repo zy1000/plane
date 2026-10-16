@@ -14,6 +14,7 @@ export type TWorkspaceSettingsTabs =
   | "my-access"
   | "general"
   | "members"
+  | "departments"
   | "groups"
   | "roles"
   | "templates"
