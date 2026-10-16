@@ -22,6 +22,7 @@ import type {
   TRequirementValue,
 } from "@plane/types";
 import { cn } from "@plane/utils";
+import { htmlToPlainText } from "@/components/common/inline-text-diff";
 import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
 import {
   mergeBuiltinAndFields,
@@ -30,6 +31,7 @@ import {
 } from "@/components/requirements/requirement-builtin-layout";
 import { getFormRows, LeafValue, RequirementAttachmentChips } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { ChangeLongTextDiff } from "./change-long-text-diff";
 import { CHANGE_TYPE_BADGE, CHANGE_TYPE_PILL, DIFF_NEW_VALUE, DIFF_OLD_VALUE } from "./styles";
 
 type TProps = {
@@ -94,6 +96,27 @@ type TRow = {
   field?: TRequirementField;
   columnKey?: TRequirementBuiltinKey;
   isAttachments?: boolean;
+};
+
+/** 值格子：长串（没有空格的编号、URL）也得折行，否则会冲出本栏压到隔壁；内置值组件自带的 truncate 一并放开 */
+const VALUE_CELL_CLASS = "min-w-0 break-words [overflow-wrap:anywhere] [&_.truncate]:whitespace-normal";
+
+/** 单行文本超过这个长度（或含换行）也按长文本出全宽块 */
+const LONG_TEXT_THRESHOLD = 60;
+
+/** 长文本字段返回两侧的纯文本，其余返回 null 留在三栏表里 */
+const getLongText = (row: TRow): { before: string; after: string } | null => {
+  const isHtml = row.columnKey === "description_html" || row.field?.field_type === "rich_text";
+  if (!isHtml && row.field?.field_type !== "text") return null;
+  const toText = (value: TRequirementValue | undefined) => {
+    if (typeof value !== "string") return "";
+    return isHtml ? htmlToPlainText(value) : value;
+  };
+  const before = toText(row.before);
+  const after = toText(row.after);
+  if (isHtml) return { before, after };
+  const isLong = [before, after].some((text) => text.length > LONG_TEXT_THRESHOLD || text.includes("\n"));
+  return isLong ? { before, after } : null;
 };
 
 const readValue = (snapshot: TRequirementChangeSnapshot | null, key: string, isBuiltin: boolean) => {
@@ -213,6 +236,16 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
 
   const changedCount = rows.filter((row) => row.changed).length;
   const visibleRows = showAll ? rows : rows.filter((row) => row.changed);
+  // 修改单才拆：长文本出全宽块逐词对比，其余留在三栏表；新增/删除只有一侧，整表一栏即可
+  const longRows =
+    isCreate || isDelete
+      ? []
+      : visibleRows.flatMap((row) => {
+          const text = getLongText(row);
+          return text ? [{ row, ...text }] : [];
+        });
+  const longKeys = new Set(longRows.map(({ row }) => row.key));
+  const tableRows = visibleRows.filter((row) => !longKeys.has(row.key));
 
   return (
     <section className="flex flex-col gap-3">
@@ -234,10 +267,15 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
           </span>
         )}
         {!isCreate && !isDelete && (
+          <span className="ml-auto text-13 text-tertiary tabular-nums">
+            {t("workspace_products.requirements.change.changed_count", { count: changedCount })}
+          </span>
+        )}
+        {!isCreate && !isDelete && (
           <button
             type="button"
             onClick={() => setShowAll((current) => !current)}
-            className="ml-auto text-13 text-accent-primary hover:underline"
+            className="text-13 text-accent-primary hover:underline"
           >
             {showAll
               ? t("workspace_products.requirements.change.show_changed_only", { count: changedCount })
@@ -246,75 +284,100 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
         )}
       </header>
 
-      <div className="overflow-hidden rounded-md border border-subtle">
-        {/* 新增/删除只有一侧有内容，两栏表头会误导成「另一侧被清空」 */}
-        {!isCreate && !isDelete && (
-          <div className="grid grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-subtle bg-layer-1 px-3 py-1.5 text-13 font-medium text-secondary">
-            <span>{t("workspace_products.requirements.change.field")}</span>
-            <span>{t("workspace_products.requirements.change.before")}</span>
-            <span>{t("workspace_products.requirements.change.after")}</span>
-          </div>
-        )}
-
-        {visibleRows.length === 0 ? (
-          <p className="px-3 py-4 text-13 text-placeholder">
-            {t("workspace_products.requirements.change.no_field_changes")}
-          </p>
-        ) : (
-          visibleRows.map((row) => (
-            <div
-              key={row.key}
-              className={cn(
-                "grid gap-x-3 border-b border-subtle px-3 py-2 text-13 last:border-b-0",
-                isCreate || isDelete
-                  ? "grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)]"
-                  : "grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(0,1fr)]",
-                row.changed && !isCreate && !isDelete && "bg-warning-subtle/10"
-              )}
-            >
-              <span className="text-13 text-tertiary">{row.label}</span>
-              {isCreate ? (
-                <SideValue
-                  field={row.field}
-                  columnKey={row.columnKey}
-                  isAttachments={row.isAttachments}
-                  value={row.after}
-                  workspaceSlug={workspaceSlug}
-                  tone="new"
-                />
-              ) : isDelete ? (
-                <SideValue
-                  field={row.field}
-                  columnKey={row.columnKey}
-                  isAttachments={row.isAttachments}
-                  value={row.before}
-                  workspaceSlug={workspaceSlug}
-                  tone="old"
-                />
-              ) : (
-                <>
-                  <SideValue
-                    field={row.field}
-                    columnKey={row.columnKey}
-                    isAttachments={row.isAttachments}
-                    value={row.before}
-                    workspaceSlug={workspaceSlug}
-                    tone={row.changed ? "old" : undefined}
-                  />
-                  <SideValue
-                    field={row.field}
-                    columnKey={row.columnKey}
-                    isAttachments={row.isAttachments}
-                    value={row.after}
-                    workspaceSlug={workspaceSlug}
-                    tone={row.changed ? "new" : undefined}
-                  />
-                </>
-              )}
+      {(tableRows.length > 0 || longRows.length === 0) && (
+        <div className="overflow-hidden rounded-md border border-subtle">
+          {/* 新增/删除只有一侧有内容，两栏表头会误导成「另一侧被清空」 */}
+          {!isCreate && !isDelete && (
+            <div className="grid grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-subtle bg-layer-1 px-3 py-1.5 text-13 font-medium text-secondary">
+              <span>{t("workspace_products.requirements.change.field")}</span>
+              <span>{t("workspace_products.requirements.change.before")}</span>
+              <span>{t("workspace_products.requirements.change.after")}</span>
             </div>
-          ))
-        )}
-      </div>
+          )}
+
+          {tableRows.length === 0 ? (
+            <p className="px-3 py-4 text-13 text-placeholder">
+              {t("workspace_products.requirements.change.no_field_changes")}
+            </p>
+          ) : (
+            tableRows.map((row) => (
+              <div
+                key={row.key}
+                className={cn(
+                  "grid gap-x-3 border-b border-subtle px-3 py-2 text-13 last:border-b-0",
+                  isCreate || isDelete
+                    ? "grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)]"
+                    : "grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(0,1fr)]",
+                  row.changed && !isCreate && !isDelete && "bg-warning-subtle/10"
+                )}
+              >
+                <span className="text-13 text-tertiary">{row.label}</span>
+                {isCreate || isDelete ? (
+                  <div className={VALUE_CELL_CLASS}>
+                    {(() => {
+                      // 新增/删除单里的描述也要看全文，不能被网格版的 180 字截断
+                      const text = getLongText(row);
+                      if (text) {
+                        const value = isCreate ? text.after : text.before;
+                        return value ? (
+                          <p className={cn("whitespace-pre-wrap", isCreate ? DIFF_NEW_VALUE : DIFF_OLD_VALUE)}>
+                            {value}
+                          </p>
+                        ) : (
+                          <EmptyValue />
+                        );
+                      }
+                      return (
+                        <SideValue
+                          field={row.field}
+                          columnKey={row.columnKey}
+                          isAttachments={row.isAttachments}
+                          value={isCreate ? row.after : row.before}
+                          workspaceSlug={workspaceSlug}
+                          tone={isCreate ? "new" : "old"}
+                        />
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <>
+                    <div className={VALUE_CELL_CLASS}>
+                      <SideValue
+                        field={row.field}
+                        columnKey={row.columnKey}
+                        isAttachments={row.isAttachments}
+                        value={row.before}
+                        workspaceSlug={workspaceSlug}
+                        tone={row.changed ? "old" : undefined}
+                      />
+                    </div>
+                    <div className={VALUE_CELL_CLASS}>
+                      <SideValue
+                        field={row.field}
+                        columnKey={row.columnKey}
+                        isAttachments={row.isAttachments}
+                        value={row.after}
+                        workspaceSlug={workspaceSlug}
+                        tone={row.changed ? "new" : undefined}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {longRows.map(({ row, before: beforeText, after: afterText }) => (
+        <ChangeLongTextDiff
+          key={row.key}
+          label={row.label}
+          before={beforeText}
+          after={afterText}
+          changed={row.changed}
+        />
+      ))}
 
       {formFields.map((form) => {
         const aligned = alignFormRows(before?.data ?? {}, after?.data ?? {}, form.id);
@@ -368,7 +431,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                         return (
                           <td
                             key={child.id}
-                            className="border-l border-subtle px-2.5 py-1.5 align-top"
+                            className={cn("border-l border-subtle px-2.5 py-1.5 align-top", VALUE_CELL_CLASS)}
                           >
                             {row.state === "created" ? (
                               <SideValue

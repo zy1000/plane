@@ -41,10 +41,26 @@ const CJK = "\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uac00
 // 第二支用前瞻排除 CJK，否则 \p{L}+ 会把「abc中文」吞成一个 token
 const TOKEN_RE = new RegExp(`[${CJK}]|(?:(?![${CJK}])[\\p{L}\\p{N}_])+|\\s+|[^\\s\\p{L}\\p{N}_]`, "gu");
 
-export const tokenizeForDiff = (text: string): string[] => text.match(TOKEN_RE) ?? [];
+/**
+ * 超过这个长度的拉丁/数字连续串按单字符再拆：编号、哈希、没空格的长串整个算一个 token 时，
+ * 末尾补几个字符就成了「整串删掉、整串新增」，读起来像整段被改写。
+ */
+const LONG_TOKEN_LENGTH = 20;
 
-/** 纯文本相同返回 []；算不出（超长 / 改动太大）返回 null，调用方回落成整值替换 */
-export const diffPlainText = (before: string, after: string): TTextDiffSegment[] | null => {
+export const tokenizeForDiff = (text: string): string[] =>
+  (text.match(TOKEN_RE) ?? []).flatMap((token) =>
+    token.length > LONG_TOKEN_LENGTH && !/\s/.test(token) ? Array.from(token) : [token]
+  );
+
+/**
+ * 纯文本相同返回 []；算不出（超长 / 改动太大）返回 null，调用方回落成整值替换。
+ * collapseContext=false 时未变段原样保留，给要看全文的场景（变更单审批）用。
+ */
+export const diffPlainText = (
+  before: string,
+  after: string,
+  collapseContext = true
+): TTextDiffSegment[] | null => {
   if (before === after) return [];
   const oldTokens = tokenizeForDiff(before);
   const newTokens = tokenizeForDiff(after);
@@ -69,7 +85,7 @@ export const diffPlainText = (before: string, after: string): TTextDiffSegment[]
     const isHead = index === 0;
     const isTail = index === changes.length - 1;
     const keep = isHead || isTail ? CONTEXT_TOKENS : CONTEXT_TOKENS * 2;
-    if (tokens.length <= keep) {
+    if (!collapseContext || tokens.length <= keep) {
       segments.push({ type: "same", text: tokens.join("") });
       return;
     }
