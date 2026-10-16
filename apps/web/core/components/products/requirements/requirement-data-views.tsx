@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import { Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementTypeSchema } from "@plane/types";
 import { cn } from "@plane/utils";
-import { TypeIcon } from "@/components/common/type-icon-picker";
 
 /**
  * 一个产品下的需求可以分属多个需求类型（形状不同），数据页因此按类型分视图：
@@ -50,15 +48,9 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
 
   const views = useMemo(
     () => [
-      { key: DEFAULT_VIEW_KEY, label: t("workspace_products.requirements.data.views.default"), icon: Layers, iconProps: undefined },
-      // 每个类型用自己的图标，而不是所有类型共用一个 Table2 —— tab 里的图标本来
-      // 就该是用来区分它们的
-      ...requirementTypes.map((requirementType) => ({
-        key: requirementType.id,
-        label: requirementType.name,
-        icon: undefined,
-        iconProps: requirementType.logo_props?.icon,
-      })),
+      { key: DEFAULT_VIEW_KEY, label: t("workspace_products.requirements.data.views.default") },
+      // 分段控件只放文字：类型名本身就足以区分，图标挤在 28px 高的段里反而显乱
+      ...requirementTypes.map((requirementType) => ({ key: requirementType.id, label: requirementType.name })),
     ],
     [t, requirementTypes]
   );
@@ -80,11 +72,10 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
     <div
       role="tablist"
       aria-label={t("workspace_products.requirements.data.views.label")}
-      className="flex items-center gap-1 overflow-x-auto"
+      className="inline-flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-lg bg-layer-1 p-[3px]"
     >
       {views.map((view, index) => {
         const isActive = view.key === activeKey;
-        const Icon = view.icon;
         return (
           <button
             key={view.key}
@@ -101,17 +92,12 @@ export const RequirementDataViewSwitcher = ({ requirementTypes, activeKey, disab
               onChange(view.key === DEFAULT_VIEW_KEY ? { kind: "default" } : { kind: "requirementType", requirementTypeId: view.key })
             }
             className={cn(
-              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-12 font-medium transition-colors",
-              isActive ? "bg-layer-2 text-primary" : "text-secondary hover:bg-layer-1 hover:text-primary",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-3 text-13 font-medium whitespace-nowrap transition-colors",
+              isActive ? "bg-surface-1 text-primary shadow-raised-200" : "text-secondary hover:text-primary",
               disabled && "cursor-not-allowed opacity-60"
             )}
           >
-            {Icon ? (
-              <Icon className="size-3.5 shrink-0" />
-            ) : (
-              <TypeIcon iconProps={view.iconProps} className="size-3.5" iconClassName="size-3.5" />
-            )}
-            <span className="max-w-[160px] truncate">{view.label}</span>
+            <span className="max-w-[180px] truncate">{view.label}</span>
           </button>
         );
       })}

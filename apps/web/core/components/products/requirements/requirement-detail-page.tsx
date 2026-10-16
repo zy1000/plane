@@ -235,6 +235,8 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
         isSubmitting={changesStore.isMutating}
         workspaceSlug={workspaceSlug}
         productId={productId}
+        requirementIds={approvalActions.pendingSelection}
+        requirements={requirement ? [requirement] : []}
         onClose={approvalActions.closeSubmitModal}
         onSubmit={(payload) => void approvalActions.submit(payload)}
       />

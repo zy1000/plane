@@ -3,6 +3,7 @@ import type { TRequirementField, TRequirementTypeSchema, IUserLite } from "@plan
 import type { useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
 import { ChangeRequestDetail } from "./change-request-detail";
 import { ChangeRequestList } from "./change-request-list";
+import { useChangeRequestStatusCounts } from "./use-change-request-status-counts";
 
 type TProps = {
   workspaceSlug: string;
@@ -29,6 +30,11 @@ export function RequirementChangesTab(props: TProps) {
     onOpenChangeRequest,
     onSettled,
   } = props;
+  const statusCounts = useChangeRequestStatusCounts({
+    workspaceSlug,
+    productId,
+    refreshKey: store.changeRequestsPage,
+  });
 
   if (openedChangeRequestId) {
     return (
@@ -56,6 +62,13 @@ export function RequirementChangesTab(props: TProps) {
       prevCursor={store.changeRequestsPage.prev_cursor}
       nextPageResults={store.changeRequestsPage.next_page_results}
       prevPageResults={store.changeRequestsPage.prev_page_results}
+      statusFilter={store.statusFilter}
+      statusCounts={statusCounts}
+      onStatusFilterChange={(value) => {
+        // 换筛选回到第一页，旧游标指向的是另一组结果
+        store.setCursor(undefined);
+        store.setStatusFilter(value);
+      }}
       onPerPageChange={store.setPerPage}
       onCursorChange={store.setCursor}
       onRetry={() => void store.fetchChangeRequests().catch(() => undefined)}

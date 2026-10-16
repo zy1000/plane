@@ -70,6 +70,8 @@ type TProps = {
   variant?: TRequirementStatusVariant;
   /** chip 变体默认带色点；工作项详情「关联需求」与用例 tag 对齐时关掉 */
   showDot?: boolean;
+  /** pill 变体前面加一枚 6px 色点（产品需求总览表用） */
+  pillDot?: boolean;
   className?: string;
 };
 
@@ -79,6 +81,7 @@ export const RequirementStatusCell = ({
   disabled = false,
   variant = "pill",
   showDot = true,
+  pillDot = false,
   className,
 }: TProps) => {
   const { t } = useTranslation();
@@ -104,9 +107,11 @@ export const RequirementStatusCell = ({
         className={cn(
           "inline-flex h-5 min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded px-1.5 text-12 font-medium",
           style.pill,
+          pillDot && "gap-[5px]",
           className
         )}
       >
+        {pillDot && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />}
         <span className="truncate">{label}</span>
       </span>
     );

@@ -29,7 +29,6 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import { Pagination } from "antd";
 import { v4 as uuidv4 } from "uuid";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -118,6 +117,8 @@ import { SubformRowHandle } from "./subform-row-handle";
 import { getSubformDropEdgeClass, moveFormRow, useSubformRowDnd } from "./use-subform-row-dnd";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { RequirementBulkOperationsBar } from "@/components/requirements/requirement-bulk-operations-bar";
+import { RequirementDataToolbar } from "@/components/requirements/requirement-data-toolbar";
+import { RequirementGridPagination } from "@/components/requirements/requirement-grid-pagination";
 const SKELETON_ROW_KEYS = ["one", "two", "three", "four", "five", "six", "seven"];
 /** 首屏先画多少行（按估算的 tr 数）再补齐其余：行高 44px，24 行 ≈ 1056px，约一屏 */
 const FIRST_PAINT_ROW_BUDGET = 24;
@@ -194,6 +195,8 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
   /** 页头已有独立的「添加需求」时关掉工具栏这份，避免并排两个主按钮 */
   hideToolbarAdd?: boolean;
+  /** 搜索 / 筛选 / 显示改用常驻搜索框 + 带字按钮（产品需求数据页），与默认视图一致 */
+  labeledToolbar?: boolean;
   /** 左侧模块树的当前选中：新建的行自动挂进该模块（null/不传 = 不挂靠） */
   createModuleId?: string | null;
   /** 当前选中模块的名字，建行弹窗右栏回显用 */
@@ -246,6 +249,7 @@ export const RequirementGrid = observer(
       onStatusChange,
       toolbarPortalEl,
       hideToolbarAdd = false,
+      labeledToolbar = false,
       createModuleId = null,
       createModuleName = null,
       createModalContext,
@@ -1278,9 +1282,7 @@ export const RequirementGrid = observer(
     });
     const rowGroups = visibleRequirements.map((requirement) => renderRequirementRows(requirement));
     const selectableRequirementIds = requirements.map((requirement) => requirement.id);
-    const displayedTotalCount = totalCount;
     const currentPageOffset = getCurrentPageOffset(prevCursor, nextCursor, prevPageResults, nextPageResults);
-    const pageItemCount = requirements.length;
     const showSelectionActions = !readOnly && selectedIds.length > 0;
     /** 可提交的选中行。撤回不做批量 —— 撤回作用在变更单上，一个选区可能跨多张单 */
     const submittableSelectedIds = useMemo(
@@ -1300,56 +1302,70 @@ export const RequirementGrid = observer(
 
     const toolbarActions: ReactNode = (
       <>
-        <div className="flex items-center">
-          {!isSearchOpen && (
-            <IconButton
-              variant="ghost"
-              size="lg"
-              className="-mr-1"
-              onClick={() => {
-                setIsSearchOpen(true);
-                window.setTimeout(() => searchInputRef.current?.focus(), 0);
-              }}
-              icon={SearchIcon}
-              aria-label={t("requirement_grid.data.search")}
-            />
-          )}
-          <div
-            className={cn(
-              "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
-              {
-                "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
-              }
-            )}
-          >
-            <SearchIcon className="h-3.5 w-3.5" />
-            <input
-              ref={searchInputRef}
-              className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-              placeholder={t("requirement_grid.data.search")}
-              value={searchInput}
-              onChange={(event) => {
-                const value = event.target.value;
-                setSearchInput(value);
-                scheduleSearchChange(value);
-              }}
-              onKeyDown={handleSearchKeyDown}
-            />
-            {isSearchOpen && (
-              <button type="button" className="grid place-items-center" onClick={clearSearch}>
-                <CloseIcon className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        </div>
-        <FiltersToggle filter={filter} />
-        <FiltersDropdown title={t("common.display")} placement="bottom-end">
-          <RequirementDisplayProperties
-            columns={displayColumns}
+        {labeledToolbar ? (
+          <RequirementDataToolbar
+            search={search}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={t("requirement_grid.data.search")}
+            filter={filter}
+            displayColumns={displayColumns}
             hiddenIds={hiddenFieldIds}
-            onToggle={toggleDisplayColumn}
+            onToggleDisplay={toggleDisplayColumn}
           />
-        </FiltersDropdown>
+        ) : (
+          <>
+            <div className="flex items-center">
+              {!isSearchOpen && (
+                <IconButton
+                  variant="ghost"
+                  size="lg"
+                  className="-mr-1"
+                  onClick={() => {
+                    setIsSearchOpen(true);
+                    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+                  }}
+                  icon={SearchIcon}
+                  aria-label={t("requirement_grid.data.search")}
+                />
+              )}
+              <div
+                className={cn(
+                  "ml-auto box-border flex h-7 w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+                  {
+                    "w-30 border-subtle px-2.5 opacity-100 md:w-64": isSearchOpen,
+                  }
+                )}
+              >
+                <SearchIcon className="h-3.5 w-3.5" />
+                <input
+                  ref={searchInputRef}
+                  className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+                  placeholder={t("requirement_grid.data.search")}
+                  value={searchInput}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSearchInput(value);
+                    scheduleSearchChange(value);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                />
+                {isSearchOpen && (
+                  <button type="button" className="grid place-items-center" onClick={clearSearch}>
+                    <CloseIcon className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <FiltersToggle filter={filter} />
+            <FiltersDropdown title={t("common.display")} placement="bottom-end">
+              <RequirementDisplayProperties
+                columns={displayColumns}
+                hiddenIds={hiddenFieldIds}
+                onToggle={toggleDisplayColumn}
+              />
+            </FiltersDropdown>
+          </>
+        )}
         {/* 单元格已经常驻可编辑，不再有「进入编辑态」这一步；这里改成新增入口 */}
         {!readOnly && canCreate && !hideToolbarAdd && (
           <Button variant="primary" size="lg" onClick={() => openCreateModal()} disabled={isLoading}>
@@ -1663,36 +1679,13 @@ export const RequirementGrid = observer(
               onMoveToModule={onMoveToModule ? () => onMoveToModule(selectedIds) : undefined}
             />
           )}
-          <div className="flex items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-secondary">
-              {displayedTotalCount > 0
-                ? t("requirement_grid.data.range", {
-                    start: currentPageOffset * perPage + 1,
-                    end: Math.min(currentPageOffset * perPage + pageItemCount, displayedTotalCount),
-                    total: displayedTotalCount,
-                  })
-                : ""}
-            </span>
-          </div>
-          <Pagination
-            simple
-            size="small"
-            current={currentPageOffset + 1}
-            pageSize={perPage}
-            total={totalCount}
-            showSizeChanger
-            pageSizeOptions={["20", "50", "100"]}
-            onChange={(page, pageSize) => {
-              if (pageSize !== perPage) {
-                onPerPageChange(pageSize);
-                return;
-              }
-              onCursorChange(page <= 1 ? undefined : `${pageSize}:${page - 1}:0`);
-            }}
-            onShowSizeChange={(_page, pageSize) => onPerPageChange(pageSize)}
+          <RequirementGridPagination
+            totalCount={totalCount}
+            perPage={perPage}
+            pageIndex={currentPageOffset}
+            onPageChange={(pageIndex) => onCursorChange(pageIndex <= 0 ? undefined : `${perPage}:${pageIndex}:0`)}
+            onPerPageChange={onPerPageChange}
           />
-          </div>
         </div>
 
         <RequirementCreateModal

@@ -27,6 +27,7 @@ import { useRequirementApprovalInbox, useRequirementChangeRequests } from "@/hoo
 import { useUser } from "@/hooks/store/user";
 import { RequirementBaselinesTab } from "./baseline/requirement-baselines-tab";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { ApprovalInboxModal } from "./approval/approval-inbox-modal";
 import { SubmitReviewModal } from "./approval/submit-review-modal";
 import { useRequirementApprovalActions } from "./approval/use-requirement-approval-actions";
@@ -309,9 +310,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     <>
       <PageHead title={t("workspace_products.navigation.requirements")} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        <nav className="flex h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-subtle px-4 md:px-6">
+        <nav className="flex h-[46px] shrink-0 items-center gap-2 overflow-hidden border-b border-subtle px-4 md:px-6">
           <div className="min-w-0 flex-1 self-stretch overflow-x-auto">
-            <div className="flex h-full min-w-max items-end gap-1">
+            <div className="flex h-full min-w-max items-stretch gap-7">
               {[
                 { key: "data" as const, icon: Database, label: t("workspace_products.requirements.tabs.data") },
                 { key: "changes" as const, icon: History, label: t("workspace_products.requirements.tabs.changes") },
@@ -328,16 +329,16 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                     type="button"
                     onClick={() => setTab(tab.key)}
                     className={cn(
-                      "relative flex h-11 items-center gap-1.5 px-3 text-12 transition-colors",
+                      "relative flex h-full items-center gap-[7px] px-0.5 text-14 transition-colors",
                       activeTab === tab.key
-                        ? "font-medium text-accent-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:bg-accent-primary"
-                        : "text-secondary hover:text-primary"
+                        ? "font-semibold text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-accent-primary"
+                        : "font-medium text-tertiary hover:text-primary"
                     )}
                   >
-                    <Icon className="size-3.5" />
+                    <Icon className="size-[15px]" />
                     {tab.label}
                     {tab.key === "changes" && pendingCount > 0 && (
-                      <span className="ml-1 grid size-4 place-items-center rounded-full bg-warning-primary text-10 text-on-color">
+                      <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-warning-primary px-[5px] text-11 font-semibold text-on-color">
                         {pendingCount}
                       </span>
                     )}
@@ -348,19 +349,19 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           </div>
           <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 pl-2">
             {(approvalInbox.inbox.pending_count > 0 || isInboxOpen) && (
-              <Button variant="secondary" size="lg" onClick={() => setIsInboxOpen(true)}>
-                <Inbox className="size-3.5" />
+              <Button
+                variant="secondary"
+                size="xl"
+                className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
+                onClick={() => setIsInboxOpen(true)}
+              >
+                <Inbox className="size-[15px]" />
                 {t("workspace_products.requirements.inbox.entry")}
                 {approvalInbox.inbox.pending_count > 0 && (
-                  <span className="ml-1 grid size-4 place-items-center rounded-full bg-warning-primary text-10 text-on-color">
+                  <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-warning-primary px-[5px] text-11 font-semibold text-on-color">
                     {approvalInbox.inbox.pending_count}
                   </span>
                 )}
-              </Button>
-            )}
-            {activeTab === "baselines" && !openedBaselineId && canManageBaselines && (
-              <Button variant="primary" size="lg" onClick={() => setIsCreateBaselineOpen(true)}>
-                {t("workspace_products.requirements.baseline.create")}
               </Button>
             )}
           </div>
@@ -368,14 +369,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
 
         {/* 视图控制自成一行：左边选看哪一类，右边是导入/录入 + 网格工具栏（搜索等） */}
         {activeTab === "data" && requirementTypes.length > 0 && (
-          <div className="relative z-20 flex shrink-0 items-center gap-3 border-b border-subtle px-4 py-1.5 md:px-6">
+          <div className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-subtle px-4 md:px-6">
             <RequirementDataViewSwitcher
               requirementTypes={requirementTypes}
               activeKey={getViewKey(activeView)}
               onChange={changeView}
             />
-            <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            <div className="ml-auto flex min-w-0 items-center gap-2">
               <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
+              {canCreate && <span aria-hidden className="mx-1 h-5 shrink-0 border-l border-subtle" />}
               {canCreate && (
                 <RequirementCreateActions
                   canImportFromLibrary={canViewLibraries}
@@ -498,11 +500,13 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onWithdrawReview={approvalActions.withdraw}
                   onStatusChange={onStatusChange}
                   toolbarPortalEl={dataToolbarHost}
+                  onMoveToModule={canEdit ? setMoveIds : undefined}
                 />
               ) : (
                 <RequirementGrid
                   ref={gridRef}
                   hideToolbarAdd
+                  labeledToolbar
                   // 按视图重挂：列显隐、勾选、筛选弹层都随之重置，避免跨视图串味
                   key={activeView.requirementTypeId}
                   workspaceSlug={workspaceSlug ?? ""}
@@ -662,6 +666,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         workspaceSlug={workspaceSlug}
         productId={productId}
         changeType={approvalActions.pendingChangeType}
+        requirementIds={approvalActions.pendingSelection}
+        requirements={store.requirementsPage.results}
         onClose={approvalActions.closeSubmitModal}
         onSubmit={(payload) => void approvalActions.submit(payload)}
       />

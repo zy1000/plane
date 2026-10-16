@@ -3,15 +3,16 @@
  *
  * 每份基线是一个不可变命名快照，所以这里没有「编辑」——只有打开、对比、改名、删除。
  * 「对比」选中两份后才可用，选择态放在本组件里，不进 URL：它是一次性的操作意图。
+ * 「创建基线」入口在本列表工具栏；空列表时由空状态的 CTA 承接。
  */
 import { useState } from "react";
-import { GitCompareArrows, Trash2 } from "lucide-react";
+import { GitCompareArrows, Layers, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TRequirementBaseline } from "@plane/types";
-import { Avatar, Loader } from "@plane/ui";
-import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { Avatar, CustomMenu, Loader } from "@plane/ui";
+import { getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { BaselinePagination } from "./baseline-pagination";
 
 type TProps = {
@@ -69,7 +70,7 @@ export function BaselineList(props: TProps) {
       <div className="p-4">
         <Loader className="space-y-2">
           {Array.from({ length: 5 }, (_, index) => (
-            <Loader.Item key={index} height="48px" />
+            <Loader.Item key={index} height="56px" />
           ))}
         </Loader>
       </div>
@@ -113,96 +114,126 @@ export function BaselineList(props: TProps) {
     );
   }
 
+  const showToolbar = canManage || selected.length > 0;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {selected.length === 2 && (
-        <div className="flex shrink-0 items-center justify-between border-b border-subtle bg-accent-subtle/30 px-4 py-2">
-          <span className="text-12 text-secondary">
-            {t("workspace_products.requirements.baseline.compare.selected")}
-          </span>
-          <Button variant="primary" size="sm" onClick={() => onCompare(selected[0], selected[1])}>
-            <GitCompareArrows className="size-3.5" />
-            {t("workspace_products.requirements.baseline.compare.action")}
-          </Button>
+      {showToolbar && (
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-subtle px-6">
+          {selected.length > 0 && (
+            <>
+              <span className="text-13 text-secondary">
+                {t("workspace_products.requirements.baseline.selected_count", { count: selected.length })}
+              </span>
+              {/* 对比只在两份之间发生：选满两份才可点 */}
+              <button
+                type="button"
+                disabled={selected.length !== 2}
+                onClick={() => onCompare(selected[0], selected[1])}
+                title={
+                  selected.length === 2 ? undefined : t("workspace_products.requirements.baseline.compare.need_two")
+                }
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-subtle bg-accent-subtle px-3 text-13 font-medium whitespace-nowrap text-accent-primary transition-colors hover:bg-accent-subtle-hover disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <GitCompareArrows className="size-4" />
+                {t("workspace_products.requirements.baseline.compare.compare_selected")}
+              </button>
+            </>
+          )}
+          {canManage && onCreate && (
+            <Button variant="primary" size="xl" className="ml-auto" prependIcon={<Plus />} onClick={onCreate}>
+              {t("workspace_products.requirements.baseline.create")}
+            </Button>
+          )}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[880px] border-collapse text-left">
-          <thead className="sticky top-0 z-[1] bg-layer-1 text-11 font-medium text-secondary">
-            <tr className="border-b border-subtle">
-              <th className="w-10 px-4 py-2.5" aria-label={t("workspace_products.requirements.baseline.compare.action")} />
-              <th className="min-w-64 px-3 py-2.5">
-                {t("workspace_products.requirements.baseline.columns.name")}
-              </th>
-              <th className="w-28 px-3 py-2.5">
-                {t("workspace_products.requirements.baseline.columns.entries")}
-              </th>
-              <th className="w-44 px-3 py-2.5">
-                {t("workspace_products.requirements.baseline.columns.creator")}
-              </th>
-              <th className="w-32 px-3 py-2.5">
+        <table className="w-full min-w-[960px] border-collapse text-left">
+          <thead className="sticky top-0 z-[1] bg-surface-2 text-13 font-medium text-tertiary">
+            <tr className="h-10 border-b border-subtle">
+              <th className="w-11 pr-2 pl-5" aria-label={t("workspace_products.requirements.baseline.compare.action")} />
+              <th className="min-w-72 px-4 font-medium">{t("workspace_products.requirements.baseline.columns.name")}</th>
+              <th className="w-48 px-4 font-medium">{t("workspace_products.requirements.baseline.columns.entries")}</th>
+              <th className="w-40 px-4 font-medium">{t("workspace_products.requirements.baseline.columns.creator")}</th>
+              <th className="w-36 px-4 font-medium">
                 {t("workspace_products.requirements.baseline.columns.created_at")}
               </th>
-              {canManage && <th className="w-14 px-3 py-2.5" />}
+              {canManage && <th className="w-14 pr-4 pl-2" />}
             </tr>
           </thead>
           <tbody>
-            {baselines.map((baseline) => (
-              <tr key={baseline.id} className="border-b border-subtle/70 text-12 hover:bg-accent-subtle/20">
-                <td className="px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(baseline.id)}
-                    onChange={() => toggle(baseline.id)}
-                    aria-label={baseline.name}
-                    className="size-3.5 cursor-pointer accent-accent-primary"
-                  />
-                </td>
-                <td className="px-3 py-3">
-                  <button
-                    type="button"
-                    onClick={() => onOpen(baseline)}
-                    className="flex max-w-full min-w-0 flex-col items-start text-left"
-                  >
-                    <span className="truncate font-medium text-accent-primary">{baseline.name}</span>
-                    {baseline.description && (
-                      <span className="mt-0.5 truncate text-11 text-tertiary">{baseline.description}</span>
-                    )}
-                  </button>
-                </td>
-                <td className="px-3 py-3 text-secondary tabular-nums">
-                  {t("workspace_products.requirements.baseline.entry_count", { count: baseline.entry_count })}
-                </td>
-                <td className="px-3 py-3">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Avatar
-                      size="sm"
-                      name={baseline.created_by_detail?.display_name ?? ""}
-                      src={getFileURL(baseline.created_by_detail?.avatar_url ?? "")}
+            {baselines.map((baseline) => {
+              const isSelected = selected.includes(baseline.id);
+              return (
+                <tr
+                  key={baseline.id}
+                  className={`h-[68px] border-b border-subtle text-14 text-primary transition-colors ${
+                    isSelected ? "bg-accent-subtle/50" : "hover:bg-layer-transparent-hover"
+                  }`}
+                >
+                  <td className="pr-2 pl-5">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggle(baseline.id)}
+                      aria-label={baseline.name}
+                      className="size-4 cursor-pointer accent-accent-primary"
                     />
-                    <span className="truncate">{baseline.created_by_detail?.display_name}</span>
-                  </span>
-                </td>
-                <td className="px-3 py-3 text-11 text-tertiary">
-                  {`${renderFormattedDate(baseline.created_at, "MM-dd")} ${renderFormattedTime(baseline.created_at)}`}
-                </td>
-                {canManage && (
-                  <td className="px-3 py-3">
+                  </td>
+                  <td className="px-4">
                     <button
                       type="button"
-                      onClick={() => onDelete(baseline)}
-                      className={cn(
-                        "grid size-6 place-items-center rounded text-tertiary transition-colors",
-                        "hover:bg-danger-subtle hover:text-danger-primary"
-                      )}
-                      aria-label={t("workspace_products.requirements.baseline.delete")}
+                      onClick={() => onOpen(baseline)}
+                      className="flex w-full min-w-0 items-center gap-3 text-left"
                     >
-                      <Trash2 className="size-3.5" />
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent-subtle text-accent-primary">
+                        <Layers className="size-4" />
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-[3px]">
+                        <span className="truncate text-14 font-semibold text-primary">{baseline.name}</span>
+                        {baseline.description && (
+                          <span className="truncate text-12 text-tertiary">{baseline.description}</span>
+                        )}
+                      </span>
                     </button>
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="px-4 text-13 text-secondary tabular-nums">
+                    {t("workspace_products.requirements.baseline.entry_count", { count: baseline.entry_count })}
+                  </td>
+                  <td className="px-4">
+                    <span className="flex min-w-0 items-center gap-2 text-13 text-secondary">
+                      <Avatar
+                        size={22}
+                        name={baseline.created_by_detail?.display_name ?? ""}
+                        src={getFileURL(baseline.created_by_detail?.avatar_url ?? "")}
+                      />
+                      <span className="truncate">{baseline.created_by_detail?.display_name}</span>
+                    </span>
+                  </td>
+                  <td className="px-4 text-13 text-tertiary tabular-nums">
+                    {`${renderFormattedDate(baseline.created_at, "MM-dd")} ${renderFormattedTime(baseline.created_at)}`}
+                  </td>
+                  {canManage && (
+                    <td className="pr-4 pl-2">
+                      <CustomMenu
+                        ellipsis
+                        closeOnSelect
+                        placement="bottom-end"
+                        optionsClassName="p-1.5"
+                        ariaLabel={t("workspace_products.requirements.baseline.more_actions")}
+                      >
+                        <CustomMenu.MenuItem onClick={() => onDelete(baseline)}>
+                          <span className="flex items-center gap-2 text-13 text-danger-primary">
+                            <Trash2 className="size-3.5 shrink-0" />
+                            {t("workspace_products.requirements.baseline.delete")}
+                          </span>
+                        </CustomMenu.MenuItem>
+                      </CustomMenu>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

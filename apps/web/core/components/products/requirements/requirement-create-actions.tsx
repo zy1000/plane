@@ -1,8 +1,11 @@
+import { ChevronDown, Download, Plus, Upload } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { CustomMenu } from "@plane/ui";
 import type { TRequirementExcelImportResponse, TRequirementFilter } from "@plane/types";
+import { cn } from "@plane/utils";
 import { RequirementExcelImportModal, useRequirementExcelActions } from "@/components/requirements/excel";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 
 type TRequirementCreateActionsProps = {
   onManualEntry: () => void;
@@ -23,7 +26,7 @@ type TRequirementCreateActionsProps = {
 };
 
 /**
- * 「添加需求」「导入」「导出」三个一级按钮，排布与标准库条目页一致。
+ * 「导入」「导出」「添加需求」三个一级按钮，主按钮放最右。
  * 导入有标准库 / Excel 两条路，收进同一个「导入」按钮，避免四个按钮并排。
  */
 export function RequirementCreateActions({
@@ -46,16 +49,19 @@ export function RequirementCreateActions({
 
   return (
     <div className="flex items-center gap-2" onMouseEnter={onImportPrefetch} onFocus={onImportPrefetch}>
-      <Button variant="primary" size="lg" onClick={onManualEntry}>
-        {t("requirement_grid.data.add")}
-      </Button>
       {excel ? (
         <CustomMenu
           placement="bottom-end"
           closeOnSelect
           maxHeight="lg"
-          customButtonClassName={getButtonStyling("secondary", "lg")}
-          customButton={<span>{t("common.import")}</span>}
+          customButtonClassName={cn(getButtonStyling("secondary", "xl"), REQUIREMENT_TOOLBAR_BUTTON_CLASS)}
+          customButton={
+            <>
+              <Upload className="size-[15px] shrink-0" />
+              {t("common.import")}
+              <ChevronDown className="size-3.5 shrink-0 text-placeholder" />
+            </>
+          }
           ariaLabel={t("common.import")}
         >
           {canImportFromLibrary && (
@@ -69,7 +75,8 @@ export function RequirementCreateActions({
         </CustomMenu>
       ) : (
         canImportFromLibrary && (
-          <Button variant="secondary" size="lg" onClick={onImport}>
+          <Button variant="secondary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onImport}>
+            <Upload className="size-[15px] shrink-0" />
             {t("common.import")}
           </Button>
         )
@@ -78,10 +85,12 @@ export function RequirementCreateActions({
         <>
           <Button
             variant="secondary"
-            size="lg"
+            size="xl"
+            className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
             disabled={excelActions.isExporting}
             onClick={() => void excelActions.handleExport()}
           >
+            <Download className="size-[15px] shrink-0" />
             {t("export")}
           </Button>
           <RequirementExcelImportModal
@@ -95,6 +104,10 @@ export function RequirementCreateActions({
           />
         </>
       )}
+      <Button variant="primary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onManualEntry}>
+        <Plus className="size-[15px] shrink-0" />
+        {t("requirement_grid.data.add")}
+      </Button>
     </div>
   );
 }

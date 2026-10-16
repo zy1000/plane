@@ -8,8 +8,9 @@
  */
 
 import React from "react";
-import { Alert, Table, Tabs, Tag, Tooltip } from "antd";
+import { Table, Tabs, Tag, Tooltip } from "antd";
 import type { ColumnsType, TableRowSelection } from "antd/es/table";
+import { CircleAlert, Info, TriangleAlert } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementExcelRow, TRequirementExcelValidation } from "@plane/types";
 
@@ -27,6 +28,22 @@ const ACTION_TAG_COLOR: Record<TRequirementExcelRow["action"], string> = {
   skip: "default",
 };
 
+const BANNER_TONE = {
+  error: { className: "border-danger-subtle bg-danger-subtle text-danger-primary", Icon: CircleAlert },
+  warning: { className: "border-warning-subtle bg-warning-subtle text-warning-primary", Icon: TriangleAlert },
+  info: { className: "border-subtle bg-layer-1 text-secondary", Icon: Info },
+} as const;
+
+const Banner = ({ tone, children }: { tone: keyof typeof BANNER_TONE; children: React.ReactNode }) => {
+  const { className, Icon } = BANNER_TONE[tone];
+  return (
+    <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-13 ${className}`}>
+      <Icon className="mt-0.5 size-4 shrink-0" />
+      <span className="min-w-0 break-words">{children}</span>
+    </div>
+  );
+};
+
 export function RequirementExcelStepValidate({ validation, selectedRowKeys, onSelectionChange, error }: TProps) {
   const { t } = useTranslation();
   const [tab, setTab] = React.useState<"all" | "problem">("all");
@@ -41,7 +58,7 @@ export function RequirementExcelStepValidate({ validation, selectedRowKeys, onSe
         key: "row",
         width: 150,
         render: (_, record) => (
-          <span className="text-12 text-secondary">
+          <span className="text-13 text-secondary">
             {record.sheet}
             <span className="text-placeholder"> · </span>
             {record.row_number}
@@ -54,8 +71,10 @@ export function RequirementExcelStepValidate({ validation, selectedRowKeys, onSe
         ellipsis: true,
         render: (_, record) => (
           <div className="flex min-w-0 items-center gap-1.5">
-            {record.display_id && <span className="shrink-0 text-11 text-tertiary">{record.display_id}</span>}
-            <span className="truncate">{record.title || "—"}</span>
+            {record.display_id && (
+              <span className="shrink-0 font-mono text-12 text-tertiary">{record.display_id}</span>
+            )}
+            <span className="truncate text-14 text-primary">{record.title || "—"}</span>
           </div>
         ),
       },
@@ -111,23 +130,19 @@ export function RequirementExcelStepValidate({ validation, selectedRowKeys, onSe
 
   return (
     <div className="flex flex-col gap-3">
-      {error && <Alert type="error" showIcon message={error} />}
+      {error && <Banner tone="error">{error}</Banner>}
       {validation && validation.ignored_sheets.length > 0 && (
-        <Alert
-          type="warning"
-          showIcon
-          message={t("requirement_excel.validate.ignored_sheets", { names: validation.ignored_sheets.join("、") })}
-        />
+        <Banner tone="warning">
+          {t("requirement_excel.validate.ignored_sheets", { names: validation.ignored_sheets.join("、") })}
+        </Banner>
       )}
       {validation && validation.ignored_headers.length > 0 && (
-        <Alert
-          type="info"
-          showIcon
-          message={t("requirement_excel.validate.ignored_headers", { names: validation.ignored_headers.join("、") })}
-        />
+        <Banner tone="info">
+          {t("requirement_excel.validate.ignored_headers", { names: validation.ignored_headers.join("、") })}
+        </Banner>
       )}
 
-      <div className="rounded-lg border border-subtle bg-surface-1 p-4">
+      <div>
         <div className="text-13 text-secondary">
           {validation
             ? t("requirement_excel.validate.summary", {
@@ -138,7 +153,7 @@ export function RequirementExcelStepValidate({ validation, selectedRowKeys, onSe
                 error: validation.error_count,
               })
             : "—"}
-          <span className="ml-2 text-primary">
+          <span className="ml-2 font-medium text-primary">
             {t("requirement_excel.validate.selected", { count: selectedRowKeys.length })}
           </span>
         </div>

@@ -1,18 +1,21 @@
 /**
- * 提交评审弹窗里的评审人 + 通过规则。
+ * 提交评审弹窗里的审批人 + 通过规则。
  *
- * 评审人与规则不再是产品级配置 —— 每次提交时在这里选，只对本次提交的变更单有效。
+ * 审批人与规则不再是产品级配置 —— 每次提交时在这里选，只对本次提交的变更单有效。
  */
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { Minus, Plus, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementApprovalType, IUserLite } from "@plane/types";
-import { cn } from "@plane/utils";
+import { Avatar } from "@plane/ui";
+import { cn, getFileURL } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 
-/** none 排最前：它是「走不走评审」的开关，与后面三条「怎么评」不是一个层级 */
+/** none 排最前：它是「走不走审批」的开关，与后面三条「怎么评」不是一个层级 */
 const DEFAULT_APPROVAL_TYPES: TRequirementApprovalType[] = ["none", "any", "all", "n_of_m"];
 
-/** 规则文案的默认命名空间。评审裁剪复用这套控件但有自己的一份文案，见 approvalTypes 注释 */
-const DEFAULT_LABEL_I18N_PREFIX = "workspace_products.requirements.approval";
+const CARD_I18N_PREFIX = "workspace_products.requirements.approval.card";
 
 type TRequirementApprovalRuleFieldsProps = {
   memberOptions: IUserLite[];
@@ -23,56 +26,27 @@ type TRequirementApprovalRuleFieldsProps = {
   onApprovalTypeChange: (type: TRequirementApprovalType) => void;
   onRequiredCountChange: (count: number) => void;
   className?: string;
-  radioGroupName?: string;
-  /** 评审人字段下方的提示，例如评审人为空时的「请至少选择一名评审人」 */
+  /** 审批人字段下方的提示，例如审批人为空时的「请至少选择一名审批人」 */
   approversHelp?: string;
-  /**
-   * 可选的规则子集。评审裁剪必须有人签批，所以它传三值把 none 去掉 ——
-   * 与其在这里写 if，不如让调用方声明自己允许哪几条。
-   */
+  /** 可选的规则子集；不传是全部四条 */
   approvalTypes?: TRequirementApprovalType[];
-  /** 规则名与字段名的文案命名空间。裁剪表有自己的一份文案，不蹭需求的 */
-  labelI18nPrefix?: string;
-  approversLabel?: string;
-  approversPlaceholder?: string;
-  ruleLabel?: string;
 };
 
-/** 标签在上、控件在下，与产品通用设置其它字段同一套排布，字段间不加分割线 */
-export function SettingsField({
-  label,
-  required,
-  help,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  help?: string;
-  children: React.ReactNode;
-}) {
+/** 标签在上、控件在下：13 号中粗字，必填红星 */
+export function ApprovalFieldLabel({ children, required }: { children: ReactNode; required?: boolean }) {
   return (
-    <div>
-      <p className="mb-1.5 text-body-sm-medium text-primary">
-        {label}
-        {required && <span className="ml-0.5 text-danger-primary">*</span>}
-      </p>
-      <div className="min-w-0">
-        {children}
-        {/* 说明常显而不是塞进占位符：占位符一旦选了值就消失，而这些话恰恰是选完才需要 */}
-        {help && <p className="mt-1.5 text-caption-md-regular text-tertiary">{help}</p>}
-      </div>
-    </div>
+    <p className="mb-2 flex items-center text-13 leading-5 font-medium text-primary">
+      {children}
+      {required && <span className="ml-0.5 text-danger-primary">*</span>}
+    </p>
   );
 }
 
 /**
- * 评审人 + 通过规则。
+ * 审批人（头像药丸的多选）+ 通过规则（单选卡片）。
  *
- * 规则用四行单选而不是四张卡：卡片里嵌下拉会让选中项当场撑高，四行也比四张卡更容易一眼
- * 比完。「指定人数」的计数控件常驻在它自己那一行右端，选中与否都不改变行高。
- *
- * 选「无需评审」时评审人下拉禁用 —— 名单在这条规则下没有意义；清空由父组件负责，这里
- * 只负责展示。
+ * 「指定人数」卡里常驻 −/N/+ 计数器，选中前禁用；选「无需审批」时审批人下拉禁用 ——
+ * 名单在这条规则下没有意义，清空由表单 hook 负责，这里只负责展示。
  */
 export function RequirementApprovalRuleFields({
   memberOptions,
@@ -83,86 +57,179 @@ export function RequirementApprovalRuleFields({
   onApprovalTypeChange,
   onRequiredCountChange,
   className,
-  radioGroupName = "requirement-change-approval-type",
   approversHelp,
   approvalTypes = DEFAULT_APPROVAL_TYPES,
-  labelI18nPrefix = DEFAULT_LABEL_I18N_PREFIX,
-  approversLabel,
-  approversPlaceholder,
-  ruleLabel,
 }: TRequirementApprovalRuleFieldsProps) {
   const { t } = useTranslation();
   const isApproverDisabled = approvalType === "none";
+  const membersById = new Map(memberOptions.map((member) => [member.id, member]));
+  const selectedMembers = approverIds
+    .map((id) => membersById.get(id))
+    .filter((member): member is IUserLite => Boolean(member));
+  const total = approverIds.length;
+  const count = Math.min(Math.max(requiredCount ?? 1, 1), Math.max(total, 1));
+
+  const removeApprover = (event: MouseEvent | KeyboardEvent, id: string) => {
+    // 药丸在下拉按钮里：拦住冒泡，删人时不顺手把下拉打开
+    event.stopPropagation();
+    event.preventDefault();
+    onApproverIdsChange(approverIds.filter((item) => item !== id));
+  };
+
+  const approversButton = (
+    <span
+      className={cn(
+        "flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-lg border border-subtle-1 bg-layer-2 px-2 py-1.5 text-left transition-colors",
+        isApproverDisabled ? "opacity-60" : "hover:border-strong"
+      )}
+    >
+      {selectedMembers.map((member) => (
+        <span
+          key={member.id}
+          className="inline-flex h-7 max-w-48 items-center gap-1.5 rounded-full bg-layer-3 py-0 pr-1.5 pl-0.5 text-13 text-primary"
+        >
+          <Avatar
+            name={member.display_name}
+            src={getFileURL(member.avatar_url ?? "")}
+            fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(member)}
+            size={22}
+            showTooltip={false}
+          />
+          <span className="truncate">{member.display_name}</span>
+          {!isApproverDisabled && (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={t("remove")}
+              onClick={(event) => removeApprover(event, member.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") removeApprover(event, member.id);
+              }}
+              className="grid size-4 shrink-0 place-items-center rounded-full text-tertiary hover:bg-layer-1 hover:text-primary"
+            >
+              <X className="size-3" />
+            </span>
+          )}
+        </span>
+      ))}
+      <span className="px-1 text-13 text-placeholder">
+        {t(
+          isApproverDisabled
+            ? "workspace_products.requirements.approval.approvers_not_needed"
+            : "workspace_products.requirements.approval.add_approver"
+        )}
+      </span>
+    </span>
+  );
 
   return (
-    <div className={cn("space-y-6", className)}>
-      <SettingsField
-        label={approversLabel ?? t("workspace_products.requirements.fields.approvers")}
-        help={approversHelp}
-      >
-        <div className="h-10 w-full">
-          <MemberDropdown
-            multiple
-            value={approverIds}
-            onChange={onApproverIdsChange}
-            disabled={isApproverDisabled}
-            memberIds={memberOptions.map((member) => member.id)}
-            buttonVariant="border-with-text"
-            className="h-full w-full"
-            buttonClassName="h-full w-full border !border-subtle bg-surface-1"
-            buttonContainerClassName="h-full w-full"
-            placeholder={approversPlaceholder ?? t("workspace_products.requirements.fields.select_approvers")}
-            showUserDetails
-          />
-        </div>
-      </SettingsField>
+    <div className={cn("flex flex-col gap-5", className)}>
+      <div>
+        <ApprovalFieldLabel required={!isApproverDisabled}>
+          {t("workspace_products.requirements.fields.approvers")}
+        </ApprovalFieldLabel>
+        <MemberDropdown
+          multiple
+          value={approverIds}
+          onChange={onApproverIdsChange}
+          disabled={isApproverDisabled}
+          memberIds={memberOptions.map((member) => member.id)}
+          buttonVariant="border-with-text"
+          className="w-full"
+          buttonContainerClassName="w-full text-left"
+          button={approversButton}
+          placement="bottom-start"
+        />
+        {approversHelp && !isApproverDisabled && <p className="mt-1.5 text-12 text-tertiary">{approversHelp}</p>}
+      </div>
 
-      <SettingsField label={ruleLabel ?? t("workspace_products.requirements.fields.approval_rule")}>
-        <div className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle">
+      <div>
+        <ApprovalFieldLabel>{t("workspace_products.requirements.fields.approval_rule")}</ApprovalFieldLabel>
+        <div
+          role="radiogroup"
+          aria-label={t("workspace_products.requirements.fields.approval_rule")}
+          className={cn("grid grid-cols-1 gap-2.5", approvalTypes.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2")}
+        >
           {approvalTypes.map((value) => {
             const isSelected = approvalType === value;
             return (
-              <label
+              <div
                 key={value}
+                role="radio"
+                aria-checked={isSelected}
+                tabIndex={0}
+                onClick={() => onApprovalTypeChange(value)}
+                onKeyDown={(event) => {
+                  // 只处理卡片自身的按键；焦点在内部 −/+ 按钮上时让按钮自己响应回车 / 空格
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onApprovalTypeChange(value);
+                  }
+                }}
                 className={cn(
-                  "flex min-h-9 cursor-pointer items-center gap-2.5 px-3 py-1.5 text-12 text-primary transition-colors hover:bg-layer-1",
-                  isSelected && "bg-accent-subtle"
+                  "flex cursor-pointer flex-col gap-1 rounded-[10px] border px-3.5 py-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent-strong",
+                  isSelected
+                    ? "border-accent-strong bg-accent-subtle ring-1 ring-accent-strong ring-inset"
+                    : "border-subtle-1 bg-surface-1 hover:bg-layer-1"
                 )}
               >
-                <input
-                  type="radio"
-                  name={radioGroupName}
-                  value={value}
-                  checked={isSelected}
-                  onChange={() => onApprovalTypeChange(value)}
-                  className="accent-accent-primary size-3.5 shrink-0"
-                />
-                <span className="font-medium">{t(`${labelI18nPrefix}.${value}`)}</span>
+                <span className="flex items-center gap-2 text-14 font-semibold text-primary">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-4 shrink-0 rounded-full",
+                      isSelected ? "border-[5px] border-accent-strong" : "border-[1.5px] border-strong"
+                    )}
+                  />
+                  {t(`${CARD_I18N_PREFIX}.${value}`)}
+                </span>
                 {value === "n_of_m" && (
-                  /* 计数常驻这一行，不随选中长出来 —— 长出来就会把整块撑高 */
-                  <span className="ml-auto flex items-center gap-1.5 text-11 text-secondary">
-                    <select
-                      value={requiredCount ?? 1}
-                      disabled={!isSelected}
-                      onChange={(event) => onRequiredCountChange(Number(event.target.value))}
-                      className="focus:border-accent-primary h-7 rounded border border-subtle bg-surface-1 px-1.5 text-12 text-primary tabular-nums outline-none disabled:opacity-50"
+                  <span
+                    className={cn(
+                      "mt-1 ml-6 inline-flex w-max items-center overflow-hidden rounded-md border bg-surface-1",
+                      isSelected ? "border-accent-subtle" : "border-subtle"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-label="-"
+                      disabled={!isSelected || count <= 1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRequiredCountChange(count - 1);
+                      }}
+                      className="grid h-6.5 min-w-6.5 place-items-center text-secondary hover:bg-layer-1 disabled:text-disabled disabled:hover:bg-transparent"
                     >
-                      {Array.from({ length: Math.max(approverIds.length, 1) }, (_, index) => index + 1).map(
-                        (count) => (
-                          <option key={count} value={count}>
-                            {count}
-                          </option>
-                        )
-                      )}
-                    </select>
-                    <span className="tabular-nums">/ {approverIds.length}</span>
+                      <Minus className="size-3.5" />
+                    </button>
+                    <b className="grid h-6.5 min-w-8 place-items-center border-x border-subtle px-2 text-13 font-semibold text-primary tabular-nums">
+                      {count}
+                    </b>
+                    <button
+                      type="button"
+                      aria-label="+"
+                      disabled={!isSelected || count >= Math.max(total, 1)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRequiredCountChange(count + 1);
+                      }}
+                      className="grid h-6.5 min-w-6.5 place-items-center text-secondary hover:bg-layer-1 disabled:text-disabled disabled:hover:bg-transparent"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
                   </span>
                 )}
-              </label>
+                <span className="pl-6 text-12 text-tertiary">
+                  {value === "n_of_m"
+                    ? t(`${CARD_I18N_PREFIX}_desc.n_of_m`, { total, count })
+                    : t(`${CARD_I18N_PREFIX}_desc.${value}`)}
+                </span>
+              </div>
             );
           })}
         </div>
-      </SettingsField>
+      </div>
     </div>
   );
 }

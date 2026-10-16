@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pagination } from "antd";
-import { Check, Library, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirementImportPayload } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { BuiltinCellValue } from "@/components/requirements/requirement-builtin-fields";
-import { REQUIREMENT_BUILTIN_TITLE_COLUMN, resolveBuiltinColumns } from "@/components/requirements/requirement-builtin-layout";
-import { getCurrentPageOffset, LeafValue } from "@/components/requirements/requirement-grid-shared";
-import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import { getCurrentPageOffset } from "@/components/requirements/requirement-grid-shared";
 import { useImportableLibraryItems } from "@/hooks/store/use-importable-library-items";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useLibraryModuleTrees } from "@/hooks/store/use-library-module-trees";
 import { useRequirementLibraries } from "@/hooks/store/use-requirement-libraries";
+import { RequirementGridPagination } from "@/components/requirements/requirement-grid-pagination";
+import { useProductsContext } from "../context";
 import {
+  collectModuleIds,
+  collectSelectionSourceNames,
   findModuleNamePath,
   RequirementImportLibraryTree,
   UNASSIGNED_MODULE_ID,
@@ -32,14 +32,14 @@ import { getSelectionState, useLibraryImportSelection } from "./use-library-impo
  * 可以跨模块、跨库攒一批再一次性导入。接口一次只收一个 library_id，跨库的部分由调用方
  * 按库分组后顺序调用（见 useProductRequirements.importFromLibraries）。
  *
- * 已经导进本产品的条目不进候选池：右侧列表由服务端剔除（条目是分页的，前端就地过滤
- * 会让某一页只剩几行、总数也偏大），树上每个节点的可导条数与「勾节点」的那批 id 则来自
- * useImportableLibraryItems（它带回每条的 module_id，模块级的数字只能这么算 ——
- * 模块树接口自带的 count 是库内全量、不排除已导入的）。
+ * 已经导进本产品的条目不进候选池，但右侧列表照样列出来（置灰、打「已导入」标签、不可勾）
+ * —— 用户要能看到「这几条我已经有了」。判定依据是 useImportableLibraryItems 的可导 id
+ * 集合：不在里面的就是已导入。树上每个节点的可导条数与「勾节点」的那批 id 也来自它
+ * （它带回每条的 module_id，模块级的数字只能这么算 —— 模块树接口自带的 count 是库内
+ * 全量、不排除已导入的）。
  *
  * 刻意不复用 RequirementGrid：它的勾选是接删除的，还自带编辑工具栏与 bulk-save
- * 契约。这里只复用它的展示部件（内置列 BuiltinCellValue + 自定义列 LeafValue），
- * 让列的呈现和标准库页保持一致。
+ * 契约。预览只出 编号 / 标题 / 状态 三列，够认人即可。
  */
 
 
@@ -68,6 +68,8 @@ export const RequirementImportFromLibraryModal = ({
   onImport,
 }: TProps) => {
   const { t } = useTranslation();
+  const { products } = useProductsContext();
+  const product = products.find((entry) => entry.id === productId);
   const [activeNode, setActiveNode] = useState<TImportTreeNode | null>(null);
   const [treeSearch, setTreeSearch] = useState("");
   /** 每次打开自增，用来让左树丢掉上一次的模块树缓存与展开状态 */
@@ -92,7 +94,6 @@ export const RequirementImportFromLibraryModal = ({
   const itemsStore = useLibraryItems({
     workspaceSlug,
     libraryId: libraryId ?? undefined,
-    excludeImportedIntoProduct: productId,
   });
   const selection = useLibraryImportSelection(itemIdsByLibrary);
 
@@ -142,23 +143,6 @@ export const RequirementImportFromLibraryModal = ({
   const isBootstrapping = isLibrariesLoading || (!libraryId && libraries.length > 0);
 
   const activeLibrary = libraries.find((library) => library.id === libraryId);
-  const fields = itemsStore.configuration?.fields ?? [];
-  const libraryBuiltinFields = itemsStore.configuration?.builtin_fields;
-  /**
-   * 预览只出最能认人的两列内置字段（标题 + 优先级），其余靠自定义字段补 —— 弹窗宽度
-   * 有限。标题恒在（锁定纳入库）；优先级被该库的需求类型配置为不纳入时剔除。
-   */
-  const previewBuiltinColumns = useMemo(
-    () => [
-      REQUIREMENT_BUILTIN_TITLE_COLUMN,
-      ...resolveBuiltinColumns("library", libraryBuiltinFields)
-        .filter((entry) => entry.key === "priority")
-        .map((entry) => entry.column),
-    ],
-    [libraryBuiltinFields]
-  );
-  // 标题现在是行上的内置列，不在 data 里 —— 预览必须单独出这一列，否则认不出是哪条需求
-  const visibleFields = useMemo(() => fields.filter((field) => field.is_active).slice(0, 2), [fields]);
   const items = itemsStore.requirementsPage.results;
   const totalCount = itemsStore.requirementsPage.total_count ?? 0;
   const currentPageOffset = getCurrentPageOffset(
@@ -167,8 +151,18 @@ export const RequirementImportFromLibraryModal = ({
     itemsStore.requirementsPage.prev_page_results,
     itemsStore.requirementsPage.next_page_results
   );
-  const pickedOnPage = libraryId ? items.filter((item) => selection.isPicked(libraryId, item.id)).length : 0;
-  const pageState = getSelectionState(pickedOnPage, items.length);
+  /** 当前库的可导 id；不在里面的行就是已导入。可导集合还在拉时一律当可导，免得整页闪成灰的 */
+  const importableIds = useMemo(
+    () => new Set(libraryId ? (itemIdsByLibrary.get(libraryId) ?? []) : []),
+    [itemIdsByLibrary, libraryId]
+  );
+  const isImported = (itemId: string) => !isImportableLoading && !importableIds.has(itemId);
+  /** 可导集合没回来前不让勾：此时分不清哪些已导入，勾上的已导入条目会让整批导入被拒 */
+  const selectableIdsOnPage = isImportableLoading
+    ? []
+    : items.filter((item) => !isImported(item.id)).map((item) => item.id);
+  const pickedOnPage = libraryId ? selectableIdsOnPage.filter((itemId) => selection.isPicked(libraryId, itemId)).length : 0;
+  const pageState = getSelectionState(pickedOnPage, selectableIdsOnPage.length);
   /** 该库有条目、但全都导进本产品了 —— 与「本来就是空库」是两回事，右侧文案要分开 */
   const isActiveLibraryDrained =
     !isImportableLoading && (activeLibrary?.item_count ?? 0) > 0 && importableCountOf(libraryId ?? "") === 0;
@@ -176,6 +170,32 @@ export const RequirementImportFromLibraryModal = ({
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
   }, [itemsStore.cursor]);
+
+  /**
+   * 当前节点（含子模块）下还能导几条 —— 右侧标题「N 条，已导入 M 条」的 M = 列表总数 − 它。
+   * 列表总数来自分页接口（含已导入），可导数来自可导集合，两边口径一致才能相减。
+   */
+  const importableInNode = useMemo(() => {
+    if (!libraryId) return 0;
+    const libraryItems = itemsByLibrary.get(libraryId) ?? [];
+    const moduleId = activeNode?.moduleId;
+    if (!moduleId) return libraryItems.length;
+    if (moduleId === UNASSIGNED_MODULE_ID) return libraryItems.filter((item) => !item.module_id).length;
+    const moduleIds = collectModuleIds(moduleTrees.treesByLibrary.get(libraryId) ?? [], moduleId);
+    return libraryItems.filter((item) => item.module_id && moduleIds.has(item.module_id)).length;
+  }, [activeNode?.moduleId, itemsByLibrary, libraryId, moduleTrees.treesByLibrary]);
+
+  const selectionSourceNames = useMemo(
+    () =>
+      collectSelectionSourceNames({
+        selected: selection.selected,
+        itemsByLibrary,
+        treesByLibrary: moduleTrees.treesByLibrary,
+        libraries,
+        unassignedLabel: t("requirement_modules.unassigned"),
+      }),
+    [itemsByLibrary, libraries, moduleTrees.treesByLibrary, selection.selected, t]
+  );
 
   /** 右侧面包屑：库名 + 从根到当前模块的名称路径 */
   const activeModulePath = useMemo(() => {
@@ -214,280 +234,306 @@ export const RequirementImportFromLibraryModal = ({
     }
   };
 
+
+  const nodeTitle = activeModulePath.length ? activeModulePath[activeModulePath.length - 1] : (activeLibrary?.name ?? "");
+  /** 标题上方的小字：选的是模块时是「库 / 上级模块」，选的是整库时是它所属的需求类型 */
+  const nodeCaption = activeModulePath.length
+    ? [activeLibrary?.name ?? "", ...activeModulePath.slice(0, -1)].join(" / ")
+    : (activeLibrary?.requirement_type_detail?.name ?? "");
+  const showNodeSummary = !itemsStore.search && !isImportableLoading && !itemsStore.isRequirementsLoading;
+  const shownSourceNames = selectionSourceNames.slice(0, 2).join("、");
+  const productLabel = product?.identifier || product?.name || "";
+
   return (
-    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.VXL}>
-      <div className="flex items-center justify-between border-b border-subtle px-5 py-4">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-md bg-layer-2 text-secondary">
-            <Library className="size-4" />
-          </span>
-          <div>
-            <h2 className="text-14 font-medium text-primary">
+    <ModalCore
+      isOpen={isOpen}
+      handleClose={onClose}
+      position={EModalPosition.CENTER}
+      width={EModalWidth.VIIXL}
+      className="sm:max-w-[1120px]"
+    >
+      <div className="flex h-[700px] max-h-[90vh] flex-col">
+        <div className="flex shrink-0 items-center gap-3 border-b border-subtle px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-16 font-semibold text-primary">
               {t("workspace_products.requirements.import_modal.title")}
             </h2>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="grid size-8 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover"
-          onClick={onClose}
-          aria-label={t("close")}
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-
-      {/* 左树多了模块层级，比原先的平铺库列表更需要纵向空间 */}
-      <div className="flex h-[58vh] min-h-[420px]">
-        {/* 左：需求类型 → 标准库 → 模块 的可勾选树，常驻 */}
-        <aside className="flex w-[296px] shrink-0 flex-col border-r border-subtle">
-          <div className="relative shrink-0 px-3 py-2.5">
-            <Search className="pointer-events-none absolute top-1/2 left-5 size-3.5 -translate-y-1/2 text-placeholder" />
-            <input
-              value={treeSearch}
-              onChange={(event) => setTreeSearch(event.target.value)}
-              className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-7 text-12 text-primary outline-none placeholder:text-placeholder"
-              placeholder={t("workspace_products.requirements.import_modal.search_tree")}
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-            {isLibrariesLoading ? (
-              /* 每条按真实节点的高度排，避免加载完之后列表跳一下 */
-              <ul className="space-y-0.5">
-                {Array.from({ length: 8 }).map((_, index) => (
-                  <li key={index} className="flex h-8 items-center px-2" style={{ animationDelay: `${index * 60}ms` }}>
-                    <span className="block h-3 w-3/4 animate-pulse rounded bg-layer-2" />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <RequirementImportLibraryTree
-                libraries={libraries}
-                itemsByLibrary={itemsByLibrary}
-                treesByLibrary={moduleTrees.treesByLibrary}
-                ensureModules={(id) => void moduleTrees.ensureModules(id)}
-                search={treeSearch}
-                selection={selection}
-                activeNode={activeNode}
-                onSelectNode={selectNode}
-                revision={treeRevision}
-              />
+            {productLabel && (
+              <p className="mt-0.5 truncate text-13 text-tertiary">
+                {t("workspace_products.requirements.import_modal.subtitle", { product: productLabel })}
+              </p>
             )}
           </div>
-        </aside>
-        {/* 右：所选节点（含其子模块）下的条目 */}
-        <section className="flex min-w-0 flex-1 flex-col">
-          {isBootstrapping ? (
-            /* 打开瞬间会自动选中第一个库，这段空档给骨架而不是提示文案 ——
-               否则用户会看到「请先选择标准库」一闪而过，像是操作失败了。
-               骨架按最终布局排（顶栏 + 表头 + 若干行），切换到真数据时不会跳版。 */
-            <>
-              <div className="flex shrink-0 items-center gap-2 border-b border-subtle px-4 py-2.5">
-                <span className="h-4 w-28 animate-pulse rounded bg-layer-2" />
-                <span className="ml-auto h-8 w-52 animate-pulse rounded-md bg-layer-2" />
-              </div>
-              <div className="min-h-0 flex-1 space-y-px px-4 pt-3">
-                <span className="mb-2 block h-3 w-full animate-pulse rounded bg-layer-2/70" />
-                {Array.from({ length: 7 }).map((_, index) => (
-                  <span
-                    key={index}
-                    className="block h-9 animate-pulse rounded bg-layer-1"
-                    style={{ animationDelay: `${index * 60}ms` }}
-                  />
-                ))}
-              </div>
-            </>
-          ) : !libraryId ? (
-            /* 走到这里只可能是一个库都没有 —— 此时说「请先选择」是没意义的 */
-            <p className="grid flex-1 place-items-center text-12 text-secondary">
-              {t("workspace_products.requirements.import_modal.empty_libraries")}
-            </p>
-          ) : (
-            <>
-              <div className="flex shrink-0 items-center gap-2 border-b border-subtle px-4 py-2.5">
-                {/* 面包屑：库 / 模块路径。只到模块为止 —— 条目本身在下面的表里 */}
-                <div className="flex min-w-0 items-center gap-1.5 text-12 text-secondary">
-                  <span className="min-w-0 truncate font-medium text-primary">{activeLibrary?.name}</span>
-                  {activeModulePath.map((name, index) => (
-                    <span key={`${name}-${index}`} className="flex min-w-0 items-center gap-1.5">
-                      <span className="text-placeholder">/</span>
+          <button
+            type="button"
+            className="grid size-8 shrink-0 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-primary"
+            onClick={onClose}
+            aria-label={t("close")}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-1">
+          {/* 左：需求类型（分组小标题）→ 标准库 → 模块 的可勾选树，常驻 */}
+          <aside className="flex w-[320px] shrink-0 flex-col border-r border-subtle bg-surface-2">
+            <div className="shrink-0 px-3.5 pt-4">
+              <label className="flex h-[34px] items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 focus-within:border-accent-strong">
+                <Search className="size-[15px] shrink-0 text-placeholder" />
+                <input
+                  value={treeSearch}
+                  onChange={(event) => setTreeSearch(event.target.value)}
+                  className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
+                  placeholder={t("workspace_products.requirements.import_modal.search_tree")}
+                />
+              </label>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-4">
+              {isLibrariesLoading ? (
+                /* 每条按真实节点的高度排，避免加载完之后列表跳一下 */
+                <ul className="mt-3.5 space-y-0.5">
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <li
+                      key={index}
+                      className="flex h-[34px] items-center px-2"
+                      style={{ animationDelay: `${index * 60}ms` }}
+                    >
+                      <span className="block h-3 w-3/4 animate-pulse rounded bg-layer-1" />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <RequirementImportLibraryTree
+                  libraries={libraries}
+                  itemsByLibrary={itemsByLibrary}
+                  treesByLibrary={moduleTrees.treesByLibrary}
+                  ensureModules={(id) => void moduleTrees.ensureModules(id)}
+                  search={treeSearch}
+                  selection={selection}
+                  activeNode={activeNode}
+                  onSelectNode={selectNode}
+                  revision={treeRevision}
+                />
+              )}
+            </div>
+          </aside>
+
+          {/* 右：所选节点（含其子模块）下的条目 */}
+          <section className="flex min-w-0 flex-1 flex-col">
+            {isBootstrapping ? (
+              /* 打开瞬间会自动选中第一个库，这段空档给骨架而不是提示文案 ——
+                 否则用户会看到「请先选择标准库」一闪而过，像是操作失败了。
+                 骨架按最终布局排（顶栏 + 表头 + 若干行），切换到真数据时不会跳版。 */
+              <>
+                <div className="flex h-[62px] shrink-0 items-center gap-3 px-5">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="h-3 w-24 animate-pulse rounded bg-layer-1" />
+                    <span className="h-4 w-40 animate-pulse rounded bg-layer-1" />
+                  </div>
+                  <span className="ml-auto h-[34px] w-[220px] animate-pulse rounded-md bg-layer-1" />
+                </div>
+                <div className="min-h-0 flex-1 border-t border-subtle">
+                  <span className="block h-[38px] animate-pulse bg-surface-2" />
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <div key={index} className="flex h-[46px] items-center border-b border-subtle px-5">
                       <span
-                        className={cn(
-                          "min-w-0 truncate",
-                          index === activeModulePath.length - 1 && "font-medium text-primary"
-                        )}
-                      >
-                        {name}
-                      </span>
-                    </span>
+                        className="block h-3 w-full animate-pulse rounded bg-layer-1"
+                        style={{ animationDelay: `${index * 60}ms` }}
+                      />
+                    </div>
                   ))}
                 </div>
-                {activeNode?.moduleId && activeNode.moduleId !== UNASSIGNED_MODULE_ID && (
-                  /* 点父模块看到的是整棵子树，不说清楚会以为列表串了别的模块的条目 */
-                  <span className="shrink-0 rounded bg-layer-2 px-1.5 py-0.5 text-10 text-tertiary">
-                    {t("workspace_products.requirements.import_modal.includes_submodules")}
-                  </span>
-                )}
-                <div className="relative ml-auto w-52">
-                  <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-placeholder" />
-                  <input
-                    value={itemsStore.search}
-                    onChange={(event) => itemsStore.setSearch(event.target.value)}
-                    className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-7 text-12 text-primary outline-none placeholder:text-placeholder"
-                    placeholder={t("search")}
-                  />
-                </div>
-              </div>
-
-              <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
-                {itemsStore.isRequirementsLoading && !items.length ? (
-                  <div className="p-4">
-                    <Loader>
-                      <Loader.Item height="160px" />
-                    </Loader>
+              </>
+            ) : !libraryId ? (
+              /* 走到这里只可能是一个库都没有 —— 此时说「请先选择」是没意义的 */
+              <p className="grid flex-1 place-items-center text-14 text-tertiary">
+                {t("workspace_products.requirements.import_modal.empty_libraries")}
+              </p>
+            ) : (
+              <>
+                <div className="flex h-[62px] shrink-0 items-center gap-3 px-5">
+                  <div className="min-w-0 flex-1">
+                    {nodeCaption && <div className="truncate text-12 text-tertiary">{nodeCaption}</div>}
+                    <div className="mt-px flex min-w-0 items-baseline gap-1.5">
+                      <span className="min-w-0 truncate text-[15px] font-semibold text-primary">{nodeTitle}</span>
+                      {showNodeSummary && (
+                        <span className="shrink-0 text-13 whitespace-nowrap text-tertiary">
+                          {t("workspace_products.requirements.import_modal.node_summary", {
+                            total: totalCount,
+                            imported: Math.max(totalCount - importableInNode, 0),
+                          })}
+                        </span>
+                      )}
+                      {activeNode?.moduleId && activeNode.moduleId !== UNASSIGNED_MODULE_ID && (
+                        /* 点父模块看到的是整棵子树，不说清楚会以为列表串了别的模块的条目 */
+                        <span className="shrink-0 rounded bg-layer-1 px-1.5 text-12 whitespace-nowrap text-tertiary">
+                          {t("workspace_products.requirements.import_modal.includes_submodules")}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ) : !items.length ? (
-                  <p className="grid h-full place-items-center text-12 text-secondary">
-                    {/* 「本来就是空库」和「都已经导进本产品了」是两回事，别用同一句话打发 */}
-                    {isActiveLibraryDrained && !itemsStore.search
-                      ? t("workspace_products.requirements.import_modal.all_imported")
-                      : t("workspace_products.requirements.import_modal.empty_items")}
-                  </p>
-                ) : (
-                  <table className="w-full border-collapse text-13">
-                    <thead className="sticky top-0 z-10 bg-surface-1">
-                      <tr className="border-b border-subtle text-left text-11 font-medium text-secondary">
-                        <th className="w-9 px-3 py-2">
-                          {/* 表头只管当前这一页（且已被搜索过滤）；整库全选在左栏 */}
-                          <Checkbox
-                            checked={pageState === "checked"}
-                            indeterminate={pageState === "indeterminate"}
-                            onChange={() =>
-                              selection.toggleItems(
-                                libraryId,
-                                items.map((item) => item.id)
-                              )
-                            }
-                            aria-label={t("workspace_products.requirements.import_modal.select_all_page")}
-                          />
-                        </th>
-                        {/* 编号排在标题之前：导入后它会作为来源编号跟着落到产品需求上，
-                            用户在这里就该看到将要带过去的是哪几个号 */}
-                        <th className="min-w-[88px] px-3 py-2">
-                          <span className="truncate">{t("requirements.identifier.column")}</span>
-                        </th>
-                        {previewBuiltinColumns.map((column) => (
-                          <th key={column.key} className="min-w-[130px] px-3 py-2">
-                            <span className="truncate">{t(column.labelKey)}</span>
-                          </th>
-                        ))}
-                        {visibleFields.map((field) => (
-                          <th key={field.id} className="min-w-[130px] px-3 py-2">
-                            <span className="truncate">{field.name}</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <label className="flex h-[34px] w-[220px] shrink-0 items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 focus-within:border-accent-strong">
+                    <Search className="size-[15px] shrink-0 text-placeholder" />
+                    <input
+                      value={itemsStore.search}
+                      onChange={(event) => itemsStore.setSearch(event.target.value)}
+                      className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
+                      placeholder={t("workspace_products.requirements.import_modal.search_items")}
+                    />
+                  </label>
+                </div>
+
+                <div ref={listRef} className="min-h-0 flex-1 overflow-auto border-t border-subtle">
+                  {itemsStore.isRequirementsLoading && !items.length ? (
+                    <div className="p-5">
+                      <Loader>
+                        <Loader.Item height="160px" />
+                      </Loader>
+                    </div>
+                  ) : isActiveLibraryDrained && !itemsStore.search ? (
+                    /* 「本来就是空库」和「都已经导进本产品了」是两回事，别用同一句话打发 */
+                    <p className="grid h-full place-items-center text-14 text-tertiary">
+                      {t("workspace_products.requirements.import_modal.all_imported")}
+                    </p>
+                  ) : !items.length ? (
+                    <p className="grid h-full place-items-center text-14 text-tertiary">
+                      {t("workspace_products.requirements.import_modal.empty_items")}
+                    </p>
+                  ) : (
+                    <div role="table" className="min-w-full">
+                      <div
+                        role="row"
+                        className="sticky top-0 z-10 grid h-[38px] grid-cols-[16px_92px_minmax(0,1fr)_120px] items-center gap-x-3 border-b border-subtle bg-surface-2 px-5 text-12 font-medium text-tertiary"
+                      >
+                        {/* 表头只管当前这一页（且已被搜索过滤）的可导行；整库全选在左栏 */}
+                        <Checkbox
+                          checked={pageState === "checked"}
+                          indeterminate={pageState === "indeterminate"}
+                          disabled={!selectableIdsOnPage.length}
+                          onChange={() => selection.toggleItems(libraryId, selectableIdsOnPage)}
+                          aria-label={t("workspace_products.requirements.import_modal.select_all_page")}
+                        />
+                        {/* 编号排在标题之前：导入后它会作为来源编号跟着落到产品需求上 */}
+                        <span role="columnheader" className="truncate">
+                          {t("requirements.identifier.column")}
+                        </span>
+                        <span role="columnheader" className="truncate">
+                          {t("workspace_products.requirements.import_modal.column_title")}
+                        </span>
+                        <span role="columnheader" className="truncate">
+                          {t("workspace_products.requirements.import_modal.column_status")}
+                        </span>
+                      </div>
                       {items.map((item) => {
-                        const isPicked = selection.isPicked(libraryId, item.id);
+                        const imported = isImported(item.id);
+                        const isPicked = !imported && selection.isPicked(libraryId, item.id);
+                        const isSelectable = !imported && !isImportableLoading;
                         return (
-                          <tr
+                          <div
                             key={item.id}
-                            onClick={() => selection.toggleItem(libraryId, item.id)}
+                            role="row"
+                            onClick={isSelectable ? () => selection.toggleItem(libraryId, item.id) : undefined}
                             className={cn(
-                              "cursor-pointer border-b border-subtle transition-colors",
-                              isPicked ? "bg-accent-subtle/40" : "hover:bg-layer-1"
+                              "grid h-[46px] grid-cols-[16px_92px_minmax(0,1fr)_120px] items-center gap-x-3 border-b border-subtle px-5 transition-colors",
+                              !isSelectable
+                                ? "cursor-default"
+                                : isPicked
+                                  ? "cursor-pointer bg-accent-subtle/50"
+                                  : "cursor-pointer hover:bg-layer-transparent-hover"
                             )}
                           >
-                            <td className="px-3 py-2 align-top">
-                              <Checkbox
-                                checked={isPicked}
-                                onChange={() => selection.toggleItem(libraryId, item.id)}
-                                onClick={(event) => event.stopPropagation()}
-                              />
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              <RequirementIdentifier displayId={item.display_id} />
-                            </td>
-                            {previewBuiltinColumns.map((column) => (
-                              <td key={column.key} className="px-3 py-2 align-top">
-                                <BuiltinCellValue columnKey={column.key} values={item} />
-                              </td>
-                            ))}
-                            {visibleFields.map((field) => (
-                              <td key={field.id} className="px-3 py-2 align-top">
-                                <LeafValue field={field} value={item.data[field.id]} workspaceSlug={workspaceSlug} />
-                              </td>
-                            ))}
-                          </tr>
+                            <Checkbox
+                              checked={isPicked}
+                              disabled={!isSelectable}
+                              onChange={() => selection.toggleItem(libraryId, item.id)}
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                            <span
+                              className={`truncate font-mono text-13 tabular-nums ${imported ? "text-placeholder" : "text-tertiary"}`}
+                            >
+                              {item.display_id}
+                            </span>
+                            <span
+                              className={`truncate text-14 ${imported ? "text-placeholder" : "font-medium text-primary"}`}
+                              title={item.title}
+                            >
+                              {item.title || "—"}
+                            </span>
+                            <span>
+                              {imported && (
+                                <span className="inline-flex h-5 items-center rounded bg-layer-1 px-1.5 text-12 text-tertiary">
+                                  {t("workspace_products.requirements.import_modal.tag_imported")}
+                                </span>
+                              )}
+                            </span>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              {totalCount > 0 && (
-                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-subtle px-4 py-2">
-                  <span className="text-11 text-secondary">
-                    {t("requirement_grid.data.range", {
-                      start: currentPageOffset * itemsStore.perPage + 1,
-                      end: Math.min(currentPageOffset * itemsStore.perPage + items.length, totalCount),
-                      total: totalCount,
-                    })}
-                  </span>
-                  <Pagination
-                    simple
-                    size="small"
-                    current={currentPageOffset + 1}
-                    pageSize={itemsStore.perPage}
-                    total={totalCount}
-                    showSizeChanger
-                    pageSizeOptions={["20", "50", "100"]}
-                    onChange={(page, pageSize) => {
-                      if (pageSize !== itemsStore.perPage) {
-                        itemsStore.setPerPage(pageSize);
-                        return;
-                      }
-                      itemsStore.setCursor(page <= 1 ? undefined : `${pageSize}:${page - 1}:0`);
-                    }}
-                    onShowSizeChange={(_page, pageSize) => itemsStore.setPerPage(pageSize)}
-                  />
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-        </section>
-      </div>
+                {totalCount > 0 && (
+                  <RequirementGridPagination
+                    totalCount={totalCount}
+                    perPage={itemsStore.perPage}
+                    pageIndex={currentPageOffset}
+                    onPageChange={(pageIndex) =>
+                      itemsStore.setCursor(pageIndex <= 0 ? undefined : `${itemsStore.perPage}:${pageIndex}:0`)
+                    }
+                    onPerPageChange={(pageSize) => itemsStore.setPerPage(pageSize)}
+                  />
+                )}
+              </>
+            )}
+          </section>
+        </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-subtle px-5 py-3">
-        <span className="min-w-0 truncate text-12 text-tertiary">
-          {error ? (
-            <span className="text-danger-primary">{error}</span>
-          ) : selection.totalCount > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-secondary">
-              <Check className="size-3.5 text-accent-primary" />
-              {t("workspace_products.requirements.import_modal.selected_summary", {
-                count: selection.totalCount,
-                libraries: selection.libraryCount,
-              })}
-            </span>
-          ) : (
-            ""
-          )}
-        </span>
-        <div className="flex shrink-0 gap-2">
-          <Button variant="secondary" onClick={onClose} disabled={isMutating}>
-            {t("cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => void handleImport()}
-            loading={isMutating}
-            disabled={!selection.totalCount || isMutating}
-          >
-            {t("workspace_products.requirements.import_modal.confirm")}
-          </Button>
+        <div className="flex shrink-0 items-center gap-3 border-t border-subtle px-6 py-3.5">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            {error ? (
+              <span className="min-w-0 truncate text-13 text-danger-primary">{error}</span>
+            ) : selection.totalCount > 0 ? (
+              <>
+                <span className="min-w-0 truncate text-13 text-primary">
+                  {t("workspace_products.requirements.import_modal.selected_count", { count: selection.totalCount })}
+                  {selectionSourceNames.length > 0 && (
+                    <span className="text-tertiary">
+                      {selectionSourceNames.length > 2
+                        ? t("workspace_products.requirements.import_modal.sources_many", {
+                            names: shownSourceNames,
+                            count: selectionSourceNames.length,
+                          })
+                        : t("workspace_products.requirements.import_modal.sources_few", { names: shownSourceNames })}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-13 text-accent-primary hover:underline"
+                  onClick={selection.clear}
+                  disabled={isMutating}
+                >
+                  {t("workspace_products.requirements.import_modal.clear")}
+                </button>
+              </>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="secondary" size="xl" onClick={onClose} disabled={isMutating}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="xl"
+              onClick={() => void handleImport()}
+              loading={isMutating}
+              disabled={!selection.totalCount || isMutating}
+            >
+              {selection.totalCount
+                ? t("workspace_products.requirements.import_modal.confirm_count", { count: selection.totalCount })
+                : t("workspace_products.requirements.import_modal.confirm")}
+            </Button>
+          </div>
         </div>
       </div>
     </ModalCore>

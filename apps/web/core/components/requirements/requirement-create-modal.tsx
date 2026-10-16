@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { cloneDeep } from "lodash-es";
-import { AlertCircle, AlignLeft, Hash, Shapes, Type, X } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirementBatchSavePayload,
   TRequirementBuiltinFieldConfig,
@@ -18,31 +18,23 @@ import type {
 } from "@plane/types";
 import { EModalPosition, EModalWidth, Input, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { useOptionalProductsContext } from "@/components/products/context";
 import { useRequirementTypeFields } from "@/hooks/store/use-requirement-type-fields";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { FileService } from "@/services/file.service";
 import { createEmptyBuiltinValues } from "./requirement-builtin-fields";
 import { resolveBuiltinColumns } from "./requirement-builtin-layout";
+import { RequirementCreateFooter } from "./requirement-create-footer";
 import {
   RequirementCreatePropertyRail,
   type TCreateRequiredEntry,
 } from "./requirement-create-property-rail";
-import { FIELD_ICONS } from "./requirement-builder-items";
 import { RequirementSubformSection } from "./requirement-detail/requirement-subform-section";
 import { isRequirementValueEmpty } from "./requirement-required";
 import { createEmptyRequirementData } from "./requirement-row-data";
 import { LeafEditor } from "./requirement-grid-shared";
 import { RequirementRichTextField } from "./requirement-rich-text";
 import { RequirementTypeSelect } from "./requirement-type-select";
-
-/**
- * 建行弹窗字段行图标与工作项 ExtraFieldRow / FIELD_TYPE_ICON 对齐：
- * text 用 AlignLeft（三条横线），不用字段库里那个 Type（字母 T）。
- */
-const CREATE_MODAL_FIELD_ICONS = {
-  ...FIELD_ICONS,
-  text: AlignLeft,
-} as const;
 
 /** 两列网格里独占一整行的字段类型：富文本与附件本身就是一块，挤进半列会变成一条缝 */
 const FULL_WIDTH_FIELD_TYPES = new Set<TRequirementField["field_type"]>(["rich_text", "attachment", "image"]);
@@ -126,21 +118,18 @@ type TProps = {
   onUpload: (file: globalThis.File, imageOnly: boolean) => Promise<TRequirementAssetRef>;
 };
 
-const FormSection = ({ children }: { children: ReactNode }) => (
-  <section className="flex min-w-0 flex-col gap-3 pt-4">{children}</section>
-);
+/** 左栏输入框：40px 高、8px 圆角、14 号字（与类型下拉同一套外形） */
+const CREATE_INPUT_CLASS = "h-10 w-full rounded-lg border border-subtle-1 bg-layer-2 px-3 py-0 text-14 focus:border-accent-strong";
 
 /**
- * 一个字段：标签（图标 + 名字 + 必填星号 / 选填）、控件、下方一行说明或错误。
+ * 一个字段：标签（名字 + 必填星号 / 选填）、控件、下方一行错误。
  * onBlur 挂在外层：控件失焦（含下拉关掉）冒泡到这里，调用方据此把字段标成「碰过」。
  */
 const ModalField = ({
   htmlFor,
   label,
-  icon: Icon,
   required = false,
   optional = false,
-  hint,
   error,
   className,
   onBlur,
@@ -148,10 +137,8 @@ const ModalField = ({
 }: {
   htmlFor?: string;
   label: string;
-  icon?: LucideIcon;
   required?: boolean;
   optional?: boolean;
-  hint?: string;
   error?: string;
   className?: string;
   onBlur?: () => void;
@@ -159,40 +146,30 @@ const ModalField = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} onBlur={onBlur}>
+    <div className={cn("flex min-w-0 flex-col", className)} onBlur={onBlur}>
       {/*
-        标签 class 必须写成字面量，不能包进 cn()：项目里的 twMerge 会把 text-12 和
-        text-primary 判成冲突，丢掉 text-12（工作项 ExtraFieldRow 也是字面量，所以没这问题）。
+        标签 class 必须写成字面量，不能包进 cn()：项目里的 twMerge 会把 text-13 和
+        text-primary 判成冲突，丢掉字号。
       */}
       <label
         htmlFor={htmlFor}
         className={
           error
-            ? "flex items-center gap-1.5 text-12 leading-4 font-medium text-danger-secondary"
-            : "flex items-center gap-1.5 text-12 leading-4 font-medium text-primary"
+            ? "mb-2 flex items-center text-13 leading-5 font-medium text-danger-secondary"
+            : "mb-2 flex items-center text-13 leading-5 font-medium text-primary"
         }
       >
-        {Icon && <Icon className="size-3.5 shrink-0 text-tertiary" />}
         <span className="truncate">{label}</span>
-        {required && <span className="shrink-0 font-bold text-danger-primary">*</span>}
-        {optional && <span className="shrink-0 text-11 font-normal text-tertiary">{t("requirement_grid.data.optional")}</span>}
+        {required && <span className="ml-0.5 shrink-0 text-danger-primary">*</span>}
+        {optional && (
+          <span className="ml-1.5 shrink-0 text-13 font-normal text-tertiary">{t("requirement_grid.data.optional")}</span>
+        )}
       </label>
       {children}
-      {(error || hint) && (
-        <p
-          className={cn(
-            "flex min-h-4 items-center gap-1 text-11 leading-4",
-            error ? "text-danger-secondary" : "text-tertiary"
-          )}
-        >
-          {error ? (
-            <>
-              <AlertCircle className="size-3 shrink-0 text-danger-primary" />
-              {error}
-            </>
-          ) : (
-            hint
-          )}
+      {error && (
+        <p className="mt-1.5 flex items-center gap-1 text-12 leading-4 text-danger-secondary">
+          <AlertCircle className="size-3.5 shrink-0 text-danger-primary" />
+          {error}
         </p>
       )}
     </div>
@@ -208,6 +185,7 @@ export const RequirementCreateModal = ({
   allowTypeSelection = false,
   fields = EMPTY_FIELDS,
   builtinLayout = null,
+  context,
   seed,
   moduleId = null,
   moduleName = null,
@@ -226,6 +204,10 @@ export const RequirementCreateModal = ({
   const [codeDraft, setCodeDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 「创建后继续添加」：建完不关弹窗，清掉标题 / 描述 / 类型字段，保留类型、模块与右栏属性 */
+  const [keepAdding, setKeepAdding] = useState(false);
+  /** 连续添加的下一条：焦点直接给标题，类型已经选过了 */
+  const focusTitleNextRef = useRef(false);
   /** 弹窗里传上去的资源。取消建行就得删掉，否则留一堆没有归属的孤儿文件 */
   const [pendingAssetIds, setPendingAssetIds] = useState<string[]>([]);
   /** 选中的类型。有选择器时由用户改，没有时恒等于传进来的 requirementTypeId */
@@ -239,7 +221,7 @@ export const RequirementCreateModal = ({
   const [openSeq, setOpenSeq] = useState(0);
   /**
    * 用户碰过（失焦过）的必填字段。行内错误只在「碰过又留空」时出现 —— 刚打开就满屏
-   * 飘红等于没有提示；没碰过的缺项由右栏清单兜底。
+   * 飘红等于没有提示；没碰过的缺项由页脚必填进度兜底。
    */
   const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set());
   /** 模块是旁路挂靠，不进内置字段。打开时跟侧栏，之后以用户在右栏改的为准 */
@@ -325,12 +307,14 @@ export const RequirementCreateModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // 打开后把焦点送到类型（总览）或标题（类型已锁定）。initialFocus 可能赶上
+  // 打开后把焦点送到类型（总览）或标题（类型已锁定 / 连续添加的下一条）。initialFocus 可能赶上
   // 类型按钮还没绑上 ref，下一帧再补一次，避免回车误关弹窗。
   useEffect(() => {
     if (!isOpen) return;
+    const preferTitle = focusTitleNextRef.current;
+    focusTitleNextRef.current = false;
     const frame = window.requestAnimationFrame(() => {
-      const target = allowTypeSelection ? typeFocusRef.current : titleInputRef.current;
+      const target = allowTypeSelection && !preferTitle ? typeFocusRef.current : titleInputRef.current;
       target?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
@@ -374,6 +358,20 @@ export const RequirementCreateModal = ({
     onClose();
   }, [onClose, pendingAssetIds, workspaceSlug]);
 
+  /** 复制行 / 插到指定位置是一次性的动作，连续添加没有意义 */
+  const canKeepAdding = !seed?.data && !seed?.builtin && !seed?.beforeId && !seed?.afterId;
+
+  /** 标题旁的「· 产品标识」：调用方给了就用，否则在产品页里从产品列表里取 */
+  const productsContext = useOptionalProductsContext();
+  const headerCode =
+    context?.entityName ??
+    (entityKind === "product"
+      ? productsContext?.products.find((product) => product.id === entityId)?.identifier
+      : undefined);
+  const typeName = allowTypeSelection
+    ? selectableTypes.find((requirementType) => requirementType.id === typeId)?.name
+    : context?.typeName;
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
@@ -397,6 +395,19 @@ export const RequirementCreateModal = ({
       });
       // 落库成功，这些资源已经有归属了，不再是待清理的孤儿
       setPendingAssetIds([]);
+      if (canKeepAdding && keepAdding) {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("requirement_grid.data.create_continued_toast", { title: builtin.title.trim() }),
+        });
+        setBuiltin((current) => ({ ...current, title: "", description_html: "" }));
+        setData(createEmptyRequirementData(visibleFields));
+        setTouched(new Set());
+        // 换 key 让标题与描述编辑器重挂（编辑器 initialValue 钉在挂载那一帧）
+        focusTitleNextRef.current = true;
+        setOpenSeq((sequence) => sequence + 1);
+        return;
+      }
       onClose();
     } catch (submitError) {
       const payload = submitError as { error?: string; detail?: string };
@@ -414,7 +425,7 @@ export const RequirementCreateModal = ({
   /**
    * 必填清单：类型（有选择器时）、标题，再加该类型里 is_required 的自定义字段
    * —— 叶子按值判空，子表按「至少一行」，口径与后端 enforce_required 一致。
-   * 保存按钮由它决定，右栏清单靠它说「还差什么」。字段随类型配置走，这里不认任何字段名。
+   * 保存按钮由它决定，页脚进度靠它说「还差几项」。字段随类型配置走，这里不认任何字段名。
    * 库条目编号不在其中：留空由服务端补占位编号。
    */
   const requiredEntries = useMemo<TCreateRequiredEntry[]>(() => {
@@ -448,203 +459,189 @@ export const RequirementCreateModal = ({
   const patchBuiltin = (patch: Partial<TRequirementBuiltinValues>) =>
     setBuiltin((current) => ({ ...current, ...patch }));
 
+  const requiredFilled = requiredEntries.filter((entry) => !entry.missing).length;
+  const hasTouchedErrors = requiredEntries.some((entry) => entry.missing && touched.has(entry.key));
+  const hasFields = leafFields.length > 0 || formFields.length > 0;
+  /** 第一行左格：可选类型时是类型下拉；标准库是编号；类型已锁定的产品行没有左格，标题独占一行 */
+  const hasLeadCell = allowTypeSelection || entityKind === "library";
+
   /*
     左右档案：
 
-      头部（不滚动）  标题 —— 「这是什么」
-      左栏（滚动）    类型、编号、标题、描述、该类型字段、子表 —— 「内容」
-      右栏（粘住）    属性轨 + 待完成清单 —— 「元数据」
-      底部（不滚动）  放弃 / 保存
+      头部（不滚动）  标题 ·产品标识
+      左栏（滚动）    类型 + 标题、描述、「<类型>字段」—— 「内容」
+      右栏（自己滚）  归属（模块、父需求）+ 计划（优先级、负责人、起止日期）—— 「元数据」
+      底部（不滚动）  必填进度 / 创建后继续添加 / 取消 / 创建需求
 
-    必填：标签星号常驻、失焦后行内报错、右栏清单兜底。打开态不亮红灯。
+    必填：标签星号常驻、失焦后行内报错、页脚进度兜底。打开态不亮红灯。
   */
   return (
     <ModalCore
       isOpen={isOpen}
       handleClose={handleClose}
-      position={EModalPosition.TOP}
-      width={EModalWidth.VXL}
+      position={EModalPosition.CENTER}
+      width={EModalWidth.VIXL}
+      className="sm:max-w-[1080px]"
       initialFocus={allowTypeSelection ? typeFocusRef : titleInputRef}
     >
-      <div className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col">
-        <div className="flex flex-shrink-0 items-center justify-between gap-4 rounded-t-lg border-b-[0.5px] border-subtle bg-surface-1 px-5 pt-4 pb-3.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <h3 className="shrink-0 text-16 leading-tight font-semibold text-primary">
-              {title ?? t("requirement_grid.data.add")}
-            </h3>
-            {headerContext}
-          </div>
+      <div className="flex h-[min(760px,90vh)] min-h-0 w-full flex-col">
+        <div className="flex flex-shrink-0 items-center gap-2 rounded-t-lg border-b border-subtle bg-surface-1 px-6 py-4">
+          <h3 className="shrink-0 text-16 leading-6 font-semibold text-primary">{title ?? t("requirement_grid.data.add")}</h3>
+          {headerCode && <span className="min-w-0 truncate pt-0.5 text-13 text-tertiary">· {headerCode}</span>}
+          {headerContext}
           <button
             type="button"
             onClick={handleClose}
             aria-label={t("close")}
-            className="grid size-7 shrink-0 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+            className="ml-auto grid size-8 shrink-0 place-items-center rounded-lg text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <div className="flex min-h-[min(28rem,50vh)] min-w-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
           <div
             data-modal-wheel-scroll
-            className="scrollbar-sm vertical-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-surface-1 px-5 pb-5"
+            className="scrollbar-sm vertical-scrollbar flex min-w-0 flex-1 flex-col gap-5 bg-surface-1 px-6 py-5 md:min-h-0 md:overflow-x-hidden md:overflow-y-auto"
           >
-            <FormSection>
-              {(scopeField || allowTypeSelection) && (
-                <div
-                  className={cn(
-                    "grid items-start gap-3.5",
-                    scopeField && allowTypeSelection && "sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]"
-                  )}
-                >
-                  {scopeField && (
-                    <ModalField
-                      label={scopeField.label}
-                      icon={scopeField.icon}
-                      required
-                      error={
-                        showError("scope")
-                          ? t("requirement_grid.data.select_required", { field: scopeField.label })
-                          : undefined
-                      }
-                      onBlur={() => touch("scope")}
-                    >
-                      {scopeField.control}
-                    </ModalField>
-                  )}
-                  {allowTypeSelection && (
-                    <ModalField
-                      label={t("requirement_detail.requirement_type")}
-                      icon={Shapes}
-                      required
-                      hint={t("requirement_grid.data.pick_type_hint")}
-                    >
-                      <div ref={bindTypeFocus}>
-                        <RequirementTypeSelect types={selectableTypes} value={typeId} onChange={setTypeId} />
-                      </div>
-                    </ModalField>
-                  )}
-                </div>
-              )}
-              {scopeField?.notice}
-              <div
-                className={cn(
-                  "grid gap-3.5",
-                  entityKind === "library" ? "grid-cols-[220px_minmax(0,1fr)]" : "grid-cols-1"
-                )}
+            {scopeField && (
+              <ModalField
+                label={scopeField.label}
+                required
+                error={
+                  showError("scope") ? t("requirement_grid.data.select_required", { field: scopeField.label }) : undefined
+                }
+                onBlur={() => touch("scope")}
               >
-                {entityKind === "library" && (
-                  <ModalField htmlFor="requirement-create-code" label={t("requirements.identifier.column")} icon={Hash}>
-                    <Input
-                      id="requirement-create-code"
-                      type="text"
-                      value={codeDraft}
-                      onChange={(event) => setCodeDraft(event.target.value)}
-                      maxLength={255}
-                      placeholder={t("requirements.identifier.code_optional_placeholder")}
-                      className="w-full text-body-sm-regular"
-                    />
-                  </ModalField>
-                )}
-                <ModalField
-                  htmlFor="requirement-create-title"
-                  label={t("requirement_fields.builtin.title")}
-                  icon={Type}
-                  required
-                  error={showError("title") ? t("requirement_grid.data.title_required") : undefined}
-                  onBlur={() => touch("title")}
-                >
+                {scopeField.control}
+                {scopeField.notice && <div className="mt-2">{scopeField.notice}</div>}
+              </ModalField>
+            )}
+
+            <div className={cn("grid items-start gap-4", hasLeadCell && "sm:grid-cols-[260px_minmax(0,1fr)]")}>
+              {allowTypeSelection ? (
+                <ModalField label={t("requirement_detail.requirement_type")} required>
+                  <div ref={bindTypeFocus}>
+                    <RequirementTypeSelect types={selectableTypes} value={typeId} onChange={setTypeId} />
+                  </div>
+                </ModalField>
+              ) : entityKind === "library" ? (
+                <ModalField htmlFor="requirement-create-code" label={t("requirements.identifier.column")} optional>
                   <Input
-                    key={openSeq}
-                    ref={titleInputRef}
-                    id="requirement-create-title"
+                    id="requirement-create-code"
                     type="text"
-                    value={builtin.title}
-                    onChange={(event) => patchBuiltin({ title: event.target.value })}
-                    onBlur={() => touch("title")}
+                    value={codeDraft}
+                    onChange={(event) => setCodeDraft(event.target.value)}
                     maxLength={255}
-                    hasError={showError("title")}
-                    aria-invalid={showError("title")}
-                    placeholder={t("requirement_grid.data.title_placeholder")}
-                    className="w-full text-body-sm-regular"
+                    placeholder={t("requirements.identifier.code_optional_placeholder")}
+                    className={CREATE_INPUT_CLASS}
                   />
                 </ModalField>
-              </div>
-              <ModalField label={t("requirement_fields.builtin.description")} icon={AlignLeft} optional>
-                <div className="relative rounded-md border-[0.5px] border-subtle-1 bg-layer-2">
-                  <RequirementRichTextField
-                    key={openSeq}
-                    workspaceSlug={workspaceSlug}
-                    entityId={entityId}
-                    editorId={`requirement-create-description-${entityId}-${openSeq}`}
-                    value={builtin.description_html}
-                    onChange={(html) => patchBuiltin({ description_html: html })}
-                    onAssetUpload={registerAsset}
-                    deferAssetDeletion
-                    placeholder={t("requirement_grid.data.description_placeholder")}
-                    containerClassName="min-h-[72px] pt-3"
-                  />
-                </div>
+              ) : null}
+              <ModalField
+                htmlFor="requirement-create-title"
+                label={t("requirement_fields.builtin.title")}
+                required
+                error={showError("title") ? t("requirement_grid.data.title_required") : undefined}
+                onBlur={() => touch("title")}
+              >
+                <Input
+                  key={openSeq}
+                  ref={titleInputRef}
+                  id="requirement-create-title"
+                  type="text"
+                  value={builtin.title}
+                  onChange={(event) => patchBuiltin({ title: event.target.value })}
+                  onBlur={() => touch("title")}
+                  maxLength={255}
+                  hasError={showError("title")}
+                  aria-invalid={showError("title")}
+                  placeholder={t("requirement_grid.data.title_placeholder")}
+                  className={CREATE_INPUT_CLASS}
+                />
               </ModalField>
-            </FormSection>
+            </div>
+
+            <ModalField label={t("requirement_fields.builtin.description")}>
+              <div className="scrollbar-sm vertical-scrollbar max-h-80 min-h-[168px] overflow-y-auto rounded-lg border border-subtle-1 bg-layer-2">
+                <RequirementRichTextField
+                  key={openSeq}
+                  workspaceSlug={workspaceSlug}
+                  entityId={entityId}
+                  editorId={`requirement-create-description-${entityId}-${openSeq}`}
+                  value={builtin.description_html}
+                  onChange={(html) => patchBuiltin({ description_html: html })}
+                  onAssetUpload={registerAsset}
+                  deferAssetDeletion
+                  placeholder={t("requirement_grid.data.description_placeholder")}
+                  containerClassName="min-h-[166px] px-4 py-3"
+                />
+              </div>
+            </ModalField>
+
+            {(hasFields || (allowTypeSelection && isFieldsLoading)) && (
+              <div className="flex items-center gap-2.5 pt-0.5">
+                <span className="shrink-0 text-14 font-semibold text-primary">
+                  {typeName
+                    ? t("requirement_grid.data.type_fields_section", { type: typeName })
+                    : t("requirement_grid.data.attributes_section")}
+                </span>
+                <span className="h-px flex-1 bg-layer-3" aria-hidden />
+              </div>
+            )}
 
             {allowTypeSelection && isFieldsLoading && (
-              <Loader className="space-y-3 pt-4">
-                <Loader.Item height="32px" />
-                <Loader.Item height="32px" />
+              <Loader className="grid grid-cols-2 gap-x-5 gap-y-4">
+                <Loader.Item height="40px" />
+                <Loader.Item height="40px" />
               </Loader>
             )}
 
             {leafFields.length > 0 && (
-              <FormSection>
-                <div className="grid grid-cols-2 gap-x-3.5 gap-y-3">
-                  {leafFields.map((field) => {
-                    const invalid = showError(field.id);
-                    return (
-                      <ModalField
-                        key={field.id}
-                        label={field.name}
-                        icon={CREATE_MODAL_FIELD_ICONS[field.field_type]}
-                        required={field.is_required}
-                        error={invalid ? leafErrorMessage(field) : undefined}
-                        className={FULL_WIDTH_FIELD_TYPES.has(field.field_type) ? "col-span-2" : undefined}
-                        onBlur={field.is_required ? () => touch(field.id) : undefined}
-                      >
-                        <div className={cn("min-w-0", invalid && "rounded-md ring-1 ring-danger-strong")}>
-                          <LeafEditor
-                            variant="modal"
-                            field={field}
-                            value={data[field.id]}
-                            workspaceSlug={workspaceSlug}
-                            entityId={entityId}
-                            onChange={(value) => setData((current) => ({ ...current, [field.id]: value }))}
-                            onUpload={handleUpload}
-                            onRemoveAsset={discardAsset}
-                            onAssetUpload={registerAsset}
-                          />
-                        </div>
-                      </ModalField>
-                    );
-                  })}
-                </div>
-              </FormSection>
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4.5 sm:grid-cols-2">
+                {leafFields.map((field) => {
+                  const invalid = showError(field.id);
+                  return (
+                    <ModalField
+                      key={field.id}
+                      label={field.name}
+                      required={field.is_required}
+                      error={invalid ? leafErrorMessage(field) : undefined}
+                      className={FULL_WIDTH_FIELD_TYPES.has(field.field_type) ? "sm:col-span-2" : undefined}
+                      onBlur={field.is_required ? () => touch(field.id) : undefined}
+                    >
+                      <div className={cn("min-w-0", invalid && "rounded-lg ring-1 ring-danger-strong")}>
+                        <LeafEditor
+                          variant="modal"
+                          field={field}
+                          value={data[field.id]}
+                          workspaceSlug={workspaceSlug}
+                          entityId={entityId}
+                          onChange={(value) => setData((current) => ({ ...current, [field.id]: value }))}
+                          onUpload={handleUpload}
+                          onRemoveAsset={discardAsset}
+                          onAssetUpload={registerAsset}
+                        />
+                      </div>
+                    </ModalField>
+                  );
+                })}
+              </div>
             )}
 
             {formFields.length > 0 && (
-              <FormSection>
-                <RequirementSubformSection
-                  forms={formFields}
-                  data={data}
-                  workspaceSlug={workspaceSlug}
-                  entityId={entityId}
-                  readOnly={false}
-                  defaultOpenCount={formFields.length}
-                  defaultOpenEmpty
-                  storageKey={`requirement-create:subforms:${typeId ?? entityId}`}
-                  onChange={setData}
-                  onUpload={handleUpload}
-                />
-              </FormSection>
+              <RequirementSubformSection
+                forms={formFields}
+                data={data}
+                workspaceSlug={workspaceSlug}
+                entityId={entityId}
+                readOnly={false}
+                defaultOpenCount={formFields.length}
+                defaultOpenEmpty
+                storageKey={`requirement-create:subforms:${typeId ?? entityId}`}
+                onChange={setData}
+                onUpload={handleUpload}
+              />
             )}
           </div>
 
@@ -659,30 +656,21 @@ export const RequirementCreateModal = ({
               setDraftModuleId(nextId);
               setDraftModuleName(nextName);
             }}
-            requiredEntries={requiredEntries}
-            touched={touched}
           />
         </div>
 
-        <div className="flex flex-shrink-0 items-center justify-end gap-2 rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-5 py-3">
-          {error ? (
-            <p className="mr-auto text-12 text-danger-primary">{error}</p>
-          ) : (
-            footerNote && <div className="mr-auto min-w-0">{footerNote}</div>
-          )}
-          <Button variant="secondary" size="lg" onClick={handleClose} disabled={isSubmitting}>
-            {t("discard")}
-          </Button>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => void handleSubmit()}
-            disabled={isSubmitting || isFieldsLoading || missingKeys.size > 0}
-            loading={isSubmitting}
-          >
-            {t("save")}
-          </Button>
-        </div>
+        <RequirementCreateFooter
+          requiredTotal={requiredEntries.length}
+          requiredFilled={requiredFilled}
+          hasErrors={hasTouchedErrors}
+          error={error}
+          note={footerNote}
+          keepAdding={canKeepAdding ? { checked: keepAdding, onChange: setKeepAdding } : undefined}
+          isSubmitting={isSubmitting}
+          canSubmit={!isSubmitting && !isFieldsLoading && missingKeys.size === 0}
+          onCancel={handleClose}
+          onSubmit={() => void handleSubmit()}
+        />
       </div>
     </ModalCore>
   );

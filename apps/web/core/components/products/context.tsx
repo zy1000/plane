@@ -81,3 +81,6 @@ export const useProductsContext = () => {
   if (!context) throw new Error("useProductsContext must be used within ProductsProvider");
   return context;
 };
+
+/** 不在 ProductsProvider 里时返回 undefined —— 给产品页内外都会用到的共享组件（如建行弹窗）取产品信息 */
+export const useOptionalProductsContext = () => useContext(ProductsContext);

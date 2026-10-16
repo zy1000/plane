@@ -6,7 +6,7 @@
  * 他以为存在、实际不存在的快照。预览与落库共用服务端同一份判定，数字不会在确认后变。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Info } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
@@ -15,10 +15,15 @@ import type {
   TRequirementBaselineScope,
   TRequirementTypeSchema,
 } from "@plane/types";
-import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
+import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { BaselinePreviewCard } from "./create-baseline-preview";
 
 const SCOPES: TRequirementBaselineScope[] = ["all", "by_type"];
+
+/** 左栏输入框：40px 高、8px 圆角、14 号字 */
+const INPUT_CLASS =
+  "block w-full rounded-lg border border-subtle-1 bg-layer-2 px-3 text-14 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong";
 
 type TProps = {
   isOpen: boolean;
@@ -83,155 +88,138 @@ export function CreateBaselineModal(props: TProps) {
   const canSubmit = Boolean(name.trim()) && !isScopeIncomplete && (preview?.entry_count ?? 0) > 0;
 
   return (
-    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
-      <div className="p-5">
-        <h2 className="text-16 font-semibold text-primary">
-          {t("workspace_products.requirements.baseline.form.title")}
-        </h2>
+    <ModalCore
+      isOpen={isOpen}
+      handleClose={onClose}
+      position={EModalPosition.CENTER}
+      width={EModalWidth.XXL}
+      className="sm:max-w-[640px]"
+    >
+      <div className="flex max-h-[90vh] min-h-0 flex-col">
+        <div className="flex shrink-0 items-start gap-3 rounded-t-lg border-b border-subtle px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-16 leading-6 font-semibold text-primary">
+              {t("workspace_products.requirements.baseline.form.title")}
+            </h2>
+            <p className="mt-0.5 text-13 text-tertiary">{t("workspace_products.requirements.baseline.form.subtitle")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("close")}
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
 
-        <label className="mt-4 block">
-          <span className="mb-2 block text-12 font-medium text-primary">
-            {t("workspace_products.requirements.baseline.form.name")}
-          </span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={255}
-            autoFocus
-            className="focus:border-accent-primary w-full rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
-          />
-        </label>
+        <div
+          data-modal-wheel-scroll
+          className="scrollbar-sm vertical-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+        >
+          <div>
+            <label htmlFor="baseline-name" className="mb-2 flex items-center text-13 leading-5 font-medium text-primary">
+              {t("workspace_products.requirements.baseline.form.name")}
+              <span className="ml-0.5 text-danger-primary">*</span>
+            </label>
+            <input
+              id="baseline-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={255}
+              autoFocus
+              placeholder={t("workspace_products.requirements.baseline.form.name_placeholder")}
+              className={cn(INPUT_CLASS, "h-10")}
+            />
+          </div>
 
-        <label className="mt-3 block">
-          <span className="mb-2 block text-12 font-medium text-primary">
-            {t("workspace_products.requirements.baseline.form.summary")}
-          </span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            rows={2}
-            maxLength={2000}
-            className="focus:border-accent-primary w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 leading-5 text-primary outline-none"
-          />
-        </label>
+          <div>
+            <label
+              htmlFor="baseline-description"
+              className="mb-2 flex items-center text-13 leading-5 font-medium text-primary"
+            >
+              {t("workspace_products.requirements.baseline.form.summary")}
+              <span className="ml-1.5 font-normal text-tertiary">{t("requirement_grid.data.optional")}</span>
+            </label>
+            <textarea
+              id="baseline-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder={t("workspace_products.requirements.baseline.form.summary_placeholder")}
+              className={cn(INPUT_CLASS, "resize-none py-2 leading-[22px]")}
+            />
+          </div>
 
-        {requirementTypes.length > 1 && (
-          <div className="mt-3">
-            <span className="mb-2 block text-12 font-medium text-primary">
-              {t("workspace_products.requirements.baseline.form.scope.label")}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {SCOPES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setScope(value)}
-                  className={cn(
-                    "rounded-md border px-2.5 py-1 text-11 transition-colors",
-                    scope === value
-                      ? "border-accent-primary bg-accent-subtle text-accent-primary"
-                      : "border-subtle text-secondary hover:text-primary"
-                  )}
-                >
-                  {t(`workspace_products.requirements.baseline.form.scope.${value}`)}
-                </button>
-              ))}
-            </div>
-            {scope === "by_type" && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {requirementTypes.map((requirementType) => (
+          {requirementTypes.length > 1 && (
+            <div>
+              <p className="mb-2 text-13 leading-5 font-medium text-primary">
+                {t("workspace_products.requirements.baseline.form.scope.label")}
+              </p>
+              <div role="radiogroup" className="inline-flex gap-0.5 rounded-[9px] bg-layer-3 p-0.75">
+                {SCOPES.map((value) => (
                   <button
-                    key={requirementType.id}
+                    key={value}
                     type="button"
-                    onClick={() => toggleType(requirementType.id)}
+                    role="radio"
+                    aria-checked={scope === value}
+                    onClick={() => setScope(value)}
                     className={cn(
-                      "rounded-full border px-2.5 py-1 text-11 transition-colors",
-                      typeIds.includes(requirementType.id)
-                        ? "border-accent-primary bg-accent-subtle text-accent-primary"
-                        : "border-subtle text-secondary hover:text-primary"
+                      "h-7.5 rounded-md px-3.5 text-13 font-medium transition-colors",
+                      scope === value
+                        ? "bg-surface-1 text-primary shadow-raised-100"
+                        : "text-secondary hover:text-primary"
                     )}
                   >
-                    {requirementType.name}
+                    {t(`workspace_products.requirements.baseline.form.scope.${value}`)}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-4 rounded-md border border-subtle bg-layer-1 p-3">
-          {isPreviewLoading ? (
-            <Loader>
-              <Loader.Item height="16px" width="180px" />
-            </Loader>
-          ) : !preview ? (
-            <p className="text-12 text-tertiary">
-              {t("workspace_products.requirements.baseline.form.preview.unavailable")}
-            </p>
-          ) : (
-            <>
-              <p className="text-13 font-medium text-primary">
-                {t("workspace_products.requirements.baseline.form.preview.included", {
-                  count: preview.entry_count,
-                })}
-              </p>
-              {preview.skipped.length > 0 && (
-                <PreviewNote
-                  tone="info"
-                  title={t("workspace_products.requirements.baseline.form.preview.skipped", {
-                    count: preview.skipped.length,
+              {scope === "by_type" && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {requirementTypes.map((requirementType) => {
+                    const isSelected = typeIds.includes(requirementType.id);
+                    return (
+                      <button
+                        key={requirementType.id}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => toggleType(requirementType.id)}
+                        className={cn(
+                          "h-7 rounded-full border px-3 text-13 transition-colors",
+                          isSelected
+                            ? "border-accent-strong bg-accent-subtle text-accent-primary"
+                            : "border-subtle-1 text-secondary hover:text-primary"
+                        )}
+                      >
+                        {requirementType.name}
+                      </button>
+                    );
                   })}
-                  titles={preview.skipped.map((item) => item.title)}
-                />
+                </div>
               )}
-              {preview.stale.length > 0 && (
-                <PreviewNote
-                  tone="warning"
-                  title={t("workspace_products.requirements.baseline.form.preview.stale", {
-                    count: preview.stale.length,
-                  })}
-                  titles={preview.stale.map((item) =>
-                    t(`workspace_products.requirements.baseline.stale_reason.${item.reason}`, {
-                      title: item.title,
-                      version: item.version,
-                    })
-                  )}
-                />
-              )}
-            </>
+            </div>
           )}
+
+          <BaselinePreviewCard preview={preview} isLoading={isPreviewLoading} />
         </div>
 
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <Button variant="secondary" disabled={isSubmitting} onClick={onClose}>
+        <div className="flex shrink-0 items-center justify-end gap-2 rounded-b-lg border-t border-subtle px-6 py-3.5">
+          <Button variant="secondary" size="xl" disabled={isSubmitting} onClick={onClose}>
             {t("cancel")}
           </Button>
           <Button
             variant="primary"
+            size="xl"
             loading={isSubmitting}
             disabled={!canSubmit}
-            onClick={() =>
-              onSubmit({ ...scopePayload, name: name.trim(), description: description.trim() })
-            }
+            onClick={() => onSubmit({ ...scopePayload, name: name.trim(), description: description.trim() })}
           >
             {t("workspace_products.requirements.baseline.form.confirm")}
           </Button>
         </div>
       </div>
     </ModalCore>
-  );
-}
-
-/** 预览里的一条提示。标题最多列 5 条，多了只给计数 —— 弹窗不是清单页 */
-function PreviewNote({ tone, title, titles }: { tone: "info" | "warning"; title: string; titles: string[] }) {
-  const Icon = tone === "warning" ? AlertTriangle : Info;
-  return (
-    <div className="mt-2 flex gap-2">
-      <Icon className={cn("mt-0.5 size-3.5 shrink-0", tone === "warning" ? "text-warning-primary" : "text-tertiary")} />
-      <div className="min-w-0">
-        <p className={cn("text-12", tone === "warning" ? "text-warning-primary" : "text-secondary")}>{title}</p>
-        <p className="mt-0.5 truncate text-11 text-tertiary">{titles.slice(0, 5).join("、")}</p>
-      </div>
-    </div>
   );
 }
