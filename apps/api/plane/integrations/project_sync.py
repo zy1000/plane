@@ -14,6 +14,7 @@
 """
 
 import html
+import random
 from datetime import datetime, timedelta, timezone
 
 from crum import impersonate
@@ -91,6 +92,21 @@ PREFERRED_EMAIL_SUFFIX = "@kaifa.cn"
 BEIJING = timezone(timedelta(hours=8))
 # 快照放 Redis，每类明细只带前这么多条
 DETAIL_LIMIT = 100
+# 新建项目随机给一个 emoji 图标，和界面新建一致；取值照抄前端 packages/constants 的 RANDOM_EMOJI_CODES
+PROJECT_EMOJI_CODES = (
+    "8986",
+    "9200",
+    "128204",
+    "127773",
+    "127891",
+    "128076",
+    "128077",
+    "128187",
+    "128188",
+    "128512",
+    "128522",
+    "128578",
+)
 
 # 覆盖比较的字段；FK 比 *_id
 SYNCED_FIELDS = (
@@ -112,6 +128,10 @@ FK_FIELDS = {"business_unit", "status", "project_type", "project_lead", "product
 
 def _text(value):
     return value.replace("\x00", "").strip() if isinstance(value, str) else ""
+
+
+def _random_logo_props():
+    return {"in_use": "emoji", "emoji": {"value": random.choice(PROJECT_EMOJI_CODES)}}
 
 
 def _date(value):
@@ -326,6 +346,7 @@ class _ProjectSync:
                 external_source=EXTERNAL_SOURCE,
                 external_id=record["external_id"],
                 dev_mode=dev_mode,
+                logo_props=_random_logo_props(),
                 **desired,
             )
             project.save()
