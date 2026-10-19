@@ -216,7 +216,7 @@ export const RequirementGrid = observer(
       workspaceSlug,
       entityId,
       entityKind,
-      showApprovalColumn = false,
+      showApprovalColumn: showApprovalColumnProp = false,
       onOpenChangeRequest,
       onSubmitReview,
       onWithdrawReview,
@@ -261,7 +261,7 @@ export const RequirementGrid = observer(
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const storageKey = `requirement:columns:${workspaceSlug}:${entityId}${columnStorageId ? `:${columnStorageId}` : ""}`;
     // 内置属性列（不含 title）：顺序与库可见性按类型布局解析；标准库藏掉未纳入的列
-    const builtinEntries = useMemo(
+    const allBuiltinEntries = useMemo(
       () => resolveBuiltinColumns(entityKind, builtinLayout),
       [entityKind, builtinLayout]
     );
@@ -288,6 +288,15 @@ export const RequirementGrid = observer(
         return [];
       }
     });
+    /**
+     * 「显示」里关掉的内置列与自定义字段共用 hiddenFieldIds：内置列用 key（status / module …），
+     * 自定义字段用 UUID，不会撞。编号、标题是固定列（编号列里折着勾选框与行按钮），不可隐藏。
+     */
+    const builtinEntries = useMemo(
+      () => allBuiltinEntries.filter((entry) => !hiddenFieldIds.includes(entry.key)),
+      [allBuiltinEntries, hiddenFieldIds]
+    );
+    const showApprovalColumn = showApprovalColumnProp && !hiddenFieldIds.includes("approval");
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     /** 行 / 子表单菜单 portal 宿主，避免 sticky 标题列把菜单盖住 */
@@ -457,7 +466,7 @@ export const RequirementGrid = observer(
     const { configs: filterConfigs, areAllConfigsInitialized } = useRequirementGridFiltersConfig({
       workspaceSlug,
       entityKind,
-      builtinColumns: builtinEntries,
+      builtinColumns: allBuiltinEntries,
       customFields: customFilterFields,
     });
     const filter = useRequirementGridFilter({
@@ -468,8 +477,16 @@ export const RequirementGrid = observer(
       onFiltersChange,
     });
     const displayColumns = useMemo(
-      () =>
-        activeFields.flatMap((field) =>
+      () => [
+        { id: "display_id", name: t("requirements.identifier.column"), locked: true },
+        { id: "title", name: t("requirement_fields.builtin.title"), locked: true },
+        ...(entityKind === "product" ? [{ id: "module", name: t("requirement_modules.column") }] : []),
+        ...(entityKind === "product"
+          ? [{ id: "source_display_id", name: t("requirements.identifier.source_column") }]
+          : []),
+        ...(showApprovalColumnProp ? [{ id: "approval", name: t("requirement_approval.column") }] : []),
+        ...allBuiltinEntries.map((entry) => ({ id: entry.key, name: t(entry.column.labelKey) })),
+        ...activeFields.flatMap((field) =>
           field.field_type === "form"
             ? [
                 { id: field.id, name: field.name },
@@ -479,7 +496,8 @@ export const RequirementGrid = observer(
               ]
             : [{ id: field.id, name: field.name }]
         ),
-      [activeFields]
+      ],
+      [activeFields, allBuiltinEntries, entityKind, showApprovalColumnProp, t]
     );
     const toggleDisplayColumn = (id: string) =>
       setHiddenFieldIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -495,16 +513,19 @@ export const RequirementGrid = observer(
      */
     const titleColumn = REQUIREMENT_BUILTIN_TITLE_COLUMN;
     const orderedColumns = useMemo(
-      () => mergeBuiltinAndFields(entityKind, builtinLayout, visibleRootFields),
-      [entityKind, builtinLayout, visibleRootFields]
+      () =>
+        mergeBuiltinAndFields(entityKind, builtinLayout, visibleRootFields).filter(
+          (descriptor) => descriptor.kind !== "builtin" || !hiddenFieldIds.includes(descriptor.entry.key)
+        ),
+      [entityKind, builtinLayout, visibleRootFields, hiddenFieldIds]
     );
     const { setScrollContainer, containerWidth } = useRequirementGridScrollContainer();
     const { getWidth, startResize } = useRequirementGridColumnResize();
 
     /** 产品需求才有来源标准库编号；标准库条目本身只有自己的编号 */
-    const showSourceColumn = entityKind === "product";
+    const showSourceColumn = entityKind === "product" && !hiddenFieldIds.includes("source_display_id");
     /** 标准库左侧已有模块树，网格不再重复一列；产品类型视图仍展示 */
-    const showModuleColumn = entityKind === "product";
+    const showModuleColumn = entityKind === "product" && !hiddenFieldIds.includes("module");
 
     const showSelectColumn = !readOnly;
     const defaultNonTitleColumnsWidth = useMemo(

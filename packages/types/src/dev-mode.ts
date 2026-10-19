@@ -1,7 +1,7 @@
 /**
  * 研发模式：工作区级的开发方式定义，决定项目能用哪些组件、有哪些阶段、每阶段启用哪些评审。
  *
- * 预置三个（IDOV / Scrum / 混合模式，`is_system`）不可删、不可改名；组件开关、描述、
+ * 预置三个（IDOV / Scrum / 混合模型，`is_system`）不可删、不可改名；组件开关、描述、
  * 图标、阶段都可以改。项目侧要到批次 3 才会引用模式。
  */
 
@@ -157,4 +157,4 @@ export const DEV_MODE_MAX_WORKLOAD_RATIO = 100;
  * 它是组件全开的那一个，等价于加模式之前的现状：存量项目回填到它，创建项目弹窗也默认选它。
  * 预置模式不许改名就是为了这个 —— 改了这里和迁移都会落空。
  */
-export const DEFAULT_DEV_MODE_NAME = "混合模式";
+export const DEFAULT_DEV_MODE_NAME = "混合模型";

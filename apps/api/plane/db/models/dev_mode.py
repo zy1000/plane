@@ -9,7 +9,7 @@
 本批（批次 2）只建这三张表和维护接口，**项目侧完全感知不到模式**：不加
 ``Project.dev_mode``，裁剪表与评审实例照旧。接项目是批次 3、4 的事。
 
-预置的三个模式（IDOV / Scrum / 混合模式）``is_system=True``：不可删、不可改名；
+预置的三个模式（IDOV / Scrum / 混合模型）``is_system=True``：不可删、不可改名；
 组件开关、描述、图标、阶段都可以随便改。
 """
 
@@ -29,7 +29,7 @@ MAX_WORKLOAD_RATIO_TOTAL = 100
 
 
 class DevMode(BaseModel):
-    """一种开发方式，如 IDOV / Scrum / 混合模式。"""
+    """一种开发方式，如 IDOV / Scrum / 混合模型。"""
 
     workspace = models.ForeignKey(
         "db.Workspace",

@@ -25,7 +25,7 @@ type TProps = {
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
   filter: TFilter;
-  displayColumns: { id: string; name: string }[];
+  displayColumns: { id: string; name: string; locked?: boolean }[];
   hiddenIds: string[];
   onToggleDisplay: (id: string) => void;
 };

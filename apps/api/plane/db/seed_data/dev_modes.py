@@ -1,4 +1,4 @@
-"""研发模式的预置规格：IDOV / Scrum / 混合模式三个模式的名称、图标与组件开关。
+"""研发模式的预置规格：IDOV / Scrum / 混合模型三个模式的名称、图标与组件开关。
 
 ════════════════════════════════════════════════════════════════════════════════
 本模块**不允许出现任何 import**（含 typing / enum）。它被两处共用：
@@ -97,7 +97,7 @@ DEV_MODE_SPECS = (
         "seed_all_stages": False,
     },
     {
-        "name": "混合模式",
+        "name": "混合模型",
         "description": "阶段评审与迭代并行，全部组件开放。存量项目默认使用此模式。",
         "icon_props": {
             "in_use": "icon",
@@ -115,7 +115,7 @@ DEV_MODE_SPECS = (
 
 #: 0387 把存量项目回填到这个模式，``utils/dev_mode.py::default_dev_mode`` 运行时也按它找
 #: 默认模式（创建项目弹窗默认选中、ORM 直建项目的兜底）。名字写死在这里供两边引用，不要改。
-DEFAULT_DEV_MODE_NAME = "混合模式"
+DEFAULT_DEV_MODE_NAME = "混合模型"
 
 
 def normalize_features(value):

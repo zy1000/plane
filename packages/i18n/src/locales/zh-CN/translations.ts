@@ -1969,6 +1969,9 @@ export default {
   },
   requirement_grid: {
     error_title: "无法加载需求数据",
+    display: {
+      locked_column: "固定列，不能隐藏",
+    },
     toast: {
       failed: "操作未能完成。",
     },
@@ -4533,7 +4536,7 @@ export default {
         description: "确定删除「{name}」及其全部字段配置和数据吗？此操作无法撤销。",
       },
       tabs: {
-        data: "需求数据",
+        data: "需求明细",
         changes: "变更记录",
         baselines: "基线",
       },

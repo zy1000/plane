@@ -47,7 +47,7 @@ class DevModeLiteSerializer(BaseSerializer):
 class DevModeSerializer(BaseSerializer):
     """研发模式列表 / 创建 / 编辑。
 
-    预置模式（``is_system``）的名称锁死 —— 批次 3 的存量项目回填按名字找「混合模式」，
+    预置模式（``is_system``）的名称锁死 —— 批次 3 的存量项目回填按名字找「混合模型」，
     改名会让回填迁移和后续的默认模式解析全部落空。组件开关、描述、图标都可以改。
     """
 

@@ -146,7 +146,7 @@ def project_required_payload(workspace, lead):
         "product_manager": str(lead.id),
         "start_date": "2026-01-01",
         "end_date": "2026-12-31",
-        # 0387：研发模式创建必填。取该工作区的混合模式（没有就顺手预置一份）
+        # 0387：研发模式创建必填。取该工作区的混合模型（没有就顺手预置一份）
         "dev_mode": str(resolve_default_dev_mode_id(workspace.id)),
     }
     payload.update(

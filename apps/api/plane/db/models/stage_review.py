@@ -348,7 +348,7 @@ class StageReviewTemplate(BaseModel):
                 name="srt_unique_parent_title_active",
             ),
             # 标准编号工作区内唯一。需求原话是「同一研发模型内唯一」，但模板库是工作区级共享、
-            # 混合模式默认勾全部节点，按模式查重在真实数据上等价于工作区唯一，用户拍板按工作区做
+            # 混合模型默认勾全部节点，按模式查重在真实数据上等价于工作区唯一，用户拍板按工作区做
             models.UniqueConstraint(
                 fields=["workspace", "standard_code"],
                 condition=Q(deleted_at__isnull=True),

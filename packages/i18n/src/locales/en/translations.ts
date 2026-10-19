@@ -1784,6 +1784,9 @@ export default {
   },
   requirement_grid: {
     error_title: "Unable to load requirement data",
+    display: {
+      locked_column: "Fixed column, can't be hidden",
+    },
     toast: {
       failed: "The action could not be completed.",
     },

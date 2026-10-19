@@ -5,6 +5,8 @@ import { FilterHeader } from "@/components/issues/issue-layouts/filters";
 type TDisplayColumn = {
   id: string;
   name: string;
+  /** 固定列：始终显示，不能关（如编号、标题） */
+  locked?: boolean;
 };
 
 type TProps = {
@@ -27,17 +29,19 @@ export const RequirementDisplayProperties = ({ columns, hiddenIds, onToggle }: T
       {previewEnabled && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {columns.map((column) => {
-            const isVisible = !hiddenIds.includes(column.id);
+            const isVisible = column.locked || !hiddenIds.includes(column.id);
             return (
               <button
                 key={column.id}
                 type="button"
+                disabled={column.locked}
+                title={column.locked ? t("requirement_grid.display.locked_column") : undefined}
                 className={`rounded-sm border px-2 py-0.5 text-11 transition-all ${
                   isVisible
                     ? "border-accent-strong bg-accent-primary text-on-color"
                     : "border-subtle hover:bg-layer-1"
-                }`}
-                onClick={() => onToggle(column.id)}
+                } ${column.locked ? "cursor-not-allowed opacity-60" : ""}`}
+                onClick={() => !column.locked && onToggle(column.id)}
               >
                 {column.name}
               </button>

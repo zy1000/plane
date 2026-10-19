@@ -100,7 +100,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
     setValue("project_lead", currentUserId, { shouldValidate: true });
   }, [currentUserId, getValues, setValue]);
 
-  // 默认选中混合模式（组件全开，等价于加模式之前的现状）。列表回来才知道它的 id，
+  // 默认选中混合模型（组件全开，等价于加模式之前的现状）。列表回来才知道它的 id，
   // 所以不能写死在 defaultValues 里。用户已经选过就不覆盖。
   useEffect(() => {
     if (isDevModesLoading || devModes.length === 0 || getValues("dev_mode")) return;
