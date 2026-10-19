@@ -5023,7 +5023,6 @@ export default {
     validation: {
       required: "{field} is required",
       max_length: "{field} must be at most {max} characters",
-      code_already_exists: "That project code is taken. Pick another one.",
       code_not_in_dictionary: "That project code is not in the data dictionary. Pick one from the list.",
       invalid_option: "The selected option is no longer available. Pick another one.",
       end_before_start: "End date cannot be earlier than start date",
@@ -5514,6 +5513,11 @@ export default {
             description:
               "Pulls proj_no from the Jiandaoyun project-code form into the “Project code” data dictionary. Add-only: nothing is deleted or renamed. Runs daily and on demand.",
           },
+          jiandaoyun_rd_project: {
+            name: "R&D projects",
+            description:
+              "Syncs projects from the Jiandaoyun R&D project form: the name comes from the R&D project number and the project ID from the R&D project ID; code, BU, status, type, lead, product manager, planned dates and description are overwritten from Jiandaoyun. Projects deleted in Jiandaoyun are kept locally. Manual syncs run in the background; synced workspaces are refreshed daily.",
+          },
           mdm_person_info: {
             name: "People",
             description:
@@ -5524,6 +5528,8 @@ export default {
           mapping: "Mapping",
           mapping_to: "Data dictionary “{name}”",
           mapping_to_members: "Members of this workspace",
+          mapping_to_projects: "Projects in this workspace",
+          projects_count: "({count} synced)",
           members_count: "({count} members, {synced} with employee id)",
           target_count: "({count} values)",
           target_missing: "Target dictionary missing",
@@ -5536,6 +5542,7 @@ export default {
           by_schedule: "Scheduled job",
           sync_now: "Sync now",
           syncing: "Syncing…",
+          running: "Syncing in the background. This refreshes when it finishes…",
         },
         summary: {
           remote_total: "{count} remote",
@@ -5549,9 +5556,16 @@ export default {
           departments_created: "{count} new departments",
           leaders_unresolved: "{count} managers unresolved",
           skipped_no_email: "{count} without email",
+          updated: "{count} updated",
+          unchanged: "{count} unchanged",
+          local_renamed: "{count} local renamed",
+          remote_missing: "{count} deleted remotely",
+          lead_unmatched: "{count} leads unmatched",
+          product_manager_unmatched: "{count} product managers unmatched",
         },
         toast: {
           synced: "Sync complete",
+          started: "Sync started in the background. This page refreshes when it finishes.",
           load_failed: "Failed to load integrations",
         },
         errors: {

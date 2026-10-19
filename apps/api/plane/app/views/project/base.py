@@ -32,7 +32,6 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
-    ROLE,
     ProjectMemberPermission,
     allow_permission,
     allow_fine_permission,
@@ -86,14 +85,8 @@ from plane.db.models.issue_type import (
 )
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
-from plane.utils.project_stage import copy_stages_from_dev_mode
 from plane.utils.requirement_project import linked_products_by_project
-from plane.utils.project.defaults import (
-    bulk_create_issue_state,
-    create_default_bug_workflow,
-    temporary_create_issue_type,
-    create_default_bug_extra_field, create_default_role,
-)
+from plane.utils.project.defaults import setup_new_project
 from plane.utils.response import list_response
 
 
@@ -622,45 +615,7 @@ class ProjectViewSet(BaseViewSet):
         )
         if serializer.is_valid():
             serializer.save()
-            issue_types = temporary_create_issue_type(project_id=serializer.data["id"])
-
-            # Add the user as Administrator to the project
-            _ = ProjectMember.objects.create(
-                project_id=serializer.data["id"],
-                member=request.user,
-                role=ROLE.ADMIN.value,
-            )
-
-            if serializer.data["project_lead"] is not None and str(
-                    serializer.data["project_lead"]
-            ) != str(request.user.id):
-                ProjectMember.objects.create(
-                    project_id=serializer.data["id"],
-                    member_id=serializer.data["project_lead"],
-                    role=ROLE.ADMIN.value,
-                )
-
-            create_default_role(workspace=workspace,project_id=serializer.data["id"])
-
-            bulk_create_issue_state(
-                issue_types=issue_types,
-                workspace=serializer.instance.workspace,
-                project=serializer.instance,
-                created_by=request.user,
-            )
-            create_default_bug_extra_field(issue_types=issue_types)
-
-            create_default_bug_workflow(
-                issue_types=issue_types,
-                workspace=serializer.instance.workspace,
-                project=serializer.instance,
-                created_by=request.user,
-            )
-
-            # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
-            # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在
-            # 阶段页手工新建。
-            copy_stages_from_dev_mode(serializer.instance, actor=request.user)
+            setup_new_project(serializer.instance, request.user)
 
             project = self.get_queryset().filter(pk=serializer.data["id"]).first()
 

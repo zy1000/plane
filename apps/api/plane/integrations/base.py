@@ -4,6 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Callable
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.cache import cache
@@ -59,9 +60,62 @@ class IntegrationSpec:
     describe_target: Callable | None = None
     # False = 不进每日 beat，只能在设置页手动触发
     scheduled: bool = True
+    # 每日 beat 只跑返回 True 的工作区；None = 所有工作区
+    schedule_filter: Callable | None = None
+    # True = 设置页「立即同步」投 Celery 后台执行（跑得久、超过请求与锁的时限），前端轮询 is_running
+    run_async: bool = False
 
     def missing_settings(self):
         return [name for name in self.required_settings if not getattr(settings, name, "")]
+
+
+# ---- 防重入锁：同一工作区同一集成同时只跑一个。手动接口、后台任务、每日 beat 共用 ----
+
+SYNC_LOCK_TIMEOUT_SECONDS = 120
+# 后台执行的集成跑得久；锁也是前端「同步中」的依据，worker 没起来时最多挂这么久
+ASYNC_SYNC_LOCK_TIMEOUT_SECONDS = 30 * 60
+
+
+def _sync_lock_cache_key(workspace_id, key):
+    return f"external_integration:lock:{workspace_id}:{key}"
+
+
+def _sync_lock_timeout(spec):
+    return ASYNC_SYNC_LOCK_TIMEOUT_SECONDS if spec.run_async else SYNC_LOCK_TIMEOUT_SECONDS
+
+
+def acquire_sync_lock(spec, workspace_id):
+    """拿到锁返回令牌，拿不到返回 None。释放要凭令牌，免得删掉锁过期后别人重新拿到的那把。"""
+    token = uuid4().hex
+    if cache.add(_sync_lock_cache_key(workspace_id, spec.key), token, timeout=_sync_lock_timeout(spec)):
+        return token
+    return None
+
+
+def claim_sync_lock(spec, workspace_id, token):
+    """后台任务开跑前确认锁还归自己：任务排队期间锁可能已过期，甚至已被下一次点击拿走。
+
+    仍是自己的就续期；过期了没人拿就重新拿上；被别人拿走返回 False，这次任务不该再跑。
+    """
+    key = _sync_lock_cache_key(workspace_id, spec.key)
+    current = cache.get(key)
+    if current == token:
+        cache.set(key, token, timeout=_sync_lock_timeout(spec))
+        return True
+    if current is None:
+        return cache.add(key, token, timeout=_sync_lock_timeout(spec))
+    return False
+
+
+def release_sync_lock(spec, workspace_id, token):
+    # 先读后删不是原子的；两步之间恰好过期又被别人拿走的窗口可以忽略（锁时限远长于一次同步）
+    key = _sync_lock_cache_key(workspace_id, spec.key)
+    if cache.get(key) == token:
+        cache.delete(key)
+
+
+def is_sync_running(spec, workspace_id):
+    return cache.get(_sync_lock_cache_key(workspace_id, spec.key)) is not None
 
 
 # ---- 「上次同步」快照：放 Redis cache 不建表；Redis 丢了只是显示成「未同步过」 ----
@@ -93,11 +147,7 @@ def _timing(started):
     }
 
 
-def run_integration(spec, workspace, actor=None):
-    """统一入口：配置检查 → 计时执行 → 成功 / 失败都写快照。view、Celery、shell 都走这里。
-
-    未配置直接抛、不写快照（那不是一次「同步」）；其它异常记日志、写 failed 快照后原样抛出。
-    """
+def ensure_configured(spec):
     missing = spec.missing_settings()
     if missing:
         raise IntegrationError(
@@ -105,6 +155,14 @@ def run_integration(spec, workspace, actor=None):
             "missing settings: " + ", ".join(missing),
             missing_settings=missing,
         )
+
+
+def run_integration(spec, workspace, actor=None):
+    """统一入口：配置检查 → 计时执行 → 成功 / 失败都写快照。view、Celery、shell 都走这里。
+
+    未配置直接抛、不写快照（那不是一次「同步」）；其它异常记日志、写 failed 快照后原样抛出。
+    """
+    ensure_configured(spec)
     started = time.monotonic()
     snapshot = {"triggered_by": _actor_snapshot(actor)}
     try:

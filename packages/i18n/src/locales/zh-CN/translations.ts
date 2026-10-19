@@ -5200,7 +5200,6 @@ export default {
     validation: {
       required: "请填写{field}",
       max_length: "{field}不能超过 {max} 个字符",
-      code_already_exists: "该项目代号已被占用，请换一个。",
       code_not_in_dictionary: "该项目代号不在数据字典中，请重新选择。",
       invalid_option: "所选项已不可用，请重新选择。",
       end_before_start: "完成日期不能早于开始日期",
@@ -5676,6 +5675,11 @@ export default {
             name: "项目代号",
             description: "从简道云「项目代号」表单拉取 proj_no，补充到数据字典「项目代号」；只新增，不删除、不改名。每天定时同步一次，也可手动触发。",
           },
+          jiandaoyun_rd_project: {
+            name: "研发项目",
+            description:
+              "从简道云「研发项目」表单同步项目：名称取研发项目编号，项目ID 取研发项目ID，代号、BU、状态、类型、负责人、产品经理、计划日期、描述以简道云为准覆盖；简道云删除的项目本地保留。手动同步在后台执行，同步过的工作区每天定时跟进一次。",
+          },
           mdm_person_info: {
             name: "人员信息",
             description:
@@ -5686,6 +5690,8 @@ export default {
           mapping: "数据对应",
           mapping_to: "数据字典「{name}」",
           mapping_to_members: "本工作区成员",
+          mapping_to_projects: "本工作区项目",
+          projects_count: "（已同步 {count} 个）",
           members_count: "（{count} 人，其中 {synced} 人已带工号）",
           target_count: "（{count} 个值）",
           target_missing: "目标字典不存在",
@@ -5698,6 +5704,7 @@ export default {
           by_schedule: "定时任务",
           sync_now: "立即同步",
           syncing: "同步中…",
+          running: "后台同步中，完成后自动刷新…",
         },
         summary: {
           remote_total: "远端 {count} 条",
@@ -5711,9 +5718,16 @@ export default {
           departments_created: "新部门 {count}",
           leaders_unresolved: "上级未解析 {count}",
           skipped_no_email: "无邮箱 {count}",
+          updated: "更新 {count}",
+          unchanged: "未变 {count}",
+          local_renamed: "本地改名 {count}",
+          remote_missing: "远端已删 {count}",
+          lead_unmatched: "负责人未匹配 {count}",
+          product_manager_unmatched: "产品经理未匹配 {count}",
         },
         toast: {
           synced: "同步完成",
+          started: "已开始后台同步，完成后会自动刷新",
           load_failed: "第三方集成信息加载失败",
         },
         errors: {

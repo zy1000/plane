@@ -1,11 +1,16 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TExternalIntegration, TExternalIntegrationSyncResponse } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { SettingsHeading } from "@/components/settings/heading";
-import { INTEGRATIONS_I18N as I18N, formatSyncSummary, getIntegrationErrorMessage } from "./helpers";
+import {
+  INTEGRATIONS_I18N as I18N,
+  formatSyncSummary,
+  getIntegrationErrorLabel,
+  getIntegrationErrorMessage,
+} from "./helpers";
 import { IntegrationCard } from "./integration-card";
 
 type Props = {
@@ -25,11 +30,36 @@ export function IntegrationsRoot(props: Props) {
     props;
   const { t } = useTranslation();
 
+  // 后台同步：is_running 由 true 变 false 时按「上次同步」快照补一个结果 toast
+  const runningKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const previous = runningKeysRef.current;
+    runningKeysRef.current = new Set(integrations.filter((item) => item.is_running).map((item) => item.key));
+    integrations.forEach((integration) => {
+      if (!previous.has(integration.key) || integration.is_running) return;
+      const lastSync = integration.last_sync;
+      if (lastSync?.status === "success") {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t(`${I18N}.toast.synced`),
+          message: lastSync.summary ? formatSyncSummary(lastSync.summary, t) : undefined,
+        });
+      } else if (lastSync?.status === "failed") {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: getIntegrationErrorLabel(lastSync.error?.code, t) });
+      }
+    });
+  }, [integrations, t]);
+
   // 卡片的「上次同步」由 hook 就地更新（成功 / 失败都带回 integration），这里只负责 toast
   const handleSync = useCallback(
     async (key: string) => {
       try {
         const response = await syncIntegration(key);
+        if (!response.result) {
+          // 后台执行：结果等轮询到 is_running 结束再 toast（见上面的 effect）
+          setToast({ type: TOAST_TYPE.INFO, title: t(`${I18N}.toast.started`) });
+          return;
+        }
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t(`${I18N}.toast.synced`),
@@ -77,7 +107,7 @@ export function IntegrationsRoot(props: Props) {
         workspaceSlug={workspaceSlug}
         integration={integration}
         canSync={canSync}
-        isSyncing={syncingKey === integration.key}
+        isSyncing={syncingKey === integration.key || integration.is_running}
         onSync={handleSync}
       />
     ));

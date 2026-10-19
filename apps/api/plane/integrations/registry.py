@@ -4,10 +4,10 @@ from django.db.models import Count
 
 from plane.db.models import DataDictionary
 
-from . import person_info, project_code
-from .base import get_last_sync
+from . import person_info, project_code, project_sync
+from .base import get_last_sync, is_sync_running
 
-INTEGRATIONS = (project_code.SPEC, person_info.SPEC)
+INTEGRATIONS = (project_code.SPEC, project_sync.SPEC, person_info.SPEC)
 _BY_KEY = {spec.key: spec for spec in INTEGRATIONS}
 
 
@@ -49,4 +49,7 @@ def describe_integration(spec, workspace):
         "is_configured": not missing,
         "missing_settings": missing,
         "last_sync": get_last_sync(workspace.id, spec.key),
+        # 后台执行的集成靠它轮询：锁在 = 还在跑
+        "run_async": spec.run_async,
+        "is_running": is_sync_running(spec, workspace.id),
     }

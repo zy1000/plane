@@ -4,6 +4,9 @@ import { ExternalIntegrationService } from "@/services/external-integration.serv
 
 const externalIntegrationService = new ExternalIntegrationService();
 
+/** 有集成在后台同步（is_running）时的轮询间隔 */
+const RUNNING_POLL_INTERVAL_MS = 3000;
+
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -44,6 +47,19 @@ export const useExternalIntegrations = (workspaceSlug: string | undefined) => {
   useEffect(() => {
     void fetchIntegrations().catch(() => undefined);
   }, [fetchIntegrations]);
+
+  // 后台同步跑完前一直静默轮询（不动 isLoading，免得卡片闪骨架）；单次失败下一轮再试
+  const hasRunning = integrations.some((item) => item.is_running);
+  useEffect(() => {
+    if (!workspaceSlug || !hasRunning) return;
+    const timer = window.setInterval(() => {
+      externalIntegrationService
+        .list(workspaceSlug)
+        .then(setIntegrations)
+        .catch(() => undefined);
+    }, RUNNING_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [workspaceSlug, hasRunning]);
 
   const replaceIntegration = useCallback((next: TExternalIntegration) => {
     setIntegrations((current) => current.map((item) => (item.key === next.key ? next : item)));

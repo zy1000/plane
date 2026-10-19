@@ -249,18 +249,6 @@ class TestProjectAPIPost(TestProjectBase):
         assert response.json()["identifier"] == ["PROJECT_IDENTIFIER_ALREADY_EXIST"]
 
     @pytest.mark.django_db
-    def test_create_project_duplicate_code(self, session_client, workspace, create_user):
-        """代号工作区内唯一；strip 之后再查重"""
-        Project.objects.create(name="Coded", identifier="CD1", workspace=workspace, code="SAME")
-
-        url = self.get_project_url(workspace.slug)
-        for code in ("SAME", "  SAME  "):
-            project_data = self.project_payload(workspace, create_user, name=f"Other {code!r}", identifier="CD2", code=code)
-            response = session_client.post(url, project_data, format="json")
-            assert response.status_code == status.HTTP_400_BAD_REQUEST
-            assert response.json()["code"] == ["PROJECT_CODE_ALREADY_EXIST"]
-
-    @pytest.mark.django_db
     def test_create_project_dictionary_item_must_match_field_and_workspace(
         self, session_client, workspace, create_user
     ):
@@ -563,9 +551,8 @@ class TestProjectAPIPatchDelete(TestProjectBase):
         assert project.status_id == status_item.id
 
     @pytest.mark.django_db
-    def test_partial_update_code_conflict_and_null_rejected(self, session_client, workspace, create_user):
-        """代号重复 400；必填字段显式 null / 空串 400"""
-        Project.objects.create(name="Project One", identifier="P1", workspace=workspace)
+    def test_partial_update_required_fields_null_rejected(self, session_client, workspace, create_user):
+        """必填字段显式 null / 空串 400"""
         # 走接口创建（同 test_partial_update_project_success）
         create_response = session_client.post(
             self.get_project_url(workspace.slug),
@@ -576,10 +563,6 @@ class TestProjectAPIPatchDelete(TestProjectBase):
         project2 = Project.objects.get(id=create_response.json()["id"])
 
         url = self.get_project_url(workspace.slug, pk=project2.id)
-
-        response = session_client.patch(url, {"code": "Project One"}, format="json")
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["code"] == ["PROJECT_CODE_ALREADY_EXIST"]
 
         response = session_client.patch(url, {"code": ""}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST

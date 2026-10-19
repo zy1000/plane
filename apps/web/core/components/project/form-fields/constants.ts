@@ -104,7 +104,6 @@ export const getMissingProjectRequiredFields = (project: Partial<TProject>): TPr
 export const PROJECT_SERVER_ERROR_I18N: Record<string, string> = {
   PROJECT_NAME_ALREADY_EXIST: "project_name_already_taken",
   PROJECT_IDENTIFIER_ALREADY_EXIST: "project_identifier_already_taken",
-  PROJECT_CODE_ALREADY_EXIST: "workspace_projects.validation.code_already_exists",
   PROJECT_CODE_NOT_IN_DICTIONARY: "workspace_projects.validation.code_not_in_dictionary",
   PROJECT_DICTIONARY_ITEM_INVALID: "workspace_projects.validation.invalid_option",
   PROJECT_PRODUCT_MANAGER_NOT_WORKSPACE_MEMBER: "workspace_projects.validation.invalid_option",

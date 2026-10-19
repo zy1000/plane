@@ -467,3 +467,35 @@ def create_default_role(workspace: Workspace, project_id: str):
         for role in workspace_roles
     ]
     ProjectRole.objects.bulk_create(bulk_obj)
+
+
+def setup_new_project(project: Project, creator: User):
+    """新建项目后的初始化：创建人 / 负责人加为管理员、角色、工作项类型、状态、缺陷字段与工作流、研发模式阶段。
+
+    创建项目接口与简道云项目同步共用，两边建出来的项目一模一样。project 须已建好 ProjectIdentifier。
+    """
+    from plane.db.models import ProjectMember
+    from plane.db.models.project import ROLE
+    from plane.utils.project_stage import copy_stages_from_dev_mode
+
+    issue_types = temporary_create_issue_type(project_id=project.id)
+
+    ProjectMember.objects.create(project_id=project.id, member=creator, role=ROLE.ADMIN.value)
+    if project.project_lead_id is not None and str(project.project_lead_id) != str(creator.id):
+        ProjectMember.objects.create(
+            project_id=project.id, member_id=project.project_lead_id, role=ROLE.ADMIN.value
+        )
+
+    create_default_role(workspace=project.workspace, project_id=project.id)
+    bulk_create_issue_state(
+        issue_types=issue_types, workspace=project.workspace, project=project, created_by=creator
+    )
+    create_default_bug_extra_field(issue_types=issue_types)
+    create_default_bug_workflow(
+        issue_types=issue_types, workspace=project.workspace, project=project, created_by=creator
+    )
+
+    # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
+    # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在
+    # 阶段页手工新建。
+    copy_stages_from_dev_mode(project, actor=creator)

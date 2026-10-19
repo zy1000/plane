@@ -203,7 +203,8 @@ class Project(BaseModel):
     pms_project_name = models.CharField(max_length=255, null=True, blank=True)
 
     # ---- 0348 扩展字段，口径与 Product 0347 逐条对应 ----
-    # 项目代号：工作区内条件唯一 + 非空 check（见 Meta.constraints）；save() 在空时回落 name。
+    # 项目代号：非空 check（见 Meta.constraints）；save() 在空时回落 name。
+    # 0415 起允许重复：简道云一个代号下挂多个研发项目。
     code = models.CharField(max_length=255, verbose_name="项目代号")
     # 三个字典 FK：DB 允许空（迁移前的存量项目为空，前端编辑时强制补齐），
     # API 层 status / project_type 必填、business_unit 选填。
@@ -286,11 +287,6 @@ class Project(BaseModel):
                 fields=["name", "workspace"],
                 condition=Q(deleted_at__isnull=True),
                 name="project_unique_name_workspace_when_deleted_at_null",
-            ),
-            models.UniqueConstraint(
-                fields=["code", "workspace"],
-                condition=Q(deleted_at__isnull=True),
-                name="project_unique_code_workspace_when_deleted_at_null",
             ),
             # 空代号没有意义，且会让第一个漏填的项目静默拿到 ''，直到第二个才撞唯一约束
             models.CheckConstraint(check=~Q(code=""), name="project_code_not_blank"),

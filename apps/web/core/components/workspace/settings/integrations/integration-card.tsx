@@ -18,6 +18,7 @@ type Props = {
   workspaceSlug: string;
   integration: TExternalIntegration;
   canSync: boolean;
+  /** 本页刚点了同步、或后台同步还在跑（integration.is_running） */
   isSyncing: boolean;
   /** toast 在 root 里统一做，这里只触发 */
   onSync: (key: string) => Promise<void>;
@@ -44,6 +45,16 @@ export function IntegrationCard(props: Props) {
         </>
       );
     }
+    if (target?.kind === "projects") {
+      return (
+        <>
+          <Link to={`/${workspaceSlug}/projects`} className="text-accent-primary hover:underline">
+            {t(`${I18N}.card.mapping_to_projects`)}
+          </Link>
+          <span className="text-tertiary">{t(`${I18N}.card.projects_count`, { count: target.synced_count })}</span>
+        </>
+      );
+    }
     if (target?.kind === "dictionary" && target.dictionary_id) {
       return (
         <>
@@ -58,6 +69,7 @@ export function IntegrationCard(props: Props) {
   };
 
   const renderLastSync = () => {
+    if (integration.is_running) return <span className="text-accent-primary">{t(`${I18N}.card.running`)}</span>;
     if (!lastSync) return <span className="text-tertiary">{t(`${I18N}.card.never_synced`)}</span>;
     const who = lastSync.triggered_by?.display_name ?? t(`${I18N}.card.by_schedule`);
     return (

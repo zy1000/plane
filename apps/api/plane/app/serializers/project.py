@@ -160,16 +160,8 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
         read_only_fields = ["workspace", "deleted_at"]
 
     def validate_code(self, value):
-        # DRF 的 CharField 已先 trim 并拒绝空串，这里做查重与字典校验
+        # DRF 的 CharField 已先 trim 并拒绝空串，这里做字典校验。代号允许重复（0415）
         code = value.strip()
-        # 与 DB 条件唯一约束同口径：未软删行全部参与，包括 is_template=True 的模板项目
-        queryset = Project.all_objects.filter(
-            workspace_id=self.context["workspace_id"], code=code, deleted_at__isnull=True
-        )
-        if self.instance is not None:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        if queryset.exists():
-            raise serializers.ValidationError("PROJECT_CODE_ALREADY_EXIST")
         # 代号必须来自 project_code 字典。值没变就不查：0355 之前的存量代号不在字典里，不该因此改不了别的字段
         if self.instance is not None and self.instance.code == code:
             return code

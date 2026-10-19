@@ -1,6 +1,7 @@
 import type {
   TExternalIntegration,
   TExternalIntegrationPersonSyncSummary,
+  TExternalIntegrationProjectSyncSummary,
   TExternalIntegrationSyncSummary,
 } from "@plane/types";
 
@@ -9,7 +10,7 @@ export const INTEGRATIONS_I18N = "workspace_settings.settings.integrations";
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
 
 /** 前端已知的集成 key / 来源：名称与描述走 i18n；后端新加了集成但前端还没补词条时回落后端文案 */
-const CATALOG_KEYS = new Set(["jiandaoyun_project_code", "mdm_person_info"]);
+const CATALOG_KEYS = new Set(["jiandaoyun_project_code", "jiandaoyun_rd_project", "mdm_person_info"]);
 const PROVIDER_KEYS = new Set(["jiandaoyun", "mdm"]);
 const ERROR_CODES = new Set([
   "INTEGRATION_NOT_FOUND",
@@ -70,9 +71,34 @@ const formatPersonSummary = (summary: TExternalIntegrationPersonSyncSummary, t: 
   return parts.join(" · ");
 };
 
+const isProjectSummary = (summary: TExternalIntegrationSyncSummary): summary is TExternalIntegrationProjectSyncSummary =>
+  "unchanged" in summary;
+
+/** 研发项目：「远端 701 条 · 新增 3 · 更新 20 · 未变 678 · 本地改名 2 · 负责人未匹配 65」，为 0 的尾项不显示 */
+const formatProjectSummary = (summary: TExternalIntegrationProjectSyncSummary, t: TTranslate) => {
+  const parts = [
+    t(`${INTEGRATIONS_I18N}.summary.remote_total`, { count: summary.remote_total }),
+    t(`${INTEGRATIONS_I18N}.summary.created`, { count: summary.created }),
+    t(`${INTEGRATIONS_I18N}.summary.updated`, { count: summary.updated }),
+    t(`${INTEGRATIONS_I18N}.summary.unchanged`, { count: summary.unchanged }),
+  ];
+  const tails = [
+    ["local_renamed", summary.local_renamed],
+    ["skipped", summary.skipped],
+    ["remote_missing", summary.remote_missing],
+    ["lead_unmatched", summary.lead_unmatched],
+    ["product_manager_unmatched", summary.product_manager_unmatched],
+  ] as const;
+  for (const [key, count] of tails) {
+    if (count > 0) parts.push(t(`${INTEGRATIONS_I18N}.summary.${key}`, { count }));
+  }
+  return parts.join(" · ");
+};
+
 /** 「远端 130 条 · 新增 3 · 已存在 122 · 跳过 4 · 本地多出 2」，为 0 的跳过 / 本地多出不显示 */
 export const formatSyncSummary = (summary: TExternalIntegrationSyncSummary, t: TTranslate) => {
   if (isPersonSummary(summary)) return formatPersonSummary(summary, t);
+  if (isProjectSummary(summary)) return formatProjectSummary(summary, t);
   const parts = [
     t(`${INTEGRATIONS_I18N}.summary.remote_total`, { count: summary.remote_total }),
     t(`${INTEGRATIONS_I18N}.summary.created`, { count: summary.created }),

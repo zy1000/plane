@@ -34,7 +34,6 @@ def _headers():
 def _post(path, body):
     url = settings.JIANDAOYUN_API_BASE_URL.rstrip("/") + path
     try:
-        print(_headers())
         response = requests.post(
             url,
             json=body,
@@ -71,12 +70,12 @@ def _post(path, body):
     return payload
 
 
-def fetch_entry_field_values(app_id, entry_id, field):
-    """按 data_id 游标翻页拉某表单某字段的全部值。
+def fetch_entry_rows(app_id, entry_id, fields):
+    """按 data_id 游标翻页拉某表单的全部行，只带 fields 里的字段（外加 _id）。
 
-    返回 (原始值列表, 页数)：列表保持远端顺序、不做清洗（含 None / 空串 / 重复），归一化交给调用方。
+    返回 (行列表, 页数)：保持远端顺序、不做清洗，归一化交给调用方。
     """
-    values, data_id, seen_ids = [], None, set()
+    rows, data_id, seen_ids = [], None, set()
     started = time.monotonic()
     for page in range(1, MAX_PAGES + 1):
         if time.monotonic() - started > TOTAL_TIME_BUDGET_SECONDS:
@@ -87,18 +86,18 @@ def fetch_entry_field_values(app_id, entry_id, field):
         body = {
             "app_id": app_id,
             "entry_id": entry_id,
-            "fields": [field],
+            "fields": list(fields),
             "limit": PAGE_LIMIT,
         }
         if data_id:
             body["data_id"] = data_id
-        rows = _post(ENTRY_DATA_LIST_PATH, body)["data"]
-        if not rows:
+        page_rows = _post(ENTRY_DATA_LIST_PATH, body)["data"]
+        if not page_rows:
             break
-        values.extend(row.get(field) if isinstance(row, dict) else None for row in rows)
-        if len(rows) < OFFICIAL_PAGE_CAP:
+        rows.extend(row if isinstance(row, dict) else {} for row in page_rows)
+        if len(page_rows) < OFFICIAL_PAGE_CAP:
             break
-        last_id = rows[-1].get("_id") if isinstance(rows[-1], dict) else None
+        last_id = rows[-1].get("_id")
         if not last_id or last_id in seen_ids:
             # 游标不前进：网关不支持 data_id 或数据异常，宁可停下也不要死循环
             break
@@ -108,4 +107,13 @@ def fetch_entry_field_values(app_id, entry_id, field):
         raise IntegrationError(
             "INTEGRATION_REMOTE_BAD_RESPONSE", f"exceeded {MAX_PAGES} pages"
         )
-    return values, page
+    return rows, page
+
+
+def fetch_entry_field_values(app_id, entry_id, field):
+    """拉某表单某字段的全部值。
+
+    返回 (原始值列表, 页数)：列表保持远端顺序、不做清洗（含 None / 空串 / 重复），归一化交给调用方。
+    """
+    rows, pages = fetch_entry_rows(app_id, entry_id, [field])
+    return [row.get(field) for row in rows], pages
