@@ -263,9 +263,10 @@ export const calculateCycleProgress = (
       completed += cycleDetails.started_estimate_points || 0;
     }
   } else {
-    completed = cycleDetails.completed_issues || 0;
-    cancelled = cycleDetails.cancelled_issues || 0;
-    total = cycleDetails.total_issues || 0;
+    // 关联需求和工作项合并计：已发布算完成、已关闭算取消。快照只冻结工作项，需求取实时值
+    completed = (cycleDetails.completed_issues || 0) + (cycle.completed_requirements || 0);
+    cancelled = (cycleDetails.cancelled_issues || 0) + (cycle.cancelled_requirements || 0);
+    total = (cycleDetails.total_issues || 0) + (cycle.total_requirements || 0);
 
     if (includeInProgress) {
       completed += cycleDetails.started_issues || 0;

@@ -70,6 +70,7 @@ from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
+from plane.utils.requirement_project import container_requirement_counts
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
@@ -233,6 +234,7 @@ class CycleViewSet(BaseViewSet):
                     Value([], output_field=ArrayField(UUIDField())),
                 )
             )
+            .annotate(**container_requirement_counts(RequirementCycle, "cycle"))
             .order_by("-is_favorite", "name")
             .distinct()
         )
@@ -258,6 +260,9 @@ class CycleViewSet(BaseViewSet):
         "is_favorite",
         "total_issues",
         "completed_issues",
+        "total_requirements",
+        "completed_requirements",
+        "cancelled_requirements",
         "cancelled_issues",
         "assignee_ids",
         "status",
@@ -419,6 +424,9 @@ class CycleViewSet(BaseViewSet):
                         "is_favorite",
                         "total_issues",
                         "completed_issues",
+                        "total_requirements",
+                        "completed_requirements",
+                        "cancelled_requirements",
                         "assignee_ids",
                         "status",
                         "has_active_overdue",
@@ -547,6 +555,9 @@ class CycleViewSet(BaseViewSet):
                 "is_favorite",
                 "total_issues",
                 "completed_issues",
+                "total_requirements",
+                "completed_requirements",
+                "cancelled_requirements",
                 "assignee_ids",
                 "status",
                 "has_active_overdue",
@@ -670,6 +681,9 @@ class CycleViewSet(BaseViewSet):
             "is_favorite",
             "total_issues",
             "completed_issues",
+            "total_requirements",
+            "completed_requirements",
+            "cancelled_requirements",
             "assignee_ids",
             "status",
             "has_active_overdue",

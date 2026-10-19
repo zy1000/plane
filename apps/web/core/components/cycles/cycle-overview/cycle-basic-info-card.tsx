@@ -94,7 +94,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
       <TestingDatesConfirmModal {...testingDatesModalProps} />
       <div className="grid grid-cols-3 gap-3 pt-2 pb-5">
         <div className="flex min-w-0 flex-col items-center gap-2">
-          <span className="text-center text-sm font-medium leading-5 text-primary">工作项完成率</span>
+          <span className="text-center text-sm font-medium leading-5 text-primary">完成率</span>
           <CircularProgressIndicator size={82} percentage={completionRate} strokeWidth={6}>
             <span className="text-sm font-semibold tabular-nums text-primary">{completionRate}%</span>
           </CircularProgressIndicator>

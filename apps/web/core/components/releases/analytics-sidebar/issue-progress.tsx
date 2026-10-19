@@ -17,6 +17,7 @@ import { getDate } from "@plane/utils";
 import ProgressChart from "@/components/core/sidebar/progress-chart";
 import { ModuleProgressStats } from "@/components/modules";
 import { useProjectEstimates } from "@/hooks/store/estimates";
+import { getReleaseProgress } from "@/components/releases/release-progress";
 import { useRelease } from "@/hooks/store/use-release";
 
 type TReleaseAnalyticsProgress = {
@@ -44,7 +45,6 @@ export const ReleaseAnalyticsProgress = observer(function ReleaseAnalyticsProgre
   const estimateDetails =
     isCurrentProjectEstimateEnabled && currentActiveEstimateId && estimateById(currentActiveEstimateId);
   const isCurrentEstimateTypeIsPoints = estimateDetails && estimateDetails?.type === EEstimateSystem.POINTS;
-  const completedIssues = releaseDetails?.completed_issues || 0;
   const totalIssues = releaseDetails?.total_issues || 0;
   const completedEstimatePoints = releaseDetails?.completed_estimate_points || 0;
   const totalEstimatePoints = releaseDetails?.total_estimate_points || 0;
@@ -53,9 +53,7 @@ export const ReleaseAnalyticsProgress = observer(function ReleaseAnalyticsProgre
       ? completedEstimatePoints != 0 && totalEstimatePoints != 0
         ? Math.round((completedEstimatePoints / totalEstimatePoints) * 100)
         : 0
-      : completedIssues != 0 && totalIssues != 0
-        ? Math.round((completedIssues / totalIssues) * 100)
-        : 0
+      : getReleaseProgress(releaseDetails)
     : 0;
   const chartDistributionData =
     plotType === "points" ? releaseDetails?.estimate_distribution : releaseDetails?.distribution || undefined;

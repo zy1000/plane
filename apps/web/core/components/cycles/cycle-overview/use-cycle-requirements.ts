@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
+import { useCycle } from "@/hooks/store/use-cycle";
 import { RequirementService } from "@/services/requirement.service";
 
 /** 一次拉全量：单个迭代的关联需求量级很小（几十条内），不做分页交互 */
@@ -29,6 +30,7 @@ type TUseCycleRequirementsProps = {
 export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUseCycleRequirementsProps) => {
   const { t } = useTranslation();
   const requirementService = useMemo(() => new RequirementService(), []);
+  const { fetchCycleDetails } = useCycle();
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
   const [updatingStatusRequirementId, setUpdatingStatusRequirementId] = useState<string | null>(null);
@@ -56,6 +58,12 @@ export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUse
       t("project_requirements.container.toast_failed")
     : null;
 
+  /** 迭代的完成率和状态校验都把关联需求算在内，需求增减或改状态后重拉迭代计数 */
+  const refreshCycleProgress = useCallback(() => {
+    if (!workspaceSlug || !projectId || !cycleId) return;
+    fetchCycleDetails(workspaceSlug, projectId, cycleId).catch(() => undefined);
+  }, [cycleId, fetchCycleDetails, projectId, workspaceSlug]);
+
   const openLinkModal = useCallback(() => setLinkModalOpen(true), []);
   const closeLinkModal = useCallback(() => setLinkModalOpen(false), []);
 
@@ -72,8 +80,9 @@ export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUse
         message: t("project_requirements.toast.linked", { count: requirementIds.length }),
       });
       void mutateRequirements();
+      refreshCycleProgress();
     },
-    [cycleId, mutateRequirements, projectId, requirementService, t, workspaceSlug]
+    [cycleId, mutateRequirements, projectId, refreshCycleProgress, requirementService, t, workspaceSlug]
   );
 
   /** 解除关联。留痕由服务端处理，这里只负责刷新列表 */
@@ -88,6 +97,7 @@ export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUse
           title: t("project_requirements.container.toast_unlinked"),
         });
         void mutateRequirements();
+        refreshCycleProgress();
       } catch (error: any) {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -98,7 +108,7 @@ export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUse
         setUnlinkingRequirementId(null);
       }
     },
-    [cycleId, mutateRequirements, projectId, requirementService, t, workspaceSlug]
+    [cycleId, mutateRequirements, projectId, refreshCycleProgress, requirementService, t, workspaceSlug]
   );
 
   /**
@@ -119,6 +129,7 @@ export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUse
           }),
         });
         void mutateRequirements();
+        refreshCycleProgress();
       } catch (error: any) {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -129,7 +140,7 @@ export const useCycleRequirements = ({ workspaceSlug, projectId, cycleId }: TUse
         setUpdatingStatusRequirementId(null);
       }
     },
-    [mutateRequirements, projectId, requirementService, t, workspaceSlug]
+    [mutateRequirements, projectId, refreshCycleProgress, requirementService, t, workspaceSlug]
   );
 
   return {

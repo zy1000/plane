@@ -33,6 +33,7 @@ import { useAttachmentBatchDownload } from "@/hooks/use-attachment-batch-downloa
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
+import { getReleaseProgress } from "@/components/releases/release-progress";
 import {
   ReleaseActivityTab,
   ReleaseMaterialsTab,
@@ -630,7 +631,14 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   );
   const completedIssues = Number(stats?.state_distribution?.completed ?? 0);
   const cancelledIssues = Number(stats?.state_distribution?.cancelled ?? 0);
-  const progress = totalIssues > 0 ? Math.floor((completedIssues / totalIssues) * 100) : 0;
+  const progress = getReleaseProgress({
+    total_issues: totalIssues,
+    completed_issues: completedIssues,
+    cancelled_issues: cancelledIssues,
+    total_requirements: stats?.total_requirements,
+    completed_requirements: stats?.completed_requirements,
+    cancelled_requirements: stats?.cancelled_requirements,
+  });
 
   const releaseTabs: ReleaseTabItem[] = useMemo(
     () => [

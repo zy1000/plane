@@ -1,6 +1,13 @@
 from dataclasses import dataclass, field
 
-from plane.db.models import Cycle, CycleIssue, FileAsset, StateGroup
+from plane.db.models import (
+    Cycle,
+    CycleIssue,
+    FileAsset,
+    RequirementCycle,
+    RequirementItemStatus,
+    StateGroup,
+)
 from plane.utils.html_processor import strip_tags
 
 
@@ -35,6 +42,19 @@ def all_issues_cancelled(cycle: Cycle):
     return not CycleIssue.objects.filter(cycle=cycle).exclude(
         issue__state__group=StateGroup.CANCELLED
     ).exists()
+
+
+def requirement_statuses(cycle: Cycle) -> list[str]:
+    """迭代下关联需求的交付状态列表（软删需求不计）。"""
+    return list(
+        RequirementCycle.objects.filter(cycle=cycle, requirement__deleted_at__isnull=True).values_list(
+            "requirement__status", flat=True
+        )
+    )
+
+
+# 需求的「未开始」口径，对应工作项的 backlog / unstarted
+UNSTARTED_REQUIREMENT_STATUSES = {RequirementItemStatus.NOT_STARTED, RequirementItemStatus.PROJECTED}
 
 
 def has_attachment(cycle: Cycle):
@@ -101,8 +121,8 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
             reasons.append("请填写开始时间")
         if cycle.end_date is None:
             reasons.append("请填写结束时间")
-        if not has_issues(cycle):
-            reasons.append("请先规划工作项")
+        if not has_issues(cycle) and not requirement_statuses(cycle):
+            reasons.append("请先规划工作项或关联需求")
         return _result(reasons)
 
     # 进行中/已退回 -> 测试中
@@ -113,10 +133,19 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
             reasons.append("请填写建议测试范围")
         if not has_test_plan(cycle):
             reasons.append("请先关联测试计划")
-        if has_issues(cycle) and all_issues_cancelled(cycle):
-            reasons.append("迭代下工作项已全部取消，只能改为已取消")
-        elif not all_issues_ready(cycle):
-            reasons.append("存在未开始的工作项")
+        # 已关闭的需求等同已取消的工作项
+        req_statuses = requirement_statuses(cycle)
+        if (
+            (has_issues(cycle) or req_statuses)
+            and all_issues_cancelled(cycle)
+            and all(s == RequirementItemStatus.CLOSED for s in req_statuses)
+        ):
+            reasons.append("迭代下工作项和需求已全部取消，只能改为已取消")
+        else:
+            if not all_issues_ready(cycle):
+                reasons.append("存在未开始的工作项")
+            if any(s in UNSTARTED_REQUIREMENT_STATUSES for s in req_statuses):
+                reasons.append("存在「未开始」或「已立项」的需求")
         return _result(reasons)
 
     # 测试中 -> 已退回（无额外前置条件）

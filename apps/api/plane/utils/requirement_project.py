@@ -14,8 +14,10 @@ from uuid import UUID
 
 from django.db.models import (
     BooleanField,
+    Count,
     ExpressionWrapper,
     F,
+    IntegerField,
     OuterRef,
     Q,
     Subquery,
@@ -875,3 +877,36 @@ def promote_on_release_completed(release_id):
         .order_by()
         .values_list("requirement_id", flat=True)
     )
+
+
+def container_requirement_counts(link_model, container_attr):
+    """迭代/发布的需求计数注解，配合工作项计数算完成率。
+
+    口径与 total/completed/cancelled_issues 一致：已发布算完成，已关闭当作取消
+    （不进分母）。软删需求不计。用 Subquery 而不是 Count + join，免得和工作项
+    计数的 join 互相放大行数。用法：queryset.annotate(**container_requirement_counts(
+    RequirementCycle, "cycle"))。
+    """
+
+    def _count(**filters):
+        return Coalesce(
+            Subquery(
+                link_model.objects.filter(
+                    **{f"{container_attr}_id": OuterRef("pk")},
+                    requirement__deleted_at__isnull=True,
+                    **filters,
+                )
+                .order_by()
+                .values(f"{container_attr}_id")
+                .annotate(cnt=Count("pk"))
+                .values("cnt")[:1]
+            ),
+            Value(0),
+            output_field=IntegerField(),
+        )
+
+    return {
+        "total_requirements": _count(),
+        "completed_requirements": _count(requirement__status=RequirementItemStatus.RELEASED),
+        "cancelled_requirements": _count(requirement__status=RequirementItemStatus.CLOSED),
+    }

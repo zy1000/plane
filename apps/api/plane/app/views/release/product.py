@@ -35,6 +35,7 @@ from plane.db.models import (
     ReleaseOverdueRecord,
     RequirementRelease,
 )
+from plane.utils.requirement_project import container_requirement_counts
 
 
 def _release_issue_count_subquery(state_group=None):
@@ -74,6 +75,7 @@ def _annotate_release_progress_and_overdue(queryset):
         cancelled_issues=Coalesce(
             Subquery(_release_issue_count_subquery("cancelled")[:1]), zero
         ),
+        **container_requirement_counts(RequirementRelease, "release"),
         has_active_overdue=Exists(
             ReleaseOverdueRecord.objects.filter(
                 release_id=OuterRef("pk"),

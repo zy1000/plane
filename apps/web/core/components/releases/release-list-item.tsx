@@ -16,6 +16,7 @@ import { generateQueryParams } from "@plane/utils";
 import { ListItem } from "@/components/core/list";
 import { ReleaseListItemAction } from "@/components/releases/release-list-item-action";
 import { ReleaseOverdueTags } from "@/components/releases/release-overdue-tags";
+import { getReleaseProgress } from "@/components/releases/release-progress";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
 import {
   getReleaseOverdueToneTextClass,
@@ -50,9 +51,7 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
 
   if (!releaseDetails) return null;
 
-  const completionPercentage =
-    ((releaseDetails.completed_issues + releaseDetails.cancelled_issues) / releaseDetails.total_issues) * 100;
-  const progress = isNaN(completionPercentage) ? 0 : Math.floor(completionPercentage);
+  const progress = getReleaseProgress(releaseDetails);
   const completedCheck = releaseDetails.status === "completed";
 
   const openPeek = (e: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {

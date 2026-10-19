@@ -80,6 +80,10 @@ export interface IRelease {
   started_issues: number;
   unstarted_issues: number;
   cancelled_issues: number;
+  /** 关联需求计数：已发布算完成、已关闭算取消，与工作项计数合并算完成率 */
+  total_requirements?: number;
+  completed_requirements?: number;
+  cancelled_requirements?: number;
   total_estimate_points?: number;
   completed_estimate_points?: number;
   backlog_estimate_points: number;
@@ -170,6 +174,10 @@ export type TProductRelease = {
   total_issues: number;
   completed_issues: number;
   cancelled_issues: number;
+  /** 关联需求计数：已发布算完成、已关闭算取消，与工作项计数合并算完成率 */
+  total_requirements?: number;
+  completed_requirements?: number;
+  cancelled_requirements?: number;
   has_active_overdue: boolean;
   has_overdue_history: boolean;
   active_overdue_phase: TReleaseOverduePhase | null;

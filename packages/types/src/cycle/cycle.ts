@@ -103,6 +103,10 @@ export interface IProjectDetails {
 
 export interface ICycle extends TProgressSnapshot {
   progress_snapshot: TProgressSnapshot | undefined;
+  /** 关联需求计数：已发布算完成、已关闭算取消，与工作项计数合并算完成率 */
+  total_requirements?: number;
+  completed_requirements?: number;
+  cancelled_requirements?: number;
 
   created_at?: string;
   created_by?: string;

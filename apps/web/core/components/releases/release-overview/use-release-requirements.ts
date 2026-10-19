@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProjectRequirement, TRequirementItemStatus } from "@plane/types";
+import { useRelease } from "@/hooks/store/use-release";
 import { RequirementService } from "@/services/requirement.service";
 
 type TUseReleaseRequirementsProps = {
@@ -44,6 +45,7 @@ export const useReleaseRequirements = ({
 }: TUseReleaseRequirementsProps) => {
   const { t } = useTranslation();
   const requirementService = useMemo(() => new RequirementService(), []);
+  const { fetchReleaseDetails } = useRelease();
   const [requirementAssociateOpen, setRequirementAssociateOpen] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
   const [updatingStatusRequirementId, setUpdatingStatusRequirementId] = useState<string | null>(null);
@@ -73,6 +75,12 @@ export const useReleaseRequirements = ({
     void mutateRequirements();
   }, [mutateRequirements]);
 
+  /** 发布的完成度和状态校验都把关联需求算在内，需求增减或改状态后重拉发布计数 */
+  const refreshReleaseProgress = useCallback(() => {
+    if (!workspaceSlug || !projectId || !releaseId) return;
+    fetchReleaseDetails(workspaceSlug, projectId, releaseId).catch(() => undefined);
+  }, [fetchReleaseDetails, projectId, releaseId, workspaceSlug]);
+
   const openRequirementAssociateModal = useCallback(() => setRequirementAssociateOpen(true), []);
 
   const closeRequirementAssociateModal = useCallback(() => setRequirementAssociateOpen(false), []);
@@ -86,8 +94,9 @@ export const useReleaseRequirements = ({
       });
       setToast({ type: TOAST_TYPE.SUCCESS, title: t("project_requirements.container.toast_linked") });
       refresh();
+      refreshReleaseProgress();
     },
-    [projectId, refresh, releaseId, requirementService, t, workspaceSlug]
+    [projectId, refresh, refreshReleaseProgress, releaseId, requirementService, t, workspaceSlug]
   );
 
   const handleUnlinkRequirement = useCallback(
@@ -98,6 +107,7 @@ export const useReleaseRequirements = ({
         await requirementService.unlinkRequirementFromRelease(workspaceSlug, projectId, releaseId, requirementId);
         setToast({ type: TOAST_TYPE.SUCCESS, title: t("project_requirements.container.toast_unlinked") });
         refresh();
+        refreshReleaseProgress();
       } catch (error) {
         const payload = error as { error?: string; detail?: string } | null;
         setToast({
@@ -109,7 +119,7 @@ export const useReleaseRequirements = ({
         setUnlinkingRequirementId(null);
       }
     },
-    [projectId, refresh, releaseId, requirementService, t, workspaceSlug]
+    [projectId, refresh, refreshReleaseProgress, releaseId, requirementService, t, workspaceSlug]
   );
 
   /**
@@ -129,6 +139,7 @@ export const useReleaseRequirements = ({
           }),
         });
         refresh();
+        refreshReleaseProgress();
       } catch (error) {
         const payload = error as { error?: string; detail?: string } | null;
         setToast({
@@ -140,7 +151,7 @@ export const useReleaseRequirements = ({
         setUpdatingStatusRequirementId(null);
       }
     },
-    [projectId, refresh, requirementService, t, workspaceSlug]
+    [projectId, refresh, refreshReleaseProgress, requirementService, t, workspaceSlug]
   );
 
   return {

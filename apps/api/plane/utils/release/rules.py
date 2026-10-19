@@ -1,6 +1,14 @@
 from dataclasses import dataclass, field
 
-from plane.db.models import Release, ReleaseIssue, ReleaseStatus, StateGroup, FileAsset
+from plane.db.models import (
+    FileAsset,
+    Release,
+    ReleaseIssue,
+    ReleaseStatus,
+    RequirementItemStatus,
+    RequirementRelease,
+    StateGroup,
+)
 
 
 @dataclass
@@ -39,6 +47,19 @@ def all_issues_cancelled(release: Release):
     """判断发布下的工作项是否全部取消"""
     return not ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exclude(
         issue__state__group=StateGroup.CANCELLED).exists()
+
+
+def requirement_statuses(release: Release) -> list[str]:
+    """发布下关联需求的交付状态列表（软删需求不计）。"""
+    return list(
+        RequirementRelease.objects.filter(release=release, requirement__deleted_at__isnull=True).values_list(
+            "requirement__status", flat=True
+        )
+    )
+
+
+# 需求的「已完成」口径：已发布算完成，已关闭等同已取消的工作项
+DONE_REQUIREMENT_STATUSES = {RequirementItemStatus.RELEASED, RequirementItemStatus.CLOSED}
 
 
 def has_attachment(release: Release):
@@ -90,17 +111,24 @@ def check_release_state(release: Release, next_status: ReleaseStatus) -> Release
             reasons.append("请填写结束时间")
         if release.test_handoff_date is None:
             reasons.append("请填写转测日期")
-        if not has_issues(release):
-            reasons.append("请先规划工作项")
+        if not has_issues(release) and not requirement_statuses(release):
+            reasons.append("请先规划工作项或关联需求")
         return _result(reasons)
 
     # 进行中 -> 待测试
     if current == ReleaseStatus.IN_PROGRESS and next_status == ReleaseStatus.PENDING_TEST:
-        if has_issues(release) and all_issues_cancelled(release):
-            reasons.append("发布下工作项已全部取消，只能改为已取消")
+        req_statuses = requirement_statuses(release)
+        if (
+            (has_issues(release) or req_statuses)
+            and all_issues_cancelled(release)
+            and all(s == RequirementItemStatus.CLOSED for s in req_statuses)
+        ):
+            reasons.append("发布下工作项和需求已全部取消，只能改为已取消")
         else:
             if not all_issues_done(release):
                 reasons.append("存在未完成的工作项")
+            if any(s not in DONE_REQUIREMENT_STATUSES for s in req_statuses):
+                reasons.append("存在未发布的需求（需为「已发布」或「已关闭」）")
             if not has_attachment(release):
                 reasons.append("请上传发布附件")
         return _result(reasons)

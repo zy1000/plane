@@ -30,7 +30,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
-from plane.db.models import Cycle, UserFavorite, Issue, Label, User, Project
+from plane.db.models import Cycle, UserFavorite, Issue, Label, User, Project, RequirementCycle
+from plane.utils.requirement_project import container_requirement_counts
 from plane.utils.analytics_plot import burndown_plot
 
 # Module imports
@@ -280,6 +281,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
             .annotate(
                 total_estimate_points=Coalesce(Subquery(total_estimate_point), Value(0, output_field=FloatField()))
             )
+            .annotate(**container_requirement_counts(RequirementCycle, "cycle"))
             .order_by("-is_favorite", "name")
             .distinct()
         )
@@ -309,6 +311,9 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     "is_favorite",
                     "cancelled_issues",
                     "completed_issues",
+                    "total_requirements",
+                    "completed_requirements",
+                    "cancelled_requirements",
                     "started_issues",
                     "unstarted_issues",
                     "backlog_issues",
@@ -359,6 +364,9 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     "total_issues",
                     "cancelled_issues",
                     "completed_issues",
+                    "total_requirements",
+                    "completed_requirements",
+                    "cancelled_requirements",
                     "started_issues",
                     "unstarted_issues",
                     "backlog_issues",

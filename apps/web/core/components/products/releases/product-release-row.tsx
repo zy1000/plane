@@ -5,6 +5,7 @@ import type { TProductRelease } from "@plane/types";
 import { Avatar, CircularProgressIndicator } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
 import { ReleaseOverdueTags } from "@/components/releases/release-overdue-tags";
+import { getReleaseProgress } from "@/components/releases/release-progress";
 import {
   getReleaseOverdueToneTextClass,
   getReleaseRowTone,
@@ -16,20 +17,12 @@ type Props = {
   workspaceSlug: string;
 };
 
-function releaseProgress(release: TProductRelease) {
-  const total = release.total_issues ?? 0;
-  const completed = release.completed_issues ?? 0;
-  const cancelled = release.cancelled_issues ?? 0;
-  const percentage = ((completed + cancelled) / total) * 100;
-  return Number.isNaN(percentage) ? 0 : Math.floor(percentage);
-}
-
 export function ProductReleaseRow(props: Props) {
   const { release, workspaceSlug } = props;
   const statusDetails = getReleaseStatusDetails(release.status);
   const project = release.project_detail;
   const overdueTone = getReleaseRowTone(release);
-  const progress = releaseProgress(release);
+  const progress = getReleaseProgress(release);
   const isCompleted = release.status === "completed";
   const overviewPath = `/${workspaceSlug}/projects/${release.project_id}/releases/${release.id}/overview`;
 

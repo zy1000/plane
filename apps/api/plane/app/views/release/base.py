@@ -58,6 +58,7 @@ from plane.db.models import (
     IssueAssignee,
     Release,
     ReleaseStatus,
+    RequirementItemStatus,
     RequirementRelease,
     UserFavorite,
     ReleaseIssue,
@@ -81,7 +82,7 @@ from plane.utils.release.overdue_strategy import (
 )
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.paginator import CustomPaginator
-from plane.utils.requirement_project import promote_on_release_completed
+from plane.utils.requirement_project import container_requirement_counts, promote_on_release_completed
 from plane.utils.response import list_response
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
@@ -357,6 +358,7 @@ class ReleaseViewSet(BaseViewSet):
             .annotate(
                 total_estimate_points=Coalesce(Subquery(total_estimate_point), Value(0, output_field=FloatField()))
             )
+            .annotate(**container_requirement_counts(RequirementRelease, "release"))
             .annotate(
                 member_ids=Coalesce(
                     ArrayAgg(
@@ -406,6 +408,9 @@ class ReleaseViewSet(BaseViewSet):
                     "is_favorite",
                     "cancelled_issues",
                     "completed_issues",
+                    "total_requirements",
+                    "completed_requirements",
+                    "cancelled_requirements",
                     "total_issues",
                     "started_issues",
                     "unstarted_issues",
@@ -493,6 +498,9 @@ class ReleaseViewSet(BaseViewSet):
                 "is_favorite",
                 "cancelled_issues",
                 "completed_issues",
+                "total_requirements",
+                "completed_requirements",
+                "cancelled_requirements",
                 "started_issues",
                 "unstarted_issues",
                 "backlog_issues",
@@ -830,6 +838,9 @@ class ReleaseViewSet(BaseViewSet):
                 "is_favorite",
                 "cancelled_issues",
                 "completed_issues",
+                "total_requirements",
+                "completed_requirements",
+                "cancelled_requirements",
                 "started_issues",
                 "total_issues",
                 "unstarted_issues",
@@ -1287,10 +1298,22 @@ class ReleaseAPI(BaseViewSet):
             .order_by('type__name')
         )
 
+        # 关联需求计数，概览完成度把它和工作项一起算：已发布算完成、已关闭算取消
+        requirement_counts = RequirementRelease.objects.filter(
+            release_id=release_id,
+            project_id=project_id,
+            requirement__deleted_at__isnull=True,
+        ).aggregate(
+            total_requirements=Count("id"),
+            completed_requirements=Count("id", filter=Q(requirement__status=RequirementItemStatus.RELEASED)),
+            cancelled_requirements=Count("id", filter=Q(requirement__status=RequirementItemStatus.CLOSED)),
+        )
+
         response_data = {
             "total_issues": total_count,
             "state_distribution": state_distribution,
             "type_distribution": list(type_stats),
+            **requirement_counts,
         }
 
         return Response(response_data, status=status.HTTP_200_OK)

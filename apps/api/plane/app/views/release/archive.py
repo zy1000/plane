@@ -26,8 +26,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from plane.app.permissions import ProjectEntityPermission, allow_fine_permission, PermissionKey
 from plane.app.serializers import ReleaseDetailSerializer
-from plane.db.models import Issue, Release, ReleaseLink, UserFavorite, Project
+from plane.db.models import Issue, Release, ReleaseLink, RequirementRelease, UserFavorite, Project
 from plane.utils.analytics_plot import burndown_plot
+from plane.utils.requirement_project import container_requirement_counts
 from plane.utils.timezone_converter import user_timezone_converter
 
 
@@ -238,6 +239,7 @@ class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
             .annotate(
                 total_estimate_points=Coalesce(Subquery(total_estimate_point), Value(0, output_field=FloatField()))
             )
+            .annotate(**container_requirement_counts(RequirementRelease, "release"))
             .annotate(
                 member_ids=Coalesce(
                     ArrayAgg(
@@ -275,6 +277,9 @@ class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
                 "is_favorite",
                 "cancelled_issues",
                 "completed_issues",
+                "total_requirements",
+                "completed_requirements",
+                "cancelled_requirements",
                 "started_issues",
                 "unstarted_issues",
                 "backlog_issues",

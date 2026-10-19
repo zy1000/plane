@@ -297,6 +297,10 @@ class ReleaseSerializer(DynamicBaseSerializer):
     started_issues = serializers.IntegerField(read_only=True)
     unstarted_issues = serializers.IntegerField(read_only=True)
     backlog_issues = serializers.IntegerField(read_only=True)
+    # 关联需求计数：已发布算完成、已关闭算取消，与工作项计数一起算完成率
+    total_requirements = serializers.IntegerField(read_only=True)
+    completed_requirements = serializers.IntegerField(read_only=True)
+    cancelled_requirements = serializers.IntegerField(read_only=True)
     total_estimate_points = serializers.FloatField(read_only=True)
     completed_estimate_points = serializers.FloatField(read_only=True)
     has_active_overdue = serializers.BooleanField(read_only=True)
@@ -340,6 +344,9 @@ class ReleaseSerializer(DynamicBaseSerializer):
             "started_issues",
             "unstarted_issues",
             "backlog_issues",
+            "total_requirements",
+            "completed_requirements",
+            "cancelled_requirements",
             "created_at",
             "updated_at",
             "archived_at",
@@ -485,6 +492,10 @@ class ProductReleaseSerializer(BaseSerializer):
     total_issues = serializers.IntegerField(read_only=True)
     completed_issues = serializers.IntegerField(read_only=True)
     cancelled_issues = serializers.IntegerField(read_only=True)
+    # 整张发布单的关联需求计数（不限本产品），口径同项目侧 ReleaseSerializer
+    total_requirements = serializers.IntegerField(read_only=True)
+    completed_requirements = serializers.IntegerField(read_only=True)
+    cancelled_requirements = serializers.IntegerField(read_only=True)
     has_active_overdue = serializers.BooleanField(read_only=True)
     has_overdue_history = serializers.BooleanField(read_only=True)
     active_overdue_phase = serializers.CharField(read_only=True, allow_null=True)
@@ -510,6 +521,9 @@ class ProductReleaseSerializer(BaseSerializer):
             "total_issues",
             "completed_issues",
             "cancelled_issues",
+            "total_requirements",
+            "completed_requirements",
+            "cancelled_requirements",
             "has_active_overdue",
             "has_overdue_history",
             "active_overdue_phase",
