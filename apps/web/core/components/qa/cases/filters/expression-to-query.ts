@@ -10,6 +10,8 @@ import type { TCaseFilterExpression, TCaseFilterExpressionData, TCaseFilterPrope
 export type TCasesFilterQueryParams = {
   assignee__in?: string;
   labels__name__icontains?: string;
+  /** 逗号分隔的模块 id，"none" = 未归类；后端递归包含子模块 */
+  module_ids?: string;
   priority__in?: string;
   review__in?: string;
   type__in?: string;
@@ -32,7 +34,7 @@ const toStringArray = (value: unknown): string[] => {
 
 const mergeCsvValue = (
   params: TCasesFilterQueryParams,
-  key: "assignee__in" | "priority__in" | "review__in" | "type__in",
+  key: "assignee__in" | "module_ids" | "priority__in" | "review__in" | "type__in",
   values: string[]
 ) => {
   if (values.length === 0) return;
@@ -56,6 +58,9 @@ const applyCondition = (params: TCasesFilterQueryParams, property: TCaseFilterPr
       break;
     case "assignee":
       mergeCsvValue(params, "assignee__in", toStringArray(value));
+      break;
+    case "module":
+      mergeCsvValue(params, "module_ids", toStringArray(value));
       break;
     case "labels": {
       const textValue = String(value ?? "").trim();

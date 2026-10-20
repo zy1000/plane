@@ -9,8 +9,10 @@ import { Col, Dropdown, Modal, Pagination, Row, Tag } from "antd";
 import { ShareAltOutlined } from "@ant-design/icons";
 import { Copy, FolderInput, FolderPlus, Pencil, Trash2 } from "lucide-react";
 import {
+  appendUnassignedNode,
   MODULE_TREE_ROOT_KEY,
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
   type TModuleTreeNode,
@@ -190,6 +192,8 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const [filters, setFilters] = useState<TCasesFilters>({});
   const [filterExpression, setFilterExpression] = useState<TCaseFilterExpression>(EMPTY_CASE_FILTER_EXPRESSION);
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
+  /** 没挂模块的用例数，树末尾「未归类」节点用 */
+  const [unassignedTotal, setUnassignedTotal] = useState<number>(0);
 
   const caseService = new CaseService();
   const caseModuleService = new CaseModuleService();
@@ -211,6 +215,8 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       ),
     [(globalEnums.Enums as any)?.case_priority]
   );
+  // 模块树数据（接口原样结构 + 计数）
+  const [modules, setModules] = useState<any[]>([]);
   const { areAllConfigsInitialized, configs: casesFilterConfigs } = useCasesFiltersConfig({
     workspaceSlug: String(workspaceSlug || ""),
     // 模板模式无项目语境：不传 projectId，维护人筛选源切到工作区成员
@@ -218,15 +224,17 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     reviewEnums,
     caseTypeEnums,
     casePriorityEnums,
+    moduleTree: modules,
   });
   // 树的行内编辑态（新建 / 重命名），同一时间只有一个
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
   const [copyingModule, setCopyingModule] = useState<{ id: string; name: string } | null>(null);
   const [movingModule, setMovingModule] = useState<{ id: string; name: string } | null>(null);
 
-  // 新增状态：模块树数据、选中模块
-  const [modules, setModules] = useState<any[]>([]);
+  // 新增状态：选中模块（模块树数据 modules 在上方，筛选的模块选项要用）
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  /** 选中「未归类」时不是真实模块：新建用例默认模块、脑图跳转等按「没选模块」处理 */
+  const selectedRealModuleId = selectedModuleId === UNASSIGNED_MODULE_KEY ? null : selectedModuleId;
 
   useEffect(() => {
     if (!moduleIdFromUrl) return;
@@ -307,9 +315,10 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       // 调用新接口获取 counts
       const countsResponse = await caseService.getModulesCount(workspaceSlug as string, repositoryId);
 
-      // 提取 total 和模块 countsMap
-      const { total = 0, ...countsMap } = countsResponse;
+      // 提取 total、未归类数 none 和模块 countsMap
+      const { total = 0, none = 0, ...countsMap } = countsResponse;
       setAllTotal(total);
+      setUnassignedTotal(none);
 
       // 批量更新 moduleData 的 total
       const updatedModules = batchUpdateModuleCounts(moduleData, countsMap as Record<string, number>);
@@ -441,13 +450,14 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const buildCaseQueryParams = (filterParams: typeof filters) => {
     const queryParams: any = { repository_id: repositoryId };
 
-    // 新增：如果有选中模块，添加 module_id 参数
+    // 新增：如果有选中模块，添加 module_id 参数（"none" = 未归类）
     if (selectedModuleId && selectedModuleId !== "all") {
       queryParams.module_id = selectedModuleId;
     }
 
     // search + rich filters
     if (filterParams.search) queryParams.search = filterParams.search;
+    if (filterParams.module_ids) queryParams.module_ids = filterParams.module_ids;
     if (filterParams.review__in) queryParams.review__in = filterParams.review__in;
     if (filterParams.type__in) queryParams.type__in = filterParams.type__in;
     if (filterParams.priority__in) queryParams.priority__in = filterParams.priority__in;
@@ -552,8 +562,10 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
         count: getNodeCount(node),
         children: build(node?.children || []),
       }));
-    return build(modules);
-  }, [modules]);
+    return appendUnassignedNode(build(modules), unassignedTotal, {
+      keepWhenEmpty: selectedModuleId === UNASSIGNED_MODULE_KEY,
+    });
+  }, [modules, unassignedTotal, selectedModuleId]);
 
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     if (!repositoryId) return [];
@@ -818,7 +830,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
             const pid = String(projectId || "");
             const params = new URLSearchParams();
             params.set("repositoryId", String(repositoryId));
-            if (selectedModuleId) params.set("moduleId", String(selectedModuleId));
+            if (selectedRealModuleId) params.set("moduleId", String(selectedRealModuleId));
             router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
           }}
           disabled={!repositoryId}
@@ -1080,7 +1092,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           workspaceSlug={workspaceSlug as string}
           repositoryId={repositoryId as string}
           repositoryName={repositoryName || ""}
-          initialModuleId={selectedModuleId}
+          initialModuleId={selectedRealModuleId}
           templateMode={isTemplateMode}
           onSuccess={async () => {
             // 新增成功后刷新当前列表与分页/筛选状态

@@ -17,6 +17,7 @@ import {
   findRequirementModuleName,
   MoveToModuleModal,
   RequirementModuleSidebar,
+  toAssignableModuleId,
 } from "@/components/requirements/module-tree";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
@@ -271,9 +272,10 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                 onBulkSave={handleBulkSave}
                 onOpenDetail={setPeekRequirement}
                 toolbarPortalEl={dataToolbarHost}
-                createModuleId={selectedModuleId}
+                createModuleId={toAssignableModuleId(selectedModuleId)}
                 createModuleName={selectedModuleName}
                 onMoveToModule={setMoveIds}
+                filterModules={moduleStore.modules}
               />
             </div>
           </div>

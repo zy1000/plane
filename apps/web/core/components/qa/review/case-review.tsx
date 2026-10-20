@@ -14,6 +14,7 @@ import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/serv
 import { Button as PlaneButton } from "@plane/propel/button";
 import {
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
   buildRepositoryModuleNodes,
   findModuleTreeLabel,
   type TModuleTreeNode,
@@ -402,6 +403,26 @@ export default function CaseReview() {
     const repositoryIdFromUrl = searchParams.get("repository_id");
     const moduleIdFromUrl = searchParams.get("module_id");
 
+    // 用例库下的「未归类」：URL 上是 repository_id + module_id=none
+    if (moduleIdFromUrl === UNASSIGNED_MODULE_KEY && repositoryIdFromUrl) {
+      const nextRepositoryId = String(repositoryIdFromUrl);
+      const nextTreeKey = `repo:${nextRepositoryId}:${UNASSIGNED_MODULE_KEY}`;
+      if (
+        skipNextUrlSyncedFetchRef.current &&
+        selectedModuleId === UNASSIGNED_MODULE_KEY &&
+        selectedRepositoryId === nextRepositoryId &&
+        selectedTreeKey === nextTreeKey
+      ) {
+        skipNextUrlSyncedFetchRef.current = false;
+        return;
+      }
+      setSelectedRepositoryId(nextRepositoryId);
+      setSelectedModuleId(UNASSIGNED_MODULE_KEY);
+      setSelectedTreeKey(nextTreeKey);
+      fetchCases(keyword, UNASSIGNED_MODULE_KEY, false, nextRepositoryId);
+      return;
+    }
+
     if (moduleIdFromUrl) {
       const nextModuleId = String(moduleIdFromUrl);
       if (
@@ -519,6 +540,7 @@ export default function CaseReview() {
     if (kind === "root") return "root";
     if (kind === "repository") return `repo:${id}`;
     if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "repository_unassigned") return `repo:${repositoryId}:${UNASSIGNED_MODULE_KEY}`;
     if (kind === "module") return `module:${id}`;
     return id;
   }
@@ -591,6 +613,18 @@ export default function CaseReview() {
       skipNextUrlSyncedFetchRef.current = true;
       updateFilterQueryParams({ repository_id: repositoryId });
       fetchCases(keyword, null, true, repositoryId);
+      return;
+    }
+
+    if (meta.kind === "repository_unassigned") {
+      const repositoryId = meta.repositoryId;
+      setSelectedRepositoryId(repositoryId);
+      setSelectedModuleId(UNASSIGNED_MODULE_KEY);
+      setSelectedCaseId(undefined);
+      setCaseDetail(null);
+      skipNextUrlSyncedFetchRef.current = true;
+      updateFilterQueryParams({ repository_id: repositoryId, module_id: UNASSIGNED_MODULE_KEY });
+      fetchCases(keyword, UNASSIGNED_MODULE_KEY, true, repositoryId);
       return;
     }
 

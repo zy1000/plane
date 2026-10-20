@@ -19,12 +19,14 @@ const applyCounts = (list: TReportModule[], counts: Record<string, number>): TRe
   }));
 
 /**
- * 测试报告模块树的数据层：模块列表、子树计数、项目报告总数，以及增 / 改名 / 换父 / 删。
+ * 测试报告模块树的数据层：模块列表、子树计数、项目报告总数与未归类数，以及增 / 改名 / 换父 / 删。
  * 写方法成功后各自重拉整棵树；失败把错误抛给调用方处理（toast）。
  */
 export const useReportModules = ({ workspaceSlug, projectId, enabled }: TArgs) => {
   const [modules, setModules] = useState<TReportModule[]>([]);
   const [total, setTotal] = useState(0);
+  /** 未归类（module 为空）的报告数 */
+  const [unassignedTotal, setUnassignedTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(enabled);
   /** 第一次拉取已结束（成功或失败）；空树和「还没加载」要分开，树组件据此校验 URL 带来的选中项 */
   const [loaded, setLoaded] = useState(false);
@@ -37,8 +39,9 @@ export const useReportModules = ({ workspaceSlug, projectId, enabled }: TArgs) =
         reportService.getReportModulesCount(workspaceSlug, projectId),
         reportService.getReportModules(workspaceSlug, projectId),
       ]);
-      const { total: nextTotal = 0, ...countsMap } = counts || { total: 0 };
+      const { total: nextTotal = 0, none: nextUnassigned = 0, ...countsMap } = counts || { total: 0 };
       setTotal(Number(nextTotal) || 0);
+      setUnassignedTotal(Number(nextUnassigned) || 0);
       setModules(applyCounts(tree, countsMap as Record<string, number>));
     } finally {
       setIsLoading(false);
@@ -85,5 +88,5 @@ export const useReportModules = ({ workspaceSlug, projectId, enabled }: TArgs) =
     [workspaceSlug, projectId, refresh]
   );
 
-  return { modules, total, isLoading, loaded, refresh, createModule, renameModule, moveModule, deleteModule };
+  return { modules, total, unassignedTotal, isLoading, loaded, refresh, createModule, renameModule, moveModule, deleteModule };
 };

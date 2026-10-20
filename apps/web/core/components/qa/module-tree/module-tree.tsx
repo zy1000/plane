@@ -124,7 +124,7 @@ export const ModuleTree = ({
       if (dragMode === "reparent" && parentByKey.get(sourceKey) === null) return null;
       return { dragKey: sourceKey, targetKey: rootKey, position: "into" };
     }
-    if (target.key === sourceKey || isInSubtree(dragNode, target.key)) return null;
+    if (target.virtual || target.key === sourceKey || isInSubtree(dragNode, target.key)) return null;
     if (position === "into") {
       if (dragMode === "reparent" && parentByKey.get(sourceKey) === target.key) return null;
       return { dragKey: sourceKey, targetKey: target.key, position: "into" };
@@ -281,8 +281,8 @@ export const ModuleTree = ({
     const hasChildren = Boolean(node?.children?.length);
     const isSelected = selectedKey === key;
     const isMuted = Boolean(node?.muted) && !isSelected;
-    const menuItems = node && getMenuItems ? getMenuItems(node) : [];
-    const canDrag = !isRoot && dragMode !== "none" && node?.draggable !== false;
+    const menuItems = node && !node.virtual && getMenuItems ? getMenuItems(node) : [];
+    const canDrag = !isRoot && dragMode !== "none" && !node?.virtual && node?.draggable !== false;
     const isDragging = dragKey === key;
     const dropHere = dropTarget?.key === key ? dropTarget.position : null;
     const indent = BASE_PADDING + depth * INDENT;

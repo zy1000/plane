@@ -2,11 +2,13 @@
 
 import { Library } from "lucide-react";
 import type { TModuleTreeNode } from "./types";
+import { UNASSIGNED_MODULE_LABEL, UnassignedModuleIcon } from "./unassigned-node";
 
 /**
  * 把后端「root → 用例库 → 全部模块 → 模块 → 子模块」的树转成模块树节点（计划详情页 / 评审详情页共用）。
  * 根节点由树的固定首行承担，这里只返回用例库这一级起的节点；
- * 「全部模块」（repository_modules_all）这一层被拍平，子模块直接挂在用例库下。
+ * 「全部模块」（repository_modules_all）这一层被拍平，子模块直接挂在用例库下；
+ * 用例库下的「未归类」（repository_unassigned）跟在模块后面，转成虚拟节点。
  */
 export const buildRepositoryModuleNodes = (tree: any, getKey: (node: any) => string): TModuleTreeNode[] => {
   if (!tree) return [];
@@ -21,6 +23,16 @@ export const buildRepositoryModuleNodes = (tree: any, getKey: (node: any) => str
         : [child]
     );
     const isRepository = kind === "repository";
+    if (kind === "repository_unassigned") {
+      return {
+        key: getKey(node),
+        label: UNASSIGNED_MODULE_LABEL,
+        count: typeof node?.count === "number" ? node.count : undefined,
+        icon: <UnassignedModuleIcon />,
+        muted: true,
+        virtual: true,
+      };
+    }
     return {
       key: getKey(node),
       label: String(node?.name ?? "-"),

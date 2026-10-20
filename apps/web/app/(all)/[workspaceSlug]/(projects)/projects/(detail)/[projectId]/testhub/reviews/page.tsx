@@ -10,6 +10,9 @@ import { CaseService } from "@/services/qa/review.service";
 import {
   MODULE_TREE_ROOT_KEY,
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
+  UNASSIGNED_MODULE_LABEL,
+  appendUnassignedNode,
   type TModuleTreeDropEvent,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
@@ -128,6 +131,8 @@ export default function ReviewsPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews);
   const [total, setTotal] = useState<number>(0);
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
+  // 未归类（module 为空）的评审数，树末尾「未归类」节点用
+  const [unassignedTotal, setUnassignedTotal] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
@@ -139,7 +144,10 @@ export default function ReviewsPage() {
   const { registerOpenNewReviewModal, registerReviewSearch, setReviewSearchValue } = useTestHub();
   const handleOpenCreateReview = useCallback(() => {
     if (!canCreateReview) return;
-    setCreateReviewInitialValues(selectedModuleIdRef.current ? { module_id: selectedModuleIdRef.current } : undefined);
+    const currentModuleId = selectedModuleIdRef.current;
+    setCreateReviewInitialValues(
+      currentModuleId && currentModuleId !== UNASSIGNED_MODULE_KEY ? { module_id: currentModuleId } : undefined
+    );
     setCreateReviewOpen(true);
   }, [canCreateReview]);
 
@@ -149,11 +157,11 @@ export default function ReviewsPage() {
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [editReview, setEditReview] = useState<any>(null);
 
-  const modulesTotalReviews = useMemo(() => {
-    const sum = (list: ReviewModule[]): number =>
-      (list || []).reduce((acc, n) => acc + Number(n?.review_count || 0) + sum(n?.children || []), 0);
-    return sum(modules);
-  }, [modules]);
+  // review_count 已是子树累计，兜底只加一级模块 + 未归类
+  const modulesTotalReviews = useMemo(
+    () => (modules || []).reduce((acc, n) => acc + Number(n?.review_count || 0), 0) + Number(unassignedTotal || 0),
+    [modules, unassignedTotal]
+  );
   const totalReviews = typeof allTotal === "number" ? allTotal : modulesTotalReviews;
 
   useEffect(() => {
@@ -196,11 +204,19 @@ export default function ReviewsPage() {
   const fetchAllReviewsTotal = async () => {
     if (!workspaceSlug || !projectId) return;
     try {
-      const params: any = { page: 1, page_size: 1 };
-      const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
+      const [res, unassignedRes] = await Promise.all([
+        caseService.getReviews(workspaceSlug as string, projectId as string, { page: 1, page_size: 1 }),
+        caseService.getReviews(workspaceSlug as string, projectId as string, {
+          page: 1,
+          page_size: 1,
+          module_id: UNASSIGNED_MODULE_KEY,
+        }),
+      ]);
       setAllTotal(Number(res?.count || 0));
+      setUnassignedTotal(Number(unassignedRes?.count || 0));
     } catch {
       setAllTotal(undefined);
+      setUnassignedTotal(undefined);
     }
   };
 
@@ -334,8 +350,10 @@ export default function ReviewsPage() {
         count: getNodeCount(m),
         children: build(m.children || []),
       }));
-    return build(modules);
-  }, [modules]);
+    return appendUnassignedNode(build(modules), unassignedTotal, {
+      keepWhenEmpty: selectedModuleId === UNASSIGNED_MODULE_KEY,
+    });
+  }, [modules, unassignedTotal, selectedModuleId]);
 
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     const module = findModuleById(modules, node.key);
@@ -396,7 +414,12 @@ export default function ReviewsPage() {
     }
   };
 
-  const selectedModuleName = selectedModuleId ? findModuleById(modules, selectedModuleId)?.name : undefined;
+  const selectedModuleName =
+    selectedModuleId === UNASSIGNED_MODULE_KEY
+      ? UNASSIGNED_MODULE_LABEL
+      : selectedModuleId
+        ? findModuleById(modules, selectedModuleId)?.name
+        : undefined;
 
   useEffect(() => {
     if (!permissionsFetched) return;

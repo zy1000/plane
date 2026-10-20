@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import {
   AlignLeft,
   FileImage,
+  Folder,
   ListChecks,
   Paperclip,
   ToggleLeft,
@@ -16,17 +17,26 @@ import type {
   TFilterConfig,
   TRequirementField,
   TRequirementFieldType,
+  TRequirementModule,
   TSupportedOperators,
 } from "@plane/types";
-import { EQUALITY_OPERATOR, EXTENDED_EQUALITY_OPERATOR, REQUIREMENT_PRIORITIES, REQUIREMENT_STATUSES } from "@plane/types";
+import {
+  COLLECTION_OPERATOR,
+  EQUALITY_OPERATOR,
+  EXTENDED_EQUALITY_OPERATOR,
+  REQUIREMENT_PRIORITIES,
+  REQUIREMENT_STATUSES,
+} from "@plane/types";
 import { Avatar } from "@plane/ui";
 import {
   createFilterConfig,
   createOperatorConfigEntry,
   getFileURL,
+  getMultiSelectConfig,
   getSingleSelectConfig,
   getTextInputConfig,
 } from "@plane/utils";
+import { UNASSIGNED_MODULE_KEY, UnassignedModuleIcon } from "@/components/qa/module-tree";
 import {
   REQUIREMENT_BUILTIN_TITLE_COLUMN,
   resolveBuiltinColumns,
@@ -37,6 +47,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
 import {
   REQUIREMENT_EMPTY_FILTER_VALUE,
+  REQUIREMENT_MODULE_FILTER_FIELD,
   REQUIREMENT_NOT_EMPTY_FILTER_VALUE,
 } from "./expression-to-requirement-filters";
 import type { TRequirementGridFilterProperty } from "./types";
@@ -123,6 +134,41 @@ const getContainsSelectOperatorConfigs = (options: TSelectOption[], params: TOpe
     ),
   ]);
 
+/** 模块树按树序拍平；子模块用「父 / 子」路径作名称，选项里能看出层级、搜子模块名也能命中 */
+const flattenModuleOptions = (modules: TRequirementModule[], parentPath = ""): TSelectOption[] =>
+  modules.flatMap((module) => {
+    const path = parentPath ? `${parentPath} / ${module.name}` : module.name;
+    return [{ id: module.id, label: path, value: module.id }, ...flattenModuleOptions(module.children ?? [], path)];
+  });
+
+/** 模块筛选多选：选父模块含子模块、「未归类」= 未挂靠，二者取或，均由后端解析。不提供取反（后端只认正向） */
+const getModuleOperatorConfigs = (options: TSelectOption[], params: TOperatorParams) =>
+  new Map([
+    createOperatorConfigEntry(COLLECTION_OPERATOR.IN, { ...params, allowNegative: false }, (updatedParams) =>
+      getMultiSelectConfig<TSelectOption, string, string>(
+        {
+          items: options,
+          getId: (option) => option.id,
+          getLabel: (option) => option.label,
+          getValue: (option) => option.value,
+          getIconData: (option) => option.id,
+        },
+        {
+          singleValueOperator: EQUALITY_OPERATOR.EXACT,
+          isOperatorEnabled: updatedParams.isOperatorEnabled,
+        },
+        {
+          getOptionIcon: (optionId) =>
+            optionId === UNASSIGNED_MODULE_KEY ? (
+              <UnassignedModuleIcon className="size-3.5 text-tertiary" />
+            ) : (
+              <Folder className="size-3.5 text-tertiary" />
+            ),
+        }
+      )
+    ),
+  ]);
+
 const getEmptyOperatorConfigs = (options: TSelectOption[], params: TOperatorParams) =>
   new Map([
     createOperatorConfigEntry(EQUALITY_OPERATOR.EXACT, params, (updatedParams) =>
@@ -143,12 +189,15 @@ export const useRequirementGridFiltersConfig = ({
   entityKind,
   builtinColumns,
   customFields,
+  modules,
 }: {
   workspaceSlug: string;
   entityKind: "product" | "library";
   /** 已按类型布局解析并按 entityKind 过滤的内置属性列（不含 title）。缺省回退现状顺序 */
   builtinColumns?: TResolvedBuiltinEntry[];
   customFields: TRequirementField[];
+  /** 库 / 产品的模块树：传了才提供「模块」筛选（首项「未归类」）；基线快照等不走后端模块过滤的场景不传 */
+  modules?: TRequirementModule[];
 }) => {
   const { t } = useTranslation();
   const {
@@ -207,6 +256,17 @@ export const useRequirementGridFiltersConfig = ({
       { id: "false", label: t("requirement_grid.data.no"), value: false },
     ],
     [t]
+  );
+
+  const moduleOptions = useMemo<TSelectOption[] | null>(
+    () =>
+      modules
+        ? [
+            { id: UNASSIGNED_MODULE_KEY, label: t("requirement_modules.unassigned"), value: UNASSIGNED_MODULE_KEY },
+            ...flattenModuleOptions(modules),
+          ]
+        : null,
+    [modules, t]
   );
 
   const searchPlaceholder = t("search");
@@ -298,6 +358,19 @@ export const useRequirementGridFiltersConfig = ({
           icon,
           isEnabled: true,
           supportedOperatorConfigsMap: getTextOperatorConfigs(operatorParams, searchPlaceholder, emptyOptions),
+        })
+      );
+    }
+
+    // 模块是内置维度：排在内置列之后、自定义字段之前
+    if (moduleOptions) {
+      nextConfigs.push(
+        createFilterConfig<TRequirementGridFilterProperty>({
+          id: REQUIREMENT_MODULE_FILTER_FIELD,
+          label: t("requirement_modules.column"),
+          icon: Folder,
+          isEnabled: true,
+          supportedOperatorConfigsMap: getModuleOperatorConfigs(moduleOptions, operatorParams),
         })
       );
     }
@@ -422,6 +495,7 @@ export const useRequirementGridFiltersConfig = ({
     emptyOptions,
     entityKind,
     members,
+    moduleOptions,
     operatorParams.allowNegative,
     operatorParams.allowedOperators,
     operatorParams.isEnabled,

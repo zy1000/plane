@@ -47,6 +47,7 @@ import type {
   TRequirementValue,
   TRequirementField,
   TRequirementFormRow,
+  TRequirementModule,
 } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -205,6 +206,8 @@ type TProps = {
   createModalContext?: TRequirementCreateContext;
   /** 勾选行的「移动到模块」入口；不传则不渲染该按钮 */
   onMoveToModule?: (requirementIds: string[]) => void;
+  /** 库 / 产品的模块树：传了筛选里才有「模块」属性 */
+  filterModules?: TRequirementModule[];
 };
 
 /** 页头的「添加需求」打开建行弹窗，所以把 openCreateModal 以 addRow 这个名字露出去 */
@@ -254,6 +257,7 @@ export const RequirementGrid = observer(
       createModuleName = null,
       createModalContext,
       onMoveToModule,
+      filterModules,
     } = props;
     const { t } = useTranslation();
     const [searchInput, setSearchInput] = useState(search);
@@ -468,6 +472,7 @@ export const RequirementGrid = observer(
       entityKind,
       builtinColumns: allBuiltinEntries,
       customFields: customFilterFields,
+      modules: filterModules,
     });
     const filter = useRequirementGridFilter({
       areAllConfigsInitialized,

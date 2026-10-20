@@ -3,9 +3,11 @@ import json
 import random
 import re
 import string
+import uuid
 from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.db.models import Q
 from openpyxl import load_workbook
 
 from plane.db.models import CaseModule
@@ -30,6 +32,56 @@ def expand_module_subtree_ids(module_id):
         expanded.update(new_children)
         frontier = new_children
     return list(expanded)
+
+
+# 模块树「未归类」节点 / 模块筛选「未归类」选项在 module_id 参数里的取值：module 为空的条目
+UNASSIGNED_MODULE_ID = "none"
+
+
+def expand_subtree_ids(model, module_ids):
+    """任意带 parent 自关联的模块模型：把一组模块 id 展开为含全部后代的 id 列表（BFS）。"""
+    expanded = {str(mid) for mid in module_ids}
+    frontier = list(expanded)
+    while frontier:
+        children = model.objects.filter(
+            parent_id__in=frontier, deleted_at__isnull=True
+        ).values_list("id", flat=True)
+        new_children = [str(c) for c in children if str(c) not in expanded]
+        if not new_children:
+            break
+        expanded.update(new_children)
+        frontier = new_children
+    return list(expanded)
+
+
+def build_module_filter_q(raw, model=CaseModule, field="module_id"):
+    """按模块过滤的 Q：真实模块递归包含子模块，"none" 表示 field 为空，两者取或。
+
+    raw 接受单值、逗号分隔串或列表；非法 id 忽略。没有任何有效值时返回 None（调用方不过滤）。
+    """
+    values = raw if isinstance(raw, (list, tuple)) else [raw]
+    module_ids = []
+    include_unassigned = False
+    for value in values:
+        for part in str(value or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if part == UNASSIGNED_MODULE_ID:
+                include_unassigned = True
+                continue
+            try:
+                module_ids.append(str(uuid.UUID(part)))
+            except ValueError:
+                continue
+    if not module_ids and not include_unassigned:
+        return None
+    q = Q()
+    if module_ids:
+        q |= Q(**{f"{field}__in": expand_subtree_ids(model, module_ids)})
+    if include_unassigned:
+        q |= Q(**{f"{field}__isnull": True})
+    return q
 
 
 def build_case_activity_snapshot(case):

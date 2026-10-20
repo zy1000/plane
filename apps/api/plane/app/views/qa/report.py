@@ -106,7 +106,7 @@ class ReportModuleDetailAPIView(BaseAPIView):
 
 
 class ReportModuleCountAPIView(BaseAPIView):
-    """{total: 项目报告总数, <module_id>: 子树累计报告数}，与列表按模块递归过滤同口径。"""
+    """{total: 项目报告总数, none: 未归类数, <module_id>: 子树累计报告数}，与列表按模块递归过滤同口径。"""
 
     model = ReportModule
 
@@ -133,12 +133,15 @@ class ReportModuleCountAPIView(BaseAPIView):
             memo[mid] = total
             return total
 
+        project_reports = TestReport.objects.filter(
+            project_id=project_id,
+            project__workspace__slug=slug,
+            deleted_at__isnull=True,
+        )
+        # none：未归类（module 为空）的报告数，与 total 同口径，供树末尾「未归类」节点
         result = {
-            "total": TestReport.objects.filter(
-                project_id=project_id,
-                project__workspace__slug=slug,
-                deleted_at__isnull=True,
-            ).count()
+            "total": project_reports.count(),
+            "none": project_reports.filter(module__isnull=True).count(),
         }
         for mid in direct_counts:
             result[mid] = subtree_count(mid)

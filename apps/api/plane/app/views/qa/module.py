@@ -59,11 +59,14 @@ class CaseModuleCountAPIView(BaseAPIView):
             memo[mid] = total
             return total
 
+        repository_cases = TestCase.objects.filter(
+            repository_id=request.query_params['repository_id'],
+            repository__workspace__slug=slug,
+        )
+        # none：没挂模块的用例数（模块树「未归类」节点），total = 各一级模块之和 + none
         result = dict(
-            total=TestCase.objects.filter(
-                repository_id=request.query_params['repository_id'],
-                repository__workspace__slug=slug,
-            ).count()
+            total=repository_cases.count(),
+            none=repository_cases.filter(module__isnull=True).count(),
         )
         for mid in direct_counts:
             result[mid] = subtree_count(mid)

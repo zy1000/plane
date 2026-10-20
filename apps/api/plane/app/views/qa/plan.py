@@ -51,7 +51,10 @@ from plane.app.serializers.qa.plan import (
     PlanCaseReviewRecordSerializer,
 )
 from plane.app.views.qa.filters import TestPlanFilter, PlanCaseFilter
-from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
+from plane.app.views.qa.utils import (
+    build_case_activity_snapshot,
+    build_module_filter_q,
+)
 from plane.db.models import (
     TestPlan,
     TestCaseRepository,
@@ -567,10 +570,13 @@ class PlanModuleCountAPIView(BaseAPIView):
             memo[mid] = total
             return total
 
+        project_plans = TestPlan.objects.filter(
+            project_id=project_id, deleted_at__isnull=True
+        )
+        # none：未归类（module 为空）的计划数，与 total 同口径，供树末尾「未归类」节点
         result = dict(
-            total=TestPlan.objects.filter(
-                project_id=project_id, deleted_at__isnull=True
-            ).count()
+            total=project_plans.count(),
+            none=project_plans.filter(module__isnull=True).count(),
         )
         for mid in direct_counts:
             result[mid] = subtree_count(mid)
@@ -644,41 +650,13 @@ class PlanView(BaseViewSet):
             if repository_id:
                 query = query.filter(case__repository_id=repository_id)
 
-        module_ids = request.query_params.getlist(
-            "module_id"
-        ) or request.query_params.getlist("module_ids")
-        if module_ids:
-            expanded = set(module_ids)
-            frontier = list(module_ids)
-            while frontier:
-                children = list(
-                    CaseModule.objects.filter(
-                        parent_id__in=frontier, deleted_at__isnull=True
-                    ).values_list("id", flat=True)
-                )
-                new_children = [c for c in children if c not in expanded]
-                if not new_children:
-                    break
-                expanded.update(new_children)
-                frontier = new_children
-            query = query.filter(case__module_id__in=list(expanded))
-        else:
-            module_id = request.query_params.get("module_id")
-            if module_id:
-                expanded = {module_id}
-                frontier = [module_id]
-                while frontier:
-                    children = list(
-                        CaseModule.objects.filter(
-                            parent_id__in=frontier, deleted_at__isnull=True
-                        ).values_list("id", flat=True)
-                    )
-                    new_children = [c for c in children if c not in expanded]
-                    if not new_children:
-                        break
-                    expanded.update(new_children)
-                    frontier = new_children
-                query = query.filter(case__module_id__in=list(expanded))
+        # 递归包含子模块；"none" = 未归类（用例 module 为空），配合 repository 参数即「某用例库下未归类」
+        module_q = build_module_filter_q(
+            request.query_params.getlist("module_id") or request.query_params.getlist("module_ids"),
+            field="case__module_id",
+        )
+        if module_q is not None:
+            query = query.filter(module_q)
         return query
 
     @action(detail=False, methods=["post"], url_path="cancel")
@@ -1091,21 +1069,10 @@ class PlanView(BaseViewSet):
             qs = qs.filter(id__in=ids)
         if repository_id:
             qs = qs.filter(case__repository_id=repository_id)
-        if module_id:
-            expanded = {str(module_id)}
-            frontier = [str(module_id)]
-            while frontier:
-                children = list(
-                    CaseModule.objects.filter(
-                        parent_id__in=frontier, deleted_at__isnull=True
-                    ).values_list("id", flat=True)
-                )
-                new_children = [str(c) for c in children if str(c) not in expanded]
-                if not new_children:
-                    break
-                expanded.update(new_children)
-                frontier = new_children
-            qs = qs.filter(case__module_id__in=list(expanded))
+        # 递归包含子模块；"none" = 未归类（用例 module 为空）
+        module_q = build_module_filter_q(module_id, field="case__module_id") if module_id else None
+        if module_q is not None:
+            qs = qs.filter(module_q)
 
         header = [allowed[f] for f in fields]
         buffer = io.StringIO()
@@ -1701,10 +1668,12 @@ class CaseAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.QA_CASE_VIEW)
     def get(self, request, slug, project_id):
         queryset = self.queryset
-        # 按模块过滤时递归包含所有子模块，与模块树上的计数口径保持一致。
-        module_id = request.query_params.get("module_id")
-        if module_id:
-            queryset = queryset.filter(module_id__in=expand_module_subtree_ids(module_id))
+        # 按模块过滤时递归包含所有子模块，与模块树上的计数口径保持一致；"none" = 未归类。
+        # module_id 是树上选中的节点，module_ids 是筛选器里选的模块，两者取交集。
+        for param in ("module_id", "module_ids"):
+            module_q = build_module_filter_q(request.query_params.get(param))
+            if module_q is not None:
+                queryset = queryset.filter(module_q)
 
         review_record_result_subquery = (
             CaseReviewRecord.objects.filter(crt__case_id=OuterRef("pk"))

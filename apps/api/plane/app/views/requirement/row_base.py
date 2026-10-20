@@ -50,8 +50,13 @@ from plane.utils.requirement_module import (
     expand_requirement_module_subtree_ids,
     module_name_map,
     module_scope_filter,
+    requirement_module_filter_q,
     set_requirement_module,
 )
+
+# 网格富筛选里「模块」条件的 field_id。它不是行上的字段（要按子树展开、要表达「未归类」），
+# 不进 RequirementFilterSerializer / filter_requirement_row_ids，而是在 RowQuery 里直接转成 queryset 过滤
+MODULE_FILTER_FIELD_ID = "module_id"
 
 
 IN_REVIEW_MESSAGE = "This requirement is under review and is read-only."
@@ -89,13 +94,20 @@ class RowQuery(NamedTuple):
     requirement_type_ids: list
     search: str
     filters: list
+    # 富筛选「模块」条件选中的值：模块 id 与 "none"（未归类），取或
+    module_ids: list
 
     def apply(self, queryset, layer):
         if self.requirement_type_ids:
             queryset = queryset.filter(
                 requirement_type_id__in=self.requirement_type_ids
             )
+        queryset = self.apply_module_filter(queryset)
         return self.apply_search(queryset, layer)
+
+    def apply_module_filter(self, queryset):
+        module_q = requirement_module_filter_q(self.module_ids)
+        return queryset if module_q is None else queryset.filter(module_q)
 
     def apply_search(self, queryset, layer):
         if not self.search.strip() and not self.filters:
@@ -244,6 +256,16 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        module_ids = []
+        field_filters = []
+        for item in filter_payload:
+            if isinstance(item, dict) and item.get("field_id") == MODULE_FILTER_FIELD_ID:
+                value = item.get("value")
+                module_ids.extend(value if isinstance(value, list) else [value])
+            else:
+                field_filters.append(item)
+        filter_payload = field_filters
+
         filter_serializer = RequirementFilterSerializer(
             data=filter_payload,
             many=True,
@@ -269,6 +291,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                     }
                     for item in filter_serializer.validated_data
                 ],
+                module_ids=module_ids,
             ),
             None,
         )
@@ -323,6 +346,8 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             queryset = queryset.filter(
                 module_id__in=expand_requirement_module_subtree_ids(module_id)
             )
+        # 富筛选的「模块」条件与左树选中取交集
+        queryset = query.apply_module_filter(queryset)
 
         # 必须排在 apply_search 之前：搜索/筛选走的是 filter_requirement_row_ids，
         # 它会把整个 queryset 拉进 Python 逐行判定，先缩小范围能直接省下那部分扫描

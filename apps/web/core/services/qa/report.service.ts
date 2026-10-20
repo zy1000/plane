@@ -23,8 +23,8 @@ export type TReportModule = {
   children?: TReportModule[];
 };
 
-/** `GET .../test/report/module/count/`：total 是项目报告总数，其余 key 是模块 id → 子树累计数 */
-export type TReportModuleCounts = { total: number } & Record<string, number>;
+/** `GET .../test/report/module/count/`：total 是项目报告总数，none 是未归类报告数，其余 key 是模块 id → 子树累计数 */
+export type TReportModuleCounts = { total: number; none?: number } & Record<string, number>;
 
 export type TReportListItem = {
   id: string;

@@ -11,6 +11,9 @@ import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/serv
 import UpdateModal from "@/components/qa/cases/update-modal";
 import {
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
+  UNASSIGNED_MODULE_LABEL,
+  UnassignedModuleIcon,
   buildRepositoryModuleNodes,
   findModuleTreeLabel,
   type TModuleTreeNode,
@@ -83,6 +86,8 @@ export default function CaseManagementReviewDetailPage() {
 
   const [reviewTree, setReviewTree] = useState<any | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  // 只在选中用例库下的「未归类」时有值（配合 selectedModuleId = none）
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [treeLoading, setTreeLoading] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -131,11 +136,17 @@ export default function CaseManagementReviewDetailPage() {
   const { repositoryFilterOptions, moduleFilterOptions } = useMemo(() => {
     const repositoryMap = new Map<string, TReviewCaseFilterSelectOption>();
     const moduleMap = new Map<string, TReviewCaseFilterSelectOption>();
+    let hasUnassigned = false;
 
     const walk = (node: any, repositoryName = "", modulePath: string[] = []) => {
       const kind = String(node?.kind || "");
       const id = node?.id ? String(node.id) : "";
       const name = String(node?.name || "-");
+
+      if (kind === "repository_unassigned") {
+        hasUnassigned = true;
+        return;
+      }
 
       if (kind === "repository" && id) {
         repositoryMap.set(id, { id, value: id, label: name });
@@ -164,9 +175,19 @@ export default function CaseManagementReviewDetailPage() {
 
     if (reviewTree) walk(reviewTree);
 
+    // 评审里有未挂模块的用例时，模块筛选第一项是「未归类」（值 none，后端按 module 为空过滤）
+    const unassignedOption: TReviewCaseFilterSelectOption = {
+      id: UNASSIGNED_MODULE_KEY,
+      value: UNASSIGNED_MODULE_KEY,
+      label: UNASSIGNED_MODULE_LABEL,
+      icon: <UnassignedModuleIcon />,
+    };
+
     return {
       repositoryFilterOptions: Array.from(repositoryMap.values()),
-      moduleFilterOptions: Array.from(moduleMap.values()),
+      moduleFilterOptions: hasUnassigned
+        ? [unassignedOption, ...Array.from(moduleMap.values())]
+        : Array.from(moduleMap.values()),
     };
   }, [reviewTree]);
 
@@ -174,10 +195,11 @@ export default function CaseManagementReviewDetailPage() {
     return JSON.stringify({
       reviewId,
       selectedModuleId,
+      selectedRepositoryId,
       ordering,
       filters,
     });
-  }, [filters, reviewId, selectedModuleId, ordering]);
+  }, [filters, reviewId, selectedModuleId, selectedRepositoryId, ordering]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
   const hasPendingAssigneeRefreshRef = useRef(false);
 
@@ -221,6 +243,7 @@ export default function CaseManagementReviewDetailPage() {
       filtersParam?: TReviewCaseListFilters;
       moduleId?: string | null;
       orderingParam?: TReviewCaseOrderBy | null;
+      repositoryId?: string | null;
     }
   ) => {
     if (!workspaceSlug || !reviewId) return;
@@ -229,6 +252,8 @@ export default function CaseManagementReviewDetailPage() {
       setError(null);
       const hasModuleOverride = Object.prototype.hasOwnProperty.call(options || {}, "moduleId");
       const effectiveModuleId = hasModuleOverride ? options?.moduleId : selectedModuleId;
+      const hasRepositoryOverride = Object.prototype.hasOwnProperty.call(options || {}, "repositoryId");
+      const effectiveRepositoryId = hasRepositoryOverride ? options?.repositoryId : selectedRepositoryId;
       const effectiveOrdering = options?.orderingParam === undefined ? ordering : (options.orderingParam ?? undefined);
       const effectiveFilters = options?.filtersParam ?? filters;
       const { search, ...filterParams } = effectiveFilters;
@@ -237,6 +262,7 @@ export default function CaseManagementReviewDetailPage() {
         page_size: size,
         ...(projectId ? { project_id: String(projectId) } : {}),
         ...(effectiveModuleId ? { module_id: effectiveModuleId } : {}),
+        ...(effectiveRepositoryId ? { repository_id: effectiveRepositoryId } : {}),
         ...(effectiveOrdering ? { ordering: effectiveOrdering } : {}),
         ...(search ? { name__icontains: search } : {}),
         ...filterParams,
@@ -431,10 +457,12 @@ export default function CaseManagementReviewDetailPage() {
     fetchReviewEnums();
     setSelectedTreeKey("root");
     setSelectedModuleId(null);
+    setSelectedRepositoryId(null);
     fetchReviewCaseList(1, pageSize, {
       filtersParam: {},
       moduleId: null,
       orderingParam: DEFAULT_REVIEW_CASE_ORDERING,
+      repositoryId: null,
     });
   }, [repositoryId, reviewId]);
 
@@ -466,6 +494,7 @@ export default function CaseManagementReviewDetailPage() {
     if (kind === "root") return "root";
     if (kind === "repository") return `repo:${id}`;
     if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "repository_unassigned") return `repo:${repositoryId}:${UNASSIGNED_MODULE_KEY}`;
     if (kind === "module") return `module:${id}`;
     return id;
   }
@@ -485,10 +514,18 @@ export default function CaseManagementReviewDetailPage() {
 
   const handleTreeSelect = (key: string) => {
     setSelectedTreeKey(key);
-    // 只有模块节点过滤列表；选中用例库或「全部用例」都看整个评审
-    const moduleId = key.startsWith("module:") ? key.slice("module:".length) : null;
+    // 模块节点按模块过滤；用例库下的「未归类」= 该库 + module none；选中用例库或「全部用例」都看整个评审
+    const unassignedSuffix = `:${UNASSIGNED_MODULE_KEY}`;
+    const isUnassigned = key.startsWith("repo:") && key.endsWith(unassignedSuffix);
+    const moduleId = key.startsWith("module:")
+      ? key.slice("module:".length)
+      : isUnassigned
+        ? UNASSIGNED_MODULE_KEY
+        : null;
+    const nextRepositoryId = isUnassigned ? key.slice("repo:".length, -unassignedSuffix.length) : null;
     setSelectedModuleId(moduleId);
-    fetchReviewCaseList(1, pageSize, { moduleId });
+    setSelectedRepositoryId(nextRepositoryId);
+    fetchReviewCaseList(1, pageSize, { moduleId, repositoryId: nextRepositoryId });
   };
 
   return (

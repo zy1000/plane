@@ -52,6 +52,9 @@ import { PlanCaseGroupBySwitcher } from "@/components/qa/plans/plan-case-group-b
 import { buildPlanCaseAssigneeNodes, buildPlanCaseGroupNodes } from "@/components/qa/plans/plan-case-tree-nodes";
 import {
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
+  UNASSIGNED_MODULE_LABEL,
+  UnassignedModuleIcon,
   buildRepositoryModuleNodes,
   findModuleTreeLabel,
   type TModuleTreeNode,
@@ -114,6 +117,7 @@ function getTreeNodeKey(node: any): string {
   if (kind === "root") return "root";
   if (kind === "repository") return `repo:${id}`;
   if (kind === "repository_modules_all") return `repo:${nodeRepositoryId}:all_modules`;
+  if (kind === "repository_unassigned") return `repo:${nodeRepositoryId}:${UNASSIGNED_MODULE_KEY}`;
   if (kind === "module") return `module:${id}`;
   return id;
 }
@@ -242,12 +246,18 @@ export default function PlanCasesPage() {
     const repositoryMap = new Map<string, TPlanCaseFilterSelectOption>();
     const moduleMap = new Map<string, TPlanCaseFilterSelectOption>();
     const moduleChildrenMap = new Map<string, string[]>();
+    let hasUnassigned = false;
 
     const walk = (node: any, repositoryLabel = "", modulePath: string[] = [], parentModuleId?: string) => {
       const kind = String(node?.kind || "");
       const id = node?.id ? String(node.id) : "";
       const name = String(node?.name || "-");
       const children = Array.isArray(node?.children) ? node.children : [];
+
+      if (kind === "repository_unassigned") {
+        hasUnassigned = true;
+        return;
+      }
 
       if (kind === "repository" && id) {
         repositoryMap.set(id, { id, value: id, label: name });
@@ -295,9 +305,19 @@ export default function PlanCasesPage() {
 
     moduleMap.forEach((_, moduleId) => collectDescendants(moduleId));
 
+    // 计划里有未挂模块的用例时，模块筛选第一项是「未归类」（值 none，后端按 module 为空过滤）
+    const unassignedOption: TPlanCaseFilterSelectOption = {
+      id: UNASSIGNED_MODULE_KEY,
+      value: UNASSIGNED_MODULE_KEY,
+      label: UNASSIGNED_MODULE_LABEL,
+      icon: <UnassignedModuleIcon />,
+    };
+
     return {
       repositoryFilterOptions: Array.from(repositoryMap.values()),
-      moduleFilterOptions: Array.from(moduleMap.values()),
+      moduleFilterOptions: hasUnassigned
+        ? [unassignedOption, ...Array.from(moduleMap.values())]
+        : Array.from(moduleMap.values()),
       moduleDescendantIdsMap: descendantsMap,
     };
   }, [planTree]);
@@ -383,6 +403,7 @@ export default function PlanCasesPage() {
     return Array.from(expanded);
   };
 
+  // 「未归类」的 none 不在子树映射里，原样透传；与真实模块求交集时自然为空
   const getEffectiveModuleIds = (treeModuleId?: string | null, filterModuleIdsCsv?: string): string[] => {
     const treeModuleIds = treeModuleId ? expandModuleIds([treeModuleId]) : [];
     const filterModuleIds = filterModuleIdsCsv ? expandModuleIds(toStringArray(filterModuleIdsCsv)) : [];
@@ -476,7 +497,7 @@ export default function PlanCasesPage() {
       return;
     }
 
-    if (kind === "module") {
+    if (kind === "module" || kind === "repository_unassigned") {
       setSelectedRepositoryId(meta.repositoryId);
       setSelectedModuleId(meta.moduleId);
       fetchCases(1, pageSize, { repositoryId: meta.repositoryId, moduleId: meta.moduleId });
@@ -595,7 +616,13 @@ export default function PlanCasesPage() {
       map.set(getTreeNodeKey(node), {
         kind,
         repositoryId: node?.repository_id ? String(node.repository_id) : null,
-        moduleId: kind === "module" && node?.id ? String(node.id) : null,
+        // 用例库下的「未归类」：moduleId 记为 none，配合 repositoryId 即「该库下未挂模块」
+        moduleId:
+          kind === "module" && node?.id
+            ? String(node.id)
+            : kind === "repository_unassigned"
+              ? UNASSIGNED_MODULE_KEY
+              : null,
       });
       (Array.isArray(node?.children) ? node.children : []).forEach(visit);
     };

@@ -14,6 +14,7 @@ import type {
   TRequirementField,
   TRequirementFilter,
   TRequirementItemStatus,
+  TRequirementModule,
   TRequirementPriority,
   TRequirementTypeSchema,
 } from "@plane/types";
@@ -164,6 +165,8 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
   /** 批量「移到模块」；不传则批量条不给这个动作 */
   onMoveToModule?: (requirementIds: string[]) => void;
+  /** 产品的模块树：传了筛选里才有「模块」属性（基线快照页不传） */
+  filterModules?: TRequirementModule[];
 };
 
 export const RequirementDefaultViewGrid = observer(function RequirementDefaultViewGrid(props: TProps) {
@@ -201,6 +204,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     onStatusChange,
     toolbarPortalEl,
     onMoveToModule,
+    filterModules,
   } = props;
   const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -292,6 +296,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     workspaceSlug,
     entityKind: "product",
     customFields: customFilterFields,
+    modules: filterModules,
   });
   const filter = useRequirementGridFilter({
     areAllConfigsInitialized,

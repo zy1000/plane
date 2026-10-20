@@ -14,6 +14,7 @@ import {
   findRequirementModuleName,
   MoveToModuleModal,
   RequirementModuleSidebar,
+  toAssignableModuleId,
 } from "@/components/requirements/module-tree";
 import { RequirementCreateModal } from "@/components/requirements/requirement-create-modal";
 import { RequirementGrid, type TRequirementGridHandle } from "@/components/requirements/requirement-grid";
@@ -501,6 +502,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onStatusChange={onStatusChange}
                   toolbarPortalEl={dataToolbarHost}
                   onMoveToModule={canEdit ? setMoveIds : undefined}
+                  filterModules={moduleStore.modules}
                 />
               ) : (
                 <RequirementGrid
@@ -552,9 +554,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onOpenChangeRequest={openChangeRequest}
                   onStatusChange={onStatusChange}
                   toolbarPortalEl={dataToolbarHost}
-                  createModuleId={selectedModuleId}
+                  createModuleId={toAssignableModuleId(selectedModuleId)}
                   createModuleName={selectedModuleName}
                   onMoveToModule={canEdit ? setMoveIds : undefined}
+                  filterModules={moduleStore.modules}
                 />
               )}
             </div>
@@ -652,7 +655,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           entityId={productId ?? ""}
           entityKind="product"
           allowTypeSelection
-          moduleId={selectedModuleId}
+          moduleId={toAssignableModuleId(selectedModuleId)}
           moduleName={selectedModuleName}
           onClose={() => setIsCreateOpen(false)}
           onSave={handleBulkSave}

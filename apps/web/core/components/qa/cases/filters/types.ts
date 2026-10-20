@@ -7,7 +7,7 @@
 import type { CompleteOrEmpty, TSupportedOperators } from "@plane/types";
 import { LOGICAL_OPERATOR } from "@plane/types";
 
-export const CASE_FILTER_PROPERTY_KEYS = ["review", "type", "priority", "assignee", "labels"] as const;
+export const CASE_FILTER_PROPERTY_KEYS = ["review", "type", "priority", "assignee", "labels", "module"] as const;
 
 export type TCaseFilterProperty = (typeof CASE_FILTER_PROPERTY_KEYS)[number];
 

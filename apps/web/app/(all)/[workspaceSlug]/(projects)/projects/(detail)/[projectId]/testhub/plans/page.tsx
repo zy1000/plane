@@ -9,6 +9,9 @@ import { FolderPlus, Pencil, Trash2 } from "lucide-react";
 import {
   MODULE_TREE_ROOT_KEY,
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
+  UNASSIGNED_MODULE_LABEL,
+  appendUnassignedNode,
   type TModuleTreeDropEvent,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
@@ -80,12 +83,14 @@ export default function TestPlanDetailPage() {
   const [filters, setFilters] = useState<{ name?: string; states?: string[] }>({});
 
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
+  // 未归类（module 为空）的计划数，树末尾「未归类」节点用
+  const [unassignedTotal, setUnassignedTotal] = useState<number | undefined>(undefined);
   const [moduleCounts, setModuleCounts] = useState<Record<string, number>>({});
-  const totalPlansFromModules = useMemo(() => {
-    const sum = (list: PlanModule[]): number =>
-      (list || []).reduce((acc, n) => acc + Number(n?.total || 0) + sum(n?.children || []), 0);
-    return sum(modules);
-  }, [modules]);
+  // 模块计数已是子树累计，兜底只加一级模块 + 未归类
+  const totalPlansFromModules = useMemo(
+    () => (modules || []).reduce((acc, n) => acc + Number(n?.total || 0), 0) + Number(unassignedTotal || 0),
+    [modules, unassignedTotal]
+  );
 
   const appliedModuleIdFromUrlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -126,8 +131,9 @@ export default function TestPlanDetailPage() {
     try {
       const pid = Array.isArray(projectId) ? projectId[0] : projectId;
       const countsResponse: any = await planService.getPlanModulesCount(workspaceSlug as string, pid);
-      const { total: t = 0, ...countsMap } = countsResponse || {};
+      const { total: t = 0, none: unassigned = 0, ...countsMap } = countsResponse || {};
       setAllTotal(typeof t === "number" ? t : Number(t || 0));
+      setUnassignedTotal(Number(unassigned || 0));
       setModuleCounts(countsMap as Record<string, number>);
       const data: any[] = await planService.getPlanModules(workspaceSlug as string, pid);
       const updatedModules = batchUpdateModuleCounts(
@@ -339,8 +345,10 @@ export default function TestPlanDetailPage() {
         count: getNodeCount(m),
         children: build(m.children || []),
       }));
-    return build(modules);
-  }, [modules]);
+    return appendUnassignedNode(build(modules), unassignedTotal, {
+      keepWhenEmpty: selectedModuleId === UNASSIGNED_MODULE_KEY,
+    });
+  }, [modules, unassignedTotal, selectedModuleId]);
 
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     const module = findModuleById(modules, node.key);
@@ -406,7 +414,7 @@ export default function TestPlanDetailPage() {
   // URL moduleId 对应的树节点在模块加载完成后展开其祖先并保持选中；只处理一次
   const expandedForUrlModuleRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!moduleIdFromUrl || modules.length === 0) return;
+    if (!moduleIdFromUrl || moduleIdFromUrl === UNASSIGNED_MODULE_KEY || modules.length === 0) return;
     if (expandedForUrlModuleRef.current === moduleIdFromUrl) return;
     expandedForUrlModuleRef.current = moduleIdFromUrl;
     const ancestors = collectAncestorIds(modules, moduleIdFromUrl);
@@ -446,7 +454,12 @@ export default function TestPlanDetailPage() {
     }
   };
 
-  const selectedModuleName = selectedModuleId ? findModuleById(modules, selectedModuleId)?.name : undefined;
+  const selectedModuleName =
+    selectedModuleId === UNASSIGNED_MODULE_KEY
+      ? UNASSIGNED_MODULE_LABEL
+      : selectedModuleId
+        ? findModuleById(modules, selectedModuleId)?.name
+        : undefined;
 
   const canViewPlans = permissionsFetched && hasPermission("qa.plan.view");
 
@@ -575,7 +588,9 @@ export default function TestPlanDetailPage() {
           repositoryName={decodedRepositoryName}
           mode="create"
           autoSelectDefaultModule={false}
-          initialData={selectedModuleId ? ({ module: selectedModuleId } as any) : null}
+          initialData={
+            selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? ({ module: selectedModuleId } as any) : null
+          }
           onSuccess={refreshAll}
         />
       )}

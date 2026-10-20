@@ -31,6 +31,7 @@ from plane.utils.qa import (
 from plane.utils.response import list_response
 from plane.app.views.qa.filters import CaseReviewFilter
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
+from plane.app.views.qa.utils import build_module_filter_q
 
 
 class ReviewModuleAPIView(BaseAPIView):
@@ -288,21 +289,6 @@ class CaseReviewView(BaseViewSet):
                 values.extend([part.strip() for part in str(raw).split(',') if part.strip()])
         return list(dict.fromkeys(values))
 
-    @staticmethod
-    def _expand_case_module_ids(module_ids):
-        expanded = {str(module_id) for module_id in module_ids if module_id}
-        frontier = list(expanded)
-        while frontier:
-            children = list(
-                CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list('id', flat=True)
-            )
-            new_children = [str(child) for child in children if str(child) not in expanded]
-            if not new_children:
-                break
-            expanded.update(new_children)
-            frontier = new_children
-        return list(expanded)
-
     def _filtered_case_through_qs(self, request, slug):
         review_id = request.query_params.get('review_id')
         query = (
@@ -336,13 +322,11 @@ class CaseReviewView(BaseViewSet):
         if assignee_values:
             query = query.filter(assignees__id__in=assignee_values).distinct()
 
-        module_ids = self._query_param_values(request, 'module_id')
-        if module_ids:
-            query = query.filter(case__module_id__in=self._expand_case_module_ids(module_ids))
-
-        filter_module_ids = self._query_param_values(request, 'module_ids')
-        if filter_module_ids:
-            query = query.filter(case__module_id__in=self._expand_case_module_ids(filter_module_ids))
+        # 树选中（module_id）与富筛选（module_ids）各自递归含子模块后取交集；"none" = 未归类（用例 module 为空）
+        for key in ('module_id', 'module_ids'):
+            module_q = build_module_filter_q(self._query_param_values(request, key), field='case__module_id')
+            if module_q is not None:
+                query = query.filter(module_q)
 
         return NumericSuffixCodeOrderingFilter().filter_queryset(request, query, self)
 

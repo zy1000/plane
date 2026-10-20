@@ -16,6 +16,8 @@ export type TModuleTreeNode = {
   muted?: boolean;
   /** 显式禁止拖动；默认跟随面板的 dragMode */
   draggable?: boolean;
+  /** 虚拟节点（如「未归类」）：不可拖、不能当落点、不出 ⋯ 菜单 */
+  virtual?: boolean;
   children?: TModuleTreeNode[];
 };
 

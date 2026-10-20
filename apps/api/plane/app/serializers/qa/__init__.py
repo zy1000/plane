@@ -903,6 +903,14 @@ class ReviewModuleListSerializer(ModelSerializer):
         qs = obj.children.filter(deleted_at__isnull=True).order_by("created_at")
         return ReviewModuleListSerializer(qs, many=True).data
 
+    def to_representation(self, instance):
+        # review_count 累加子孙模块（子节点已各自算好子树数），与列表按模块递归过滤、其他模块树同口径
+        data = super().to_representation(instance)
+        data["review_count"] = data["review_count"] + sum(
+            child.get("review_count", 0) for child in data.get("children") or []
+        )
+        return data
+
     class Meta:
         model = CaseReviewModule
         fields = "__all__"

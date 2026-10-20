@@ -7,6 +7,7 @@ utils/requirement_project.set_requirement_status 的口径说明）。本文件�
 """
 
 from collections import defaultdict
+from uuid import UUID
 
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -34,6 +35,39 @@ def expand_requirement_module_subtree_ids(module_id):
         expanded.update(new_children)
         frontier = new_children
     return list(expanded)
+
+
+# 「未归类」在 module_id 取值里的写法：没挂任何模块的行（与列表 ?module_id=none 同义）
+UNASSIGNED_MODULE_ID = "none"
+
+
+def requirement_module_filter_q(values):
+    """网格富筛选「模块」条件的 Q：真实模块递归含子模块，"none" = 未挂靠，二者取或。
+
+    非法 id 忽略；没有任何有效值时返回 None（不过滤）。
+    """
+    module_ids = []
+    include_unassigned = False
+    for value in values or []:
+        text = str(value or "").strip()
+        if text == UNASSIGNED_MODULE_ID:
+            include_unassigned = True
+            continue
+        try:
+            module_ids.append(str(UUID(text)))
+        except ValueError:
+            continue
+    if not module_ids and not include_unassigned:
+        return None
+    expanded = set()
+    for module_id in module_ids:
+        expanded.update(expand_requirement_module_subtree_ids(module_id))
+    q = Q()
+    if expanded:
+        q |= Q(module_id__in=list(expanded))
+    if include_unassigned:
+        q |= Q(module_id__isnull=True)
+    return q
 
 
 def module_scope_filter(owner):
@@ -74,7 +108,8 @@ def build_module_tree_payload(*, scope_filter, total_queryset):
 
     一次聚合查询 + 内存建树，避免逐节点 COUNT / 逐节点查子级的 N+1。
     total 是作用域内**全部**需求数（含未挂靠模块的行）—— 「全部」节点的
-    计数口径，与列表不传 module_id 时的行数一致。
+    计数口径，与列表不传 module_id 时的行数一致。unassigned 是其中未挂靠
+    模块的行数 —— 「未归类」节点的计数，与列表 module_id=none 的行数一致。
     """
     modules = list(
         RequirementModule.objects.filter(**scope_filter)
@@ -119,6 +154,7 @@ def build_module_tree_payload(*, scope_filter, total_queryset):
             node_payload(module) for module in modules if module.parent_id is None
         ],
         "total": total_queryset.count(),
+        "unassigned": total_queryset.filter(module_id__isnull=True).count(),
     }
 
 

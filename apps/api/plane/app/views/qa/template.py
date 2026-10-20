@@ -20,7 +20,7 @@ from plane.app.views.qa.case import (
 )
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
 from plane.app.views.qa.template_permissions import CASE_TEMPLATE_READ_KEYS
-from plane.app.views.qa.utils import build_case_activity_snapshot, expand_module_subtree_ids
+from plane.app.views.qa.utils import build_case_activity_snapshot, build_module_filter_q
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.db.models import CaseReviewThrough, PlanCase, TestCase, TestCaseRepository, TestCaseVersion
 from plane.utils.paginator import CustomPaginator
@@ -92,10 +92,12 @@ class TemplateCaseAPIView(BaseAPIView):
             )
 
         queryset = self.get_queryset()
-        # 按模块过滤时递归包含所有子模块，与模块树计数口径一致
-        module_id = request.query_params.get("module_id")
-        if module_id:
-            queryset = queryset.filter(module_id__in=expand_module_subtree_ids(module_id))
+        # 按模块过滤时递归包含所有子模块，与模块树计数口径一致；"none" = 未归类。
+        # module_id 是树上选中的节点，module_ids 是筛选器里选的模块，两者取交集
+        for param in ("module_id", "module_ids"):
+            module_q = build_module_filter_q(request.query_params.get(param))
+            if module_q is not None:
+                queryset = queryset.filter(module_q)
 
         # 模板用例没有评审/执行语境，注解常量短路 serializer 的逐行评审与执行回查
         queryset = queryset.annotate(
@@ -207,9 +209,9 @@ class TemplateCaseIdsAPIView(BaseAPIView):
             repository__workspace__slug=slug,
             repository__is_template=True,
         )
-        module_id = request.query_params.get("module_id")
-        if module_id:
-            queryset = queryset.filter(module_id__in=expand_module_subtree_ids(module_id))
+        module_q = build_module_filter_q(request.query_params.get("module_id"))
+        if module_q is not None:
+            queryset = queryset.filter(module_q)
 
         data = list(queryset.values("id", "module_id"))
         return list_response(data=data, count=len(data))

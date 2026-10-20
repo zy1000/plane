@@ -7,6 +7,7 @@ import { PageHead } from "@/components/core/page-title";
 import { ReportService, type TReportListItem } from "@/services/qa/report.service";
 import { CreateUpdateReportModal } from "@/components/qa/reports/create-update-report-modal";
 import { ReportListTable } from "@/components/qa/reports/report-list-table";
+import { UNASSIGNED_MODULE_KEY } from "@/components/qa/module-tree";
 import { ReportModuleTree } from "@/components/qa/reports/report-module-tree";
 import { useReportModules } from "@/hooks/store/use-report-modules";
 import { useTestHub } from "../testhub-context";
@@ -74,7 +75,9 @@ export default function TestReportsPage() {
   // 新建报告默认带入左树当前选中模块；initialData 存进 state，避免每次 render 新对象把弹窗表单重置
   const openCreateModal = useCallback(() => {
     if (!canCreateReport) return;
-    setCreateInitialValues({ module: selectedModuleIdRef.current });
+    const currentModuleId = selectedModuleIdRef.current;
+    // 选中「未归类」时新建报告不带模块
+    setCreateInitialValues({ module: currentModuleId === UNASSIGNED_MODULE_KEY ? null : currentModuleId });
     setShowCreateModal(true);
   }, [canCreateReport]);
   useEffect(() => {
@@ -233,6 +236,7 @@ export default function TestReportsPage() {
           <ReportModuleTree
             modules={reportModules.modules}
             total={reportModules.total}
+            unassignedTotal={reportModules.unassignedTotal}
             loaded={reportModules.loaded}
             loading={!reportModules.loaded}
             selectedModuleId={selectedModuleId}

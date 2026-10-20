@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from "react";
+import type { ReactElement } from "react";
 import { LayersIcon, MembersPropertyIcon, PriorityPropertyIcon, StatePropertyIcon } from "@plane/propel/icons";
 import type { IUserLite, TFilterConfig, TSupportedOperators } from "@plane/types";
 import { COLLECTION_OPERATOR, EQUALITY_OPERATOR } from "@plane/types";
@@ -26,6 +27,8 @@ export type TReviewCaseFilterSelectOption = {
   id: string;
   label: string;
   value: string;
+  /** 选项图标（如模块筛选里「未归类」的虚线文件夹），不传不显示 */
+  icon?: ReactElement;
 };
 
 type TUseReviewCaseFiltersConfigProps = {
@@ -47,17 +50,19 @@ const getMultiSelectOperatorConfigs = (
 ) =>
   new Map([
     createOperatorConfigEntry(COLLECTION_OPERATOR.IN, params, (updatedParams) =>
-      getMultiSelectConfig<TReviewCaseFilterSelectOption, string, undefined>(
+      getMultiSelectConfig<TReviewCaseFilterSelectOption, string, ReactElement | undefined>(
         {
           items: options,
           getId: (option) => option.id,
           getLabel: (option) => option.label,
           getValue: (option) => option.value,
+          getIconData: (option) => option.icon,
         },
         {
           singleValueOperator: EQUALITY_OPERATOR.EXACT,
           ...updatedParams,
-        }
+        },
+        { getOptionIcon: (icon) => icon }
       )
     ),
   ]);

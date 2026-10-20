@@ -33,7 +33,7 @@ from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializ
     CaseLabelListSerializer, IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
-from plane.app.views.qa.utils import expand_module_subtree_ids
+from plane.app.views.qa.utils import UNASSIGNED_MODULE_ID, build_module_filter_q, expand_module_subtree_ids
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
     CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion, \
@@ -197,6 +197,26 @@ def copy_module_subtree(
             assignee_id=assignee_id, keep_assignee=keep_assignee,
         )
     return new_module
+
+
+def build_unassigned_children(repo_id, count, with_count=True):
+    """计划 / 评审用例树里用例库下的「未归类」节点（用例 module 为空），排在「全部模块」之后；没有则不出。
+    调用方在用例库下一个模块都没有时也不加（与用例库那一行重复，同前端 appendUnassignedNode）。
+
+    评审用例树的模块节点本来不带计数，with_count=False 时同样不带，免得只有这一行有数字。
+    """
+    if not count:
+        return []
+    node = {
+        "id": f"{repo_id}:{UNASSIGNED_MODULE_ID}",
+        "name": "未归类",
+        "kind": "repository_unassigned",
+        "repository_id": repo_id,
+        "children": [],
+    }
+    if with_count:
+        node["count"] = int(count)
+    return [node]
 
 
 class CaseAssetAPIView(BaseAPIView):
@@ -469,8 +489,9 @@ class CaseAPI(BaseViewSet):
             qs = qs.filter(id__in=ids)
         if repository_id:
             qs = qs.filter(repository_id=repository_id)
-        if module_id:
-            qs = qs.filter(module_id__in=expand_module_subtree_ids(module_id))
+        module_q = build_module_filter_q(module_id)
+        if module_q is not None:
+            qs = qs.filter(module_q)
 
         header = [allowed[f] for f in fields]
         buffer = io.StringIO()
@@ -547,6 +568,7 @@ class CaseAPI(BaseViewSet):
         module_ids_by_repo: dict[str, set[str]] = defaultdict(set)
         repo_counts: dict[str, int] = defaultdict(int)
         base_module_counts: dict[str, int] = defaultdict(int)
+        unassigned_counts: dict[str, int] = defaultdict(int)
 
         for r in rows:
             repo_id = r.get('case__repository_id')
@@ -561,6 +583,8 @@ class CaseAPI(BaseViewSet):
             if module_id:
                 module_ids_by_repo[repo_id].add(str(module_id))
                 base_module_counts[str(module_id)] += count
+            else:
+                unassigned_counts[repo_id] += count
 
         if not repo_ids:
             return Response({"id": "all", "name": "全部用例", "kind": "root", "count": 0, "children": []},
@@ -666,7 +690,8 @@ class CaseAPI(BaseViewSet):
                             "repository_id": repo_id,
                             "count": repo_total,
                             "children": module_tree,
-                        }
+                        },
+                        *(build_unassigned_children(repo_id, unassigned_counts.get(repo_id, 0)) if module_tree else []),
                     ],
                 }
             )
@@ -706,6 +731,17 @@ class CaseAPI(BaseViewSet):
         if not repo_ids:
             return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []},
                             status=status.HTTP_200_OK)
+
+        # 各用例库下未挂模块的评审用例数，给「未归类」节点用
+        unassigned_counts = {
+            str(r['case__repository_id']): r['count']
+            for r in CaseReviewThrough.objects.filter(
+                review_id=review_id, case__deleted_at__isnull=True, case__repository__workspace__slug=slug,
+                case__module__isnull=True,
+            )
+            .values('case__repository_id')
+            .annotate(count=Count('case_id', distinct=True))
+        }
 
         expanded_ids_by_repo: dict[str, set[str]] = {rid: set(mids) for rid, mids in module_ids_by_repo.items()}
         for repo_id, mids in list(expanded_ids_by_repo.items()):
@@ -790,7 +826,12 @@ class CaseAPI(BaseViewSet):
                             "kind": "repository_modules_all",
                             "repository_id": repo_id,
                             "children": module_tree,
-                        }
+                        },
+                        *(
+                            build_unassigned_children(repo_id, unassigned_counts.get(repo_id, 0), with_count=False)
+                            if module_tree
+                            else []
+                        ),
                     ],
                 }
             )

@@ -52,6 +52,7 @@ export const useRequirementModules = (
   const [modules, setModules] = useState<TRequirementModule[]>([]);
   const [groups, setGroups] = useState<TProjectRequirementModuleGroup[]>([]);
   const [total, setTotal] = useState(0);
+  const [unassigned, setUnassigned] = useState(0);
   const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && entityId));
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +78,8 @@ export const useRequirementModules = (
         );
         setModules(response.modules);
         setTotal(response.total);
+        // 后端树接口新增的字段，@plane/types 的响应类型里还没有
+        setUnassigned((response as typeof response & { unassigned?: number }).unassigned ?? 0);
       }
     } catch (requestError) {
       setError(getErrorMessage(requestError));
@@ -166,6 +169,8 @@ export const useRequirementModules = (
     groups,
     /** 作用域内全部需求数（含未挂靠的行），「全部」节点的计数 */
     total,
+    /** 库 / 产品作用域内未挂靠模块的需求数，「未归类」节点的计数；项目作用域恒为 0 */
+    unassigned,
     isLoading,
     isMutating,
     error,

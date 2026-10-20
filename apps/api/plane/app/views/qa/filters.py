@@ -10,33 +10,18 @@ from plane.db.models import (
     TestReport,
     ReportModule,
 )
+from plane.app.views.qa.utils import build_module_filter_q
 from plane.utils.filters.filterset import UUIDInFilter
 
 
 class TestReportFilter(filters.FilterSet):
-    """测试报告列表过滤：module_id 递归包含子模块，口径与模块树计数一致。"""
+    """测试报告列表过滤：module_id 递归包含子模块，口径与模块树计数一致；"none" = 未归类。"""
 
-    module_id = filters.UUIDFilter(method="filter_module_id")
+    module_id = filters.CharFilter(method="filter_module_id")
 
     def filter_module_id(self, queryset, name, value):
-        if not value:
-            return queryset
-
-        expanded = {str(value)}
-        frontier = [str(value)]
-        while frontier:
-            children = list(
-                ReportModule.objects.filter(
-                    parent_id__in=frontier, deleted_at__isnull=True
-                ).values_list("id", flat=True)
-            )
-            new_children = [str(c) for c in children if str(c) not in expanded]
-            if not new_children:
-                break
-            expanded.update(new_children)
-            frontier = new_children
-
-        return queryset.filter(module_id__in=list(expanded))
+        q = build_module_filter_q(value, model=ReportModule)
+        return queryset if q is None else queryset.filter(q)
 
     class Meta:
         model = TestReport
@@ -49,25 +34,12 @@ class TestReportFilter(filters.FilterSet):
 
 class TestPlanFilter(filters.FilterSet):
     assignee_display_name = filters.CharFilter(field_name='plan_cases__assignee__display_name', lookup_expr='icontains')
-    module_id = filters.UUIDFilter(method="filter_module_id")
+    # 递归包含子模块；"none" = 未归类（module 为空）
+    module_id = filters.CharFilter(method="filter_module_id")
 
     def filter_module_id(self, queryset, name, value):
-        if not value:
-            return queryset
-
-        expanded = {str(value)}
-        frontier = [str(value)]
-        while frontier:
-            children = list(
-                PlanModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id", flat=True)
-            )
-            new_children = [str(c) for c in children if str(c) not in expanded]
-            if not new_children:
-                break
-            expanded.update(new_children)
-            frontier = new_children
-
-        return queryset.filter(module_id__in=list(expanded))
+        q = build_module_filter_q(value, model=PlanModule)
+        return queryset if q is None else queryset.filter(q)
 
     class Meta:
         model = TestPlan
@@ -82,6 +54,12 @@ class TestPlanFilter(filters.FilterSet):
 class PlanCaseFilter(filters.FilterSet):
     # 前端历史参数名是 assignee_isnull（无双下划线），保留别名
     assignee_isnull = filters.BooleanFilter(field_name="assignee", lookup_expr="isnull")
+    # 逗号分隔的模块 id（前端已展开子树）；"none" = 未归类（用例 module 为空）
+    case__module_id__in = filters.CharFilter(method="filter_case_module_in")
+
+    def filter_case_module_in(self, queryset, name, value):
+        q = build_module_filter_q(value, field="case__module_id")
+        return queryset if q is None else queryset.filter(q)
 
     class Meta:
         model = PlanCase
@@ -89,7 +67,7 @@ class PlanCaseFilter(filters.FilterSet):
             "plan_id": ["exact", "in"],
             "assignee_id": ["exact", "in", "isnull"],
             "case__repository_id": ["exact", "in"],
-            "case__module_id": ["exact", "in"],
+            "case__module_id": ["exact"],
             "case__type": ["exact", "in"],
             "case__priority": ["exact", "in"],
             "result": ["exact", "in"],
@@ -101,7 +79,8 @@ class CaseReviewFilter(filters.FilterSet):
     assignee__in = UUIDInFilter(method="filter_assignee")
     started_at__lte = filters.DateFilter(field_name="started_at", lookup_expr="lte")
     ended_at__gte = filters.DateFilter(field_name="ended_at", lookup_expr="gte")
-    module_id = filters.UUIDFilter(method="filter_module_id")
+    # 递归包含子模块；"none" = 未归类（module 为空）
+    module_id = filters.CharFilter(method="filter_module_id")
 
     def filter_assignee(self, queryset, name, value):
         if not value:
@@ -109,24 +88,8 @@ class CaseReviewFilter(filters.FilterSet):
         return queryset.filter(assignees__id__in=value).distinct()
 
     def filter_module_id(self, queryset, name, value):
-        if not value:
-            return queryset
-
-        expanded = {str(value)}
-        frontier = [str(value)]
-        while frontier:
-            children = list(
-                CaseReviewModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list(
-                    "id", flat=True
-                )
-            )
-            new_children = [str(c) for c in children if str(c) not in expanded]
-            if not new_children:
-                break
-            expanded.update(new_children)
-            frontier = new_children
-
-        return queryset.filter(module_id__in=list(expanded))
+        q = build_module_filter_q(value, model=CaseReviewModule)
+        return queryset if q is None else queryset.filter(q)
 
     class Meta:
         model = CaseReview

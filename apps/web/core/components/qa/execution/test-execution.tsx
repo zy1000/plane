@@ -47,6 +47,7 @@ import { PlanCaseGroupBySwitcher } from "@/components/qa/plans/plan-case-group-b
 import { buildPlanCaseAssigneeNodes, buildPlanCaseGroupNodes } from "@/components/qa/plans/plan-case-tree-nodes";
 import {
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
   buildRepositoryModuleNodes,
   findModuleTreeLabel,
   type TModuleTreeNode,
@@ -474,7 +475,7 @@ export default function TestExecutionPage() {
       return;
     }
 
-    if (meta.kind === "module") {
+    if (meta.kind === "module" || meta.kind === "repository_unassigned") {
       const repoId = meta.repositoryId;
       const moduleId = meta.moduleId;
       setSelectedRepositoryId(repoId);
@@ -512,6 +513,7 @@ export default function TestExecutionPage() {
     if (kind === "root") return "root";
     if (kind === "repository") return `repo:${id}`;
     if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "repository_unassigned") return `repo:${repositoryId}:${UNASSIGNED_MODULE_KEY}`;
     if (kind === "module") return `module:${id}`;
     return id;
   }
@@ -546,7 +548,13 @@ export default function TestExecutionPage() {
       map.set(getTreeNodeKey(node), {
         kind,
         repositoryId: node?.repository_id ? String(node.repository_id) : null,
-        moduleId: kind === "module" && node?.id ? String(node.id) : null,
+        // 用例库下的「未归类」：moduleId 记为 none，配合 repositoryId 即「该库下未挂模块」
+        moduleId:
+          kind === "module" && node?.id
+            ? String(node.id)
+            : kind === "repository_unassigned"
+              ? UNASSIGNED_MODULE_KEY
+              : null,
       });
       (Array.isArray(node?.children) ? node.children : []).forEach(visit);
     };

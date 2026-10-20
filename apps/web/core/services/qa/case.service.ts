@@ -8,7 +8,8 @@ import { getFileMetaDataForUpload, generateFileUploadPayload } from "@plane/serv
 import { FileUploadService } from "@/services/file-upload.service";
 
 
-export type ModuleCountResponse = { total: number } & Record<string, number>;
+/** total：库内全部用例；none：没挂模块的用例；其余 key 为模块 id → 子树累计数 */
+export type ModuleCountResponse = { total: number; none?: number } & Record<string, number>;
 
 /** 批量改属性：属性字段出现即修改（assignee 传 null 清空），标签按加减语义 */
 export type TCaseBulkUpdatePayload = {

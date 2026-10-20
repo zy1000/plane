@@ -619,7 +619,7 @@ export class RequirementService extends APIService {
       ids?: string[];
       /** 关联选择器（父项下拉等）用：排除已关闭的需求。带 ids 回显时服务端豁免 */
       excludeClosed?: boolean;
-      /** 按模块过滤（含子模块）；不传 = 全部（含未挂靠的需求） */
+      /** 按模块过滤（含子模块）；"none" = 只看未挂靠的需求；不传 = 全部（含未挂靠的需求） */
       moduleId?: string;
     } = {}
   ): Promise<TRequirementsResponse> {

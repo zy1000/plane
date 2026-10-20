@@ -9,6 +9,8 @@ import { AlertModalCore } from "@plane/ui";
 import {
   MODULE_TREE_ROOT_KEY,
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
+  appendUnassignedNode,
   collectAncestorKeys,
   indexModuleTree,
   isInSubtree,
@@ -56,7 +58,16 @@ export const RequirementModuleSidebar = (props: TProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const treeNodes = useMemo(() => toTreeNodes(store.modules), [store.modules]);
-  const { nodeByKey } = useMemo(() => indexModuleTree(treeNodes), [treeNodes]);
+  const isUnassignedSelected = selectedModuleId === UNASSIGNED_MODULE_KEY;
+  // 末尾的「未归类」（一个模块都没有时不出，见 appendUnassignedNode）
+  const displayNodes = useMemo(
+    () =>
+      appendUnassignedNode(treeNodes, store.unassigned, { keepWhenEmpty: isUnassignedSelected }).map((node) =>
+        node.key === UNASSIGNED_MODULE_KEY ? { ...node, label: t("requirement_modules.unassigned") } : node
+      ),
+    [treeNodes, store.unassigned, isUnassignedSelected, t]
+  );
+  const { nodeByKey } = useMemo(() => indexModuleTree(displayNodes), [displayNodes]);
 
   // 选中项（通常来自 URL）藏在收起的分支里时，把它的祖先展开；只在第一次拿到树时做
   const initialExpandDone = useRef(false);
@@ -153,7 +164,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
       <ModuleTreePanel
         title={t("requirement_modules.sidebar_label")}
         root={{ label: allLabel, count: store.total }}
-        nodes={treeNodes}
+        nodes={displayNodes}
         selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
         onSelect={(key) => onSelect(key === MODULE_TREE_ROOT_KEY ? null : key)}
         expandedKeys={expandedKeys}

@@ -7,6 +7,8 @@ import { useTranslation } from "@plane/i18n";
 import {
   MODULE_TREE_ROOT_KEY,
   ModuleTreePanel,
+  UNASSIGNED_MODULE_KEY,
+  appendUnassignedNode,
   collectAncestorKeys,
   indexModuleTree,
   isInSubtree,
@@ -22,6 +24,8 @@ type Props = {
   modules: TReportModule[];
   /** 项目报告总数，显示在「全部报告」上 */
   total: number;
+  /** 未归类（module 为空）的报告数，树末尾「未归类」节点 */
+  unassignedTotal: number;
   /** 模块第一次拉取已结束；空树也算加载完 */
   loaded: boolean;
   loading?: boolean;
@@ -51,6 +55,7 @@ const toTreeNodes = (list: TReportModule[]): TModuleTreeNode[] =>
 export const ReportModuleTree = ({
   modules,
   total,
+  unassignedTotal,
   loaded,
   loading = false,
   selectedModuleId,
@@ -67,7 +72,13 @@ export const ReportModuleTree = ({
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
 
-  const treeNodes = useMemo(() => toTreeNodes(modules), [modules]);
+  const treeNodes = useMemo(
+    () =>
+      appendUnassignedNode(toTreeNodes(modules), unassignedTotal, {
+        keepWhenEmpty: selectedModuleId === UNASSIGNED_MODULE_KEY,
+      }),
+    [modules, unassignedTotal, selectedModuleId]
+  );
   const nodeIndex = useMemo(() => indexModuleTree(treeNodes), [treeNodes]);
 
   // 模块第一次加载完（含空树）：选中项（通常来自 URL）不存在就回到「全部报告」，存在就展开它的祖先
