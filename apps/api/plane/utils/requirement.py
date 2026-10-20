@@ -56,19 +56,34 @@ BUILTIN_COLUMN_DEFAULTS = {
 
 BUILTIN_COLUMNS = tuple(BUILTIN_COLUMN_DEFAULTS)
 
-# 不算「内容」的内置列。
+# 不算「内容」的内置列：不进内容判定（requirement_content_values）、不进变更单 diff、
+# 不被回滚倒推。改它们不会把已通过的行推进「已改动·待提交」。
 #
 # status 是**交付状态轴**（这条需求做到哪了），不是被批准的内容。把它算进内容 diff 会
 # 让「标一次已发布」把行推进「已改动·待提交」，还要审批人为研发进度签字。
-# 内容写路径（partial_update / save_requirement_row_batch）的写集合也只取
-# CONTENT_BUILTIN_COLUMNS，status 只由 utils/requirement_project 的状态 util 写。
+# 优先级 / 负责人 / 开始结束日期是**排期属性**（谁做、什么时候做、先做哪个），评审看的是
+# 需求本身写得对不对，为调一次排期走一轮评审只是噪音（2026-10-20 产品决策）。
 #
 # 与下面的 LIBRARY_HIDDEN_BUILTIN_COLUMNS 是两个独立常量，含义不同：那个说的是「模板里
 # 不该有」，这个说的是「不算内容」。合并会让以后调整任一侧都出错。
-NON_CONTENT_BUILTIN_COLUMNS = ("status",)
+NON_CONTENT_BUILTIN_COLUMNS = (
+    "status",
+    "priority",
+    "assignee_id",
+    "start_date",
+    "target_date",
+)
 
 CONTENT_BUILTIN_COLUMNS = tuple(
     column for column in BUILTIN_COLUMNS if column not in NON_CONTENT_BUILTIN_COLUMNS
+)
+
+# 内容写路径（partial_update / save_requirement_row_batch / Excel 更新）写的内置列。
+# 「不算内容」不等于「不由内容路径写」：排期属性仍在网格 / 详情里随内容一起编辑，
+# 只有 status 例外 —— 它只由 utils/requirement_project 的状态 util 写，写集合里带上它
+# 会让序列化器阶段无锁读到的旧值盖掉并发的状态改动。
+ROW_WRITABLE_BUILTIN_COLUMNS = tuple(
+    column for column in BUILTIN_COLUMNS if column != "status"
 )
 
 # 父项在批量拷贝（导入、物化）时需要重映射，单独拎出来
@@ -248,11 +263,15 @@ def requirement_content_values(row):
 
     整份 data 原样比对，**包括子表单的行顺序** —— 顺序是用户能拖着排的数据，改了就该
     判成内容变化。提交评审那侧的 diff（_root_field_changed）用的是同一口径。
+
+    值为 None 的键按「没有这个键」算，与提交那侧（_row_compare_values 按 .get 取值）一致：
+    需求通过后类型又加了字段，下一次保存会由 validate_requirement_data 补上 `新字段: None`。
+    不剔掉的话只改个优先级也会被判成内容变化，而提交时 diff 又是空的 → REQUIREMENT_NO_CHANGES。
     """
     values = serialize_builtin_values(row)
     return (
         tuple(values[column] for column in CONTENT_BUILTIN_COLUMNS),
-        deepcopy(row.data or {}),
+        deepcopy({key: value for key, value in (row.data or {}).items() if value is not None}),
         # 需求级附件算内容但不是内置列，显式带上（见模型字段注释）
         deepcopy(row.attachments or []),
     )
@@ -1454,9 +1473,9 @@ def save_requirement_row_batch(
         before = requirement_content_values(row)
         was_approved = row_was_approved(row)
         for column, value in builtin_values_from_payload(item.get("builtin")).items():
-            # status 不算内容、不由内容路径写：跳过它，下面的 bulk_update 字段列表
+            # status 不由内容路径写：跳过它，下面的 bulk_update 字段列表
             # 也不含它 —— 否则序列化器阶段无锁读到的旧值会盖掉并发的状态改动
-            if column in NON_CONTENT_BUILTIN_COLUMNS:
+            if column not in ROW_WRITABLE_BUILTIN_COLUMNS:
                 continue
             setattr(row, column, value)
         # 手填编号只有库作用域的 serializer 会放进载荷（已 strip + 查重）；
@@ -1474,7 +1493,7 @@ def save_requirement_row_batch(
         model.objects.bulk_update(
             updated_rows,
             [
-                *CONTENT_BUILTIN_COLUMNS,
+                *ROW_WRITABLE_BUILTIN_COLUMNS,
                 *(["code"] if code_touched else []),
                 "data",
                 "version",

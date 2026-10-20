@@ -38,7 +38,7 @@ from plane.db.models import (
 )
 from plane.utils.asset_zip import build_assets_zip_response
 from plane.utils.requirement import (
-    CONTENT_BUILTIN_COLUMNS,
+    ROW_WRITABLE_BUILTIN_COLUMNS,
     RequirementBatchConflict,
     filter_requirement_row_ids,
     requirement_content_values,
@@ -506,8 +506,8 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             before = requirement_content_values(row)
             was_approved = row_was_approved(row)
             for column, value in serializer.validated_data["builtin"].items():
-                # status 不算内容、不由内容路径写（见 NON_CONTENT_BUILTIN_COLUMNS）
-                if column in CONTENT_BUILTIN_COLUMNS:
+                # status 不由内容路径写（见 ROW_WRITABLE_BUILTIN_COLUMNS）
+                if column in ROW_WRITABLE_BUILTIN_COLUMNS:
                     setattr(row, column, value)
             # 库条目手填编号；serializer 已 strip + 查重。单条 PATCH 只锁行不锁库，
             # 并发窗口由唯一约束兜底（IntegrityError 在 atomic 外转 400）
@@ -524,7 +524,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             resync_approved_row_version(row, before=before, was_approved=was_approved)
             row.save(
                 update_fields=[
-                    *CONTENT_BUILTIN_COLUMNS,
+                    *ROW_WRITABLE_BUILTIN_COLUMNS,
                     *(["code"] if code_touched else []),
                     "data",
                     *(["attachments"] if attachments_touched else []),

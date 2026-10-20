@@ -102,6 +102,7 @@
 - **`change_type` 由服务端定**，客户端只能表达「我要删」的意图。
 - 提交时写进单里的：`schema_revision`（字段结构快照）、`approval_type`/`required_count` 与 `RequirementChangeApproval` 行（**本次提交给定的**规则与名单，不是任何配置的快照）。评审人资格（产品成员 / 工作区管理员）在 `submit_change_request` 里查，产品侧与项目侧两个提单入口共用（409 `REQUIREMENT_APPROVER_INVALID`）；形状校验（none 不带名单、n_of_m 人数区间）在 `RequirementChangeApprovalSpecSerializer`。
 - update 类型做字段级 diff，无实质变化的行直接跳过；全部无变化则删掉空单并抛 `REQUIREMENT_NO_CHANGES`。
+- **「内容」只有标题 / 描述 / 父项 / 自定义字段 / 附件**（2026-10-20）：`NON_CONTENT_BUILTIN_COLUMNS` = 状态 + 排期属性（优先级 / 负责人 / 开始 / 结束日期），模块也不是内容（独立旁路）。排期属性仍走内容写路径编辑（写集合是 `ROW_WRITABLE_BUILTIN_COLUMNS`，只去掉 status），但改它不让已通过的行变「已改动」、不进变更单 diff、回滚 / 驳回撤销不倒推；评审中 / 已关闭照旧不能改。前端对应 `requirement-builtin-fields.tsx` 的 `isContent`。
 - **回滚 `rollback_requirement_to_version()` 不是撤销审批**：版本链一条不动，`approved_version` 也不变，它只是一次写在活行上的**普通编辑**（`version += 1`）。只恢复内容列（`parent_id` 不回滚，避免 FK 悬挂）。恢复的 `data` 必须按**当前**字段结构裁剪（`prune_requirement_data_to_fields`）。
 - **标准库条目是旁路**：`RequirementLibrary` 内的条目永不走审批（approval_state 永远 `draft`，status 恒 `not_started`），由 CheckConstraint `req_library_item_never_approved` 硬保证。
 - 基线只收录 `approved_version` 非空的需求；评审中/已改动的按**上一个已通过版本**收录并标 `stale`；从未通过的 `skipped`。`collect_baseline_entries()` 不写库，**创建与 dry-run 预览共用同一份判定**。

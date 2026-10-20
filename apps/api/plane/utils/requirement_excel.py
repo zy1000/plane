@@ -49,7 +49,7 @@ from plane.db.models import (
     RequirementPriority,
 )
 from plane.utils.requirement import (
-    CONTENT_BUILTIN_COLUMNS,
+    ROW_WRITABLE_BUILTIN_COLUMNS,
     TITLE_MAX_LENGTH,
     builtin_filter_specs,
     builtin_values_from_row,
@@ -1189,7 +1189,7 @@ class RowResult:
     module_path: Optional[tuple] = None
     #: 更新行：模块与现有行不同。与 status_value 同为旁路轴，不算内容
     module_changed: bool = False
-    #: 更新行：内容（内置内容列 + data）与现有行是否有实质差异。False 时不进批量写入
+    #: 更新行：内置可写列 + data 与现有行是否有实质差异。False 时不进批量写入
     content_changed: bool = True
     #: 更新行对应的现有行对象，只在解析期用，不进响应
     existing: Optional[Any] = dataclass_field(default=None, repr=False)
@@ -1486,7 +1486,8 @@ class RequirementImportResolver:
     def _content_differs(self, result, existing):
         before = builtin_values_from_row(existing)
         after = {**before, **result.builtin}
-        for column in CONTENT_BUILTIN_COLUMNS:
+        # 排期属性（优先级 / 负责人 / 日期）不算内容但随内容一起写，这里要算进「要不要写」
+        for column in ROW_WRITABLE_BUILTIN_COLUMNS:
             if _norm_scalar(before.get(column)) != _norm_scalar(after.get(column)):
                 return True
         return _norm_data(existing.data) != _norm_data(result.data)

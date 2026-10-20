@@ -125,7 +125,8 @@ def _row_compare_values(row):
     内置列用列名当 key，自定义字段用字段 UUID —— 两者不可能撞上，于是内置列和自定义
     字段走同一套字段级 diff，前端的「仅显示变化列」也能覆盖内置列。
 
-    只取 CONTENT_BUILTIN_COLUMNS：status 是交付进度轴，研发做完了不该触发一轮内容评审。
+    只取 CONTENT_BUILTIN_COLUMNS：status 是交付进度轴，研发做完了不该触发一轮内容评审；
+    优先级 / 负责人 / 日期是排期属性，同样不进 diff（见 NON_CONTENT_BUILTIN_COLUMNS）。
     """
     row = row or {}
     return {
@@ -786,7 +787,8 @@ ROLLBACK_STRUCTURE_COLUMNS = ("parent_id",)
 # 回滚真正会写回去的列：内容列减去结构列。
 #
 # status 天然不在其中（它不是内容列）—— 回滚是「内容退回那一版」，不是「研发进度倒退」。
-# 一条已实现的需求把文案改错了要退回去，它仍然是已实现的。
+# 一条已实现的需求把文案改错了要退回去，它仍然是已实现的。排期属性（优先级 / 负责人 /
+# 日期）同理：退回文案不该顺手把负责人和排期也换回当年的。
 ROLLBACK_RESTORED_COLUMNS = tuple(
     column
     for column in CONTENT_BUILTIN_COLUMNS

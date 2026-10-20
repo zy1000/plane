@@ -76,7 +76,9 @@ export const REQUIREMENT_BUILTIN_COLUMNS: readonly TRequirementBuiltinColumnDef[
   },
   {
     key: "priority",
-    isContent: true,
+    // 排期属性：随内容一起编辑，但不算「内容」—— 改它不触发评审、不进 diff、不被回滚倒推
+    // （与后端 utils/requirement.NON_CONTENT_BUILTIN_COLUMNS 同口径）
+    isContent: false,
     showInLibrary: true,
     labelKey: "requirement_fields.builtin.priority",
     typeLabelKey: "requirement_fields.field_types.select",
@@ -85,7 +87,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS: readonly TRequirementBuiltinColumnDef[
   },
   {
     key: "assignee_id",
-    isContent: true,
+    isContent: false,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.assignee",
     typeLabelKey: "requirement_fields.field_types.member",
@@ -94,7 +96,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS: readonly TRequirementBuiltinColumnDef[
   },
   {
     key: "start_date",
-    isContent: true,
+    isContent: false,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.start_date",
     typeLabelKey: "requirement_fields.builtin.types.date",
@@ -103,7 +105,7 @@ export const REQUIREMENT_BUILTIN_COLUMNS: readonly TRequirementBuiltinColumnDef[
   },
   {
     key: "target_date",
-    isContent: true,
+    isContent: false,
     showInLibrary: false,
     labelKey: "requirement_fields.builtin.target_date",
     typeLabelKey: "requirement_fields.builtin.types.date",
