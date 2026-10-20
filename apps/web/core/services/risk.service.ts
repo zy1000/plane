@@ -41,10 +41,10 @@ export class RiskService extends APIService {
       });
   }
 
-  /** 新建弹窗里展示的预计编号（不占号；有人先建了，保存时拿到的会顺延） */
-  async getNextCode(workspaceSlug: string, projectId: string): Promise<string> {
-    return this.get(`${this.base(workspaceSlug, projectId)}/next-code/`)
-      .then((response) => response?.data?.code)
+  /** 推简道云失败后「重新同步」：后端重新排队，返回置成 pending 的详情 */
+  async resync(workspaceSlug: string, projectId: string, riskId: string): Promise<TRiskDetail> {
+    return this.post(`${this.base(workspaceSlug, projectId)}/${riskId}/resync/`)
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });

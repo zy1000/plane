@@ -35,15 +35,9 @@ export const RiskTimelineRow = (props: {
 /** 行上下各 4px，节点盒 28px：圆心离行顶 18px */
 const ACTIVITY_NODE_CENTER = 18;
 
-/** 轨迹记的是模型列名，展示要走人读的字段 key */
-const FIELD_I18N: Record<string, string> = {
-  description_html: "description",
-  impact_description_html: "impact_description",
-  response_measures_html: "response_measures",
-};
-
-/** 只记「改了」的富文本字段：不存值，只写「修改了 xx」 */
-const RICH_TEXT_FIELDS = ["description_html", "impact_description_html", "response_measures_html"];
+/** 纯文本段落：记了全文，展示时截断、悬停看全文 */
+const TEXT_FIELDS = ["description", "impact_description", "response_measures"];
+const TEXT_PREVIEW_LENGTH = 80;
 const MEMBER_FIELDS = ["proposer", "owner"];
 const DATE_FIELDS = ["proposed_date", "planned_handle_date", "actual_close_date"];
 const SCALE_FIELDS = ["impact_level", "probability"];
@@ -82,6 +76,9 @@ const useDisplayValue = () => {
       return getUserDetails(value)?.display_name ?? t(`${RISK_I18N}.activity.unknown_user`);
     }
     if (DATE_FIELDS.includes(field)) return renderFormattedDate(value) ?? value;
+    if (TEXT_FIELDS.includes(field) && value.length > TEXT_PREVIEW_LENGTH) {
+      return <span title={value}>{`${value.slice(0, TEXT_PREVIEW_LENGTH)}…`}</span>;
+    }
     return value;
   };
 };
@@ -108,7 +105,8 @@ const Transition = ({ from, to }: { from: ReactNode | null; to: ReactNode }) => 
 /**
  * 变更历史的一条：灰点 + 一句 13px 的话 + 右侧时间。句式按 `TRiskActivity` 的注释来：
  * 普通字段「把{字段}从 旧 → 新」（没旧值是「设为」、没新值是「清空了」）；等级自动重算
- * 「风险等级随之从 中 → 高」；富文本「修改了{字段}」；干系人 / 缺陷 / 附件各自一句加对象。
+ * 「风险等级随之从 中 → 高」；干系人 / 缺陷 / 附件各自一句加对象。
+ * 简道云推过来的改动（extra.source）操作人写成「某某（简道云）」，对不上人的只写「简道云」。
  */
 export const RiskActivityRow = ({
   activity,
@@ -126,11 +124,15 @@ export const RiskActivityRow = ({
   const { getUserDetails } = useMember();
   const displayValue = useDisplayValue();
   const field = activity.field ?? "";
-  const fieldLabel = t(`${RISK_I18N}.fields.${FIELD_I18N[field] ?? field}`, { defaultValue: field });
+  const fieldLabel = t(`${RISK_I18N}.fields.${field}`, { defaultValue: field });
   const isAutoLevel = field === "risk_level" && activity.extra?.auto === true;
+  const source = activity.extra?.source === "jiandaoyun" ? t(`${RISK_I18N}.activity.source_jiandaoyun`) : null;
+  const actorName = activity.actor_detail?.display_name;
   const actor = (
     <span className="font-medium text-primary">
-      {activity.actor_detail?.display_name ?? t(`${RISK_I18N}.activity.unknown_user`)}
+      {actorName && source
+        ? t(`${RISK_I18N}.activity.actor_with_source`, { name: actorName, source })
+        : (actorName ?? source ?? t(`${RISK_I18N}.activity.unknown_user`))}
     </span>
   );
 
@@ -192,13 +194,6 @@ export const RiskActivityRow = ({
         {actor}
         <span>{t(`${RISK_I18N}.activity.${removed ? "removed_attachment" : "added_attachment"}`)}</span>
         <Value>{activity.new_value || activity.old_value || ""}</Value>
-      </>
-    );
-  } else if (RICH_TEXT_FIELDS.includes(field)) {
-    body = (
-      <>
-        {actor}
-        <span>{t(`${RISK_I18N}.activity.edited`, { field: fieldLabel })}</span>
       </>
     );
   } else if (activity.old_value && activity.new_value) {

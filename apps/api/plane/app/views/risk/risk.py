@@ -42,9 +42,10 @@ from plane.utils.risk import (
     RiskError,
     active_risk_issues,
     create_risk,
+    delete_risk,
     link_issues,
-    preview_risk_code,
     link_risks_to_issue,
+    resync_risk,
     unlink_issue,
     update_risk,
     write_activity,
@@ -154,14 +155,6 @@ class RiskViewSet(BaseViewSet):
         return Response(RiskDetailSerializer(risk).data, status=status.HTTP_200_OK)
 
     @allow_permission(WRITE_ROLES)
-    def next_code(self, request, slug, project_id):
-        """新建弹窗展示的预计编号，不占号（见 utils/risk.py::preview_risk_code）"""
-        project = Project.objects.filter(workspace__slug=slug, pk=project_id).first()
-        if project is None:
-            return _not_found("Project")
-        return Response({"code": preview_risk_code(project.workspace_id)}, status=status.HTTP_200_OK)
-
-    @allow_permission(WRITE_ROLES)
     def create(self, request, slug, project_id):
         project = Project.objects.filter(workspace__slug=slug, pk=project_id).first()
         if project is None:
@@ -197,8 +190,18 @@ class RiskViewSet(BaseViewSet):
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
         if risk is None:
             return _not_found()
-        risk.delete()
+        # 绑定了简道云的连远端一起删（提交后异步推）
+        delete_risk(risk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @allow_permission(WRITE_ROLES)
+    def resync(self, request, slug, project_id, pk):
+        """详情页「重新同步」：推送失败的再推一遍（没绑定就重新建）。不同步的风险原样返回。"""
+        risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
+        if risk is None:
+            return _not_found()
+        resync_risk(risk)
+        return self._detail(slug, project_id, pk)
 
     # --- 关联缺陷 ---------------------------------------------------------
 

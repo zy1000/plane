@@ -314,6 +314,7 @@ CELERY_IMPORTS = (
     "plane.bgtasks.cleanup_task",
     "plane.bgtasks.upcoming_overdue_reminder_task",
     "plane.bgtasks.external_integration_sync_task",
+    "plane.bgtasks.risk_sync_task",
     "plane.license.bgtasks.tracer",
     # management tasks
     "plane.bgtasks.dummy_data_task",
@@ -336,6 +337,15 @@ JIANDAOYUN_PROJECT_CODE_APP_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_APP_ID"
 JIANDAOYUN_PROJECT_CODE_ENTRY_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_ENTRY_ID", "")
 JIANDAOYUN_RD_PROJECT_APP_ID = os.environ.get("JIANDAOYUN_RD_PROJECT_APP_ID", "")
 JIANDAOYUN_RD_PROJECT_ENTRY_ID = os.environ.get("JIANDAOYUN_RD_PROJECT_ENTRY_ID", "")
+# 风险双向同步（plane/integrations/risk_sync.py）。网关每个接口一个编号，写接口各自一个 base URL；
+# 三个写地址都填了才会往简道云推（相当于开关）—— 简道云只有一张正式表单，**只能有一个环境填**
+JIANDAOYUN_RISK_APP_ID = os.environ.get("JIANDAOYUN_RISK_APP_ID", "")
+JIANDAOYUN_RISK_ENTRY_ID = os.environ.get("JIANDAOYUN_RISK_ENTRY_ID", "")
+JIANDAOYUN_API_CREATE_BASE_URL = os.environ.get("JIANDAOYUN_API_CREATE_BASE_URL", "")
+JIANDAOYUN_API_UPDATE_BASE_URL = os.environ.get("JIANDAOYUN_API_UPDATE_BASE_URL", "")
+JIANDAOYUN_API_DELETE_BASE_URL = os.environ.get("JIANDAOYUN_API_DELETE_BASE_URL", "")
+# 简道云「数据推送」的签名密钥（推送设置页生成）；为空时接收接口拒收
+JIANDAOYUN_RISK_PUSH_SECRET = os.environ.get("JIANDAOYUN_RISK_PUSH_SECRET", "")
 JIANDAOYUN_TIMEOUT_SECONDS = int(os.environ.get("JIANDAOYUN_TIMEOUT_SECONDS", "30"))
 # 主数据平台（MDM）人员名单，见 plane/integrations/person_info.py；认证只有请求头 appkey
 PERSON_INFO_API_URL = os.environ.get("PERSON_INFO_API_URL", "")

@@ -3,10 +3,13 @@ import type { IUserLite } from "./users";
 /**
  * 项目风险（自研模块）：项目子菜单，与工作项 / 发布 / 迭代平级；与缺陷多对多。
  *
- * - `code` 由后端生成：PRS + 年月 + 当月流水号，工作区内按月重置，不可改。
+ * - `code` 来自简道云的流水号（RS + 年月 + 三位）：简道云同步来的项目里新建的风险先存本地、编号为空，
+ *   后台推到简道云成功后回填；推送状态看 `sync_status`（空 = 这条不同步，如老项目里的风险）。
  * - `risk_level` 按影响程度 × 发生概率（各 1–5）推算：乘积 ≥ 12 高、6–10 中、≤ 5 低；之后可以手动改，
  *   手动改不动影响程度和发生概率，再改这两项时重新推算并覆盖手动值。推算规则在后端
  *   `utils/risk.py::compute_risk_level`，`computeRiskLevel` 是它的镜像；当前等级与推算值不同即「手动调整」。
+ *   影响程度 / 发生概率 / 等级只有简道云同步来的记录会空（显示「未评估」），本地新建仍必填。
+ * - 三段文本（风险描述 / 影响描述 / 应对措施）是纯文本，与简道云一致。
  * - 必填：名称、状态、风险描述、提出人、提出时间、责任人、影响程度、发生概率。
  */
 
@@ -95,20 +98,24 @@ export const computeRiskLevel = (
   return ERiskLevel.MEDIUM;
 };
 
+/** 最近一次推简道云的结果；"" = 这条风险不同步 */
+export type TRiskSyncStatus = "" | "pending" | "synced" | "failed";
+
 /** 列表行 */
 export type TRisk = {
   id: string;
   workspace: string;
   project: string;
-  code: string;
+  /** 简道云流水号；推送成功前、或不同步的风险为 null */
+  code: string | null;
   name: string;
   status: ERiskStatus;
   category: ERiskCategory | "";
-  impact_level: TRiskScale;
-  probability: TRiskScale;
-  risk_level: ERiskLevel;
-  /** impact_level × probability */
-  risk_score: number;
+  impact_level: TRiskScale | null;
+  probability: TRiskScale | null;
+  risk_level: ERiskLevel | "";
+  /** impact_level × probability；两项缺一为 null */
+  risk_score: number | null;
   strategy: ERiskStrategy | "";
   is_in_risk_production: boolean | null;
   proposer: string | null;
@@ -121,29 +128,35 @@ export type TRisk = {
   actual_close_date: string | null;
   /** 关联的、未删除的缺陷数 */
   issue_count: number;
+  /** 简道云记录 id；空串 = 还没推成功或不同步 */
+  external_id: string;
+  sync_status: TRiskSyncStatus;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
   updated_at: string;
 };
 
-/** 详情 = 列表行 + 三段富文本 + 两个单行文本 + 干系人明细 */
+/** 详情 = 列表行 + 三段纯文本 + 两个单行文本 + 干系人明细 + 推送结果 */
 export type TRiskDetail = TRisk & {
-  description_html: string;
-  impact_description_html: string;
-  response_measures_html: string;
+  description: string;
+  impact_description: string;
+  response_measures: string;
   risk_loss: string;
   trigger_factors: string;
   stakeholder_details: IUserLite[];
+  /** sync_status 为 failed 时的原因 */
+  sync_error: string;
+  synced_at: string | null;
 };
 
 export type TCreateRiskPayload = {
   name: string;
   status?: ERiskStatus;
   category?: ERiskCategory | "";
-  description_html: string;
-  impact_description_html?: string;
-  response_measures_html?: string;
+  description: string;
+  impact_description?: string;
+  response_measures?: string;
   impact_level: TRiskScale;
   probability: TRiskScale;
   /** 不传按影响程度 × 发生概率推算；传了以它为准（手动调整） */
@@ -214,10 +227,12 @@ export type TCreateRiskCommentPayload = {
  * - `risk_level`：影响程度 / 发生概率改动引起的重新推算 `extra.auto === true`；手动调整是普通字段改动
  * - proposer / owner：old_value / new_value 是用户 id
  * - stakeholders：verb added / removed，各带一个用户 id（new_identifier / old_identifier）
- * - description_html / impact_description_html / response_measures_html：只记「改了」，两边都空
+ * - description / impact_description / response_measures：纯文本，old_value → new_value（可能很长，展示时截断）
+ * - code：简道云回填编号；project：简道云把风险挪到了别的研发项目（值是项目名）
  * - issues：verb added / removed，identifier 是工作项 id
  * - attachment：verb created / deleted，value 是文件名
  * - comment：verb created，`comment` 是正文摘要，`risk_comment` 指向评论
+ * - 简道云推过来的改动 `extra.source === "jiandaoyun"`，actor 是按工号对上的改动人（对不上为 null）
  */
 export type TRiskActivity = {
   id: string;

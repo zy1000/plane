@@ -110,7 +110,7 @@ const LevelSelector = ({
   disabled,
   onChange,
 }: {
-  value: ERiskLevel | null;
+  value: ERiskLevel | "" | null;
   disabled: boolean;
   onChange: (next: ERiskLevel) => void;
 }) => {
@@ -164,7 +164,8 @@ export const RiskAssessmentField = ({
 }: {
   impactLevel: TRiskScale | null;
   probability: TRiskScale | null;
-  riskLevel: ERiskLevel | null;
+  /** "" = 未评估（简道云同步来的记录才会这样），五档全不选、不出来源标签 */
+  riskLevel: ERiskLevel | "" | null;
   disabled?: boolean;
   /** 点过提交后两项还没选全：整块标红，卡片下方出红字 */
   error?: string;

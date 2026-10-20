@@ -21,9 +21,16 @@ export const RiskStatusBadge = ({ status, className }: { status: ERiskStatus; cl
   );
 };
 
-/** 等级：方点 + 色字，不带底色 —— 与状态分两种画法，扫表时不混 */
-export const RiskLevelBadge = ({ level, className }: { level: ERiskLevel; className?: string }) => {
+/** 等级：方点 + 色字，不带底色 —— 与状态分两种画法，扫表时不混。空（简道云同步来的没评估）显「未评估」 */
+export const RiskLevelBadge = ({ level, className }: { level: ERiskLevel | ""; className?: string }) => {
   const { t } = useTranslation();
+  if (!level) {
+    return (
+      <span className={cn("inline-flex shrink-0 items-center text-13 whitespace-nowrap text-placeholder", className)}>
+        {t(`${RISK_I18N}.fields.risk_level_unset`)}
+      </span>
+    );
+  }
   const style = RISK_LEVEL_STYLE[level];
   return (
     <span className={cn("inline-flex shrink-0 items-center gap-1.5 text-13 font-semibold whitespace-nowrap", style.text, className)}>

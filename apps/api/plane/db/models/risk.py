@@ -3,13 +3,17 @@
 风险是项目的子菜单，与工作项 / 发布 / 迭代平级：登记「可能影响进度、成本、质量的
 不确定因素」，分配责任人持续跟踪；与缺陷（类别为「缺陷」的工作项）多对多。
 
-- 编号 ``code``：``PRS`` + 北京时间年月（YYMM）+ 当月流水号（三位起，溢出自然变四位），
-  **工作区内**共用一个计数、每月从 001 重置。由 ``utils/risk.py::allocate_risk_code``
-  在 advisory 锁下分配；删掉的编号不复用，所以唯一约束不带 ``deleted_at`` 条件。
+- 编号 ``code`` 来自简道云「风险」表单的流水号（``RS`` + YYMM + 三位，按月从 001 起），本地
+  **不自己算**：新建先存本地、编号为空，推到简道云成功后回填（``integrations/risk_sync.py``）。
+  非简道云项目里的风险永远没有编号。删掉的编号不复用，所以唯一约束不带 ``deleted_at`` 条件。
 - 风险等级 ``risk_level`` 按影响程度 × 发生概率（各 1–5）推算：乘积 ≥ 12 为高、6–10 为中、
   ≤ 5 为低，规则只写在 ``utils/risk.py::compute_risk_level`` 一处。之后可以手动改（不动影响
   程度 / 发生概率），再改这两项时重新推算并覆盖手动值；与推算值不同即「手动调整」，不另存标记。
-- 富文本只存 ``*_html`` 一列，口径同阶段评审（见 ``stage_review.py`` 的注释）。
+  影响程度 / 发生概率 / 等级都可空：本地新建仍必填，只有简道云同步来的记录会空（界面显示「未评估」）。
+- 风险描述 / 影响描述 / 应对措施是纯文本（与简道云一致，2026-10-20 由富文本改回）；评论仍是富文本。
+- 与简道云的绑定：``external_source`` = ``jiandaoyun_risk``、``external_id`` = 远端 ``_id``；
+  ``sync_status`` 记最近一次出站推送的结果（空 = 不同步的风险），``external_people`` 存简道云里
+  对不上本系统账号的人员原值，推送时原样带回、不把他们冲掉。
 - 附件 → ``self.assets``（entity_type=RISK_FILE 的 FileAsset，两步预签名上传）；
   评论 → ``self.comments``；变更历史 → ``self.activities``，三者都不占本表的列。
 """
@@ -68,8 +72,18 @@ class RiskStrategy(models.TextChoices):
     ACCEPT = "accept", "接受"
 
 
+class RiskSyncStatus(models.TextChoices):
+    """最近一次出站推送的结果。空串 = 这条风险不同步（非简道云项目，或建它时没配写接口）。"""
+
+    PENDING = "pending", "待推送"
+    SYNCED = "synced", "已同步"
+    FAILED = "failed", "推送失败"
+
+
 class Risk(ProjectBaseModel):
-    code = models.CharField(max_length=20, db_index=True, verbose_name="编号")
+    code = models.CharField(
+        max_length=20, null=True, blank=True, db_index=True, verbose_name="编号"
+    )
     name = models.CharField(max_length=255, verbose_name="名称")
     status = models.CharField(
         max_length=30,
@@ -85,21 +99,22 @@ class Risk(ProjectBaseModel):
         default="",
         verbose_name="风险类别",
     )
-    description_html = models.TextField(blank=True, default="", verbose_name="描述")
-    impact_description_html = models.TextField(
-        blank=True, default="", verbose_name="影响描述"
-    )
-    response_measures_html = models.TextField(
-        blank=True, default="", verbose_name="应对措施"
-    )
+    description = models.TextField(blank=True, default="", verbose_name="描述")
+    impact_description = models.TextField(blank=True, default="", verbose_name="影响描述")
+    response_measures = models.TextField(blank=True, default="", verbose_name="应对措施")
     impact_level = models.PositiveSmallIntegerField(
-        choices=RiskScale.choices, verbose_name="影响程度"
+        choices=RiskScale.choices, null=True, blank=True, verbose_name="影响程度"
     )
     probability = models.PositiveSmallIntegerField(
-        choices=RiskScale.choices, verbose_name="发生概率"
+        choices=RiskScale.choices, null=True, blank=True, verbose_name="发生概率"
     )
     risk_level = models.CharField(
-        max_length=10, choices=RiskLevel.choices, db_index=True, verbose_name="风险等级"
+        max_length=10,
+        choices=RiskLevel.choices,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name="风险等级",
     )
     risk_loss = models.CharField(
         max_length=255, blank=True, default="", verbose_name="风险损失"
@@ -146,6 +161,16 @@ class Risk(ProjectBaseModel):
     actual_close_date = models.DateField(
         null=True, blank=True, verbose_name="实际关闭日期"
     )
+    # --- 简道云绑定（见模块注释） ---
+    external_source = models.CharField(max_length=255, blank=True, default="")
+    external_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    sync_status = models.CharField(
+        max_length=20, choices=RiskSyncStatus.choices, blank=True, default=""
+    )
+    sync_error = models.TextField(blank=True, default="")
+    synced_at = models.DateTimeField(null=True, blank=True)
+    # {"proposer": {...}|None, "owner": {...}|None, "stakeholders": [{...}]}，值是简道云人员字段原样
+    external_people = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = "risks"
@@ -157,9 +182,15 @@ class Risk(ProjectBaseModel):
             models.Index(fields=["project", "risk_level"], name="risk_project_level"),
         ]
         constraints = [
-            # 故意不带 deleted_at 条件：编号一经分配就不复用，软删的也占着号
+            # 故意不带 deleted_at 条件：编号一经分配就不复用，软删的也占着号；NULL 之间不冲突
             models.UniqueConstraint(
                 fields=["workspace", "code"], name="risk_unique_workspace_code"
+            ),
+            # 一条远端记录只能绑一条本地风险（含软删的：恢复时要找回同一条）
+            models.UniqueConstraint(
+                fields=["workspace", "external_source", "external_id"],
+                condition=~Q(external_id=""),
+                name="risk_unique_external",
             ),
         ]
 

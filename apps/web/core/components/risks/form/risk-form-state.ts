@@ -1,9 +1,6 @@
 import type { ERiskCategory, ERiskLevel, ERiskStrategy, TCreateRiskPayload, TRiskDetail, TRiskScale } from "@plane/types";
 import { ERiskStatus } from "@plane/types";
-import { isBlankRichText } from "@/components/stage-reviews/detail/stage-review-content";
 import { RISK_REQUIRED_FIELDS } from "../constants";
-
-export const EMPTY_HTML = "<p></p>";
 
 export type TRiskRequiredField = (typeof RISK_REQUIRED_FIELDS)[number];
 
@@ -12,9 +9,9 @@ export type TRiskFormValue = {
   name: string;
   status: ERiskStatus;
   category: ERiskCategory | "";
-  descriptionHtml: string;
-  impactDescriptionHtml: string;
-  responseMeasuresHtml: string;
+  description: string;
+  impactDescription: string;
+  responseMeasures: string;
   impactLevel: TRiskScale | null;
   probability: TRiskScale | null;
   /** 改影响程度 / 发生概率时推算出来，也可以手动改 */
@@ -37,9 +34,9 @@ export const EMPTY_RISK_FORM: TRiskFormValue = {
   name: "",
   status: ERiskStatus.DRAFT,
   category: "",
-  descriptionHtml: EMPTY_HTML,
-  impactDescriptionHtml: EMPTY_HTML,
-  responseMeasuresHtml: EMPTY_HTML,
+  description: "",
+  impactDescription: "",
+  responseMeasures: "",
   impactLevel: null,
   probability: null,
   riskLevel: null,
@@ -59,12 +56,12 @@ export const riskFormFromDetail = (risk: TRiskDetail): TRiskFormValue => ({
   name: risk.name,
   status: risk.status,
   category: risk.category,
-  descriptionHtml: risk.description_html || EMPTY_HTML,
-  impactDescriptionHtml: risk.impact_description_html || EMPTY_HTML,
-  responseMeasuresHtml: risk.response_measures_html || EMPTY_HTML,
+  description: risk.description ?? "",
+  impactDescription: risk.impact_description ?? "",
+  responseMeasures: risk.response_measures ?? "",
   impactLevel: risk.impact_level,
   probability: risk.probability,
-  riskLevel: risk.risk_level,
+  riskLevel: risk.risk_level || null,
   riskLoss: risk.risk_loss ?? "",
   triggerFactors: risk.trigger_factors ?? "",
   strategy: risk.strategy,
@@ -81,7 +78,7 @@ export const riskFormFromDetail = (risk: TRiskDetail): TRiskFormValue => ({
 export const getRiskFilledMap = (value: TRiskFormValue): Record<TRiskRequiredField, boolean> => ({
   name: value.name.trim() !== "",
   status: Boolean(value.status),
-  description_html: !isBlankRichText(value.descriptionHtml),
+  description: value.description.trim() !== "",
   proposer_id: Boolean(value.proposerId),
   proposed_date: Boolean(value.proposedDate),
   owner_id: Boolean(value.ownerId),
@@ -94,9 +91,9 @@ export const toRiskPayload = (value: TRiskFormValue): TCreateRiskPayload => ({
   name: value.name.trim(),
   status: value.status,
   category: value.category,
-  description_html: value.descriptionHtml,
-  impact_description_html: value.impactDescriptionHtml,
-  response_measures_html: value.responseMeasuresHtml,
+  description: value.description.trim(),
+  impact_description: value.impactDescription.trim(),
+  response_measures: value.responseMeasures.trim(),
   impact_level: value.impactLevel!,
   probability: value.probability!,
   risk_level: value.riskLevel ?? undefined,

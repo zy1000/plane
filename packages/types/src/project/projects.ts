@@ -141,6 +141,8 @@ export interface IProject extends IPartialProject {
   timezone?: string;
   /** PMS 系统中的项目名称（可选） */
   pms_project_name?: string | null;
+  /** 外部来源（如 "jiandaoyun_rd_project" = 简道云同步来的研发项目，风险编号由简道云生成） */
+  external_source?: string | null;
   estimated_hours?: number | string | null;
   next_work_item_sequence?: number;
 }

@@ -96,7 +96,7 @@ export const RiskList = observer(function RiskList({
       risks
         .filter(
           (risk) =>
-            (!keyword || risk.code.toLowerCase().includes(keyword) || risk.name.toLowerCase().includes(keyword)) &&
+            (!keyword || (risk.code ?? "").toLowerCase().includes(keyword) || risk.name.toLowerCase().includes(keyword)) &&
             riskMatchesConditions(risk, conditions, currentUser?.id)
         )
         .sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -241,7 +241,6 @@ export const RiskList = observer(function RiskList({
         isOpen={Boolean(form)}
         form={form}
         workspaceSlug={workspaceSlug}
-        workspaceId={workspaceId}
         projectId={projectId}
         isSubmitting={isMutating}
         onClose={() => setForm(null)}

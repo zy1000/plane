@@ -4,6 +4,10 @@ import { RiskService } from "@/services/risk.service";
 
 const service = new RiskService();
 
+/** 「生成中」的风险：后台推简道云、回填编号一般一两秒，期间每 3 秒静默重拉一次，最多 1 分钟 */
+export const RISK_PENDING_POLL_INTERVAL_MS = 3000;
+export const RISK_PENDING_POLL_MAX = 20;
+
 /**
  * 后端抛的是 `error?.response?.data`：领域错误是 `{error, code}`，序列化器错误是 `{字段: ["码"]}`。
  * 归一成一句话并把错误码取出来给调用方翻文案（`risk.errors.<code>`）。
@@ -62,6 +66,22 @@ export const useRisks = (workspaceSlug: string | undefined, projectId: string | 
     setIsLoading(Boolean(workspaceSlug && projectId));
     void fetchAll();
   }, [fetchAll, workspaceSlug, projectId]);
+
+  // 有「生成中」的就隔 3 秒重拉：每次拉回来 risks 换了引用，接着排下一次；都有编号了或拉满 1 分钟就停
+  const hasPending = risks.some((risk) => risk.sync_status === "pending");
+  const pendingPollsRef = useRef(0);
+  useEffect(() => {
+    if (!hasPending) {
+      pendingPollsRef.current = 0;
+      return;
+    }
+    if (pendingPollsRef.current >= RISK_PENDING_POLL_MAX) return;
+    const timer = window.setTimeout(() => {
+      pendingPollsRef.current += 1;
+      void fetchAll();
+    }, RISK_PENDING_POLL_INTERVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [hasPending, risks, fetchAll]);
 
   const mutate = useCallback(
     async <T,>(run: () => Promise<T>) => {

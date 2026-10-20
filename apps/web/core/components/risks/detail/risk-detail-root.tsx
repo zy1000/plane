@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MoveDiagonal, Trash2, X } from "lucide-react";
+import { MoveDiagonal, RefreshCw, Trash2, X } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -16,6 +16,7 @@ import { RISK_I18N } from "../constants";
 import { DeleteRiskModal } from "../delete-risk-modal";
 import { translateRiskError } from "../errors";
 import { RISK_DETAIL_HEADER_ACTIONS_ID, RISK_DETAIL_HEADER_TITLE_ID } from "../header-slots";
+import { RiskCodeLabel } from "../risk-code-label";
 import { RiskActivity } from "./risk-activity";
 import { RiskAttachments } from "./risk-attachments";
 import { RiskContent } from "./risk-content";
@@ -47,10 +48,10 @@ const useRiskHeaderSlot = (id: string) => {
   return host;
 };
 
-/** 顶栏左侧的「编号 · 状态」：抽屉在头一行，独立页 portal 到面包屑末尾 */
+/** 顶栏左侧的「编号 · 状态」：抽屉在头一行，独立页 portal 到面包屑末尾。编号没生成 / 推送失败时显状态 */
 const CodeAndStatus = ({ detail }: { detail: TRiskDetail }) => (
   <span className="flex min-w-0 items-center gap-2.5">
-    <span className="shrink-0 font-mono text-13 text-secondary tabular-nums">{detail.code}</span>
+    <RiskCodeLabel risk={detail} className="shrink-0 text-13" />
     <RiskStatusBadge status={detail.status} />
   </span>
 );
@@ -129,6 +130,7 @@ export const RiskDetailRoot = ({
     saveState,
     retryLastSave,
     updateRisk,
+    resyncRisk,
     deleteRisk,
     linkIssues,
     unlinkIssue,
@@ -186,6 +188,14 @@ export const RiskDetailRoot = ({
       return next;
     });
 
+  /** 推简道云失败后重新排队；成功只是「已排队」，结果等后台任务回填 */
+  const handleResync = () =>
+    void runSave(async () => {
+      const next = await resyncRisk();
+      if (next) setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${RISK_I18N}.sync.resync_started`) });
+      return next;
+    });
+
   const handleDelete = async () => {
     if (!riskId) return;
     try {
@@ -226,6 +236,17 @@ export const RiskDetailRoot = ({
   const detailPath = riskDetailPath(workspaceSlug, projectId, detail.id);
   const saveStatus = <RiskSaveStatus state={saveState} onRetry={() => void runSave(retryLastSave)} />;
   const moreMenu = canEdit && <MoreMenu onDelete={() => setIsDeleteOpen(true)} />;
+  // 推送失败才出「重新同步」；原因在编号的悬停提示里
+  const resyncButton = canEdit && detail.sync_status === "failed" && (
+    <button
+      type="button"
+      onClick={handleResync}
+      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-danger-strong px-2 text-12 font-medium text-danger-primary transition hover:bg-danger-subtle"
+    >
+      <RefreshCw className="size-3.5" aria-hidden="true" />
+      {t(`${RISK_I18N}.sync.resync`)}
+    </button>
+  );
 
   return (
     <>
@@ -233,6 +254,7 @@ export const RiskDetailRoot = ({
         /* 头一行：编号 · 状态 · 保存状态 在左；模式切换 / 在新页面中打开 / ⋯ / 关闭 在右 */
         <div className="flex h-11 shrink-0 items-center gap-1 border-b border-subtle px-4 text-13 text-tertiary">
           <CodeAndStatus detail={detail} />
+          {resyncButton && <span className="ml-2">{resyncButton}</span>}
           <span className="ml-2">{saveStatus}</span>
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-3">
             {onPeekModeChange && <RiskPeekModeSelect mode={peekMode} onChange={onPeekModeChange} />}
@@ -253,7 +275,7 @@ export const RiskDetailRoot = ({
             createPortal(
               <>
                 <Breadcrumbs.Separator />
-                <Breadcrumbs.ItemWrapper type="text" isLast label={`${detail.code} ${detail.name}`}>
+                <Breadcrumbs.ItemWrapper type="text" isLast label={[detail.code, detail.name].filter(Boolean).join(" ")}>
                   <CodeAndStatus detail={detail} />
                 </Breadcrumbs.ItemWrapper>
               </>,
@@ -262,6 +284,7 @@ export const RiskDetailRoot = ({
           {actionsHost &&
             createPortal(
               <>
+                {resyncButton}
                 {saveStatus}
                 {moreMenu}
               </>,
@@ -296,9 +319,6 @@ export const RiskDetailRoot = ({
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="stage-review-drawer-body flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-5 pb-8">
           <RiskContent
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            projectId={projectId}
             detail={detail}
             editable={canEdit}
             onUpdate={handleUpdate}

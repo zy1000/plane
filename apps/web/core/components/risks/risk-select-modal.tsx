@@ -14,6 +14,7 @@ import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane
 import { cn } from "@plane/utils";
 import { RiskService } from "@/services/risk.service";
 import { RiskLevelBadge, RiskStatusBadge } from "./badges";
+import { RiskCodeLabel } from "./risk-code-label";
 
 const riskService = new RiskService();
 
@@ -64,7 +65,7 @@ export const RiskSelectModal = ({ isOpen, workspaceSlug, projectId, linkedRiskId
     const keyword = searchTerm.trim().toLowerCase();
     if (!keyword) return risks;
     return risks.filter(
-      (risk) => risk.code.toLowerCase().includes(keyword) || risk.name.toLowerCase().includes(keyword)
+      (risk) => (risk.code ?? "").toLowerCase().includes(keyword) || risk.name.toLowerCase().includes(keyword)
     );
   }, [risks, searchTerm]);
 
@@ -161,7 +162,7 @@ export const RiskSelectModal = ({ isOpen, workspaceSlug, projectId, linkedRiskId
                 )}
               >
                 <Checkbox checked={isSelected} disabled={isLinked} onChange={() => toggleRisk(risk.id)} />
-                <span className="shrink-0 font-mono text-12 text-secondary">{risk.code}</span>
+                <RiskCodeLabel risk={risk} className="shrink-0" />
                 <span className="min-w-0 flex-1 truncate text-primary" title={risk.name}>
                   {risk.name}
                 </span>

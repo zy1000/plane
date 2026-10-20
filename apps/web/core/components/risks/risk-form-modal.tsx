@@ -8,8 +8,8 @@ import type { TCreateRiskPayload, TRiskDetail, TUpdateRiskPayload } from "@plane
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { renderFormattedPayloadDate } from "@plane/utils";
 import { RequiredStatus } from "@/components/common/form-modal";
+import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
-import { RiskService } from "@/services/risk.service";
 import { RISK_I18N, RISK_REQUIRED_FIELDS } from "./constants";
 import { translateRiskError } from "./errors";
 import { RiskFormAttachments } from "./form/risk-form-attachments";
@@ -18,9 +18,9 @@ import { RiskFormProperties } from "./form/risk-form-properties";
 import type { TRiskFormValue } from "./form/risk-form-state";
 import { EMPTY_RISK_FORM, getRiskFilledMap, riskFormFromDetail, toRiskPayload } from "./form/risk-form-state";
 import { useRiskFormAttachments } from "./form/use-risk-form-attachments";
+import { getRiskCodeText } from "./risk-code-label";
 
 const I18N = RISK_I18N;
-const riskService = new RiskService();
 
 /**
  * 新建 / 编辑风险：两栏弹窗，骨架同产品、项目的新建弹窗。
@@ -29,6 +29,7 @@ const riskService = new RiskService();
  *   应对措施、风险损失、触发因素、风险管理策略。等级随两项推算，也能手动改（见 `RiskAssessmentField`）。
  * - 右栏（窄，340px）点选（`RiskFormProperties`）：基本信息 / 人员 / 日期。
  * - 必填 8 项在页脚计数；点过提交后缺的一次全部标红。后端错误翻成文案显示在页脚左侧。
+ * - 编号由简道云生成：新建时芯片写「保存后由简道云生成」（非简道云项目是「—」），编辑时显编号或推送状态。
  * - 编辑态整份提交（PATCH 允许全量），`stakeholder_ids` 整份替换。
  * - 附件（`useRiskFormAttachments`）：新建时先存在浏览器，风险建好后逐个上传，这期间弹窗关不掉；有失败照常关，
  *   提示去详情页重传（不会重复建风险）。编辑时选了就传、删了就删。
@@ -37,7 +38,6 @@ export const RiskFormModal = ({
   isOpen,
   form,
   workspaceSlug,
-  workspaceId,
   projectId,
   isSubmitting,
   onClose,
@@ -47,7 +47,6 @@ export const RiskFormModal = ({
   isOpen: boolean;
   form: { mode: "create" } | { mode: "edit"; risk: TRiskDetail } | null;
   workspaceSlug: string;
-  workspaceId: string;
   projectId: string;
   isSubmitting: boolean;
   onClose: () => void;
@@ -57,15 +56,12 @@ export const RiskFormModal = ({
 }) => {
   const { t } = useTranslation();
   const { data: currentUser } = useUser();
+  const { getProjectById } = useProject();
   const nameRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState<TRiskFormValue>(EMPTY_RISK_FORM);
   /** 点过提交：缺的必填项开始标红 */
   const [touched, setTouched] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  /** 编辑器只认 initialValue，每次打开换个 key 重挂 */
-  const [editorVersion, setEditorVersion] = useState(0);
-  /** 新建时的预计编号，完整展示；没取到之前先用本月前缀占位 */
-  const [nextCode, setNextCode] = useState<string | null>(null);
   /** 新建成功后正在传暂存的附件：一共几个 */
   const [afterCreateUploadTotal, setAfterCreateUploadTotal] = useState(0);
 
@@ -83,8 +79,8 @@ export const RiskFormModal = ({
     if (!busy) onClose();
   };
   const today = renderFormattedPayloadDate(new Date()) ?? "";
-  // 编号里的年月只是预告（YYMM），真编号保存后由后端按北京时间分配
-  const period = today.slice(2, 4) + today.slice(5, 7);
+  // 简道云同步来的项目里，编号由简道云生成；老项目里的风险不同步、没有编号
+  const isJdyProject = getProjectById(projectId)?.external_source === "jiandaoyun_rd_project";
 
   useEffect(() => {
     if (!isOpen || !form) return;
@@ -95,20 +91,6 @@ export const RiskFormModal = ({
     );
     setTouched(false);
     setServerError(null);
-    setEditorVersion((current) => current + 1);
-    setNextCode(null);
-    if (form.mode === "create") {
-      let cancelled = false;
-      riskService
-        .getNextCode(workspaceSlug, projectId)
-        .then((code) => {
-          if (!cancelled) setNextCode(code);
-        })
-        .catch(() => undefined);
-      return () => {
-        cancelled = true;
-      };
-    }
     // currentUser / today 只在打开那一刻取一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, form]);
@@ -189,21 +171,16 @@ export const RiskFormModal = ({
           >
             <RiskFormContent
               title={t(`${I18N}.form.${editing ? "edit_title" : "create_title"}`)}
-              codeLabel={editing ? editing.code : (nextCode ?? `PRS${period}`)}
-              codeHint={editing ? undefined : t(`${I18N}.form.code_hint`)}
+              codeLabel={editing ? getRiskCodeText(t, editing) : isJdyProject ? t(`${I18N}.form.code_from_jdy`) : "—"}
               value={value}
               patch={patch}
               nameError={missing("name") ? t(`${I18N}.errors.RISK_NAME_REQUIRED`) : undefined}
-              descriptionError={missing("description_html") ? t(`${I18N}.errors.RISK_DESCRIPTION_REQUIRED`) : undefined}
+              descriptionError={missing("description") ? t(`${I18N}.errors.RISK_DESCRIPTION_REQUIRED`) : undefined}
               assessmentError={
                 missing("impact_level") || missing("probability") ? t(`${I18N}.form.assessment_required`) : undefined
               }
               nameRef={nameRef}
               attachments={<RiskFormAttachments state={attachments} locked={isSubmitting || isUploadingAfterCreate} />}
-              workspaceSlug={workspaceSlug}
-              workspaceId={workspaceId}
-              projectId={projectId}
-              editorVersion={editorVersion}
             />
           </div>
 

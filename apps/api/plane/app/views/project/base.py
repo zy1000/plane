@@ -535,6 +535,8 @@ class ProjectViewSet(BaseViewSet):
             "product_manager",
             "start_date",
             "end_date",
+            # 风险新建弹窗靠它判断是不是简道云同步来的项目（编号由简道云生成）
+            "external_source",
             "created_at",
             "updated_at",
             "created_by",

@@ -55,6 +55,16 @@ export function IntegrationCard(props: Props) {
         </>
       );
     }
+    if (target?.kind === "risks") {
+      return (
+        <>
+          <Link to={`/${workspaceSlug}/projects`} className="text-accent-primary hover:underline">
+            {t(`${I18N}.card.mapping_to_risks`)}
+          </Link>
+          <span className="text-tertiary">{t(`${I18N}.card.risks_count`, { count: target.synced_count })}</span>
+        </>
+      );
+    }
     if (target?.kind === "dictionary" && target.dictionary_id) {
       return (
         <>

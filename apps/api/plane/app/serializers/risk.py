@@ -1,6 +1,6 @@
 """风险的序列化：List / Detail 负责输出，Write 负责输入校验。
 
-规则（编号、等级、关联缺陷）都在 ``utils/risk.py``；这里只校验形状和必填。
+规则（等级、关联缺陷、推简道云）都在 ``utils/risk.py``；这里只校验形状和必填。
 """
 
 from rest_framework import serializers
@@ -18,8 +18,6 @@ from plane.db.models import (
     RiskStrategy,
     User,
 )
-from plane.utils.content_validator import validate_html_content
-from plane.utils.risk import html_is_blank
 
 from .base import BaseSerializer
 
@@ -59,6 +57,9 @@ class RiskListSerializer(BaseSerializer):
             "planned_handle_date",
             "actual_close_date",
             "issue_count",
+            # 简道云绑定：有 external_id 才同步过；code 为空时前端按 sync_status 显示「生成中 / 未同步」
+            "external_id",
+            "sync_status",
             "created_by",
             "updated_by",
             "created_at",
@@ -71,6 +72,8 @@ class RiskListSerializer(BaseSerializer):
         return [str(user.id) for user in obj.stakeholders.all()]
 
     def get_risk_score(self, obj):
+        if not obj.impact_level or not obj.probability:
+            return None
         return int(obj.impact_level) * int(obj.probability)
 
 
@@ -81,12 +84,14 @@ class RiskDetailSerializer(RiskListSerializer):
 
     class Meta(RiskListSerializer.Meta):
         fields = RiskListSerializer.Meta.fields + [
-            "description_html",
-            "impact_description_html",
-            "response_measures_html",
+            "description",
+            "impact_description",
+            "response_measures",
             "risk_loss",
             "trigger_factors",
             "stakeholder_details",
+            "sync_error",
+            "synced_at",
         ]
         read_only_fields = fields
 
@@ -161,20 +166,12 @@ class RiskCommentSerializer(BaseSerializer):
 # --- 输入 -------------------------------------------------------------------
 
 
-def _clean_html(value):
-    if value is None or value == "":
-        return ""
-    is_valid, error_message, sanitized_html = validate_html_content(value)
-    if not is_valid:
-        raise serializers.ValidationError(error_message or "HTML content is not valid.")
-    return sanitized_html if sanitized_html is not None else value
-
-
 class RiskWriteSerializer(serializers.ModelSerializer):
     """新建 / 部分更新共用。新建时视图已把提出人、提出时间兜底填好。
 
     ``risk_level`` 选填：不传按影响程度 × 发生概率推算，传了就是手动调整，规则见
-    ``utils/risk.py::create_risk / update_risk``。
+    ``utils/risk.py::create_risk / update_risk``。影响程度 / 发生概率模型上可空（简道云同步来的会空），
+    本地写入仍必填。三段文本是纯文本，只去首尾空白。
     """
 
     name = serializers.CharField(max_length=255)
@@ -182,12 +179,12 @@ class RiskWriteSerializer(serializers.ModelSerializer):
     category = serializers.ChoiceField(
         choices=RiskCategory.choices, required=False, allow_blank=True, default=""
     )
-    description_html = serializers.CharField(allow_blank=True)
-    impact_description_html = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True, default=""
+    description = serializers.CharField(allow_blank=True, trim_whitespace=False)
+    impact_description = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default="", trim_whitespace=False
     )
-    response_measures_html = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True, default=""
+    response_measures = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default="", trim_whitespace=False
     )
     impact_level = serializers.ChoiceField(choices=RiskScale.choices)
     probability = serializers.ChoiceField(choices=RiskScale.choices)
@@ -211,9 +208,9 @@ class RiskWriteSerializer(serializers.ModelSerializer):
             "name",
             "status",
             "category",
-            "description_html",
-            "impact_description_html",
-            "response_measures_html",
+            "description",
+            "impact_description",
+            "response_measures",
             "impact_level",
             "probability",
             "risk_level",
@@ -251,17 +248,17 @@ class RiskWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("RISK_NAME_REQUIRED")
         return value.strip()
 
-    def validate_description_html(self, value):
-        cleaned = _clean_html(value)
-        if html_is_blank(cleaned):
+    def validate_description(self, value):
+        cleaned = (value or "").strip()
+        if not cleaned:
             raise serializers.ValidationError("RISK_DESCRIPTION_REQUIRED")
         return cleaned
 
-    def validate_impact_description_html(self, value):
-        return _clean_html(value)
+    def validate_impact_description(self, value):
+        return (value or "").strip()
 
-    def validate_response_measures_html(self, value):
-        return _clean_html(value)
+    def validate_response_measures(self, value):
+        return (value or "").strip()
 
     def validate_proposer_id(self, value):
         return self._assert_member(value)

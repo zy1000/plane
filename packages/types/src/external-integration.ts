@@ -65,10 +65,39 @@ export type TExternalIntegrationProjectSyncSummary = {
   pages: number;
 };
 
+/** 风险集成一次导入 / 对账的汇总；details 里每类明细最多 100 条 */
+export type TExternalIntegrationRiskSyncSummary = {
+  remote_total: number;
+  created: number;
+  /** 本地已删、简道云里还在（在回收站恢复了），本地跟着恢复 */
+  recovered: number;
+  updated: number;
+  unchanged: number;
+  /** 项目对不上 / 本地已删 / 出错 */
+  skipped: number;
+  /** 本地还没推成功、这轮没覆盖 */
+  local_unsynced: number;
+  /** 本地已同步、远端已删除（本地不删） */
+  remote_missing: number;
+  /** 没推成功的重新排队数 */
+  requeued: number;
+  proposer_unmatched: number;
+  owner_unmatched: number;
+  stakeholder_unmatched: number;
+  details: {
+    skipped: { code: string; name: string; reason: string }[];
+    remote_missing: string[];
+    unmatched_people: { employee_id: string; name: string; proposer: number; owner: number; stakeholders: number }[];
+    unmatched_values: Record<string, string[]>;
+  };
+  pages: number;
+};
+
 export type TExternalIntegrationSyncSummary =
   | TExternalIntegrationDictionarySyncSummary
   | TExternalIntegrationPersonSyncSummary
-  | TExternalIntegrationProjectSyncSummary;
+  | TExternalIntegrationProjectSyncSummary
+  | TExternalIntegrationRiskSyncSummary;
 
 export type TExternalIntegrationSyncSnapshot = {
   status: TExternalIntegrationSyncStatus;
@@ -102,10 +131,17 @@ export type TExternalIntegrationProjectsTarget = {
   synced_count: number;
 };
 
+export type TExternalIntegrationRisksTarget = {
+  kind: "risks";
+  /** 本工作区已和简道云绑定的风险数 */
+  synced_count: number;
+};
+
 export type TExternalIntegrationTarget =
   | TExternalIntegrationDictionaryTarget
   | TExternalIntegrationWorkspaceMembersTarget
-  | TExternalIntegrationProjectsTarget;
+  | TExternalIntegrationProjectsTarget
+  | TExternalIntegrationRisksTarget;
 
 export type TExternalIntegration = {
   key: string;

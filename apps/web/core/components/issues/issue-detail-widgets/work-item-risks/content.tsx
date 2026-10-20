@@ -14,6 +14,7 @@ import type { TRisk } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { RiskLevelBadge, RiskStatusBadge } from "@/components/risks/badges";
+import { RiskCodeLabel } from "@/components/risks/risk-code-label";
 // hooks
 import { getRiskError } from "@/hooks/store/use-risks";
 
@@ -72,7 +73,7 @@ export const WorkItemRisksCollapsibleContent = (props: Props) => {
               rel="noopener noreferrer"
               className="flex min-w-0 flex-1 items-center gap-3 hover:text-accent-primary"
             >
-              <span className="shrink-0 font-mono text-12 text-secondary">{risk.code}</span>
+              <RiskCodeLabel risk={risk} className="shrink-0" />
               <span className="min-w-0 max-w-full truncate text-13 text-primary">{risk.name}</span>
             </a>
           </Tooltip>

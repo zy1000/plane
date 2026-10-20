@@ -8,7 +8,7 @@ import type {
   TUpdateRiskPayload,
 } from "@plane/types";
 import { RiskService } from "@/services/risk.service";
-import { getRiskError } from "./use-risks";
+import { RISK_PENDING_POLL_INTERVAL_MS, RISK_PENDING_POLL_MAX, getRiskError } from "./use-risks";
 
 const service = new RiskService();
 
@@ -122,6 +122,32 @@ export const useRiskDetail = (
   }, []);
 
   /**
+   * 推简道云还在路上（新建等编号 / 修改 / 重新同步）：隔 3 秒拉一次详情，拿到结果（编号、或失败及原因）就停，
+   * 最多 1 分钟。回填编号不推进 updated_at，applyDetail 照收；结果出来顺带补拉轨迹（编号那条）。
+   */
+  const isPending = detail?.sync_status === "pending";
+  const pendingPollsRef = useRef(0);
+  useEffect(() => {
+    if (!isPending || !workspaceSlug || !projectId || !riskId) {
+      pendingPollsRef.current = 0;
+      return;
+    }
+    if (pendingPollsRef.current >= RISK_PENDING_POLL_MAX) return;
+    const timer = setTimeout(() => {
+      pendingPollsRef.current += 1;
+      void service
+        .retrieve(workspaceSlug, projectId, riskId)
+        .then((next) => {
+          if (!isCurrentScope()) return;
+          applyDetail(next);
+          if (next.sync_status !== "pending") refreshActivities();
+        })
+        .catch(() => undefined);
+    }, RISK_PENDING_POLL_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [isPending, detail, workspaceSlug, projectId, riskId, isCurrentScope, applyDetail, refreshActivities]);
+
+  /**
    * 「随手改」的写入：顶栏显示 保存中 → 已保存（2 秒后收起）/ 保存失败。
    * 几个保存并发时全部落地才算「已保存」；有一个失败就停在「保存失败」，直到重试成功。
    */
@@ -172,6 +198,16 @@ export const useRiskDetail = (
     },
     [workspaceSlug, projectId, riskId, runSave, applyDetail, refreshActivities]
   );
+
+  /** 推简道云失败后重新排队：响应是置成 pending 的详情（updated_at 不变，applyDetail 照收） */
+  const resyncRisk = useCallback(async () => {
+    if (!workspaceSlug || !projectId || !riskId) return undefined;
+    return runSave(async () => {
+      const next = await service.resync(workspaceSlug, projectId, riskId);
+      applyDetail(next);
+      return next;
+    });
+  }, [workspaceSlug, projectId, riskId, runSave, applyDetail]);
 
   /** 删除走明确的确认弹窗 + toast，不走顶栏保存状态 */
   const deleteRisk = useCallback(async () => {
@@ -321,6 +357,7 @@ export const useRiskDetail = (
     retryLastSave,
     refresh: fetchAll,
     updateRisk,
+    resyncRisk,
     deleteRisk,
     linkIssues,
     unlinkIssue,

@@ -8,6 +8,7 @@ import { cn, getFileURL } from "@plane/utils";
 import { PLAIN_TD } from "@/components/review-tailorings/plain-table";
 import { RiskLevelBadge, RiskStatusBadge } from "./badges";
 import { RISK_I18N, riskCategoryLabelKey } from "./constants";
+import { RiskCodeLabel } from "./risk-code-label";
 
 const EMPTY = <span className="text-placeholder">—</span>;
 
@@ -60,7 +61,7 @@ export const RiskRow = observer(function RiskRow({
   return (
     <tr className={cn("group cursor-pointer hover:bg-layer-1", isActive && "bg-layer-1")} onClick={onOpen}>
       <td className={cn(PLAIN_TD, "pl-6 whitespace-nowrap")}>
-        <span className="font-mono text-12 text-secondary">{risk.code}</span>
+        <RiskCodeLabel risk={risk} />
       </td>
       <td className={cn(PLAIN_TD, "max-w-0")}>
         <span className="flex min-w-0 items-center gap-2">

@@ -2930,6 +2930,7 @@ export default {
       risk_level_auto: "自动推算",
       risk_level_manual: "手动调整",
       risk_level_manual_hint: "再改影响程度或发生概率时，会按新值重新推算",
+      risk_level_unset: "未评估",
       impact_description: "影响描述",
       risk_loss: "风险损失",
       trigger_factors: "触发因素",
@@ -2946,6 +2947,8 @@ export default {
       planned_handle_date_short: "计划处理",
       actual_close_date: "实际关闭日期",
       actual_close_date_short: "实际关闭",
+      code: "编号",
+      project: "研发项目",
     },
     groups: {
       basic: "基本信息",
@@ -2956,8 +2959,7 @@ export default {
     form: {
       create_title: "新建风险",
       edit_title: "编辑风险",
-      code_pending: "编号 PRS{period}···",
-      code_hint: "预计编号，以保存时为准",
+      code_from_jdy: "保存后由简道云生成",
       name_placeholder: "名称",
       submit_create: "创建风险",
       submit_edit: "保存",
@@ -3032,7 +3034,8 @@ export default {
       retry: "重试",
       delete: "删除风险",
       delete_confirm_title: "删除风险",
-      delete_confirm_description: "「{code} {name}」删除后不可恢复，编号不会被复用。",
+      delete_confirm_description: "「{title}」删除后不可恢复。",
+      delete_sync_note: "简道云里的这条记录会一起删除。",
       not_found: "风险不存在或已删除",
       more: "更多",
       impact_description_placeholder: "点击添加影响描述",
@@ -3079,7 +3082,6 @@ export default {
       set: "把{field}设为",
       cleared: "清空了{field}",
       level_auto: "风险等级随之从",
-      edited: "修改了{field}",
       added_stakeholder: "添加了干系人",
       removed_stakeholder: "移除了干系人",
       added_issue: "关联了缺陷",
@@ -3088,6 +3090,15 @@ export default {
       removed_attachment: "删除了附件",
       commented: "发表了评论",
       unknown_user: "未知成员",
+      source_jiandaoyun: "简道云",
+      actor_with_source: "{name}（{source}）",
+    },
+    sync: {
+      pending: "生成中",
+      failed: "未同步",
+      failed_hint: "推送到简道云失败",
+      resync: "重新同步",
+      resync_started: "已重新排队，推送完成后编号自动更新",
     },
     filters: {
       status: "状态",
@@ -5680,6 +5691,11 @@ export default {
             description:
               "从简道云「研发项目」表单同步项目：名称取研发项目编号，项目ID 取研发项目ID，代号、BU、状态、类型、负责人、产品经理、计划日期、描述以简道云为准覆盖；简道云删除的项目本地保留。手动同步在后台执行，同步过的工作区每天定时跟进一次。",
           },
+          jiandaoyun_risk: {
+            name: "风险",
+            description:
+              "简道云「风险」表单与各项目的风险双向同步：本系统新建 / 修改 / 删除实时推到简道云（编号由简道云生成），简道云的改动经数据推送回到本系统。这里的同步是全量对账：以简道云为准覆盖本地，本地有简道云没有的只报告。首次导入后每天定时对账一次，也可手动触发。",
+          },
           mdm_person_info: {
             name: "人员信息",
             description:
@@ -5692,6 +5708,8 @@ export default {
           mapping_to_members: "本工作区成员",
           mapping_to_projects: "本工作区项目",
           projects_count: "（已同步 {count} 个）",
+          mapping_to_risks: "各项目的风险",
+          risks_count: "（已同步 {count} 条）",
           members_count: "（{count} 人，其中 {synced} 人已带工号）",
           target_count: "（{count} 个值）",
           target_missing: "目标字典不存在",
@@ -5724,6 +5742,12 @@ export default {
           remote_missing: "远端已删 {count}",
           lead_unmatched: "负责人未匹配 {count}",
           product_manager_unmatched: "产品经理未匹配 {count}",
+          recovered: "恢复 {count}",
+          local_unsynced: "本地待推送 {count}",
+          requeued: "重新排队 {count}",
+          proposer_unmatched: "提出人未匹配 {count}",
+          owner_unmatched: "责任人未匹配 {count}",
+          stakeholder_unmatched: "干系人未匹配 {count}",
         },
         toast: {
           synced: "同步完成",

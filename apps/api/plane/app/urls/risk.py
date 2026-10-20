@@ -17,14 +17,14 @@ urlpatterns = [
         name="risks",
     ),
     path(
-        f"{PROJECT}/risks/next-code/",
-        RiskViewSet.as_view({"get": "next_code"}),
-        name="risk-next-code",
-    ),
-    path(
         f"{PROJECT}/risks/<uuid:pk>/",
         RiskViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="risk-detail",
+    ),
+    path(
+        f"{PROJECT}/risks/<uuid:pk>/resync/",
+        RiskViewSet.as_view({"post": "resync"}),
+        name="risk-resync",
     ),
     path(
         f"{PROJECT}/risks/<uuid:pk>/issues/",

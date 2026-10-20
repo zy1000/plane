@@ -52,7 +52,7 @@ export const RISK_LEVEL_STYLE: Record<ERiskLevel, { square: string; text: string
 export const RISK_REQUIRED_FIELDS = [
   "name",
   "status",
-  "description_html",
+  "description",
   "proposer_id",
   "proposed_date",
   "owner_id",

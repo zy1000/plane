@@ -4,10 +4,11 @@ from django.db.models import Count
 
 from plane.db.models import DataDictionary
 
-from . import person_info, project_code, project_sync
+from . import person_info, project_code, project_sync, risk_sync
 from .base import get_last_sync, is_sync_running
 
-INTEGRATIONS = (project_code.SPEC, project_sync.SPEC, person_info.SPEC)
+# 每日 beat 按这个顺序串行跑：风险挂在研发项目下，必须排在项目同步之后
+INTEGRATIONS = (project_code.SPEC, project_sync.SPEC, risk_sync.SPEC, person_info.SPEC)
 _BY_KEY = {spec.key: spec for spec in INTEGRATIONS}
 
 

@@ -6,9 +6,8 @@ import { MODAL_FIELD_CLASS, ModalFieldLabel, ModalInlineError } from "@/componen
 import { RISK_I18N } from "../constants";
 import { RiskAssessmentField } from "./risk-assessment-field";
 import type { TRiskFormPatch, TRiskFormValue } from "./risk-form-state";
-import type { TRiskEditorScope } from "./risk-rich-text-field";
-import { RiskRichTextField } from "./risk-rich-text-field";
 import { RiskStrategySegmented } from "./risk-strategy-segmented";
+import { RiskTextAreaField } from "./risk-text-area-field";
 
 const TEXT_INPUT_CLASS = cn(
   MODAL_FIELD_CLASS,
@@ -22,7 +21,6 @@ const TEXT_INPUT_CLASS = cn(
 export const RiskFormContent = ({
   title,
   codeLabel,
-  codeHint,
   value,
   patch,
   nameError,
@@ -30,14 +28,11 @@ export const RiskFormContent = ({
   assessmentError,
   nameRef,
   attachments,
-  ...scope
-}: TRiskEditorScope & {
+}: {
   /** 左上角小标题：新建风险 / 编辑风险 */
   title: string;
-  /** 编号芯片：新建时是预计编号（如 PRS2610008，不占号），编辑时是真实编号 */
+  /** 编号芯片：编辑时是编号（或「生成中 / 未同步」），新建时是「保存后由简道云生成」 */
   codeLabel: string;
-  /** 芯片后的小字，编辑时不传 */
-  codeHint?: string;
   value: TRiskFormValue;
   patch: TRiskFormPatch;
   nameError?: string;
@@ -64,7 +59,6 @@ export const RiskFormContent = ({
             <span className="inline-flex h-5.5 items-center rounded-md bg-layer-3 px-2 font-mono text-12 font-medium text-secondary">
               {codeLabel}
             </span>
-            {codeHint && <span>{codeHint}</span>}
           </p>
           {/* 名称必填：输入框按内容（空时按占位）定宽，红星紧跟在字后面；下划线挂在外层整行 */}
           <label
@@ -92,17 +86,17 @@ export const RiskFormContent = ({
         </div>
       </div>
 
-      {/* 风险描述（必填）；三段富文本都能放大编辑 */}
-      <RiskRichTextField
+      {/* 风险描述（必填）；三段文本都能放大编辑 */}
+      <RiskTextAreaField
         id="description"
         label={t(`${RISK_I18N}.fields.description`)}
         required
         error={descriptionError}
-        html={value.descriptionHtml}
+        value={value.description}
+        placeholder={t(`${RISK_I18N}.form.editor_placeholder`)}
         minHeightClass="min-h-[160px]"
         maxHeightClass="max-h-[320px]"
-        onChange={(html) => patch({ descriptionHtml: html })}
-        scope={scope}
+        onChange={(next) => patch({ description: next })}
       />
 
       {/* 影响程度 / 发生概率 / 风险等级 */}
@@ -115,23 +109,21 @@ export const RiskFormContent = ({
       />
 
       {/* 影响描述 / 应对措施：各占一整行；框有高度上限，超出在框里滚 */}
-      <RiskRichTextField
+      <RiskTextAreaField
         id="impact-description"
         label={t(`${RISK_I18N}.fields.impact_description`)}
-        html={value.impactDescriptionHtml}
+        value={value.impactDescription}
         minHeightClass="min-h-[120px]"
         maxHeightClass="max-h-[240px]"
-        onChange={(html) => patch({ impactDescriptionHtml: html })}
-        scope={scope}
+        onChange={(next) => patch({ impactDescription: next })}
       />
-      <RiskRichTextField
+      <RiskTextAreaField
         id="response-measures"
         label={t(`${RISK_I18N}.fields.response_measures`)}
-        html={value.responseMeasuresHtml}
+        value={value.responseMeasures}
         minHeightClass="min-h-[120px]"
         maxHeightClass="max-h-[240px]"
-        onChange={(html) => patch({ responseMeasuresHtml: html })}
-        scope={scope}
+        onChange={(next) => patch({ responseMeasures: next })}
       />
 
       {/* 风险损失 / 触发因素：各占一整行 */}

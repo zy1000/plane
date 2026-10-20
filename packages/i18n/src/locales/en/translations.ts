@@ -2316,6 +2316,7 @@ export default {
       risk_level_auto: "Auto",
       risk_level_manual: "Manual",
       risk_level_manual_hint: "Changing impact or probability recalculates it",
+      risk_level_unset: "Not assessed",
       impact_description: "Impact description",
       risk_loss: "Potential loss",
       trigger_factors: "Triggers",
@@ -2332,6 +2333,8 @@ export default {
       planned_handle_date_short: "Planned",
       actual_close_date: "Actual close date",
       actual_close_date_short: "Closed",
+      code: "Code",
+      project: "R&D project",
     },
     groups: {
       basic: "Basics",
@@ -2342,8 +2345,7 @@ export default {
     form: {
       create_title: "New risk",
       edit_title: "Edit risk",
-      code_pending: "Code PRS{period}···",
-      code_hint: "Expected code, final on save",
+      code_from_jdy: "Assigned by Jiandaoyun after saving",
       name_placeholder: "Name",
       submit_create: "Create risk",
       submit_edit: "Save",
@@ -2418,7 +2420,8 @@ export default {
       retry: "Retry",
       delete: "Delete risk",
       delete_confirm_title: "Delete risk",
-      delete_confirm_description: "\"{code} {name}\" will be deleted permanently. The code will not be reused.",
+      delete_confirm_description: "\"{title}\" will be deleted permanently.",
+      delete_sync_note: "The matching record in Jiandaoyun will be deleted too.",
       not_found: "Risk not found",
       more: "More",
       impact_description_placeholder: "Click to add impact description",
@@ -2465,7 +2468,6 @@ export default {
       set: "set {field} to",
       cleared: "cleared {field}",
       level_auto: "risk level changed from",
-      edited: "edited {field}",
       added_stakeholder: "added stakeholder",
       removed_stakeholder: "removed stakeholder",
       added_issue: "linked defect",
@@ -2474,6 +2476,15 @@ export default {
       removed_attachment: "deleted attachment",
       commented: "commented",
       unknown_user: "Unknown member",
+      source_jiandaoyun: "Jiandaoyun",
+      actor_with_source: "{name} ({source})",
+    },
+    sync: {
+      pending: "Pending",
+      failed: "Not synced",
+      failed_hint: "Failed to push to Jiandaoyun",
+      resync: "Resync",
+      resync_started: "Queued again; the code updates once the push succeeds",
     },
     filters: {
       status: "Status",
@@ -5518,6 +5529,11 @@ export default {
             description:
               "Syncs projects from the Jiandaoyun R&D project form: the name comes from the R&D project number and the project ID from the R&D project ID; code, BU, status, type, lead, product manager, planned dates and description are overwritten from Jiandaoyun. Projects deleted in Jiandaoyun are kept locally. Manual syncs run in the background; synced workspaces are refreshed daily.",
           },
+          jiandaoyun_risk: {
+            name: "Risks",
+            description:
+              "Two-way sync between the Jiandaoyun risk form and project risks: risks created, edited or deleted here are pushed to Jiandaoyun in real time (codes are assigned by Jiandaoyun), and changes made in Jiandaoyun arrive through its data push. This sync is a full reconciliation: Jiandaoyun overwrites local records; local-only records are only reported. Runs daily after the first import and on demand.",
+          },
           mdm_person_info: {
             name: "People",
             description:
@@ -5530,6 +5546,8 @@ export default {
           mapping_to_members: "Members of this workspace",
           mapping_to_projects: "Projects in this workspace",
           projects_count: "({count} synced)",
+          mapping_to_risks: "Risks across projects",
+          risks_count: "({count} synced)",
           members_count: "({count} members, {synced} with employee id)",
           target_count: "({count} values)",
           target_missing: "Target dictionary missing",
@@ -5562,6 +5580,12 @@ export default {
           remote_missing: "{count} deleted remotely",
           lead_unmatched: "{count} leads unmatched",
           product_manager_unmatched: "{count} product managers unmatched",
+          recovered: "{count} restored",
+          local_unsynced: "{count} pending local pushes",
+          requeued: "{count} requeued",
+          proposer_unmatched: "{count} proposers unmatched",
+          owner_unmatched: "{count} owners unmatched",
+          stakeholder_unmatched: "{count} stakeholders unmatched",
         },
         toast: {
           synced: "Sync complete",
