@@ -39,6 +39,9 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
       ? getProjectMemberIds(projectId, false)
       : workspaceMemberIds;
 
+  // 只有回退到整个工作区成员时才按部门分组；项目成员、调用方指定的名单保持平铺
+  const groupByDepartment = !propsMemberIds && !projectId;
+
   const onDropdownOpen = () => {
     if (!memberIds && projectId && workspaceSlug) fetchProjectMembers(workspaceSlug.toString(), projectId);
   };
@@ -47,6 +50,7 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
     <MemberDropdownBase
       {...props}
       getUserDetails={getUserDetails}
+      groupByDepartment={groupByDepartment}
       memberIds={memberIds ?? []}
       onDropdownOpen={onDropdownOpen}
     />

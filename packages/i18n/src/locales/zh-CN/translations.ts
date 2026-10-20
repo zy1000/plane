@@ -4001,6 +4001,13 @@ export default {
     },
     relations_toolbar: "需求关联操作",
   },
+  /** 人员下拉（负责人、处理人等选择器） */
+  member_dropdown: {
+    search_placeholder: "搜索姓名、工号或部门",
+    clear_search: "清空搜索",
+    same_department: "同部门",
+    no_department: "未分配部门",
+  },
   /** 项目「产品」页（/projects/:id/products）：本项目关联的产品及其需求交付进度 */
   project_products: {
     no_visible_products: "当前工作区没有你可见的产品",

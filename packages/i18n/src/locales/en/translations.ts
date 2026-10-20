@@ -3815,6 +3815,13 @@ export default {
     },
     relations_toolbar: "Requirement relation actions",
   },
+  /** Member dropdown (assignee / owner pickers) */
+  member_dropdown: {
+    search_placeholder: "Search name, employee ID or department",
+    clear_search: "Clear search",
+    same_department: "My department",
+    no_department: "No department",
+  },
   /** Project "Products" page (/projects/:id/products): linked products and their delivery progress */
   project_products: {
     no_visible_products: "No product in this workspace is visible to you",

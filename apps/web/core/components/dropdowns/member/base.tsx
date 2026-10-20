@@ -25,6 +25,8 @@ import type { MemberDropdownProps } from "./types";
 
 type TMemberDropdownBaseProps = {
   getUserDetails: (userId: string) => IUserLite | undefined;
+  /** 候选人是整个工作区时按部门分组 */
+  groupByDepartment?: boolean;
   icon?: LucideIcon;
   memberIds?: string[];
   onClose?: () => void;
@@ -46,6 +48,7 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
     dropdownArrow = false,
     dropdownArrowClassName = "",
     getUserDetails,
+    groupByDepartment = false,
     hideIcon = false,
     icon,
     labelClassName,
@@ -207,9 +210,12 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
       {isOpen && (
         <MemberOptions
           getUserDetails={getUserDetails}
+          groupByDepartment={groupByDepartment}
           isOpen={isOpen}
           memberIds={viewOnly ? selectedMemberIds : memberIds}
+          multiple={multiple}
           onDropdownOpen={onDropdownOpen}
+          onSelect={(val) => dropdownOnChange(val as string & string[])}
           optionsClassName={optionsClassName}
           placement={placement}
           referenceElement={referenceElement}
