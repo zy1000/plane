@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 import hashlib
+from collections import Counter
 
 # Django imports
 from django.core.exceptions import ValidationError
@@ -12,6 +13,9 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 # Module imports
+from plane.db.seed_data.issue_scheme import TEMPLATE_IDENTITY_PREFIX
+
+from .issue_scheme import SchemeBaseModel
 from .project import ProjectBaseModel
 
 # IssueType 自动衍生的项目级权限定义。
@@ -58,10 +62,21 @@ def parse_issue_type_permission_key(key: str):
     return issue_type_id_hex, action
 
 
-def build_issue_type_template_permission_key(issue_type_name: str, action: str) -> str:
-    name = (issue_type_name or "").strip()
-    name_digest = hashlib.sha1(name.encode("utf-8")).hexdigest()
-    return f"{ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX}{name_digest}.{action}"
+def issue_type_template_identity(issue_type_name: str, system_key=None) -> str:
+    """角色模板里类型权限摘要的原文。
+
+    系统类型按 ``system_key``（改名不断、「缺陷」与「缺陷(软件)」是同一个），
+    自建类型按名字。系统类型带前缀，免得自建类型恰好叫 bug 时撞上同一个摘要。
+    """
+    if system_key:
+        return f"{TEMPLATE_IDENTITY_PREFIX}{system_key}"
+    return (issue_type_name or "").strip()
+
+
+def build_issue_type_template_permission_key(issue_type_name: str, action: str, system_key=None) -> str:
+    identity = issue_type_template_identity(issue_type_name, system_key)
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()
+    return f"{ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX}{digest}.{action}"
 
 
 def parse_issue_type_template_permission_key(key: str):
@@ -81,18 +96,50 @@ def parse_issue_type_template_permission_key(key: str):
     return name_digest, action
 
 
-def build_issue_type_template_permission_descriptors(issue_type_names):
+def build_issue_type_template_permission_descriptors(issue_types):
+    """``issue_types`` 是 ``(名字, system_key)`` 的可迭代对象，返回 ``{模板 key: 描述符}``。
+
+    描述符 ``{"name": 展示名, "action": 动作, "system_key": 标识或 None}``；下发到项目时
+    有 system_key 按它找目标类型，否则按名字（``utils/project/role_import.py``）。
+    同一个摘要只取第一次出现的展示名。
+    """
     descriptors = {}
-    for issue_type_name in issue_type_names:
+    for issue_type_name, system_key in issue_types:
         name = (issue_type_name or "").strip()
         if not name:
             continue
 
         for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS:
-            key = build_issue_type_template_permission_key(name, action)
-            descriptors[key] = {"name": name, "action": action}
+            key = build_issue_type_template_permission_key(name, action, system_key)
+            descriptors.setdefault(
+                key, {"name": name, "action": action, "system_key": system_key or None}
+            )
 
     return descriptors
+
+
+def workspace_issue_type_template_descriptors(workspace_id):
+    """本工作区当前可选的类型权限模板：模板详情、模板保存、下发到项目三处共用。
+
+    按工作区里在用的类型去重：系统类型每个标识一组，展示名取工作区里用得最多的那个名字
+    （「缺陷」与「缺陷(软件)」并成一组）；自建类型按名字一组。按展示名排序。
+    """
+    rows = Counter(
+        IssueType.objects.filter(workspace_id=workspace_id, is_active=True).values_list(
+            "name", "system_key"
+        )
+    )
+    display_by_key = {}
+    for (name, system_key), count in rows.items():
+        if not system_key:
+            continue
+        best = display_by_key.get(system_key)
+        if best is None or (-count, name) < (-best[1], best[0]):
+            display_by_key[system_key] = (name, count)
+
+    issue_types = {(name, key) for key, (name, _) in display_by_key.items()}
+    issue_types |= {(name, None) for (name, system_key) in rows if not system_key}
+    return build_issue_type_template_permission_descriptors(sorted(issue_types, key=lambda x: (x[0] or "", x[1] or "")))
 
 
 def sync_issue_type_permissions(issue_type, *, deactivate: bool = False) -> None:
@@ -165,8 +212,17 @@ class IssueTypeCategory(models.Model):
         return self.name
 
 
-class IssueType(ProjectBaseModel):
+class IssueType(SchemeBaseModel):
+    # 所属工作项方案。按项目取类型写 IssueType.objects.filter(scheme__projects=<project_id>)
+    scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.CASCADE,
+        related_name="issue_types",
+    )
     name = models.CharField(max_length=255)
+    # 系统标识：种子五个类型的固定英文 key（seed_data/issue_scheme.py），代码按它判断而不按名字。
+    # 用户自建的类型为空；创建后不可改（serializer 只读）。
+    system_key = models.CharField(max_length=32, null=True, blank=True)
     description = models.TextField(blank=True)
     logo_props = models.JSONField(default=dict)
     is_epic = models.BooleanField(default=False)
@@ -181,13 +237,19 @@ class IssueType(ProjectBaseModel):
     )
 
     class Meta:
-        unique_together = ["project", "name", "deleted_at"]
+        unique_together = ["scheme", "name", "deleted_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["project", "name"],
+                fields=["scheme", "name"],
                 condition=Q(deleted_at__isnull=True),
-                name="issue_type_unique_project_name_when_deleted_at_null",
-            )
+                name="issue_type_unique_scheme_name_when_deleted_at_null",
+            ),
+            # 同方案每个系统标识至多一个
+            models.UniqueConstraint(
+                fields=["scheme", "system_key"],
+                condition=Q(deleted_at__isnull=True, system_key__isnull=False),
+                name="issue_type_unique_scheme_system_key",
+            ),
         ]
         verbose_name = "Issue Type"
         verbose_name_plural = "Issue Types"
@@ -197,7 +259,13 @@ class IssueType(ProjectBaseModel):
         return self.name
 
 
-class TypeExtraField(ProjectBaseModel):
+class TypeExtraField(SchemeBaseModel):
+    # 与 issue_type.scheme 恒一致
+    scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.CASCADE,
+        related_name="extra_fields",
+    )
     FIELD_TYPE_CHOICES = (
         ("text", "Text"),
         ("number", "Number"),
@@ -229,9 +297,9 @@ class TypeExtraField(ProjectBaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["project", "issue_type", "name"],
+                fields=["scheme", "issue_type", "name"],
                 condition=Q(deleted_at__isnull=True),
-                name="type_extra_field_unique_name_active",
+                name="type_extra_field_unique_scheme_name_active",
             )
         ]
         verbose_name = "Type Extra Field"
@@ -241,6 +309,11 @@ class TypeExtraField(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.name} <{self.issue_type.name}>"
+
+    def save(self, *args, **kwargs):
+        if self.issue_type_id and not self.scheme_id:
+            self.scheme_id = self.issue_type.scheme_id
+        super().save(*args, **kwargs)
 
 
 class TypeExtraFieldValue(ProjectBaseModel):

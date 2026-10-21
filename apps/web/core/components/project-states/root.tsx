@@ -13,7 +13,7 @@ import type { IState, TStateOperationsCallbacks } from "@plane/types";
 import { ProjectStateLoader, GroupList } from "@/components/project-states";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useIssueConfigPermission } from "@/hooks/use-issue-config-permission";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 // types
 import type { TIssueType } from "@/services/project/project-issue-type.service";
@@ -86,7 +86,8 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     deleteState,
     markStateAsDefault,
   } = useProjectState();
-  const { allowProjectPermissionKeys } = useUserPermissions();
+  // 方案作用域看研发模式权限、跟随研发模式的项目只读，见 useIssueConfigPermission
+  const { canEdit } = useIssueConfigPermission(workspaceSlug, projectId);
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
 
   // selected issue type state
@@ -102,12 +103,12 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   // derived values
   const statePermissions: TProjectStatePermissions = useMemo(
     () => ({
-      canCreateState: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.create], workspaceSlug, projectId),
-      canEditState: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.edit], workspaceSlug, projectId),
-      canDeleteState: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.delete], workspaceSlug, projectId),
-      canMarkStateAsDefault: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.markDefault], workspaceSlug, projectId),
+      canCreateState: canEdit([STATE_PERMISSION_KEYS.create]),
+      canEditState: canEdit([STATE_PERMISSION_KEYS.edit]),
+      canDeleteState: canEdit([STATE_PERMISSION_KEYS.delete]),
+      canMarkStateAsDefault: canEdit([STATE_PERMISSION_KEYS.markDefault]),
     }),
-    [allowProjectPermissionKeys, workspaceSlug, projectId]
+    [canEdit]
   );
 
   const selectedIssueType = issueTypes?.find((t) => t.id === selectedIssueTypeId);

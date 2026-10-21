@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import type { TIssueTypeSystemKey } from "@/services/project/project-issue-type.service";
+
 /**
  * 工时类别前端统一常量。
  *
@@ -55,22 +57,23 @@ export function getCategoryPanelKind(key: string | undefined | null): TTimesheet
 }
 
 /**
- * 工作项工时子类别 → 允许的 issue type.name 列表。
+ * 工作项工时子类别 → 允许的工作项类型系统标识列表。
  *
- * 与后端 apps/api/plane/db/models/timesheet.py::ISSUE_TYPE_NAME_TO_CATEGORY_KEY 对齐，
- * 前端在填报弹窗右侧请求 issue 列表时会把这份白名单作为 `type__name` 查询参数。
+ * 与后端 apps/api/plane/db/models/timesheet.py::ISSUE_TYPE_KEY_TO_CATEGORY_KEY 对齐，
+ * 前端在填报弹窗右侧请求 issue 列表时会把这份白名单作为 `type__system_key` 查询参数。
+ * 按系统标识而不按名字：以前写死的「缺陷」对不上主流项目的「缺陷(软件)」。
  *
  * 未在映射中的 key 不做 type 筛选（兼容旧的通用 ISSUE 类别或未来新增的类别）。
  */
-export const CATEGORY_ISSUE_TYPE_NAMES: Record<string, string[]> = {
-  [TIMESHEET_CATEGORY_KEY.REQUIREMENT]: ["史诗", "特性", "用户故事"],
-  [TIMESHEET_CATEGORY_KEY.TASK]: ["任务"],
-  [TIMESHEET_CATEGORY_KEY.BUG]: ["缺陷"],
+export const CATEGORY_ISSUE_TYPE_KEYS: Record<string, TIssueTypeSystemKey[]> = {
+  [TIMESHEET_CATEGORY_KEY.REQUIREMENT]: ["epic", "feature", "story"],
+  [TIMESHEET_CATEGORY_KEY.TASK]: ["task"],
+  [TIMESHEET_CATEGORY_KEY.BUG]: ["bug"],
 };
 
-export function getCategoryIssueTypeNames(key: string | undefined | null): string[] | undefined {
+export function getCategoryIssueTypeKeys(key: string | undefined | null): TIssueTypeSystemKey[] | undefined {
   if (!key) return undefined;
-  return CATEGORY_ISSUE_TYPE_NAMES[key];
+  return CATEGORY_ISSUE_TYPE_KEYS[key];
 }
 
 /**

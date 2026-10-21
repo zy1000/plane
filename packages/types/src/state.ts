@@ -13,7 +13,10 @@ export interface IState {
   description: string;
   group: TStateGroups;
   name: string;
+  /** 状态所属方案的归属项目；跟随研发模式的项目共用模式方案的状态，此时为 null。按项目取状态请比 scheme_id */
   project_id: string;
+  /** 所属工作项方案（TProject.issue_scheme） */
+  scheme_id?: string | null;
   sequence: number;
   workspace_id: string;
   order: number;

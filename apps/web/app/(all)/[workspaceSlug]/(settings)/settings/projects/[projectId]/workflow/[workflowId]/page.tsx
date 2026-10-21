@@ -11,6 +11,7 @@ import { PROJECT_SETTINGS } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
+import { IssueSchemeFollowBanner } from "@/components/issue-scheme/follow-banner";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { WorkflowTransitionsRoot } from "@/components/project-workflows/workflow-transitions";
 // hooks
@@ -60,6 +61,7 @@ function WorkflowDetailPage({ params }: Route.ComponentProps) {
   return (
     <SettingsContentWrapper header={<WorkflowDetailHeader workflowName={workflow?.name} />} hugging>
       <PageHead title={pageTitle} />
+      <IssueSchemeFollowBanner workspaceSlug={workspaceSlug} projectId={projectId} />
       <div className="w-full">
         {isLoadingWorkflow ? (
           <div className="flex flex-col gap-3">

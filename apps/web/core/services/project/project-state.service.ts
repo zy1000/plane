@@ -8,6 +8,7 @@
 import { API_BASE_URL } from "@plane/constants";
 import type { IIntakeState, IState } from "@plane/types";
 import { APIService } from "@/services/api.service";
+import { issueConfigBasePath } from "@/services/project/issue-scheme-scope";
 // helpers
 // types
 
@@ -17,7 +18,7 @@ export class ProjectStateService extends APIService {
   }
 
   async createState(workspaceSlug: string, projectId: string, data: any): Promise<IState> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/`, data)
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/states/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -25,7 +26,7 @@ export class ProjectStateService extends APIService {
   }
 
   async markDefault(workspaceSlug: string, projectId: string, stateId: string, issueTypeId: string | null): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/mark-default/`, {
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/mark-default/`, {
       issue_type_id: issueTypeId,
     })
       .then((response) => response?.data)
@@ -36,7 +37,7 @@ export class ProjectStateService extends APIService {
 
   async getStates(workspaceSlug: string, projectId: string, issueTypeId?: string | null): Promise<IState[]> {
     const params = issueTypeId ? { issue_type_id: issueTypeId } : undefined;
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/`, { params })
+    return this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/states/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -52,7 +53,7 @@ export class ProjectStateService extends APIService {
   }
 
   async getState(workspaceSlug: string, projectId: string, stateId: string): Promise<any> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/`)
+    return this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -60,7 +61,7 @@ export class ProjectStateService extends APIService {
   }
 
   async updateState(workspaceSlug: string, projectId: string, stateId: string, data: IState): Promise<any> {
-    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/`, data)
+    return this.put(`${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -68,7 +69,7 @@ export class ProjectStateService extends APIService {
   }
 
   async patchState(workspaceSlug: string, projectId: string, stateId: string, data: Partial<IState>): Promise<any> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/`, data)
+    return this.patch(`${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -76,7 +77,7 @@ export class ProjectStateService extends APIService {
   }
 
   async deleteState(workspaceSlug: string, projectId: string, stateId: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/`)
+    return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

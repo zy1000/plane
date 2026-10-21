@@ -17,7 +17,7 @@ def extra_field_context(create_user):
         workspace=workspace,
         created_by=create_user,
     )
-    issue_type = IssueType.objects.create(project=project, name="任务")
+    issue_type = IssueType.objects.create(scheme_id=project.issue_scheme_id, name="任务")
     return {"project": project, "issue_type": issue_type}
 
 
@@ -27,13 +27,13 @@ def test_create_mode_requires_all_required_extra_fields(extra_field_context):
     project = extra_field_context["project"]
     issue_type = extra_field_context["issue_type"]
     field_a = TypeExtraField.objects.create(
-        project=project,
+        scheme_id=project.issue_scheme_id,
         issue_type=issue_type,
         name="字段 A",
         is_required=True,
     )
     field_b = TypeExtraField.objects.create(
-        project=project,
+        scheme_id=project.issue_scheme_id,
         issue_type=issue_type,
         name="字段 B",
         is_required=True,
@@ -56,13 +56,13 @@ def test_patch_mode_does_not_require_unsubmitted_required_fields(extra_field_con
     project = extra_field_context["project"]
     issue_type = extra_field_context["issue_type"]
     field_a = TypeExtraField.objects.create(
-        project=project,
+        scheme_id=project.issue_scheme_id,
         issue_type=issue_type,
         name="字段 A",
         is_required=True,
     )
     TypeExtraField.objects.create(
-        project=project,
+        scheme_id=project.issue_scheme_id,
         issue_type=issue_type,
         name="字段 B",
         is_required=True,
@@ -85,7 +85,7 @@ def test_patch_mode_rejects_empty_required_field_when_submitted(extra_field_cont
     project = extra_field_context["project"]
     issue_type = extra_field_context["issue_type"]
     field = TypeExtraField.objects.create(
-        project=project,
+        scheme_id=project.issue_scheme_id,
         issue_type=issue_type,
         name="字段 A",
         is_required=True,
@@ -108,7 +108,7 @@ def test_required_boolean_false_is_not_empty(extra_field_context):
     project = extra_field_context["project"]
     issue_type = extra_field_context["issue_type"]
     field = TypeExtraField.objects.create(
-        project=project,
+        scheme_id=project.issue_scheme_id,
         issue_type=issue_type,
         name="是否复现",
         field_type="boolean",

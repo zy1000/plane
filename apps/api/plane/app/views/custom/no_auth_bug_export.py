@@ -13,6 +13,7 @@ from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 
 from plane.app.views.base import BaseAPIView
+from plane.db.seed_data.issue_scheme import BUG as SYSTEM_BUG
 from plane.db.models import (
     Issue,
     IssueActivity,
@@ -50,7 +51,6 @@ class PublicBugReportExportAPIView(BaseAPIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
-    bug_type_names = ("缺陷", "缺陷(软件)")
     OPEN_STATE_NAME = "Open"
     TRACE_ACTIVITY_FIELDS = ("state", "assignees")
     TECH_REASON_FIELD_NAME = "技术原因及解决方案"
@@ -313,7 +313,8 @@ class PublicBugReportExportAPIView(BaseAPIView):
         queryset = (
             Issue.objects.filter(
                 deleted_at__isnull=True,
-                type__name__in=self.bug_type_names,
+                # 按系统标识：老项目的「缺陷」与新项目的「缺陷(软件)」都是 bug，改名不影响
+                type__system_key=SYSTEM_BUG,
                 workspace__slug=workspace_slug,
                 created_at__date__gte=start_date,
             )

@@ -73,6 +73,20 @@ class ProjectMemberPermission(BasePermission):
         ).exists()
 
 
+
+class IssueSchemeConfigPermission(BasePermission):
+    """工作项配置视图（类型 / 扩展字段）：项目级路由沿用 ProjectMemberPermission，
+    方案级路由（模板中心维护模式方案）按研发模式权限，见 check_issue_scheme_route_permission。"""
+
+    def has_permission(self, request, view):
+        from .base import check_issue_scheme_route_permission, is_issue_scheme_route
+
+        if request.user.is_anonymous:
+            return False
+        if is_issue_scheme_route(view.kwargs):
+            return check_issue_scheme_route_permission(request, view.kwargs) is None
+        return ProjectMemberPermission().has_permission(request, view)
+
 class ProjectEntityPermission(BasePermission):
     def has_permission(self, request, view):
         if request.user.is_anonymous:

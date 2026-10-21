@@ -228,6 +228,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       original_role: projectMember.original_role,
       custom_role_ids: projectMember.custom_role_ids,
       inherited_role_ids: projectMember.inherited_role_ids,
+      role_template_ids: projectMember.role_template_ids,
       role_sources: projectMember.role_sources,
       member: {
         ...userDetails,
@@ -284,6 +285,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       original_role: projectMember.original_role,
       custom_role_ids: projectMember.custom_role_ids,
       inherited_role_ids: projectMember.inherited_role_ids,
+      role_template_ids: projectMember.role_template_ids,
       role_sources: projectMember.role_sources,
       member: {
         ...userDetails,

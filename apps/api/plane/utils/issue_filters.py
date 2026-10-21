@@ -363,6 +363,14 @@ def filter_type_name(params, issue_filter, method, prefix=""):
     return issue_filter
 
 
+def filter_type_system_key(params, issue_filter, method, prefix=""):
+    # 按类型系统标识过滤（epic / feature / story / task / bug），改名不影响
+    system_keys = [item for item in params.get("type__system_key").split(",") if item]
+    if system_keys:
+        issue_filter[f"{prefix}type__system_key__in"] = system_keys
+    return issue_filter
+
+
 def filter_type_category(params, issue_filter, method, prefix=""):
     if method == "GET":
         category_names = [item for item in params.get("type_category").split(",") if item]
@@ -519,6 +527,7 @@ def issue_filters(query_params, method, prefix=""):
         # 新增：按 Issue.type 外键过滤
         "type_id": filter_type_id,
         "type__name": filter_type_name,
+        "type__system_key": filter_type_system_key,
         # 产品 / 产品模块（Issue 单选外键）
         "product_id": filter_product_id,
         "product_module_id": filter_product_module_id,

@@ -173,7 +173,7 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/templates/dev-modes",
             "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/page.tsx"
           ),
-          // 详情的头部与子页签在 layout 里，两个子页（阶段 / 组件开关）进 Outlet
+          // 详情的头部与子页签在 layout 里，子页（阶段 / 组件开关 / 工作项配置）进 Outlet
           layout("./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/layout.tsx", [
             route(
               ":workspaceSlug/templates/dev-modes/:devModeId",
@@ -182,6 +182,15 @@ export const coreRoutes: RouteConfigEntry[] = [
             route(
               ":workspaceSlug/templates/dev-modes/:devModeId/features",
               "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/features/page.tsx"
+            ),
+            // 工作项配置：模式方案的类型与字段 / 状态 / 工作流，流转配置是它的子页
+            route(
+              ":workspaceSlug/templates/dev-modes/:devModeId/issue-scheme",
+              "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/issue-scheme/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/templates/dev-modes/:devModeId/issue-scheme/workflows/:workflowId",
+              "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/issue-scheme/workflows/[workflowId]/page.tsx"
             ),
           ]),
           route(

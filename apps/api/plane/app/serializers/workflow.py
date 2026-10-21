@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from plane.app.serializers import BaseSerializer
+from plane.utils.issue_scheme import project_scheme_id
 from plane.db.models import (
     ApprovalType,
     IssueTransitionApprovalRecord,
@@ -38,6 +39,14 @@ def build_workflow_principal_item(principal):
             "label": principal.role.name,
             "avatar_url": None,
         }
+    if principal.kind == WorkflowPrincipalKind.ROLE and principal.workspace_role_id:
+        # 角色模板（模式方案的审批人）：展示同角色，运行时解析到项目里由这个模板派生的角色
+        return {
+            "kind": "role",
+            "id": f"template:{principal.workspace_role_id}",
+            "label": principal.workspace_role.name,
+            "avatar_url": None,
+        }
     if principal.kind == WorkflowPrincipalKind.DYNAMIC and principal.dynamic_target:
         return {
             "kind": "dynamic",
@@ -69,7 +78,9 @@ class WorkflowSerializer(BaseSerializer):
         ]
 
     def validate(self, attrs):
-        if attrs.get("issue_type") and str(attrs["issue_type"].project_id) != str(self.context.get("project_id")):
+        # 类型必须在当前方案里（方案级路由直接给 scheme_id，项目级路由按项目所用的方案）
+        scheme_id = self.context.get("scheme_id") or project_scheme_id(self.context.get("project_id"))
+        if attrs.get("issue_type") and str(attrs["issue_type"].scheme_id) != str(scheme_id):
             raise serializers.ValidationError("Issue type is not valid please pass a valid issue_type_id")
         return attrs
 
@@ -102,16 +113,17 @@ class WorkflowTransitionSerializer(BaseSerializer):
         ]
 
     def validate(self, attrs):
-        project_id = self.context.get("project_id")
+        # 工作流与两端状态都必须在当前方案里
+        scheme_id = str(self.context.get("scheme_id") or project_scheme_id(self.context.get("project_id")))
         workflow = attrs.get("workflow") or (self.instance.workflow if self.instance else None)
         from_state = attrs.get("from_state") or (self.instance.from_state if self.instance else None)
         to_state = attrs.get("to_state") or (self.instance.to_state if self.instance else None)
 
-        if workflow and str(workflow.project_id) != str(project_id):
+        if workflow and str(workflow.scheme_id) != scheme_id:
             raise serializers.ValidationError("Workflow is not valid for this project")
-        if from_state and str(from_state.project_id) != str(project_id):
+        if from_state and str(from_state.scheme_id) != scheme_id:
             raise serializers.ValidationError("From state is not valid for this project")
-        if to_state and str(to_state.project_id) != str(project_id):
+        if to_state and str(to_state.scheme_id) != scheme_id:
             raise serializers.ValidationError("To state is not valid for this project")
         return attrs
 

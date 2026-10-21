@@ -6,6 +6,7 @@
 
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
+import { issueConfigBasePath } from "@/services/project/issue-scheme-scope";
 
 export type TWorkflow = {
   id: string;
@@ -165,7 +166,7 @@ export class ProjectWorkflowService extends APIService {
     issueTypeId?: string
   ): Promise<TWorkflow[]> {
     const params = issueTypeId ? { issue_type_id: issueTypeId } : undefined;
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/`, { params })
+    return this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/workflows/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -177,7 +178,7 @@ export class ProjectWorkflowService extends APIService {
     projectId: string,
     data: TWorkflowCreatePayload
   ): Promise<TWorkflow> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/`, data)
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/workflows/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -189,7 +190,7 @@ export class ProjectWorkflowService extends APIService {
     projectId: string,
     data: TWorkflowUpdatePayload
   ): Promise<TWorkflow> {
-    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/`, data)
+    return this.put(`${issueConfigBasePath(workspaceSlug, projectId)}/workflows/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -201,7 +202,7 @@ export class ProjectWorkflowService extends APIService {
     projectId: string,
     workflowId: string
   ): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/`, undefined, {
+    return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/workflows/`, undefined, {
       params: { id: workflowId },
     })
       .then(() => undefined)
@@ -218,7 +219,7 @@ export class ProjectWorkflowService extends APIService {
     workflowId: string
   ): Promise<TWorkflowTransition[]> {
     return this.get(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/${workflowId}/transitions/`
+      `${issueConfigBasePath(workspaceSlug, projectId)}/workflows/${workflowId}/transitions/`
     )
       .then((response) => response?.data)
       .catch((error) => {
@@ -233,7 +234,7 @@ export class ProjectWorkflowService extends APIService {
     data: TWorkflowTransitionCreatePayload
   ): Promise<TWorkflowTransition> {
     return this.post(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/${workflowId}/transitions/`,
+      `${issueConfigBasePath(workspaceSlug, projectId)}/workflows/${workflowId}/transitions/`,
       data
     )
       .then((response) => response?.data)
@@ -249,7 +250,7 @@ export class ProjectWorkflowService extends APIService {
     data: TWorkflowTransitionUpdatePayload
   ): Promise<TWorkflowTransition> {
     return this.put(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/${workflowId}/transitions/`,
+      `${issueConfigBasePath(workspaceSlug, projectId)}/workflows/${workflowId}/transitions/`,
       data
     )
       .then((response) => response?.data)
@@ -265,7 +266,7 @@ export class ProjectWorkflowService extends APIService {
     transitionId: string
   ): Promise<void> {
     return this.delete(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/${workflowId}/transitions/`,
+      `${issueConfigBasePath(workspaceSlug, projectId)}/workflows/${workflowId}/transitions/`,
       undefined,
       { params: { id: transitionId } }
     )
@@ -390,7 +391,7 @@ export class ProjectWorkflowService extends APIService {
     issueTypeId?: string
   ): Promise<TWorkflowFlowchart[]> {
     const params = issueTypeId ? { issue_type_id: issueTypeId } : undefined;
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/flowchart/`, { params })
+    return this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/workflows/flowchart/`, { params })
       .then((response) => (response?.data as TWorkflowFlowchartResponse)?.results ?? [])
       .catch((error) => {
         throw error?.response?.data;

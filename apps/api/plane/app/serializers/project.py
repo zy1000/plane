@@ -34,6 +34,7 @@ from plane.utils.data_dictionary import (
 )
 from .data_dictionary import DataDictionaryItemLiteSerializer
 from .dev_mode import DevModeLiteSerializer
+from .issue_scheme import IssueSchemeLiteSerializer
 from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
     ISSUE_TYPE_PERMISSION_KEY_PREFIX,
@@ -65,6 +66,21 @@ def get_active_custom_role_ids(obj):
     ]
 
 
+def get_project_member_role_template_ids(role_sources):
+    """成员所持角色（直接授予 + 用户组继承）对应的角色模板 id。
+
+    工作流里模式方案的负责人 / 审批人约束指向角色模板（token ``role_template:<id>``），运行时解析为
+    「本项目里由该模板派生的角色」，前端用这个列表判断成员是否命中（同 custom_role_ids 之于 ``role:<id>``）。
+    """
+    return list(
+        dict.fromkeys(
+            source["role"]["source_template_id"]
+            for source in role_sources
+            if source["role"].get("source_template_id")
+        )
+    )
+
+
 def get_project_member_role_sources(obj, context):
     sources_by_member_id = context.get("role_sources_by_member_id")
     if sources_by_member_id is None:
@@ -82,6 +98,12 @@ def get_project_member_role_sources(obj, context):
             "role": {
                 "id": str(source["role"]["id"]),
                 "name": source["role"]["name"],
+                # 角色的来源模板：模式方案的审批人 / 负责人约束指向模板，前端按它判断成员是否命中
+                "source_template_id": (
+                    str(source["role"]["source_template_id"])
+                    if source["role"].get("source_template_id")
+                    else None
+                ),
             },
             "group": (
                 {
@@ -138,6 +160,9 @@ class ProjectExtendedDetailMixin(serializers.Serializer):
     # 侧栏与功能页都要按「模式位 AND 项目位」渲染，列表页和详情页都得带上，
     # 否则前端得为每个项目再拉一次模式
     dev_mode_detail = DevModeLiteSerializer(source="dev_mode", read_only=True)
+    # 工作项方案：由 Project.save() 建 / 由脱离接口换，任何项目接口都不能直接写
+    issue_scheme = serializers.PrimaryKeyRelatedField(read_only=True)
+    issue_scheme_detail = IssueSchemeLiteSerializer(source="issue_scheme", read_only=True)
 
 
 class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
@@ -387,11 +412,15 @@ class ProjectMemberSerializer(BaseSerializer):
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
     permission_keys = serializers.SerializerMethodField(read_only=True)
     inherited_role_ids = serializers.SerializerMethodField(read_only=True)
+    role_template_ids = serializers.SerializerMethodField(read_only=True)
     role_sources = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProjectMember
         fields = "__all__"
+
+    def get_role_template_ids(self, obj):
+        return get_project_member_role_template_ids(get_project_member_role_sources(obj, self.context))
 
     def get_custom_role_ids(self, obj):
         return get_active_custom_role_ids(obj)
@@ -453,6 +482,7 @@ class ProjectMemberRoleSerializer(DynamicBaseSerializer):
     original_role = serializers.IntegerField(source="role", read_only=True)
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
     inherited_role_ids = serializers.SerializerMethodField(read_only=True)
+    role_template_ids = serializers.SerializerMethodField(read_only=True)
     role_sources = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -466,9 +496,13 @@ class ProjectMemberRoleSerializer(DynamicBaseSerializer):
             "created_at",
             "custom_role_ids",
             "inherited_role_ids",
+            "role_template_ids",
             "role_sources",
         )
         read_only_fields = ["original_role", "created_at", "custom_role_ids"]
+
+    def get_role_template_ids(self, obj):
+        return get_project_member_role_template_ids(self.get_role_sources(obj))
 
     def get_custom_role_ids(self, obj):
         return get_active_custom_role_ids(obj)
@@ -747,7 +781,7 @@ class ProjectRolePermissionBindingSerializer(serializers.Serializer):
 
     def _get_project_issue_type_keys(self, project) -> set:
         issue_type_ids = IssueType.objects.filter(
-            project=project, deleted_at__isnull=True
+            scheme_id=project.issue_scheme_id, deleted_at__isnull=True
         ).values_list("id", flat=True)
         return {
             build_issue_type_permission_key(issue_type_id, action)

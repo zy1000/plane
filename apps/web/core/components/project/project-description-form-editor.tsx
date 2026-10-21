@@ -93,6 +93,12 @@ export const ProjectDescriptionFormEditor: React.FC<Props> = observer((props) =>
     setInlineEditorVersion((v) => v + 1);
   };
 
+  // 编辑器加载时会给旧 HTML（如简道云同步来的纯 <p>）补 data-id，这不是用户改动，不回写表单，否则一进页就算「1 处修改」
+  const handleEditorChange = (_json: object, html: string, options?: { isMigrationUpdate?: boolean }) => {
+    if (options?.isMigrationUpdate) return;
+    onChange(html);
+  };
+
   if (!workspaceId) {
     return (
       <Loader>
@@ -139,7 +145,7 @@ export const ProjectDescriptionFormEditor: React.FC<Props> = observer((props) =>
               id={projectId}
               initialValue={initialValue}
               value={null}
-              onChange={(_json: object, html: string) => onChange(html)}
+              onChange={handleEditorChange}
               containerClassName="pt-2 pr-8 text-13 font-medium"
               {...commonEditorProps}
             />
@@ -185,7 +191,7 @@ export const ProjectDescriptionFormEditor: React.FC<Props> = observer((props) =>
             id={projectId}
             initialValue={initialValue}
             value={null}
-            onChange={(_json: object, html: string) => onChange(html)}
+            onChange={handleEditorChange}
             containerClassName="text-13 font-medium"
             {...commonEditorProps}
           />

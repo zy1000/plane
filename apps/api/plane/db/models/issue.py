@@ -100,13 +100,6 @@ class IssueManager(SoftDeletionManager):
 
 
 class Issue(ProjectBaseModel):
-    class IssueTypeEnum(models.TextChoices):
-        TASK = '任务'
-        BUG = '缺陷'
-        EPIC = '史诗'
-        FEATURE = '特性'
-        STORY = '用户故事'
-
     PRIORITY_CHOICES = (
         ("urgent", "Urgent"),
         ("high", "High"),
@@ -214,11 +207,14 @@ class Issue(ProjectBaseModel):
             try:
                 from plane.db.models import State
 
+                # 本项目所用方案里的状态（跟随与自定义同一条路径）
                 default_state = State.objects.filter(
-                    ~models.Q(is_triage=True), project=self.project, default=True
+                    ~models.Q(is_triage=True), scheme__projects=self.project_id, default=True
                 ).first()
                 if default_state is None:
-                    random_state = State.objects.filter(~models.Q(is_triage=True), project=self.project).first()
+                    random_state = State.objects.filter(
+                        ~models.Q(is_triage=True), scheme__projects=self.project_id
+                    ).first()
                     self.state = random_state
                 else:
                     self.state = default_state

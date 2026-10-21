@@ -138,6 +138,8 @@ class ProjectViewSet(BaseViewSet):
                 "product_manager__avatar_asset",
                 # dev_mode_detail 要出 features（侧栏与功能页按「模式位 AND 项目位」渲染）
                 "dev_mode",
+                # issue_scheme_detail（跟随 / 项目自定义）
+                "issue_scheme",
             )
             .annotate(
                 is_favorite=Exists(
@@ -229,18 +231,23 @@ class ProjectViewSet(BaseViewSet):
 
         if privileged_project_ids:
             issue_type_permission_keys = {}
+            # 类型归方案：先取项目 → 方案，再按方案取类型（共用方案的多个项目得到同一组 key）
+            project_ids_by_scheme = {}
+            for project_id, scheme_id in Project.all_objects.filter(
+                pk__in=privileged_project_ids
+            ).values_list("id", "issue_scheme_id"):
+                project_ids_by_scheme.setdefault(scheme_id, []).append(str(project_id))
             issue_type_rows = IssueType.objects.filter(
-                project_id__in=privileged_project_ids, deleted_at__isnull=True
-            ).values_list("project_id", "id")
+                scheme_id__in=list(project_ids_by_scheme), deleted_at__isnull=True
+            ).values_list("scheme_id", "id")
 
-            for project_id, issue_type_id in issue_type_rows:
-                issue_type_keys = issue_type_permission_keys.setdefault(
-                    str(project_id), set()
-                )
-                for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS:
-                    issue_type_keys.add(
-                        build_issue_type_permission_key(issue_type_id, action)
-                    )
+            for scheme_id, issue_type_id in issue_type_rows:
+                type_keys = {
+                    build_issue_type_permission_key(issue_type_id, action)
+                    for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
+                }
+                for project_id in project_ids_by_scheme.get(scheme_id, []):
+                    issue_type_permission_keys.setdefault(project_id, set()).update(type_keys)
 
             static_permission_keys = set(PermissionKey.values())
             for project_id in privileged_project_ids:
@@ -500,6 +507,8 @@ class ProjectViewSet(BaseViewSet):
                 dev_mode_icon_props=F("dev_mode__icon_props"),
                 dev_mode_features=F("dev_mode__features"),
                 dev_mode_is_system=F("dev_mode__is_system"),
+                issue_scheme_name=F("issue_scheme__name"),
+                issue_scheme_project=F("issue_scheme__project_id"),
             )
             .annotate(sort_order=Subquery(sort_order))
             .distinct()
@@ -509,6 +518,9 @@ class ProjectViewSet(BaseViewSet):
             "dev_mode_icon_props",
             "dev_mode_features",
             "dev_mode_is_system",
+            "issue_scheme",
+            "issue_scheme_name",
+            "issue_scheme_project",
             "release_view",
             "review_view",
             "is_time_tracking_enabled",
@@ -571,6 +583,18 @@ class ProjectViewSet(BaseViewSet):
                 "features": row.pop("dev_mode_features"),
                 "is_system": row.pop("dev_mode_is_system"),
             }
+            # 与 ProjectExtendedDetailMixin.issue_scheme_detail 同形状
+            scheme_name = row.pop("issue_scheme_name")
+            scheme_project = row.pop("issue_scheme_project")
+            row["issue_scheme_detail"] = (
+                {
+                    "id": row["issue_scheme"],
+                    "name": scheme_name,
+                    "is_project_owned": scheme_project is not None,
+                }
+                if row["issue_scheme"] is not None
+                else None
+            )
         return Response(project_rows, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
@@ -678,6 +702,7 @@ class ProjectViewSet(BaseViewSet):
             "business_category__dictionary",
             "product_manager__avatar_asset",
             "dev_mode",
+            "issue_scheme",
         ).get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(

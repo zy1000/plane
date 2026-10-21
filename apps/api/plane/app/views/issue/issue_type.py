@@ -7,60 +7,57 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.views import BaseAPIView, BaseViewSet
-from plane.app.permissions import ProjectMemberPermission, WorkspaceEntityPermission
+from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
+from plane.app.permissions import IssueSchemeConfigPermission, WorkspaceEntityPermission
 from plane.app.serializers.issue_type import IssueTypeCategorySerializer, IssueTypeSerializer
 from plane.db.models import (
     IssueType,
-    Issue,
-    Project,
     Workspace,
 )
 from plane.db.models.issue_type import IssueTypeCategory
+from plane.utils.issue_scheme import in_use_response_data, is_referenced, issue_type_references
 from plane.utils.project.defaults import (
     bulk_create_issue_state,
     create_default_bug_workflow,
 )
 
 
-class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
-    """项目Issue Type列表和创建接口"""
+class ProjectIssueTypeListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
+    """Issue Type 列表和创建接口。项目级与方案级（模板中心）路由共用，见 IssueSchemeScopeMixin。"""
 
     serializer_class = IssueTypeSerializer
     model = IssueType
-    permission_classes = [ProjectMemberPermission]
+    permission_classes = [IssueSchemeConfigPermission]
 
     def get_queryset(self):
         return (
             IssueType.objects.filter(
                 workspace__slug=self.kwargs.get("slug"),
-                project_id=self.kwargs.get("project_id"),
+                scheme_id=self.get_scheme_id(),
                 deleted_at__isnull=True,
             )
-            .select_related("project")
+            .select_related("scheme")
             .prefetch_related("extra_fields")
             .order_by("level", "created_at")
         )
 
-    def get(self, request, slug, project_id):
-        """获取项目的Issue Type列表"""
+    def get(self, request, slug, project_id=None, issue_scheme_id=None):
+        """获取 Issue Type 列表"""
         issue_types = self.get_queryset()
         serializer = IssueTypeSerializer(issue_types, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def post(self, request, slug, project_id):
-        """创建新的项目级Issue Type"""
-        project = get_object_or_404(Project, pk=project_id, workspace__slug=slug)
+    def post(self, request, slug, project_id=None, issue_scheme_id=None):
+        """在当前方案里新建 Issue Type（新类型的 5 条衍生权限在跟随项目里默认没人持有，见需求 4.3）"""
+        scheme_id = self.get_scheme_id()
+        if scheme_id is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
         serializer = IssueTypeSerializer(
             data=request.data, context={"workspace_slug": slug}
         )
         if serializer.is_valid():
-            issue_type = serializer.save(project=project)
-            bulk_create_issue_state(
-                issue_types=[issue_type],
-                workspace=project.workspace,
-                project=project,
-                created_by=request.user,
-            )
+            issue_type = serializer.save(scheme_id=scheme_id)
+            bulk_create_issue_state(issue_types=[issue_type], created_by=request.user)
             response_serializer = IssueTypeSerializer(issue_type)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -71,13 +68,10 @@ class WorkspaceIssueTypeApiView(BaseAPIView):
 
     def get_queryset(self):
         return (
-            IssueType.objects.filter(
-                project__isnull=False,
-                deleted_at__isnull=True,
-            )
-            .select_related("project")
+            IssueType.objects.filter(deleted_at__isnull=True)
+            .select_related("scheme")
             .prefetch_related("extra_fields")
-            .order_by("project_id", "level", "created_at")
+            .order_by("scheme_id", "level", "created_at")
         )
 
     def get(self, request, slug: str):
@@ -86,23 +80,25 @@ class WorkspaceIssueTypeApiView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class IssueTypeViewSet(BaseAPIView):
+class IssueTypeViewSet(IssueSchemeScopeMixin, BaseAPIView):
+    """单个 Issue Type 的读改删。项目级与方案级（模板中心）路由共用，见 IssueSchemeScopeMixin。"""
+
     model = IssueType
-    permission_classes = [ProjectMemberPermission]
+    permission_classes = [IssueSchemeConfigPermission]
 
     def get_queryset(self):
         return IssueType.objects.filter(
             workspace__slug=self.kwargs.get("slug"),
-            project_id=self.kwargs.get("project_id"),
+            scheme_id=self.get_scheme_id(),
             deleted_at__isnull=True,
-        )
+        ).select_related("scheme")
 
-    def get(self, request, slug, project_id, issue_type_id):
+    def get(self, request, slug, issue_type_id, project_id=None, issue_scheme_id=None):
         issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
         serializer = IssueTypeSerializer(issue_type)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def patch(self, request, slug, project_id, issue_type_id):
+    def patch(self, request, slug, issue_type_id, project_id=None, issue_scheme_id=None):
         issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
         serializer = IssueTypeSerializer(
             issue_type,
@@ -116,7 +112,7 @@ class IssueTypeViewSet(BaseAPIView):
             return Response(response_serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def put(self, request, slug, project_id, issue_type_id):
+    def put(self, request, slug, issue_type_id, project_id=None, issue_scheme_id=None):
         issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
         serializer = IssueTypeSerializer(
             issue_type,
@@ -130,17 +126,18 @@ class IssueTypeViewSet(BaseAPIView):
             return Response(response_serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def delete(self, request, slug, project_id, issue_type_id):
+    def delete(self, request, slug, issue_type_id, project_id=None, issue_scheme_id=None):
         issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
         if issue_type.is_default:
             return Response(
                 {"msg": "默认工作项类型不能删除"}, status=status.HTTP_400_BAD_REQUEST
             )
-        if Issue.objects.filter(project_id=project_id, type=issue_type).exists():
-            return Response(
-                {"msg": "该工作项类型正在被使用,请先删除对应工作项"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # 删除保护（需求 4.3）：类型归方案，任一项目（含已脱离的）的工作项、草稿（含归档、软删）在用就不能删，只能停用
+        refs = issue_type_references(issue_type.id)
+        if is_referenced(refs):
+            data = in_use_response_data(refs, "工作项类型")
+            data["msg"] = data["error"]
+            return Response(data, status=status.HTTP_409_CONFLICT)
         issue_type.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

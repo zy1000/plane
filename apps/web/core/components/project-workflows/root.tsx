@@ -17,7 +17,7 @@ import { cn } from "@plane/utils";
 // hooks
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectWorkflows } from "@/hooks/store/use-project-workflows";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useIssueConfigPermission } from "@/hooks/use-issue-config-permission";
 // services
 import type { TWorkflow } from "@/services/project/project-workflow.service";
 // types
@@ -37,7 +37,10 @@ const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required pe
 
 type TProjectWorkflowRootProps = {
   workspaceSlug: string;
+  /** 项目 id，或模板中心的方案作用域键 `scheme:<id>`（见 issue-scheme-scope.ts） */
   projectId: string;
+  /** 点工作流卡片进流转配置的路径；不传走项目设置下的路径 */
+  getWorkflowDetailPath?: (workflowId: string) => string;
 };
 
 type TIssueTypeSidebarItemProps = {
@@ -85,10 +88,11 @@ const WorkflowListSkeleton: FC = () => (
   </div>
 );
 
-export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSlug, projectId }) => {
+export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSlug, projectId, getWorkflowDetailPath }) => {
   const { t } = useTranslation();
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
-  const { allowProjectPermissionKeys } = useUserPermissions();
+  // 方案作用域看研发模式权限、跟随研发模式的项目只读，见 useIssueConfigPermission
+  const { canEdit } = useIssueConfigPermission(workspaceSlug, projectId);
   const {
     fetchWorkflows,
     createWorkflow,
@@ -101,10 +105,10 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
   const [selectedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
   const [modalState, setModalState] = useState<{ isOpen: boolean; workflow?: TWorkflow }>({ isOpen: false });
 
-  const canCreateWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.create], workspaceSlug, projectId);
-  const canEditWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.edit], workspaceSlug, projectId);
-  const canDeleteWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.delete], workspaceSlug, projectId);
-  const canConfigWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.config], workspaceSlug, projectId);
+  const canCreateWorkflow = canEdit([WORKFLOW_PERMISSION_KEYS.create]);
+  const canEditWorkflow = canEdit([WORKFLOW_PERMISSION_KEYS.edit]);
+  const canDeleteWorkflow = canEdit([WORKFLOW_PERMISSION_KEYS.delete]);
+  const canConfigWorkflow = canEdit([WORKFLOW_PERMISSION_KEYS.config]);
 
   const toastWorkflowError = useCallback(
     (error: unknown, fallbackMessage: string) => {
@@ -290,6 +294,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
                     workflow={workflow}
                     workspaceSlug={workspaceSlug}
                     projectId={projectId}
+                    detailPath={getWorkflowDetailPath?.(workflow.id)}
                     canEditWorkflow={canEditWorkflow}
                     canDeleteWorkflow={canDeleteWorkflow}
                     canConfigWorkflow={canConfigWorkflow}

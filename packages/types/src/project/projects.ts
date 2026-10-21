@@ -8,6 +8,7 @@ import type { TLogoProps } from "../common";
 import type { TDataDictionaryItemLite } from "../data-dictionary";
 import type { TDevModeLite } from "../dev-mode";
 import type { TUserPermissions } from "../enums";
+import type { TIssueSchemeLite } from "../issue-scheme";
 import type { TIssuePriorities } from "../issues";
 import type { TStateGroups } from "../state";
 import type { IUser, IUserLite } from "../users";
@@ -96,6 +97,10 @@ export interface IPartialProject {
   dev_mode?: string | null;
   /** 模式的组件开关是项目功能位的上限，侧栏与功能页都要读它 */
   dev_mode_detail?: TDevModeLite | null;
+  // ---- 0418 工作项方案：只读，由后端建 / 由脱离接口换 ----
+  /** 工作项方案 id */
+  issue_scheme?: string | null;
+  issue_scheme_detail?: TIssueSchemeLite | null;
 }
 
 export interface IProject extends IPartialProject {
@@ -158,6 +163,8 @@ export type TProjectMembership = {
   role: TUserPermissions | EUserProjectRoles;
   custom_role_ids?: string[];
   inherited_role_ids?: string[];
+  /** 所持角色（直接 + 用户组继承）的来源角色模板 id；模式方案的工作流约束指向模板（`role_template:<id>`） */
+  role_template_ids?: string[];
   role_sources?: IProjectRoleSource[];
   permission_keys?: string[];
 } & (

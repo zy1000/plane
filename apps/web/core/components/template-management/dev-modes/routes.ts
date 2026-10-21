@@ -1,5 +1,5 @@
 /**
- * 研发模式详情的两个子页路径与选中判定。
+ * 研发模式详情的子页路径与选中判定。
  *
  * 结构照「评审」标签的子页页签（`components/reviews/routes.ts`）：路径集中在这里，
  * 页签、跳转、面包屑都从这里取，别再手写字符串。以后模式下面加内容就在这里加一条。
@@ -15,6 +15,16 @@ export const devModeStagesPath = devModeDetailPath;
 
 export const devModeFeaturesPath = (workspaceSlug: string, devModeId: string) =>
   `${devModeDetailPath(workspaceSlug, devModeId)}/features`;
+
+/**
+ * 「工作项配置」：模式方案的类型与字段 / 状态 / 工作流（docs/issue-scheme/ 4.1）。
+ * 内部三段用 `?tab=` 切，流转配置是它下面的子路径。
+ */
+export const devModeIssueSchemePath = (workspaceSlug: string, devModeId: string) =>
+  `${devModeDetailPath(workspaceSlug, devModeId)}/issue-scheme`;
+
+export const devModeIssueSchemeWorkflowPath = (workspaceSlug: string, devModeId: string, workflowId: string) =>
+  `${devModeIssueSchemePath(workspaceSlug, devModeId)}/workflows/${workflowId}`;
 
 /** 评审模板库里某个阶段类型的维护入口（勾选面板的「去评审页签维护这棵树」） */
 export const reviewTemplatesPath = (workspaceSlug: string, stageTypeId?: string) =>

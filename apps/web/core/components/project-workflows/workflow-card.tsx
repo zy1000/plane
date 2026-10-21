@@ -16,6 +16,8 @@ type TWorkflowCardProps = {
   workflow: TWorkflow;
   workspaceSlug: string;
   projectId: string;
+  /** 点卡片进流转配置的路径；不传走项目设置下的路径（模板中心传自己的） */
+  detailPath?: string;
   canEditWorkflow: boolean;
   canDeleteWorkflow: boolean;
   canConfigWorkflow: boolean;
@@ -28,6 +30,7 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   workflow,
   workspaceSlug,
   projectId,
+  detailPath,
   canEditWorkflow,
   canDeleteWorkflow,
   canConfigWorkflow,
@@ -39,7 +42,8 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   const location = useLocation();
   const [isToggling, setIsToggling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const workflowSettingsPath = `/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}${location.search}`;
+  const workflowSettingsPath =
+    detailPath ?? `/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}${location.search}`;
 
   const handleToggleActive = async (value: boolean) => {
     if (!canEditWorkflow || isToggling) return;

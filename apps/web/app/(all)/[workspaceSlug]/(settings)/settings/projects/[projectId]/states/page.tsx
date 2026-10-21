@@ -10,6 +10,7 @@ import { useTranslation } from "@plane/i18n";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
+import { IssueSchemeFollowBanner } from "@/components/issue-scheme/follow-banner";
 import { ProjectStateRoot } from "@/components/project-states";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
@@ -40,6 +41,7 @@ function StatesSettingsPage({ params }: Route.ComponentProps) {
   return (
     <SettingsContentWrapper header={<StatesProjectSettingsHeader />}>
       <PageHead title={pageTitle} />
+      <IssueSchemeFollowBanner workspaceSlug={workspaceSlug} projectId={projectId} />
       <div className="w-full">
         <SettingsHeading
           title={t("project_settings.states.heading")}

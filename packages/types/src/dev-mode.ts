@@ -43,6 +43,8 @@ export type TDevMode = {
   icon_props: TLogoProps;
   features: TDevModeFeatures;
   is_system: boolean;
+  /** 模式方案 id：跟随本模式的项目共用的工作项配置（模板中心「工作项配置」页签） */
+  issue_scheme?: string | null;
   /** 阶段数 */
   stage_count: number;
   /** 该模式下所有阶段勾选的评审节点总数 */

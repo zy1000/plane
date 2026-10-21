@@ -15,11 +15,15 @@ import { cn } from "@plane/utils";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useMember } from "@/hooks/store/use-member";
 import { useProjectRoles } from "@/hooks/store/use-project-roles";
+import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
+import { isIssueSchemeScopeKey } from "@/services/project/issue-scheme-scope";
 import type { TWorkflowTransition } from "@/services/project/project-workflow.service";
 import {
   WORKFLOW_SPECIAL_APPROVER_OPTIONS,
   getRoleIdFromToken,
+  getRoleTemplateIdFromToken,
   getWorkflowApproverLabel,
+  isRoleTemplateToken,
   isRoleToken,
 } from "./approver-utils";
 
@@ -66,22 +70,46 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
 }) => {
   const isPrincipal = box === "initiator" || box === "assignee" || box === "approver";
 
+  // 方案作用域（模板中心）没有项目：不拉项目成员 / 角色，角色模板按工作区取
+  const isSchemeScope = isIssueSchemeScopeKey(projectId);
   const {
     getUserDetails,
     project: { getProjectMemberIds, fetchProjectMembers },
+    workspace: { getWorkspaceMemberIds, fetchWorkspaceMembers },
   } = useMember();
-  const { roles, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
+  const { roles, fetchRoles } = useProjectRoles(workspaceSlug, isSchemeScope ? undefined : projectId);
+  const { roles: roleTemplates, fetchRoles: fetchRoleTemplates } = useWorkspaceRoles(workspaceSlug, "project_template");
   const { fields } = useIssueTypeExtraFields(workspaceSlug, projectId, issueTypeId, undefined, { lite: true });
 
   useEffect(() => {
     if (!isPrincipal) return;
-    if (!getProjectMemberIds(projectId, false)) {
-      void fetchProjectMembers(workspaceSlug, projectId);
+    if (isSchemeScope) {
+      if (!getWorkspaceMemberIds(workspaceSlug)?.length) void fetchWorkspaceMembers(workspaceSlug);
+    } else {
+      if (!getProjectMemberIds(projectId, false)) {
+        void fetchProjectMembers(workspaceSlug, projectId);
+      }
+      if (roles.length === 0) {
+        void fetchRoles();
+      }
     }
-    if (roles.length === 0) {
-      void fetchRoles();
+    if (roleTemplates.length === 0) {
+      void fetchRoleTemplates();
     }
-  }, [fetchProjectMembers, fetchRoles, getProjectMemberIds, isPrincipal, projectId, roles.length, workspaceSlug]);
+  }, [
+    fetchProjectMembers,
+    fetchRoles,
+    fetchRoleTemplates,
+    fetchWorkspaceMembers,
+    getProjectMemberIds,
+    getWorkspaceMemberIds,
+    isPrincipal,
+    isSchemeScope,
+    projectId,
+    roleTemplates.length,
+    roles.length,
+    workspaceSlug,
+  ]);
 
   const roleTokenNameMap = useMemo(
     () =>
@@ -90,6 +118,14 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
         return acc;
       }, {}),
     [roles]
+  );
+  const roleTemplateNameMap = useMemo(
+    () =>
+      roleTemplates.reduce<Record<string, string>>((acc, role) => {
+        acc[role.id] = role.name;
+        return acc;
+      }, {}),
+    [roleTemplates]
   );
 
   const fieldIdNameMap = useMemo(
@@ -120,7 +156,7 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
         dynamic.push(id);
         return;
       }
-      if (isRoleToken(id)) {
+      if (isRoleToken(id) || isRoleTemplateToken(id)) {
         role.push(id);
         return;
       }
@@ -182,12 +218,15 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
 
     const renderPrincipalItem = (id: string) => {
       const roleId = getRoleIdFromToken(id);
+      const templateId = getRoleTemplateIdFromToken(id);
       const specialOption = WORKFLOW_SPECIAL_APPROVER_OPTIONS.find((option) => option.id === id);
-      const isMember = !isSpecialToken(id) && !isRoleToken(id);
+      const isMember = !isSpecialToken(id) && !isRoleToken(id) && !isRoleTemplateToken(id);
       const user = isMember ? getUserDetails(id) : undefined;
-      const label = roleId
-        ? (roleTokenNameMap[roleId] ?? "项目角色")
-        : getWorkflowApproverLabel(id, getUserDetails, (rid) => roleTokenNameMap[rid]);
+      const label = templateId
+        ? (roleTemplateNameMap[templateId] ?? "角色模板")
+        : roleId
+          ? (roleTokenNameMap[roleId] ?? "项目角色")
+          : getWorkflowApproverLabel(id, getUserDetails, (rid) => roleTokenNameMap[rid]);
 
       return (
         <div

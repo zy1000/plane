@@ -14,7 +14,7 @@
 """
 
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 
 from plane.db.seed_data.dev_modes import normalize_features
@@ -44,6 +44,14 @@ class DevMode(BaseModel):
     # 九个布尔 key，形状由 seed_data.dev_modes.normalize_features 收敛
     features = models.JSONField(default=dict, blank=True, verbose_name="组件开关")
     is_system = models.BooleanField(default=False, verbose_name="是否预置")
+    # 模式方案：跟随本模式的项目共用的工作项配置。创建时由 save() 自动建，不可换。
+    # 批次 4 之前只是空壳（内容在批次 4 生成）。
+    issue_scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.RESTRICT,
+        related_name="dev_modes",
+        verbose_name="工作项方案",
+    )
 
     class Meta:
         db_table = "dev_modes"
@@ -59,14 +67,38 @@ class DevMode(BaseModel):
         ]
 
     def save(self, *args, **kwargs):
+        from .issue_scheme import IssueScheme
+
         # 九个 key 恒定齐全：读侧（前端 chip、批次 3 的项目开关取交集）就不用到处兜底
         self.features = normalize_features(self.features)
-        super().save(*args, **kwargs)
+        # 模式方案随模式一起建：预置（ensure_dev_modes）、接口新建、ORM 直建都走这里。
+        # IssueScheme 不反向引用模式，先建方案再插模式行没有先后问题；
+        # 包一个事务，模式行撞了重名约束时方案一起回滚，不留孤儿。
+        with transaction.atomic():
+            if self.issue_scheme_id is None:
+                self.issue_scheme = IssueScheme.objects.create(
+                    workspace_id=self.workspace_id, name=self.name
+                )
+            elif not self._state.adding:
+                IssueScheme.objects.filter(pk=self.issue_scheme_id, project__isnull=True).exclude(
+                    name=self.name
+                ).update(name=self.name)
+            super().save(*args, **kwargs)
 
     def delete(self, using=None, soft=False, *args, **kwargs):
+        from .issue_scheme import IssueScheme
+
         # 只硬删，同 StageType.delete：软删级联任务把 RESTRICT 当 CASCADE 处理，
         # 软删一个模式会顺手把它的阶段、勾选连同（批次 3 之后）引用它的项目一起软删。
-        return super().delete(using=using, soft=False, *args, **kwargs)
+        scheme_id = self.issue_scheme_id
+        result = super().delete(using=using, soft=False, *args, **kwargs)
+        # 模式方案跟着软删。能走到这里说明没有项目引用本模式（DevModeViewSet.destroy 的检查），
+        # 跟随项目恒属于本模式，所以也没有项目指向这个方案；别处还在用（两模式共用）就留着。
+        if scheme_id and not DevMode.all_objects.filter(issue_scheme_id=scheme_id).exists():
+            scheme = IssueScheme.objects.filter(pk=scheme_id, project__isnull=True).first()
+            if scheme is not None:
+                scheme.delete()
+        return result
 
     def __str__(self):
         return self.name

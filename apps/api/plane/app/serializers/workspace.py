@@ -25,7 +25,6 @@ from plane.db.models import (
     WorkspaceUserLink,
     UserRecentVisit,
     Issue,
-    IssueType,
     Page,
     Project,
     ProjectMember,
@@ -36,7 +35,7 @@ from plane.db.models import (
 from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_KEY_PREFIX,
     ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY,
-    build_issue_type_template_permission_descriptors,
+    workspace_issue_type_template_descriptors,
 )
 from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 from plane.utils.url import contains_url
@@ -448,17 +447,7 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
         return normalized_keys
 
     def _get_workspace_issue_type_template_permissions(self, workspace):
-        issue_type_names = (
-            IssueType.objects.filter(
-                project__workspace=workspace,
-                deleted_at__isnull=True,
-                is_active=True,
-            )
-            .order_by("name")
-            .values_list("name", flat=True)
-            .distinct()
-        )
-        return build_issue_type_template_permission_descriptors(issue_type_names)
+        return workspace_issue_type_template_descriptors(workspace.id)
 
     def save(self, **kwargs):
         role = self.context["role"]

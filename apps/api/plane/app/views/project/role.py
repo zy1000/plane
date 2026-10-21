@@ -236,7 +236,7 @@ class ProjectRolePermissionAPIView(BaseAPIView):
         因此需要结合 IssueType 表按 project 过滤可见范围。
         """
         issue_type_ids = IssueType.objects.filter(
-            project=project, deleted_at__isnull=True
+            scheme_id=project.issue_scheme_id, deleted_at__isnull=True
         ).values_list("id", flat=True)
         return {
             build_issue_type_permission_key(issue_type_id, action)

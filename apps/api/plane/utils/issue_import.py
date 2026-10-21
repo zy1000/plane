@@ -42,6 +42,7 @@ from plane.db.models import (
     State,
 )
 from plane.db.models.state import StateGroup
+from plane.db.seed_data.issue_scheme import LEGACY_NAME_TO_SYSTEM_KEY
 from plane.utils.requirement_module import module_path_index
 from plane.utils.import_export import (
     REQUIREMENT_FORMAT,
@@ -333,16 +334,20 @@ class _RowResolver:
         # 缓存：项目内所有 IssueType。type_by_name 以名称小写为键，避免大小写敏感。
         self._issue_types = list(
             IssueType.objects.filter(
-                project_id=self.project_id, deleted_at__isnull=True
+                scheme__projects=self.project_id, deleted_at__isnull=True
             )
         )
         self.type_by_name: dict[str, IssueType] = {
             it.name.strip().lower(): it for it in self._issue_types
         }
+        # 名字对不上时按种子名字认系统类型：模板里写「任务」「缺陷」，项目里改过名或叫「缺陷(软件)」也能对上
+        self.type_by_system_key: dict[str, IssueType] = {
+            it.system_key: it for it in self._issue_types if it.system_key
+        }
 
         # 缓存：每个 type 的 backlog state（按 sequence 升序的第一个）。
         backlog_states = State.objects.filter(
-            project_id=self.project_id,
+            scheme__projects=self.project_id,
             group=StateGroup.BACKLOG.value,
             deleted_at__isnull=True,
         ).order_by("sequence")
@@ -479,6 +484,9 @@ class _RowResolver:
             result.errors.append("类型不能为空")
         else:
             issue_type = self.type_by_name.get(type_value.lower())
+            if issue_type is None:
+                system_key = LEGACY_NAME_TO_SYSTEM_KEY.get(type_value)
+                issue_type = self.type_by_system_key.get(system_key) if system_key else None
             if issue_type is None:
                 result.errors.append(f"类型「{type_value}」在项目中不存在")
         result.resolved[FIELD_TYPE] = issue_type

@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
+import { issueConfigBasePath } from "@/services/project/issue-scheme-scope";
 
 export type TIssueTypeIconProps = {
   name: string;
@@ -7,11 +8,19 @@ export type TIssueTypeIconProps = {
   background_color?: string;
 };
 
+/**
+ * 工作项类型的系统标识（后端 seed_data/issue_scheme.py）：种子五个类型的固定 key，
+ * 按它判断类型而不按名字。用户自建的类型为 null。
+ */
+export type TIssueTypeSystemKey = "epic" | "feature" | "story" | "task" | "bug";
+
 export type TIssueType = {
   id: string;
   project?: string;
   project_id?: string;
   name: string;
+  /** 系统标识，只读；自建类型为 null */
+  system_key?: TIssueTypeSystemKey | null;
   description?: string;
   logo_props?: {
     icon?: TIssueTypeIconProps;
@@ -119,7 +128,7 @@ export class ProjectIssueTypeService extends APIService {
     if (!force && cached && Object.keys(cached).length > 0) {
       return Promise.resolve(Object.values(cached));
     }
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/`)
+    return this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/`)
       .then((response) => {
         const map: Record<string, TIssueType> = {};
         response?.data.forEach((t: any) => {
@@ -136,7 +145,7 @@ export class ProjectIssueTypeService extends APIService {
   }
 
   async fetchProjectIssueType(workspaceSlug: string, projectId: string, issueTypeId: string): Promise<TIssueType> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/`)
+    return this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`)
       .then((response) => {
         const issueType = response?.data;
         if (issueType?.id) {
@@ -176,7 +185,7 @@ export class ProjectIssueTypeService extends APIService {
     projectId: string,
     data: Partial<TIssueType>
   ): Promise<TIssueType> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/`, data)
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/`, data)
       .then((response) => {
         // 清除缓存以确保下次获取最新数据
         this.clearCache(workspaceSlug, projectId);
@@ -193,7 +202,7 @@ export class ProjectIssueTypeService extends APIService {
     issueTypeId: string,
     data: Partial<TIssueType>
   ): Promise<TIssueType> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/`, data)
+    return this.patch(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`, data)
       .then((response) => {
         this.clearCache(workspaceSlug, projectId);
         return response?.data;
@@ -205,7 +214,7 @@ export class ProjectIssueTypeService extends APIService {
 
   // 新增：删除工作项类型
   async deleteProjectIssueType(workspaceSlug: string, projectId: string, issueTypeId: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/`)
+    return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`)
       .then((response) => {
         // 清除缓存以确保下次获取最新数据
         this.clearCache(workspaceSlug, projectId);
@@ -231,7 +240,7 @@ export class ProjectIssueTypeService extends APIService {
     const queryParams: Record<string, string | number> = {};
     if (issueTypeId) queryParams["issue_type"] = issueTypeId;
     if (lite) queryParams["lite"] = 1;
-    const promise = this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, {
+    const promise = this.get(`${issueConfigBasePath(workspaceSlug, projectId)}/type-extra-fields/`, {
       params: queryParams,
     })
       .then((response) => {
@@ -255,7 +264,7 @@ export class ProjectIssueTypeService extends APIService {
     projectId: string,
     data: TTypeExtraFieldPayload
   ): Promise<TTypeExtraField> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, data)
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/type-extra-fields/`, data)
       .then((response) => {
         clearExtraFieldsCacheForProject(workspaceSlug, projectId);
         return response?.data;
@@ -271,7 +280,7 @@ export class ProjectIssueTypeService extends APIService {
     fieldId: string,
     data: Partial<TTypeExtraField>
   ): Promise<TTypeExtraField> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/${fieldId}/`, data)
+    return this.patch(`${issueConfigBasePath(workspaceSlug, projectId)}/type-extra-fields/${fieldId}/`, data)
       .then((response) => {
         clearExtraFieldsCacheForProject(workspaceSlug, projectId);
         return response?.data;
@@ -282,7 +291,7 @@ export class ProjectIssueTypeService extends APIService {
   }
 
   async deleteTypeExtraField(workspaceSlug: string, projectId: string, fieldId: string): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/${fieldId}/`)
+    return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/type-extra-fields/${fieldId}/`)
       .then((response) => {
         clearExtraFieldsCacheForProject(workspaceSlug, projectId);
         return response?.data;

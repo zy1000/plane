@@ -70,7 +70,7 @@ class TestWorkspaceUserProfileMetrics:
             name=name,
             color="#60646C",
             group=group,
-            project=self.project,
+            scheme_id=self.project.issue_scheme_id,
         )
 
     def _create_issue(self, name, state):

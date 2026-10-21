@@ -33,6 +33,7 @@ from .timezone import urlpatterns as timezone_urls
 from .exporter import urlpatterns as exporter_urls
 from .custom import urlpatterns as custom_urls
 from .issue_type import urlpatterns as issue_type_urls
+from .issue_scheme import urlpatterns as issue_scheme_urls
 from .qa import urlpatterns as qa_urls
 from .project_stage import urlpatterns as project_stage_urls
 from .risk import urlpatterns as risk_urls
@@ -73,6 +74,7 @@ urlpatterns = [
     *timezone_urls,
     *custom_urls,
     *issue_type_urls,
+    *issue_scheme_urls,
     *exporter_urls,
     *qa_urls,
     *project_stage_urls,

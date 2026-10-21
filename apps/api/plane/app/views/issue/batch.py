@@ -56,7 +56,7 @@ class IssueBatchUpdate(BaseAPIView):
 
         if state_id:
             try:
-                to_state = State.objects.get(pk=state_id, project_id=project_id)
+                to_state = State.objects.get(pk=state_id, scheme__projects=project_id)
             except (State.DoesNotExist, DjangoValidationError, TypeError, ValueError):
                 to_state = None
 

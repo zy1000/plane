@@ -14,6 +14,8 @@ export interface IIntakeState {
   group: TIntakeStateGroups;
   name: string;
   project_id: string;
+  /** 所属工作项方案（TProject.issue_scheme） */
+  scheme_id?: string | null;
   sequence: number;
   workspace_id: string;
 }

@@ -14,6 +14,7 @@ import type { IIntakeState, IState } from "@plane/types";
 import { sortStates } from "@plane/utils";
 // plane web
 import { ProjectStateService } from "@/services/project/project-state.service";
+import { getSchemeIdFromScopeKey } from "@/services/project/issue-scheme-scope";
 import type { RootStore } from "@/plane-web/store/root.store";
 
 export interface IStateStore {
@@ -129,7 +130,7 @@ export class StateStore implements IStateStore {
     const projectId = this.router.projectId;
     const workspaceSlug = this.router.workspaceSlug || "";
     if (!projectId || !(this.fetchedMap[projectId] || this.fetchedMap[workspaceSlug])) return;
-    return sortStates(Object.values(this.stateMap).filter((state) => state.project_id === projectId));
+    return sortStates(Object.values(this.stateMap).filter((state) => this.isStateOfProject(state, projectId)));
   }
 
   /**
@@ -152,6 +153,20 @@ export class StateStore implements IStateStore {
 
     return allGroups;
   }
+
+  /**
+   * 状态是否属于某个项目。状态归工作项方案，跟随研发模式的项目共用模式方案的状态，
+   * 所以按项目所用的方案（TProject.issue_scheme）比 scheme_id；项目信息还没加载时退回比 project_id
+   * （项目自定义时两者等价）。
+   */
+  private isStateOfProject = (state: { scheme_id?: string | null; project_id: string }, projectId: string) => {
+    // 模板中心的方案作用域（`scheme:<id>`）：直接比方案
+    const scopedSchemeId = getSchemeIdFromScopeKey(projectId);
+    if (scopedSchemeId) return state.scheme_id === scopedSchemeId;
+    const schemeId = this.rootStore.projectRoot.project.getProjectById(projectId)?.issue_scheme;
+    if (schemeId && state.scheme_id) return state.scheme_id === schemeId;
+    return state.project_id === projectId;
+  };
 
   /**
    * @description returns state details using state id
@@ -179,7 +194,7 @@ export class StateStore implements IStateStore {
   getProjectStates = computedFn((projectId: string | null | undefined) => {
     const workspaceSlug = this.router.workspaceSlug || "";
     if (!projectId || !(this.fetchedMap[projectId] || this.fetchedMap[workspaceSlug])) return;
-    return sortStates(Object.values(this.stateMap).filter((state) => state.project_id === projectId));
+    return sortStates(Object.values(this.stateMap).filter((state) => this.isStateOfProject(state, projectId)));
   });
 
   /**
@@ -196,7 +211,7 @@ export class StateStore implements IStateStore {
       if (!(this.fetchedMap[cacheKey] || this.fetchedMap[workspaceSlug])) return undefined;
       return sortStates(
         Object.values(this.stateMap).filter(
-          (state) => state.project_id === projectId && state.issue_type_id === issueTypeId
+          (state) => this.isStateOfProject(state, projectId) && state.issue_type_id === issueTypeId
         )
       );
     }
@@ -261,7 +276,7 @@ export class StateStore implements IStateStore {
    */
   getProjectIntakeState = computedFn((projectId: string | null | undefined) => {
     if (!projectId || !this.fetchedIntakeMap[projectId]) return;
-    return Object.values(this.intakeStateMap).find((state) => state.project_id === projectId);
+    return Object.values(this.intakeStateMap).find((state) => this.isStateOfProject(state, projectId));
   });
 
   /**
@@ -422,7 +437,7 @@ export class StateStore implements IStateStore {
     const targetState = this.stateMap[stateId];
     const issueTypeId = targetState?.issue_type_id ?? null;
     const currentDefaultState = Object.values(this.stateMap).find(
-      (state) => state.project_id === projectId && state.default && state.issue_type_id === issueTypeId
+      (state) => this.isStateOfProject(state, projectId) && state.default && state.issue_type_id === issueTypeId
     );
     // 快照受影响的 state 对象（勿复用 stateMap 引用，否则 set() 就地修改后无法回滚）
     const snapshot: Record<string, IState> = {};

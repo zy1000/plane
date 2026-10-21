@@ -65,12 +65,16 @@ def build_project_member_role_sources(project_members) -> dict:
         member_id__in=member_ids,
         deleted_at__isnull=True,
         role__deleted_at__isnull=True,
-    ).values("member_id", "role_id", "role__name")
+    ).values("member_id", "role_id", "role__name", "role__source_template_id")
     for row in direct_rows:
         sources_by_member_id[row["member_id"]].append(
             {
                 "type": "direct_role",
-                "role": {"id": row["role_id"], "name": row["role__name"]},
+                "role": {
+                    "id": row["role_id"],
+                    "name": row["role__name"],
+                    "source_template_id": row["role__source_template_id"],
+                },
                 "group": None,
             }
         )
@@ -90,6 +94,7 @@ def build_project_member_role_sources(project_members) -> dict:
             "project_id",
             "role_id",
             "role__name",
+            "role__source_template_id",
             "group_id",
             "group__name",
             "group__group_members__member__member_id",
@@ -108,7 +113,11 @@ def build_project_member_role_sources(project_members) -> dict:
         sources_by_member_id[project_member_id].append(
             {
                 "type": "group_role",
-                "role": {"id": row["role_id"], "name": row["role__name"]},
+                "role": {
+                    "id": row["role_id"],
+                    "name": row["role__name"],
+                    "source_template_id": row["role__source_template_id"],
+                },
                 "group": {"id": row["group_id"], "name": row["group__name"]},
             }
         )

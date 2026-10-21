@@ -48,11 +48,13 @@ def is_extra_field_value_empty(value: Any) -> bool:
 
 
 def _coerce_value_for_field(
-    field: TypeExtraField, value: Any
+    field: TypeExtraField, value: Any, project_id: str
 ) -> Tuple[Any, Optional[str]]:
     """根据字段类型把前端传入的 value 归一化为可持久化的形态。
 
     返回 `(normalized_value, error_message)`：当 `error_message` 非空表示校验失败。
+    ``project_id`` 是工作项所在的项目：字段归方案、不代表某个项目，人员字段的成员资格
+    要按工作项的项目校验（需求 3.1.2）。
     """
 
     field_type = field.field_type
@@ -120,7 +122,7 @@ def _coerce_value_for_field(
                 return None, None
             unique_ids = set(user_ids)
             valid_count = ProjectMember.objects.filter(
-                project_id=field.project_id,
+                project_id=project_id,
                 member_id__in=list(unique_ids),
                 is_active=True,
             ).values("member_id").distinct().count()
@@ -130,7 +132,7 @@ def _coerce_value_for_field(
         if isinstance(value, (list, tuple)):
             return None, "单选用户字段不支持多个值"
         if not ProjectMember.objects.filter(
-            project_id=field.project_id,
+            project_id=project_id,
             member_id=value,
             is_active=True,
         ).exists():
@@ -238,7 +240,7 @@ def validate_extra_field_values(
         return [], {}
 
     fields_qs = TypeExtraField.objects.filter(
-        project_id=project_id,
+        scheme__projects=project_id,
         issue_type_id=issue_type_id,
         is_active=True,
         deleted_at__isnull=True,
@@ -261,7 +263,7 @@ def validate_extra_field_values(
             errors.setdefault(field_id, []).append("字段不属于该工作项类型")
             continue
 
-        normalized, err = _coerce_value_for_field(field, raw.get("value"))
+        normalized, err = _coerce_value_for_field(field, raw.get("value"), project_id)
         if err:
             errors.setdefault(field_id, []).append(err)
             continue
@@ -287,7 +289,7 @@ def get_missing_required_extra_fields(issue) -> List[TypeExtraField]:
 
     required_fields = list(
         TypeExtraField.objects.filter(
-            project_id=issue.project_id,
+            scheme__projects=issue.project_id,
             issue_type_id=issue.type_id,
             is_active=True,
             is_required=True,

@@ -46,6 +46,15 @@ from plane.db.models import (
     EstimatePoint, IssueType,
     Product,
 )
+from plane.db.seed_data.issue_scheme import (
+    BUG as SYSTEM_BUG,
+    EPIC as SYSTEM_EPIC,
+    FEATURE as SYSTEM_FEATURE,
+    LEGACY_NAME_TO_SYSTEM_KEY,
+    STORY as SYSTEM_STORY,
+    TASK as SYSTEM_TASK,
+)
+from plane.utils.issue_scheme import project_scheme_id
 from plane.utils.issue_product import (
     apply_resolved_product_fields,
     product_module_queryset,
@@ -67,30 +76,31 @@ from .issue_type import (
 
 
 def _is_allowed_to_add_parent(parent_issue, sub_issue):
-    p = parent_issue.type.name
+    """同 app/views/issue/utils.py::is_allowed_to_add_parent，多支持直接传类型对象。按类型系统标识判断。"""
+
+    def is_defect(issue_type):
+        return bool(getattr(issue_type, "category", None)) and issue_type.category.name == "缺陷"
+
+    p = parent_issue.type.system_key
     if isinstance(sub_issue, Issue):
-        c = sub_issue.type.name
+        c = sub_issue.type.system_key
+        sub_is_defect = is_defect(sub_issue.type) or c == SYSTEM_BUG
     elif isinstance(sub_issue, IssueType):
-        c = sub_issue.name
+        c = sub_issue.system_key
+        sub_is_defect = is_defect(sub_issue) or c == SYSTEM_BUG
     else:
-        c = sub_issue
-    if c == "史诗":
+        c = LEGACY_NAME_TO_SYSTEM_KEY.get(sub_issue)
+        sub_is_defect = c == SYSTEM_BUG or "缺陷" in (sub_issue or "")
+    if c == SYSTEM_EPIC:
         return False
-    if c == "用户故事":
-        return p == "特性"
-    if c == "特性":
-        return p == "史诗"
-    if c == '任务':
-        return p == "用户故事" or p == "任务"
-    if isinstance(sub_issue, Issue):
-        sub_is_defect = getattr(sub_issue.type, 'category', None) and sub_issue.type.category.name == "缺陷"
-    elif isinstance(sub_issue, IssueType):
-        sub_is_defect = getattr(sub_issue, 'category', None) and sub_issue.category.name == "缺陷"
-    else:
-        sub_is_defect = '缺陷' in c
+    if c == SYSTEM_STORY:
+        return p == SYSTEM_FEATURE
+    if c == SYSTEM_FEATURE:
+        return p == SYSTEM_EPIC
+    if c == SYSTEM_TASK:
+        return p in {SYSTEM_STORY, SYSTEM_TASK}
     if sub_is_defect:
-        parent_is_defect = getattr(parent_issue.type, 'category', None) and parent_issue.type.category.name == "缺陷"
-        return p == "任务" or parent_is_defect or p == '用户故事'
+        return p in {SYSTEM_TASK, SYSTEM_STORY} or is_defect(parent_issue.type)
     return False
 
 
@@ -244,18 +254,20 @@ class IssueCreateSerializer(BaseSerializer):
                 ).values_list("id", flat=True)
             )
 
-        # Check state is from the project only else raise validation error
+        # Check state is from the project's scheme only else raise validation error
         if (
                 attrs.get("state")
                 and not state_manager.filter(
-            project_id=self.context.get("project_id"),
+            scheme__projects=self.context.get("project_id"),
             pk=attrs.get("state").id,
         ).exists()
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
-        # Check state belongs to the issue's type when the state is type-scoped
-        if attrs.get("type") and str(attrs["type"].project_id) != str(self.context.get("project_id")):
+        # 类型必须在本项目所用的方案里
+        if attrs.get("type") and str(attrs["type"].scheme_id) != str(
+            project_scheme_id(self.context.get("project_id"))
+        ):
             raise serializers.ValidationError("Issue type is not valid please pass a valid type_id")
 
         if attrs.get("state"):
@@ -964,7 +976,7 @@ class IssueSerializer(DynamicBaseSerializer):
     def validate(self, data):
         if (
                 data.get("state_id")
-                and not State.objects.filter(project_id=self.context.get("project_id"),
+                and not State.objects.filter(scheme__projects=self.context.get("project_id"),
                                              pk=data.get("state_id")).exists()
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
@@ -1316,7 +1328,7 @@ class IssueBatchUpdateSerializer(BaseSerializer):
 
         state = attrs.get("state")
         if state is not None and self.instance is not None:
-            if str(state.project_id) != str(self.instance.project_id):
+            if str(state.scheme_id) != str(project_scheme_id(self.instance.project_id)):
                 raise serializers.ValidationError(
                     {"state_id": "目标状态不存在或不属于当前项目"}
                 )

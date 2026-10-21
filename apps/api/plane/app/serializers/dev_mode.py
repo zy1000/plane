@@ -70,6 +70,8 @@ class DevModeSerializer(BaseSerializer):
             "icon_props",
             "features",
             "is_system",
+            # 模式方案 id：模板中心「工作项配置」页签按它取类型 / 状态 / 工作流
+            "issue_scheme",
             "stage_count",
             "template_count",
             "project_count",
@@ -80,6 +82,7 @@ class DevModeSerializer(BaseSerializer):
             "id",
             "workspace_id",
             "is_system",
+            "issue_scheme",
             "stage_count",
             "template_count",
             "project_count",

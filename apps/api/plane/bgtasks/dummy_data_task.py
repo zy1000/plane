@@ -8,6 +8,7 @@ import random
 from datetime import datetime, timedelta
 
 # Django imports
+from django.db import transaction
 from django.db.models import Max
 
 # Third party imports
@@ -15,6 +16,7 @@ from celery import shared_task
 from faker import Faker
 
 # Module imports
+from plane.utils.issue_scheme import attach_own_scheme
 from plane.db.models import (
     Workspace,
     User,
@@ -46,13 +48,17 @@ def create_project(workspace, user_id):
     name = fake.name()
     unique_id = str(uuid.uuid4())[:5]
 
-    project = Project.objects.create(
+    project = Project(
         workspace=workspace,
         name=f"{name}_{unique_id}",
         identifier=name[: random.randint(2, 12 if len(name) - 1 >= 12 else len(name) - 1)].upper(),
         created_by_id=user_id,
         intake_view=True,
     )
+    # 下面 create_states 会写一套自己的状态：给项目单建方案（项目自定义），别写进共用的模式方案
+    with transaction.atomic():
+        attach_own_scheme(project)
+        project.save()
 
     # Add current member as project member
     _ = ProjectMember.objects.create(project=project, member_id=user_id, role=20)
@@ -109,7 +115,8 @@ def create_states(workspace, project, user_id):
             State(
                 name=state["name"],
                 color=state["color"],
-                project=project,
+                # bulk_create 绕过 save()，方案显式给
+                scheme_id=project.issue_scheme_id,
                 sequence=state["sequence"],
                 workspace=workspace,
                 group=state["group"],
@@ -269,7 +276,7 @@ def create_issues(workspace, project, user_id, issue_count):
     Faker.seed(0)
 
     states = (
-        State.objects.filter(workspace=workspace, project=project)
+        State.objects.filter(workspace=workspace, scheme_id=project.issue_scheme_id)
         .exclude(group=StateGroup.TRIAGE.value)
         .values_list("id", flat=True)
     )

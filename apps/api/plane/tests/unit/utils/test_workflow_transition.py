@@ -1,4 +1,5 @@
 import pytest
+from django.db import transaction
 
 from plane.app.serializers.workflow import IssueTransitionRecordListSerializer
 from plane.db.models import (
@@ -26,6 +27,7 @@ from plane.db.models import (
     Workspace,
     WorkspaceMember,
 )
+from plane.utils.issue_scheme import attach_own_scheme
 from plane.utils.workflow.transition import (
     approve_transition_record,
     check_state_assignee_constraint,
@@ -67,12 +69,16 @@ class TestWorkflowTransitionDynamicApprovers:
             slug="workflow-workspace",
             owner=creator,
         )
-        project = Project.objects.create(
+        project = Project(
             name="Workflow Project",
             identifier="WFP",
             workspace=workspace,
             created_by=creator,
         )
+        # 新项目默认跟随模式方案（模式方案不收项目角色审批人）；这里要在项目自己的方案里配类型与工作流
+        with transaction.atomic():
+            attach_own_scheme(project)
+            project.save()
 
         project_members = {}
         for member in (creator, assignee, initiator):
@@ -82,7 +88,7 @@ class TestWorkflowTransitionDynamicApprovers:
             )
 
         issue_type = IssueType.objects.create(
-            project=project,
+            scheme_id=project.issue_scheme_id,
             name="任务",
         )
 
@@ -91,19 +97,19 @@ class TestWorkflowTransitionDynamicApprovers:
             color="#60646C",
             group="backlog",
             default=True,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=issue_type,
         )
         to_state = State.objects.create(
             name="已完成",
             color="#46A758",
             group="completed",
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=issue_type,
         )
 
         workflow = Workflow.objects.create(
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=issue_type,
             name="任务审批流",
             is_active=True,
@@ -145,7 +151,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -188,7 +194,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -228,7 +234,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -281,7 +287,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -313,7 +319,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -361,7 +367,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -425,13 +431,13 @@ class TestWorkflowTransitionDynamicApprovers:
 
         WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
         )
         field = TypeExtraField.objects.create(
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=issue_type,
             name="验收说明",
             is_required=True,
@@ -478,13 +484,13 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
         )
         field = TypeExtraField.objects.create(
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=issue_type,
             name="发布备注",
             is_required=False,
@@ -537,7 +543,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -545,7 +551,7 @@ class TestWorkflowTransitionDynamicApprovers:
         )
         _add_dynamic_approvers(transition, [WorkflowApproverTarget.CREATED_BY])
         field = TypeExtraField.objects.create(
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=issue_type,
             name="验收说明",
             is_required=True,
@@ -606,7 +612,7 @@ class TestWorkflowTransitionDynamicApprovers:
         )
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ANY,
@@ -646,7 +652,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
@@ -689,7 +695,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
@@ -736,7 +742,7 @@ class TestWorkflowTransitionDynamicApprovers:
         IssueAssignee.objects.create(issue=issue, assignee=assignee, project=project)
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -797,7 +803,7 @@ class TestWorkflowTransitionDynamicApprovers:
         IssueAssignee.objects.create(issue=issue, assignee=assignee, project=project)
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -862,7 +868,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
@@ -921,14 +927,14 @@ class TestWorkflowTransitionDynamicApprovers:
             name="进行中",
             color="#5A67D8",
             group="started",
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=workflow_context["issue_type"],
         )
         third_state = State.objects.create(
             name="评审中",
             color="#C05621",
             group="started",
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type=workflow_context["issue_type"],
         )
         outsider = type(creator).objects.create(
@@ -943,7 +949,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         t1 = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
@@ -957,7 +963,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         t2 = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=other_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
@@ -987,7 +993,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=third_state,
             to_state=to_state,
             approval_type=ApprovalType.ALL,
@@ -1012,7 +1018,7 @@ class TestWorkflowTransitionDynamicApprovers:
 
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
+            scheme_id=project.issue_scheme_id,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,

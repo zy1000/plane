@@ -117,7 +117,7 @@ class TestProjectAPIPost(TestProjectBase):
         assert ProjectUserProperty.objects.filter(project=project, user=user).exists()
 
         # Verify default states were created
-        states = State.objects.filter(project=project)
+        states = State.objects.filter(scheme_id=project.issue_scheme_id)
         assert states.count() == 5
         expected_states = ["Backlog", "Todo", "In Progress", "Done", "Cancelled"]
         state_names = list(states.values_list("name", flat=True))
@@ -161,7 +161,7 @@ class TestProjectAPIPost(TestProjectBase):
 
         project = Project.objects.get(name=project_data["name"])
         workflow = Workflow.objects.get(
-            project=project,
+            scheme_id=project.issue_scheme_id,
             issue_type__name="缺陷",
             is_active=True,
         )

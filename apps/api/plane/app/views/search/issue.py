@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 # Module imports
 from .base import BaseAPIView
+from plane.db.seed_data.issue_scheme import BUG, EPIC, FEATURE, STORY, TASK
 from plane.db.models import (
     Issue,
     ProjectMember,
@@ -29,25 +30,23 @@ from plane.utils.work_item_picker import build_picker_rows, order_picker_issues
 
 
 class IssueSearchEndpoint(BaseAPIView):
+    # 父子候选按类型系统标识（seed_data/issue_scheme.py）取，不按名字：
+    # 改名不影响，「缺陷(软件)」也能被认成缺陷。自建类型（无标识）走默认，也不会出现在候选里。
     TYPE_CHILDREN_MAP = {
-        Issue.IssueTypeEnum.EPIC: [Issue.IssueTypeEnum.FEATURE],
-        Issue.IssueTypeEnum.FEATURE: [Issue.IssueTypeEnum.STORY],
-        Issue.IssueTypeEnum.STORY: [Issue.IssueTypeEnum.BUG, Issue.IssueTypeEnum.TASK],
+        EPIC: [FEATURE],
+        FEATURE: [STORY],
+        STORY: [BUG, TASK],
     }
 
-    TYPE_CHILDREN_DEFAULT = [Issue.IssueTypeEnum.BUG, Issue.IssueTypeEnum.TASK]
+    TYPE_CHILDREN_DEFAULT = [BUG, TASK]
 
     TYPE_PARENTS_MAP = {
-        Issue.IssueTypeEnum.EPIC: [],
-        Issue.IssueTypeEnum.FEATURE: [Issue.IssueTypeEnum.EPIC],
-        Issue.IssueTypeEnum.STORY: [Issue.IssueTypeEnum.FEATURE],
+        EPIC: [],
+        FEATURE: [EPIC],
+        STORY: [FEATURE],
     }
 
-    TYPE_PARENTS_DEFAULT = [
-        Issue.IssueTypeEnum.BUG,
-        Issue.IssueTypeEnum.TASK,
-        Issue.IssueTypeEnum.STORY,
-    ]
+    TYPE_PARENTS_DEFAULT = [BUG, TASK, STORY]
 
     def filter_issues_by_project(self, project_id: int, issues: QuerySet) -> QuerySet:
         """
@@ -180,16 +179,16 @@ class IssueSearchEndpoint(BaseAPIView):
         issues = issues.filter(target_date__isnull=True)
         return issues
 
-    def get_child_optional_types(self, type_name: str) -> list:
-        return self.TYPE_CHILDREN_MAP.get(type_name, self.TYPE_CHILDREN_DEFAULT)
+    def get_child_optional_types(self, system_key: Optional[str]) -> list:
+        return self.TYPE_CHILDREN_MAP.get(system_key, self.TYPE_CHILDREN_DEFAULT)
 
-    def get_parent_optional_types(self, type_name: str) -> list:
-        return self.TYPE_PARENTS_MAP.get(type_name, self.TYPE_PARENTS_DEFAULT)
+    def get_parent_optional_types(self, system_key: Optional[str]) -> list:
+        return self.TYPE_PARENTS_MAP.get(system_key, self.TYPE_PARENTS_DEFAULT)
 
     def filter_issues_by_id(self, issues: QuerySet, issue_id: str, type_filter: str) -> QuerySet:
         issue = Issue.issue_objects.filter(pk=issue_id).first()
         method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
-        return issues.filter(type__name__in=method(type_name=issue.type.name))
+        return issues.filter(type__system_key__in=method(system_key=issue.type.system_key))
 
     def filter_issues_by_type(
         self,
@@ -198,9 +197,9 @@ class IssueSearchEndpoint(BaseAPIView):
         project_id: str,
         type_filter: str = 'parent',
     ) -> QuerySet:
-        issue_type = IssueType.objects.get(pk=issue_type_id, project_id=project_id)
+        issue_type = IssueType.objects.get(pk=issue_type_id, scheme__projects=project_id)
         method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
-        return issues.filter(type__name__in=method(type_name=issue_type.name))
+        return issues.filter(type__system_key__in=method(system_key=issue_type.system_key))
 
     def parse_int_query_param(
         self,

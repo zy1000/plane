@@ -5,6 +5,7 @@ export * from "./dev-mode-detail-shell";
 export * from "./dev-mode-feature-toggles";
 export * from "./dev-mode-features-panel";
 export * from "./dev-mode-form-modal";
+export * from "./dev-mode-issue-scheme-panel";
 export * from "./dev-mode-list";
 export * from "./dev-mode-stage-bulk-create-modal";
 export * from "./dev-mode-stage-form-modal";

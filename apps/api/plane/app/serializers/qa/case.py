@@ -3,6 +3,7 @@ from rest_framework.serializers import ModelSerializer
 
 from plane.app.serializers.qa.plan import PlanCaseReviewRecordSerializer
 from plane.db.models import PlanCaseRecord, CaseLabel, TestCaseVersion
+from plane.db.seed_data.issue_scheme import REQUIREMENT_KEYS
 
 
 class CaseExecuteRecordSerializer(ModelSerializer):
@@ -138,7 +139,7 @@ class CaseVersionCompareSerializer(serializers.Serializer):
                 'id',
                 'name',
                 'sequence_id',
-                'type__name',
+                'type__system_key',
                 'type__category__name',
                 'project_id',
                 'archived_at',
@@ -152,15 +153,13 @@ class CaseVersionCompareSerializer(serializers.Serializer):
             result = []
             for i in id_list:
                 row = issue_by_id.get(i) or {}
-                type_name = row.get('type__name')
+                system_key = row.get('type__system_key')
                 category_name = row.get('type__category__name')
                 group = (
                     '产品需求'
-                    if type_name in ['史诗', '特性', '用户故事']
+                    if system_key in REQUIREMENT_KEYS
                     else '缺陷'
                     if category_name == '缺陷'
-                    else '工作项'
-                    if type_name == '任务'
                     else '工作项'
                 )
                 result.append(

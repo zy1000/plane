@@ -209,7 +209,7 @@ def allow_workspace_self_or_permission(permission_key, user_kwarg="user_id"):
 def _get_all_issue_type_permission_keys_for_project(project_id: str) -> set:
     """当前项目下所有未删除 IssueType 衍生出来的全部 project.issue_type.<id_hex>.<action> 集合。"""
     issue_type_ids = IssueType.objects.filter(
-        project_id=project_id, deleted_at__isnull=True
+        scheme__projects=project_id, deleted_at__isnull=True
     ).values_list("id", flat=True)
     return {
         build_issue_type_permission_key(issue_type_id, action)
@@ -344,7 +344,7 @@ def resolve_project_issue_type_name(
     保留这个函数以便调用方做"type_id 是否合法"的快速校验。鉴权本身不再依赖名字。
     """
     issue_type = IssueType.objects.filter(
-        project_id=project_id,
+        scheme__projects=project_id,
         id=issue_type_id,
         deleted_at__isnull=True,
     ).first()
@@ -411,6 +411,41 @@ def has_project_issue_permission(
 
 _FINE_PERMISSION_LEVELS = ("WORKSPACE", "PROJECT", "PRODUCT")
 
+#: 方案级路由的 URL 参数：模板中心维护模式方案时，工作项配置接口挂在
+#: workspaces/<slug>/issue-schemes/<issue_scheme_id>/ 下，与项目级同名接口共用视图（docs/issue-scheme/ 4.2）
+ISSUE_SCHEME_ROUTE_KWARG = "issue_scheme_id"
+
+
+def is_issue_scheme_route(kwargs) -> bool:
+    return bool(kwargs.get(ISSUE_SCHEME_ROUTE_KWARG)) and not kwargs.get("project_id")
+
+
+def check_issue_scheme_route_permission(request, kwargs):
+    """方案级路由的鉴权，返回 None 放行，否则返回 Response。
+
+    模式方案统一走研发模式的权限（需求 6 / 拍板 #4）：读要 workspace.dev_mode.view（或 manage），
+    写要 workspace.dev_mode.manage；视图上声明的项目级 key（state.* / workflow.*）在这里不看。
+    只认本工作区的模式方案：项目方案只能从项目级路由改。
+    """
+    from rest_framework.permissions import SAFE_METHODS
+
+    from plane.db.models import IssueScheme
+
+    slug = kwargs.get("slug", "")
+    if not IssueScheme.objects.filter(
+        pk=kwargs.get(ISSUE_SCHEME_ROUTE_KWARG), workspace__slug=slug, project__isnull=True
+    ).exists():
+        return Response({"error": "Issue scheme not found."}, status=status.HTTP_404_NOT_FOUND)
+    needed = {PermissionKey.WORKSPACE_DEV_MODE_MANAGE.value}
+    if request.method in SAFE_METHODS:
+        needed.add(PermissionKey.WORKSPACE_DEV_MODE_VIEW.value)
+    if _get_user_workspace_permission_keys(request.user, slug) & needed:
+        return None
+    return Response(
+        {"error": "You don't have the required workspace permissions."},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
 
 def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
     """
@@ -432,6 +467,9 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
             slug = kwargs.get("slug", "")
+            if level == "PROJECT" and is_issue_scheme_route(kwargs):
+                denied = check_issue_scheme_route_permission(request, kwargs)
+                return denied or view_func(instance, request, *args, **kwargs)
             if level == "WORKSPACE":
                 user_keys = _get_user_workspace_permission_keys(request.user, slug)
                 request._plane_workspace_permission_keys = user_keys
@@ -528,6 +566,9 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
+            if level != "WORKSPACE" and is_issue_scheme_route(kwargs):
+                denied = check_issue_scheme_route_permission(request, kwargs)
+                return denied or view_func(instance, request, *args, **kwargs)
             if level == "WORKSPACE":
                 if not is_workspace_member(request.user, kwargs["slug"]):
                     return Response(

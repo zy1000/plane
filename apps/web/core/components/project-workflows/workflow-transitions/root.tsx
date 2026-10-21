@@ -13,7 +13,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IState } from "@plane/types";
 import { useWorkflowTransitions } from "@/hooks/store/use-workflow-transitions";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useIssueConfigPermission } from "@/hooks/use-issue-config-permission";
 import type { TApprovalType, TWorkflow, TWorkflowTransition } from "@/services/project/project-workflow.service";
 import { StateTransitionCard } from "./state-transition-card";
 import { TransitionEditModal } from "./transition-edit-modal";
@@ -42,7 +42,8 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
   workflow,
 }) => {
   const { t } = useTranslation();
-  const { allowProjectPermissionKeys } = useUserPermissions();
+  // 方案作用域看研发模式权限、跟随研发模式的项目只读，见 useIssueConfigPermission
+  const { canEdit } = useIssueConfigPermission(workspaceSlug, projectId);
   const { getProjectStatesByIssueTypeId, fetchProjectStates } = useProjectState();
   const {
     transitions,
@@ -84,7 +85,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     box: TViewBox;
   } | null>(null);
 
-  const canConfigWorkflow = allowProjectPermissionKeys([WORKFLOW_CONFIG_PERMISSION_KEY], workspaceSlug, projectId);
+  const canConfigWorkflow = canEdit([WORKFLOW_CONFIG_PERMISSION_KEY]);
 
   useEffect(() => {
     fetchTransitions();

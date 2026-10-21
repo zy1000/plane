@@ -12,7 +12,7 @@ from enum import Enum
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 
 # Module imports
@@ -130,6 +130,15 @@ class Project(BaseModel):
         on_delete=models.RESTRICT,
         related_name="projects",
         verbose_name="研发模式",
+    )
+    # 项目当前使用的工作项方案：指向模式方案 = 跟随，指向自己的项目方案 = 项目自定义。
+    # 由 save() 建 / 由脱离接口换，任何项目接口都不能直接写。批次 4 起新项目改为指向 dev_mode.issue_scheme。
+    # related_name="projects" 是按项目取类型 / 状态的查询约定（scheme__projects=<project_id>），别改。
+    issue_scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.RESTRICT,
+        related_name="projects",
+        verbose_name="工作项方案",
     )
     guest_view_all_features = models.BooleanField(default=False)
     cover_image = models.TextField(blank=True, null=True)
@@ -291,7 +300,28 @@ class Project(BaseModel):
             workspace = Workspace.objects.get(id=self.workspace_id)
             self.timezone = workspace.timezone
 
-        return super().save(*args, **kwargs)
+        from .issue_scheme import IssueScheme
+
+        with transaction.atomic():
+            # 没指定方案 = 跟随研发模式：指向模式方案（docs/issue-scheme/ 5.1）。覆盖所有建项目的路径
+            # （接口、简道云同步、测试）。要项目自定义的路径（workspace_seed、dummy_data 会写自己的状态）
+            # 在保存前用 utils.issue_scheme.attach_own_scheme 先建好自己的方案。
+            if self.issue_scheme_id is None:
+                from .dev_mode import DevMode
+
+                self.issue_scheme_id = (
+                    DevMode.objects.filter(pk=self.dev_mode_id).values_list("issue_scheme_id", flat=True).first()
+                )
+            if self.issue_scheme_id is None:
+                # 兜底：模式还没有方案时给项目单建一个。项目方案反向引用项目（OneToOne），这里先于
+                # 项目行插入：Postgres 上 Django 的外键约束是 DEFERRABLE INITIALLY DEFERRED，同一事务内先后无妨。
+                self.issue_scheme = IssueScheme.objects.create(
+                    workspace_id=self.workspace_id, name=self.name, project_id=self.pk
+                )
+            elif not is_creating and (kwargs.get("update_fields") is None or "name" in kwargs["update_fields"]):
+                # 改名时同步项目方案的名字（只用于展示和排错）
+                IssueScheme.objects.filter(project_id=self.pk).exclude(name=self.name).update(name=self.name)
+            return super().save(*args, **kwargs)
 
 
 class ProjectBaseModel(BaseModel):

@@ -125,7 +125,7 @@ class IntakeIssueUpdateSerializer(BaseSerializer):
             if issue.state and issue.state.group == StateGroup.TRIAGE.value:
                 # Verify default state exists before allowing the update
                 default_state = State.objects.filter(
-                    workspace=intake_issue.workspace, project=intake_issue.project, default=True
+                    workspace=intake_issue.workspace, scheme__projects=intake_issue.project_id, default=True
                 ).first()
 
                 if not default_state:
@@ -149,7 +149,7 @@ class IntakeIssueUpdateSerializer(BaseSerializer):
             if issue.state and issue.state.group == StateGroup.TRIAGE.value:
                 # Get the default project state
                 default_state = State.objects.filter(
-                    workspace=instance.workspace, project=instance.project, default=True
+                    workspace=instance.workspace, scheme__projects=instance.project_id, default=True
                 ).first()
                 if default_state:
                     issue.state = default_state

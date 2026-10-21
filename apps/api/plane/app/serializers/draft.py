@@ -112,7 +112,7 @@ class DraftIssueCreateSerializer(BaseSerializer):
         if (
             attrs.get("state")
             and not State.objects.filter(
-                project_id=self.context.get("project_id"),
+                scheme__projects=self.context.get("project_id"),
                 pk=attrs.get("state").id,
             ).exists()
         ):

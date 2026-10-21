@@ -22,9 +22,9 @@ from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_KEY_PREFIX,
     ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX,
     build_issue_type_permission_key,
-    build_issue_type_template_permission_descriptors,
     build_issue_type_template_permission_key,
     parse_issue_type_permission_key,
+    workspace_issue_type_template_descriptors,
 )
 from plane.utils.project.role_import import (
     TemplatePermissionScopeError,
@@ -213,7 +213,7 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
 
         issue_types = IssueType.objects.filter(
             id__in=[issue_type_id for issue_type_id, _ in issue_type_keys.values()]
-        ).only("id", "name")
+        ).only("id", "name", "system_key")
         issue_types_by_id = {issue_type.id: issue_type for issue_type in issue_types}
 
         key_map = {}
@@ -222,22 +222,12 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
             if not issue_type:
                 continue
             key_map[key] = build_issue_type_template_permission_key(
-                issue_type.name, action
+                issue_type.name, action, issue_type.system_key
             )
         return key_map
 
     def get_issue_type_template_permissions(self, role, bound_permission_keys):
-        issue_type_names = (
-            IssueType.objects.filter(
-                project__workspace=role.workspace,
-                deleted_at__isnull=True,
-                is_active=True,
-            )
-            .order_by("name")
-            .values_list("name", flat=True)
-            .distinct()
-        )
-        descriptors = build_issue_type_template_permission_descriptors(issue_type_names)
+        descriptors = workspace_issue_type_template_descriptors(role.workspace_id)
         bound_key_set = set(bound_permission_keys)
         action_labels = dict(ISSUE_TYPE_PERMISSION_ACTIONS)
 

@@ -308,6 +308,7 @@ class ProjectMemberViewSet(BaseViewSet):
                 "role",
                 "custom_role_ids",
                 "inherited_role_ids",
+                "role_template_ids",
                 "role_sources",
             ),
             many=True,

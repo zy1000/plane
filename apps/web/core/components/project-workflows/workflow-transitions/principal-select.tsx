@@ -11,11 +11,16 @@ import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 import { useProjectRoles } from "@/hooks/store/use-project-roles";
+import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
+import { isIssueSchemeScopeKey } from "@/services/project/issue-scheme-scope";
 import {
   WORKFLOW_SPECIAL_APPROVER_OPTIONS,
+  buildRoleTemplateToken,
   buildRoleToken,
   getRoleIdFromToken,
+  getRoleTemplateIdFromToken,
   getWorkflowApproverLabel,
+  isRoleTemplateToken,
   isRoleToken,
 } from "./approver-utils";
 import { DropdownPanel } from "./dropdown-panel";
@@ -63,18 +68,24 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
   const [search, setSearch] = useState("");
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
 
+  // 方案作用域（模板中心维护模式方案）：没有项目，候选成员取工作区成员、角色只能选角色模板
+  const isSchemeScope = isIssueSchemeScopeKey(projectId);
   const {
     getUserDetails,
     project: { getProjectMemberIds, fetchProjectMembers },
+    workspace: { getWorkspaceMemberIds, fetchWorkspaceMembers },
   } = useMember();
   const {
-    roles,
+    roles: projectRoles,
     fetchRoles,
     isLoading: isRolesLoading,
-  } = useProjectRoles(workspaceSlug, projectId);
+  } = useProjectRoles(workspaceSlug, isSchemeScope ? undefined : projectId);
+  const { roles: roleTemplates, fetchRoles: fetchRoleTemplates } = useWorkspaceRoles(workspaceSlug, "project_template");
+  const roles = isSchemeScope ? [] : projectRoles;
 
-  const memberIds = getProjectMemberIds(projectId, false) ?? [];
+  const memberIds = (isSchemeScope ? getWorkspaceMemberIds(workspaceSlug) : getProjectMemberIds(projectId, false)) ?? [];
   const isAllSelected = value.length === 0;
+  const hasSelectedTemplates = value.some(isRoleTemplateToken);
 
   const roleTokenNameMap = useMemo(
     () =>
@@ -84,6 +95,18 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
       }, {}),
     [roles]
   );
+  const roleTemplateNameMap = useMemo(
+    () =>
+      roleTemplates.reduce<Record<string, string>>((acc, role) => {
+        acc[role.id] = role.name;
+        return acc;
+      }, {}),
+    [roleTemplates]
+  );
+  // 角色模板候选：方案作用域全部列出；项目作用域只列已选中的（脱离时拷来的），能看见也能去掉
+  const templateOptions = isSchemeScope
+    ? roleTemplates
+    : roleTemplates.filter((role) => value.includes(buildRoleTemplateToken(role.id)));
 
   const filteredSpecialOptions = WORKFLOW_SPECIAL_APPROVER_OPTIONS.filter((option) =>
     `${option.label} ${option.description}`.toLowerCase().includes(search.toLowerCase())
@@ -91,6 +114,9 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
   const filteredRoleOptions = search
     ? roles.filter((role) => role.name.toLowerCase().includes(search.toLowerCase()))
     : roles;
+  const filteredTemplateOptions = search
+    ? templateOptions.filter((role) => role.name.toLowerCase().includes(search.toLowerCase()))
+    : templateOptions;
   const filteredMemberIds = search
     ? memberIds.filter((id) => {
         const user = getUserDetails(id);
@@ -113,6 +139,15 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
           };
         }
 
+        if (isRoleTemplateToken(principalId)) {
+          const templateId = getRoleTemplateIdFromToken(principalId);
+          return {
+            id: principalId,
+            type: "role",
+            label: templateId ? (roleTemplateNameMap[templateId] ?? "角色模板") : "角色模板",
+          };
+        }
+
         if (isRoleToken(principalId)) {
           const roleId = getRoleIdFromToken(principalId);
           return {
@@ -131,17 +166,25 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
           avatarUrl: user?.avatar_url,
         };
       }),
-    [getUserDetails, roleTokenNameMap, value]
+    [getUserDetails, roleTokenNameMap, roleTemplateNameMap, value]
   );
 
   const handleOpen = async () => {
     if (disabled) return;
     setIsOpen(true);
+    if (isSchemeScope) {
+      if (!getWorkspaceMemberIds(workspaceSlug)?.length) void fetchWorkspaceMembers(workspaceSlug);
+      if (roleTemplates.length === 0) void fetchRoleTemplates();
+      return;
+    }
     if (!getProjectMemberIds(projectId, false)) {
       void fetchProjectMembers(workspaceSlug, projectId);
     }
     if (roles.length === 0) {
       void fetchRoles();
+    }
+    if (hasSelectedTemplates && roleTemplates.length === 0) {
+      void fetchRoleTemplates();
     }
   };
 
@@ -295,6 +338,32 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
             )}
             {filteredRoleOptions.map((role) => {
               const token = buildRoleToken(role.id);
+              const isSelected = value.includes(token);
+              return (
+                <button
+                  key={role.id}
+                  type="button"
+                  onClick={() => handleToggle(token)}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
+                >
+                  <div
+                    className={cn(
+                      "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
+                      isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
+                    )}
+                  >
+                    {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                  </div>
+                  <span className="truncate text-primary">{role.name}</span>
+                </button>
+              );
+            })}
+
+            {filteredTemplateOptions.length > 0 && (
+              <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">角色模板</p>
+            )}
+            {filteredTemplateOptions.map((role) => {
+              const token = buildRoleTemplateToken(role.id);
               const isSelected = value.includes(token);
               return (
                 <button

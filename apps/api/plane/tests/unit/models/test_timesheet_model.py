@@ -189,13 +189,13 @@ class TestTimeSheetModel:
         # 必须有一个 state 才能建 issue
         state = State.objects.create(
             name="Backlog",
-            project=project,
+            scheme_id=project.issue_scheme_id,
             workspace=workspace,
             slug="backlog",
             sequence=1,
         )
 
-        bug_type = IssueType.objects.create(project=project, name="缺陷")
+        bug_type = IssueType.objects.create(scheme_id=project.issue_scheme_id, name="缺陷")
         issue = Issue.objects.create(
             workspace=workspace,
             project=project,

@@ -132,7 +132,7 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
         field = (
             TypeExtraField.objects.filter(
                 id=field_id,
-                project_id=project_id,
+                scheme__projects=project_id,
                 is_active=True,
                 deleted_at__isnull=True,
             )

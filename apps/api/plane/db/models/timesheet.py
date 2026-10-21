@@ -10,6 +10,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
+from plane.db.seed_data import issue_scheme as issue_type_keys
+
 from .base import BaseModel
 
 MIDNIGHT_END_SENTINEL = datetime.time(23, 59, 0)
@@ -37,39 +39,38 @@ CATEGORY_KEYS_REQUIRE_TEST_CASE = {TIMESHEET_CATEGORY_TEST_CASE}
 # 仅挂项目（不允许挂 issue / test_case）的类别 key 集合，未来新增纯项目级类别时在此处追加
 CATEGORY_KEYS_PROJECT_ONLY = {TIMESHEET_CATEGORY_PROJECT, TIMESHEET_CATEGORY_SAMPLE}
 
-# 工作项 type 名称 → 工时类别 key 的映射。
-# 名称是工作区里 IssueType.name 的中文配置，与 apps/api/plane/app/views/issue/custom.py
-# 中的 '史诗' / '特性' / '用户故事' / '任务' / '缺陷' 保持一致。
-# 新增类型 / 重命名时在此处维护即可。
-ISSUE_TYPE_NAME_TO_CATEGORY_KEY = {
-    "史诗": TIMESHEET_CATEGORY_REQUIREMENT,
-    "特性": TIMESHEET_CATEGORY_REQUIREMENT,
-    "用户故事": TIMESHEET_CATEGORY_REQUIREMENT,
-    "任务": TIMESHEET_CATEGORY_TASK,
-    "缺陷": TIMESHEET_CATEGORY_BUG,
+# 工作项类型系统标识 → 工时类别 key 的映射（seed_data/issue_scheme.py）。
+# 按标识而不按名字：「缺陷(软件)」以前对不上写死的「缺陷」，缺陷工时全落到了通用类别。
+# 自建类型（system_key 为空）落通用的 ISSUE。
+ISSUE_TYPE_KEY_TO_CATEGORY_KEY = {
+    issue_type_keys.EPIC: TIMESHEET_CATEGORY_REQUIREMENT,
+    issue_type_keys.FEATURE: TIMESHEET_CATEGORY_REQUIREMENT,
+    issue_type_keys.STORY: TIMESHEET_CATEGORY_REQUIREMENT,
+    issue_type_keys.TASK: TIMESHEET_CATEGORY_TASK,
+    issue_type_keys.BUG: TIMESHEET_CATEGORY_BUG,
 }
 
 
 def resolve_issue_category_key(issue) -> str:
-    """按 issue 的 type.name 解析出对应的工时类别 key。
+    """按 issue 的 type.system_key 解析出对应的工时类别 key。
     未匹配到映射或未挂 type 时回落到通用的 ISSUE（保证始终有兜底）。
     """
     if issue is None:
         return TIMESHEET_CATEGORY_ISSUE
-    type_name = None
+    system_key = None
     type_obj = getattr(issue, "type", None)
     if type_obj is not None:
-        type_name = getattr(type_obj, "name", None)
-    if not type_name and getattr(issue, "type_id", None):
+        system_key = getattr(type_obj, "system_key", None)
+    elif getattr(issue, "type_id", None):
         # lazy 读取，避免调用方必须 select_related('type')
         from .issue_type import IssueType
 
-        type_name = (
+        system_key = (
             IssueType.objects.filter(pk=issue.type_id)
-            .values_list("name", flat=True)
+            .values_list("system_key", flat=True)
             .first()
         )
-    return ISSUE_TYPE_NAME_TO_CATEGORY_KEY.get(type_name, TIMESHEET_CATEGORY_ISSUE)
+    return ISSUE_TYPE_KEY_TO_CATEGORY_KEY.get(system_key, TIMESHEET_CATEGORY_ISSUE)
 
 
 class TimesheetCategory(BaseModel):

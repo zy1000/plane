@@ -171,7 +171,7 @@ class ProjectUpdateSerializer(ProjectCreateSerializer):
         """Update a project"""
         if (
             validated_data.get("default_state", None) is not None
-            and not State.objects.filter(project=instance, id=validated_data.get("default_state")).exists()
+            and not State.objects.filter(scheme_id=instance.issue_scheme_id, id=validated_data.get("default_state")).exists()
         ):
             # Check if the default state is a state in the project
             raise serializers.ValidationError("Default state should be a state in the project")
@@ -215,6 +215,8 @@ class ProjectSerializer(BaseSerializer):
             "updated_by",
             "deleted_at",
             "cover_image_url",
+            # 工作项方案由 Project.save() 建 / 由脱离接口换，外部 API 不能直接写
+            "issue_scheme",
         ]
 
     def validate(self, data):

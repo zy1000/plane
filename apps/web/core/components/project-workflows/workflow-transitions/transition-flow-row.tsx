@@ -12,7 +12,7 @@ import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
 import { cn } from "@plane/utils";
 import type { TWorkflowTransition } from "@/services/project/project-workflow.service";
-import { isRoleToken, WORKFLOW_SPECIAL_APPROVER_OPTIONS } from "./approver-utils";
+import { isRoleTemplateToken, isRoleToken, WORKFLOW_SPECIAL_APPROVER_OPTIONS } from "./approver-utils";
 import type { TViewBox } from "./workflow-view-panel";
 
 type TTransitionFlowRowProps = {
@@ -49,7 +49,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
       const specialOption = WORKFLOW_SPECIAL_APPROVER_OPTIONS.find((option) => option.id === id);
       if (specialOption) {
         specialLabels.push(specialOption.label);
-      } else if (isRoleToken(id)) {
+      } else if (isRoleToken(id) || isRoleTemplateToken(id)) {
         roleCount += 1;
       } else {
         memberCount += 1;

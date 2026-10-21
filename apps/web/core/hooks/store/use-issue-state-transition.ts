@@ -7,6 +7,10 @@ import {
 import { useMember } from "./use-member";
 
 const ROLE_TOKEN_PREFIX = "role:";
+/** 角色模板（模式方案的工作流约束）：命中 = 成员持有由该模板派生的项目角色（后端同口径） */
+const ROLE_TEMPLATE_TOKEN_PREFIX = "role_template:";
+/** 流程图接口里角色模板的 id 形如 `template:<模板 id>`（见后端 build_workflow_principal_item） */
+const FLOWCHART_TEMPLATE_ID_PREFIX = "template:";
 const SPECIAL_ASSIGNEES_TOKEN = "special:assignees";
 const SPECIAL_CREATED_BY_TOKEN = "special:created_by";
 
@@ -39,6 +43,11 @@ const EMPTY_RESULT: TStateTransitionCheckResult = {
 
 const workflowService = new ProjectWorkflowService();
 
+const toRolePrincipalToken = (principalId: string) =>
+  principalId.startsWith(FLOWCHART_TEMPLATE_ID_PREFIX)
+    ? `${ROLE_TEMPLATE_TOKEN_PREFIX}${principalId.slice(FLOWCHART_TEMPLATE_ID_PREFIX.length)}`
+    : `${ROLE_TOKEN_PREFIX}${principalId}`;
+
 const normalizeIds = (ids: Array<string | null | undefined> | undefined | null) =>
   Array.from(new Set((ids ?? []).filter(Boolean) as string[]));
 
@@ -52,7 +61,7 @@ const mapFlowchartToTransitionRules = (flowchart?: TWorkflowFlowchart | null): T
     approverTokens: transition.approvers
       .map((principal) => {
         if (principal.kind === "member") return principal.id;
-        if (principal.kind === "role") return `${ROLE_TOKEN_PREFIX}${principal.id}`;
+        if (principal.kind === "role") return toRolePrincipalToken(principal.id);
         if (principal.kind === "dynamic") return `special:${principal.id}`;
         return null;
       })
@@ -60,7 +69,7 @@ const mapFlowchartToTransitionRules = (flowchart?: TWorkflowFlowchart | null): T
     assigneeTokens: transition.assignees
       .map((principal) => {
         if (principal.kind === "member") return principal.id;
-        if (principal.kind === "role") return `${ROLE_TOKEN_PREFIX}${principal.id}`;
+        if (principal.kind === "role") return toRolePrincipalToken(principal.id);
         if (principal.kind === "dynamic") return `special:${principal.id}`;
         return null;
       })
@@ -97,7 +106,8 @@ export const useIssueStateTransition = (
 
       try {
         const workflows = await workflowService.fetchWorkflows(workspaceSlug, projectId, issueTypeId);
-        const workflow = workflows.find((item) => item.is_active) ?? workflows[0] ?? null;
+        // 只认激活的工作流：没有激活的就不约束（与后端 get_active_workflow 一致），别退回取第一条未激活的
+        const workflow = workflows.find((item) => item.is_active) ?? null;
         if (!workflow) {
           transitionRulesByIssueTypeRef.current[issueTypeId] = [];
           return [];
@@ -150,6 +160,17 @@ export const useIssueStateTransition = (
           if (issue.created_by && memberIdSet.has(issue.created_by)) {
             allowedAssigneeSet.add(issue.created_by);
           }
+          return;
+        }
+        if (token.startsWith(ROLE_TEMPLATE_TOKEN_PREFIX)) {
+          const templateId = token.slice(ROLE_TEMPLATE_TOKEN_PREFIX.length);
+          if (!templateId) return;
+          projectMemberIds.forEach((memberId) => {
+            const memberDetails = getProjectMemberDetails(memberId, projectId);
+            if (memberDetails?.role_template_ids?.includes(templateId)) {
+              allowedAssigneeSet.add(memberId);
+            }
+          });
           return;
         }
         if (token.startsWith(ROLE_TOKEN_PREFIX)) {

@@ -59,6 +59,7 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity
+from plane.db.seed_data.issue_scheme import TASK as SYSTEM_TASK
 from plane.db.models import (
     CycleIssue,
     FileAsset,
@@ -517,10 +518,10 @@ class IssueViewSet(BaseViewSet):
         if not data.get("type_id"):
             default_issue_type = (
                 IssueType.objects.filter(
-                    project=project, is_default=True, deleted_at__isnull=True
+                    scheme_id=project.issue_scheme_id, is_default=True, deleted_at__isnull=True
                 ).first()
                 or IssueType.objects.filter(
-                    project=project, name="任务", deleted_at__isnull=True
+                    scheme_id=project.issue_scheme_id, system_key=SYSTEM_TASK, deleted_at__isnull=True
                 ).first()
             )
             if default_issue_type is None:
@@ -904,7 +905,7 @@ class IssueViewSet(BaseViewSet):
         )
         if state_id and str(state_id) != str(issue.state_id):
             try:
-                to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
+                to_state = StateModel.objects.get(pk=state_id, scheme__projects=project_id)
                 allowed, error_msg, transition_record = check_update_state_permission(
                     issue=issue,
                     to_state=to_state,

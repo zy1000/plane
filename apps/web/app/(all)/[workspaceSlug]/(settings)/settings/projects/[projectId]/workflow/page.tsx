@@ -10,6 +10,7 @@ import { PROJECT_SETTINGS } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
+import { IssueSchemeFollowBanner } from "@/components/issue-scheme/follow-banner";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
 import { ProjectWorkflowRoot } from "@/components/project-workflows";
@@ -36,6 +37,7 @@ function WorkflowSettingsPage({ params }: Route.ComponentProps) {
   return (
     <SettingsContentWrapper header={<WorkflowProjectSettingsHeader />} hugging>
       <PageHead title={pageTitle} />
+      <IssueSchemeFollowBanner workspaceSlug={workspaceSlug} projectId={projectId} />
       <div className="w-full">
         <SettingsHeading title="工作流" description="配置工作项在不同状态之间的流转规则。" />
         <div className="mt-8">

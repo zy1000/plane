@@ -113,6 +113,7 @@ from .workspace import (
 
 from .favorite import UserFavorite
 
+from .issue_scheme import IssueScheme
 from .issue_type import IssueType,IssueTypeCategory
 
 from .recent_visit import UserRecentVisit

@@ -24,6 +24,7 @@ from plane.app.serializers import (
     IssueStateIntakeSerializer,
 )
 from plane.utils.issue_filters import issue_filters
+from plane.utils.issue_scheme import project_scheme_id
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models.intake import SourceType
 
@@ -126,16 +127,16 @@ class IntakeIssuePublicViewSet(BaseViewSet):
             return Response({"error": "Invalid priority"}, status=status.HTTP_400_BAD_REQUEST)
 
         # get the triage state
+        # triage 每方案一条，跟着项目所用的方案走
         triage_state = State.triage_objects.filter(
-            project_id=project_deploy_board.project_id, workspace_id=project_deploy_board.workspace_id
+            scheme__projects=project_deploy_board.project_id, workspace_id=project_deploy_board.workspace_id
         ).first()
 
         if not triage_state:
             triage_state = State.objects.create(
                 name="Triage",
                 group=StateGroup.TRIAGE.value,
-                project_id=project_deploy_board.project_id,
-                workspace_id=project_deploy_board.workspace_id,
+                scheme_id=project_scheme_id(project_deploy_board.project_id),
                 color="#4E5355",
                 sequence=65000,
                 default=False,

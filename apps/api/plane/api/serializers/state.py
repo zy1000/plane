@@ -16,10 +16,13 @@ class StateSerializer(BaseSerializer):
     and automatic default state switching for workflow management.
     """
 
+    # 状态归方案，没有 project 列。对外仍给 project（方案的归属项目，模式方案为空），保持契约不变
+    project = serializers.UUIDField(source="scheme.project_id", read_only=True)
+
     def validate(self, data):
         # If the default is being provided then make all other states default False
         if data.get("default", False):
-            State.objects.filter(project_id=self.context.get("project_id")).update(default=False)
+            State.objects.filter(scheme__projects=self.context.get("project_id")).update(default=False)
 
         if data.get("group", None) == StateGroup.TRIAGE.value:
             raise serializers.ValidationError("Cannot create triage state")
@@ -35,7 +38,8 @@ class StateSerializer(BaseSerializer):
             "created_at",
             "updated_at",
             "workspace",
-            "project",
+            # 工作项方案由接口按项目带出，外部调用方不能指定
+            "scheme",
             "deleted_at",
             "slug",
         ]

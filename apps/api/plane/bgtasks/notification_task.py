@@ -335,7 +335,7 @@ def notifications(
                         issue_activity.get("field") == "state"
                         and preference.issue_completed
                         and State.objects.filter(
-                            project_id=project_id,
+                            scheme__projects=project_id,
                             pk=issue_activity.get("new_identifier"),
                             group="completed",
                         ).exists()

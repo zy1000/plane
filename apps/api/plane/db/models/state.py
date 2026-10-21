@@ -8,7 +8,7 @@ from django.template.defaultfilters import slugify
 from django.db.models import Q
 
 # Module imports
-from .project import ProjectBaseModel
+from .issue_scheme import SchemeBaseModel
 from plane.db.mixins import SoftDeletionManager
 
 class StateGroup(models.TextChoices):
@@ -128,7 +128,14 @@ class TriageStateManager(SoftDeletionManager):
         return super().get_queryset().filter(group=StateGroup.TRIAGE.value)
 
 
-class State(ProjectBaseModel):
+class State(SchemeBaseModel):
+    # 所属工作项方案。按项目取状态写 State.objects.filter(scheme__projects=<project_id>)；
+    # triage 每方案一条、不挂类型
+    scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.CASCADE,
+        related_name="states",
+    )
     name = models.CharField(max_length=255, verbose_name="State Name")
     description = models.TextField(verbose_name="State Description", blank=True)
     color = models.CharField(max_length=255, verbose_name="State Color")
@@ -153,15 +160,15 @@ class State(ProjectBaseModel):
 
     def __str__(self):
         """Return name of the state"""
-        return f"{self.name} <{self.project.name}>"
+        return f"{self.name} <{self.scheme.name}>"
 
     class Meta:
-        unique_together = ["name",'issue_type', "project", "deleted_at"]
+        unique_together = ["name", "issue_type", "scheme", "deleted_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["name",'issue_type', "project"],
+                fields=["name", "issue_type", "scheme"],
                 condition=Q(deleted_at__isnull=True),
-                name="state_unique_name_project_when_deleted_at_null",
+                name="state_unique_name_scheme_when_deleted_at_null",
             )
         ]
         verbose_name = "State"
@@ -171,9 +178,11 @@ class State(ProjectBaseModel):
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.name)
+        if self.issue_type_id and not self.scheme_id:
+            self.scheme_id = self.issue_type.scheme_id
         if self._state.adding:
             # Get the maximum sequence value from the database
-            last_id = State.objects.filter(project=self.project).aggregate(largest=models.Max("sequence"))["largest"]
+            last_id = State.objects.filter(scheme_id=self.scheme_id).aggregate(largest=models.Max("sequence"))["largest"]
             # if last_id is not None
             if last_id is not None:
                 self.sequence = last_id + 15000

@@ -5,8 +5,9 @@
 """把 WorkspaceRole(type=project_template) 的权限映射成某个项目可用的 ProjectRole 权限。
 
 工作项类型的权限 key 里嵌了 IssueType 的 UUID，每个项目各不相同，所以模板里存的是
-描述符（名字 + 动作），落到具体项目时要按 IssueType 名字重新解析。直接复制模板的
-permissions JSON 会留下一批指向别的项目的死 key。
+描述符（名字 + 系统标识 + 动作），落到具体项目时要重新解析：系统类型按 ``system_key``
+找（改名不断），自建类型按名字找。直接复制模板的 permissions JSON 会留下一批指向别的
+项目的死 key。
 """
 
 from uuid import UUID
@@ -17,24 +18,14 @@ from plane.db.models import IssueType, Permission, Project, ProjectRole
 from plane.db.models.issue_type import (
     ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY,
     build_issue_type_permission_key,
-    build_issue_type_template_permission_descriptors,
     parse_issue_type_permission_key,
     parse_issue_type_template_permission_key,
+    workspace_issue_type_template_descriptors,
 )
 
 
 def get_workspace_issue_type_template_descriptors(workspace_role):
-    issue_type_names = (
-        IssueType.objects.filter(
-            project__workspace=workspace_role.workspace,
-            deleted_at__isnull=True,
-            is_active=True,
-        )
-        .order_by("name")
-        .values_list("name", flat=True)
-        .distinct()
-    )
-    descriptors = build_issue_type_template_permission_descriptors(issue_type_names)
+    descriptors = workspace_issue_type_template_descriptors(workspace_role.workspace_id)
 
     template_permissions = (
         workspace_role.permissions if isinstance(workspace_role.permissions, dict) else {}
@@ -55,7 +46,10 @@ def get_workspace_issue_type_template_descriptors(workspace_role):
         if not isinstance(name, str) or descriptor.get("action") != action:
             continue
 
-        descriptors[key] = {"name": name, "action": action}
+        # 工作区里已经没有这个类型时，保存模板时留下的描述符仍可用来下发（目标项目可能还有）
+        descriptors.setdefault(
+            key, {"name": name, "action": action, "system_key": descriptor.get("system_key") or None}
+        )
 
     return descriptors
 
@@ -79,7 +73,7 @@ def get_project_issue_type_key_descriptors(permission_keys):
 
     issue_types = IssueType.objects.filter(
         id__in=[issue_type_id for issue_type_id, _ in issue_type_keys.values()]
-    ).only("id", "name")
+    ).only("id", "name", "system_key")
     issue_types_by_id = {issue_type.id: issue_type for issue_type in issue_types}
 
     descriptors = {}
@@ -87,19 +81,24 @@ def get_project_issue_type_key_descriptors(permission_keys):
         issue_type = issue_types_by_id.get(issue_type_id)
         if not issue_type:
             continue
-        descriptors[key] = {"name": issue_type.name, "action": action}
+        descriptors[key] = {"name": issue_type.name, "action": action, "system_key": issue_type.system_key}
 
     return descriptors
 
 
 def map_template_permission_keys_to_project(project, workspace_role, permission_keys):
-    target_issue_types = IssueType.objects.filter(
-        project=project,
-        deleted_at__isnull=True,
-        is_active=True,
-    ).only("id", "name")
+    target_issue_types = list(
+        IssueType.objects.filter(
+            scheme_id=project.issue_scheme_id,
+            deleted_at__isnull=True,
+            is_active=True,
+        ).only("id", "name", "system_key")
+    )
     target_issue_type_id_by_name = {
         issue_type.name: issue_type.id for issue_type in target_issue_types
+    }
+    target_issue_type_id_by_system_key = {
+        issue_type.system_key: issue_type.id for issue_type in target_issue_types if issue_type.system_key
     }
     template_descriptors = get_workspace_issue_type_template_descriptors(workspace_role)
     project_key_descriptors = get_project_issue_type_key_descriptors(permission_keys)
@@ -113,7 +112,10 @@ def map_template_permission_keys_to_project(project, workspace_role, permission_
             descriptor = project_key_descriptors.get(key)
 
         if descriptor:
-            target_issue_type_id = target_issue_type_id_by_name.get(descriptor["name"])
+            if descriptor.get("system_key"):
+                target_issue_type_id = target_issue_type_id_by_system_key.get(descriptor["system_key"])
+            else:
+                target_issue_type_id = target_issue_type_id_by_name.get(descriptor["name"])
             if target_issue_type_id:
                 mapped_keys.append(
                     build_issue_type_permission_key(
@@ -150,6 +152,23 @@ def build_project_role_permissions(project, workspace_role):
     project_permissions["permission_keys"] = permission_keys
     project_permissions.pop(ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY, None)
     return project_permissions, bad_keys
+
+
+def apply_template_permissions_to_project_roles(project):
+    """把项目里由模板派生的角色的权限按模板重新换算成本项目的 key（建项目时用）。
+
+    建项目时角色要先于工作项方案建好（项目方案的缺陷工作流按角色名找审批人），那时类型可能还没生成，
+    所以 create_default_role 先原样复制，方案就位后再调这里。模板里非项目 scope 的 key 照旧带上，与原先
+    原样复制一致，不在建项目时报错。
+    """
+    project_roles = list(
+        ProjectRole.objects.filter(project_id=project.id, source_template__isnull=False).select_related(
+            "source_template"
+        )
+    )
+    for project_role in project_roles:
+        project_role.permissions, _ = build_project_role_permissions(project, project_role.source_template)
+    ProjectRole.objects.bulk_update(project_roles, ["permissions"])
 
 
 class TemplatePermissionScopeError(Exception):

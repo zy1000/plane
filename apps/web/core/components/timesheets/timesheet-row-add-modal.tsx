@@ -28,7 +28,7 @@ import { Logo } from "@plane/propel/emoji-icon-picker";
 import { cn } from "@plane/utils";
 import {
   getCategoryIconName,
-  getCategoryIssueTypeNames,
+  getCategoryIssueTypeKeys,
   getCategoryPanelKind,
   getTimesheetCategoryChroma,
 } from "@/constants/timesheet-category";
@@ -203,12 +203,12 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
       try {
         if (panel === "issue") {
-          // 工作项工时被拆分为 REQUIREMENT / TASK / BUG 后，需要把类别允许的 issue type.name
+          // 工作项工时被拆分为 REQUIREMENT / TASK / BUG 后，需要把类别允许的类型系统标识
           // 透传到后端做筛选，从而让每个子菜单只看到自己归属的工作项。
-          const typeNames = getCategoryIssueTypeNames(category.categoryKey);
+          const typeKeys = getCategoryIssueTypeKeys(category.categoryKey);
           const baseParams: Record<string, any> = {
             ...(query ? { name: query } : {}),
-            ...(typeNames && typeNames.length > 0 ? { type__name: typeNames.join(",") } : {}),
+            ...(typeKeys && typeKeys.length > 0 ? { type__system_key: typeKeys.join(",") } : {}),
           };
 
           if (currentUserId) {

@@ -108,6 +108,11 @@ type TExtraFieldControlProps = {
   onChange: (next: TIssueExtraFieldValue["value"]) => void;
   disabled?: boolean;
   /**
+   * 当前工作项所在项目：成员字段只列这个项目的成员（后端保存时同口径校验）。
+   * 必须由调用方传，不能从 field 上取 —— 跟随研发模式的项目共用模式方案的字段，field.project_id 为 null。
+   */
+  projectId: string | null | undefined;
+  /**
    * compact=true — sidebar style: transparent button, h-7.5, no border on normal state.
    * compact=false (default) — modal style: border-with-text, h-[38px].
    */
@@ -115,7 +120,7 @@ type TExtraFieldControlProps = {
 };
 
 export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
-  const { field, value, onChange, disabled, error, compact = false } = props;
+  const { field, value, onChange, disabled, error, projectId, compact = false } = props;
   const fieldType = field.field_type;
   const inputId = `extra-field-${field.id}`;
 
@@ -343,7 +348,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
           value={currentArr}
           onChange={(next) => onChange(next)}
           multiple={true}
-          projectId={field.project_id ?? field.project ?? undefined}
+          projectId={projectId ?? undefined}
           buttonVariant={compact ? "transparent-with-text" : "border-with-text"}
           buttonContainerClassName={cn("w-full", compact && "max-w-full text-left h-7.5 rounded-sm")}
           buttonClassName={cn(
@@ -368,7 +373,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         value={singleValue}
         onChange={(next) => onChange(next ?? null)}
         multiple={false}
-        projectId={field.project_id ?? field.project ?? undefined}
+        projectId={projectId ?? undefined}
         buttonVariant={compact ? "transparent-with-text" : "border-with-text"}
         buttonContainerClassName={cn("w-full", compact && "max-w-full text-left h-7.5 rounded-sm")}
         buttonClassName={cn(

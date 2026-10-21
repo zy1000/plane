@@ -55,9 +55,12 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
             : undefined,
         });
       } else {
-        const e = error as { error?: string };
+        const e = error as { error?: string; code?: string };
         const msg = e?.error;
-        if (msg === "The state is not empty, only empty states can be deleted") {
+        if (e?.code === "ISSUE_SCHEME_OBJECT_IN_USE" && msg) {
+          // 状态归工作项方案：任一项目的工作项、草稿或审批记录在用就不能删，后端给出带计数的说明
+          setToast({ type: TOAST_TYPE.ERROR, title: "无法删除", message: msg });
+        } else if (msg === "The state is not empty, only empty states can be deleted") {
           setToast({
             type: TOAST_TYPE.ERROR,
             title: "Error!",

@@ -14,6 +14,7 @@ from .project import (
     ProjectBasePermission,
     ProjectEntityPermission,
     ProjectMemberPermission,
+    IssueSchemeConfigPermission,
     ProjectLitePermission,
     ProjectAdminPermission,
 )

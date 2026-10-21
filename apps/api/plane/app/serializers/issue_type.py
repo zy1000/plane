@@ -4,12 +4,15 @@ from rest_framework import serializers
 
 # Module imports
 from .base import BaseSerializer
-from plane.db.models import IssueType, TypeExtraField, TypeExtraFieldValue
+from plane.db.models import IssueType, Project, TypeExtraField, TypeExtraFieldValue
 from plane.db.models.issue_type import IssueTypeCategory
 
 
 class TypeExtraFieldSerializer(BaseSerializer):
-    project_id = serializers.UUIDField(source="project.id", read_only=True)
+    # 字段归方案。project / project_id 取方案的归属项目（模式方案为空），保留给老调用方
+    project = serializers.UUIDField(source="scheme.project_id", read_only=True)
+    project_id = serializers.UUIDField(source="scheme.project_id", read_only=True)
+    scheme_id = serializers.UUIDField(read_only=True)
     workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
     issue_type_id = serializers.PrimaryKeyRelatedField(
         queryset=IssueType.objects.none(),
@@ -22,6 +25,7 @@ class TypeExtraFieldSerializer(BaseSerializer):
             "id",
             "project",
             "project_id",
+            "scheme_id",
             "workspace",
             "workspace_id",
             "issue_type",
@@ -41,7 +45,6 @@ class TypeExtraFieldSerializer(BaseSerializer):
             "updated_at",
         ]
         read_only_fields = [
-            "project",
             "workspace",
             "issue_type",
             "created_at",
@@ -51,13 +54,18 @@ class TypeExtraFieldSerializer(BaseSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         project_id = self.context.get("project_id")
+        scheme_id = self.context.get("scheme_id")
         workspace_slug = self.context.get("workspace_slug")
         issue_type_queryset = IssueType.objects.none()
 
-        if project_id or workspace_slug:
+        if scheme_id or project_id or workspace_slug:
             issue_type_queryset = IssueType.objects.filter(deleted_at__isnull=True)
-            if project_id:
-                issue_type_queryset = issue_type_queryset.filter(project_id=project_id)
+            if scheme_id:
+                # 只能挂到当前方案里的类型上
+                issue_type_queryset = issue_type_queryset.filter(scheme_id=scheme_id)
+            elif project_id:
+                # 只能挂到本项目所用方案里的类型上
+                issue_type_queryset = issue_type_queryset.filter(scheme__projects=project_id)
             if workspace_slug:
                 issue_type_queryset = issue_type_queryset.filter(
                     workspace__slug=workspace_slug
@@ -71,11 +79,20 @@ class TypeExtraFieldSerializer(BaseSerializer):
         issue_type = attrs.get("issue_type") or getattr(
             self.instance, "issue_type", None
         )
-        project_id = self.context.get("project_id") or getattr(
-            getattr(self.instance, "project", None), "id", None
-        )
+        project_id = self.context.get("project_id")
+        scheme_id = self.context.get("scheme_id")
 
-        if issue_type and project_id and str(issue_type.project_id) != str(project_id):
+        if issue_type and scheme_id and str(issue_type.scheme_id) != str(scheme_id):
+            raise serializers.ValidationError(
+                {"issue_type_id": "工作项类型不属于当前项目"}
+            )
+        if issue_type and not scheme_id and project_id and not Project.objects.filter(
+            pk=project_id, issue_scheme_id=issue_type.scheme_id
+        ).exists():
+            raise serializers.ValidationError(
+                {"issue_type_id": "工作项类型不属于当前项目"}
+            )
+        if issue_type and self.instance is not None and issue_type.scheme_id != self.instance.scheme_id:
             raise serializers.ValidationError(
                 {"issue_type_id": "工作项类型不属于当前项目"}
             )
@@ -83,7 +100,7 @@ class TypeExtraFieldSerializer(BaseSerializer):
         return attrs
 
     def create(self, validated_data):
-        validated_data.setdefault("project", validated_data["issue_type"].project)
+        validated_data.setdefault("scheme_id", validated_data["issue_type"].scheme_id)
         return super().create(validated_data)
 
 
@@ -150,7 +167,10 @@ class IssueTypeCategorySerializer(BaseSerializer):
 
 
 class IssueTypeSerializer(BaseSerializer):
-    project_id = serializers.UUIDField(source="project.id", read_only=True)
+    # 类型归方案。project / project_id 取方案的归属项目（模式方案为空），保留给老调用方
+    project = serializers.UUIDField(source="scheme.project_id", read_only=True)
+    project_id = serializers.UUIDField(source="scheme.project_id", read_only=True)
+    scheme_id = serializers.UUIDField(read_only=True)
     extra_fields = serializers.SerializerMethodField()
     # 暴露 category 为可写外键：写入时使用 `category_id`，工作区上下文下限定 queryset，
     # 避免跨工作区指向不属于当前 workspace 的类别。
@@ -180,7 +200,10 @@ class IssueTypeSerializer(BaseSerializer):
             "id",
             "project",
             "project_id",
+            "scheme_id",
             "name",
+            # 系统标识：种子类型的固定英文 key，代码按它判断；只读，用户自建的类型恒为空
+            "system_key",
             "description",
             "logo_props",
             "is_epic",
@@ -196,4 +219,4 @@ class IssueTypeSerializer(BaseSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["project", "workspace", "created_at", "updated_at"]
+        read_only_fields = ["workspace", "system_key", "created_at", "updated_at"]

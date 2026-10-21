@@ -19,11 +19,14 @@ from plane.app.serializers.workflow import (
     WorkflowTransitionSerializer,
 )
 from plane.app.views import BaseAPIView
+from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
 from plane.db.models import (
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
     ProjectMember,
     ProjectRole,
+    WorkspaceMember,
+    WorkspaceRole,
     State,
     TransitionRecordStatus,
     Workflow,
@@ -42,6 +45,8 @@ SPECIAL_APPROVER_ID_MAP = {
     f"{SPECIAL_APPROVER_PREFIX}{WorkflowApproverTarget.CREATED_BY}": WorkflowApproverTarget.CREATED_BY,
 }
 ROLE_PRINCIPAL_PREFIX = "role:"
+#: 工作区角色模板（WorkspaceRole，type=项目模板）。模式方案只能选它；运行时解析到项目里 source_template 等于它的角色
+ROLE_TEMPLATE_PRINCIPAL_PREFIX = "role_template:"
 PRINCIPAL_DIMENSION_FIELD_MAP = {
     WorkflowPrincipalDimension.INITIATOR: "initiator_ids",
     WorkflowPrincipalDimension.ASSIGNEE: "assignee_ids",
@@ -49,7 +54,9 @@ PRINCIPAL_DIMENSION_FIELD_MAP = {
 }
 
 
-class WorkflowAPIView(BaseAPIView):
+class WorkflowAPIView(IssueSchemeScopeMixin, BaseAPIView):
+    """工作流 CRUD。项目级与方案级（模板中心）路由共用，见 IssueSchemeScopeMixin。"""
+
     model = Workflow
     serializer_class = WorkflowSerializer
     filterset_fields = {
@@ -57,59 +64,61 @@ class WorkflowAPIView(BaseAPIView):
         "id": ["exact"],
     }
 
-    def get_project_queryset(self, project_id):
-        return Workflow.objects.filter(project_id=project_id)
+    def get_scheme_queryset(self):
+        return Workflow.objects.filter(scheme_id=self.get_scheme_id())
 
     @allow_fine_permission(PermissionKey.WORKFLOW_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
-    def get(self, request, slug, project_id):
-        workflows = self.filter_queryset(self.get_project_queryset(project_id))
+    def get(self, request, slug, project_id=None, issue_scheme_id=None):
+        workflows = self.filter_queryset(self.get_scheme_queryset())
         serializer = self.serializer_class(instance=workflows, many=True)
         return Response(serializer.data)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CREATE)
-    def post(self, request, slug, project_id):
+    def post(self, request, slug, project_id=None, issue_scheme_id=None):
         serializer = self.serializer_class(
-            data=request.data, context={"project_id": project_id}
+            data=request.data, context=self.serializer_scope_context()
         )
         if serializer.is_valid():
-            serializer.save(project_id=project_id)
+            serializer.save(scheme_id=self.get_scheme_id())
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_DELETE)
-    def delete(self, request, slug, project_id):
-        self.filter_queryset(self.get_project_queryset(project_id)).delete(soft=False)
+    def delete(self, request, slug, project_id=None, issue_scheme_id=None):
+        self.filter_queryset(self.get_scheme_queryset()).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_EDIT)
-    def put(self, request, slug, project_id):
+    def put(self, request, slug, project_id=None, issue_scheme_id=None):
         data = request.data.copy()
         workflow_id = data.pop("id")
-        workflow = self.get_project_queryset(project_id).get(id=workflow_id)
+        workflow = self.get_scheme_queryset().get(id=workflow_id)
         update_serializer = self.serializer_class(
             instance=workflow,
             data=data,
             partial=True,
-            context={"project_id": project_id},
+            context=self.serializer_scope_context(),
         )
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
         return Response(update_serializer.data, status=status.HTTP_200_OK)
 
 
-class WorkflowTransitionAPIView(BaseAPIView):
+class WorkflowTransitionAPIView(IssueSchemeScopeMixin, BaseAPIView):
+    """流转 CRUD。项目级与方案级（模板中心）路由共用，见 IssueSchemeScopeMixin。"""
+
     serializer_class = WorkflowTransitionSerializer
 
     def get_workflow_queryset(self, project_id, workflow_id):
         return WorkflowTransition.objects.filter(
-            project_id=project_id,
+            scheme_id=self.get_scheme_id(),
             workflow_id=workflow_id,
         )
 
     def _build_principals(
-        self, transition, dimension, member_ids, role_ids, dynamic_targets
+        self, transition, dimension, member_ids, role_ids, dynamic_targets, template_ids=()
     ):
-        """批量创建指定维度对象行（成员/角色/动态对象），忽略重复项。"""
+        """批量创建指定维度对象行（成员/角色/角色模板/动态对象），忽略重复项。"""
         principals = [
             WorkflowTransitionPrincipal(
                 transition=transition,
@@ -132,6 +141,15 @@ class WorkflowTransitionAPIView(BaseAPIView):
             WorkflowTransitionPrincipal(
                 transition=transition,
                 dimension=dimension,
+                kind=WorkflowPrincipalKind.ROLE,
+                workspace_role_id=template_id,
+            )
+            for template_id in template_ids
+        )
+        principals.extend(
+            WorkflowTransitionPrincipal(
+                transition=transition,
+                dimension=dimension,
                 kind=WorkflowPrincipalKind.DYNAMIC,
                 dynamic_target=dynamic_target,
             )
@@ -145,6 +163,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
     def _parse_principal_tokens(self, tokens):
         member_ids = []
         role_ids = []
+        template_ids = []
         dynamic_targets = []
 
         for token in tokens:
@@ -156,6 +175,11 @@ class WorkflowTransitionAPIView(BaseAPIView):
                 continue
             if token.startswith(SPECIAL_APPROVER_PREFIX):
                 raise ValueError(f"不支持的动态对象：{token}")
+            if token.startswith(ROLE_TEMPLATE_PRINCIPAL_PREFIX):
+                template_id = token[len(ROLE_TEMPLATE_PRINCIPAL_PREFIX):]
+                if template_id and template_id not in template_ids:
+                    template_ids.append(template_id)
+                continue
             if token.startswith(ROLE_PRINCIPAL_PREFIX):
                 role_id = token[len(ROLE_PRINCIPAL_PREFIX):]
                 if role_id and role_id not in role_ids:
@@ -164,24 +188,49 @@ class WorkflowTransitionAPIView(BaseAPIView):
             if token not in member_ids:
                 member_ids.append(token)
 
-        return member_ids, role_ids, dynamic_targets
+        return member_ids, role_ids, template_ids, dynamic_targets
 
     def _parse_and_validate_principal_tokens(self, project_id, dimension, tokens):
-        member_ids, role_ids, dynamic_targets = self._parse_principal_tokens(tokens)
+        """项目级：成员须是项目成员、角色须是本项目角色。方案级（模式方案没有项目）：成员须是工作区成员、
+        只能选角色模板。两种都接受角色模板（项目方案里可能有脱离时从模式方案拷来的）。"""
+        member_ids, role_ids, template_ids, dynamic_targets = self._parse_principal_tokens(tokens)
+        slug = self.kwargs.get("slug")
 
         if member_ids:
-            member_qs = ProjectMember.objects.filter(
-                project_id=project_id,
-                member_id__in=member_ids,
-                is_active=True,
-                deleted_at__isnull=True,
-            )
-            if dimension == WorkflowPrincipalDimension.ASSIGNEE:
-                member_qs = member_qs.filter(role__gte=15)
+            if self.is_scheme_route:
+                member_qs = WorkspaceMember.objects.filter(
+                    workspace__slug=slug, member_id__in=member_ids, is_active=True
+                )
+                if dimension == WorkflowPrincipalDimension.ASSIGNEE:
+                    member_qs = member_qs.filter(role__gte=15)
+            else:
+                member_qs = ProjectMember.objects.filter(
+                    project_id=project_id,
+                    member_id__in=member_ids,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                )
+                if dimension == WorkflowPrincipalDimension.ASSIGNEE:
+                    member_qs = member_qs.filter(role__gte=15)
             valid_member_ids = {str(member_id) for member_id in member_qs.values_list("member_id", flat=True)}
             invalid_member_ids = set(member_ids) - valid_member_ids
             if invalid_member_ids:
                 raise ValueError("成员不属于当前项目或不可用于该配置")
+
+        if template_ids:
+            valid_template_ids = {
+                str(template_id)
+                for template_id in WorkspaceRole.objects.filter(
+                    workspace__slug=slug,
+                    type=WorkspaceRole.RoleType.PROJECT_TEMPLATE,
+                    id__in=template_ids,
+                ).values_list("id", flat=True)
+            }
+            if set(template_ids) - valid_template_ids:
+                raise ValueError("角色模板不属于当前工作区")
+
+        if role_ids and self.is_scheme_route:
+            raise ValueError("模式方案的审批人只能选角色模板")
 
         if role_ids:
             valid_role_ids = {
@@ -196,13 +245,14 @@ class WorkflowTransitionAPIView(BaseAPIView):
             if invalid_role_ids:
                 raise ValueError("角色不属于当前项目")
 
-        return member_ids, role_ids, dynamic_targets
+        return member_ids, role_ids, template_ids, dynamic_targets
 
-    def _save_principals(self, transition, dimension, tokens, replace=False):
+    def _save_principals(self, project_id, transition, dimension, tokens, replace=False):
         if replace:
             transition.principals.filter(dimension=dimension).delete()
-        member_ids, role_ids, dynamic_targets = self._parse_and_validate_principal_tokens(
-            project_id=transition.project_id,
+        # 成员 / 角色按路由里的项目校验：流转归方案，自己身上没有项目
+        member_ids, role_ids, template_ids, dynamic_targets = self._parse_and_validate_principal_tokens(
+            project_id=project_id,
             dimension=dimension,
             tokens=tokens or [],
         )
@@ -212,6 +262,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
             member_ids=member_ids,
             role_ids=role_ids,
             dynamic_targets=dynamic_targets,
+            template_ids=template_ids,
         )
 
     def _with_principals(self, serializer_data, transition, dimension, field_name):
@@ -226,6 +277,8 @@ class WorkflowTransitionAPIView(BaseAPIView):
                 principal_ids.append(str(principal.member_id))
             elif principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
                 principal_ids.append(f"{ROLE_PRINCIPAL_PREFIX}{principal.role_id}")
+            elif principal.kind == WorkflowPrincipalKind.ROLE and principal.workspace_role_id:
+                principal_ids.append(f"{ROLE_TEMPLATE_PRINCIPAL_PREFIX}{principal.workspace_role_id}")
             elif (
                 principal.kind == WorkflowPrincipalKind.DYNAMIC
                 and principal.dynamic_target
@@ -252,7 +305,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
         return self._with_required_field_ids(data, transition)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
-    def get(self, request, slug, project_id, workflow_id):
+    def get(self, request, slug, workflow_id, project_id=None, issue_scheme_id=None):
         transitions = self.get_workflow_queryset(
             project_id, workflow_id
         ).prefetch_related("principals", "required_fields")
@@ -264,10 +317,10 @@ class WorkflowTransitionAPIView(BaseAPIView):
         return Response(data)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
-    def post(self, request, slug, project_id, workflow_id):
+    def post(self, request, slug, workflow_id, project_id=None, issue_scheme_id=None):
         data = {**request.data, "workflow_id": str(workflow_id)}
         serializer = self.serializer_class(
-            data=data, context={"project_id": project_id}
+            data=data, context=self.serializer_scope_context()
         )
         if serializer.is_valid():
             try:
@@ -281,10 +334,12 @@ class WorkflowTransitionAPIView(BaseAPIView):
             except ValueError as exc:
                 return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-            transition = serializer.save(project_id=project_id)
+            # 方案由 WorkflowTransition.save() 从工作流带出
+            transition = serializer.save()
             for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
                 if field_name in request.data:
                     self._save_principals(
+                        project_id=project_id,
                         transition=transition,
                         dimension=dimension,
                         tokens=request.data.get(field_name) or [],
@@ -306,7 +361,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
-    def put(self, request, slug, project_id, workflow_id):
+    def put(self, request, slug, workflow_id, project_id=None, issue_scheme_id=None):
         data = request.data.copy()
         transition_id = data.pop("id")
         extra_field_ids = data.pop("extra_field_ids", [])
@@ -317,7 +372,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
             instance=transition,
             data=data,
             partial=True,
-            context={"project_id": project_id},
+            context=self.serializer_scope_context(),
         )
         serializer.is_valid(raise_exception=True)
         try:
@@ -336,6 +391,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
         for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
             if field_name in request.data:
                 self._save_principals(
+                    project_id=project_id,
                     transition=transition,
                     dimension=dimension,
                     tokens=request.data.get(field_name) or [],
@@ -360,7 +416,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
         )
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
-    def delete(self, request, slug, project_id, workflow_id):
+    def delete(self, request, slug, workflow_id, project_id=None, issue_scheme_id=None):
         transition_id = request.data.get("id") or request.query_params.get("id")
         qs = self.get_workflow_queryset(project_id, workflow_id)
         if transition_id:
@@ -369,7 +425,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class WorkflowFlowchartAPIView(BaseAPIView):
+class WorkflowFlowchartAPIView(IssueSchemeScopeMixin, BaseAPIView):
     """
     GET /workspaces/<slug>/projects/<project_id>/workflows/flowchart/?issue_type_id=<可选>
 
@@ -380,19 +436,20 @@ class WorkflowFlowchartAPIView(BaseAPIView):
     """
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
-    def get(self, request, slug, project_id):
+    def get(self, request, slug, project_id=None, issue_scheme_id=None):
         issue_type_id = request.query_params.get("issue_type_id")
+        scheme_id = self.get_scheme_id()
 
         # 未软删的流转对象，预取成员头像资源与角色，避免逐条额外查询
         principal_qs = (
             WorkflowTransitionPrincipal.objects.filter(deleted_at__isnull=True)
-            .select_related("member", "member__avatar_asset", "role")
+            .select_related("member", "member__avatar_asset", "role", "workspace_role")
         )
         required_field_qs = WorkflowTransitionRequiredField.objects.filter(
             deleted_at__isnull=True
         ).select_related("extra_field")
         transitions_qs = (
-            WorkflowTransition.objects.filter(project_id=project_id)
+            WorkflowTransition.objects.filter(scheme_id=scheme_id)
             .select_related("from_state", "to_state")
             .prefetch_related(
                 Prefetch("principals", queryset=principal_qs),
@@ -402,7 +459,7 @@ class WorkflowFlowchartAPIView(BaseAPIView):
         )
 
         workflows = (
-            Workflow.objects.filter(project_id=project_id, is_active=True)
+            Workflow.objects.filter(scheme_id=scheme_id, is_active=True)
             .select_related("issue_type")
             .prefetch_related(Prefetch("transitions", queryset=transitions_qs))
             .order_by("issue_type__name")
@@ -417,7 +474,7 @@ class WorkflowFlowchartAPIView(BaseAPIView):
         states_by_type = defaultdict(list)
         if issue_type_ids:
             states = State.objects.filter(
-                project_id=project_id,
+                scheme_id=scheme_id,
                 issue_type_id__in=issue_type_ids,
             ).order_by("sequence")
             for state in states:

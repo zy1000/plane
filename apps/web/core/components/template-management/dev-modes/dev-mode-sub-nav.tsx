@@ -1,24 +1,26 @@
 import { Link, useLocation } from "react-router";
-import { Layers, ToggleLeft } from "lucide-react";
+import { Layers, ListTree, ToggleLeft } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
-import { devModeFeaturesPath, devModeStagesPath, isDevModeSubPageActive } from "./routes";
+import { devModeFeaturesPath, devModeIssueSchemePath, devModeStagesPath, isDevModeSubPageActive } from "./routes";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 type TSubNavItem = {
   key: string;
   i18nKey: string;
+  /** 直接给中文名（不走 i18n 的页签） */
+  label?: string;
   icon: LucideIcon;
   href: string;
-  /** 页签名后面那个小计数 */
+  /** 页签名后面那个小计数；空串不显示 */
   count: string;
   /** 索引页（路径就是详情本身），选中判定只认全等 */
   isIndex: boolean;
 };
 
 /**
- * 模式详情的子页页签（阶段 / 组件开关）。
+ * 模式详情的子页页签（阶段 / 组件开关 / 工作项配置）。
  *
  * 下划线式，与「评审」标签下的子页页签同款。以后模式下面要加内容（里程碑、默认角色
  * 之类），在这里加一项 + 在 `routes.ts` 加一条路径即可，头部与既有子页都不用动。
@@ -56,6 +58,16 @@ export function DevModeSubNav({
       count: `${featureOnCount} / ${featureTotal}`,
       isIndex: false,
     },
+    {
+      // 模式方案：跟随本模式的项目共用的工作项类型 / 状态 / 工作流（docs/issue-scheme/ 4.1）
+      key: "issue_scheme",
+      i18nKey: "",
+      label: "工作项配置",
+      icon: ListTree,
+      href: devModeIssueSchemePath(workspaceSlug, devModeId),
+      count: "",
+      isIndex: false,
+    },
   ];
 
   return (
@@ -73,15 +85,17 @@ export function DevModeSubNav({
             )}
           >
             <Icon className="size-3.5 shrink-0" />
-            <span>{t(item.i18nKey)}</span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-px text-11 font-medium tabular-nums",
-                isActive ? "bg-accent-primary/10 text-accent-primary" : "bg-layer-1 text-tertiary"
-              )}
-            >
-              {item.count}
-            </span>
+            <span>{item.label ?? t(item.i18nKey)}</span>
+            {item.count && (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-px text-11 font-medium tabular-nums",
+                  isActive ? "bg-accent-primary/10 text-accent-primary" : "bg-layer-1 text-tertiary"
+                )}
+              >
+                {item.count}
+              </span>
+            )}
             {isActive && (
               <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-t-sm bg-accent-primary" aria-hidden />
             )}

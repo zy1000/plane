@@ -33,6 +33,7 @@ import type { TIssueOperations } from "./root";
 
 type TDeferredFieldRowProps = {
   field: TTypeExtraField;
+  projectId: string;
   committedValue: unknown;
   issueId: string;
   onCommit: (next: TIssueExtraFieldValue["value"]) => Promise<void>;
@@ -42,7 +43,7 @@ type TDeferredFieldRowProps = {
 };
 
 const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFieldRowProps) {
-  const { field, committedValue, issueId, onCommit, disabled, commitOnEnter = true } = props;
+  const { field, projectId, committedValue, issueId, onCommit, disabled, commitOnEnter = true } = props;
   const [localValue, setLocalValue] = useState<unknown>(committedValue);
 
   useEffect(() => {
@@ -85,6 +86,7 @@ const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFiel
           value={localValue}
           onChange={(next) => setLocalValue(next)}
           disabled={disabled}
+          projectId={projectId}
           compact
         />
       </div>
@@ -96,13 +98,14 @@ const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFiel
 
 type TImmediateFieldRowProps = {
   field: TTypeExtraField;
+  projectId: string;
   value: unknown;
   onCommit: (next: TIssueExtraFieldValue["value"]) => Promise<void>;
   disabled?: boolean;
 };
 
 const ImmediateFieldRow = observer(function ImmediateFieldRow(props: TImmediateFieldRowProps) {
-  const { field, value, onCommit, disabled } = props;
+  const { field, projectId, value, onCommit, disabled } = props;
   const FieldIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
 
   return (
@@ -112,6 +115,7 @@ const ImmediateFieldRow = observer(function ImmediateFieldRow(props: TImmediateF
         value={value}
         onChange={(next) => onCommit(next)}
         disabled={disabled}
+        projectId={projectId}
         compact
       />
     </SidebarPropertyListItem>
@@ -180,6 +184,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
               <DeferredFieldRow
                 key={`${issueId}-${field.id}`}
                 field={field}
+                projectId={projectId}
                 committedValue={isValueEmpty(currentValue) ? "" : currentValue}
                 issueId={issueId}
                 onCommit={(next) => commit(field.id, field.field_type, next)}
@@ -193,6 +198,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
             <ImmediateFieldRow
               key={field.id}
               field={field}
+              projectId={projectId}
               value={currentValue}
               onCommit={(next) => commit(field.id, field.field_type, next)}
               disabled={disabled}

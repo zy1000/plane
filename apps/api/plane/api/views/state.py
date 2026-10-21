@@ -13,7 +13,9 @@ from drf_spectacular.utils import OpenApiResponse, OpenApiRequest
 # Module imports
 from plane.api.serializers import StateSerializer
 from plane.app.permissions import ProjectEntityPermission
-from plane.db.models import Issue, State
+from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
+from plane.utils.issue_scheme import is_referenced, project_scheme_id, state_references
+from plane.db.models import State
 from .base import BaseAPIView
 from plane.utils.openapi import (
     state_docs,
@@ -36,7 +38,7 @@ from plane.utils.openapi import (
 )
 
 
-class StateListCreateAPIEndpoint(BaseAPIView):
+class StateListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
     """State List and Create Endpoint"""
 
     serializer_class = StateSerializer
@@ -47,14 +49,15 @@ class StateListCreateAPIEndpoint(BaseAPIView):
     def get_queryset(self):
         return (
             State.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(project_id=self.kwargs.get("project_id"))
+            # 本项目所用方案里的状态；项目与成员条件写在同一个 filter() 里共用一条 projects join
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                scheme__projects=self.kwargs.get("project_id"),
+                scheme__projects__project_projectmember__member=self.request.user,
+                scheme__projects__project_projectmember__is_active=True,
+                scheme__projects__archived_at__isnull=True,
             )
             .filter(is_triage=False)
-            .filter(project__archived_at__isnull=True)
-            .select_related("project")
+            .select_related("scheme")
             .select_related("workspace")
             .distinct()
         )
@@ -90,7 +93,7 @@ class StateListCreateAPIEndpoint(BaseAPIView):
                     request.data.get("external_id")
                     and request.data.get("external_source")
                     and State.objects.filter(
-                        project_id=project_id,
+                        scheme__projects=project_id,
                         workspace__slug=slug,
                         external_source=request.data.get("external_source"),
                         external_id=request.data.get("external_id"),
@@ -98,7 +101,7 @@ class StateListCreateAPIEndpoint(BaseAPIView):
                 ):
                     state = State.objects.filter(
                         workspace__slug=slug,
-                        project_id=project_id,
+                        scheme__projects=project_id,
                         external_id=request.data.get("external_id"),
                         external_source=request.data.get("external_source"),
                     ).first()
@@ -110,13 +113,13 @@ class StateListCreateAPIEndpoint(BaseAPIView):
                         status=status.HTTP_409_CONFLICT,
                     )
 
-                serializer.save(project_id=project_id)
+                serializer.save(scheme_id=project_scheme_id(project_id))
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except IntegrityError:
             state = State.objects.filter(
                 workspace__slug=slug,
-                project_id=project_id,
+                scheme__projects=project_id,
                 name=request.data.get("name"),
             ).first()
             return Response(
@@ -159,7 +162,7 @@ class StateListCreateAPIEndpoint(BaseAPIView):
         )
 
 
-class StateDetailAPIEndpoint(BaseAPIView):
+class StateDetailAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
     """State Detail Endpoint"""
 
     serializer_class = StateSerializer
@@ -170,14 +173,15 @@ class StateDetailAPIEndpoint(BaseAPIView):
     def get_queryset(self):
         return (
             State.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(project_id=self.kwargs.get("project_id"))
+            # 本项目所用方案里的状态；项目与成员条件写在同一个 filter() 里共用一条 projects join
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                scheme__projects=self.kwargs.get("project_id"),
+                scheme__projects__project_projectmember__member=self.request.user,
+                scheme__projects__project_projectmember__is_active=True,
+                scheme__projects__archived_at__isnull=True,
             )
             .filter(is_triage=False)
-            .filter(project__archived_at__isnull=True)
-            .select_related("project")
+            .select_related("scheme")
             .select_related("workspace")
             .distinct()
         )
@@ -228,7 +232,7 @@ class StateDetailAPIEndpoint(BaseAPIView):
         Permanently remove a workflow state from a project.
         Default states and states with existing work items cannot be deleted.
         """
-        state = State.objects.get(is_triage=False, pk=state_id, project_id=project_id, workspace__slug=slug)
+        state = State.objects.get(is_triage=False, pk=state_id, scheme__projects=project_id, workspace__slug=slug)
 
         if state.default:
             return Response(
@@ -236,10 +240,9 @@ class StateDetailAPIEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check for any issues in the state
-        issue_exist = Issue.objects.filter(state=state_id).exists()
-
-        if issue_exist:
+        # 状态归方案：任一项目（含已脱离的）的工作项、草稿（含归档、软删）或审批记录在用就不能删。
+        # 对外接口保持原来的 400 与文案
+        if is_referenced(state_references(state.id)):
             return Response(
                 {"error": "The state is not empty, only empty states can be deleted"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -275,14 +278,14 @@ class StateDetailAPIEndpoint(BaseAPIView):
         Partially update an existing workflow state's properties like name, color, or group.
         Validates external ID uniqueness if provided.
         """
-        state = State.objects.get(workspace__slug=slug, project_id=project_id, pk=state_id)
+        state = State.objects.get(workspace__slug=slug, scheme__projects=project_id, pk=state_id)
         serializer = StateSerializer(state, data=request.data, partial=True)
         if serializer.is_valid():
             if (
                 request.data.get("external_id")
                 and (state.external_id != str(request.data.get("external_id")))
                 and State.objects.filter(
-                    project_id=project_id,
+                    scheme__projects=project_id,
                     workspace__slug=slug,
                     external_source=request.data.get("external_source", state.external_source),
                     external_id=request.data.get("external_id"),

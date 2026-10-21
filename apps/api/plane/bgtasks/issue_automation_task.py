@@ -117,7 +117,10 @@ def close_old_issues():
             # Check if Issues
             if issues:
                 if project.default_state is None:
-                    close_state = State.objects.filter(group="cancelled").first()
+                    # 本项目所用方案里的取消状态（原来不带过滤，会拿到别的项目的状态）
+                    close_state = State.objects.filter(
+                        scheme_id=project.issue_scheme_id, group="cancelled"
+                    ).first()
                 else:
                     close_state = project.default_state
 

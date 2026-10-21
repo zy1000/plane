@@ -20,6 +20,7 @@ from drf_spectacular.utils import OpenApiResponse, OpenApiRequest
 
 
 # Module imports
+from plane.utils.issue_scheme import prepare_project_issue_scheme
 from plane.db.models import (
     Cycle,
     Intake,
@@ -28,7 +29,6 @@ from plane.db.models import (
     DeployBoard,
     ProjectMember,
     State,
-    DEFAULT_STATES,
     Workspace,
     UserFavorite,
     Label,
@@ -238,21 +238,8 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
                         role=20,
                     )
 
-                State.objects.bulk_create(
-                    [
-                        State(
-                            name=state["name"],
-                            color=state["color"],
-                            project=serializer.instance,
-                            sequence=state["sequence"],
-                            workspace=serializer.instance.workspace,
-                            group=state["group"],
-                            default=state.get("default", False),
-                            created_by=request.user,
-                        )
-                        for state in DEFAULT_STATES
-                    ]
-                )
+                # 工作项配置：默认跟随研发模式，共用模式方案（不再给项目自建一套无类型的默认状态）
+                prepare_project_issue_scheme(serializer.instance, creator=request.user)
 
                 # 项目阶段从研发模式带出，口径同 app 侧的 ProjectViewSet.create
                 copy_stages_from_dev_mode(serializer.instance, actor=request.user)
@@ -616,8 +603,9 @@ class ProjectSummaryAPIEndpoint(BaseAPIView):
                 .values("count")
             ),
             "states": lambda: (
-                State.objects.filter(project_id=OuterRef("pk"))
-                .values("project_id")
+                # 状态归方案：数项目所用方案里的状态
+                State.objects.filter(scheme_id=OuterRef("issue_scheme_id"))
+                .values("scheme_id")
                 .annotate(count=Count("*"))
                 .values("count")
             ),

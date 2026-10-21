@@ -9,6 +9,7 @@ from plane.db.models import (
     IssueAssignee,
     ProjectGroupRole,
     ProjectMember,
+    ProjectRole,
     ProjectMemberRole,
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
@@ -32,7 +33,9 @@ from plane.utils.extra_field_value import (
 
 def get_active_workflow(issue: Issue):
     """根据 issue.type 获取激活的工作流，不存在返回 None。"""
-    return Workflow.objects.filter(issue_type=issue.type, is_active=True, project_id=issue.project_id).first()
+    return Workflow.objects.filter(
+        issue_type=issue.type, is_active=True, scheme__projects=issue.project_id
+    ).first()
 
 
 def get_active_transition(issue: Issue, to_state: State):
@@ -144,17 +147,29 @@ def resolve_dimension_user_ids(
     want_assignees = False
     want_created_by = False
 
+    template_ids = []
     for principal in principals:
         if principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
             user_ids.append(principal.member_id)
         elif principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
             role_ids.append(principal.role_id)
+        elif principal.kind == WorkflowPrincipalKind.ROLE and principal.workspace_role_id:
+            template_ids.append(principal.workspace_role_id)
         elif principal.kind == WorkflowPrincipalKind.DYNAMIC:
             if principal.dynamic_target == WorkflowApproverTarget.ASSIGNEES:
                 want_assignees = True
             elif principal.dynamic_target == WorkflowApproverTarget.CREATED_BY:
                 want_created_by = True
 
+    if template_ids:
+        # 角色模板（模式方案的审批人）→ 本项目里由该模板派生的角色；没有就视为空（需求 4.4）
+        role_ids.extend(
+            ProjectRole.objects.filter(
+                project_id=issue.project_id,
+                source_template_id__in=template_ids,
+                deleted_at__isnull=True,
+            ).values_list("id", flat=True)
+        )
     if role_ids:
         user_ids.extend(resolve_role_member_ids(issue.project_id, role_ids))
     if want_assignees:
@@ -162,7 +177,22 @@ def resolve_dimension_user_ids(
     if want_created_by and issue.created_by_id:
         user_ids.append(issue.created_by_id)
 
-    return _normalize_user_ids(user_ids)
+    normalized_ids = _normalize_user_ids(user_ids)
+    if not normalized_ids:
+        return []
+    # 模式方案的指定成员只要求工作区成员（共用给多个项目），解析时按本工作项项目的在职成员收口；
+    # 否则会给项目外的人建审批记录、发通知，而他们进不了项目也处理不了
+    active_member_ids = set(
+        _normalize_user_ids(
+            ProjectMember.objects.filter(
+                project_id=issue.project_id,
+                is_active=True,
+                deleted_at__isnull=True,
+                member_id__in=normalized_ids,
+            ).values_list("member_id", flat=True)
+        )
+    )
+    return [user_id for user_id in normalized_ids if user_id in active_member_ids]
 
 
 def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:

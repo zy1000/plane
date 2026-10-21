@@ -411,8 +411,8 @@ def track_state(
         requested_state_id = None
 
     if current_state_id != requested_state_id:
-        new_state = State.objects.filter(pk=requested_state_id, project_id=project_id).first()
-        old_state = State.objects.filter(pk=current_state_id, project_id=project_id).first()
+        new_state = State.objects.filter(pk=requested_state_id, scheme__projects=project_id).first()
+        old_state = State.objects.filter(pk=current_state_id, scheme__projects=project_id).first()
 
         issue_activities.append(
             IssueActivity(
@@ -846,7 +846,7 @@ def track_closed_to(
     epoch,
 ):
     if requested_data.get("closed_to") is not None:
-        updated_state = State.objects.get(pk=requested_data.get("closed_to"), project_id=project_id)
+        updated_state = State.objects.get(pk=requested_data.get("closed_to"), scheme__projects=project_id)
         issue_activities.append(
             IssueActivity(
                 issue_id=issue_id,

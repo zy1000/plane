@@ -9,6 +9,7 @@ from django.db.models import Q
 
 # Module imports
 from .base import BaseModel
+from .issue_scheme import SchemeBaseModel
 from .project import ProjectBaseModel
 
 
@@ -35,12 +36,18 @@ class WorkflowPrincipalKind(models.TextChoices):
     DYNAMIC = "dynamic", "动态对象"
 
 
-class Workflow(ProjectBaseModel):
+class Workflow(SchemeBaseModel):
     """
-    某个项目下、某个工作项类型的状态流转工作流。
-    每个 project + issue_type 同一时间只允许存在一个激活中的工作流。
+    某个工作项方案下、某个工作项类型的状态流转工作流。
+    每个 scheme + issue_type 同一时间只允许存在一个激活中的工作流。
     """
 
+    # 所属工作项方案，与 issue_type.scheme 恒一致
+    scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.CASCADE,
+        related_name="workflows",
+    )
     issue_type = models.ForeignKey(
         "db.IssueType",
         on_delete=models.CASCADE,
@@ -56,42 +63,49 @@ class Workflow(ProjectBaseModel):
         verbose_name_plural = "Workflows"
         db_table = "workflows"
         ordering = ("-created_at",)
-        # project + issue_type 下最多只允许一条激活的工作流
+        # scheme + issue_type 下最多只允许一条激活的工作流
         constraints = [
             models.UniqueConstraint(
-                fields=["project", "issue_type"],
+                fields=["scheme", "issue_type"],
                 condition=Q(is_active=True, deleted_at__isnull=True),
-                name="workflow_unique_active_per_project_issue_type",
+                name="workflow_unique_active_per_scheme_issue_type",
             ),
         ]
 
     def __str__(self):
-        return f"{self.name} <{self.project.name} / {self.issue_type.name}>"
+        return f"{self.name} <{self.scheme.name} / {self.issue_type.name}>"
 
     def clean(self):
         super().clean()
-        # issue_type 必须属于当前项目
-        if self.issue_type_id and str(self.issue_type.project_id) != str(
-            self.project_id
-        ):
+        # issue_type 必须属于当前方案
+        if self.issue_type_id and str(self.issue_type.scheme_id) != str(self.scheme_id):
             raise ValidationError(
                 {"issue_type": "该工作项类型不属于当前项目，无法为其创建工作流。"}
             )
 
     def save(self, *args, **kwargs):
-        if self.project_id and not self.workspace_id:
-            self.workspace_id = self.project.workspace_id
+        if self.issue_type_id and not self.scheme_id:
+            self.scheme_id = self.issue_type.scheme_id
+        # full_clean 要校验 workspace 非空，先从方案带出（SchemeBaseModel.save 随后还会再对齐一次）
+        if self.scheme_id and not self.workspace_id:
+            self.workspace_id = self.scheme.workspace_id
         self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
 
 
-class WorkflowTransition(ProjectBaseModel):
+class WorkflowTransition(SchemeBaseModel):
     """
     工作流中的一条状态流转边：from_state → to_state。
     from_state 为 None 时表示"初始流转"，即该状态可作为初始状态直接设置。
     两端状态必须都属于 workflow.issue_type 的状态集合。
     """
 
+    # 与 workflow.scheme 恒一致（save() 里跟着工作流带出）
+    scheme = models.ForeignKey(
+        "db.IssueScheme",
+        on_delete=models.CASCADE,
+        related_name="workflow_transitions",
+    )
     workflow = models.ForeignKey(
         Workflow,
         on_delete=models.CASCADE,
@@ -186,19 +200,19 @@ class WorkflowTransition(ProjectBaseModel):
         if self.from_state_id and self.from_state_id == self.to_state_id:
             raise ValidationError("起始状态与目标状态不能相同。")
 
-        # 两端状态必须属于当前项目
-        if self.to_state_id and self.to_state.project_id != self.project_id:
+        # 两端状态必须属于当前方案
+        if self.to_state_id and self.to_state.scheme_id != self.scheme_id:
             raise ValidationError({"to_state": "目标状态不属于当前项目。"})
 
-        if self.from_state_id and self.from_state.project_id != self.project_id:
+        if self.from_state_id and self.from_state.scheme_id != self.scheme_id:
             raise ValidationError({"from_state": "起始状态不属于当前项目。"})
 
     def save(self, *args, **kwargs):
-        # 保持 project 与 workflow.project 一致
-        if self.workflow_id and not self.project_id:
-            self.project = self.workflow.project
-        if self.project_id and not self.workspace_id:
-            self.workspace_id = self.project.workspace_id
+        # 保持 scheme 与 workflow 一致；full_clean 要校验 workspace 非空，先带出
+        if self.workflow_id and not self.scheme_id:
+            self.scheme_id = self.workflow.scheme_id
+        if self.scheme_id and not self.workspace_id:
+            self.workspace_id = self.scheme.workspace_id
         self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
 
@@ -209,7 +223,7 @@ class WorkflowTransitionPrincipal(BaseModel):
     - dimension 区分维度（initiator / assignee / approver）。
     - kind 区分对象类型（member 指定成员 / role 项目角色 / dynamic 动态对象），
       并与 member / role / dynamic_target 三列严格一一对应（恰好一列有值）。
-    项目作用域经 transition 间接获得，无需独立的 project/workspace 冗余字段。
+    方案作用域经 transition 间接获得，无需独立的 scheme/workspace 冗余字段。
     启用/停用配置请使用软删除（deleted_at）。
     """
 
@@ -245,6 +259,18 @@ class WorkflowTransitionPrincipal(BaseModel):
         related_name="workflow_transition_principals",
         verbose_name="项目角色",
     )
+    # 工作区角色模板。模式方案没有项目、选不了 ProjectRole，只能指模板，运行时按
+    # 「本项目里 source_template 等于它的角色」解析（需求 4.4）。kind=role 时与 role 恰好一列有值：
+    # 模式方案只用它；项目方案自己配的用 role，脱离时从模式方案拷过来的仍是它。
+    # CASCADE 同 role：删模板就去掉引用它的审批人行（SET_NULL 会撞上面的二选一约束）。
+    workspace_role = models.ForeignKey(
+        "db.WorkspaceRole",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="workflow_transition_principals",
+        verbose_name="角色模板",
+    )
     dynamic_target = models.CharField(
         max_length=20,
         choices=WorkflowApproverTarget.choices,
@@ -262,9 +288,14 @@ class WorkflowTransitionPrincipal(BaseModel):
             # kind 与三列严格一致（恰好一列有值）
             models.CheckConstraint(
                 check=(
-                    Q(kind="member", member__isnull=False, role__isnull=True, dynamic_target__isnull=True)
-                    | Q(kind="role", member__isnull=True, role__isnull=False, dynamic_target__isnull=True)
-                    | Q(kind="dynamic", member__isnull=True, role__isnull=True, dynamic_target__isnull=False)
+                    Q(kind="member", member__isnull=False, role__isnull=True, workspace_role__isnull=True,
+                      dynamic_target__isnull=True)
+                    | Q(kind="role", member__isnull=True, role__isnull=False, workspace_role__isnull=True,
+                        dynamic_target__isnull=True)
+                    | Q(kind="role", member__isnull=True, role__isnull=True, workspace_role__isnull=False,
+                        dynamic_target__isnull=True)
+                    | Q(kind="dynamic", member__isnull=True, role__isnull=True, workspace_role__isnull=True,
+                        dynamic_target__isnull=False)
                 ),
                 name="wf_principal_kind_coherent",
             ),
@@ -280,6 +311,11 @@ class WorkflowTransitionPrincipal(BaseModel):
                 name="wf_principal_uniq_role",
             ),
             models.UniqueConstraint(
+                fields=["transition", "dimension", "workspace_role"],
+                condition=Q(workspace_role__isnull=False, deleted_at__isnull=True),
+                name="wf_principal_uniq_workspace_role",
+            ),
+            models.UniqueConstraint(
                 fields=["transition", "dimension", "dynamic_target"],
                 condition=Q(dynamic_target__isnull=False, deleted_at__isnull=True),
                 name="wf_principal_uniq_dynamic",
@@ -287,17 +323,20 @@ class WorkflowTransitionPrincipal(BaseModel):
         ]
 
     def __str__(self):
-        target = self.member_id or self.role_id or self.dynamic_target
+        target = self.member_id or self.role_id or self.workspace_role_id or self.dynamic_target
         return f"[{self.dimension}/{self.kind}] {target} → {self.transition}"
 
     def clean(self):
         super().clean()
         from .project import ProjectMember
+        from .workspace import WorkspaceMember
 
         # 1) kind 与三列一致性兜底（数据库 CheckConstraint 的应用层镜像）
+        if self.role_id is not None and self.workspace_role_id is not None:
+            raise ValidationError("项目角色与角色模板只能填写其中一项。")
         populated = {
             WorkflowPrincipalKind.MEMBER: self.member_id is not None,
-            WorkflowPrincipalKind.ROLE: self.role_id is not None,
+            WorkflowPrincipalKind.ROLE: self.role_id is not None or self.workspace_role_id is not None,
             WorkflowPrincipalKind.DYNAMIC: bool(self.dynamic_target),
         }
         if sum(1 for is_set in populated.values() if is_set) != 1:
@@ -307,32 +346,55 @@ class WorkflowTransitionPrincipal(BaseModel):
         if not populated.get(self.kind):
             raise ValidationError({"kind": "kind 与所填写的对象列不一致。"})
 
-        # 2) member 必须是 transition.workflow.project 在职成员
+        # 2) member：项目方案要求是该项目在职成员；模式方案没有项目可校验，只要求是工作区成员
+        #    （建项目时会把方案里的指定成员加进项目，需求 4.4）
         if (
             self.kind == WorkflowPrincipalKind.MEMBER
             and self.member_id
             and self.transition_id
         ):
-            project = self.transition.workflow.project
-            if not ProjectMember.objects.filter(
-                project=project,
-                member=self.member,
-                is_active=True,
-            ).exists():
+            scheme = self.transition.scheme
+            if scheme.project_id:
+                is_valid_member = ProjectMember.objects.filter(
+                    project_id=scheme.project_id,
+                    member=self.member,
+                    is_active=True,
+                ).exists()
+            else:
+                is_valid_member = WorkspaceMember.objects.filter(
+                    workspace_id=scheme.workspace_id,
+                    member=self.member,
+                    is_active=True,
+                ).exists()
+            if not is_valid_member:
                 raise ValidationError(
                     {
                         "member": f"用户 '{self.member}' 不是当前项目的成员，无法设为流转对象。"
                     }
                 )
 
-        # 3) role 必须属于该流转边所在项目
+        # 3) role：项目角色只能用在它所属项目的项目方案里（模式方案只能选角色模板，批次 4）
         if (
             self.kind == WorkflowPrincipalKind.ROLE
             and self.role_id
             and self.transition_id
         ):
-            if str(self.role.project_id) != str(self.transition.project_id):
+            if str(self.role.project_id) != str(self.transition.scheme.project_id):
                 raise ValidationError({"role": "该角色不属于当前项目。"})
+
+        # 3b) 角色模板：须是本工作区的项目角色模板
+        if (
+            self.kind == WorkflowPrincipalKind.ROLE
+            and self.workspace_role_id
+            and self.transition_id
+        ):
+            from .workspace import WorkspaceRole
+
+            if (
+                str(self.workspace_role.workspace_id) != str(self.transition.scheme.workspace_id)
+                or self.workspace_role.type != WorkspaceRole.RoleType.PROJECT_TEMPLATE
+            ):
+                raise ValidationError({"workspace_role": "该角色模板不属于当前工作区。"})
 
         # 4) dynamic_target 必须是受支持的动态对象类型
         if (

@@ -13,6 +13,7 @@ from datetime import timedelta
 
 # Django imports
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password
 
@@ -20,6 +21,7 @@ from django.contrib.auth.hashers import make_password
 from celery import shared_task
 
 # Module imports
+from plane.utils.issue_scheme import attach_own_scheme, project_scheme_id
 from plane.db.models import (
     Workspace,
     WorkspaceMember,
@@ -109,7 +111,10 @@ def create_project_and_member(workspace: Workspace, bot_user: User) -> Dict[int,
             module_view=True,
             issue_views_view=True,
         )
-        project.save(created_by_id=bot_user.id, disable_auto_set_user=True)
+        # 种子数据自带一套状态：给项目单建方案（项目自定义），别写进共用的模式方案
+        with transaction.atomic():
+            attach_own_scheme(project)
+            project.save(created_by_id=bot_user.id, disable_auto_set_user=True)
 
         # Create project members
         ProjectMember.objects.bulk_create(
@@ -198,7 +203,8 @@ def create_project_states(
 
         state = State(
             **state_seed,
-            project_id=project_map[project_id],
+            # 状态归项目所用的方案
+            scheme_id=project_scheme_id(project_map[project_id]),
             workspace=workspace,
             created_by_id=bot_user.id,
         )

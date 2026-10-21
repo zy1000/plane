@@ -33,7 +33,7 @@ def state(project):
     """Create a test state"""
     return State.objects.create(
         name="Todo",
-        project=project,
+        scheme_id=project.issue_scheme_id,
         group="backlog",
         default=True,
     )

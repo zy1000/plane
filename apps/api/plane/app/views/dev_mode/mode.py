@@ -9,6 +9,7 @@ from plane.app.serializers.dev_mode import (
     count_projects_using,
 )
 from plane.app.views.base import BaseViewSet
+from plane.utils.issue_scheme import seed_issue_scheme
 from plane.db.models import DevMode, Workspace
 from plane.utils.dev_mode import ensure_dev_modes
 
@@ -100,6 +101,8 @@ class DevModeViewSet(BaseViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         dev_mode = serializer.save(workspace=workspace, is_system=False)
+        # 新模式的方案由 DevMode.save() 建，这里补上种子内容（五个类型、默认状态、缺陷字段与工作流）
+        seed_issue_scheme(dev_mode.issue_scheme, created_by=request.user)
         return Response(
             self.get_serializer(self._get_dev_mode(dev_mode.pk)).data,
             status=status.HTTP_201_CREATED,

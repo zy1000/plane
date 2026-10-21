@@ -170,14 +170,14 @@ class IntakeIssueListCreateAPIEndpoint(BaseAPIView):
             return Response({"error": "Invalid priority"}, status=status.HTTP_400_BAD_REQUEST)
 
         # get the triage state
-        triage_state = State.triage_objects.filter(project_id=project_id, workspace__slug=slug).first()
+        # triage 每方案一条，跟着项目所用的方案走
+        triage_state = State.triage_objects.filter(scheme__projects=project_id, workspace__slug=slug).first()
 
         if not triage_state:
             triage_state = State.objects.create(
                 name="Triage",
                 group=StateGroup.TRIAGE.value,
-                project_id=project_id,
-                workspace_id=project.workspace_id,
+                scheme_id=project.issue_scheme_id,
                 color="#4E5355",
                 sequence=65000,
                 default=False,

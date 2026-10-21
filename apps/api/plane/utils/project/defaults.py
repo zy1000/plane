@@ -17,6 +17,7 @@ from plane.db.models import (
     WorkflowTransitionRequiredField,
     IssueTypeCategory, User, Workspace, WorkspaceRole, ProjectRole
 )
+from plane.db.seed_data.issue_scheme import BUG, EPIC, FEATURE, STORY, TASK
 from plane.utils.data_model import IssueTypeModel
 from plane.utils.project.member import add_user_to_project
 
@@ -76,6 +77,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             },
             "display": "缺陷(软件)",
             "category": "缺陷",
+            "system_key": BUG,
         }
     )
     task = IssueTypeModel(
@@ -91,6 +93,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             "display": "任务",
             "is_default": True,
             "category": "任务",
+            "system_key": TASK,
         }
     )
     epic = IssueTypeModel(
@@ -105,6 +108,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             },
             "display": "史诗",
             "category": "需求",
+            "system_key": EPIC,
         }
     )
     feature = IssueTypeModel(
@@ -119,6 +123,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             },
             "display": "特性",
             "category": "需求",
+            "system_key": FEATURE,
         }
     )
     story = IssueTypeModel(
@@ -133,6 +138,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             },
             "display": "用户故事",
             "category": "需求",
+            "system_key": STORY,
         }
     )
 
@@ -140,14 +146,20 @@ def init_issue_type() -> list[IssueTypeModel]:
 
 
 def temporary_create_issue_type(project: Project = None, project_id: str = None):
+    """在项目所用的方案里建种子类型；方案里已有类型就跳过。"""
     if project_id:
         project = Project.objects.get(id=project_id)
-    if IssueType.objects.filter(project=project).exists():
+    return create_scheme_issue_types(project.issue_scheme)
+
+
+def create_scheme_issue_types(scheme):
+    """给一个工作项方案建五个种子类型（项目方案与批次 4 的模式方案共用）；方案里已有类型就跳过。"""
+    if IssueType.objects.filter(scheme=scheme).exists():
         return
 
     # 获取工作项类型类别
     category_map = dict()
-    for obj in IssueTypeCategory.objects.filter(workspace=project.workspace):
+    for obj in IssueTypeCategory.objects.filter(workspace_id=scheme.workspace_id):
         category_map[obj.name] = obj
 
     types = init_issue_type()
@@ -155,17 +167,21 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
     for issue_type in types:
         obj = IssueType.objects.create(
             name=issue_type.display,
-            project=project,
+            scheme=scheme,
             description=issue_type.display,
             is_default=issue_type.is_default,
             logo_props=issue_type.icon,
             category=category_map[issue_type.category],
+            system_key=issue_type.system_key,
         )
         issue_types.append(obj)
     return issue_types
 
 
 def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
+    """给每个类型建默认状态，再给它们所在的方案补一条 triage。kwargs 只用 created_by。"""
+    if not issue_types:
+        return
     create_list = list()
     for issue_type in issue_types:
         default_states = (
@@ -174,36 +190,36 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
             else DEFAULT_STATES
         )
         for state in default_states:
-            # Triage 不绑 issue_type，统一在函数末尾按项目维度幂等创建一条。
+            # Triage 不绑 issue_type，统一在函数末尾按方案维度幂等创建一条。
             if state["group"] == StateGroup.TRIAGE.value:
                 continue
             create_list.append(
                 State(
                     name=state["name"],
                     color=state["color"],
-                    project=kwargs["project"],
+                    # bulk_create 绕过 save()，方案与工作区显式给：状态归所属类型的方案
+                    scheme_id=issue_type.scheme_id,
                     sequence=state["sequence"],
-                    workspace=kwargs["workspace"],
+                    workspace_id=issue_type.workspace_id,
                     group=state["group"],
                     default=state.get("default", False),
-                    created_by=kwargs["created_by"],
+                    created_by=kwargs.get("created_by"),
                     issue_type_id=issue_type.id,
                 )
             )
 
     State.objects.bulk_create(create_list)
 
-    project = kwargs["project"]
-    if not State.triage_objects.filter(project=project).exists():
+    scheme_id = issue_types[0].scheme_id
+    if not State.triage_objects.filter(scheme_id=scheme_id).exists():
         State.objects.create(
             name="Triage",
             color="#4E5355",
-            project=project,
+            scheme_id=scheme_id,
             sequence=65000,
-            workspace=kwargs["workspace"],
             group=StateGroup.TRIAGE.value,
             default=False,
-            created_by=kwargs["created_by"],
+            created_by=kwargs.get("created_by"),
             issue_type=None,
         )
 
@@ -219,10 +235,10 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     )
     if defect_issue_type is None:
         return
-    project = defect_issue_type.project
+    # 字段的方案由 TypeExtraField.save() 从类型带出
     # 软件版本
     TypeExtraField.objects.create(
-        issue_type=defect_issue_type, project=project, name="软件版本", is_required=True
+        issue_type=defect_issue_type, name="软件版本", is_required=True
     )
 
     # 功能模块
@@ -267,7 +283,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     }
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
-        project=project,
         name="功能模块",
         is_required=True,
         options=function_module,
@@ -285,7 +300,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     }
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
-        project=project,
         name="发现方式",
         is_required=True,
         options=discover,
@@ -308,7 +322,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     }
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
-        project=project,
         name="缺陷级别",
         is_required=True,
         options=bug_level,
@@ -339,7 +352,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     }
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
-        project=project,
         name="缺陷原因",
         options=bug_cause,
         field_type="select",
@@ -347,31 +359,46 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
 
     # 修复版本
     TypeExtraField.objects.create(
-        issue_type=defect_issue_type, project=project, name="修复版本"
+        issue_type=defect_issue_type, name="修复版本"
     )
 
     # 解决方案
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
-        project=project,
         name="技术原因及解决方案",
         options={"text_mode": "paragraph"},
     )
 
 
-def add_principal(rule_info: dict, project: Project, transition: WorkflowTransition):
-    """添加工作流的审批人、目标人、发起人"""
+def add_principal(rule_info: dict, project: Project | None, transition: WorkflowTransition):
+    """添加工作流的审批人、目标人、发起人。
+
+    ``project`` 为空表示模式方案：没有项目角色可选，角色按工作区里的同名「项目角色模板」写 workspace_role，
+    运行时再解析到项目里 source_template 等于它的角色（需求 4.4）。
+    """
     bulk_object = []
 
     def add(data: dict, dimension: str):
         for key, value in data.items():
             if key == 'role_name':
-                role_ids = list(
-                    ProjectRole.objects.filter(project=project, name__in=value).values_list('id', flat=True))
-                for role_id in role_ids:
-                    bulk_object.append(
-                        WorkflowTransitionPrincipal(transition=transition, role_id=role_id, dimension=dimension,
-                                                    kind=WorkflowPrincipalKind.ROLE))
+                if project is not None:
+                    role_ids = list(
+                        ProjectRole.objects.filter(project=project, name__in=value).values_list('id', flat=True))
+                    for role_id in role_ids:
+                        bulk_object.append(
+                            WorkflowTransitionPrincipal(transition=transition, role_id=role_id, dimension=dimension,
+                                                        kind=WorkflowPrincipalKind.ROLE))
+                else:
+                    template_ids = list(
+                        WorkspaceRole.objects.filter(
+                            workspace_id=transition.workspace_id,
+                            type=WorkspaceRole.RoleType.PROJECT_TEMPLATE,
+                            name__in=value,
+                        ).values_list('id', flat=True))
+                    for template_id in template_ids:
+                        bulk_object.append(
+                            WorkflowTransitionPrincipal(transition=transition, workspace_role_id=template_id,
+                                                        dimension=dimension, kind=WorkflowPrincipalKind.ROLE))
             elif key == 'member_name':
                 member_ids = list(
                     User.objects.filter(display_name__in=value).values_list('id', flat=True)
@@ -399,28 +426,28 @@ def add_principal(rule_info: dict, project: Project, transition: WorkflowTransit
 
 
 def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
+    """``project`` 为空表示给模式方案生成：不往项目里加人，角色审批人按角色模板写（见 add_principal）。"""
     defect_issue_type = get_bug_issue_type(issue_types)
     if defect_issue_type is None:
         return None
 
-    project = kwargs["project"]
+    project = kwargs.get("project")
 
-    # 将三人添加进项目里面
-    approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会','杨玉柱'])
-    add_user_to_project(approver_users, project)
+    # 将三人添加进项目里面（模式方案在建项目时由 add_scheme_members_to_project 加）
+    if project is not None:
+        approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会','杨玉柱'])
+        add_user_to_project(approver_users, project)
 
-    # 创建默认缺陷工作流
+    # 创建默认缺陷工作流（方案由 Workflow.save() 从类型带出）
     workflow = Workflow.objects.create(
-        project=project,
-        workspace=kwargs["workspace"],
         issue_type=defect_issue_type,
         name="缺陷默认工作流",
         is_active=True,
-        created_by=kwargs["created_by"],
+        created_by=kwargs.get("created_by"),
     )
 
     states = State.objects.filter(
-        project=project, issue_type=defect_issue_type, deleted_at__isnull=True
+        scheme_id=defect_issue_type.scheme_id, issue_type=defect_issue_type, deleted_at__isnull=True
     )
     state_map = {state.name: state for state in states}
 
@@ -430,8 +457,6 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
         # 创建工作流规则
         transition = WorkflowTransition.objects.create(
             workflow=workflow,
-            project=project,
-            workspace=kwargs["workspace"],
             from_state=from_state,
             to_state=to_state,
             approval_type=rule_info.get('approval_type', ApprovalType.ALL),
@@ -460,6 +485,8 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
 
 
 def create_default_role(workspace: Workspace, project_id: str):
+    """按工作区的项目角色模板建本项目角色。权限先原样复制，其中的工作项类型权限是模板格式、对不上本项目
+    任何类型，须在工作项方案就位后用 role_import.apply_template_permissions_to_project_roles 换算（见 setup_new_project）。"""
     workspace_roles: list[WorkspaceRole] = WorkspaceRole.objects.filter(workspace=workspace)
     bulk_obj = [
         ProjectRole(name=role.name, description=role.description, permissions=role.permissions, source_template=role,
@@ -470,15 +497,18 @@ def create_default_role(workspace: Workspace, project_id: str):
 
 
 def setup_new_project(project: Project, creator: User):
-    """新建项目后的初始化：创建人 / 负责人加为管理员、角色、工作项类型、状态、缺陷字段与工作流、研发模式阶段。
+    """新建项目后的初始化：创建人 / 负责人加为管理员、角色、工作项配置、研发模式阶段。
 
     创建项目接口与简道云项目同步共用，两边建出来的项目一模一样。project 须已建好 ProjectIdentifier。
+
+    工作项配置看项目指向哪个方案，见 utils.issue_scheme.prepare_project_issue_scheme。放在建角色之后：
+    缺陷工作流的角色审批人要按项目角色 / 角色模板的名字找。
     """
     from plane.db.models import ProjectMember
     from plane.db.models.project import ROLE
+    from plane.utils.issue_scheme import prepare_project_issue_scheme
+    from plane.utils.project.role_import import apply_template_permissions_to_project_roles
     from plane.utils.project_stage import copy_stages_from_dev_mode
-
-    issue_types = temporary_create_issue_type(project_id=project.id)
 
     ProjectMember.objects.create(project_id=project.id, member=creator, role=ROLE.ADMIN.value)
     if project.project_lead_id is not None and str(project.project_lead_id) != str(creator.id):
@@ -487,13 +517,9 @@ def setup_new_project(project: Project, creator: User):
         )
 
     create_default_role(workspace=project.workspace, project_id=project.id)
-    bulk_create_issue_state(
-        issue_types=issue_types, workspace=project.workspace, project=project, created_by=creator
-    )
-    create_default_bug_extra_field(issue_types=issue_types)
-    create_default_bug_workflow(
-        issue_types=issue_types, workspace=project.workspace, project=project, created_by=creator
-    )
+    prepare_project_issue_scheme(project, creator=creator)
+    # 类型就位后才能把模板里的类型权限换成本项目的 key；原样复制的话普通成员建不了任何类型的工作项
+    apply_template_permissions_to_project_roles(project)
 
     # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
     # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在

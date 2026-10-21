@@ -35,6 +35,7 @@ type TIssueExtraFieldsProps = {
 
 type TFieldRowProps = {
   field: TTypeExtraField;
+  projectId: string | null | undefined;
   value: unknown;
   error?: string;
   onChange: (next: TIssueExtraFieldValue["value"]) => void;
@@ -42,7 +43,7 @@ type TFieldRowProps = {
 };
 
 const ExtraFieldRow = (props: TFieldRowProps) => {
-  const { field, value, onChange, disabled, error } = props;
+  const { field, projectId, value, onChange, disabled, error } = props;
   const inputId = `extra-field-${field.id}`;
   const FieldIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
 
@@ -60,6 +61,7 @@ const ExtraFieldRow = (props: TFieldRowProps) => {
           error={error}
           onChange={onChange}
           disabled={disabled}
+          projectId={projectId}
           compact={false}
         />
         {error && <span className="text-caption-sm-medium text-danger-primary">{error}</span>}
@@ -125,6 +127,7 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
                 <ExtraFieldRow
                   key={field.id}
                   field={field}
+                  projectId={projectId}
                   value={value}
                   error={isRequiredAndEmpty ? `${field.name} 为必填字段` : undefined}
                   disabled={disabled}

@@ -19,12 +19,17 @@ class WorkspaceStatesEndpoint(BaseAPIView):
     use_read_replica = True
 
     def get(self, request, slug):
-        states = State.objects.filter(
-            workspace__slug=slug,
-            project__project_projectmember__member=request.user,
-            project__project_projectmember__is_active=True,
-            project__archived_at__isnull=True,
-            is_triage=False,
+        # 当前用户所在项目用到的方案里的状态。共用方案时同一状态会经多个项目命中，distinct 去重
+        states = (
+            State.objects.filter(
+                workspace__slug=slug,
+                scheme__projects__project_projectmember__member=request.user,
+                scheme__projects__project_projectmember__is_active=True,
+                scheme__projects__archived_at__isnull=True,
+                is_triage=False,
+            )
+            .select_related("scheme")
+            .distinct()
         )
 
         grouped_states = defaultdict(list)
