@@ -71,6 +71,9 @@ const TextCell = ({
 
 type TRow = { id: string } & Record<string, unknown>;
 
+const cellValue = (row: TRow, column: TColumn) =>
+  row[column.key] === null || row[column.key] === undefined ? "" : String(row[column.key]);
+
 /**
  * 一张可以加行的表：表头 + 行 + 末尾「添加一行」。
  * 没有行时整块不出，入口在「补充」条；删除按钮悬停才出，浮在行尾，不占列。
@@ -139,35 +142,40 @@ const RowTable = ({
               </span>
             ))}
           </div>
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className={cn("group relative grid min-h-10 border-t text-14 text-primary", LINE)}
-              style={gridStyle}
-            >
-              {columns.map((column, index) => (
-                <div key={column.key} className={CELL_CLASS}>
-                  <TextCell
-                    value={row[column.key] === null || row[column.key] === undefined ? "" : String(row[column.key])}
-                    editable={editable}
-                    autoFocus={index === 0 && row.id === focusRowId}
-                    onCommit={(next) => commit(row, column, next)}
-                  />
-                </div>
-              ))}
-              {editable && (
-                <button
-                  type="button"
-                  aria-label={t(`${I18N}.detail.delete_row`)}
-                  title={t(`${I18N}.detail.delete_row`)}
-                  onClick={() => onDelete(row.id)}
-                  className="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md bg-surface-1 text-placeholder opacity-0 transition group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
+          {rows.map((row) => {
+            // 新行聚焦第一个空格：组件版本第一次添加带出的默认行组件已填，直接落在版本格
+            const focusIndex =
+              row.id === focusRowId ? Math.max(0, columns.findIndex((column) => cellValue(row, column) === "")) : -1;
+            return (
+              <div
+                key={row.id}
+                className={cn("group relative grid min-h-10 border-t text-14 text-primary", LINE)}
+                style={gridStyle}
+              >
+                {columns.map((column, index) => (
+                  <div key={column.key} className={CELL_CLASS}>
+                    <TextCell
+                      value={cellValue(row, column)}
+                      editable={editable}
+                      autoFocus={index === focusIndex}
+                      onCommit={(next) => commit(row, column, next)}
+                    />
+                  </div>
+                ))}
+                {editable && (
+                  <button
+                    type="button"
+                    aria-label={t(`${I18N}.detail.delete_row`)}
+                    title={t(`${I18N}.detail.delete_row`)}
+                    onClick={() => onDelete(row.id)}
+                    className="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md bg-surface-1 text-placeholder opacity-0 transition group-hover:opacity-100 hover:bg-danger-subtle hover:text-danger-primary focus:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
           {editable && (
             <button
               type="button"

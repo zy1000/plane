@@ -834,8 +834,16 @@ def _row_extra(table, row):
     }
 
 
+#: 组件版本表第一次添加时一次带出的组件，版本留空
+DEFAULT_COMPONENTS = ("基表硬件", "基表软件", "模块硬件", "模块软件")
+
+
 def add_row(review, *, actor, table, data):
-    """加一行，排在最后。"""
+    """加一行，排在最后。
+
+    组件版本表还空着、请求也没带内容（前端「添加一行」发的是空行）时，一次带出
+    ``DEFAULT_COMPONENTS`` 四行；表里已有行后照常只加一行。返回第一条新行。
+    """
     _assert_row_host(review)
     model, _ = ROW_TABLES[table]
     last = (
@@ -844,25 +852,33 @@ def add_row(review, *, actor, table, data):
         .values_list("sort_order", flat=True)
         .first()
     )
-    row = model.objects.create(
-        stage_review=review,
-        project_id=review.project_id,
-        sort_order=(last or 0) + SORT_ORDER_STEP,
-        created_by=actor,
-        updated_by=actor,
-        **data,
-    )
+    if table == "component_versions" and last is None and not data:
+        rows_data = [{"component": component} for component in DEFAULT_COMPONENTS]
+    else:
+        rows_data = [data]
+    rows = [
+        model.objects.create(
+            stage_review=review,
+            project_id=review.project_id,
+            sort_order=(last or 0) + offset * SORT_ORDER_STEP,
+            created_by=actor,
+            updated_by=actor,
+            **row_data,
+        )
+        for offset, row_data in enumerate(rows_data, start=1)
+    ]
     _touch(review, actor)
-    extra = _row_extra(table, row)
-    write_activity(
-        review,
-        actor=actor,
-        verb="created",
-        field=table,
-        new_value=extra["row_label"] or None,
-        extra=extra,
-    )
-    return row
+    for row in rows:
+        extra = _row_extra(table, row)
+        write_activity(
+            review,
+            actor=actor,
+            verb="created",
+            field=table,
+            new_value=extra["row_label"] or None,
+            extra=extra,
+        )
+    return rows[0]
 
 
 def update_row(review, row, *, actor, table, data):
