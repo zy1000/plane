@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { Building2, Calendar, CircleDot, Globe2, Lock, Package, Route, Tag, UserCheck, Users } from "lucide-react";
-import { PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { DueDatePropertyIcon, MembersPropertyIcon, StartDatePropertyIcon } from "@plane/propel/icons";
 import type { IUserLite, TFilterConfig, TProject, TProjectFilterProperty, TSupportedOperators } from "@plane/types";
@@ -214,15 +213,11 @@ export const useProjectFiltersConfig = ({
         supportedOperatorConfigsMap: multiSelect(dictionaryOptions("business_unit"), params, isLabel),
       }),
       createFilterConfig<TProjectFilterProperty>({
-        id: "product_type",
-        label: t(`${I18N}.fields.product_type`),
+        id: "business_category",
+        label: t(`${I18N}.fields.business_category`),
         icon: Package,
         isEnabled: true,
-        supportedOperatorConfigsMap: multiSelect(
-          [...PROJECT_PRODUCT_TYPE_OPTIONS.map((type) => ({ id: type, value: type, label: type })), noneOption],
-          params,
-          isLabel
-        ),
+        supportedOperatorConfigsMap: multiSelect(dictionaryOptions("business_category"), params, isLabel),
       }),
       createFilterConfig<TProjectFilterProperty>({
         id: "dev_mode",

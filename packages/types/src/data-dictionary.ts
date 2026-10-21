@@ -13,11 +13,12 @@ export enum EProductDictionaryKey {
   SOFTWARE_LEVEL = "product_software_level",
 }
 
-/** 项目引用的 4 个系统字典（CODE 不是 FK：Project.code 存的是它某个值的 label） */
+/** 项目引用的 5 个系统字典（CODE 不是 FK：Project.code 存的是它某个值的 label） */
 export enum EProjectDictionaryKey {
   BUSINESS_UNIT = "project_business_unit",
   STATUS = "project_status",
   PROJECT_TYPE = "project_type",
+  BUSINESS_CATEGORY = "project_business_category",
   CODE = "project_code",
 }
 

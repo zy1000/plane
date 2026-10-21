@@ -8,11 +8,9 @@ import { useState } from "react";
 import { Controller } from "react-hook-form";
 import type { Control } from "react-hook-form";
 import { Link } from "react-router";
-import { PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmojiPicker, EmojiIconPickerTypes, Logo } from "@plane/propel/emoji-icon-picker";
-import type { TDataDictionaryItemLite, TProjectProductType } from "@plane/types";
-import { CustomSelect } from "@plane/ui";
+import type { TDataDictionaryItemLite } from "@plane/types";
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
 import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-section";
 import type { TFormVariant } from "@/components/common/form-section";
@@ -123,7 +121,7 @@ export function ProjectCodeField(props: TProjectCodeFieldProps) {
   );
 }
 
-// ---- 数据字典下拉（所属BU / 项目状态 / 项目类型）----
+// ---- 数据字典下拉（所属BU / 项目状态 / 项目类型 / 业务分类）----
 type TProjectDictionaryFieldProps = TProjectFieldProps & {
   name: TProjectDictionaryFieldKey;
   required: boolean;
@@ -167,57 +165,6 @@ export function ProjectDictionaryField(props: TProjectDictionaryFieldProps) {
               tabIndex={tabIndex}
             />
           </div>
-        </FormFieldShell>
-      )}
-    />
-  );
-}
-
-// ---- 产品类型（模型上的 CharField choices，与走数据字典的「项目类型」是两个概念）----
-type TProjectProductTypeFieldProps = TProjectFieldProps & {
-  /** 创建时必填；设置页保留「未设置」，存量项目为空也能改别的字段 */
-  required: boolean;
-};
-
-export function ProjectProductTypeField(props: TProjectProductTypeFieldProps) {
-  const { control, variant, disabled = false, tabIndex, required } = props;
-  const { t, styles, label, requiredMessage } = useFieldHelpers(variant);
-  return (
-    <Controller
-      control={control}
-      name="product_type"
-      rules={requiredValueRules(required ? requiredMessage("product_type") : undefined)}
-      render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <FormFieldShell
-          label={label("product_type")}
-          required={required}
-          editable={!disabled}
-          error={error?.message}
-          styles={styles}
-        >
-          <CustomSelect
-            value={value ?? ""}
-            onChange={(val: string) => onChange(val === "" ? null : (val as TProjectProductType))}
-            label={
-              value ? (
-                <span>{value}</span>
-              ) : (
-                <span className="text-placeholder">{t("workspace_projects.fields.select_placeholder")}</span>
-              )
-            }
-            className="w-full"
-            buttonClassName={cn(styles.select, error && "!border-danger-strong")}
-            input
-            disabled={disabled}
-            tabIndex={tabIndex}
-          >
-            {!required && <CustomSelect.Option value="">{t("workspace_projects.fields.not_set")}</CustomSelect.Option>}
-            {PROJECT_PRODUCT_TYPE_OPTIONS.map((option) => (
-              <CustomSelect.Option key={option} value={option}>
-                {option}
-              </CustomSelect.Option>
-            ))}
-          </CustomSelect>
         </FormFieldShell>
       )}
     />

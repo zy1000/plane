@@ -89,7 +89,6 @@ class ProjectCreateSerializer(BaseSerializer):
             "external_id",
             "is_issue_type_enabled",
             "is_time_tracking_enabled",
-            "product_type",
             "pms_project_name",
         ]
 
@@ -292,6 +291,5 @@ class ProjectLiteSerializer(BaseSerializer):
             "emoji",
             "description",
             "cover_image_url",
-            "product_type",
         ]
         read_only_fields = fields

@@ -25,7 +25,6 @@ import {
   ProjectDevModeReadOnlyField,
   ProjectDictionaryField,
   ProjectMemberField,
-  ProjectProductTypeField,
   getProjectDateFormatToken,
   getProjectFieldLabelKey,
   useProjectDictionaries,
@@ -57,7 +56,7 @@ const VARIANT = "grouped-settings" as const;
 export function ProjectDetailsForm(props: IProjectDetailsForm) {
   const { project, workspaceSlug, projectId } = props;
   const { t, currentLocale } = useTranslation();
-  // 一次拉全量字典给所属BU / 项目状态 / 项目类型共用
+  // 一次拉全量字典给所属BU / 项目状态 / 项目类型 / 业务分类共用
   const dictionaries = useProjectDictionaries(workspaceSlug, true);
   const { form, dirtyCount, isSaving, missingRequiredFields, editorVersion, discard, onSubmit } =
     useProjectSettingsForm({ project, workspaceSlug, projectId });
@@ -106,7 +105,13 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                 dictionaries={dictionaries}
                 fallbackItem={project.project_type_detail}
               />
-              <ProjectProductTypeField {...base} required />
+              <ProjectDictionaryField
+                {...base}
+                name="business_category"
+                required
+                dictionaries={dictionaries}
+                fallbackItem={project.business_category_detail}
+              />
               <ProjectDictionaryField
                 {...base}
                 name="business_unit"

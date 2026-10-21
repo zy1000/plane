@@ -78,8 +78,8 @@ const matchCondition = (project: TProject, condition: TProjectFilterCondition, c
       return matchOption(project.project_type, condition.operator, selected);
     case "business_unit":
       return matchOption(project.business_unit, condition.operator, selected);
-    case "product_type":
-      return matchOption(project.product_type, condition.operator, selected);
+    case "business_category":
+      return matchOption(project.business_category, condition.operator, selected);
     case "dev_mode":
       return matchOption(project.dev_mode, condition.operator, selected);
     case "network":

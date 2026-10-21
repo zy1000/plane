@@ -85,33 +85,6 @@ def get_default_preferences():
     return {"pages": {"block_display": True}, "navigation": {"default_tab": "work_items", "hide_in_more_menu": []}}
 
 
-PROJECT_PRODUCT_TYPE_CHOICES = (
-    ("电表", "电表"),
-    ("水表", "水表"),
-    ("气表", "气表"),
-    ("P2P", "P2P"),
-    ("PLC", "PLC"),
-    ("DCU", "DCU"),
-    ("CIU", "CIU"),
-    ("工具", "工具"),
-    ("LoRaWAN", "LoRaWAN"),
-    ("RF mesh", "RF mesh"),
-    ("Sigfox", "Sigfox"),
-    ("wM-Bus", "wM-Bus"),
-    ("Zigbee", "Zigbee"),
-    ("BLE", "BLE"),
-    ("Gateway", "Gateway"),
-    ("WIFI", "WIFI"),
-    ("Ethernet", "Ethernet"),
-    ("Lora", "Lora"),
-    ("Hybrid", "Hybrid"),
-    ("WI-SUN", "WI-SUN"),
-    ("Repeater", "Repeater"),
-    ("RS485", "RS485"),
-    ("其他", "其他"),
-)
-
-
 class Project(BaseModel):
     NETWORK_CHOICES = ((0, "Secret"), (2, "Public"))
     name = models.CharField(max_length=255, verbose_name="Project Name")
@@ -192,22 +165,14 @@ class Project(BaseModel):
         verbose_name="Estimated Hours",
         help_text="Total estimated working hours for this project (default: 100h)",
     )
-    product_type = models.CharField(
-        max_length=32,
-        choices=PROJECT_PRODUCT_TYPE_CHOICES,
-        null=True,
-        blank=True,
-        verbose_name="Project Product Type",
-    )
-
     pms_project_name = models.CharField(max_length=255, null=True, blank=True)
 
     # ---- 0348 扩展字段，口径与 Product 0347 逐条对应 ----
     # 项目代号：非空 check（见 Meta.constraints）；save() 在空时回落 name。
     # 0415 起允许重复：简道云一个代号下挂多个研发项目。
     code = models.CharField(max_length=255, verbose_name="项目代号")
-    # 三个字典 FK：DB 允许空（迁移前的存量项目为空，前端编辑时强制补齐），
-    # API 层 status / project_type 必填、business_unit 选填。
+    # 字典 FK：DB 允许空（迁移前的存量项目为空，前端编辑时强制补齐），
+    # API 层 status / project_type 必填、business_unit / business_category 选填。
     # RESTRICT 而非 PROTECT：直接删被引用的字典值同样报错，但整个工作区硬删时
     # Project 与 DataDictionaryItem 同批级联可以通过。真正的保护在
     # DataDictionaryItemViewSet.destroy 的引用检查（utils/data_dictionary.py::is_item_in_use）。
@@ -227,7 +192,6 @@ class Project(BaseModel):
         related_name="projects_by_status",
         verbose_name="项目状态",
     )
-    # 与上面的 product_type（CharField choices，产品类型）是两个概念，互不相干
     project_type = models.ForeignKey(
         "db.DataDictionaryItem",
         on_delete=models.RESTRICT,
@@ -235,6 +199,15 @@ class Project(BaseModel):
         blank=True,
         related_name="projects_by_project_type",
         verbose_name="项目类型",
+    )
+    # 0417 取代原 product_type（产品类型）列；简道云「研发项目」的 busi_type 同步过来
+    business_category = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="projects_by_business_category",
+        verbose_name="业务分类",
     )
     # 只要求工作区活跃成员，不进 ProjectMember（与 Product.project_lead 同口径；
     # 注意不同于本模型的 project_lead —— 那个会在创建时被加成项目管理员）

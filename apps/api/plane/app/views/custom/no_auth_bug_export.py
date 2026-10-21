@@ -65,7 +65,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
         "创建时间",
         "当前负责人",
         "创建人",
-        "产品类型",
+        "业务分类",
         "状态",
         "缺陷级别",
         "缺陷原因",
@@ -77,7 +77,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
         "创建时间": 20,
         "当前负责人": 20,
         "创建人": 16,
-        "产品类型": 16,
+        "业务分类": 16,
         "状态": 15,
         "ID": 20,
         "缺陷原因": 30,
@@ -317,7 +317,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
                 workspace__slug=workspace_slug,
                 created_at__date__gte=start_date,
             )
-            .select_related("workspace", "project", "state", "created_by")
+            .select_related("workspace", "project", "project__business_category", "state", "created_by")
             .prefetch_related(
                 Prefetch(
                     "issue_assignee",
@@ -397,7 +397,11 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "创建人": self._resolve_user_name(
                         getattr(issue, "created_by", None)
                     ),
-                    "产品类型": issue.project.product_type if issue.project_id else "",
+                    "业务分类": (
+                        issue.project.business_category.label
+                        if issue.project_id and issue.project.business_category_id
+                        else ""
+                    ),
                     "状态": issue.state.name if issue.state_id else "",
                     "缺陷级别": self._get_bug_level(issue),
                     "缺陷原因": self._get_bug_reason(issue),

@@ -13,9 +13,10 @@ export const PROJECT_DICTIONARY_FIELDS = {
   business_unit: EProjectDictionaryKey.BUSINESS_UNIT,
   status: EProjectDictionaryKey.STATUS,
   project_type: EProjectDictionaryKey.PROJECT_TYPE,
+  business_category: EProjectDictionaryKey.BUSINESS_CATEGORY,
 } as const;
 
-/** 表单里所有从字典取值的字段：3 个 FK + 项目代号（code 是字符串列，存字典值的 label 而不是 id） */
+/** 表单里所有从字典取值的字段：4 个 FK + 项目代号（code 是字符串列，存字典值的 label 而不是 id） */
 export const PROJECT_FORM_DICTIONARY_KEYS = {
   ...PROJECT_DICTIONARY_FIELDS,
   code: EProjectDictionaryKey.CODE,
@@ -36,7 +37,6 @@ export type TProjectFormFieldKey =
   | "description_html"
   | "pms_project_name"
   | "timezone"
-  | "product_type"
   | "dev_mode"
   | TProjectDictionaryFieldKey
   | TProjectMemberFieldKey
@@ -53,7 +53,7 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
   "description_html",
   "pms_project_name",
   "timezone",
-  "product_type",
+  "business_category",
   "project_type",
   "status",
   "project_lead",
@@ -72,7 +72,7 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
 export const PROJECT_REQUIRED_FIELDS = [
   "code",
   "project_type",
-  "product_type",
+  "business_category",
   "status",
   "project_lead",
   "product_manager",

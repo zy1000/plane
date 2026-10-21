@@ -3,12 +3,13 @@ import type { TDataDictionary, TDataDictionaryItem, TDataDictionaryItemLite } fr
 import { EProjectDictionaryKey } from "@plane/types";
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 
-export type TProjectDictionaryField = "status" | "project_type" | "business_unit";
+export type TProjectDictionaryField = "status" | "project_type" | "business_unit" | "business_category";
 
 const DICTIONARY_KEY_BY_FIELD: Record<TProjectDictionaryField, EProjectDictionaryKey> = {
   status: EProjectDictionaryKey.STATUS,
   project_type: EProjectDictionaryKey.PROJECT_TYPE,
   business_unit: EProjectDictionaryKey.BUSINESS_UNIT,
+  business_category: EProjectDictionaryKey.BUSINESS_CATEGORY,
 };
 
 export type TProjectListLookups = {

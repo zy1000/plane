@@ -49,7 +49,7 @@ const REQUIRED_KEYS = [
   "dev_mode",
   "code",
   "project_type",
-  "product_type",
+  "business_category",
   "status",
   "project_lead",
   "product_manager",

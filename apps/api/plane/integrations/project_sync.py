@@ -4,7 +4,7 @@
 
 - 名称 = 研发项目编号，项目ID（identifier）= 研发项目ID；本地未绑定的项目和它撞名，就给本地项目改名
 - 每次同步用远端值覆盖本地（含空值）；远端删了的本地不删，只报告
-- BU、项目代号缺的值补进字典；状态 / 类型按 label 匹配，匹配不上留空并报告
+- BU、项目代号缺的值补进字典；状态 / 类型 / 业务分类按 label 匹配，匹配不上留空并报告
 - 负责人 / 产品经理按工号匹配本工作区活跃成员，找不到留空；一个工号多个账号时取 @kaifa.cn 那个
 - 研发模式只在创建时按名称取（空 → 默认模式）；之后不跟远端，项目本来就不允许换模式
 - 新建项目走 ``setup_new_project``，和界面新建一模一样；创建人 = 负责人，找不到用工作区所有者
@@ -54,6 +54,7 @@ FIELD_CODE = "proj_no"  # 项目代号
 FIELD_BU = "bu"
 FIELD_STATUS = "proj_stat"
 FIELD_TYPE = "proj_ty"
+FIELD_BUSINESS_CATEGORY = "busi_type"  # 业务分类
 FIELD_LEAD = "rd_proj_duty_per"  # 研发项目负责人（人员字段 {name, username: 工号}）
 FIELD_PRODUCT_MANAGER = "rd_prd_mger"  # 研发产品经理
 FIELD_START = "plan_star_date"  # 计划开始日期
@@ -67,6 +68,7 @@ REMOTE_FIELDS = (
     FIELD_BU,
     FIELD_STATUS,
     FIELD_TYPE,
+    FIELD_BUSINESS_CATEGORY,
     FIELD_LEAD,
     FIELD_PRODUCT_MANAGER,
     FIELD_START,
@@ -116,6 +118,7 @@ SYNCED_FIELDS = (
     "business_unit",
     "status",
     "project_type",
+    "business_category",
     "project_lead",
     "product_manager",
     "start_date",
@@ -123,7 +126,7 @@ SYNCED_FIELDS = (
     "description",
     "description_html",
 )
-FK_FIELDS = {"business_unit", "status", "project_type", "project_lead", "product_manager"}
+FK_FIELDS = {"business_unit", "status", "project_type", "business_category", "project_lead", "product_manager"}
 
 
 def _text(value):
@@ -194,6 +197,7 @@ def normalize_rows(rows):
                 "business_unit": _text(row.get(FIELD_BU)),
                 "status": _text(row.get(FIELD_STATUS)),
                 "project_type": _text(row.get(FIELD_TYPE)),
+                "business_category": _text(row.get(FIELD_BUSINESS_CATEGORY)),
                 "lead": (lead_employee_id, lead_name),
                 "product_manager": (manager_employee_id, manager_name),
                 "start_date": _date(row.get(FIELD_START)),
@@ -280,7 +284,13 @@ class _ProjectSync:
         self.counts = {"created": 0, "updated": 0, "unchanged": 0}
         self.local_renamed, self.skipped = [], []
         self.unmatched_people = {}  # (工号, 姓名) -> {"lead": n, "product_manager": n}
-        self.unmatched_values = {"status": set(), "project_type": set(), "business_unit": set(), "dev_mode": set()}
+        self.unmatched_values = {
+            "status": set(),
+            "project_type": set(),
+            "business_unit": set(),
+            "business_category": set(),
+            "dev_mode": set(),
+        }
 
     # ---- 字段解析 ----
 
@@ -310,6 +320,7 @@ class _ProjectSync:
             "business_unit": self._item("business_unit", record["business_unit"]),
             "status": self._item("status", record["status"]),
             "project_type": self._item("project_type", record["project_type"]),
+            "business_category": self._item("business_category", record["business_category"]),
             "project_lead": self._user(record["lead"], "lead"),
             "product_manager": self._user(record["product_manager"], "product_manager"),
             "start_date": record["start_date"],

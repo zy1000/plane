@@ -19,32 +19,6 @@ export enum EUserProjectRoles {
   GUEST = 5,
 }
 
-/** 项目产品类型（与后端 Project.product_type choices 一致） */
-export type TProjectProductType =
-  | "电表"
-  | "水表"
-  | "气表"
-  | "P2P"
-  | "PLC"
-  | "DCU"
-  | "CIU"
-  | "工具"
-  | "LoRaWAN"
-  | "RF mesh"
-  | "Sigfox"
-  | "wM-Bus"
-  | "Zigbee"
-  | "BLE"
-  | "Gateway"
-  | "WIFI"
-  | "Ethernet"
-  | "Lora"
-  | "Hybrid"
-  | "WI-SUN"
-  | "Repeater"
-  | "RS485"
-  | "其他";
-
 /** 项目关联的产品（ProductProject 关联表，只表达引用关系）；列表接口按 identifier 排序返回 */
 export type TProjectLinkedProduct = {
   id: string;
@@ -93,11 +67,9 @@ export interface IPartialProject {
   updated_by?: string;
   intake_count?: number;
   description_html?: string | null;
-  /** 项目产品类型（列表/详情接口可能返回） */
-  product_type?: TProjectProductType | null;
-  /** 项目关联的产品（两个列表接口返回；与 product_type 无关） */
+  /** 项目关联的产品（两个列表接口返回） */
   products?: TProjectLinkedProduct[];
-  // ---- 0348 扩展字段：API 创建时必填（business_unit 除外），但 DB 可空（迁移前的存量项目为 null，编辑时必须补齐）----
+  // ---- 0348 扩展字段：API 创建时必填（business_unit / business_category 除外），但 DB 可空（迁移前的存量项目为 null，编辑时必须补齐）----
   /** 项目代号，工作区内唯一 */
   code?: string | null;
   /** 所属BU（数据字典值 id，选填） */
@@ -109,9 +81,12 @@ export interface IPartialProject {
   /** 项目状态（数据字典值 id） */
   status?: string | null;
   status_detail?: TDataDictionaryItemLite | null;
-  /** 项目类型（数据字典值 id；与 product_type 产品类型是两个概念） */
+  /** 项目类型（数据字典值 id） */
   project_type?: string | null;
   project_type_detail?: TDataDictionaryItemLite | null;
+  /** 业务分类（数据字典值 id，0417 取代原产品类型） */
+  business_category?: string | null;
+  business_category_detail?: TDataDictionaryItemLite | null;
   /** YYYY-MM-DD */
   start_date?: string | null;
   /** YYYY-MM-DD */

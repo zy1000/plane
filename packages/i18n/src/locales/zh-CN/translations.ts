@@ -5197,7 +5197,7 @@ export default {
       timezone: "时区",
       project_type: "项目类型",
       status: "项目状态",
-      product_type: "产品类型",
+      business_category: "业务分类",
       project_lead: "负责人",
       product_manager: "研发产品经理",
       start_date: "开始日期",

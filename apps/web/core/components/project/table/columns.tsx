@@ -20,7 +20,7 @@ export const ACTIONS_COLUMN_WIDTH = 150;
 export const PROJECT_COLUMN_WIDTH: Record<TProjectDisplayPropertyKey, number> = {
   code: 168,
   project_type: 116,
-  product_type: 96,
+  business_category: 116,
   status: 112,
   business_unit: 112,
   dev_mode: 112,
@@ -70,7 +70,7 @@ const DictionaryCell = ({
 }) => {
   const resolved = ctx.lookups.resolveItem(field, project[field], project[`${field}_detail`]);
   if (!resolved) return <EmptyCell />;
-  // 状态永远是彩色标签；类型 / BU 跟字典的「彩色显示」开关走
+  // 状态永远是彩色标签；类型 / BU / 业务分类跟字典的「彩色显示」开关走
   const color =
     field === "status"
       ? resolveProjectStatusColor(resolved.item, resolved.dictionary)
@@ -139,8 +139,8 @@ export const renderProjectCell = (
       return <TextCell value={project.code} />;
     case "project_type":
       return <DictionaryCell project={project} field="project_type" ctx={ctx} />;
-    case "product_type":
-      return <TextCell value={project.product_type} />;
+    case "business_category":
+      return <DictionaryCell project={project} field="business_category" ctx={ctx} />;
     case "status":
       return <DictionaryCell project={project} field="status" ctx={ctx} />;
     case "business_unit":

@@ -10,10 +10,8 @@ import { Activity, AlertTriangle, Boxes, Building2, CalendarDays, Crown, Flag, T
 import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { Link } from "react-router";
 // plane imports
-import { ETabIndices, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
+import { ETabIndices } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { TProjectProductType } from "@plane/types";
-import { CustomSearchSelect } from "@plane/ui";
 import { cn, getDate, getTabIndex, renderFormattedPayloadDate } from "@plane/utils";
 // components
 import {
@@ -53,12 +51,6 @@ type Props = {
 const Row = (props: React.ComponentProps<typeof PropertyRailRow>) => (
   <PropertyRailRow className="min-h-11" {...props} />
 );
-
-const PRODUCT_TYPE_OPTIONS = PROJECT_PRODUCT_TYPE_OPTIONS.map((option) => ({
-  value: option,
-  query: option,
-  content: <span className="truncate">{option}</span>,
-}));
 
 /**
  * 创建弹窗右栏：分类 / 排期 / 团队三组属性，一行一项。
@@ -125,36 +117,6 @@ export const ProjectCreateProperties = observer(function ProjectCreateProperties
     );
   };
 
-  const productTypeControl = (
-    <Controller
-      control={control}
-      name="product_type"
-      rules={requiredValueRules(requiredMessage("product_type"))}
-      render={({ field: { value, onChange }, fieldState: { error } }) => (
-        <CustomSearchSelect
-          options={PRODUCT_TYPE_OPTIONS}
-          value={value ?? null}
-          onChange={(next: string | null) => onChange((next as TProjectProductType | null) ?? null)}
-          className="h-full w-full"
-          customButtonClassName="h-full rounded-lg hover:bg-transparent"
-          optionsClassName="w-[min(20rem,calc(100vw-2rem))]"
-          tabIndex={getIndex("product_type")}
-          customButton={
-            <span className={cn(PROPERTY_VALUE_CLASS, error && PROPERTY_VALUE_ERROR_CLASS)}>
-              {value ? (
-                <span className="truncate">{value}</span>
-              ) : (
-                <span className={cn("truncate", error ? "text-danger-primary" : "text-placeholder")}>
-                  {error?.message ?? placeholderFor(true)}
-                </span>
-              )}
-            </span>
-          }
-        />
-      )}
-    />
-  );
-
   const renderDate = (name: TProjectDateFieldKey) => (
     <Controller
       control={control}
@@ -215,8 +177,8 @@ export const ProjectCreateProperties = observer(function ProjectCreateProperties
         <Row icon={Tag} label={label("project_type")} required>
           {renderDictionary("project_type", true)}
         </Row>
-        <Row icon={Boxes} label={label("product_type")} required>
-          {productTypeControl}
+        <Row icon={Boxes} label={label("business_category")} required>
+          {renderDictionary("business_category", true)}
         </Row>
         <Row icon={Building2} label={label("business_unit")}>
           {renderDictionary("business_unit", false)}

@@ -62,7 +62,7 @@ export const PROJECT_CREATE_TAB_INDICES = [
   "code",
   "description",
   "project_type",
-  "product_type",
+  "business_category",
   "business_unit",
   "status",
   "start_date",

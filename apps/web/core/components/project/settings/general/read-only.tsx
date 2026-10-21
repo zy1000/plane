@@ -86,8 +86,8 @@ export const ProjectSettingsReadOnly = observer(function ProjectSettingsReadOnly
             <ReadOnlyField label={label("project_type")}>
               <Text value={project.project_type_detail?.label} />
             </ReadOnlyField>
-            <ReadOnlyField label={label("product_type")}>
-              <Text value={project.product_type} />
+            <ReadOnlyField label={label("business_category")}>
+              <Text value={project.business_category_detail?.label} />
             </ReadOnlyField>
             <ReadOnlyField label={label("business_unit")}>
               <Text value={project.business_unit_detail?.label} />

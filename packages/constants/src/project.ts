@@ -15,33 +15,6 @@ import type {
 
 export type TNetworkChoiceIconKey = "Lock" | "Globe2";
 
-/** 与后端 `Project.product_type` 选项一致 */
-export const PROJECT_PRODUCT_TYPE_OPTIONS = [
-  "电表",
-  "水表",
-  "气表",
-  "P2P",
-  "PLC",
-  "DCU",
-  "CIU",
-  "工具",
-  "LoRaWAN",
-  "RF mesh",
-  "Sigfox",
-  "wM-Bus",
-  "Zigbee",
-  "BLE",
-  "Gateway",
-  "WIFI",
-  "Ethernet",
-  "Lora",
-  "Hybrid",
-  "WI-SUN",
-  "Repeater",
-  "RS485",
-  "其他",
-] as const;
-
 export type TNetworkChoice = {
   key: 0 | 2;
   labelKey: string;
@@ -139,7 +112,7 @@ export const PROJECT_DISPLAY_PROPERTIES: {
 }[] = [
   { key: "code", i18n_label: "workspace_projects.fields.code" },
   { key: "project_type", i18n_label: "workspace_projects.fields.project_type" },
-  { key: "product_type", i18n_label: "workspace_projects.fields.product_type" },
+  { key: "business_category", i18n_label: "workspace_projects.fields.business_category" },
   { key: "status", i18n_label: "workspace_projects.fields.status_short" },
   { key: "business_unit", i18n_label: "workspace_projects.fields.business_unit" },
   { key: "dev_mode", i18n_label: "workspace_projects.fields.dev_mode" },
@@ -155,7 +128,7 @@ export const PROJECT_DISPLAY_PROPERTIES: {
 export const DEFAULT_PROJECT_DISPLAY_PROPERTIES: TProjectDisplayProperties = {
   code: false,
   project_type: true,
-  product_type: false,
+  business_category: false,
   status: true,
   business_unit: false,
   dev_mode: true,

@@ -109,6 +109,23 @@ SYSTEM_DICTIONARIES = (
     },
     # ---- 项目代号（0355）：Project.code 仍是字符串列，取值必须是这个字典里某个值的 label；无预置值 ----
     {"key": "project_code", "name": "项目代号", "description": "", "items": ()},
+    # ---- 业务分类（0417）：取代项目的产品类型，值与简道云「研发项目」的业务分类一致 ----
+    {
+        "key": "project_business_category",
+        "name": "业务分类",
+        "description": "",
+        "items": (
+            "海外电力设备",
+            "国内电力设备",
+            "国内水气设备",
+            "海外水气设备",
+            "电系统-HES",
+            "电系统-非HES",
+            "水气系统",
+            "综合能源系统",
+            "综合能源设备",
+        ),
+    },
 )
 SYSTEM_DICTIONARY_KEYS = tuple(spec["key"] for spec in SYSTEM_DICTIONARIES)
 
@@ -127,6 +144,7 @@ PROJECT_DICTIONARY_FIELD_KEYS = {
     "business_unit": "project_business_unit",
     "status": "project_status",
     "project_type": "project_type",
+    "business_category": "project_business_category",
 }
 
 # Project.code 不是 FK：存的是 project_code 字典里某个值的 label，所以不进上面的映射（引用检查按 label 另查）。

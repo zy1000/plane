@@ -92,7 +92,7 @@ export function useProjectSettingsForm(params: Params) {
       product_manager: normalizeUserId(formData.product_manager),
       status: formData.status ?? null,
       project_type: formData.project_type ?? null,
-      product_type: formData.product_type ?? null,
+      business_category: formData.business_category ?? null,
       start_date: formData.start_date ?? null,
       end_date: formData.end_date ?? null,
       project_lead: normalizeUserId(formData.project_lead),

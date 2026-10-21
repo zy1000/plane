@@ -21,7 +21,7 @@ export type TProjectOrderByOptions =
 export type TProjectDisplayPropertyKey =
   | "code"
   | "project_type"
-  | "product_type"
+  | "business_category"
   | "status"
   | "business_unit"
   | "dev_mode"
@@ -48,7 +48,7 @@ export type TProjectFilterProperty =
   | "status"
   | "project_type"
   | "business_unit"
-  | "product_type"
+  | "business_category"
   | "dev_mode"
   | "lead"
   | "product_manager"

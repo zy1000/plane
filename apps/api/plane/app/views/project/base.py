@@ -132,6 +132,8 @@ class ProjectViewSet(BaseViewSet):
                 "status__dictionary",
                 "project_type",
                 "project_type__dictionary",
+                "business_category",
+                "business_category__dictionary",
                 # product_manager_detail 要出头像 URL，一并把 avatar_asset 拉上，否则每行一条查询
                 "product_manager__avatar_asset",
                 # dev_mode_detail 要出 features（侧栏与功能页按「模式位 AND 项目位」渲染）
@@ -532,6 +534,7 @@ class ProjectViewSet(BaseViewSet):
             "business_unit",
             "status",
             "project_type",
+            "business_category",
             "product_manager",
             "start_date",
             "end_date",
@@ -663,7 +666,7 @@ class ProjectViewSet(BaseViewSet):
 
         workspace = Workspace.objects.get(slug=slug)
 
-        # select_related 四个扩展 FK：下面 ProjectSerializer(project).data 的快照要出 *_detail
+        # select_related 五个扩展 FK：下面 ProjectSerializer(project).data 的快照要出 *_detail
         project = Project.objects.select_related(
             "business_unit",
             "business_unit__dictionary",
@@ -671,6 +674,8 @@ class ProjectViewSet(BaseViewSet):
             "status__dictionary",
             "project_type",
             "project_type__dictionary",
+            "business_category",
+            "business_category__dictionary",
             "product_manager__avatar_asset",
             "dev_mode",
         ).get(pk=pk, workspace=workspace)
@@ -934,7 +939,7 @@ class DeployBoardViewSet(BaseViewSet):
 
 class ProjectAPI(BaseViewSet):
     model = Project
-    # ProjectListSerializer 现在带 4 个 *_detail，不 select_related 会 N+1
+    # ProjectListSerializer 现在带 5 个 *_detail，不 select_related 会 N+1
     queryset = Project.objects.select_related(
         "business_unit",
         "business_unit__dictionary",
@@ -942,6 +947,8 @@ class ProjectAPI(BaseViewSet):
         "status__dictionary",
         "project_type",
         "project_type__dictionary",
+        "business_category",
+        "business_category__dictionary",
         "product_manager__avatar_asset",
     )
     pagination_class = CustomPaginator
@@ -1465,6 +1472,8 @@ class ProjectAPI(BaseViewSet):
             "status__dictionary",
             "project_type",
             "project_type__dictionary",
+            "business_category",
+            "business_category__dictionary",
             "product_manager__avatar_asset",
         )
         query = self.filter_queryset(query).order_by("-created_at")

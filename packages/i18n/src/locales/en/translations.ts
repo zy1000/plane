@@ -5020,7 +5020,7 @@ export default {
       timezone: "Timezone",
       project_type: "Project type",
       status: "Project status",
-      product_type: "Product type",
+      business_category: "Business category",
       project_lead: "Project lead",
       product_manager: "R&D product manager",
       start_date: "Start date",

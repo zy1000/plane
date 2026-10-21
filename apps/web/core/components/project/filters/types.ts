@@ -5,7 +5,7 @@ export const PROJECT_FILTER_PROPERTY_KEYS = [
   "status",
   "project_type",
   "business_unit",
-  "product_type",
+  "business_category",
   "dev_mode",
   "lead",
   "product_manager",

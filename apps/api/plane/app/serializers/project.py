@@ -133,6 +133,7 @@ class ProjectExtendedDetailMixin(serializers.Serializer):
     business_unit_detail = DataDictionaryItemLiteSerializer(source="business_unit", read_only=True)
     status_detail = DataDictionaryItemLiteSerializer(source="status", read_only=True)
     project_type_detail = DataDictionaryItemLiteSerializer(source="project_type", read_only=True)
+    business_category_detail = DataDictionaryItemLiteSerializer(source="business_category", read_only=True)
     product_manager_detail = UserLiteSerializer(source="product_manager", read_only=True)
     # 侧栏与功能页都要按「模式位 AND 项目位」渲染，列表页和详情页都得带上，
     # 否则前端得为每个项目再拉一次模式
@@ -143,8 +144,9 @@ class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
     workspace_detail = WorkspaceLiteSerializer(source="workspace", read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
     # code 不用声明：模型列无 blank=True，DRF 自动 required + allow_blank=False；归一化与查重在 validate_code。
-    # 下面这些列 DB 可空 / API 创建必填（business_unit 选填），语义同 ProductSerializer。
+    # 下面这些列 DB 可空 / API 创建必填（business_unit / business_category 选填），语义同 ProductSerializer。
     business_unit = _dictionary_item_field(required=False)
+    business_category = _dictionary_item_field(required=False)
     status = _dictionary_item_field()
     project_type = _dictionary_item_field()
     product_manager = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=True)
@@ -333,7 +335,6 @@ class ProjectLiteSerializer(BaseSerializer):
             "cover_image_url",
             "logo_props",
             "description",
-            "product_type",
         ]
         read_only_fields = fields
 
