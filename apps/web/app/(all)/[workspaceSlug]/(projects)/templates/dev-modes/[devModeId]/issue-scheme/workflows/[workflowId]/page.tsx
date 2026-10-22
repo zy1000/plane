@@ -6,7 +6,7 @@
 
 import { DevModeIssueSchemeWorkflowPanel } from "@/components/template-management/dev-modes";
 
-/** 「工作项配置」下某条工作流的流转配置。权限与数据都由 layout 处理。 */
+/** 「工作项」页下某条工作流的流转配置。权限与数据都由 layout 处理。 */
 export default function TemplateDevModeIssueSchemeWorkflowPage() {
   return <DevModeIssueSchemeWorkflowPanel />;
 }

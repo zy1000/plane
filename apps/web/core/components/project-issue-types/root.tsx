@@ -112,17 +112,17 @@ const getSelectionMode = (options: TTypeExtraField["options"]): "single" | "mult
   return "single";
 };
 
-const getFieldTypeOption = (fieldType: TTypeExtraField["field_type"]) =>
+export const getFieldTypeOption = (fieldType: TTypeExtraField["field_type"]) =>
   FIELD_TYPE_OPTIONS.find((option) => option.value === fieldType) ?? DEFAULT_FIELD_TYPE_OPTION;
 
 /** 字段行展示文案 */
-const getFieldRowLabel = (field: TTypeExtraField): string => {
+export const getFieldRowLabel = (field: TTypeExtraField): string => {
   if (field.field_type === "text") return getTextMode(field.options) === "paragraph" ? "段落" : "单行";
   if (field.field_type === "select" && getSelectionMode(field.options) === "multiple") return "多选";
   return getFieldTypeOption(field.field_type).rowLabel;
 };
 
-const getApiErrorMessage = (error: unknown, fallback: string) => {
+export const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "string") return error;
   if (!error || typeof error !== "object") return fallback;
   if ("msg" in error && typeof error.msg === "string") return error.msg;
@@ -156,7 +156,7 @@ const StatusBadge = ({
   );
 };
 
-type TMoreMenuItem = {
+export type TMoreMenuItem = {
   label: string;
   icon?: ReactNode;
   disabled?: boolean;
@@ -164,7 +164,7 @@ type TMoreMenuItem = {
   onClick: () => void;
 };
 
-function MoreMenu({ items, title = "更多操作" }: { items: TMoreMenuItem[]; title?: string }) {
+export function MoreMenu({ items, title = "更多操作" }: { items: TMoreMenuItem[]; title?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
@@ -232,7 +232,7 @@ function MoreMenu({ items, title = "更多操作" }: { items: TMoreMenuItem[]; t
   );
 }
 
-const WorkItemTypeIcon = ({ issueType, className = "" }: { issueType?: Partial<TIssueType>; className?: string }) => (
+export const WorkItemTypeIcon = ({ issueType, className = "" }: { issueType?: Partial<TIssueType>; className?: string }) => (
   <TypeIcon iconProps={issueType?.logo_props?.icon} className={className} />
 );
 
@@ -334,6 +334,82 @@ function getNormalizedSelectOptions(values: string[]) {
 function formatUserIsMultipleForForm(field: TTypeExtraField): boolean {
   if (field.field_type !== "user") return false;
   return getSelectionMode(field.options) === "multiple";
+}
+
+/** 已有属性 → 表单初值（编辑态） */
+function fieldToFormState(field: TTypeExtraField): TFieldFormState {
+  return {
+    name: field.name ?? "",
+    description: field.description ?? "",
+    field_type: field.field_type,
+    text_is_paragraph: formatTextIsParagraphForForm(field),
+    number_default_value: formatNumberFieldDefaultForForm(field),
+    select_options: formatSelectOptionsForForm(field),
+    select_is_multiple: formatSelectIsMultipleForForm(field),
+    select_default_value: formatSelectDefaultValueForForm(field),
+    select_default_values: formatSelectDefaultValuesForForm(field),
+    user_is_multiple: formatUserIsMultipleForForm(field),
+    is_required: field.is_required === true,
+    is_active: field.is_active !== false,
+  };
+}
+
+export type TFieldPayloadBase = Omit<TTypeExtraFieldPayload, "issue_type_id">;
+
+/**
+ * 表单 → 请求体（新建再补 issue_type_id）。校验不过返回给用户看的错误文案。
+ * 项目设置的行内表单与模板中心的属性弹窗共用，校验口径只有这一份。
+ */
+function buildFieldPayload(fieldForm: TFieldFormState): { error: string } | { payload: TFieldPayloadBase } {
+  const name = fieldForm.name.trim();
+
+  let numberDefaultPayload: number | null | undefined;
+  if (fieldForm.field_type === "number") {
+    const parsed = parseNumberFieldDefaultPayload(fieldForm.number_default_value);
+    if (!parsed.ok) return { error: "默认值必须是有效数字，或留空表示不设默认值。" };
+    numberDefaultPayload = parsed.value;
+  }
+
+  let selectOptionsPayload: { choices: string[]; selection_mode: "single" | "multiple" } | undefined;
+  let selectDefaultPayload: string | string[] | null | undefined;
+  if (isSelectFieldType(fieldForm.field_type)) {
+    const filledOptions = fieldForm.select_options.map((option) => option.trim()).filter(Boolean);
+    const selectOptions = getNormalizedSelectOptions(fieldForm.select_options);
+    if (selectOptions.length === 0) return { error: "下拉菜单至少需要添加一个选项。" };
+    if (filledOptions.length !== selectOptions.length) return { error: "下拉菜单选项不能重复。" };
+
+    selectOptionsPayload = {
+      choices: selectOptions,
+      selection_mode: fieldForm.select_is_multiple ? "multiple" : "single",
+    };
+    selectDefaultPayload = fieldForm.select_is_multiple
+      ? fieldForm.select_default_values.filter((value) => selectOptions.includes(value))
+      : selectOptions.includes(fieldForm.select_default_value)
+        ? fieldForm.select_default_value
+        : null;
+  }
+
+  const textOptionsPayload =
+    fieldForm.field_type === "text" ? { text_mode: fieldForm.text_is_paragraph ? "paragraph" : "single_line" } : undefined;
+
+  const userOptionsPayload =
+    fieldForm.field_type === "user" ? { selection_mode: fieldForm.user_is_multiple ? "multiple" : "single" } : undefined;
+
+  return {
+    payload: {
+      name,
+      description: fieldForm.description.trim(),
+      field_type: fieldForm.field_type,
+      is_required: fieldForm.is_required,
+      is_active: fieldForm.is_active,
+      ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
+      ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
+      ...(isSelectFieldType(fieldForm.field_type)
+        ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null }
+        : {}),
+      ...(fieldForm.field_type === "user" ? { options: userOptionsPayload, default_value: null } : {}),
+    },
+  };
 }
 
 function FieldTypeSelect({
@@ -922,7 +998,208 @@ function InlineFieldForm({
   );
 }
 
-function WorkItemTypeModal({
+/**
+ * 某个工作项类型的属性列表：一行一个属性（名称 / 类型 / 状态 / 更多），编辑与新建都在列表里就地展开表单。
+ * 项目设置「工作项类型」展开后的属性区与模板中心工作项页的「属性」分段共用这一份。
+ */
+export function IssueTypeFieldList({
+  issueTypeId,
+  fields,
+  isLoading,
+  canEdit,
+  hideTitle = false,
+  onCreate,
+  onUpdate,
+  onRequestDelete,
+}: {
+  issueTypeId: string;
+  /** 只含这个类型的属性 */
+  fields: TTypeExtraField[];
+  isLoading: boolean;
+  canEdit: boolean;
+  /** 外面已经有「属性」标题时不再重复 */
+  hideTitle?: boolean;
+  onCreate: (payload: TTypeExtraFieldPayload) => Promise<unknown>;
+  onUpdate: (fieldId: string, payload: TFieldPayloadBase) => Promise<unknown>;
+  onRequestDelete: (field: TTypeExtraField) => void;
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingField, setEditingField] = useState<TTypeExtraField | undefined>();
+  const [fieldForm, setFieldForm] = useState<TFieldFormState>(DEFAULT_FIELD_FORM);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const inlineFormRef = useRef<HTMLDivElement>(null);
+  const isFormOpen = isAdding || Boolean(editingField);
+
+  const resetFieldForm = () => {
+    setIsAdding(false);
+    setEditingField(undefined);
+    setFieldForm(DEFAULT_FIELD_FORM);
+  };
+
+  const openCreateFieldForm = () => {
+    if (!canEdit) return;
+    setIsAdding(true);
+    setEditingField(undefined);
+    setFieldForm(DEFAULT_FIELD_FORM);
+  };
+
+  const openEditFieldForm = (field: TTypeExtraField) => {
+    if (!canEdit) return;
+    setIsAdding(false);
+    setEditingField(field);
+    setFieldForm(fieldToFormState(field));
+  };
+
+  useEffect(() => {
+    if (!isFormOpen) return;
+    inlineFormRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [isFormOpen]);
+
+  // 正在编辑的属性被删掉了：收起表单
+  useEffect(() => {
+    if (editingField && !fields.some((field) => field.id === editingField.id)) resetFieldForm();
+  }, [editingField, fields]);
+
+  const handleSubmitField = async () => {
+    if (!canEdit) return;
+    if (!fieldForm.name.trim()) return;
+
+    const built = buildFieldPayload(fieldForm);
+    if ("error" in built) {
+      setToast({ type: TOAST_TYPE.ERROR, title: "校验失败", message: built.error });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editingField) {
+        await onUpdate(editingField.id, built.payload);
+      } else {
+        await onCreate({ issue_type_id: issueTypeId, ...built.payload });
+      }
+      resetFieldForm();
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: editingField ? "更新失败" : "创建失败",
+        message: getApiErrorMessage(
+          error,
+          editingField ? "无法更新自定义属性，请稍后重试。" : "无法创建自定义属性，请检查名称是否重复。"
+        ),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isFormOpen && fields.length === 0) {
+    return (
+      <div className="mb-3 flex w-full flex-col items-center justify-center rounded-md bg-surface-1 py-10 text-center">
+        <div className="border-accent-primary/40 flex size-14 items-center justify-center rounded-lg border bg-accent-primary/10 text-accent-primary">
+          <Layers className="size-7" strokeWidth={2} />
+        </div>
+        <h3 className="mt-4 text-sm font-semibold text-primary">添加自定义属性</h3>
+        <p className="mt-1 text-sm text-secondary">您为此工作项类型添加的新属性将显示在此处。</p>
+        <Button
+          variant="neutral-primary"
+          size="sm"
+          className="mt-4"
+          prependIcon={<Plus className="size-3" />}
+          onClick={openCreateFieldForm}
+          disabled={!canEdit}
+        >
+          添加新属性
+        </Button>
+        {isLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      {!hideTitle && <div className="mb-3 text-sm font-medium text-primary">属性</div>}
+
+      <div className="mb-4 space-y-2">
+        {fields.map((field) => {
+          if (editingField?.id === field.id) {
+            return (
+              <div key={field.id} ref={inlineFormRef}>
+                <InlineFieldForm
+                  form={fieldForm}
+                  isSubmitting={isSubmitting}
+                  submitLabel="更新"
+                  fieldTypeLocked
+                  onChange={setFieldForm}
+                  onCancel={resetFieldForm}
+                  onSubmit={() => void handleSubmitField()}
+                />
+              </div>
+            );
+          }
+          return (
+            <div
+              key={field.id}
+              className="hover:border-primary/40 flex items-center gap-3 rounded-md border border-strong px-3 py-2.5 text-sm transition hover:bg-layer-1-hover"
+            >
+              <GripVertical className="size-4 shrink-0 text-tertiary" />
+              <span className="min-w-0 flex-1 truncate font-medium text-primary">{field.name}</span>
+              <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
+              {field.is_active === false ? (
+                <StatusBadge tone="danger">已禁用</StatusBadge>
+              ) : (
+                <StatusBadge tone="success">活动</StatusBadge>
+              )}
+              <MoreMenu
+                items={[
+                  {
+                    label: "编辑",
+                    icon: <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
+                    disabled: !canEdit,
+                    onClick: () => openEditFieldForm(field),
+                  },
+                  {
+                    label: "删除",
+                    disabled: !canEdit,
+                    tone: "danger",
+                    icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
+                    onClick: () => onRequestDelete(field),
+                  },
+                ]}
+              />
+            </div>
+          );
+        })}
+        {isAdding && (
+          <div ref={inlineFormRef}>
+            <InlineFieldForm
+              form={fieldForm}
+              isSubmitting={isSubmitting}
+              submitLabel="创建"
+              onChange={setFieldForm}
+              onCancel={resetFieldForm}
+              onSubmit={() => void handleSubmitField()}
+            />
+          </div>
+        )}
+      </div>
+
+      {!isFormOpen && (
+        <Button
+          variant="neutral-primary"
+          size="sm"
+          prependIcon={<Plus className="size-3" />}
+          onClick={openCreateFieldForm}
+          disabled={!canEdit}
+        >
+          添加新属性
+        </Button>
+      )}
+      {isLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
+    </div>
+  );
+}
+
+export function WorkItemTypeModal({
   isOpen,
   isSubmitting,
   onClose,
@@ -1085,11 +1362,6 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
   // translation
   const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | undefined>();
-  const [addingFieldFor, setAddingFieldFor] = useState<string | undefined>();
-  const [editingField, setEditingField] = useState<TTypeExtraField | undefined>();
-  const [fieldForm, setFieldForm] = useState<TFieldFormState>(DEFAULT_FIELD_FORM);
-  const [isFieldSubmitting, setIsFieldSubmitting] = useState(false);
-  const inlineFormRef = useRef<HTMLDivElement>(null);
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [editingIssueType, setEditingIssueType] = useState<TIssueType | undefined>();
   const [isTypeSubmitting, setIsTypeSubmitting] = useState(false);
@@ -1131,44 +1403,6 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
     });
     return groupedFields;
   }, [fields]);
-
-  const resetFieldForm = () => {
-    setAddingFieldFor(undefined);
-    setEditingField(undefined);
-    setFieldForm(DEFAULT_FIELD_FORM);
-  };
-
-  const openCreateFieldForm = (issueTypeId: string) => {
-    if (!canEdit) return;
-    setAddingFieldFor(issueTypeId);
-    setEditingField(undefined);
-    setFieldForm(DEFAULT_FIELD_FORM);
-  };
-
-  const openEditFieldForm = (field: TTypeExtraField) => {
-    if (!canEdit) return;
-    setAddingFieldFor(field.issue_type_id);
-    setEditingField(field);
-    setFieldForm({
-      name: field.name ?? "",
-      description: field.description ?? "",
-      field_type: field.field_type,
-      text_is_paragraph: formatTextIsParagraphForForm(field),
-      number_default_value: formatNumberFieldDefaultForForm(field),
-      select_options: formatSelectOptionsForForm(field),
-      select_is_multiple: formatSelectIsMultipleForForm(field),
-      select_default_value: formatSelectDefaultValueForForm(field),
-      select_default_values: formatSelectDefaultValuesForForm(field),
-      user_is_multiple: formatUserIsMultipleForForm(field),
-      is_required: field.is_required === true,
-      is_active: field.is_active !== false,
-    });
-  };
-
-  useEffect(() => {
-    if (!addingFieldFor) return;
-    inlineFormRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [addingFieldFor]);
 
   const issueTypeIdsKey = useMemo(
     () =>
@@ -1248,120 +1482,6 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
     setDeleteTarget({ kind: "issueType", issueType });
   };
 
-  const handleSubmitField = async (issueTypeId: string) => {
-    if (!canEdit) return;
-    const name = fieldForm.name.trim();
-    if (!name) return;
-
-    let numberDefaultPayload: number | null | undefined;
-    if (fieldForm.field_type === "number") {
-      const parsed = parseNumberFieldDefaultPayload(fieldForm.number_default_value);
-      if (!parsed.ok) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "校验失败",
-          message: "默认值必须是有效数字，或留空表示不设默认值。",
-        });
-        return;
-      }
-      numberDefaultPayload = parsed.value;
-    }
-
-    let selectOptionsPayload: { choices: string[]; selection_mode: "single" | "multiple" } | undefined;
-    let selectDefaultPayload: string | string[] | null | undefined;
-    if (isSelectFieldType(fieldForm.field_type)) {
-      const filledOptions = fieldForm.select_options.map((option) => option.trim()).filter(Boolean);
-      const selectOptions = getNormalizedSelectOptions(fieldForm.select_options);
-
-      if (selectOptions.length === 0) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "校验失败",
-          message: "下拉菜单至少需要添加一个选项。",
-        });
-        return;
-      }
-
-      if (filledOptions.length !== selectOptions.length) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "校验失败",
-          message: "下拉菜单选项不能重复。",
-        });
-        return;
-      }
-
-      selectOptionsPayload = {
-        choices: selectOptions,
-        selection_mode: fieldForm.select_is_multiple ? "multiple" : "single",
-      };
-      selectDefaultPayload = fieldForm.select_is_multiple
-        ? fieldForm.select_default_values.filter((value) => selectOptions.includes(value))
-        : selectOptions.includes(fieldForm.select_default_value)
-          ? fieldForm.select_default_value
-          : null;
-    }
-
-    const textOptionsPayload =
-      fieldForm.field_type === "text"
-        ? { text_mode: fieldForm.text_is_paragraph ? "paragraph" : "single_line" }
-        : undefined;
-
-    const userOptionsPayload =
-      fieldForm.field_type === "user"
-        ? {
-            selection_mode: fieldForm.user_is_multiple ? "multiple" : "single",
-          }
-        : undefined;
-
-    setIsFieldSubmitting(true);
-    try {
-      if (editingField) {
-        await updateField(editingField.id, {
-          name,
-          description: fieldForm.description.trim(),
-          field_type: fieldForm.field_type,
-          is_required: fieldForm.is_required,
-          is_active: fieldForm.is_active,
-          ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
-          ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
-          ...(isSelectFieldType(fieldForm.field_type)
-            ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null }
-            : {}),
-          ...(fieldForm.field_type === "user" ? { options: userOptionsPayload, default_value: null } : {}),
-        });
-      } else {
-        const payload: TTypeExtraFieldPayload = {
-          issue_type_id: issueTypeId,
-          name,
-          description: fieldForm.description.trim(),
-          field_type: fieldForm.field_type,
-          is_required: fieldForm.is_required,
-          is_active: fieldForm.is_active,
-          ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
-          ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
-          ...(isSelectFieldType(fieldForm.field_type)
-            ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null }
-            : {}),
-          ...(fieldForm.field_type === "user" ? { options: userOptionsPayload, default_value: null } : {}),
-        };
-        await createField(payload);
-      }
-      resetFieldForm();
-    } catch (error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: editingField ? "更新失败" : "创建失败",
-        message: getApiErrorMessage(
-          error,
-          editingField ? "无法更新自定义属性，请稍后重试。" : "无法创建自定义属性，请检查名称是否重复。"
-        ),
-      });
-    } finally {
-      setIsFieldSubmitting(false);
-    }
-  };
-
   const requestDeleteField = (field: TTypeExtraField) => {
     if (!canEdit) return;
     setDeleteTarget({ kind: "field", field });
@@ -1376,7 +1496,6 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
         if (expandedId === deleteTarget.issueType.id) setExpandedId(undefined);
       } else {
         await deleteField(deleteTarget.field.id);
-        if (editingField?.id === deleteTarget.field.id) resetFieldForm();
       }
       setDeleteTarget(undefined);
     } catch (error) {
@@ -1520,117 +1639,15 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
                       >
                         <div className="min-h-0 overflow-hidden">
                           <div className="border-t border-subtle">
-                            {addingFieldFor === issueType.id || typeFields.length > 0 ? (
-                              <div className="p-4">
-                                <div className="mb-3 text-sm font-medium text-primary">属性</div>
-
-                                {(typeFields.length > 0 || addingFieldFor === issueType.id) && (
-                                  <div className="mb-4 space-y-2">
-                                    {typeFields.map((field) => {
-                                      const isEditingThisRow =
-                                        addingFieldFor === issueType.id && editingField?.id === field.id;
-                                      if (isEditingThisRow) {
-                                        return (
-                                          <div key={field.id} ref={inlineFormRef}>
-                                            <InlineFieldForm
-                                              form={fieldForm}
-                                              isSubmitting={isFieldSubmitting}
-                                              submitLabel="更新"
-                                              fieldTypeLocked
-                                              onChange={setFieldForm}
-                                              onCancel={resetFieldForm}
-                                              onSubmit={() => handleSubmitField(issueType.id)}
-                                            />
-                                          </div>
-                                        );
-                                      }
-                                      return (
-                                        <div
-                                          key={field.id}
-                                          className="hover:border-primary/40 flex items-center gap-3 rounded-md border border-strong px-3 py-2.5 text-sm transition hover:bg-layer-1-hover"
-                                        >
-                                          <GripVertical className="size-4 shrink-0 text-tertiary" />
-                                          <span className="min-w-0 flex-1 truncate font-medium text-primary">
-                                            {field.name}
-                                          </span>
-                                          <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
-                                          {field.is_active === false ? (
-                                            <StatusBadge tone="danger">已禁用</StatusBadge>
-                                          ) : (
-                                            <StatusBadge tone="success">活动</StatusBadge>
-                                          )}
-                                          <MoreMenu
-                                            items={[
-                                              {
-                                                label: "编辑",
-                                                icon: (
-                                                  <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />
-                                                ),
-                                                disabled: !canEdit,
-                                                onClick: () => openEditFieldForm(field),
-                                              },
-                                              {
-                                                label: "删除",
-                                                disabled: !canEdit,
-                                                tone: "danger",
-                                                icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
-                                                onClick: () => requestDeleteField(field),
-                                              },
-                                            ]}
-                                          />
-                                        </div>
-                                      );
-                                    })}
-                                    {addingFieldFor === issueType.id && !editingField && (
-                                      <div ref={inlineFormRef}>
-                                        <InlineFieldForm
-                                          form={fieldForm}
-                                          isSubmitting={isFieldSubmitting}
-                                          submitLabel="创建"
-                                          onChange={setFieldForm}
-                                          onCancel={resetFieldForm}
-                                          onSubmit={() => handleSubmitField(issueType.id)}
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {addingFieldFor !== issueType.id && (
-                                  <Button
-                                    variant="neutral-primary"
-                                    size="sm"
-                                    prependIcon={<Plus className="size-3" />}
-                                    onClick={() => openCreateFieldForm(issueType.id)}
-                                    disabled={!canEdit}
-                                  >
-                                    添加新属性
-                                  </Button>
-                                )}
-                                {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
-                              </div>
-                            ) : (
-                              <div className="mb-3 flex w-full flex-col items-center justify-center rounded-md bg-surface-1 py-10 text-center">
-                                <div className="border-accent-primary/40 flex size-14 items-center justify-center rounded-lg border bg-accent-primary/10 text-accent-primary">
-                                  <Layers className="size-7" strokeWidth={2} />
-                                </div>
-                                <h3 className="mt-4 text-sm font-semibold text-primary">添加自定义属性</h3>
-                                <p className="mt-1 text-sm text-secondary">
-                                  您为此工作项类型添加的新属性将显示在此处。
-                                </p>
-                                <Button
-                                  variant="neutral-primary"
-                                  size="sm"
-                                  className="mt-4"
-                                  prependIcon={<Plus className="size-3" />}
-                                  onClick={() => openCreateFieldForm(issueType.id)}
-                                  disabled={!canEdit}
-                                >
-                                  添加新属性
-                                </Button>
-                                {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
-                              </div>
-                            )}
+                            <IssueTypeFieldList
+                              issueTypeId={issueType.id}
+                              fields={typeFields}
+                              isLoading={fieldsLoading}
+                              canEdit={canEdit}
+                              onCreate={createField}
+                              onUpdate={updateField}
+                              onRequestDelete={requestDeleteField}
+                            />
                           </div>
                         </div>
                       </div>

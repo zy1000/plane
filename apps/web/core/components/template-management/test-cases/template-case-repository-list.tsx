@@ -8,11 +8,8 @@ import { FlaskConical, Plus } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Breadcrumbs, Header } from "@plane/ui";
 import { renderFormattedDateTime } from "@plane/utils";
 // components
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -150,49 +147,36 @@ export const TemplateCaseRepositoryList = observer(function TemplateCaseReposito
   return (
     <>
       <PageHead title={`${t("workspace_templates.test_cases.title")} - ${t("workspace_templates.title")}`} />
-      <AppHeader
-        header={
-          <Header>
-            <Header.LeftItem>
-              <Breadcrumbs>
-                <Breadcrumbs.Item
-                  component={
-                    <BreadcrumbLink
-                      label={t("workspace_templates.test_cases.title")}
-                      icon={<FlaskConical className="size-4 text-secondary" />}
-                      isLast
-                    />
-                  }
-                  isLast
-                />
-              </Breadcrumbs>
-            </Header.LeftItem>
-            <Header.RightItem className="gap-2">
-              <Input.Search
-                allowClear
-                placeholder={t("workspace_templates.test_cases.search_placeholder")}
-                style={{ width: 220 }}
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onSearch={(value) => void fetchPage({ page: 1, search: value.trim() }).catch(() => undefined)}
-              />
-              {canManageCaseTemplates && (
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setEditing(null);
-                    setModalOpen(true);
-                  }}
-                >
-                  <Plus className="size-3.5" />
-                  {t("workspace_templates.test_cases.create")}
-                </Button>
-              )}
-            </Header.RightItem>
-          </Header>
-        }
-      />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
+        {/* 标题行：与模板中心其他列表页一致，不再用顶栏面包屑 */}
+        <div className="flex shrink-0 flex-wrap items-start gap-4 px-7 pb-[18px] pt-6">
+          <div className="min-w-0">
+            <h1 className="text-20 font-semibold text-primary">{t("workspace_templates.test_cases.title")}</h1>
+            <p className="mt-1 text-13 text-secondary">平台级用例模板，项目测试计划可以从这里导入用例。</p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Input.Search
+              allowClear
+              placeholder={t("workspace_templates.test_cases.search_placeholder")}
+              style={{ width: 220 }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onSearch={(value) => void fetchPage({ page: 1, search: value.trim() }).catch(() => undefined)}
+            />
+            {canManageCaseTemplates && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEditing(null);
+                  setModalOpen(true);
+                }}
+              >
+                <Plus className="size-3.5" />
+                {t("workspace_templates.test_cases.create")}
+              </Button>
+            )}
+          </div>
+        </div>
         {error ? (
           <div className="flex h-full min-h-80 items-center justify-center p-6 text-center">
             <div>
@@ -235,7 +219,7 @@ export const TemplateCaseRepositoryList = observer(function TemplateCaseReposito
             </div>
           </div>
         ) : (
-          <div className="template-case-repository-table min-h-0 flex-1 overflow-auto">
+          <div className="template-case-repository-table mx-7 mb-6 min-h-0 overflow-auto rounded-[10px] border border-subtle">
             <style
               dangerouslySetInnerHTML={{
                 __html: `

@@ -50,7 +50,7 @@ export function StageReviewTemplateRow(props: Props) {
       className={cn(
         "group border-b border-subtle text-13 transition-colors last:border-b-0 hover:bg-layer-1-hover",
         REVIEW_ROW_GRID,
-        isChild ? "h-11" : "h-12",
+        "min-h-[54px] py-1.5",
         !template.is_active && "opacity-55"
       )}
     >
@@ -91,31 +91,24 @@ export function StageReviewTemplateRow(props: Props) {
       <span className="flex min-w-0 items-center gap-1">
         {/* 子节点用一段连接线表达从属，不靠纯缩进 */}
         {isChild && <span className="mr-1 h-px w-3 shrink-0 bg-strong" />}
-        <span
-          className={cn("min-w-0 flex-1 truncate", isRoot ? "font-medium text-primary" : "text-primary")}
-          title={template.title}
-        >
-          {template.title}
+        <span className="min-w-0 flex-1">
+          <span
+            className={cn("block truncate", isRoot ? "font-semibold text-primary" : "font-medium text-primary")}
+            title={template.title}
+          >
+            {template.title}
+          </span>
+          {/* 三个角色收到名称下面一行；根评审的审核者本来就是「无」 */}
+          <span className="mt-0.5 block truncate text-12 text-tertiary">
+            发起 <b className="mr-2.5 font-medium text-secondary">{template.initiator_role || "—"}</b>
+            主导 <b className="mr-2.5 font-medium text-secondary">{template.leader_role || "—"}</b>
+            审核 <b className="font-medium text-secondary">{template.auditor_role || t(`${I18N}.no_auditor`)}</b>
+          </span>
         </span>
       </span>
 
       <span>
         <StageReviewKindBadge kind={template.kind} />
-      </span>
-
-      {/* 发起者几乎全是「项目负责人」，按弱信息处理 */}
-      <span className="truncate text-12 text-tertiary" title={template.initiator_role}>
-        {template.initiator_role || "—"}
-      </span>
-      <span className="truncate text-secondary" title={template.leader_role}>
-        {template.leader_role || "—"}
-      </span>
-      {/* 根评审的审核者本来就是「无」，用 — 占位而不是留白 */}
-      <span
-        className={cn("truncate", template.auditor_role ? "text-secondary" : "text-tertiary")}
-        title={template.auditor_role || t(`${I18N}.no_auditor`)}
-      >
-        {template.auditor_role || "—"}
       </span>
 
       <span>

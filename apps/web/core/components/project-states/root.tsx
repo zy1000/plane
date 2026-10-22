@@ -35,6 +35,8 @@ const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required pe
 type TProjectState = {
   workspaceSlug: string;
   projectId: string;
+  /** 固定看这个类型的状态、不出左侧类型栏（模板中心「工作项」页左边已选好类型） */
+  issueTypeId?: string;
 };
 
 type TIssueTypeSidebarItemProps = {
@@ -75,7 +77,7 @@ const IssueTypeSidebarItem: FC<TIssueTypeSidebarItemProps> = ({ issueType, isSel
 };
 
 export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProjectState) {
-  const { workspaceSlug, projectId } = props;
+  const { workspaceSlug, projectId, issueTypeId } = props;
   // hooks
   const {
     getGroupedProjectStatesByIssueTypeId,
@@ -91,7 +93,8 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
 
   // selected issue type state
-  const [selectedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
+  const [pickedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
+  const selectedIssueTypeId = issueTypeId ?? pickedIssueTypeId;
 
   // auto-select first issue type when loaded
   useEffect(() => {
@@ -187,6 +190,29 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     );
   }
 
+  // right content: states for selected type
+  const content = (
+    <div className="min-w-0 flex-1">
+      {selectedIssueType && (
+        <p className="mb-4 text-sm font-medium text-secondary">
+          {selectedIssueType.name} 的状态
+        </p>
+      )}
+      {!groupedProjectStates ? (
+        <ProjectStateLoader />
+      ) : (
+        <GroupList
+          groupedStates={groupedProjectStates}
+          stateOperationsCallbacks={stateOperationsCallbacks}
+          permissions={statePermissions}
+          shouldTrackEvents
+        />
+      )}
+    </div>
+  );
+
+  if (issueTypeId) return content;
+
   return (
     <div className="flex gap-6">
       {/* left sidebar: issue type list */}
@@ -205,24 +231,7 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
       {/* divider */}
       <div className="w-px flex-shrink-0 bg-border-subtle" />
 
-      {/* right content: states for selected type */}
-      <div className="min-w-0 flex-1">
-        {selectedIssueType && (
-          <p className="mb-4 text-sm font-medium text-secondary">
-            {selectedIssueType.name} 的状态
-          </p>
-        )}
-        {!groupedProjectStates ? (
-          <ProjectStateLoader />
-        ) : (
-          <GroupList
-            groupedStates={groupedProjectStates}
-            stateOperationsCallbacks={stateOperationsCallbacks}
-            permissions={statePermissions}
-            shouldTrackEvents
-          />
-        )}
-      </div>
+      {content}
     </div>
   );
 });

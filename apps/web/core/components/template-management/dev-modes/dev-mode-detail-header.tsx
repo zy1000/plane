@@ -1,56 +1,79 @@
+import { Briefcase, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import type { TDevMode } from "@plane/types";
+import { DEFAULT_DEV_MODE_NAME } from "@plane/types";
 import { cn } from "@plane/utils";
 import { TypeIcon } from "@/components/common/type-icon-picker";
+import { MoreMenu } from "@/components/project-issue-types/root";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 /**
- * 详情页头部：只做模式身份 + 三个数字。
- *
- * 组件开关从这里挪进了自己的子页 —— 横在头部与阶段表之间既挤，也堵死了往模式下
- * 加内容的路。编辑按钮在顶栏右侧，不占头部。
+ * 模式页身份头（方案 A）：图标、名称、预置 / 默认标签、描述，右侧在用项目数与编辑 / 删除。
+ * 原来的顶栏面包屑撤掉了 —— 左栏已经说明「在哪个模式里」。
  */
-export function DevModeDetailHeader({ devMode }: { devMode: TDevMode }) {
+export function DevModeDetailHeader({
+  devMode,
+  canEdit,
+  onEdit,
+  onDelete,
+}: {
+  devMode: TDevMode;
+  canEdit: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const { t } = useTranslation();
-
-  const stats = [
-    { key: "stages", value: devMode.stage_count },
-    { key: "templates", value: devMode.template_count },
-    { key: "projects", value: devMode.project_count },
-  ];
+  const isDefault = devMode.is_system && devMode.name === DEFAULT_DEV_MODE_NAME;
+  const deleteBlockedReason = devMode.is_system
+    ? t(`${DEV_MODE_I18N}.card.delete_preset_blocked`)
+    : devMode.project_count > 0
+      ? t(`${DEV_MODE_I18N}.card.delete_in_use_blocked`)
+      : null;
 
   return (
-    <div className="flex items-start gap-3.5 px-6 pt-5">
-      <TypeIcon iconProps={devMode.icon_props?.icon} className="size-12 rounded-xl" iconClassName="size-6" />
+    <div className="flex items-start gap-3.5 px-7 pt-5">
+      <TypeIcon iconProps={devMode.icon_props?.icon} className="size-11 rounded-[11px]" iconClassName="size-[22px]" />
       <div className="min-w-0">
-        <h1 className="flex items-center gap-2.5 text-20 font-semibold text-primary">
-          {devMode.name}
+        <h1 className="flex items-center gap-2.5 text-20 font-semibold leading-[30px] text-primary">
+          <span className="truncate">{devMode.name}</span>
           <span
             className={cn(
-              "inline-flex h-5 items-center rounded px-2 text-11 font-medium",
-              devMode.is_system
-                ? "border border-subtle bg-surface-2 text-secondary"
-                : "border border-accent-primary/30 bg-accent-primary/10 text-accent-primary"
+              "inline-flex h-[22px] shrink-0 items-center rounded-md px-2 text-12 font-medium",
+              isDefault ? "bg-accent-subtle text-accent-primary" : "bg-layer-1 text-secondary"
             )}
           >
-            {t(devMode.is_system ? `${DEV_MODE_I18N}.card.preset` : `${DEV_MODE_I18N}.card.custom`)}
+            {isDefault ? "默认" : t(devMode.is_system ? `${DEV_MODE_I18N}.card.preset` : `${DEV_MODE_I18N}.card.custom`)}
           </span>
         </h1>
-        <p className="mt-1 max-w-4xl text-13 leading-5 text-secondary">
+        <p className="mt-0.5 max-w-3xl truncate text-13 text-secondary">
           {devMode.description || t(`${DEV_MODE_I18N}.card.no_description`)}
-          {devMode.is_system && ` ${t(`${DEV_MODE_I18N}.detail.preset_hint`)}`}
         </p>
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
-          {stats.map((stat, index) => (
-            <span key={stat.key} className="flex items-center gap-3">
-              {index > 0 && <span className="text-placeholder">·</span>}
-              <span>
-                <b className="mr-1 text-14 font-semibold tabular-nums text-primary">{stat.value}</b>
-                {t(`${DEV_MODE_I18N}.card.${stat.key}`)}
-              </span>
-            </span>
-          ))}
-        </div>
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <span className="mr-1.5 flex items-center gap-1.5 text-13 text-secondary">
+          <Briefcase className="size-3.5" />
+          <b className="font-semibold tabular-nums text-primary">{devMode.project_count}</b> 个项目在用
+        </span>
+        {canEdit && (
+          <>
+            <Button variant="secondary" onClick={onEdit}>
+              <Pencil className="size-3.5" />
+              编辑信息
+            </Button>
+            <MoreMenu
+              items={[
+                {
+                  label: deleteBlockedReason ?? t(`${DEV_MODE_I18N}.card.delete`),
+                  icon: <Trash2 className="size-3.5" />,
+                  tone: "danger",
+                  disabled: Boolean(deleteBlockedReason),
+                  onClick: onDelete,
+                },
+              ]}
+            />
+          </>
+        )}
       </div>
     </div>
   );

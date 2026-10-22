@@ -8,14 +8,13 @@ import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TStageReviewTemplate } from "@plane/types";
 import { STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
-import { AlertModalCore, Breadcrumbs, Header, Loader } from "@plane/ui";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { AppHeader } from "@/components/core/app-header";
+import { AlertModalCore, Loader } from "@plane/ui";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useStageReviewTemplates } from "@/hooks/store/use-stage-review-templates";
 import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { useTemplatePermissions } from "../permissions";
+import { useTemplateCenter } from "../template-center-context";
 import { StageRail } from "./stage-rail";
 import { StageReviewTemplateFormModal, type TStageReviewFormValue } from "./stage-review-template-form-modal";
 import { StageReviewTemplateTable } from "./stage-review-template-table";
@@ -35,7 +34,8 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
   const { t } = useTranslation();
   const { canManageReviewTemplates } = useTemplatePermissions(workspaceSlug);
   // 阶段的唯一来源是工作区的阶段类型 —— 还没配模板的阶段也要能选中并加第一条
-  const { stageOptions: stages, isLoading: isStagesLoading } = useStageTypes(workspaceSlug);
+  const { stageTypes, stageOptions: stages, isLoading: isStagesLoading } = useStageTypes(workspaceSlug);
+  const { modes } = useTemplateCenter();
 
   const {
     templates,
@@ -98,6 +98,18 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
     return { ...selectedGroup, nodes };
   }, [selectedGroup, search]);
 
+  const codeByStageId = useMemo(() => new Map(stageTypes.map((stageType) => [stageType.id, stageType.code])), [stageTypes]);
+
+  /** 当前阶段类型被哪些研发模式勾了节点：改模板前先知道会影响谁 */
+  const usedBy = useMemo(() => {
+    if (!selectedGroup) return [];
+    return modes.devModes
+      .filter((mode) =>
+        (mode.stage_brief ?? []).some((stage) => stage.stage_type_id === selectedGroup.stageId && stage.template_count > 0)
+      )
+      .map((mode) => mode.name);
+  }, [modes.devModes, selectedGroup]);
+
   const toggleExpand = (templateId: string) =>
     setExpandedIds((current) => {
       const next = new Set(current);
@@ -149,7 +161,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
   const renderBody = () => {
     if (isLoading) {
       return (
-        <Loader className="flex min-h-0 w-full flex-1 gap-4">
+        <Loader className="flex min-h-0 w-full flex-1 gap-4 px-7">
           <Loader.Item height="420px" width="248px" className="hidden md:block" />
           <Loader.Item height="420px" width="100%" className="flex-1" />
         </Loader>
@@ -186,21 +198,35 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
     }
 
     return (
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 md:flex-row">
-        <div className="min-h-0 shrink-0 max-md:max-h-56 md:w-64">
-          <StageRail groups={groups} selectedStageId={selectedGroup.stageId} onSelect={setSelectedStageId} />
+      <div className="flex min-h-0 w-full flex-1 border-t border-subtle">
+        <div className="min-h-0 w-[220px] shrink-0 border-r border-subtle">
+          <StageRail
+            groups={groups}
+            selectedStageId={selectedGroup.stageId}
+            codeByStageId={codeByStageId}
+            onSelect={setSelectedStageId}
+          />
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-baseline gap-2.5">
-              <h2 className="text-16 font-semibold text-primary">{selectedGroup.stageLabel}</h2>
-              <span className="text-12 text-tertiary">
-                {t(`${I18N}.stage_summary`, {
-                  reviews: selectedGroup.reviewCount,
-                  activities: selectedGroup.activityCount,
-                })}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5 px-7 py-5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-18 font-semibold text-primary">{selectedGroup.stageLabel}</h2>
+            <span className="font-mono text-12 text-tertiary">{codeByStageId.get(selectedGroup.stageId) ?? ""}</span>
+            <span className="text-13 text-tertiary">
+              {t(`${I18N}.stage_summary`, {
+                reviews: selectedGroup.reviewCount,
+                activities: selectedGroup.activityCount,
+              })}
+            </span>
+            {usedBy.length > 0 && (
+              <span className="ml-auto flex items-center gap-1.5 text-12 text-tertiary">
+                被这些模式勾选
+                {usedBy.map((name) => (
+                  <span key={name} className="rounded-md bg-layer-1 px-2 text-12 font-medium leading-[22px] text-secondary">
+                    {name}
+                  </span>
+                ))}
               </span>
-            </div>
+            )}
           </div>
           <StageReviewTemplateTable
             group={filteredGroup}
@@ -225,44 +251,32 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
   return (
     <>
       <PageHead title={`${t(`${I18N}.title`)} - ${t("workspace_templates.title")}`} />
-      <AppHeader
-        header={
-          <Header>
-            <Header.LeftItem>
-              <Breadcrumbs>
-                <Breadcrumbs.Item
-                  component={
-                    <BreadcrumbLink
-                      label={t(`${I18N}.title`)}
-                      icon={<ClipboardCheck className="size-4 text-secondary" />}
-                      isLast
-                    />
-                  }
-                  isLast
-                />
-              </Breadcrumbs>
-            </Header.LeftItem>
-            <Header.RightItem className="gap-2">
-              <div className="relative">
-                <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={t(`${I18N}.search_placeholder`)}
-                  className="h-8 w-56 rounded-md border border-subtle bg-surface-1 pr-2.5 pl-8 text-12 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong"
-                />
-              </div>
-              {canManageReviewTemplates && (
-                <Button variant="primary" onClick={() => setEditor({ mode: "create", parent: null })}>
-                  <Plus className="size-3.5" />
-                  {t(`${I18N}.create`)}
-                </Button>
-              )}
-            </Header.RightItem>
-          </Header>
-        }
-      />
-      <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">{renderBody()}</ContentWrapper>
+      <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
+        <div className="flex shrink-0 flex-wrap items-start gap-4 px-7 pb-[18px] pt-6">
+          <div className="min-w-0">
+            <h1 className="text-20 font-semibold text-primary">{t(`${I18N}.title`)}</h1>
+            <p className="mt-1 text-13 text-secondary">按阶段类型维护标准评审与评审活动；研发模式的阶段从这里勾选节点。</p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t(`${I18N}.search_placeholder`)}
+                className="h-8 w-60 rounded-md border border-subtle bg-surface-1 pr-2.5 pl-8 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong"
+              />
+            </div>
+            {canManageReviewTemplates && (
+              <Button variant="primary" onClick={() => setEditor({ mode: "create", parent: null })}>
+                <Plus className="size-3.5" />
+                {t(`${I18N}.create`)}
+              </Button>
+            )}
+          </div>
+        </div>
+        {renderBody()}
+      </ContentWrapper>
 
       <StageReviewTemplateFormModal
         isOpen={editor.mode !== "closed"}

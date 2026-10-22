@@ -6,7 +6,7 @@
 
 import { DevModeIssueSchemePanel } from "@/components/template-management/dev-modes";
 
-/** 模式详情的「工作项配置」子页。权限与数据都由 layout 处理。 */
+/** 模式页的「工作项」页签。权限与数据都由 layout 处理。 */
 export default function TemplateDevModeIssueSchemePage() {
   return <DevModeIssueSchemePanel />;
 }

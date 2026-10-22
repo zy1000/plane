@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -10,7 +10,7 @@ from plane.app.serializers.dev_mode import (
 )
 from plane.app.views.base import BaseViewSet
 from plane.utils.issue_scheme import seed_issue_scheme
-from plane.db.models import DevMode, Workspace
+from plane.db.models import DevMode, DevModeStage, Workspace
 from plane.utils.dev_mode import ensure_dev_modes
 
 #: 读研发模式：查看或维护任一即可（只配了维护的角色不该被读挡住，口径同评审模板库）
@@ -50,6 +50,20 @@ class DevModeViewSet(BaseViewSet):
                     ),
                     distinct=True,
                 ),
+            )
+            .prefetch_related(
+                Prefetch(
+                    "stages",
+                    queryset=DevModeStage.objects.select_related("stage_type")
+                    .annotate(
+                        links_count=Count(
+                            "template_links",
+                            filter=Q(template_links__deleted_at__isnull=True),
+                        )
+                    )
+                    .order_by("sort_order", "created_at", "id"),
+                    to_attr="brief_stages",
+                )
             )
             .order_by("created_at", "id")
         )

@@ -3501,7 +3501,7 @@ export default {
     },
   },
   workspace_templates: {
-    title: "模板管理",
+    title: "模板中心",
     navigation: {
       requirement_types: "需求类型",
       libraries: "标准需求库",
@@ -3522,8 +3522,8 @@ export default {
         module_view: "模块",
         release_view: "发布",
         issue_views_view: "视图",
-        page_view: "页面",
-        intake_view: "收件箱",
+        page_view: "笔记",
+        intake_view: "收集",
         is_time_tracking_enabled: "工时",
         is_issue_type_enabled: "工作项类型",
         review_view: "评审",

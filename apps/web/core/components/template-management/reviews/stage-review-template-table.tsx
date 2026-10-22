@@ -82,7 +82,7 @@ export function StageReviewTemplateTable(props: Props) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-subtle bg-surface-1">
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-subtle bg-surface-1">
       {!hasRootReview && (
         <div className="flex items-center gap-2 border-b border-subtle bg-layer-1 px-3 py-2 text-12 text-tertiary">
           <Info className="size-3.5 shrink-0" />
@@ -91,7 +91,7 @@ export function StageReviewTemplateTable(props: Props) {
       )}
 
       <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-auto">
-        <div role="table" className="flex min-w-[1020px] flex-col">
+        <div role="table" className="flex min-w-[720px] flex-col">
           <div
             role="row"
             className={cn(
@@ -101,11 +101,8 @@ export function StageReviewTemplateTable(props: Props) {
           >
             <span />
             <span>{t(`${I18N}.table.code`)}</span>
-            <span>{t(`${I18N}.table.title`)}</span>
+            <span>{t(`${I18N}.table.title`)} · 发起 / 主导 / 审核</span>
             <span>{t(`${I18N}.table.kind`)}</span>
-            <span>{t(`${I18N}.table.initiator`)}</span>
-            <span>{t(`${I18N}.table.leader`)}</span>
-            <span>{t(`${I18N}.table.auditor`)}</span>
             <span>{t(`${I18N}.table.active`)}</span>
             <span />
           </div>

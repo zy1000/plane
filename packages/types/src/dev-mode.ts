@@ -51,8 +51,20 @@ export type TDevMode = {
   template_count: number;
   /** 引用这个模式的项目数。批次 3 给 Project 加外键前恒为 0 */
   project_count: number;
+  /** 按顺序的阶段摘要：模板中心「全部模式对比」的阶段路线、评审模板库的「被哪些模式勾选」 */
+  stage_brief?: TDevModeStageBrief[];
   created_at: string;
   updated_at: string;
+};
+
+export type TDevModeStageBrief = {
+  id: string;
+  name: string;
+  /** 阶段类型编码 */
+  code: string;
+  stage_type_id: string;
+  /** 该阶段勾选的评审节点数 */
+  template_count: number;
 };
 
 /**

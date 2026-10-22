@@ -1,104 +1,82 @@
 import { Link, useLocation } from "react-router";
-import { Layers, ListTree, ToggleLeft } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 import { devModeFeaturesPath, devModeIssueSchemePath, devModeStagesPath, isDevModeSubPageActive } from "./routes";
-import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 type TSubNavItem = {
   key: string;
-  i18nKey: string;
-  /** 直接给中文名（不走 i18n 的页签） */
-  label?: string;
-  icon: LucideIcon;
+  label: string;
   href: string;
-  /** 页签名后面那个小计数；空串不显示 */
+  /** 页签名后面的小计数；空串不显示 */
   count: string;
-  /** 索引页（路径就是详情本身），选中判定只认全等 */
+  /** 索引页（路径就是模式页本身），选中判定只认全等 */
   isIndex: boolean;
 };
 
 /**
- * 模式详情的子页页签（阶段 / 组件开关 / 工作项配置）。
+ * 模式页的一层页签（方案 A）：阶段与评审 · 工作项 · 组件。
  *
- * 下划线式，与「评审」标签下的子页页签同款。以后模式下面要加内容（里程碑、默认角色
- * 之类），在这里加一项 + 在 `routes.ts` 加一条路径即可，头部与既有子页都不用动。
+ * 原来「工作项配置」下面还有一层「类型与属性 / 状态 / 工作流」页签，现在工作项页里改成
+ * 「左边选类型、右边分段看属性 / 状态 / 工作流」，页签只剩这一层。
  */
 export function DevModeSubNav({
   workspaceSlug,
   devModeId,
   stageCount,
+  typeCount,
   featureOnCount,
   featureTotal,
 }: {
   workspaceSlug: string;
   devModeId: string;
   stageCount: number;
+  /** 还没拉回来时 undefined，不显示计数 */
+  typeCount: number | undefined;
   featureOnCount: number;
   featureTotal: number;
 }) {
-  const { t } = useTranslation();
   const { pathname } = useLocation();
 
   const items: TSubNavItem[] = [
     {
       key: "stages",
-      i18nKey: `${DEV_MODE_I18N}.sub_nav.stages`,
-      icon: Layers,
+      label: "阶段与评审",
       href: devModeStagesPath(workspaceSlug, devModeId),
       count: String(stageCount),
       isIndex: true,
     },
     {
-      key: "features",
-      i18nKey: `${DEV_MODE_I18N}.sub_nav.features`,
-      icon: ToggleLeft,
-      href: devModeFeaturesPath(workspaceSlug, devModeId),
-      count: `${featureOnCount} / ${featureTotal}`,
+      key: "work_items",
+      label: "工作项",
+      href: devModeIssueSchemePath(workspaceSlug, devModeId),
+      count: typeCount === undefined ? "" : `${typeCount} 类型`,
       isIndex: false,
     },
     {
-      // 模式方案：跟随本模式的项目共用的工作项类型 / 状态 / 工作流（docs/issue-scheme/ 4.1）
-      key: "issue_scheme",
-      i18nKey: "",
-      label: "工作项配置",
-      icon: ListTree,
-      href: devModeIssueSchemePath(workspaceSlug, devModeId),
-      count: "",
+      key: "features",
+      label: "组件",
+      href: devModeFeaturesPath(workspaceSlug, devModeId),
+      count: `${featureOnCount} / ${featureTotal}`,
       isIndex: false,
     },
   ];
 
   return (
-    <nav className="flex gap-1 border-b border-subtle px-6">
+    <nav className="flex gap-7 border-b border-subtle px-7">
       {items.map((item) => {
         const isActive = isDevModeSubPageActive(pathname, item.href, item.isIndex);
-        const Icon = item.icon;
         return (
           <Link
             key={item.key}
             to={item.href}
             className={cn(
-              "relative mr-4 flex h-10 items-center gap-1.5 whitespace-nowrap px-1 text-13 font-medium transition-colors",
-              isActive ? "text-primary" : "text-secondary hover:text-primary"
+              "-mb-px flex h-11 items-center gap-1.5 whitespace-nowrap border-b-2 text-14 transition-colors",
+              isActive
+                ? "border-accent-primary font-semibold text-primary"
+                : "border-transparent text-secondary hover:text-primary"
             )}
           >
-            <Icon className="size-3.5 shrink-0" />
-            <span>{item.label ?? t(item.i18nKey)}</span>
-            {item.count && (
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-px text-11 font-medium tabular-nums",
-                  isActive ? "bg-accent-primary/10 text-accent-primary" : "bg-layer-1 text-tertiary"
-                )}
-              >
-                {item.count}
-              </span>
-            )}
-            {isActive && (
-              <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-t-sm bg-accent-primary" aria-hidden />
-            )}
+            {item.label}
+            {item.count && <span className="text-12 font-medium tabular-nums text-tertiary">{item.count}</span>}
           </Link>
         );
       })}

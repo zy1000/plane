@@ -41,6 +41,10 @@ type TProjectWorkflowRootProps = {
   projectId: string;
   /** 点工作流卡片进流转配置的路径；不传走项目设置下的路径 */
   getWorkflowDetailPath?: (workflowId: string) => string;
+  /** 固定看这个类型的工作流、不出左侧类型栏（模板中心「工作项」页左边已选好类型） */
+  issueTypeId?: string;
+  /** 外部共用的工作流数据（模板中心的分段计数要跟着增删变）；不传自己建一份 */
+  workflowsStore?: ReturnType<typeof useProjectWorkflows>;
 };
 
 type TIssueTypeSidebarItemProps = {
@@ -88,11 +92,18 @@ const WorkflowListSkeleton: FC = () => (
   </div>
 );
 
-export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSlug, projectId, getWorkflowDetailPath }) => {
+export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({
+  workspaceSlug,
+  projectId,
+  getWorkflowDetailPath,
+  issueTypeId,
+  workflowsStore,
+}) => {
   const { t } = useTranslation();
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
   // 方案作用域看研发模式权限、跟随研发模式的项目只读，见 useIssueConfigPermission
   const { canEdit } = useIssueConfigPermission(workspaceSlug, projectId);
+  const ownWorkflowsStore = useProjectWorkflows(workspaceSlug, projectId);
   const {
     fetchWorkflows,
     createWorkflow,
@@ -100,9 +111,10 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
     deleteWorkflow,
     getWorkflowsByIssueTypeId,
     isLoadingForIssueType,
-  } = useProjectWorkflows(workspaceSlug, projectId);
+  } = workflowsStore ?? ownWorkflowsStore;
 
-  const [selectedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
+  const [pickedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
+  const selectedIssueTypeId = issueTypeId ?? pickedIssueTypeId;
   const [modalState, setModalState] = useState<{ isOpen: boolean; workflow?: TWorkflow }>({ isOpen: false });
 
   const canCreateWorkflow = canEdit([WORKFLOW_PERMISSION_KEYS.create]);
@@ -206,6 +218,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
   };
 
   if (issueTypesLoading) {
+    if (issueTypeId) return <WorkflowListSkeleton />;
     return (
       <div className="flex gap-6">
         <aside className="w-44 flex-shrink-0">
@@ -232,81 +245,89 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
     );
   }
 
+  // right content: workflows for selected issue type
+  const content = (
+    <div className="min-w-0 flex-1">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm font-medium text-secondary">
+          {selectedIssueType ? `${selectedIssueType.name} 的工作流` : "工作流"}
+        </p>
+        {selectedIssueTypeId && (
+          <Button
+            variant="primary"
+            size="sm"
+            prependIcon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => {
+              if (canCreateWorkflow) setModalState({ isOpen: true, workflow: undefined });
+            }}
+            disabled={!canCreateWorkflow}
+          >
+            新建工作流
+          </Button>
+        )}
+      </div>
+
+      {isLoadingWorkflows ? (
+        <WorkflowListSkeleton />
+      ) : workflows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-subtle py-12 text-center">
+          <GitPullRequest className="size-8 rotate-90 text-tertiary" strokeWidth={1.2} />
+          <div>
+            <p className="text-sm font-medium text-secondary">暂无工作流</p>
+            <p className="mt-1 text-xs text-tertiary">
+              {canCreateWorkflow ? "点击「新建工作流」创建第一条工作流" : "该工作项类型下尚未配置工作流"}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {[...workflows]
+            .sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
+            .map((workflow) => (
+              <WorkflowCard
+                key={workflow.id}
+                workflow={workflow}
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                detailPath={getWorkflowDetailPath?.(workflow.id)}
+                canEditWorkflow={canEditWorkflow}
+                canDeleteWorkflow={canDeleteWorkflow}
+                canConfigWorkflow={canConfigWorkflow}
+                onToggleActive={handleToggleActive}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
-      <div className="flex gap-6">
-        {/* left sidebar: issue type list */}
-        <aside className="flex w-44 flex-shrink-0 flex-col gap-0.5">
-          <p className="tracking-wider mb-1.5 px-2.5 text-xs font-medium text-tertiary uppercase">工作项类型</p>
-          {issueTypes.map((issueType) => (
-            <IssueTypeSidebarItem
-              key={issueType.id}
-              issueType={issueType}
-              isSelected={selectedIssueTypeId === issueType.id}
-              onClick={() => setSelectedIssueTypeId(issueType.id)}
-            />
-          ))}
-        </aside>
+      {issueTypeId ? (
+        content
+      ) : (
+        <div className="flex gap-6">
+          {/* left sidebar: issue type list */}
+          <aside className="flex w-44 flex-shrink-0 flex-col gap-0.5">
+            <p className="tracking-wider mb-1.5 px-2.5 text-xs font-medium text-tertiary uppercase">工作项类型</p>
+            {issueTypes.map((issueType) => (
+              <IssueTypeSidebarItem
+                key={issueType.id}
+                issueType={issueType}
+                isSelected={selectedIssueTypeId === issueType.id}
+                onClick={() => setSelectedIssueTypeId(issueType.id)}
+              />
+            ))}
+          </aside>
 
-        {/* vertical divider */}
-        <div className="bg-border-subtle w-px flex-shrink-0" />
+          {/* vertical divider */}
+          <div className="bg-border-subtle w-px flex-shrink-0" />
 
-        {/* right content: workflows for selected issue type */}
-        <div className="min-w-0 flex-1">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-medium text-secondary">
-              {selectedIssueType ? `${selectedIssueType.name} 的工作流` : "工作流"}
-            </p>
-            {selectedIssueTypeId && (
-              <Button
-                variant="primary"
-                size="sm"
-                prependIcon={<Plus className="h-3.5 w-3.5" />}
-                onClick={() => {
-                  if (canCreateWorkflow) setModalState({ isOpen: true, workflow: undefined });
-                }}
-                disabled={!canCreateWorkflow}
-              >
-                新建工作流
-              </Button>
-            )}
-          </div>
-
-          {isLoadingWorkflows ? (
-            <WorkflowListSkeleton />
-          ) : workflows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-subtle py-12 text-center">
-              <GitPullRequest className="size-8 rotate-90 text-tertiary" strokeWidth={1.2} />
-              <div>
-                <p className="text-sm font-medium text-secondary">暂无工作流</p>
-                <p className="mt-1 text-xs text-tertiary">
-                  {canCreateWorkflow ? "点击「新建工作流」创建第一条工作流" : "该工作项类型下尚未配置工作流"}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {[...workflows]
-                .sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
-                .map((workflow) => (
-                  <WorkflowCard
-                    key={workflow.id}
-                    workflow={workflow}
-                    workspaceSlug={workspaceSlug}
-                    projectId={projectId}
-                    detailPath={getWorkflowDetailPath?.(workflow.id)}
-                    canEditWorkflow={canEditWorkflow}
-                    canDeleteWorkflow={canDeleteWorkflow}
-                    canConfigWorkflow={canConfigWorkflow}
-                    onToggleActive={handleToggleActive}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                ))}
-            </div>
-          )}
+          {content}
         </div>
-      </div>
+      )}
 
       {selectedIssueTypeId && (
         <WorkflowFormModal

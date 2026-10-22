@@ -6,7 +6,8 @@ import { DevModeDetailProvider, DevModeDetailShell } from "@/components/template
 import { useUserPermissions } from "@/hooks/store/user";
 
 /**
- * 模式详情的外层：拉一次详情供两个子页共用，外壳负责头部与子页签，子页进 Outlet。
+ * 模式页的外层：拉一次详情供各子页共用，外壳负责头部与页签，子页进 Outlet。
+ * 按模式 id 加 key：左栏里换模式时整棵重挂，选中的阶段、勾选草稿不会串到另一个模式。
  */
 const DevModeDetailLayout = observer(function DevModeDetailLayout() {
   const { workspaceSlug, devModeId } = useParams();
@@ -19,7 +20,7 @@ const DevModeDetailLayout = observer(function DevModeDetailLayout() {
   if (workspaceInfoBySlug(slug) && !canViewDevModes) return <NotAuthorizedView className="h-full" />;
 
   return (
-    <DevModeDetailProvider workspaceSlug={slug} devModeId={modeId}>
+    <DevModeDetailProvider key={modeId} workspaceSlug={slug} devModeId={modeId}>
       <DevModeDetailShell />
     </DevModeDetailProvider>
   );

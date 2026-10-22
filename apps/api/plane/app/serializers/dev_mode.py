@@ -59,6 +59,7 @@ class DevModeSerializer(BaseSerializer):
     stage_count = serializers.SerializerMethodField()
     template_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
+    stage_brief = serializers.SerializerMethodField()
 
     class Meta:
         model = DevMode
@@ -75,6 +76,7 @@ class DevModeSerializer(BaseSerializer):
             "stage_count",
             "template_count",
             "project_count",
+            "stage_brief",
             "created_at",
             "updated_at",
         ]
@@ -86,6 +88,7 @@ class DevModeSerializer(BaseSerializer):
             "stage_count",
             "template_count",
             "project_count",
+            "stage_brief",
             "created_at",
             "updated_at",
         ]
@@ -110,6 +113,31 @@ class DevModeSerializer(BaseSerializer):
 
     def get_project_count(self, obj):
         return count_projects_using(obj)
+
+    def get_stage_brief(self, obj):
+        """按顺序的阶段摘要：模板中心「全部模式对比」的阶段路线、评审模板库标「被哪些模式勾选」用。
+
+        列表视图用 ``brief_stages`` 预取（带 ``links_count``），单个对象回退到现查。
+        """
+        stages = getattr(obj, "brief_stages", None)
+        if stages is None:
+            stages = obj.stages.select_related("stage_type").order_by(
+                "sort_order", "created_at", "id"
+            )
+        return [
+            {
+                "id": str(stage.id),
+                "name": stage.name,
+                "code": stage.stage_type.code,
+                "stage_type_id": str(stage.stage_type_id),
+                "template_count": (
+                    stage.links_count
+                    if getattr(stage, "links_count", None) is not None
+                    else stage.template_links.count()
+                ),
+            }
+            for stage in stages
+        ]
 
     def validate_name(self, value):
         name = value.strip()

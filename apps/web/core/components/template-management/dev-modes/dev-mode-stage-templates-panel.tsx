@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { ExternalLink, X } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { EStageReviewKind, TDevModeStage } from "@plane/types";
@@ -11,7 +11,7 @@ import { reviewTemplatesPath } from "./routes";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 /**
- * 阶段勾选面板：该阶段类型下的评审树（评审 → 活动两层），父节点全选 / 半选。
+ * 选中阶段的评审节点（方案 A，常驻右栏）：评审 → 活动两层树，父节点全选 / 半选。
  *
  * 勾改的是草稿，底栏出现「还原 / 保存勾选」后整体 PUT —— 逐个勾都发一次请求会让
  * 勾父节点变成几十个并发。
@@ -25,7 +25,6 @@ export function DevModeStageTemplatesPanel({
   isLoading,
   isSaving,
   canEdit,
-  onClose,
   onToggle,
   onReset,
   onSave,
@@ -38,7 +37,6 @@ export function DevModeStageTemplatesPanel({
   isLoading: boolean;
   isSaving: boolean;
   canEdit: boolean;
-  onClose: () => void;
   onToggle: (templateId: string, checked: boolean) => void;
   onReset: () => void;
   onSave: () => void;
@@ -47,42 +45,39 @@ export function DevModeStageTemplatesPanel({
 
   const totalNodes = tree.reduce((sum, item) => sum + 1 + item.children.length, 0);
   const selectedCount = draftSelection.size;
+  const percent = totalNodes ? Math.round((selectedCount / totalNodes) * 100) : 0;
 
   return (
-    <aside className="flex w-[372px] shrink-0 flex-col overflow-hidden rounded-lg border border-subtle bg-surface-1">
-      <div className="flex items-start justify-between gap-2.5 border-b border-subtle px-4 pb-3 pt-3.5">
-        <div className="min-w-0">
-          <h3 className="flex items-center gap-2 text-13 font-semibold text-primary">
-            <span className="shrink-0 font-mono text-12 font-normal tabular-nums text-secondary">{stage.code}</span>
-            <span className="truncate">{t(`${DEV_MODE_I18N}.panel.title`, { name: stage.name })}</span>
-          </h3>
-          <p className="mt-1 text-11 leading-4 text-tertiary">
-            {t(`${DEV_MODE_I18N}.panel.description`, { type: stage.stage_type_detail?.name ?? "" })}
-          </p>
-          {/* 这棵树只能在「评审」页签维护，面板里只勾选 —— 给一条直达该阶段类型的路 */}
+    <aside className="flex w-[384px] shrink-0 flex-col border-l border-subtle bg-surface-1">
+      <div className="border-b border-subtle px-5 pb-3.5 pt-[18px]">
+        <h3 className="flex items-center gap-2 text-16 font-semibold text-primary">
+          <span className="truncate">{stage.name}</span>
+          <span className="shrink-0 font-mono text-12 font-normal text-tertiary">{stage.code}</span>
+        </h3>
+        <p className="mt-1 text-12 text-tertiary">项目进入此阶段时，按这里的勾选生成评审与评审活动</p>
+        <div className="mt-3.5 flex items-center gap-2.5 text-12 text-secondary">
+          <span className="shrink-0">
+            已勾选 <b className="tabular-nums text-primary">{selectedCount}</b> / {totalNodes}
+          </span>
+          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-layer-3">
+            <span className="block h-full rounded-full bg-accent-primary" style={{ width: `${percent}%` }} />
+          </span>
+          {/* 这棵树只能在评审模板库维护，这里只勾选 —— 给一条直达该阶段类型的路 */}
           <Link
             to={reviewTemplatesPath(workspaceSlug, stage.stage_type_id)}
-            className="mt-2 inline-flex items-center gap-1 text-11 font-medium text-link-primary transition-colors hover:text-link-primary-hover"
+            className="flex shrink-0 items-center gap-1 text-link-primary hover:text-link-primary-hover"
           >
-            {t(`${DEV_MODE_I18N}.panel.manage_tree`)}
-            <ExternalLink className="size-3" />
+            评审模板库
+            <ExternalLink className="size-3.5" />
           </Link>
         </div>
-        <button
-          type="button"
-          className="grid size-7 shrink-0 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-2 hover:text-primary"
-          onClick={onClose}
-          aria-label={t("close")}
-        >
-          <X className="size-4" />
-        </button>
       </div>
 
-      <div className="vertical-scrollbar scrollbar-sm flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+      <div className="vertical-scrollbar scrollbar-sm flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 py-2">
         {isLoading ? (
           <Loader className="flex flex-col gap-1.5 p-1">
             {[0, 1, 2, 3, 4, 5].map((index) => (
-              <Loader.Item key={index} height="28px" />
+              <Loader.Item key={index} height="44px" />
             ))}
           </Loader>
         ) : tree.length === 0 ? (
@@ -95,74 +90,98 @@ export function DevModeStageTemplatesPanel({
             const isParentChecked = draftSelection.has(node.id);
             // 半选：自己勾了但子节点没勾满，或者自己没勾但有子节点勾了
             const isIndeterminate =
-              children.length > 0 &&
-              selectedChildren > 0 &&
-              (selectedChildren < children.length || !isParentChecked);
+              children.length > 0 && selectedChildren > 0 && (selectedChildren < children.length || !isParentChecked);
 
             return (
               <div key={node.id} className="flex flex-col">
                 <label
                   className={cn(
-                    "flex h-9 items-center gap-2.5 rounded-md px-2 text-13 font-semibold text-primary",
+                    "flex items-start gap-2.5 rounded-lg px-2.5 py-2.5 transition-colors hover:bg-layer-transparent-hover",
                     canEdit ? "cursor-pointer" : "cursor-default"
                   )}
                 >
-                  <Checkbox
-                    disabled={!canEdit}
-                    checked={isParentChecked}
-                    indeterminate={isIndeterminate && !isParentChecked}
-                    onChange={(event) => onToggle(node.id, event.target.checked)}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{node.title}</span>
-                  {children.length > 0 && (
-                    <StageReviewKindBadge kind={node.kind as EStageReviewKind} className="shrink-0" />
-                  )}
-                  <span className="shrink-0 text-11 font-normal text-tertiary">{node.auditor_role || "—"}</span>
-                </label>
-
-                {children.map((child) => (
-                  <label
-                    key={child.id}
-                    className={cn(
-                      "relative flex h-9 items-center gap-2.5 rounded-md pl-[34px] pr-2 text-13 transition-colors",
-                      canEdit ? "cursor-pointer hover:bg-layer-1-hover" : "cursor-default",
-                      draftSelection.has(child.id) ? "text-primary" : "text-tertiary"
-                    )}
-                  >
-                    {/* 连接线：竖线贯穿整行，横线接到复选框。
-                        用 border 而不是 bg —— token 体系里只有 --border-color-strong，
-                        没有 --background-color-strong，写 bg-strong 画出来是透明的。 */}
-                    <span className="pointer-events-none absolute bottom-0 left-[15px] top-0 w-0 border-l border-strong" />
-                    <span className="pointer-events-none absolute left-[15px] top-1/2 h-0 w-2.5 border-t border-strong" />
+                  {children.length > 0 ? (
+                    <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-tertiary" />
+                  ) : null}
+                  <span className="pt-px">
                     <Checkbox
                       disabled={!canEdit}
-                      checked={draftSelection.has(child.id)}
-                      onChange={(event) => onToggle(child.id, event.target.checked)}
+                      checked={isParentChecked}
+                      indeterminate={isIndeterminate && !isParentChecked}
+                      onChange={(event) => onToggle(node.id, event.target.checked)}
                     />
-                    <span className="min-w-0 flex-1 truncate">{child.title}</span>
-                    <span className="shrink-0 text-11 text-tertiary">{child.auditor_role || "—"}</span>
-                  </label>
-                ))}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn("truncate text-13", children.length > 0 ? "font-semibold text-primary" : "text-primary")}>
+                        {node.title}
+                      </span>
+                      {children.length > 0 && <StageReviewKindBadge kind={node.kind as EStageReviewKind} className="shrink-0" />}
+                    </span>
+                    <span className="mt-0.5 block truncate text-12 text-tertiary">
+                      {children.length > 0
+                        ? `主导 ${node.leader_role || "—"}`
+                        : [node.leader_role, node.auditor_role].filter(Boolean).join(" → ") || "—"}
+                    </span>
+                  </span>
+                </label>
+
+                {children.length > 0 && (
+                  <div className="ml-[22px] border-l border-subtle pl-1">
+                    {children.map((child) => {
+                      const isChecked = draftSelection.has(child.id);
+                      return (
+                        <label
+                          key={child.id}
+                          className={cn(
+                            "flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-layer-transparent-hover",
+                            canEdit ? "cursor-pointer" : "cursor-default"
+                          )}
+                        >
+                          <span className="pt-px">
+                            <Checkbox
+                              disabled={!canEdit}
+                              checked={isChecked}
+                              onChange={(event) => onToggle(child.id, event.target.checked)}
+                            />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={cn("block truncate text-13", isChecked ? "text-primary" : "text-tertiary")} title={child.title}>
+                              {child.title}
+                            </span>
+                            <span className="mt-0.5 block truncate text-12 text-tertiary">
+                              {[child.leader_role, child.auditor_role].filter(Boolean).join(" → ") || "—"}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })
         )}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-subtle bg-surface-2 px-3.5 py-2.5">
-        <span className="text-12 text-tertiary">
-          {t(`${DEV_MODE_I18N}.panel.selected`, { selected: selectedCount, total: totalNodes })}
-          {hasChanges && ` · ${t(`${DEV_MODE_I18N}.panel.unsaved`)}`}
-        </span>
-        {canEdit && hasChanges && (
-          <span className="flex gap-1.5">
-            <Button variant="tertiary" size="lg" onClick={onReset} disabled={isSaving}>
-              {t(`${DEV_MODE_I18N}.panel.reset`)}
-            </Button>
-            <Button variant="primary" size="lg" onClick={onSave} loading={isSaving}>
-              {t(`${DEV_MODE_I18N}.panel.save`)}
-            </Button>
-          </span>
+      <div className="flex shrink-0 items-center gap-2 border-t border-subtle bg-layer-1 px-4 py-3">
+        {hasChanges ? (
+          <>
+            <span className="size-[7px] rounded-full bg-warning-primary" />
+            <span className="text-13 text-secondary">{t(`${DEV_MODE_I18N}.panel.unsaved`)}</span>
+            {canEdit && (
+              <span className="ml-auto flex gap-1.5">
+                <Button variant="tertiary" size="lg" onClick={onReset} disabled={isSaving}>
+                  {t(`${DEV_MODE_I18N}.panel.reset`)}
+                </Button>
+                <Button variant="primary" size="lg" onClick={onSave} loading={isSaving}>
+                  {t(`${DEV_MODE_I18N}.panel.save`)}
+                </Button>
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-12 text-tertiary">勾选后在这里保存</span>
         )}
       </div>
     </aside>

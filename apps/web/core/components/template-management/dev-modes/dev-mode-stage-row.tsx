@@ -1,9 +1,9 @@
 import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TDevModeStage } from "@plane/types";
-import { Checkbox, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { DEV_MODE_I18N, DEV_MODE_ICON_BUTTON, DEV_MODE_STAGE_ROW_GRID } from "./dev-modes-grid";
+import { MoreMenu } from "@/components/project-issue-types/root";
+import { DEV_MODE_I18N, DEV_MODE_STAGE_ROW_GRID } from "./dev-modes-grid";
 
 const formatRatio = (value: string | null) => {
   if (value === null || value === "") return null;
@@ -13,32 +13,37 @@ const formatRatio = (value: string | null) => {
   return `${parsed.toString()}%`;
 };
 
+/**
+ * 阶段表的一行（方案 A）：序号圆点 · 名称 + 编码 · 评审节点覆盖条 · 占比 · 周期 · 更多。
+ * 阶段名与类型名不同时（如「O-10阶段」用的是「O阶段」类型）在名称后补一句类型。
+ */
 export function DevModeStageRow({
   stage,
   index,
+  totalNodes,
   isActive,
-  isSelected,
   canEdit,
   canDrag,
   onOpen,
-  onToggleSelect,
   onEdit,
   onDelete,
 }: {
   stage: TDevModeStage;
-  /** 展示用的行号，从 1 开始 */
+  /** 展示用的序号，从 1 开始 */
   index: number;
+  /** 该阶段类型下可勾的节点数；评审模板还没回来时 undefined */
+  totalNodes: number | undefined;
   isActive: boolean;
-  isSelected: boolean;
   canEdit: boolean;
   canDrag: boolean;
   onOpen: (stage: TDevModeStage) => void;
-  onToggleSelect: (stageId: string, checked: boolean) => void;
   onEdit: (stage: TDevModeStage) => void;
   onDelete: (stage: TDevModeStage) => void;
 }) {
   const { t } = useTranslation();
   const ratio = formatRatio(stage.workload_ratio);
+  const typeName = stage.stage_type_detail?.name;
+  const coverage = totalNodes ? Math.min(100, Math.round((stage.template_count / totalNodes) * 100)) : 0;
 
   return (
     <div
@@ -53,85 +58,72 @@ export function DevModeStageRow({
       }}
       className={cn(
         DEV_MODE_STAGE_ROW_GRID,
-        "group relative h-11 cursor-pointer border-b border-subtle text-13 transition-colors last:border-b-0",
-        isActive
-          ? "bg-accent-subtle before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-accent-primary before:content-['']"
-          : "hover:bg-layer-1-hover"
+        "group h-[50px] cursor-pointer border-b border-subtle text-14 transition-colors last:border-b-0",
+        isActive ? "bg-accent-subtle" : "hover:bg-layer-transparent-hover"
       )}
     >
-      <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-        <Checkbox
-          disabled={!canEdit}
-          checked={isSelected}
-          onChange={(event) => onToggleSelect(stage.id, event.target.checked)}
-        />
-      </span>
-
       <span className="flex justify-center">
         {canDrag && (
           <GripVertical
             data-sortable-drag-handle
-            className={cn(
-              "size-3.5 cursor-grab text-placeholder transition-opacity active:cursor-grabbing",
-              isActive || isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-            )}
+            className="size-3.5 cursor-grab text-placeholder opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-100"
             aria-label={t(`${DEV_MODE_I18N}.table.drag_hint`)}
             onClick={(event) => event.stopPropagation()}
           />
         )}
       </span>
 
-      <span className="tabular-nums text-12 text-tertiary">{index}</span>
+      <span
+        className={cn(
+          "grid size-6 place-items-center rounded-full text-12 font-semibold tabular-nums",
+          isActive ? "bg-accent-primary text-on-color" : "bg-layer-1 text-secondary"
+        )}
+      >
+        {index}
+      </span>
 
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate font-medium text-primary">{stage.name}</span>
-        <span
-          className={cn(
-            "shrink-0 rounded px-1.5 py-px text-11 font-medium",
-            isActive ? "bg-accent-primary/10 text-accent-primary" : "bg-layer-1 text-tertiary"
-          )}
-        >
-          {t(`${DEV_MODE_I18N}.table.node_count`, { count: stage.template_count })}
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span className={cn("truncate text-primary", isActive ? "font-semibold" : "font-medium")}>{stage.name}</span>
+        <span className="shrink-0 font-mono text-12 text-tertiary">{stage.code}</span>
+        {typeName && typeName !== stage.name && (
+          <span className="shrink-0 truncate text-12 text-tertiary">类型 {typeName}</span>
+        )}
+      </span>
+
+      <span className="flex items-center gap-2 text-13 tabular-nums text-secondary">
+        <span className="h-1 w-12 shrink-0 overflow-hidden rounded-full bg-layer-3">
+          <span className="block h-full rounded-full bg-accent-primary" style={{ width: `${coverage}%` }} />
+        </span>
+        <span className={cn(totalNodes !== undefined && stage.template_count < totalNodes && "text-warning-primary")}>
+          {stage.template_count}
+          {totalNodes !== undefined && ` / ${totalNodes}`}
         </span>
       </span>
 
-      <span className="truncate font-mono text-12 tabular-nums text-secondary">{stage.code}</span>
-      <span className="truncate text-secondary">{stage.stage_type_detail?.name ?? "—"}</span>
-
-      <span className={cn("text-right tabular-nums", ratio ? "text-secondary" : "text-placeholder")}>
-        {ratio ?? "—"}
-      </span>
-      <span
-        className={cn("text-right tabular-nums", stage.standard_days !== null ? "text-secondary" : "text-placeholder")}
-      >
-        {stage.standard_days !== null
-          ? t(`${DEV_MODE_I18N}.table.days`, { count: stage.standard_days })
-          : "—"}
+      <span className={cn("text-right tabular-nums", ratio ? "text-secondary" : "text-placeholder")}>{ratio ?? "—"}</span>
+      <span className={cn("text-right tabular-nums", stage.standard_days !== null ? "text-secondary" : "text-placeholder")}>
+        {stage.standard_days !== null ? t(`${DEV_MODE_I18N}.table.days`, { count: stage.standard_days }) : "—"}
       </span>
 
       <span
-        className={cn(
-          "flex items-center justify-end gap-0.5 transition-opacity focus-within:opacity-100",
-          isActive || isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}
+        className="flex justify-end opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <Tooltip tooltipContent={t(`${DEV_MODE_I18N}.table.edit`)} position="top">
-          <button type="button" className={DEV_MODE_ICON_BUTTON} disabled={!canEdit} onClick={() => onEdit(stage)}>
-            <Pencil className="size-3.5" strokeWidth={2} />
-          </button>
-        </Tooltip>
-        <Tooltip tooltipContent={t(`${DEV_MODE_I18N}.table.delete`)} position="top">
-          <button
-            type="button"
-            className={cn(DEV_MODE_ICON_BUTTON, "hover:bg-danger-subtle hover:text-danger-primary")}
-            disabled={!canEdit}
-            onClick={() => onDelete(stage)}
-          >
-            <Trash2 className="size-3.5" strokeWidth={2} />
-          </button>
-        </Tooltip>
+        {canEdit && (
+          <MoreMenu
+            title="阶段操作"
+            items={[
+              { label: t(`${DEV_MODE_I18N}.table.edit`), icon: <Pencil className="size-3.5" />, onClick: () => onEdit(stage) },
+              {
+                label: t(`${DEV_MODE_I18N}.table.delete`),
+                icon: <Trash2 className="size-3.5" />,
+                tone: "danger",
+                onClick: () => onDelete(stage),
+              },
+            ]}
+          />
+        )}
       </span>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -15,16 +15,15 @@ import { DevModeStageTemplatesPanel } from "./dev-mode-stage-templates-panel";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 
 type TStageEditor = { mode: "closed" } | { mode: "create" } | { mode: "edit"; stage: TDevModeStage };
-type TPendingDelete = { stage: TDevModeStage } | { bulk: string[] } | null;
 
 const toNullableString = (value: string) => (value.trim() === "" ? null : value.trim());
 const toNullableNumber = (value: string) => (value.trim() === "" ? null : Number(value));
 
 /**
- * 「阶段」子页：阶段表 + 右侧评审勾选面板，以及三个弹窗。
+ * 「阶段与评审」（方案 A）：左边阶段表，右边常驻所选阶段的评审节点勾选。
  *
- * 阶段类型清单来自工作区的阶段类型库（新建阶段要从里面选）；每个类型下的节点数用评审
- * 模板列表算，只为了在批量新建弹窗里提示「会勾上多少个」。
+ * 总有一个阶段是选中的（进页默认第一个），右栏不再点了才弹出。阶段类型清单来自工作区的
+ * 阶段类型库；每个类型下的节点数用评审模板列表算，表格的「已勾 / 可勾」和批量新建弹窗都用它。
  */
 export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
   const { t } = useTranslation();
@@ -38,7 +37,6 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
     bulkCreateStages,
     updateStage,
     deleteStage,
-    bulkDeleteStages,
     reorderStages,
     activeStage,
     activeStageId,
@@ -58,11 +56,10 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
 
   const [stageEditor, setStageEditor] = useState<TStageEditor>({ mode: "closed" });
   const [isBulkCreateOpen, setIsBulkCreateOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [pendingDelete, setPendingDelete] = useState<TPendingDelete>(null);
+  const [pendingDelete, setPendingDelete] = useState<TDevModeStage | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  /** 每个阶段类型下的活跃评审节点数，批量新建弹窗用 */
+  /** 每个阶段类型下的活跃评审节点数 */
   const templateCountByStageType = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const template of templates) {
@@ -71,6 +68,22 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
     }
     return counts;
   }, [templates]);
+
+  const handleOpenStage = useCallback(
+    (stageId: string) => {
+      void openStage(stageId).catch(() => {
+        setToast({ type: TOAST_TYPE.ERROR, title: t(`${DEV_MODE_I18N}.errors.templates_load_failed`) });
+      });
+    },
+    [openStage, t]
+  );
+
+  // 进页面默认选第一个阶段；选中的被删了落回第一个
+  useEffect(() => {
+    if (stages.length === 0) return;
+    if (activeStageId && stages.some((stage) => stage.id === activeStageId)) return;
+    handleOpenStage(stages[0].id);
+  }, [stages, activeStageId, handleOpenStage]);
 
   const handleStageSubmit = useCallback(
     async (value: TDevModeStageFormValue) => {
@@ -83,12 +96,13 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
         await updateStage(stageEditor.stage.id, payload);
         setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${DEV_MODE_I18N}.toast.stage_updated`) });
       } else {
-        await createStage({ ...payload, stage_type_id: value.stageTypeId });
+        const created = await createStage({ ...payload, stage_type_id: value.stageTypeId });
         setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${DEV_MODE_I18N}.toast.stage_created`) });
+        if (created) handleOpenStage(created.id);
       }
       setStageEditor({ mode: "closed" });
     },
-    [createStage, stageEditor, t, updateStage]
+    [createStage, handleOpenStage, stageEditor, t, updateStage]
   );
 
   const handleBulkCreate = useCallback(
@@ -110,21 +124,11 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
     if (!pendingDelete) return;
     setIsDeleting(true);
     try {
-      if ("bulk" in pendingDelete) {
-        await bulkDeleteStages(pendingDelete.bulk);
-        setSelectedIds(new Set());
-      } else {
-        await deleteStage(pendingDelete.stage.id);
-        setSelectedIds((current) => {
-          const next = new Set(current);
-          next.delete(pendingDelete.stage.id);
-          return next;
-        });
-      }
+      await deleteStage(pendingDelete.id);
       setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${DEV_MODE_I18N}.toast.stage_deleted`) });
       setPendingDelete(null);
     } catch (deleteError) {
-      const payload = deleteError as { code?: string; error?: string; stages?: string[] } | undefined;
+      const payload = deleteError as { error?: string } | undefined;
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t(`${DEV_MODE_I18N}.toast.stage_delete_failed`),
@@ -133,7 +137,7 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
     } finally {
       setIsDeleting(false);
     }
-  }, [bulkDeleteStages, deleteStage, pendingDelete, t]);
+  }, [deleteStage, pendingDelete, t]);
 
   const handleReorder = useCallback(
     (ordered: TDevModeStage[]) => {
@@ -144,21 +148,11 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
     [reorderStages, t]
   );
 
-  const handleOpenStage = useCallback(
-    (stage: TDevModeStage) => {
-      // 再点一次已展开的行就收起面板
-      void openStage(activeStageId === stage.id ? null : stage.id).catch(() => {
-        setToast({ type: TOAST_TYPE.ERROR, title: t(`${DEV_MODE_I18N}.errors.templates_load_failed`) });
-      });
-    },
-    [activeStageId, openStage, t]
-  );
-
   const handleSaveTemplates = useCallback(() => {
     void saveTemplateDraft()
       .then(() => setToast({ type: TOAST_TYPE.SUCCESS, title: t(`${DEV_MODE_I18N}.toast.templates_saved`) }))
       .catch((saveError) => {
-        const payload = saveError as { code?: string; error?: string } | undefined;
+        const payload = saveError as { error?: string } | undefined;
         setToast({ type: TOAST_TYPE.ERROR, title: t(`${DEV_MODE_I18N}.errors.generic`), message: payload?.error });
       });
   }, [saveTemplateDraft, t]);
@@ -171,54 +165,41 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-6">
-        <div className="flex min-h-0 flex-1 gap-4">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-            <DevModeStageTable
-              stages={stages}
-              activeStageId={activeStageId}
-              selectedIds={selectedIds}
-              canEdit={canManageDevModes}
-              workloadTotal={workloadTotal}
-              workloadRemaining={workloadRemaining}
-              onOpenStage={handleOpenStage}
-              onToggleSelect={(stageId, checked) =>
-                setSelectedIds((current) => {
-                  const next = new Set(current);
-                  if (checked) next.add(stageId);
-                  else next.delete(stageId);
-                  return next;
-                })
-              }
-              onToggleSelectAll={(checked) =>
-                setSelectedIds(checked ? new Set(stages.map((item) => item.id)) : new Set())
-              }
-              onEditStage={(stage) => setStageEditor({ mode: "edit", stage })}
-              onDeleteStage={(stage) => setPendingDelete({ stage })}
-              onBulkDelete={() => setPendingDelete({ bulk: [...selectedIds] })}
-              onReorder={handleReorder}
-              onCreate={() => setStageEditor({ mode: "create" })}
-              onBulkCreate={() => setIsBulkCreateOpen(true)}
-            />
-          </div>
-
-          {activeStage && (
-            <DevModeStageTemplatesPanel
-              workspaceSlug={workspaceSlug}
-              stage={activeStage}
-              tree={templateTree}
-              draftSelection={draftSelection}
-              hasChanges={hasTemplateChanges}
-              isLoading={isTemplatesLoading}
-              isSaving={isSavingTemplates}
-              canEdit={canManageDevModes}
-              onClose={() => void openStage(null)}
-              onToggle={toggleTemplate}
-              onReset={resetTemplateDraft}
-              onSave={handleSaveTemplates}
-            />
-          )}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5 pb-5 pl-7 pr-6 pt-[18px]">
+          <DevModeStageTable
+            stages={stages}
+            activeStageId={activeStageId}
+            totalByStageType={templateCountByStageType}
+            canEdit={canManageDevModes}
+            workloadTotal={workloadTotal}
+            workloadRemaining={workloadRemaining}
+            onOpenStage={(stage) => {
+              if (stage.id !== activeStageId) handleOpenStage(stage.id);
+            }}
+            onEditStage={(stage) => setStageEditor({ mode: "edit", stage })}
+            onDeleteStage={setPendingDelete}
+            onReorder={handleReorder}
+            onCreate={() => setStageEditor({ mode: "create" })}
+            onBulkCreate={() => setIsBulkCreateOpen(true)}
+          />
         </div>
+
+        {activeStage && (
+          <DevModeStageTemplatesPanel
+            workspaceSlug={workspaceSlug}
+            stage={activeStage}
+            tree={templateTree}
+            draftSelection={draftSelection}
+            hasChanges={hasTemplateChanges}
+            isLoading={isTemplatesLoading}
+            isSaving={isSavingTemplates}
+            canEdit={canManageDevModes}
+            onToggle={toggleTemplate}
+            onReset={resetTemplateDraft}
+            onSave={handleSaveTemplates}
+          />
+        )}
       </div>
 
       <DevModeStageFormModal
@@ -247,11 +228,7 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
         isSubmitting={isDeleting}
         handleClose={() => setPendingDelete(null)}
         handleSubmit={() => void handleDelete()}
-        title={
-          pendingDelete && "bulk" in pendingDelete
-            ? t(`${DEV_MODE_I18N}.delete_stage_modal.bulk_title`, { count: pendingDelete.bulk.length })
-            : t(`${DEV_MODE_I18N}.delete_stage_modal.title`, { name: pendingDelete?.stage.name ?? "" })
-        }
+        title={t(`${DEV_MODE_I18N}.delete_stage_modal.title`, { name: pendingDelete?.name ?? "" })}
         content={t(`${DEV_MODE_I18N}.delete_stage_modal.description`)}
         primaryButtonText={{
           default: t(`${DEV_MODE_I18N}.delete_stage_modal.confirm`),
