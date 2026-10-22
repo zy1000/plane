@@ -1,4 +1,4 @@
-import { Briefcase, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TDevMode } from "@plane/types";
@@ -51,10 +51,6 @@ export function DevModeDetailHeader({
         </p>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <span className="mr-1.5 flex items-center gap-1.5 text-13 text-secondary">
-          <Briefcase className="size-3.5" />
-          <b className="font-semibold tabular-nums text-primary">{devMode.project_count}</b> 个项目在用
-        </span>
         {canEdit && (
           <>
             <Button variant="secondary" onClick={onEdit}>

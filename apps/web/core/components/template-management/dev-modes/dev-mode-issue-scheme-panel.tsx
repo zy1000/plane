@@ -234,7 +234,7 @@ const TypeDetail = observer(function TypeDetail({
  * 数据走模式方案作用域（`scheme:<id>`），改动即时作用到跟随本模式的项目。
  */
 export const DevModeIssueSchemePanel = observer(function DevModeIssueSchemePanel() {
-  const { workspaceSlug, scheme, schemeError, scopeKey, issueTypesStore } = useDevModeDetailContext();
+  const { workspaceSlug, devMode, scheme, schemeError, scopeKey, issueTypesStore } = useDevModeDetailContext();
   const { canManageDevModes: canEdit } = useTemplatePermissions(workspaceSlug);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreating, setIsCreating] = useState(false);
@@ -270,13 +270,22 @@ export const DevModeIssueSchemePanel = observer(function DevModeIssueSchemePanel
     return <div className="py-16 text-center text-13 text-secondary">加载工作项配置失败，请刷新重试。</div>;
   }
 
+  // 页头的「N 个项目在用」是研发模式维度；这里拆成工作项方案维度的跟随 / 自定义两段，两个数口径一致（都只算活跃项目）
+  const totalProjects = devMode?.project_count;
+  const followingProjects = scheme?.following_project_count;
+  const customProjects =
+    totalProjects !== undefined && followingProjects !== undefined ? totalProjects - followingProjects : undefined;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="mx-7 mt-4 flex items-center gap-2.5 rounded-[9px] bg-layer-1 px-3.5 py-2.5 text-13 text-secondary">
         <Users className="size-3.5 shrink-0 text-accent-primary" />
         <span>
-          跟随本模式的 <b className="font-semibold text-primary">{scheme?.following_project_count ?? "—"}</b>{" "}
-          个项目共用这套类型、状态和工作流，改动即时生效；已切换为项目自定义的项目不受影响。
+          使用本模式的 <b className="font-semibold tabular-nums text-primary">{totalProjects ?? "—"}</b> 个项目中，
+          <b className="font-semibold tabular-nums text-primary">{followingProjects ?? "—"}</b>{" "}
+          个跟随这套类型、状态和工作流（改动即时生效），
+          <b className="font-semibold tabular-nums text-primary">{customProjects ?? "—"}</b>{" "}
+          个已切换为项目自定义（不受影响）。
         </span>
       </div>
 
