@@ -64,6 +64,8 @@ export const useTabPreferences = (workspaceSlug: string, projectId: string): TTa
   const updatePreferences = async (newPreferences: TTabPreferences) => {
     await updateProjectUserProperties(workspaceSlug, projectId, {
       preferences: {
+        // preferences 是整体替换，别把视图页签等其它偏好冲掉
+        ...(storePreferences?.preferences ?? {}),
         pages: storePreferences?.preferences?.pages || { block_display: false },
         navigation: {
           default_tab: newPreferences.defaultTab,

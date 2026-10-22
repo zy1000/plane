@@ -213,8 +213,10 @@ class GlobalSearchEndpoint(BaseAPIView):
             for field in fields:
                 q |= Q(**{f"{field}__icontains": query})
 
+        # 搜索结果跳的是 /views/<id> 详情页，只有工作项视图有那一页；缺陷 / 需求页的视图不进搜索
         issue_views = IssueView.objects.filter(
             q,
+            scope="issues",
             project__project_projectmember__member=self.request.user,
             project__project_projectmember__is_active=True,
             project__archived_at__isnull=True,

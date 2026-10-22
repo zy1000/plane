@@ -66,7 +66,6 @@ class IssueViewSerializer(DynamicBaseSerializer):
             "project",
             "query",
             "owned_by",
-            "access",
             "is_locked",
         ]
 

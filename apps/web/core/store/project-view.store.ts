@@ -8,7 +8,7 @@ import { set } from "lodash-es";
 import { observable, action, makeObservable, runInAction, computed } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { IProjectView, TViewFilters } from "@plane/types";
+import type { IProjectView, TViewFilters, TViewScope } from "@plane/types";
 // constants
 // helpers
 import { getValidatedViewFilters, getViewName, orderViews, shouldFilterView } from "@plane/utils";
@@ -17,10 +17,15 @@ import { ViewService } from "@/services/view.service";
 // store
 import type { CoreRootStore } from "./root.store";
 
+/** 没有 scope 的历史数据都是工作项视图 */
+const getViewScope = (view: IProjectView): TViewScope => view.scope ?? "issues";
+const getScopedKey = (projectId: string, scope: TViewScope) => `${projectId}__${scope}`;
+
 export interface IProjectViewStore {
   //Loaders
   loader: boolean;
   fetchedMap: Record<string, boolean>;
+  fetchedScopeMap: Record<string, boolean>;
   // observables
   viewMap: Record<string, IProjectView>;
   filters: TViewFilters;
@@ -29,9 +34,10 @@ export interface IProjectViewStore {
   // computed actions
   getProjectViews: (projectId: string) => IProjectView[] | undefined;
   getFilteredProjectViews: (projectId: string) => IProjectView[] | undefined;
+  getScopedProjectViews: (projectId: string, scope: TViewScope) => IProjectView[] | undefined;
   getViewById: (viewId: string) => IProjectView;
   // fetch actions
-  fetchViews: (workspaceSlug: string, projectId: string) => Promise<undefined | IProjectView[]>;
+  fetchViews: (workspaceSlug: string, projectId: string, scope?: TViewScope) => Promise<undefined | IProjectView[]>;
   fetchViewDetails: (workspaceSlug: string, projectId: string, viewId: string) => Promise<IProjectView>;
   // CRUD actions
   createView: (workspaceSlug: string, projectId: string, data: Partial<IProjectView>) => Promise<IProjectView>;
@@ -55,6 +61,7 @@ export class ProjectViewStore implements IProjectViewStore {
   viewMap: Record<string, IProjectView> = {};
   //loaders
   fetchedMap: Record<string, boolean> = {};
+  fetchedScopeMap: Record<string, boolean> = {};
   filters: TViewFilters = { searchQuery: "", sortBy: "desc", sortKey: "updated_at" };
   // root store
   rootStore;
@@ -67,6 +74,7 @@ export class ProjectViewStore implements IProjectViewStore {
       loader: observable.ref,
       viewMap: observable,
       fetchedMap: observable,
+      fetchedScopeMap: observable,
       filters: observable,
       // computed
       projectViewIds: computed,
@@ -99,7 +107,11 @@ export class ProjectViewStore implements IProjectViewStore {
   get projectViewIds() {
     const projectId = this.rootStore.router.projectId;
     if (!projectId || !this.fetchedMap[projectId]) return null;
-    const viewIds = Object.keys(this.viewMap ?? {})?.filter((viewId) => this.viewMap?.[viewId]?.project === projectId);
+    // 「视图」页签只列工作项视图；缺陷 / 需求页的视图只在各自页内页签里出现
+    const viewIds = Object.keys(this.viewMap ?? {})?.filter((viewId) => {
+      const view = this.viewMap?.[viewId];
+      return view?.project === projectId && getViewScope(view) === "issues";
+    });
     return viewIds;
   }
 
@@ -108,10 +120,21 @@ export class ProjectViewStore implements IProjectViewStore {
 
     const ViewsList = Object.values(this.viewMap ?? {});
     // helps to filter views based on the projectId
-    let filteredViews = ViewsList.filter((view) => view?.project === projectId);
+    let filteredViews = ViewsList.filter((view) => view?.project === projectId && getViewScope(view) === "issues");
     filteredViews = orderViews(filteredViews, this.filters.sortKey, this.filters.sortBy);
 
     return filteredViews ?? undefined;
+  });
+
+  /**
+   * 页内视图页签用：某页面范围下的全部视图，按 sort_order 再按名称排
+   */
+  getScopedProjectViews = computedFn((projectId: string, scope: TViewScope) => {
+    if (!this.fetchedScopeMap[getScopedKey(projectId, scope)]) return undefined;
+
+    return Object.values(this.viewMap ?? {})
+      .filter((view) => view?.project === projectId && getViewScope(view) === scope)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
   });
   /**
    * returns viewsIds of issues
@@ -124,6 +147,7 @@ export class ProjectViewStore implements IProjectViewStore {
     let filteredViews = ViewsList.filter(
       (view) =>
         view?.project === projectId &&
+        getViewScope(view) === "issues" &&
         getViewName(view.name).toLowerCase().includes(this.filters.searchQuery.toLowerCase()) &&
         shouldFilterView(view, this.filters.filters)
     );
@@ -162,15 +186,16 @@ export class ProjectViewStore implements IProjectViewStore {
    * @param projectId
    * @returns Promise<IProjectView[]>
    */
-  fetchViews = async (workspaceSlug: string, projectId: string) => {
+  fetchViews = async (workspaceSlug: string, projectId: string, scope: TViewScope = "issues") => {
     try {
       this.loader = true;
-      await this.viewService.getViews(workspaceSlug, projectId).then((response) => {
+      await this.viewService.getViews(workspaceSlug, projectId, scope).then((response) => {
         runInAction(() => {
           response.forEach((view) => {
             set(this.viewMap, [view.id], view);
           });
-          set(this.fetchedMap, projectId, true);
+          if (scope === "issues") set(this.fetchedMap, projectId, true);
+          set(this.fetchedScopeMap, getScopedKey(projectId, scope), true);
           this.loader = false;
         });
         return response;

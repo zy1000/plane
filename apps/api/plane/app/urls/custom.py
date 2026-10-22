@@ -3,7 +3,6 @@ from django.urls import path
 from plane.app.views.custom.project_analytics import (
     CustomProjectAdvanceAnalyticsEndpoint,
     ProjectDefectAnalyticsEndpoint,
-    ProjectDefectQuickCountsEndpoint,
 )
 from plane.app.views.custom.simple_api import SimpleTestAPIView, HealthCheckAPIView
 from plane.app.views.custom.ldap_sync import LdapUserSyncAPIView
@@ -18,11 +17,6 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/defect-analytics/",
         ProjectDefectAnalyticsEndpoint.as_view(),
         name="defect-analytics",
-    ),
-    path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/defect-quick-counts/",
-        ProjectDefectQuickCountsEndpoint.as_view(),
-        name="defect-quick-counts",
     ),
     # 新增的简单API接口
     path(

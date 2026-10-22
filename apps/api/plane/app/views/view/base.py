@@ -293,9 +293,19 @@ class IssueViewViewSet(BaseViewSet):
             .distinct()
         )
 
+    def _is_project_admin(self, slug, project_id):
+        return ProjectMember.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            member=self.request.user,
+            role=20,
+            is_active=True,
+        ).exists()
+
     @allow_fine_permission(PermissionKey.VIEW_VIEW)
     def list(self, request, slug, project_id):
-        queryset = self.get_queryset()
+        # 页内视图页签按页面范围取：不传 scope 时沿用原「视图」页签的工作项视图
+        queryset = self.get_queryset().filter(scope=request.GET.get("scope") or "issues")
         project = Project.objects.get(id=project_id)
         if (
                 ProjectMember.objects.filter(
@@ -355,14 +365,16 @@ class IssueViewViewSet(BaseViewSet):
             if issue_view.is_locked:
                 return Response({"error": "view is locked"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Only update the view if owner is updating
-            if issue_view.owned_by_id != request.user.id:
+            # 个人视图只有创建人能改；公共视图创建人和项目管理员都能改
+            is_owner = issue_view.owned_by_id == request.user.id
+            if not is_owner and not (issue_view.access == 1 and self._is_project_admin(slug, project_id)):
                 return Response(
-                    {"error": "Only the owner of the view can update the view"},
+                    {"error": "Only the owner or a project admin can update the view"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            serializer = IssueViewSerializer(issue_view, data=request.data, partial=True)
+            data = {key: value for key, value in request.data.items() if key != "scope"}
+            serializer = IssueViewSerializer(issue_view, data=data, partial=True)
 
             if serializer.is_valid():
                 serializer.save()
@@ -372,16 +384,7 @@ class IssueViewViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.VIEW_DELETE)
     def destroy(self, request, slug, project_id, pk):
         project_view = IssueView.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
-        if (
-                ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    project_id=project_id,
-                    member=request.user,
-                    role=20,
-                    is_active=True,
-                ).exists()
-                or project_view.owned_by_id == request.user.id
-        ):
+        if self._is_project_admin(slug, project_id) or project_view.owned_by_id == request.user.id:
             project_view.delete()
             # Delete the user favorite view
             UserFavorite.objects.filter(

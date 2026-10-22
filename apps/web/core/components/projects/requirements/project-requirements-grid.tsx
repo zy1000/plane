@@ -56,8 +56,6 @@ import { ProjectRequirementDisplayProperties } from "./project-requirement-displ
 import {
   COLUMN_ICONS,
   COLUMN_LABEL_KEYS,
-  getColumnStorageKey,
-  readHiddenColumns,
   TOGGLEABLE_COLUMNS,
   type TProjectRequirementColumnKey,
 } from "./project-requirements-columns";
@@ -99,6 +97,9 @@ type TProps = {
   /** 当前生效的分面筛选数量。用来区分「没关联」和「筛没了」 */
   activeFilterCount: number;
   onClearFilters: () => void;
+  /** 列显隐由页面持有：视图页签要把它和筛选一起记住 */
+  hiddenColumns: TProjectRequirementColumnKey[];
+  onToggleColumn: (key: TProjectRequirementColumnKey) => void;
 };
 
 export const ProjectRequirementsGrid = (props: TProps) => {
@@ -132,6 +133,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     hasAnyLinked,
     activeFilterCount,
     onClearFilters,
+    hiddenColumns,
+    onToggleColumn,
   } = props;
   const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -140,17 +143,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // --- 列显隐 ---------------------------------------------------------
-  const [hiddenColumns, setHiddenColumns] = useState<TProjectRequirementColumnKey[]>(() =>
-    readHiddenColumns(projectId)
-  );
-  // 切项目时要换成那个项目的偏好，否则会把上一个项目的勾选带过去
-  useEffect(() => setHiddenColumns(readHiddenColumns(projectId)), [projectId]);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(getColumnStorageKey(projectId), JSON.stringify(hiddenColumns));
-  }, [hiddenColumns, projectId]);
-
+  // --- 列显隐（状态在页面，见 useProjectRequirementColumns）-----------------
   const isVisible = useCallback((key: TProjectRequirementColumnKey) => !hiddenColumns.includes(key), [hiddenColumns]);
   const isDisplayIdVisible = isVisible("display_id");
   // 模块与编号一样特殊：可见时紧跟编号钉在左侧，不进「标题之后」的普通列序
@@ -159,9 +152,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     () => TOGGLEABLE_COLUMNS.filter((key) => key !== "display_id" && key !== "module" && isVisible(key)),
     [isVisible]
   );
-  const toggleColumn = (key: TProjectRequirementColumnKey) =>
-    setHiddenColumns((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
-
   const builtinByKey = useMemo(
     () => Object.fromEntries(REQUIREMENT_BUILTIN_COLUMNS.map((column) => [column.key, column])),
     []
@@ -479,7 +469,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
       <FiltersDropdown title={t("common.display")} placement="bottom-end">
         <div className="vertical-scrollbar relative scrollbar-sm h-full w-full divide-y divide-subtle-1 overflow-hidden overflow-y-auto px-2.5">
           <div className="py-2">
-            <ProjectRequirementDisplayProperties hiddenColumns={hiddenColumns} onToggle={toggleColumn} />
+            <ProjectRequirementDisplayProperties hiddenColumns={hiddenColumns} onToggle={onToggleColumn} />
           </div>
         </div>
       </FiltersDropdown>

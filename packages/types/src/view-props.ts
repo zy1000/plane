@@ -6,6 +6,7 @@
 
 import type { IProjectMemberNavigationPreferences } from "./project";
 import type { TIssue } from "./issues/issue";
+import type { TViewScope, TViewTabPreferences } from "./views";
 import type { LOGICAL_OPERATOR, TSupportedOperators } from "./rich-filters";
 import type { CompleteOrEmpty } from "./utils";
 
@@ -235,6 +236,7 @@ export interface IProjectUserPropertiesResponse extends IIssueFiltersResponse {
       block_display: boolean;
     };
     navigation: IProjectMemberNavigationPreferences;
+    views?: Partial<Record<TViewScope, TViewTabPreferences>>;
   };
 }
 

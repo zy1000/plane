@@ -667,7 +667,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
 
         total_members = ProjectMember.objects.filter(project_id=project_id, member__is_bot=False, is_active=True).count()
         total_pages = ProjectPage.objects.filter(project_id=project_id, deleted_at__isnull=True).count()
-        total_views = IssueView.objects.filter(project_id=project_id, deleted_at__isnull=True).count()
+        total_views = IssueView.objects.filter(project_id=project_id, scope="issues", deleted_at__isnull=True).count()
 
         test_repositories = TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
         test_cases = TestCase.objects.filter(repository__in=test_repositories, deleted_at__isnull=True)

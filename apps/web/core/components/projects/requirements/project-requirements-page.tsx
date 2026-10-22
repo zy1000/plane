@@ -18,6 +18,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
+  IProjectView,
   TProjectRequirement,
   TProjectRequirementCreatePayload,
   TRequirementItemStatus,
@@ -31,6 +32,8 @@ import { ProjectRequirementModuleSidebar } from "@/components/requirements/modul
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import { ViewTabsRoot, countFilterConditions } from "@/components/views/in-page";
+import type { TViewSnapshot, TViewSummaryRow } from "@/components/views/in-page";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
@@ -44,6 +47,7 @@ import {
   listQueryToExpression,
   parseListQueryFromSearchParams,
   projectRequirementExpressionToQuery,
+  projectRequirementFiltersAdapter,
   serializeListQuery,
   useProjectRequirementFilter,
   useProjectRequirementFiltersConfig,
@@ -57,8 +61,13 @@ import {
   getProductFromParam,
   moduleBelongsToProduct,
 } from "./project-requirement-product-tabs";
+import { TOGGLEABLE_COLUMNS, type TProjectRequirementColumnKey } from "./project-requirements-columns";
 import { ProjectRequirementsGrid } from "./project-requirements-grid";
 import { UnlinkRequirementConfirmModal } from "./unlink-confirm-modal";
+import { useProjectRequirementColumns } from "./use-project-requirement-columns";
+
+/** 需求视图把列显隐塞在 display_properties 里，和工作项视图共用一张表 */
+type TRequirementViewDisplayProperties = { hidden_columns?: TProjectRequirementColumnKey[] };
 
 const requirementService = new RequirementService();
 
@@ -80,6 +89,9 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const [initialListQuery] = useState(() => parseListQueryFromSearchParams(searchParams));
   const [initialExpression] = useState(() => listQueryToExpression(initialListQuery));
   const syncedFilterRef = useRef(serializeListQuery(initialListQuery));
+  // 带着筛选参数进来（深链 / 前进后退）就以 URL 为准，不用记住的视图盖掉它
+  const [hasInitialUrlFilters] = useState(() => Object.values(initialListQuery).some(Boolean));
+  const { hiddenColumns, setHiddenColumns, toggleColumn } = useProjectRequirementColumns(project);
 
   useLayoutEffect(() => {
     setDataToolbarHost(document.getElementById(PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID) as HTMLDivElement | null);
@@ -219,6 +231,34 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     store.setListFilters(next);
     filter.resetExpression(listQueryToExpression(next));
   }, [filter, searchParams, store.setListFilters]);
+
+  // ── 视图页签：记住筛选表达式 + 列显隐 ────────────────────────────────────
+  // filter.expression 是 observable，本组件是 observer，每次渲染现算即可
+  const currentViewSnapshot: TViewSnapshot = {
+    rich_filters: projectRequirementFiltersAdapter.toExternal(filter.expression) as unknown as IProjectView["rich_filters"],
+    display_properties: { hidden_columns: hiddenColumns } as unknown as IProjectView["display_properties"],
+  };
+
+  const applyViewSnapshot = useCallback(
+    (snapshot: TViewSnapshot | null) => {
+      filter.resetExpression((snapshot?.rich_filters ?? {}) as unknown as TProjectRequirementFilterExpression);
+      const columns = (snapshot?.display_properties as unknown as TRequirementViewDisplayProperties | undefined)
+        ?.hidden_columns;
+      if (Array.isArray(columns)) setHiddenColumns(columns);
+    },
+    [filter, setHiddenColumns]
+  );
+
+  const getViewSummary = useCallback((snapshot: TViewSnapshot): TViewSummaryRow[] => {
+    const conditionCount = countFilterConditions(snapshot.rich_filters);
+    const hidden = (snapshot.display_properties as unknown as TRequirementViewDisplayProperties | undefined)
+      ?.hidden_columns;
+    const visibleCount = TOGGLEABLE_COLUMNS.length - (hidden?.length ?? 0);
+    return [
+      { label: "筛选条件", text: conditionCount > 0 ? `${conditionCount} 条` : "无（看全部）" },
+      { label: "显示列", text: `${visibleCount} 列` },
+    ];
+  }, []);
 
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
@@ -396,6 +436,18 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     <>
       <PageHead title={pageTitle} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
+        <ViewTabsRoot
+          workspaceSlug={slug}
+          projectId={project}
+          scope="requirements"
+          allLabel="全部需求"
+          pageLabel="需求"
+          current={currentViewSnapshot}
+          apply={applyViewSnapshot}
+          compareKeys={["rich_filters", "display_properties"]}
+          applyOnMount={!hasInitialUrlFilters}
+          getSummary={getViewSummary}
+        />
         <FiltersRow filter={filter} />
 
         {/* 左模块树 + 右网格。保持 min-h-0 / overflow-hidden 链路完整，
@@ -451,6 +503,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               onStatusChange={(requirementId, status) => void handleStatusChange(requirementId, status)}
               toolbarPortalEl={dataToolbarHost}
               toolbarAfterSearch={<FiltersToggle filter={filter} />}
+              hiddenColumns={hiddenColumns}
+              onToggleColumn={toggleColumn}
             />
           </div>
         </div>

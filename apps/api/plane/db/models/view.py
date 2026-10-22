@@ -64,6 +64,13 @@ class IssueView(WorkspaceBaseModel):
     display_properties = models.JSONField(default=get_default_display_properties)
     rich_filters = models.JSONField(default=dict)
     access = models.PositiveSmallIntegerField(default=1, choices=((0, "Private"), (1, "Public")))
+    # 页内视图页签所属页面：工作项 / 缺陷 / 项目研发需求，公共视图即原「视图」页签里的项目视图
+    scope = models.CharField(
+        max_length=32,
+        default="issues",
+        db_index=True,
+        choices=(("issues", "Issues"), ("defects", "Defects"), ("requirements", "Requirements")),
+    )
     sort_order = models.FloatField(default=65535)
     logo_props = models.JSONField(default=dict)
     owned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="views")

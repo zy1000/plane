@@ -27,6 +27,7 @@ import {
   getProductFromParam,
 } from "@/components/projects/requirements/project-requirement-product-tabs";
 import { ProjectRequirementsGrid } from "@/components/projects/requirements/project-requirements-grid";
+import { useProjectRequirementColumns } from "@/components/projects/requirements/use-project-requirement-columns";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
@@ -96,6 +97,7 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
   const syncedFilterRef = useRef(serializeListQuery(initialListQuery));
 
   const store = useProfileRequirements({ workspaceSlug: slug, userId: user, initialListQuery });
+  const { hiddenColumns, toggleColumn } = useProjectRequirementColumns(user ? `profile-requirements-${user}` : undefined);
   const facets = store.requirementsPage.extra_stats ?? null;
   const rows = store.requirementsPage.results;
 
@@ -230,6 +232,8 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
               onLink={noop}
               onUnlink={noop}
               toolbarAfterSearch={<FiltersToggle filter={filter} />}
+              hiddenColumns={hiddenColumns}
+              onToggleColumn={toggleColumn}
             />
           </div>
         )}

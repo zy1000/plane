@@ -130,6 +130,20 @@ export interface IProjectIssuesFilter extends IBaseIssueFilterStore {
     filters: TSupportedFilterForUpdate,
     scope?: TProjectIssueScope
   ) => Promise<void>;
+  /**
+   * 页内视图页签切视图：筛选 + 显示设置 + 显示字段一次写入、一次拉取、一次回写后端。
+   * 拆成三次 updateFilters 会互相取消在途请求，列表停在骨架屏。
+   */
+  applyViewSnapshot: (
+    workspaceSlug: string,
+    projectId: string,
+    snapshot: {
+      richFilters: TWorkItemFilterExpression;
+      displayFilters?: Partial<IIssueDisplayFilterOptions>;
+      displayProperties?: Partial<IIssueDisplayProperties>;
+    },
+    scope?: TProjectIssueScope
+  ) => Promise<void>;
   /** 仅更新内存中的 richFilters 并触发数据刷新，不回写后端（供 typed 页面使用） */
   applyLocalRichFilters: (
     workspaceSlug: string,
@@ -438,6 +452,51 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
     } catch (error) {
       this.fetchFilters(workspaceSlug, projectId, scope);
       throw error;
+    }
+  };
+
+  applyViewSnapshot: IProjectIssuesFilter["applyViewSnapshot"] = async (
+    workspaceSlug,
+    projectId,
+    snapshot,
+    scope = this.activeScope
+  ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
+    const current = this.filters[scopedKey];
+    if (isEmpty(current)) return;
+
+    const currentDisplayFilters = current.displayFilters as IIssueDisplayFilterOptions;
+    const nextDisplayFilters: IIssueDisplayFilterOptions = {
+      ...currentDisplayFilters,
+      ...(snapshot.displayFilters ?? {}),
+    };
+    // 与 updateFilters 同一套看板分组兜底
+    if (nextDisplayFilters.group_by === null) nextDisplayFilters.sub_group_by = null;
+    if (nextDisplayFilters.layout === "kanban" && nextDisplayFilters.group_by === nextDisplayFilters.sub_group_by)
+      nextDisplayFilters.sub_group_by = null;
+    if (nextDisplayFilters.layout === "kanban" && nextDisplayFilters.group_by === null)
+      nextDisplayFilters.group_by = "state_detail.group";
+    const nextDisplayProperties: IIssueDisplayProperties = {
+      ...(current.displayProperties as IIssueDisplayProperties),
+      ...(snapshot.displayProperties ?? {}),
+    };
+    const layoutChanged = nextDisplayFilters.layout !== currentDisplayFilters?.layout;
+
+    runInAction(() => {
+      set(this.filters, [scopedKey, "richFilters"], snapshot.richFilters);
+      set(this.filters, [scopedKey, "displayFilters"], nextDisplayFilters);
+      set(this.filters, [scopedKey, "displayProperties"], nextDisplayProperties);
+    });
+
+    if (layoutChanged) this.rootIssueStore.projectIssues.clear(true);
+    this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation", scope);
+
+    if (scope === DEFAULT_PROJECT_ISSUE_SCOPE) {
+      await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
+        rich_filters: snapshot.richFilters,
+        display_filters: nextDisplayFilters,
+        display_properties: nextDisplayProperties,
+      });
     }
   };
 

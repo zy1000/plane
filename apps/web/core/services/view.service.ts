@@ -5,7 +5,7 @@
  */
 
 import { API_BASE_URL } from "@plane/constants";
-import type { IProjectView } from "@plane/types";
+import type { IProjectView, TViewScope } from "@plane/types";
 import { APIService } from "@/services/api.service";
 // types
 // helpers
@@ -39,8 +39,8 @@ export class ViewService extends APIService {
       });
   }
 
-  async getViews(workspaceSlug: string, projectId: string): Promise<IProjectView[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/views/`)
+  async getViews(workspaceSlug: string, projectId: string, scope: TViewScope = "issues"): Promise<IProjectView[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/views/`, { params: { scope } })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -17,9 +17,21 @@ export enum EViewAccess {
   PUBLIC,
 }
 
+/** 页内视图页签所属页面；公共视图（issues）即「视图」页签里的项目视图 */
+export type TViewScope = "issues" | "defects" | "requirements";
+
+/** 每人每页面的视图页签偏好，存在项目用户属性的 preferences.views[scope] */
+export type TViewTabPreferences = {
+  default_view_id?: string | null;
+  hidden_view_ids?: string[];
+  order?: string[];
+};
+
 export interface IProjectView {
   id: string;
   access: EViewAccess;
+  scope?: TViewScope;
+  sort_order?: number;
   created_at: Date;
   updated_at: Date;
   is_favorite: boolean;
