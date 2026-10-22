@@ -487,7 +487,9 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
 def create_default_role(workspace: Workspace, project_id: str):
     """按工作区的项目角色模板建本项目角色。权限先原样复制，其中的工作项类型权限是模板格式、对不上本项目
     任何类型，须在工作项方案就位后用 role_import.apply_template_permissions_to_project_roles 换算（见 setup_new_project）。"""
-    workspace_roles: list[WorkspaceRole] = WorkspaceRole.objects.filter(workspace=workspace)
+    workspace_roles: list[WorkspaceRole] = WorkspaceRole.objects.filter(
+        workspace=workspace, type=WorkspaceRole.RoleType.PROJECT_TEMPLATE
+    )
     bulk_obj = [
         ProjectRole(name=role.name, description=role.description, permissions=role.permissions, source_template=role,
                     project_id=project_id, workspace=workspace)
