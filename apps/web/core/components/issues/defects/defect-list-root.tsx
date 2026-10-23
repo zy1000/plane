@@ -403,6 +403,8 @@ export const DefectListRoot = observer(function DefectListRoot() {
         } finally {
           isApplyingViewRef.current = false;
         }
+        // 筛选条显隐跟着视图走：带条件就展开（不然看不出视图生效），没条件就收起
+        filterInstance.toggleVisibility(filterInstance.hasActiveFilters);
       }
       void issuesFilter.applyViewSnapshot(
         workspaceSlug,

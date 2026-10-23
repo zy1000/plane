@@ -242,6 +242,8 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const applyViewSnapshot = useCallback(
     (snapshot: TViewSnapshot | null) => {
       filter.resetExpression((snapshot?.rich_filters ?? {}) as unknown as TProjectRequirementFilterExpression);
+      // 筛选条显隐跟着视图走：带条件就展开（不然看不出视图生效），没条件就收起
+      filter.toggleVisibility(filter.hasActiveFilters);
       const columns = (snapshot?.display_properties as unknown as TRequirementViewDisplayProperties | undefined)
         ?.hidden_columns;
       if (Array.isArray(columns)) setHiddenColumns(columns);
